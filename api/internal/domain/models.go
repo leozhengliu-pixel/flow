@@ -910,6 +910,8 @@ type UserSettings struct {
 	AgentEnabled          bool              `json:"agentEnabled"`
 	AgentInstructions     string            `json:"agentInstructions"`
 	PulseSchedule         string            `json:"pulseSchedule"`
+	PulseWelcomeDismissed bool              `json:"pulseWelcomeDismissed,omitempty"`
+	FeedLastSeenTime      string            `json:"feedLastSeenTime,omitempty"`
 	JobTitle              string            `json:"jobTitle,omitempty"`
 	Username              string            `json:"username,omitempty"`
 	UpdatedAt             time.Time         `json:"updatedAt"`

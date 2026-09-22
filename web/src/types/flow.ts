@@ -972,6 +972,10 @@ export interface UserSettings {
   agentEnabled: boolean;
   agentInstructions: string;
   pulseSchedule?: "default" | "daily" | "weekly" | "never";
+  /** LS-0767 — first-run Pulse welcome banner dismissed. */
+  pulseWelcomeDismissed?: boolean;
+  /** LS-0270 / LS-0731 — persisted Pulse feed last-seen cursor (ISO). */
+  feedLastSeenTime?: string;
   jobTitle?: string;
   username?: string;
   updatedAt: string;

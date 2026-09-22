@@ -11,7 +11,7 @@ const groups: PulseFilterField[][] = [
   ['author','team','createdDate'],
   ['updateType','health'],
   ['initiative'],
-  ['project','projectMember','projectStatus','projectLabel'],
+  ['project','projectMember','projectStatus','projectStatusType','projectLabel'],
 ]
 
 function Filter({size=16}:{size?:number}){return <FilterIcon width={size} height={size}/>}

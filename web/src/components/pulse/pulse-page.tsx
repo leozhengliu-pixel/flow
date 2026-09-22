@@ -1,15 +1,18 @@
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Menu, Sparkles, SquarePen, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { pulsePath, pulseViewPath, type PulseRouteView } from '@/lib/app-routes'
 import type { BootstrapData, InitiativeUpdate, Project, ProjectUpdate, SavedView, SavedViewMutationInput, UserSettings } from '@/types/flow'
 import { PulseComposer } from './pulse-composer'
 import { PulseNewViewEditor, PulseSubscriptionMenu, type PulseCadence, type PulseViewDraft } from './pulse-menus'
-import { buildPulseFeed, pulseConfigFromView, pulseViewMutation, type PulseViewConfig } from './pulse-model'
+import { pulseConfigFromView, pulseViewMutation, type PulseUpdateItem, type PulseViewConfig } from './pulse-model'
 import { PulseUpdateCard } from './pulse-update-card'
 import { AddViewIcon } from '@/components/ui/view-action-icons'
+import { useFeedView } from './use-feed-view'
+import { useShowPulseWelcomeBanner } from './use-show-pulse-welcome-banner'
+import { PulseWelcomeBanner } from './pulse-welcome-banner'
 import './pulse.css'
 
 type Props = {
@@ -48,15 +51,29 @@ export function PulsePage(props: Props) {
   const [editingView, setEditingView] = useState<SavedView>()
   const [savingView,setSavingView]=useState(false)
   const [draft, setDraft] = useState<PulseViewDraft>(blankDraft)
+  const contentRef = useRef<HTMLElement>(null)
   const pulseViews=data.savedViews.filter(saved=>saved.resource==='pulse'&&saved.scope==='personal'&&saved.ownerId===data.viewer.id)
   const activeSavedView=pulseViews.find(saved=>saved.id===props.viewId)
   const [activeConfig,setActiveConfig]=useState<PulseViewConfig>(()=>pulseConfigFromView(activeSavedView))
   useEffect(()=>setActiveConfig(pulseConfigFromView(activeSavedView)),[activeSavedView])
   useEffect(()=>{if(viewId&&!activeSavedView)onNavigateView('following')},[activeSavedView,onNavigateView,viewId])
-  const feed = useMemo(() => buildPulseFeed(data, activeSavedView ? 'all' : view, activeSavedView ? activeConfig : {filters:[],match:'all'}), [activeConfig, activeSavedView, data, view])
+
   const userSettings=data.userSettings[data.viewer.id]
   const cadence:PulseCadence=userSettings?.pulseSchedule??'never'
   const changeCadence=async(next:PulseCadence)=>{if(!userSettings)return;await props.onUpdateUserSettings({...userSettings,pulseSchedule:next})}
+
+  const feedView = useFeedView({
+    data,
+    view,
+    viewId,
+    config: activeSavedView ? activeConfig : { filters: [], match: 'all' },
+    onPersistLastSeen: async iso => {
+      if (!userSettings) return
+      return props.onUpdateUserSettings({ ...userSettings, feedLastSeenTime: iso })
+    },
+  })
+
+  const showWelcome = useShowPulseWelcomeBanner(data)
   const closeViewEditor=()=>{setCreatingView(false);setEditingView(undefined);setDraft(blankDraft())}
   const openViewEditor=(saved?:SavedView)=>{setEditingView(saved);setDraft(saved?{name:saved.name,icon:saved.icon??'CustomView',color:saved.color??'#8a8f98',...pulseConfigFromView(saved)}:blankDraft());setCreatingView(true)}
   const saveView=async()=>{const name=draft.name.trim()||'All updates';if(savingView)return;setSavingView(true);try{const input={name,icon:draft.icon,color:draft.color,resource:'pulse' as const,scope:'personal' as const,ownerId:data.viewer.id,view:'all' as const,...pulseViewMutation(draft)};const saved=editingView?await props.onUpdateSavedView(editingView.id,input):await props.onCreateSavedView(input);closeViewEditor();props.onNavigateSavedView(saved.id)}finally{setSavingView(false)}}
@@ -64,9 +81,20 @@ export function PulsePage(props: Props) {
   const removeView=async(saved:SavedView)=>{if(!await confirmAction('Delete view?',{description:saved.name,confirmLabel:'Delete view',danger:true}))return;await props.onDeleteSavedView(saved);if(activeSavedView?.id===saved.id)navigate('following')}
   const navigate=(next:PulseRouteView)=>{closeViewEditor();props.onNavigateView(next)}
 
+  const dismissWelcome = async (next: PulseCadence) => {
+    if (!userSettings) return
+    await props.onUpdateUserSettings({
+      ...userSettings,
+      pulseSchedule: next,
+      pulseWelcomeDismissed: true,
+    })
+  }
+
+  const feedEmpty = feedView.items.length === 0
+
   return <main className="flow-framed-workspace main-panel pulse-page">
     <header className="pulse-header">
-      <div className="pulse-header-top"><button aria-label="Open workspace sidebar" className="pulse-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button"><Menu size={16}/></button><h2>Pulse</h2><span/><PulseSubscriptionMenu cadence={cadence} onChange={next=>void changeCadence(next)}/></div>
+      <div className="pulse-header-top"><button aria-label="Open workspace sidebar" className="pulse-mobile-menu" data-sidebar-trigger onClick={props.onOpenSidebar} type="button"><Menu size={16}/></button><h2>Pulse</h2><span/>{feedView.unreadCount > 0 ? <span className="pulse-unread-badge" aria-label={`${feedView.unreadCount} new`}>{feedView.unreadCount} new</span> : null}<PulseSubscriptionMenu cadence={cadence} onChange={next=>void changeCadence(next)}/></div>
       <div className="pulse-toolbar">
       <div className="pulse-view-tabs">
         {([['following', 'For me'], ['popular', 'Popular'], ['all', 'Recent']] as const).map(([id, label]) => <a className="ui-pill" aria-current={!activeSavedView && view === id ? 'page' : undefined} href={pulsePath(data.workspace.urlKey, id)} key={id} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); navigate(id) }}>{label}</a>)}
@@ -82,11 +110,58 @@ export function PulsePage(props: Props) {
       onChange={setDraft}
       onSave={()=>void saveView()}
     />}
-    <section className="pulse-content">
-      {feed.length === 0 ? <PulseEmptyState copy={emptyCopy(activeSavedView, view)} onCreate={() => setComposerOpen(true)}/> : <div className="pulse-feed"><div className="pulse-feed-actions"><button onClick={() => setComposerOpen(true)} type="button"><SquarePen size={13}/>New update</button></div>{feed.map(item => <PulseUpdateCard {...props} item={item} key={item.id} users={data.users} viewerId={data.viewer.id} workspaceSlug={data.workspace.urlKey}/>)}</div>}
+    <section className="pulse-content" ref={contentRef}>
+      {showWelcome && !feedEmpty ? (
+        <PulseWelcomeBanner
+          containerRef={contentRef}
+          cadence={cadence}
+          workspaceDefault={data.workspaceSettings.featureSettings?.pulseWorkspaceSchedule}
+          onConfirm={dismissWelcome}
+        />
+      ) : null}
+      {feedEmpty ? (
+        <>
+          {showWelcome ? (
+            <PulseWelcomeBanner
+              containerRef={contentRef}
+              cadence={cadence}
+              workspaceDefault={data.workspaceSettings.featureSettings?.pulseWorkspaceSchedule}
+              onConfirm={dismissWelcome}
+            />
+          ) : null}
+          <PulseEmptyState copy={emptyCopy(activeSavedView, view)} onCreate={() => setComposerOpen(true)}/>
+        </>
+      ) : (
+        <div className="pulse-feed">
+          <div className="pulse-feed-actions"><button onClick={() => setComposerOpen(true)} type="button"><SquarePen size={13}/>New update</button></div>
+          <PulseFeedSections {...props} feedView={feedView} />
+        </div>
+      )}
     </section>
     <PulseComposer initiatives={data.initiatives} onCreateInitiative={props.onCreateInitiative} onCreateProject={props.onCreateProject} onUploadInitiativeAttachment={props.onUploadInitiativeAttachment} onUploadProjectAttachment={props.onUploadProjectAttachment} onOpenChange={setComposerOpen} open={composerOpen} projects={data.projects} users={data.users}/>
   </main>
+}
+
+function PulseFeedSections(props: Props & { feedView: ReturnType<typeof useFeedView> }) {
+  const { feedView } = props
+  const renderCard = (item: PulseUpdateItem) => (
+    <PulseUpdateCard {...props} item={item} key={item.id} users={props.data.users} viewerId={props.data.viewer.id} workspaceSlug={props.data.workspace.urlKey}/>
+  )
+  if (!feedView.newItemsCount) {
+    return <>{feedView.items.map(renderCard)}</>
+  }
+  return (
+    <>
+      {feedView.newItems.map(renderCard)}
+      <div className="pulse-feed-separator" role="separator" aria-label={`${feedView.newItemsCount} new`}>
+        <span>{feedView.newItemsCount === 1 ? '1 new' : `${feedView.newItemsCount} new`}</span>
+        <i />
+        <em>Last seen</em>
+      </div>
+      {feedView.olderItems.map(renderCard)}
+      {!feedView.olderItems.length ? <p className="pulse-feed-caught-up">You’re all caught up</p> : null}
+    </>
+  )
 }
 
 function PulseEmptyState({ copy, onCreate }: { copy: string; onCreate: () => void }) { return <div className="pulse-empty"><div className="pulse-empty-icon"><i/><i/><span><Sparkles size={17}/></span></div><strong>Pulse</strong><p>{copy}</p><div><button onClick={onCreate} type="button">New update</button><a href="https://github.com/leozhengliu-pixel/flow/blob/main/docs/pulse-page-modules.md" rel="noreferrer" target="_blank">Documentation</a></div></div> }
