@@ -1,0 +1,220 @@
+.asks-settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 16px 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: 500 13px/18px "Inter Variable", "SF Pro Display", system-ui, sans-serif;
+  cursor: pointer;
+}
+.asks-settings-back:hover {
+  color: var(--theme-text-primary);
+}
+.asks-settings-back:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+  border-radius: 6px;
+}
+
+.asks-coming-soon {
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-surface-1);
+}
+.asks-coming-soon strong {
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+.asks-coming-soon span {
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.asks-slack-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.asks-slack-toolbar label {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+}
+.asks-slack-toolbar input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: 13px/18px inherit;
+}
+
+.asks-channel-row {
+  box-sizing: border-box;
+  min-height: 56px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) minmax(120px, 1fr) minmax(120px, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--theme-border);
+}
+.asks-channel-row:last-child {
+  border-bottom: 0;
+}
+.asks-channel-row strong {
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 450;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asks-channel-row .feature-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.asks-wizard {
+  width: 640px;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.asks-wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 16px 24px;
+}
+.asks-wizard-steps span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  box-shadow: 0 0 0 0.5px var(--theme-border);
+}
+.asks-wizard-steps span[data-active="true"] {
+  color: var(--theme-text-primary);
+  background: color-mix(in srgb, #5e6ad2 14%, transparent);
+  box-shadow: 0 0 0 0.5px color-mix(in srgb, #5e6ad2 40%, transparent);
+}
+.asks-wizard-steps span[data-done="true"] {
+  color: var(--theme-text-primary);
+}
+.asks-wizard-panel {
+  margin: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.asks-wizard-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+.asks-wizard-panel input,
+.asks-wizard-panel select {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+  font: 13px/19px "Inter Variable", "SF Pro Display", system-ui, sans-serif;
+}
+.asks-wizard-panel input:focus,
+.asks-wizard-panel select:focus {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.asks-wizard-dns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-surface-1);
+}
+.asks-wizard-dns dt {
+  margin: 0;
+  color: var(--theme-text-secondary);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.asks-wizard-dns dd {
+  margin: 2px 0 8px;
+  color: var(--theme-text-primary);
+  font: 450 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all;
+}
+.asks-wizard-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.asks-clickable-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.asks-clickable-row:hover .feature-row,
+.asks-clickable-row:focus-visible .feature-row {
+  background: var(--theme-surface-hover);
+}
+.asks-clickable-row:focus-visible {
+  outline: 0;
+}
+
+:root[data-theme="light"] .asks-coming-soon,
+:root[data-theme="light"] .asks-wizard-dns,
+:root[data-theme="light"] .asks-slack-toolbar label {
+  border-color: var(--theme-border);
+  background: var(--theme-surface-2);
+}
+:root[data-theme="light"] .asks-channel-row {
+  border-color: var(--border);
+}

@@ -287,6 +287,36 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 				return fmt.Errorf("%w: Asks requires an enabled, verified team email intake address", errInvalid)
 			}
 		}
+		channels := make([]domain.AsksSlackChannelMapping, 0, len(input.FeatureSettings.AsksSlackChannels))
+		seenChannels := map[string]struct{}{}
+		for _, item := range input.FeatureSettings.AsksSlackChannels {
+			channel := strings.TrimSpace(item.Channel)
+			teamID := strings.TrimSpace(item.TeamID)
+			templateID := strings.TrimSpace(item.TemplateID)
+			if channel == "" || teamID == "" {
+				return fmt.Errorf("%w: Asks Slack channel mapping requires channel and teamId", errInvalid)
+			}
+			key := strings.ToLower(channel)
+			if _, exists := seenChannels[key]; exists {
+				return fmt.Errorf("%w: duplicate Asks Slack channel mapping", errInvalid)
+			}
+			if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+				return fmt.Errorf("%w: Asks Slack channel team not found", errInvalid)
+			}
+			if templateID != "" && !slices.ContainsFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
+				return template.ID == templateID && (template.TeamID == "" || template.TeamID == teamID)
+			}) {
+				return fmt.Errorf("%w: Asks Slack channel template not found", errInvalid)
+			}
+			seenChannels[key] = struct{}{}
+			channels = append(channels, domain.AsksSlackChannelMapping{
+				Channel:    channel,
+				TeamID:     teamID,
+				TemplateID: templateID,
+				Enabled:    item.Enabled,
+			})
+		}
+		input.FeatureSettings.AsksSlackChannels = channels
 		if !slices.Contains([]string{"daily", "weekly", "never"}, input.FeatureSettings.PulseWorkspaceSchedule) {
 			return errInvalid
 		}
