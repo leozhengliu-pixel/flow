@@ -31,6 +31,8 @@ import { AutomationTrustedSourceEditor } from "@/components/automation/automatio
 import { loopPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import type { BootstrapData, Loop } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
+import { AgentComposeDraftTracker } from "@/components/agent/agent-compose-draft-tracker";
+import { AgentMentionBodyData } from "@/components/agent/agent-mention-body-data";
 import { toast } from "sonner";
 import "./loops-page.css";
 
@@ -609,15 +611,20 @@ function LoopEditor({
   const compose = async () => {
     if (!composePrompt.trim() || composeBusy) return;
     setComposeBusy(true);
+    const draftId = serverDraftId ?? loop?.id ?? `loop-compose:${Date.now()}`;
     try {
+      AgentComposeDraftTracker.add(draftId);
+      const mention = AgentMentionBodyData.buildPreset("triage");
+      const mentionPrefix = AgentMentionBodyData.toPlainText(mention);
       const response = await sendAgentMessage({
-        message: `Write only the concise, executable instructions for a Flow automation loop. Trigger: ${triggerLabels[triggerType]}. User intent: ${composePrompt.trim()}`,
+        message: `${mentionPrefix}\nWrite only the concise, executable instructions for a Flow automation loop. Trigger: ${triggerLabels[triggerType]}. User intent: ${composePrompt.trim()}`,
         issueIds: [],
         history: [],
       });
       setInstructions(response.message.trim());
       setComposeOpen(false);
       setComposePrompt("");
+      AgentComposeDraftTracker.remove(draftId);
     } catch (error) {
       toast.error(
         error instanceof Error
@@ -861,6 +868,8 @@ function LoopEditor({
               onClick={() => {
                 setComposePrompt("");
                 setComposeOpen(true);
+                const draftId = serverDraftId ?? loop?.id ?? `loop-compose:${Date.now()}`;
+                AgentComposeDraftTracker.add(draftId);
               }}
             >
               <Sparkles size={13} />

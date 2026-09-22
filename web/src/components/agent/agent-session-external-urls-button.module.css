@@ -1,0 +1,8 @@
+.wrap{position:relative;display:inline-flex}
+.link,.menuButton{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border:.5px solid var(--theme-border);border-radius:6px;background:var(--theme-surface-2);color:var(--theme-text-secondary);font:12px/1 var(--font);text-decoration:none;cursor:pointer}
+.link:hover,.menuButton:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.link svg,.menuButton svg{flex:none}
+.caret{width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid currentColor;opacity:.7}
+.menu{position:absolute;z-index:20;top:calc(100% + 4px);right:0;min-width:160px;margin:0;padding:4px;list-style:none;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-2);box-shadow:var(--shadow-control)}
+.menu a{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:6px;color:var(--theme-text-primary);font:12px/1.2 var(--font);text-decoration:none}
+.menu a:hover{background:var(--theme-surface-hover)}

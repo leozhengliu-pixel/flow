@@ -69,3 +69,6 @@
 :global(:root[data-theme="light"]) .messageActivity>div{border-color:var(--theme-border)}
 :global(:root[data-theme="light"]) .messageActivity>div strong{color:var(--theme-text-tertiary)!important}
 :global(:root[data-theme="light"]) .messageActivity>div p{color:var(--theme-text-secondary)}
+.context>span button{width:18px;height:18px;display:grid;place-items:center;margin-left:auto;border:0;border-radius:4px;background:transparent;color:var(--theme-text-tertiary);cursor:pointer}
+.context>span button:hover{background:var(--theme-surface-1);color:var(--theme-text-primary)}
+.srFeedback{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
