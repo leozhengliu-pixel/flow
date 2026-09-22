@@ -167,7 +167,7 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { useLocation } from "react-router-dom";
@@ -464,6 +464,16 @@ function App() {
     location.pathname === "/connect/figma/desktop-redirect" ||
     location.pathname === "/connect/sentry" ||
     location.pathname === "/connect/sentry/callback";
+  const authTokenPath =
+    location.pathname === "/auth/token" ||
+    location.pathname === "/auth/email" ||
+    location.pathname.startsWith("/auth/saml") ||
+    location.pathname.startsWith("/auth/web-saml");
+  const authErrorPath = location.pathname === "/auth/error";
+  const authGoogleCallbackPath =
+    location.pathname === "/auth/google/callback" ||
+    location.pathname === "/auth/oidc/callback";
+  const mobileAuthPath = location.pathname === "/mobile-auth";
   const authPath =
     [
       "/login",
@@ -473,7 +483,11 @@ function App() {
       "/reset-password",
     ].some((path) => location.pathname === path) ||
     location.pathname.startsWith("/invite/") ||
-    location.pathname.startsWith("/join/");
+    location.pathname.startsWith("/join/") ||
+    authTokenPath ||
+    authErrorPath ||
+    authGoogleCallbackPath ||
+    mobileAuthPath;
   useEffect(() => {
     if (authReady && !session && (oauthPath || connectPath)) {
       const returnTo = `${location.pathname}${location.search}`;
@@ -496,11 +510,15 @@ function App() {
       session &&
       authPath &&
       !location.pathname.startsWith("/invite/") &&
-      !location.pathname.startsWith("/join/")
+      !location.pathname.startsWith("/join/") &&
+      !authTokenPath &&
+      !authErrorPath &&
+      !authGoogleCallbackPath &&
+      !mobileAuthPath
     ) {
       navigateTo("/", { replace: true });
     }
-  }, [authPath, authReady, location.pathname, navigateTo, session]);
+  }, [authPath, authReady, authTokenPath, authErrorPath, authGoogleCallbackPath, mobileAuthPath, location.pathname, navigateTo, session]);
   useEffect(() => {
     if (!account) return;
     if (oauthPath || connectPath) return;
@@ -3846,6 +3864,19 @@ function App() {
   );
   if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
   if (!authReady) return withStore(<AppStartup />);
+  const handleAuthenticated = async (authenticated: AuthSession, returnTo?: string) => {
+    setSession(authenticated);
+    const nextAccount = await fetchAccountBootstrap();
+    setAccount(nextAccount);
+    setError(false);
+    navigateTo(returnTo || "/", { replace: true });
+  };
+  if (authErrorPath) return withStore(<AuthErrorPage />);
+  if (mobileAuthPath) return withStore(<MobileAuthPage />);
+  if (authGoogleCallbackPath)
+    return withStore(<AuthGoogleCallbackPage onAuthenticated={handleAuthenticated} />);
+  if (authTokenPath)
+    return withStore(<AuthTokenPage onAuthenticated={handleAuthenticated} />);
   if (location.pathname.startsWith("/join/"))
     return withStore(
       <Suspense fallback={<AppStartup />}>
@@ -3864,13 +3895,7 @@ function App() {
     return withStore(
       <AuthPage
         session={session}
-        onAuthenticated={async (authenticated, returnTo) => {
-          setSession(authenticated);
-          const nextAccount = await fetchAccountBootstrap();
-          setAccount(nextAccount);
-          setError(false);
-          navigateTo(returnTo || "/", { replace: true });
-        }}
+        onAuthenticated={handleAuthenticated}
         onInvitationAccepted={async (workspaceKey) => {
           setAccount(await fetchAccountBootstrap());
           setData(null);

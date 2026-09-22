@@ -1040,6 +1040,8 @@ export const zhCN: Record<string, string> = {
   "Approved connectors": "已批准的连接器",
   "Left workspace": "已离开工作区",
   "Only admins": "仅管理员",
+  "Only owners": "仅所有者",
+  "Only owners and admins": "仅所有者和管理员",
   "All members": "所有成员",
   "Workflows & automations": "工作流与自动化",
   "Show initiatives in the sidebar": "在侧栏中显示目标",

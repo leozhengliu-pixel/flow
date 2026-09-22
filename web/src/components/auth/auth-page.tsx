@@ -16,6 +16,7 @@ import {
 import type { AuthProviderConfig } from '@/lib/api'
 import type { AuthSession, InvitationPreview } from '@/types/flow'
 import { LanguageSelect } from '@/i18n/i18n'
+import { createGoogleLoginState, withClientKey } from '@/lib/google-login-state'
 
 import './auth-page.css'
 
@@ -136,7 +137,12 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
   return <AuthShell>
     {(isForgot || isReset) && <button className="auth-back" onClick={() => navigate('/login')}><ArrowLeft/>Back</button>}
     <h1>{isSignup ? 'Create your account' : isForgot ? 'Reset your password' : isReset ? 'Choose a new password' : 'Log in to Flow'}</h1>
-    {!isReset&&!isForgot&&providers.providers.map(provider=><a className="auth-google auth-provider" href={provider.startUrl} key={provider.id}><span>{provider.id==='google'?'G':provider.id==='saml'?'S':'O'}</span>Continue with <b>{provider.name}</b></a>)}
+    {!isReset&&!isForgot&&providers.providers.map(provider=><a className="auth-google auth-provider" href={provider.startUrl} key={provider.id} onClick={(event) => {
+      if (provider.id !== 'google' && provider.id !== 'oidc') return
+      event.preventDefault()
+      const state = createGoogleLoginState()
+      window.location.assign(withClientKey(provider.startUrl, state.key))
+    }}><span>{provider.id==='google'?'G':provider.id==='saml'?'S':'O'}</span>Continue with <b>{provider.name}</b></a>)}
     {!isReset && !isForgot && providers.email&&providers.providers.length>0&&<div className="auth-divider"><span>or</span></div>}
     {providers.email&&!(isReset&&message)&&<form onSubmit={submit}>
       {isSignup && <label>Full name<input name="name" autoFocus autoComplete="name" value={name} onChange={event => setName(event.target.value)} placeholder="Your name" required/></label>}

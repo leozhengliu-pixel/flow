@@ -13,6 +13,8 @@ import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
+import { useSecuritySetting } from '@/hooks/use-security-setting';
+import type { SecuritySettingKey } from '@/lib/security-setting';
 import {
   Activity,
   AppWindow,
@@ -3077,59 +3079,51 @@ function SecurityPage({
       <Section title="Workspace management">
         <PermissionRow
           title="New user invitations"
-          value={settings.invitePermission}
-          onChange={(value) =>
-            void save({ ...settings, invitePermission: value })
-          }
+          settingKey="invitePermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="Team creation"
-          value={settings.teamCreatePermission}
-          onChange={(value) =>
-            void save({ ...settings, teamCreatePermission: value })
-          }
+          settingKey="teamCreatePermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="Manage workspace labels"
-          value={settings.labelPermission}
-          onChange={(value) =>
-            void save({ ...settings, labelPermission: value })
-          }
+          settingKey="labelPermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="Manage workspace templates"
-          value={settings.templatePermission}
-          onChange={(value) =>
-            void save({ ...settings, templatePermission: value })
-          }
+          settingKey="templatePermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="Workspace initiatives"
-          value={settings.initiativePermission ?? "members"}
-          onChange={(value) =>
-            void save({ ...settings, initiativePermission: value })
-          }
+          settingKey="initiativePermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="Manage loops"
-          value={settings.loopPermission ?? "members"}
-          onChange={(value) =>
-            void save({ ...settings, loopPermission: value })
-          }
+          settingKey="loopPermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="Modify agent guidance"
-          value={settings.agentGuidancePermission ?? "admins"}
-          onChange={(value) =>
-            void save({ ...settings, agentGuidancePermission: value })
-          }
+          settingKey="agentGuidancePermission"
+          settings={settings}
+          save={save}
         />
         <PermissionRow
           title="API key creation"
-          value={settings.apiKeyPermission}
-          onChange={(value) =>
-            void save({ ...settings, apiKeyPermission: value })
-          }
+          settingKey="apiKeyPermission"
+          settings={settings}
+          save={save}
         />
       </Section>
       <Section title="Integrations & applications">
@@ -3159,24 +3153,40 @@ function SecurityPage({
 }
 function PermissionRow({
   title,
-  value,
-  onChange,
+  settingKey,
+  settings,
+  save,
 }: {
   title: string;
-  value: string;
-  onChange: (value: string) => void;
+  settingKey: SecuritySettingKey;
+  settings: WorkspaceSettings;
+  save: (next: WorkspaceSettings) => Promise<void>;
 }) {
+  const security = useSecuritySetting(settingKey, settings, save);
   return (
-    <Row title={title}>
-      <Select
-        label={title}
-        value={value === "admins" ? "Only admins" : "All members"}
-        options={["Only admins", "All members"]}
-        onChange={(next) =>
-          onChange(next === "Only admins" ? "admins" : "members")
-        }
-      />
-    </Row>
+    <>
+      <Row title={title}>
+        <Select
+          label={title}
+          value={security.value}
+          options={security.options.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          onChange={security.onValueChange}
+        />
+      </Row>
+      {settingKey === "apiKeyPermission" && (
+        <ConfirmDialog
+          open={security.confirmOpen}
+          title={security.confirmTitle}
+          description={security.confirmDescription}
+          confirm="Confirm"
+          onCancel={security.cancelRestrict}
+          onConfirm={() => void security.confirmRestrict()}
+        />
+      )}
+    </>
   );
 }
 function ApiPage({
