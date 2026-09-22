@@ -5,7 +5,7 @@
   padding:8px 10px;
   border:.5px solid var(--border);
   border-radius:8px;
-  background:var(--theme-surface-2,var(--bg-elevated));
+  background:var(--theme-surface-2);
 }
 .header{
   display:flex;
@@ -15,7 +15,7 @@
   font-size:12px;
   font-weight:500;
 }
-.header svg{color:lch(67.6% 34.2 283)}
+.header svg{color:var(--focus-ring)}
 .acceptAll{
   margin-left:auto;
   height:22px;
@@ -56,5 +56,5 @@
   width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;
   border:0;border-radius:6px;background:transparent;cursor:pointer;color:var(--theme-text-secondary,var(--muted));
 }
-.accept:hover{color:var(--success, #3dd68c);background:var(--bg-hover)}
-.dismiss:hover{color:var(--danger, #f7615f);background:var(--bg-hover)}
+.accept:hover{color:var(--success);background:var(--bg-hover)}
+.dismiss:hover{color:var(--danger);background:var(--bg-hover)}

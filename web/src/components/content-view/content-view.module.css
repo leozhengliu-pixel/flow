@@ -266,7 +266,7 @@
 .filterButton:hover{background:var(--bg-hover);color:var(--theme-text-primary,var(--text))}
 .filterButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 .filterButtonActive{
-  background:var(--theme-surface-2,var(--bg-elevated));
+  background:var(--theme-surface-2);
   border-color:var(--theme-border-strong,var(--border));
   color:var(--theme-text-primary,var(--text));
 }
@@ -276,7 +276,7 @@
   padding:0 5px;
   border-radius:9999px;
   background:var(--accent-primary,var(--accent));
-  color:#fff;
+  color:var(--on-accent);
   font-size:10px;
   line-height:16px;
   text-align:center;
@@ -307,5 +307,5 @@
   border:.5px solid var(--border);
   border-radius:10px;
   background:var(--bg-panel,var(--theme-surface-1));
-  box-shadow:var(--shadow-lg,var(--shadow));
+  box-shadow:var(--shadow-dialog);
 }
