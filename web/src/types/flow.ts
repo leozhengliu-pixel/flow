@@ -435,12 +435,18 @@ export interface Attachment {
   linkbackUrl?: string;
   syncStatus?: string;
 }
+export interface CommentThreadSummary {
+  content: string;
+  evalLogId?: string;
+}
 export interface Comment {
   id: UUID;
   version: number;
   body: string;
   bodyData?: Record<string, unknown>;
   parentId?: UUID;
+  resolved?: boolean;
+  threadSummary?: CommentThreadSummary;
   reactions: Record<string, UUID[]>;
   createdAt: string;
   editedAt?: string;

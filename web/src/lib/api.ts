@@ -2439,6 +2439,32 @@ export function updateComment(
     body: JSON.stringify({ body, bodyData, expectedVersion }),
   });
 }
+export function resolveComment(
+  issueId: string,
+  commentId: string,
+  resolved: boolean,
+  expectedVersion?: number,
+  threadSummary?: { content: string; evalLogId?: string },
+): Promise<Comment> {
+  return request(`/api/issues/${issueId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved, expectedVersion, threadSummary }),
+  });
+}
+export function resolveDocumentComment(
+  documentId: string,
+  commentId: string,
+  resolved: boolean,
+  expectedVersion?: number,
+  threadSummary?: { content: string; evalLogId?: string },
+): Promise<Comment> {
+  return request(`/api/documents/${documentId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved, expectedVersion, threadSummary }),
+  });
+}
 export function deleteComment(
   issueId: string,
   commentId: string,
@@ -2494,6 +2520,20 @@ export function uploadAttachment(
     method: "POST",
     body,
   });
+}
+export function uploadAttachmentFromURL(
+  issueId: string,
+  url: string,
+  options?: { title?: string; embed?: boolean },
+): Promise<Attachment> {
+  return request(
+    `/api/issues/${issueId}/attachments/from-url`,
+    jsonRequest("POST", {
+      url,
+      title: options?.title,
+      embed: options?.embed,
+    }),
+  );
 }
 
 export function deleteAttachment(
