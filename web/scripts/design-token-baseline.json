@@ -11,7 +11,10 @@
   "components/content-view/content-view-header-search.css": 1,
   "components/create-issue/create-issue-dialog.module.css": 57,
   "components/customer-detail/customer-detail-page.css": 12,
+  "components/customer/customer-logo-pile.css": 3,
+  "components/customer/embedded-customer-need-form.css": 2,
   "components/cycles/cycles.css": 25,
+  "components/detail/issue-customer-needs.css": 1,
   "components/documents/document-page.css": 1,
   "components/documents/documents-multi-select-actions.module.css": 2,
   "components/editor/lightbox-editor.css": 22,
@@ -54,6 +57,7 @@
   "components/views/view-icon-picker.module.css": 23,
   "components/workspace-directory/workspace-directory.css": 38,
   "components/workspace-operations/workspace-operations.css": 21,
+  "components/workspace/label-page-toolbar.css": 2,
   "components/workspace/organization-not-found.css": 14,
   "components/workspace/workspace.css": 19
 }
