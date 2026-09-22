@@ -107,6 +107,30 @@ type Invitation struct {
 	Token       string     `json:"token,omitempty"`
 }
 
+// WorkspaceInviteLink is the shareable workspace join link (distinct from
+// per-email Invitation tokens accepted at /invite/:token).
+type WorkspaceInviteLink struct {
+	Token     string    `json:"token"`
+	Enabled   bool      `json:"enabled"`
+	CreatedBy string    `json:"createdBy,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// OAuthSyncGroupRequest is an app-user request to sync IdP/directory groups
+// into workspace teams. Approve/deny is available when this model is present.
+type OAuthSyncGroupRequest struct {
+	ID            string     `json:"id"`
+	ApplicationID string     `json:"applicationId"`
+	GroupName     string     `json:"groupName"`
+	TeamID        string     `json:"teamId,omitempty"`
+	Status        string     `json:"status"` // pending | approved | denied
+	RequestedBy   string     `json:"requestedBy,omitempty"`
+	ReviewedBy    string     `json:"reviewedBy,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	ReviewedAt    *time.Time `json:"reviewedAt,omitempty"`
+}
+
 type AuthSession struct {
 	User        User                  `json:"user"`
 	Memberships []WorkspaceMembership `json:"memberships"`
@@ -1135,6 +1159,7 @@ type OAuthApplication struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
 	Description  string    `json:"description,omitempty"`
+	LogoURL      string    `json:"logoUrl,omitempty"`
 	ClientID     string    `json:"clientId"`
 	ClientSecret string    `json:"clientSecret,omitempty"`
 	RedirectURIs []string  `json:"redirectUris"`
@@ -1148,6 +1173,7 @@ type Webhook struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
 	URL             string     `json:"url"`
+	ApplicationID   string     `json:"applicationId,omitempty"`
 	ResourceTypes   []string   `json:"resourceTypes"`
 	TeamIDs         []string   `json:"teamIds"`
 	TeamRestriction string     `json:"teamRestriction,omitempty"`
@@ -1164,9 +1190,10 @@ type Webhook struct {
 type WebhookFailureEvent struct {
 	ID              string    `json:"id"`
 	WebhookID       string    `json:"webhookId"`
+	ApplicationID   string    `json:"applicationId,omitempty"`
 	ExecutionID     string    `json:"executionId"`
 	URL             string    `json:"url"`
-	HTTPStatus      *int      `json:"httpStatus"`
+	HTTPStatus      *int      `json:"httpStatus,omitempty"`
 	ResponseOrError string    `json:"responseOrError"`
 	CreatedAt       time.Time `json:"createdAt"`
 }
@@ -1795,6 +1822,8 @@ type Bootstrap struct {
 	Members                       []WorkspaceMember                  `json:"members"`
 	TeamMembers                   []TeamMember                       `json:"teamMembers"`
 	Invitations                   []Invitation                       `json:"invitations"`
+	WorkspaceInviteLink            *WorkspaceInviteLink               `json:"workspaceInviteLink,omitempty"`
+	OAuthSyncGroupRequests         []OAuthSyncGroupRequest            `json:"oauthSyncGroupRequests,omitempty"`
 	ViewerRole                    string                             `json:"viewerRole"`
 }
 
