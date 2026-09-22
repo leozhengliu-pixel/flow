@@ -951,6 +951,9 @@ func normalize(data *domain.Bootstrap) {
 	if data.EmailIntakeAddresses == nil {
 		data.EmailIntakeAddresses = []domain.EmailIntakeAddress{}
 	}
+	if data.AsksWebSettings == nil {
+		data.AsksWebSettings = []domain.AsksWebSettings{}
+	}
 	if data.EmailIntakeMessages == nil {
 		data.EmailIntakeMessages = []domain.EmailIntakeMessage{}
 	}

@@ -1,13 +1,15 @@
-
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { I18nProvider } from "@/i18n/i18n";
 import { makeBootstrap } from "@/test/fixtures";
-import type { WorkspaceSettings } from "@/types/flow";
+import type { AsksWebSettings, WorkspaceSettings } from "@/types/flow";
 import {
+  createAsksWebSettings,
   createEmailIntakeAddress,
+  updateAsksWebSettings,
   updateWorkspacePreferences,
+  verifyAsksWebDNS,
   verifyEmailIntakeAddress,
 } from "@/lib/api";
 import {
@@ -15,6 +17,10 @@ import {
   AsksSlackSettingsPage,
   NewAsksEmailIntakePage,
 } from "./asks-settings";
+import {
+  AsksWebSettingsWizardPage,
+  resolveAsksWebStatus,
+} from "./asks-web-settings";
 
 vi.mock("@/lib/api", async (original) => ({
   ...(await original<typeof import("@/lib/api")>()),
@@ -23,6 +29,13 @@ vi.mock("@/lib/api", async (original) => ({
   verifyEmailIntakeAddress: vi.fn(),
   authorizeIntegration: vi.fn(),
   disconnectIntegration: vi.fn(),
+  createAsksWebSettings: vi.fn(),
+  updateAsksWebSettings: vi.fn(),
+  verifyAsksWebDNS: vi.fn(),
+  deleteAsksWebSettings: vi.fn(),
+  createAsksWebPage: vi.fn(),
+  updateAsksWebPage: vi.fn(),
+  deleteAsksWebPage: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -36,27 +49,29 @@ const settings = {
   featureSettings: { asksEmailAddresses: [], asksSlackChannels: [] },
 } as unknown as WorkspaceSettings;
 
-it("shows honest Coming soon for web forms and opens Slack deep settings", () => {
-  const onOpenSlack = vi.fn();
+const sampleWeb: AsksWebSettings = {
+  id: "cfg-1",
+  title: "Acme Asks",
+  hostname: "asks.acme.test",
+  asksUrl: "https://asks.acme.test",
+  customDomainStatus: "none",
+  emailAddress: "asks@acme.test",
+  emailDomainConfigured: true,
+  dnsVerified: true,
+  hostingStatus: "configured",
+  samlConfigured: false,
+  pages: [],
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
+};
+
+it("shows web forms empty chrome and opens wizard", () => {
+  const onOpenWebFormsWizard = vi.fn();
   const data = makeBootstrap({
     viewerRole: "admin",
     workspaceSettings: settings,
-    integrationConnections: [
-      {
-        id: "slack-1",
-        provider: "slack",
-        name: "Acme Slack",
-        status: "connected",
-        config: { scope: "asks" },
-        scopes: [],
-        channels: ["support"],
-        linkbackEnabled: false,
-        deliveryAttempts: 0,
-        connectedBy: "user-1",
-        createdAt: "2026-01-01T00:00:00Z",
-        updatedAt: "2026-01-01T00:00:00Z",
-      },
-    ] as never,
+    asksWebSettings: [],
+    integrationConnections: [],
     emailIntakeAddresses: [],
   });
   render(
@@ -68,19 +83,71 @@ it("shows honest Coming soon for web forms and opens Slack deep settings", () =>
         setEnabled={vi.fn()}
         setFeature={vi.fn()}
         onReload={vi.fn()}
-        onOpenSlack={onOpenSlack}
+        onOpenSlack={vi.fn()}
         onOpenEmailIntake={vi.fn()}
+        onOpenWebFormsWizard={onOpenWebFormsWizard}
+        onOpenWebFormsSettings={vi.fn()}
+        onOpenWebFormsPage={vi.fn()}
       />
     </I18nProvider>,
   );
-  expect(screen.getByText("Coming soon")).toBeVisible();
+  expect(screen.getByText("No Asks web configuration")).toBeVisible();
+  expect(screen.queryByText(/Upgrade to the/i)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Add Asks Web forms" }));
+  expect(onOpenWebFormsWizard).toHaveBeenCalled();
+});
+
+it("renders AsksWebStatus for configured web forms", () => {
+  const onOpenWebFormsSettings = vi.fn();
+  const data = makeBootstrap({
+    viewerRole: "admin",
+    workspaceSettings: settings,
+    asksWebSettings: [sampleWeb],
+    integrationConnections: [],
+    emailIntakeAddresses: [],
+  });
+  render(
+    <I18nProvider>
+      <AsksSettingsPage
+        data={data}
+        settings={settings}
+        busy={false}
+        setEnabled={vi.fn()}
+        setFeature={vi.fn()}
+        onReload={vi.fn()}
+        onOpenWebFormsSettings={onOpenWebFormsSettings}
+        onOpenWebFormsWizard={vi.fn()}
+        onOpenWebFormsPage={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+  expect(screen.getByText("Configured")).toBeVisible();
+  expect(screen.getByText("SAML not configured")).toBeVisible();
+  fireEvent.click(screen.getByText("asks.acme.test"));
+  expect(onOpenWebFormsSettings).toHaveBeenCalledWith("cfg-1");
+});
+
+it("maps status machine kinds without billing limits", () => {
   expect(
-    screen.getByText(
-      "Custom web forms, domains, and SAML for Asks are not available yet.",
-    ),
-  ).toBeVisible();
-  fireEvent.click(screen.getByText("Acme Slack"));
-  expect(onOpenSlack).toHaveBeenCalledWith("slack-1");
+    resolveAsksWebStatus({
+      ...sampleWeb,
+      hostingStatus: "pending",
+      dnsVerified: false,
+      emailDomainConfigured: false,
+    }).kind,
+  ).toBe("pending");
+  expect(
+    resolveAsksWebStatus({
+      ...sampleWeb,
+      customDomainStatus: "blocked",
+    }).message,
+  ).toBe("Domain activation blocked");
+  expect(
+    resolveAsksWebStatus({
+      ...sampleWeb,
+      emailDomainConfigured: false,
+    }).message,
+  ).toBe("Email domain not configured");
 });
 
 it("maps Slack channels to teams without billing upgrade copy", async () => {
@@ -208,4 +275,69 @@ it("walks the email intake wizard through DNS verification", async () => {
     { featureSettings: { asksEmailAddresses: ["asks@mail.example.com"] } },
     "workspace",
   );
+});
+
+it("walks Asks web forms wizard host → email → DNS → SAML stub", async () => {
+  vi.mocked(createAsksWebSettings).mockResolvedValue({
+    settings: {
+      ...sampleWeb,
+      id: "cfg-new",
+      dnsVerified: false,
+      hostingStatus: "pending",
+      emailDomainConfigured: false,
+      emailAddress: "",
+    },
+    dnsRecord: {
+      type: "TXT",
+      name: "_flow-asks.asks.acme.test",
+      value: "flow-asks-verification=abc",
+    },
+  });
+  vi.mocked(verifyAsksWebDNS).mockResolvedValue({
+    ...sampleWeb,
+    id: "cfg-new",
+  });
+  const onComplete = vi.fn();
+  const onReload = vi.fn().mockResolvedValue(undefined);
+  const data = makeBootstrap({
+    viewerRole: "admin",
+    workspaceSettings: settings,
+    asksWebSettings: [],
+  });
+  render(
+    <I18nProvider>
+      <AsksWebSettingsWizardPage
+        data={data}
+        onBack={vi.fn()}
+        onComplete={onComplete}
+        onReload={onReload}
+      />
+    </I18nProvider>,
+  );
+  fireEvent.change(screen.getByLabelText("Hostname"), {
+    target: { value: "asks.acme.test" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() =>
+    expect(screen.getByLabelText("Notification email")).toBeVisible(),
+  );
+  fireEvent.change(screen.getByLabelText("Notification email"), {
+    target: { value: "asks@acme.test" },
+  });
+  vi.mocked(updateAsksWebSettings).mockResolvedValue({
+    ...sampleWeb,
+    id: "cfg-new",
+    dnsVerified: false,
+    hostingStatus: "pending",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() =>
+    expect(screen.getByText("_flow-asks.asks.acme.test")).toBeVisible(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
+  await waitFor(() =>
+    expect(screen.getByText("Coming soon")).toBeVisible(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+  await waitFor(() => expect(onComplete).toHaveBeenCalledWith("cfg-new"));
 });

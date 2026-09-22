@@ -44,6 +44,8 @@ import type {
 } from "@/types/flow";
 import { SettingsToggle as BaseSettingsToggle } from "./settings-primitives";
 
+import { AsksWebFormsSection } from "./asks-web-settings";
+
 import "./feature-settings.css";
 import "./asks-settings.css";
 
@@ -80,6 +82,9 @@ export function AsksSettingsPage({
   onReload,
   onOpenSlack,
   onOpenEmailIntake,
+  onOpenWebFormsWizard,
+  onOpenWebFormsSettings,
+  onOpenWebFormsPage,
 }: {
   data: BootstrapData;
   settings: WorkspaceSettings;
@@ -89,6 +94,9 @@ export function AsksSettingsPage({
   onReload: () => Promise<void>;
   onOpenSlack?: (integrationId: string) => void;
   onOpenEmailIntake?: () => void;
+  onOpenWebFormsWizard?: (id?: string) => void;
+  onOpenWebFormsSettings?: (id: string) => void;
+  onOpenWebFormsPage?: (settingsId: string, pageId?: string) => void;
 }) {
   const { t } = useI18n();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -186,14 +194,14 @@ export function AsksSettingsPage({
         title="Web forms"
         description="Collect Asks from a public web form on your own domain"
       >
-        <div className="asks-coming-soon">
-          <strong>{t("Coming soon")}</strong>
-          <span>
-            {t(
-              "Custom web forms, domains, and SAML for Asks are not available yet.",
-            )}
-          </span>
-        </div>
+        <AsksWebFormsSection
+          data={data}
+          canManage={!busy && ["admin", "owner"].includes(data.viewerRole)}
+          onOpenWizard={(id) => onOpenWebFormsWizard?.(id)}
+          onOpenSettings={(id) => onOpenWebFormsSettings?.(id)}
+          onAddPage={(settingsId) => onOpenWebFormsPage?.(settingsId, "new")}
+          onReload={onReload}
+        />
       </FeatureSection>
 
       <FeatureSection

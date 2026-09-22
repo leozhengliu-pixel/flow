@@ -193,6 +193,7 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	data.WorkflowRuns = []domain.WorkflowRun{}
 	data.EmailIntakeAddresses = []domain.EmailIntakeAddress{}
 	data.EmailIntakeMessages = []domain.EmailIntakeMessage{}
+	data.AsksWebSettings = []domain.AsksWebSettings{}
 	data.APIKeys = []domain.APIKey{}
 	data.Passkeys = []domain.Passkey{}
 	data.PasskeyRegistrationChallenges = []domain.PasskeyRegistrationChallenge{}
