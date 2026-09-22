@@ -27,6 +27,9 @@ import { IssueHeader } from '@/components/issue/issue-header'
 import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { AssigneePicker, PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
 import { CyclePicker, EstimatePicker, LabelPicker } from '@/components/issue/label-project-pickers'
+import { DetailLabelControl } from '@/components/property/detail-label-control'
+import { EmbeddedCustomerNeedForm } from '@/components/customer/embedded-customer-need-form'
+import './issue-customer-needs.css'
 import { IssueProjectPicker } from '@/components/issue/issue-project-picker'
 import type { NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { IssueAttachments, type AttachmentUploadState } from '@/components/issue/issue-attachments'
@@ -34,7 +37,7 @@ import { descriptionImageSrcs } from '@/components/issue/editor/image-extension'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { IssueReleasePicker } from '@/components/issue/issue-release-picker'
 import { IssueSubscriberPicker } from '@/components/issue/issue-subscriber-picker'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { useIssueAutosave } from '@/components/issue/editor/use-issue-autosave'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
@@ -87,6 +90,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const inlineImageSrcs=descriptionImageSrcs(issue.description,issue.descriptionState,issue.documentContent?.contentData)
   const commentMediaSrcs=comments.reduce((srcs,comment)=>{for(const src of descriptionImageSrcs(comment.body,undefined,comment.bodyData))srcs.add(src);return srcs},new Set<string>())
   const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!inlineImageSrcs.has(attachment.url)&&!commentMediaSrcs.has(attachment.url))
+  const [localCustomerRequests,setLocalCustomerRequests]=useState<import('@/types/flow').CustomerRequest[]>([])
   const customerRequests=data.customerRequests.filter(request=>request.issueId===issue.id)
   const linkedReviews=data.reviews.filter(review=>review.issueIds.includes(issue.id))
   const releasesEnabled=data.workspaceSettings.featureFlags.releases??true
@@ -110,7 +114,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {parentIssue&&<IssueParentContext parent={parentIssue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={()=>openIssue(parentIssue)}/>}
         <TriageIntelligenceSuggestions issue={issue} data={data} onIssueUpdated={onIssueUpdated}/>
         <div className="issue-mobile-properties" aria-label="Issue properties">
-          <StatusPicker value={issue.state} states={availableStates} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<AssigneePicker value={issue.assignee} users={data.users} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})}/><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}<LabelPicker emptyLabel="Start typing to create a new label" value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel} onCreate={createLabel}/><IssueProjectPicker data={data} issue={issue} presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{releasesEnabled&&<IssueReleasePicker data={data} issue={issue}/>}
+          <StatusPicker value={issue.state} states={availableStates} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<AssigneePicker value={issue.assignee} users={data.users} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})}/><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}<DetailLabelControl changeLabelAction="changeLabelAction" host="issue" isArchived={Boolean(issue.archivedAt)} isReadOnly={Boolean(issue.archivedAt)}><LabelPicker emptyLabel="Start typing to create a new label" value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel} onCreate={createLabel}/></DetailLabelControl><IssueProjectPicker data={data} issue={issue} presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{releasesEnabled&&<IssueReleasePicker data={data} issue={issue}/>}
         </div>
         <IssueDescriptionEditor
           selectionActions={descriptionSelection.actions}
@@ -142,7 +146,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {issue.relations.length>0&&<IssueSection title="Relations" count={issue.relations.length}>{issue.relations.map(relation=>{const target=related(relation.relatedIssueId);return <div className="linked-issue relation-row" key={relation.id}><Link2 size={14}/><span>{relationLabel(relation.type)}</span><strong>{target?.identifier} {target?.title}</strong><button aria-label="Remove relation" onClick={()=>onDeleteRelation(relation.id)}><X size={12}/></button></div>})}</IssueSection>}
         {linkedReviews.length>0&&<IssueCodeReviews actions={issueOptionsActions} reviews={linkedReviews}/>}
         {(linkedDocuments.length>0||linkedResources.length>0)&&<IssueResources documents={linkedDocuments} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment}/>}
-        {data.workspaceSettings.featureFlags['customer-requests'] !== false && customerRequests.length>0&&<IssueSection title="Customer requests" count={customerRequests.length}>{customerRequests.map(request=>{const customer=data.customers.find(item=>item.id===request.customerId);return <div className="linked-issue issue-resource-row" key={request.id}><UserRound size={14}/><span>{customer?.name??'Customer'}</span><strong>{request.body}</strong></div>})}</IssueSection>}
+        {data.workspaceSettings.featureFlags['customer-requests'] !== false && <IssueCustomerNeedsSection data={data} issueId={issue.id} requests={[...localCustomerRequests, ...customerRequests]} onLocalCreated={request=>setLocalCustomerRequests(current=>[request,...current.filter(item=>item.id!==request.id)])}/>}
         <IssueAttachments attachments={fileAttachments} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
         <IssueAgentTasks key={`${data.workspace.id}:${issue.id}`} issue={issue} data={data}/>
         {descriptionSelection.panels}
@@ -200,7 +204,7 @@ function SubIssueDisplayMenu({value,onChange}:{value:SubIssueDisplay;onChange:(v
 
 function SubIssueSelect({ariaLabel,value,options,onChange}:{ariaLabel:string;value:string;options:{id:string;label:string}[];onChange:(value:string)=>void}){return <Select.Root value={value} onValueChange={onChange}><Select.Trigger className="sub-issue-select" aria-label={ariaLabel}><Select.Value/><Select.Icon><ChevronDown/></Select.Icon></Select.Trigger><Select.Portal><Select.Content data-flow-motion="floating" className="sub-issue-select-menu" position="popper" sideOffset={4}><Select.Viewport>{options.map(option=><Select.Item className="sub-issue-select-item" value={option.id} key={option.id}><Select.ItemText>{option.label}</Select.ItemText><Select.ItemIndicator><Check/></Select.ItemIndicator></Select.Item>)}</Select.Viewport></Select.Content></Select.Portal></Select.Root>}
 
-function IssueProperties({issue,data,activities,presence=[],releasesEnabled,onCreateMilestone,onCreateProject,onCreateLabel,onUpdate,onToggleLabel}:{issue:Issue;data:BootstrapData;activities:ActivityEvent[];presence?:Presence[];releasesEnabled:boolean;onCreateMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateLabel?:(name:string,groupId?:string)=>void|Promise<void>;onUpdate:(i:IssueUpdateInput)=>Promise<void>;onToggleLabel:(id:string)=>Promise<void>}){const labelScopes=new Set(labelTeamScopeIds(issue.team.id,data.teams,data.teamSettings));const labels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope));const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined;const member=issue.assignee?data.members.find(item=>item.user.id===issue.assignee?.id):undefined;const online=Boolean(issue.assignee&&(issue.assignee.id===data.viewer.id||presence.some(item=>item.user.id===issue.assignee?.id)));const estimateType=resolvedTeamSettings(data.teamSettings,issue.team.id)?.estimateType??'notUsed';return <aside className="issue-properties"><h3>Properties</h3><StatusPicker value={issue.state} states={statesForIssue(data,issue)} hoverHistory={{activities,issueCreatedAt:issue.createdAt}} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<div className="issue-assignee-property"><AssigneePicker value={issue.assignee} users={data.users} hoverContext={{member,online,workspaceName:issue.team.name,project:issue.project}} onChange={assigneeId=>onUpdate({assigneeId})}/>{issue.assignee&&<a className="issue-assignee-profile" href={`/${data.workspace.urlKey}/members`} aria-label="Go to user"><ChevronRight size={15}/></a>}</div><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}{sla&&<PropertyGroup title="SLA"><IssueSLAIndicator sla={sla} ruleName={rule?.name}/></PropertyGroup>}<PropertyGroup title="Labels"><LabelPicker emptyLabel="Start typing to create a new label" inline value={issue.labels} labels={labels} labelGroups={data.labelGroups} onToggle={onToggleLabel} onCreate={onCreateLabel}/></PropertyGroup><IssueProjectPicker grouped data={data} issue={issue} presence={presence} onCreateMilestone={onCreateMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{issue.dueDate&&<PropertyGroup title="Due date"><DueDatePicker value={issue.dueDate} onChange={dueDate=>onUpdate({dueDate})}/></PropertyGroup>}{releasesEnabled&&<IssueReleasePicker grouped data={data} issue={issue}/>}</aside>}
+function IssueProperties({issue,data,activities,presence=[],releasesEnabled,onCreateMilestone,onCreateProject,onCreateLabel,onUpdate,onToggleLabel}:{issue:Issue;data:BootstrapData;activities:ActivityEvent[];presence?:Presence[];releasesEnabled:boolean;onCreateMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateLabel?:(name:string,groupId?:string)=>void|Promise<void>;onUpdate:(i:IssueUpdateInput)=>Promise<void>;onToggleLabel:(id:string)=>Promise<void>}){const labelScopes=new Set(labelTeamScopeIds(issue.team.id,data.teams,data.teamSettings));const labels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope));const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined;const member=issue.assignee?data.members.find(item=>item.user.id===issue.assignee?.id):undefined;const online=Boolean(issue.assignee&&(issue.assignee.id===data.viewer.id||presence.some(item=>item.user.id===issue.assignee?.id)));const estimateType=resolvedTeamSettings(data.teamSettings,issue.team.id)?.estimateType??'notUsed';return <aside className="issue-properties"><h3>Properties</h3><StatusPicker value={issue.state} states={statesForIssue(data,issue)} hoverHistory={{activities,issueCreatedAt:issue.createdAt}} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<div className="issue-assignee-property"><AssigneePicker value={issue.assignee} users={data.users} hoverContext={{member,online,workspaceName:issue.team.name,project:issue.project}} onChange={assigneeId=>onUpdate({assigneeId})}/>{issue.assignee&&<a className="issue-assignee-profile" href={`/${data.workspace.urlKey}/members`} aria-label="Go to user"><ChevronRight size={15}/></a>}</div><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}{sla&&<PropertyGroup title="SLA"><IssueSLAIndicator sla={sla} ruleName={rule?.name}/></PropertyGroup>}<PropertyGroup title="Labels"><DetailLabelControl changeLabelAction="changeLabelAction" host="issue" isArchived={Boolean(issue.archivedAt)} isReadOnly={Boolean(issue.archivedAt)}><LabelPicker emptyLabel="Start typing to create a new label" inline value={issue.labels} labels={labels} labelGroups={data.labelGroups} onToggle={onToggleLabel} onCreate={onCreateLabel}/></DetailLabelControl></PropertyGroup><IssueProjectPicker grouped data={data} issue={issue} presence={presence} onCreateMilestone={onCreateMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{issue.dueDate&&<PropertyGroup title="Due date"><DueDatePicker value={issue.dueDate} onChange={dueDate=>onUpdate({dueDate})}/></PropertyGroup>}{releasesEnabled&&<IssueReleasePicker grouped data={data} issue={issue}/>}</aside>}
 function PropertyGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="property-group"><h4>{title}</h4>{children}</section>}
 function IssueSection({title,count,children}:{title:string;count:number;children:React.ReactNode}){return <section className="issue-detail-section"><header><strong>{title}</strong><span>{count}</span></header>{children}</section>}
 function IssueParentContext({parent,issues,workspaceKey,onOpen}:{parent:Issue;issues:Issue[];workspaceKey:string;onOpen:()=>void}){const children=parent.subIssueIds.map(id=>issues.find(issue=>issue.id===id)).filter((issue):issue is Issue=>Boolean(issue)&&!issue!.archivedAt),completed=children.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length;return <div className="issue-parent-context"><span>Sub-issue of</span><a href={`/${workspaceKey}/issue/${parent.identifier}`} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();onOpen()}}><StatusIcon state={parent.state} size={14}/><strong data-i18n-ignore>{parent.identifier}</strong><span data-i18n-ignore>{parent.title}</span></a>{children.length>0&&<button aria-label={`Open sub-issues of ${parent.identifier}`} onClick={onOpen}><SubIssueProgressRing completed={completed} total={children.length}/><span>{completed}/{children.length}</span></button>}</div>}
@@ -214,3 +218,61 @@ function IssueResources({documents,links,workspaceKey,actions,onDeleteLink}:{doc
 function safeHost(value:string){try{return new URL(value).hostname}catch{return 'Link'}}
 function relationLabel(type:IssueRelationType){return type==='blocked_by'?'Blocked by':type==='blocks'?'Blocking':type==='duplicate'?'Duplicate of':type==='parent_of'?'Parent of':type==='sub_issue_of'?'Sub-issue of':'Related'}
 function statesForIssue(data:BootstrapData,issue:Issue,seen=new Set<string>()):WorkflowState[]{const settings=data.teamSettings[issue.team.id];if(settings?.inheritWorkflowStatuses&&settings.parentTeamId&&!seen.has(issue.team.id)){seen.add(issue.team.id);return statesForIssue(data,{...issue,team:{...issue.team,id:settings.parentTeamId}},seen)}const specific=data.states.some(state=>state.teamId===issue.team.id);return data.states.filter(state=>specific?state.teamId===issue.team.id:!state.teamId).sort((left,right)=>(left.position??0)-(right.position??0))}
+
+function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: {
+  data: BootstrapData
+  issueId: string
+  requests: import('@/types/flow').CustomerRequest[]
+  onLocalCreated: (request: import('@/types/flow').CustomerRequest) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const merged = useMemo(() => {
+    const seen = new Set<string>()
+    const rows: import('@/types/flow').CustomerRequest[] = []
+    for (const item of requests) {
+      if (seen.has(item.id)) continue
+      seen.add(item.id)
+      rows.push(item)
+    }
+    return rows
+  }, [requests])
+  const archivedCount = merged.filter(item => item.archivedAt).length
+  const visible = merged.filter(item => showArchived || !item.archivedAt)
+  return (
+    <IssueSection title="Customer requests" count={visible.length}>
+      <div className="issue-customer-needs-toolbar">
+        <button type="button" onClick={() => setAdding(true)}><Plus size={13}/>Add request</button>
+        {archivedCount > 0 && (
+          <button aria-pressed={showArchived} type="button" onClick={() => setShowArchived(value => !value)}>
+            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+          </button>
+        )}
+      </div>
+      {adding && (
+        <EmbeddedCustomerNeedForm
+          data={data}
+          host="issuePage"
+          issueId={issueId}
+          onCancel={() => setAdding(false)}
+          onCreated={async (request) => {
+            onLocalCreated(request)
+            setAdding(false)
+          }}
+        />
+      )}
+      {visible.map(request => {
+        const customer = data.customers.find(item => item.id === request.customerId)
+        return (
+          <div className={`linked-issue issue-resource-row${request.archivedAt ? ' is-archived' : ''}`} key={request.id}>
+            <UserRound size={14}/>
+            <span>{customer?.name ?? 'Customer'}</span>
+            <strong>{request.body}</strong>
+            {request.priority ? <em className="issue-need-important">Important</em> : null}
+            {request.sourceUrl ? <a href={request.sourceUrl} rel="noreferrer" target="_blank">Source</a> : null}
+          </div>
+        )
+      })}
+    </IssueSection>
+  )
+}

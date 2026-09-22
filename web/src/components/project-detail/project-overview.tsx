@@ -19,10 +19,12 @@ import { DocumentGlyph } from '@/components/documents/document-icon'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useI18n } from '@/i18n/i18n'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
-import type { Issue, ProjectResource, Team } from '@/types/flow'
+import type { BootstrapData, CustomerRequest, Issue, Project, ProjectResource, Team } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PRIORITY_LABELS } from './project-detail-types'
 import { ProjectLabelControl } from '@/components/property/project-label-control'
+import { DetailLabelControl } from '@/components/property/detail-label-control'
+import { EmbeddedCustomerNeedForm } from '@/components/customer/embedded-customer-need-form'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 import { ProjectPropertiesMenu } from './project-properties-menu'
 
@@ -58,7 +60,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
     {issueData?.workspaceSettings.featureFlags.initiatives !== false && <InitiativeSection initiatives={initiatives} project={project} save={save}/>}
     <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save} onCreateLabel={onCreateLabel}/>
     <ResourceSection documents={documents} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
-    {issueData?.workspaceSettings.featureFlags['customer-requests'] !== false && <InlineStringSection addLabel="Add customer request" items={project.customers ?? []} onChange={customers => void save({ customers })} title="Customers"/>}
+    {issueData?.workspaceSettings.featureFlags['customer-requests'] !== false && <ProjectCustomerNeedsSection issueData={issueData} project={project} save={save} />}
 
     <section className="project-overview__latest">
       {projectUpdates[0] ? <button className="project-overview__latest-update" onClick={() => onTabChange('activity')} type="button"><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><p data-i18n-ignore>{projectUpdates[0].body}</p></div></button> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText size={14}/>Write first project update</button>}
@@ -183,7 +185,7 @@ function InitiativeSection({ initiatives, project, save }: { initiatives: Props[
 }
 
 function ProjectLabelSection({ labels, labelGroups, project, save, onCreateLabel }: { labels: Props['labels']; labelGroups: Props['labelGroups']; project: Props['project']; save: Props['save']; onCreateLabel: Props['onCreateLabel'] }) {
-  return <section className="project-overview__row-section"><h3>Labels</h3><div className="project-overview__row-content"><ProjectLabelControl labels={labels} labelGroups={labelGroups} selectedIds={project.labelIds ?? []} onChange={labelIds => void save({ labelIds })} onCreateLabel={onCreateLabel}/></div></section>
+  return <section className="project-overview__row-section"><h3>Labels</h3><div className="project-overview__row-content"><DetailLabelControl changeLabelAction="changeLabelAction" host="project" isArchived={Boolean(project.archivedAt)} isReadOnly={Boolean(project.archivedAt)}><ProjectLabelControl labels={labels} labelGroups={labelGroups} selectedIds={project.labelIds ?? []} onChange={labelIds => void save({ labelIds })} onCreateLabel={onCreateLabel}/></DetailLabelControl></div></section>
 }
 
 function DateProperty({ label, max, min, onChange, placeholder, resolution, value }: { label: 'Start date'|'Target date'; max?: string; min?: string; onChange: (value: string, resolution?: 'halfYear'|'month'|'quarter'|'year') => void; placeholder: string; resolution?: 'halfYear'|'month'|'quarter'|'year'; value?: string }) {
@@ -209,3 +211,67 @@ function ProjectDescriptionEditor({ users, value, onCommit }: { users: Props['us
 function uniqueById<T extends { id: string }>(items: T[]) { return [...new Map(items.map(item => [item.id, item])).values()] }
 function toggleString(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
 import { AnimatedMilestones } from '@/components/ui/motion';
+
+
+function ProjectCustomerNeedsSection({ issueData, project, save }: { issueData?: BootstrapData; project: Project; save: (input: ProjectMutationInput) => Promise<void> }) {
+  const [adding, setAdding] = useState(false)
+  const [showArchived, setShowArchived] = useState(false)
+  const [localRequests, setLocalRequests] = useState<CustomerRequest[]>([])
+  if (!issueData) {
+    return <InlineStringSection addLabel="Add customer request" items={project.customers ?? []} onChange={customers => void save({ customers })} title="Customers"/>
+  }
+  const merged = [...localRequests, ...issueData.customerRequests.filter(item => item.projectId === project.id)]
+  const seen = new Set<string>()
+  const requests = merged.filter(item => {
+    if (seen.has(item.id)) return false
+    seen.add(item.id)
+    return true
+  })
+  const archivedCount = requests.filter(item => item.archivedAt).length
+  const visible = requests.filter(item => showArchived || !item.archivedAt)
+  return (
+    <section className="project-overview__row-section">
+      <h3>Customer requests</h3>
+      <div className="project-overview__row-content project-customer-needs">
+        {visible.map(request => {
+          const customer = issueData.customers.find(item => item.id === request.customerId)
+          return (
+            <span className={`project-overview__string-item${request.archivedAt ? ' is-archived' : ''}`} key={request.id}>
+              <span>{customer?.name ?? 'Customer'}: {request.body}</span>
+              {request.priority ? <em>Important</em> : null}
+            </span>
+          )
+        })}
+        {(project.customers ?? []).map(item => (
+          <span className="project-overview__string-item" key={`name:${item}`}>
+            <span>{item}</span>
+            <button aria-label={`Remove ${item}`} onClick={() => void save({ customers: (project.customers ?? []).filter(value => value !== item) })} type="button"><Trash2 size={11}/></button>
+          </span>
+        ))}
+        <button className="project-overview__inline-add" onClick={() => setAdding(true)} type="button"><Plus size={13}/>Add customer request</button>
+        {archivedCount > 0 && (
+          <button className="project-overview__inline-add" type="button" onClick={() => setShowArchived(value => !value)}>
+            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+          </button>
+        )}
+      </div>
+      {adding && (
+        <EmbeddedCustomerNeedForm
+          data={issueData}
+          host="projectPage"
+          projectId={project.id}
+          onCancel={() => setAdding(false)}
+          onCreated={async (request) => {
+            setLocalRequests(current => [request, ...current])
+            const customer = issueData.customers.find(item => item.id === request.customerId)
+            if (customer && !(project.customers ?? []).includes(customer.name)) {
+              await save({ customers: [...(project.customers ?? []), customer.name] })
+            }
+            setAdding(false)
+          }}
+        />
+      )}
+    </section>
+  )
+}
+

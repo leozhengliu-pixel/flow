@@ -531,3 +531,26 @@
 :root[data-theme="light"] .customer-delete-dialog footer .danger {
   color: var(--on-accent);
 }
+
+.customer-request-row.is-archived {
+  opacity: 0.62;
+}
+.customer-show-archived {
+  height: 24px !important;
+  margin-left: auto;
+  padding: 0 8px !important;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  font: 500 11px var(--font);
+  cursor: pointer;
+}
+.customer-show-archived:hover,
+.customer-show-archived[aria-pressed="true"] {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+.customer-requests-heading > button:last-child {
+  margin-left: 0;
+}

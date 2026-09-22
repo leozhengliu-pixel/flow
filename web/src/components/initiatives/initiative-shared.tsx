@@ -8,6 +8,7 @@ import { ProjectTargetDatePicker } from '@/components/projects-page/project-targ
 import { PropertyMenu } from '@/components/property/property-menu'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { LabelPicker } from '@/components/issue/label-project-pickers'
+import { customersForInitiative, DetailLabelControl } from '@/components/property/detail-label-control'
 import type { Initiative, InitiativeMutationInput, IssueLabel, LabelGroup, Project, Team, User } from '@/types/flow'
 import { formatTarget, titleCase } from './initiative-model'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -59,18 +60,25 @@ export function InitiativeTeamsPicker({ initiative, teams, onUpdate }: { initiat
   return <Popover.Root><Popover.Trigger asChild><button aria-label="Change contributing teams" className="li-team-picker" type="button">{selected.length ? <><span className="li-team-mark"><ViewGlyph color={selected[0].color} icon={selected[0].icon || 'Team'}/></span><span data-i18n-ignore>{selected.length === 1 ? selected[0].name : `${selected.length} teams`}</span></> : <><UsersRound size={14}/><span>Contributing teams</span></>}</button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="start" className="li-team-picker-menu" collisionPadding={8} sideOffset={4}><header>Contributing teams</header>{teams.map(team => <button aria-checked={initiative.contributingTeamIds?.includes(team.id)} key={team.id} onClick={() => toggle(team.id)} role="checkbox" type="button"><span className="li-picker-checkbox">{initiative.contributingTeamIds?.includes(team.id) && <CheckboxMark/>}</span><span className="li-team-mark"><ViewGlyph color={team.color} icon={team.icon || 'Team'}/></span><span data-i18n-ignore>{team.name}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
 }
 
-export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], onUpdate, onCreateLabel, compact = false }: {
+export function InitiativeLabelsPicker({ initiative, labels, labelGroups = [], onUpdate, onCreateLabel, compact = false, projects = [], customers = [], customerRequests = [], isReadOnly = false }: {
   initiative: Initiative
   labels: IssueLabel[]
   labelGroups?: LabelGroup[]
   compact?: boolean
+  isReadOnly?: boolean
+  projects?: Array<{ id: string; customers?: string[] }>
+  customers?: Array<{ id: string; name: string; logoUrl?: string }>
+  customerRequests?: Array<{ projectId?: string; customerId: string; archivedAt?: string }>
   onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>
   onCreateLabel?: (name: string) => Promise<IssueLabel>
 }) {
   const selected = labels.filter(label => initiative.labelIds.includes(label.id))
-  return <div className={compact ? 'li-label-picker li-label-picker--compact' : 'li-label-picker'}>
-    <LabelPicker emptyLabel="Start typing to create a new label" labels={labels} labelGroups={labelGroups} searchShortcut="N, then L" showGroupHeadings={false} surfaceClassName="li-initiative-label-command" value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }} onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}/>
-  </div>
+  const pileCustomers = customersForInitiative(initiative, projects, customers, customerRequests)
+  return <DetailLabelControl changeLabelAction="changeLabelAction" customers={pileCustomers} host="initiative" isArchived={false} isReadOnly={isReadOnly}>
+    <div className={compact ? 'li-label-picker li-label-picker--compact' : 'li-label-picker'}>
+      <LabelPicker emptyLabel="Start typing to create a new label" labels={labels} labelGroups={labelGroups} searchShortcut="N, then L" showGroupHeadings={false} surfaceClassName="li-initiative-label-command" value={selected} onToggle={labelId => { void onUpdate({ labelIds: initiative.labelIds.includes(labelId) ? initiative.labelIds.filter(id => id !== labelId) : [...initiative.labelIds, labelId] }) }} onCreate={onCreateLabel ? async name => { const label = await onCreateLabel(name); await onUpdate({ labelIds: [...new Set([...initiative.labelIds, label.id])] }) } : undefined}/>
+    </div>
+  </DetailLabelControl>
 }
 
 export function ProjectAssociationPicker({ children, initiative, projects, onUpdate, label = 'Add project' }: {
