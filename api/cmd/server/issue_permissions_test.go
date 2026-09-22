@@ -45,6 +45,7 @@ func TestPrivateIssueExplicitShareAndTeamOwnerInheritance(t *testing.T) {
 	// The workspace owner inherits team-owner access for a child team.
 	child := authRequest[domain.Team](t, admin, http.MethodPost, server.URL+"/api/workspaces/test-workspace/teams", map[string]any{"name": "Child", "key": "CHD", "parentTeamId": team.ID}, "", http.StatusCreated)
 	authRequest[any](t, admin, http.MethodPatch, server.URL+"/api/workspaces/test-workspace/teams/"+child.ID, map[string]string{"name": "Child renamed"}, "", http.StatusOK)
+	authRequest[domain.TeamSettings](t, admin, http.MethodPatch, server.URL+"/api/teams/"+team.ID+"/settings", map[string]any{"issueSharingEnabled": true}, "test-workspace", http.StatusOK)
 	shared := authRequest[map[string]any](t, admin, http.MethodPost, server.URL+"/api/issues/"+issue.ID+"/share", nil, "test-workspace", http.StatusOK)
 	shareToken, _ := shared["token"].(string)
 	if shareToken == "" {
