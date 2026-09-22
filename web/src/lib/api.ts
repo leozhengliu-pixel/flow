@@ -80,7 +80,6 @@ import type {
   User,
   UserSettings,
   Webhook,
-  WebhookFailureEvent,
   WorkflowState,
   Workspace,
   WorkspaceMember,
