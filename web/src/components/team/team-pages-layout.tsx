@@ -127,18 +127,13 @@ export function TeamPagesLayout({
   );
 
   useEffect(() => {
-    if (!team || blocked || typeof window === "undefined") return;
+    if (!team || blocked) return;
     // Progressive preload OK — warm common team surfaces after paint.
-    const path = window.location.pathname;
-    const run = () => {
+    const path = typeof window !== "undefined" ? window.location.pathname : "";
+    const handle = globalThis.setTimeout(() => {
       void preloadRoute(path).catch(() => undefined);
-    };
-    if ("requestIdleCallback" in window && "cancelIdleCallback" in window) {
-      const handle = window.requestIdleCallback(run);
-      return () => window.cancelIdleCallback(handle);
-    }
-    const handle = window.setTimeout(run, 120);
-    return () => window.clearTimeout(handle);
+    }, 120);
+    return () => globalThis.clearTimeout(handle);
   }, [team?.id, blocked]);
 
   return (
