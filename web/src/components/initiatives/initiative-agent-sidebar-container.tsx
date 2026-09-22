@@ -51,9 +51,8 @@ export function InitiativeAgentSidebarContainer({
         onRequestClose={() => setOpen(false)}
         open={open}
         target={{ type: 'initiative', id: initiative.id, title: initiative.name }}
-      >
-        {children}
-      </EntityAgentPanel>
+      />
+      {children}
     </aside>
   )
 }
