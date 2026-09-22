@@ -19,6 +19,9 @@ import { toast } from 'sonner'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
+import { EditCustomViewHeader } from './edit-custom-view-header'
+import { filtersAreDirty, SaveCustomViewButtons } from './save-custom-view-buttons'
+import { discardCustomViewDraft } from './custom-view-draft'
 import { InsightHiddenNotice, SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
@@ -257,6 +260,12 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       if (viewEditor === 'edit') onFinishEditSavedView?.()
     } finally { setViewSaving(false) }
   }
+  const filtersDirty = Boolean(savedView && filtersAreDirty(filters, filtersFromSavedView(savedView)))
+  const updateSavedViewFilters = () => {
+    if (!savedView || !onUpdateSavedView) return
+    void onUpdateSavedView(savedView.id, { resource: 'issues', scope: savedView.scope, teamId: savedView.teamId, ownerId: savedView.ownerId, view: savedView.view, filters, display: displaySnapshot(display) }).catch(() => undefined)
+  }
+
   const savedViewMenu = savedView && <SavedViewMenu
     view={savedView}
     users={data.users}
@@ -302,19 +311,35 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       onToggleFavorite={() => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
       viewActions={savedViewMenu}
       onOpenSidebar={onOpenSidebar}
-      viewEditor={viewEditor && <SavedViewEditor
-        initialName={viewEditor === 'edit' ? savedView?.name : duplicateFrom?.name ?? ''}
-        namePlaceholder="All issues"
-        initialDescription={viewEditor === 'edit' ? savedView?.description : duplicateFrom?.description ?? ''}
-        initialIcon={viewEditor === 'edit' ? savedView?.icon : duplicateFrom?.icon}
-        initialColor={viewEditor === 'edit' ? savedView?.color : duplicateFrom?.color}
+      viewEditor={viewEditor && (viewEditor === 'edit' && savedView ? <EditCustomViewHeader
+        orgKey={data.workspace.urlKey}
+        viewId={savedView.id}
+        initialName={savedView.name}
+        initialDescription={savedView.description}
+        initialIcon={savedView.icon}
+        initialColor={savedView.color}
         initialTarget={initialSaveTarget}
-        saveTargets={viewEditor === 'create' ? saveTargets : []}
+        saveTargets={[]}
         saving={viewSaving}
-        onCancel={() => { setViewEditor(undefined); if (creatingView) onCancelCreateSavedView?.(); else if (viewEditor === 'edit') onFinishEditSavedView?.() }}
+        hasChanges
+        onCancel={() => { setViewEditor(undefined); onFinishEditSavedView?.() }}
         onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual) }}
-      />}
-      filterBar={(!savedView || viewEditor) && <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>}
+      /> : <SavedViewEditor
+        initialName={duplicateFrom?.name ?? ''}
+        namePlaceholder="All issues"
+        initialDescription={duplicateFrom?.description ?? ''}
+        initialIcon={duplicateFrom?.icon}
+        initialColor={duplicateFrom?.color}
+        initialTarget={initialSaveTarget}
+        saveTargets={saveTargets}
+        saving={viewSaving}
+        onCancel={() => { setViewEditor(undefined); if (creatingView) onCancelCreateSavedView?.(); discardCustomViewDraft(data.workspace.urlKey, 'new') }}
+        onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual) }}
+      />)}
+      filterBar={(filters.length > 0 || viewEditor || !savedView) && <>
+        <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>
+        {savedView && filtersDirty && !viewEditor && <SaveCustomViewButtons saving={viewSaving} onUpdate={updateSavedViewFilters} onCreate={() => setViewEditor('create')} />}
+      </>}
     >
       <IssuesSplitLayout
         detailsOpen={detailsOpen && !insightsOpen}

@@ -61,7 +61,7 @@ test('renders core workspace workflows without runtime or viewport failures', as
 
 test('streams Agent reasoning, tools, and text into the conversation', async ({ page, request }, testInfo) => {
   const device = testInfo.project.name === 'chromium' ? 'desktop' : 'mobile'
-  const workspaceKey = `e2e-agent-${device}`
+  const workspaceKey = `e2e-agent-${device}-${Date.now()}`
   const response = await request.post('http://127.0.0.1:4180/api/workspaces', {
     data: { name: 'Agent composer workspace', urlKey: workspaceKey, region: 'us' },
   })
@@ -71,6 +71,9 @@ test('streams Agent reasoning, tools, and text into the conversation', async ({ 
   await expect(editor).toHaveAttribute('contenteditable', 'true')
   await editor.fill('Review the workspace')
   await page.getByRole('button', { name: 'Submit comment' }).click()
+  const workGroup = page.locator('details').filter({ has: page.locator('div[class*="workItems"]') }).first()
+  await workGroup.locator(':scope > summary').click()
+  await workGroup.locator('details > summary').filter({ hasText: /^Looked at issues$/ }).click()
   await expect(page.getByText('Looked at issues')).toBeVisible()
   await expect(page.getByText('Reviewed workspace context.')).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Result' })).toBeVisible()
