@@ -811,6 +811,7 @@ export function Sidebar({
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}
+        workspaceSlug={workspaceSlug}
       />
     </>
   );
@@ -2298,10 +2299,13 @@ function HelpMenu({
 function KeyboardShortcutsDialog({
   open,
   onOpenChange,
+  workspaceSlug,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workspaceSlug: string;
 }) {
+  const { t } = useI18n();
   const groups = [
     [
       "Navigation",
@@ -2344,6 +2348,14 @@ function KeyboardShortcutsDialog({
             ))}
           </section>
         ))}
+        <div className="sidebar-shortcuts-customize">
+          <a
+            href={settingsPath(workspaceSlug, "shortcuts")}
+            onClick={() => onOpenChange(false)}
+          >
+            {t("Customize in Settings")}
+          </a>
+        </div>
       </DialogContent>
     </Dialog>
   );
