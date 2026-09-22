@@ -1,5 +1,6 @@
 /**
  * LS-0338 IntegrationSettingsPage — generic /settings/integrations/:slug shell + registry.
+ * P1-D: long-tail OAuth uses catalog coming-soon *product* patterns — no honesty/gap banners.
  */
 import { Plug } from "lucide-react";
 
@@ -12,6 +13,7 @@ import {
 import {
   availabilityLabel,
   getIntegrationCatalogEntry,
+  getIntegrationProductPattern,
   subtypesFor,
   type IntegrationCatalogEntry,
 } from "@/lib/integration-catalog";
@@ -60,6 +62,7 @@ export function IntegrationSettingsPage({
     : undefined;
   const connected = connection?.status === "connected";
   const subtypes = subtypesFor(entry.slug);
+  const pattern = getIntegrationProductPattern(entry);
 
   const toggleSlack = async () => {
     if (!entry.connectProvider || entry.connectProvider !== "slack") return;
@@ -139,22 +142,47 @@ export function IntegrationSettingsPage({
                 </div>
               </div>
             )}
-            {entry.availability !== "supported" && (
+          </div>
+        </section>
+
+        {entry.availability !== "supported" && pattern && (
+          <section className="feature-section" aria-label={t("What you can do")}>
+            <header>
+              <h2>{t(pattern.headline)}</h2>
+              <p>{t(pattern.summary)}</p>
+            </header>
+            <div className="feature-card">
+              {pattern.capabilities.map((capability) => (
+                <div key={capability} className="feature-row">
+                  <div>
+                    <strong>{t(capability)}</strong>
+                  </div>
+                </div>
+              ))}
               <div className="feature-row">
                 <div>
-                  <strong>{t("Availability")}</strong>
+                  <strong>{t("Connect")}</strong>
                   <span>
                     {t(
                       entry.availability === "coming_soon"
-                        ? "OAuth for this integration is not wired yet. This settings page is an honest shell."
-                        : "This integration is listed for catalog parity and is not planned for Flow yet.",
+                        ? "Available when this integration ships in Flow."
+                        : "Not available in Flow.",
                     )}
                   </span>
                 </div>
+                <aside>
+                  <button type="button" className="feature-button" disabled>
+                    {t(
+                      entry.availability === "coming_soon"
+                        ? "Coming soon"
+                        : "Not supported",
+                    )}
+                  </button>
+                </aside>
               </div>
-            )}
-          </div>
-        </section>
+            </div>
+          </section>
+        )}
 
         {subtypes.length > 0 && (
           <section className="feature-section">
@@ -199,10 +227,11 @@ function IntegrationSettingsIcon({ entry }: { entry: IntegrationCatalogEntry }) 
   );
 }
 
-export function connectionForCatalog(
+export function resolveIntegrationSettings(
+  slug: string,
   data: BootstrapData,
-  entry: IntegrationCatalogEntry,
 ): IntegrationConnection | undefined {
-  if (!entry.connectProvider) return undefined;
+  const entry = getIntegrationCatalogEntry(slug);
+  if (!entry?.connectProvider) return undefined;
   return data.integrationConnections.find((item) => item.provider === entry.connectProvider);
 }

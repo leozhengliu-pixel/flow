@@ -1,7 +1,8 @@
 /**
  * LS-0337 — Integration catalog schema + subtype sections.
- * REST-facing catalog only (no GraphQL). Availability is honest:
- * supported providers can connect; others are Coming soon / Not supported shells.
+ * REST-facing catalog only (no GraphQL). Availability labels Coming soon /
+ * Not supported are product availability — not engineering-gap banners.
+ * P1-D adds product patterns for long-tail OAuth shells (LS-0340 / LS-0685…).
  */
 
 export type IntegrationAvailability = "supported" | "coming_soon" | "not_supported";
@@ -18,6 +19,12 @@ export type IntegrationCategory =
 /** Primary catalog slug (settings path segment). */
 export type IntegrationSlug = string;
 
+export interface IntegrationProductPattern {
+  headline: string;
+  summary: string;
+  capabilities: string[];
+}
+
 export interface IntegrationCatalogEntry {
   slug: IntegrationSlug;
   /** Linear-aligned service / subtype key when applicable. */
@@ -32,6 +39,8 @@ export interface IntegrationCatalogEntry {
   subtype?: boolean;
   /** Providers that currently have REST connect / manage flows. */
   connectProvider?: "github" | "gitlab" | "slack" | "jira";
+  /** Optional product-capability copy for Coming soon / Not supported detail pages. */
+  productPattern?: IntegrationProductPattern;
 }
 
 /** Primary (non-subtype) catalog used by All Integrations. */
@@ -95,6 +104,15 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     description: "Turn support tickets into tracked product work",
     category: "Support",
     availability: "coming_soon",
+    productPattern: {
+      headline: "Support tickets in Flow",
+      summary: "Sync Zendesk tickets with Flow issues so support and product stay aligned.",
+      capabilities: [
+        "Create Flow issues from Zendesk tickets",
+        "Reopen Zendesk tickets when linked issues complete",
+        "Keep customer context on the issue",
+      ],
+    },
   },
   {
     slug: "intercom",
@@ -103,6 +121,15 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     description: "Capture customer conversations as issues",
     category: "Support",
     availability: "coming_soon",
+    productPattern: {
+      headline: "Conversations to issues",
+      summary: "Turn Intercom conversations into tracked Flow issues without leaving support.",
+      capabilities: [
+        "Create issues from Intercom conversations",
+        "Sync conversation status with issue state",
+        "Attach customer context to requests",
+      ],
+    },
   },
   {
     slug: "discord",
@@ -111,6 +138,15 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
     description: "Post workspace updates to Discord channels",
     category: "Productivity",
     availability: "coming_soon",
+    productPattern: {
+      headline: "Community updates",
+      summary: "Broadcast project and initiative updates to Discord channels your community follows.",
+      capabilities: [
+        "Post project updates to a Discord channel",
+        "Post initiative updates to a Discord channel",
+        "Keep a single source of truth in Flow",
+      ],
+    },
   },
   {
     slug: "microsoft-teams",
@@ -229,6 +265,7 @@ export const INTEGRATION_CATALOG: IntegrationCatalogEntry[] = [
 /** Subtype / personal / specialty rows (LS-0337) — not shown as primary cards. */
 export const INTEGRATION_SUBTYPES: IntegrationCatalogEntry[] = [
   { slug: "github-enterprise-server", service: "githubEnterpriseServer", name: "GitHub Enterprise Server", description: "Self-hosted GitHub Enterprise Server", category: "Engineering", availability: "coming_soon", parentSlug: "github", subtype: true },
+  { slug: "github-enterprise-cloud", service: "githubEnterpriseCloud", name: "GitHub Enterprise Cloud", description: "GitHub Enterprise Cloud with data residency", category: "Engineering", availability: "coming_soon", parentSlug: "github", subtype: true },
   { slug: "github-commit", service: "githubCommit", name: "GitHub Commits", description: "Commit linking and status", category: "Engineering", availability: "coming_soon", parentSlug: "github", subtype: true },
   { slug: "github-import", service: "githubImport", name: "GitHub Import", description: "Import repositories and issues", category: "Engineering", availability: "coming_soon", parentSlug: "github", subtype: true },
   { slug: "github-personal", service: "githubPersonal", name: "GitHub (personal)", description: "Personal GitHub authorization", category: "Engineering", availability: "coming_soon", parentSlug: "github", subtype: true },
@@ -272,4 +309,31 @@ export function availabilityLabel(availability: IntegrationAvailability): string
 
 export function subtypesFor(parentSlug: string): IntegrationCatalogEntry[] {
   return INTEGRATION_SUBTYPES.filter((entry) => entry.parentSlug === parentSlug);
+}
+
+const DEFAULT_PRODUCT_PATTERNS: Partial<Record<IntegrationAvailability, IntegrationProductPattern>> = {
+  coming_soon: {
+    headline: "Coming soon",
+    summary: "This integration will connect Flow with the tools your team already uses.",
+    capabilities: [
+      "Connect your workspace account",
+      "Sync relevant activity into Flow",
+      "Manage the connection from Settings",
+    ],
+  },
+  not_supported: {
+    headline: "Not supported",
+    summary: "This catalog entry is listed for completeness and is not available in Flow.",
+    capabilities: [
+      "Browse related integrations that are available",
+      "Use webhooks or Zapier for custom automation",
+    ],
+  },
+};
+
+export function getIntegrationProductPattern(
+  entry: IntegrationCatalogEntry,
+): IntegrationProductPattern | undefined {
+  if (entry.availability === "supported") return undefined;
+  return entry.productPattern ?? DEFAULT_PRODUCT_PATTERNS[entry.availability];
 }
