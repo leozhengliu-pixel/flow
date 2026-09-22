@@ -1205,6 +1205,7 @@ export function createCustomerRequest(input: {
   sourceUrl?: string;
   issueId?: string;
   projectId?: string;
+  priority?: number;
 }): Promise<CustomerRequest> {
   return request("/api/customer-requests", jsonRequest("POST", input));
 }
@@ -1213,7 +1214,7 @@ export function updateCustomerRequest(
   input: Partial<
     Pick<
       CustomerRequest,
-      "body" | "source" | "sourceUrl" | "issueId" | "projectId"
+      "body" | "source" | "sourceUrl" | "issueId" | "projectId" | "priority"
     >
   >,
 ): Promise<CustomerRequest> {
