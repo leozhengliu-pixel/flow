@@ -463,6 +463,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Status name', keywords: ['name'] },
           { title: 'Status color', keywords: ['color'] },
           { title: 'Status type', keywords: ['backlog', 'planned', 'started', 'completed', 'canceled'] },
+          { title: 'Inherit from parent or workspace', keywords: ['inherit', 'team project statuses', 'team-project-statuses'] },
         ],
       },
     ],

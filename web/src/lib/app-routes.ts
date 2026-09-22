@@ -90,6 +90,7 @@ export type TeamSettingsSection =
   | "templates"
   | "recurring-issues"
   | "statuses"
+  | "project-statuses"
   | "workflow"
   | "triage"
   | "cycles"
@@ -1693,6 +1694,7 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "templates",
   "recurring-issues",
   "statuses",
+  "project-statuses",
   "workflow",
   "triage",
   "cycles",

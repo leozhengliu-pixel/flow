@@ -3717,6 +3717,34 @@ export function ProjectStatusesSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  return (
+    <div className="ip-settings-page ip-project-statuses-page" data-i18n-ignore>
+      <header className="settings-page-header ip-page-header">
+        <div>
+          <h1>{t("Project statuses")}</h1>
+          <p>
+            {t(
+              "Project statuses define the workflow that projects go through from start to completion",
+            )}
+          </p>
+        </div>
+      </header>
+      <ProjectStatusesSection data={data} onReload={onReload} />
+    </div>
+  );
+}
+
+/** LS-0676 reusable project status list — shared by workspace + team (LS-0595) pages. */
+export function ProjectStatusesSection({
+  data,
+  onReload,
+  disabled = false,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+  disabled?: boolean;
+}) {
+  const { t } = useI18n();
   const [creating, setCreating] = useState<StatusType | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -3736,6 +3764,7 @@ export function ProjectStatusesSettings({
     }
   };
   const move = (status: ProjectStatus, delta: number) => {
+    if (disabled) return;
     const group = ordered.filter((item) => item.type === status.type);
     const index = group.findIndex((item) => item.id === status.id);
     const target = index + delta;
@@ -3747,33 +3776,24 @@ export function ProjectStatusesSettings({
     void run(() => reorderProjectStatuses(next.map((item) => item.id)));
   };
   const moveBefore = (status: ProjectStatus, target: ProjectStatus) => {
+    if (disabled) return;
     if (status.id === target.id || status.type !== target.type) return;
     const next = ordered.filter((item) => item.id !== status.id),
       targetIndex = next.findIndex((item) => item.id === target.id);
     next.splice(targetIndex, 0, status);
     void run(() => reorderProjectStatuses(next.map((item) => item.id)));
   };
-  const busy = creating !== null || editing !== null;
+  const busy = disabled || creating !== null || editing !== null;
   return (
-    <div className="ip-settings-page ip-project-statuses-page" data-i18n-ignore>
-      <header className="settings-page-header ip-page-header">
-        <div>
-          <h1>{t("Project statuses")}</h1>
-          <p>
-            {t(
-              "Project statuses define the workflow that projects go through from start to completion",
-            )}
-          </p>
-        </div>
-      </header>
       <section
         className="ip-status-card"
         role="list"
         aria-label={t("Project statuses")}
+        data-disabled={disabled || undefined}
       >
         {STATUS_SECTIONS.map((section) => {
           const statuses = ordered.filter((item) => item.type === section.type),
-            canReorder = statuses.length > 1;
+            canReorder = !disabled && statuses.length > 1;
           return (
             <div className="ip-status-section" role="list" key={section.type}>
               <header>
@@ -3781,7 +3801,7 @@ export function ProjectStatusesSettings({
                 <button
                   aria-label={t("Create new project status")}
                   disabled={busy}
-                  onClick={() => setCreating(section.type)}
+                  onClick={() => { if (!disabled) setCreating(section.type) }}
                 >
                   <Plus />
                 </button>
@@ -3863,7 +3883,6 @@ export function ProjectStatusesSettings({
           );
         })}
       </section>
-    </div>
   );
 }
 function StatusEditor({

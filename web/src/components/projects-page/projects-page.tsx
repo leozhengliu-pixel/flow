@@ -273,7 +273,12 @@ export function ProjectsPage({
   const defaultCreateStatus = availableProjectStatuses.find(status => status.type === 'backlog')?.name ?? availableProjectStatuses[0]?.name ?? ''
   const workspaceDefault = useMemo(() => parseProjectDisplayDefault(projectDisplayDefault), [projectDisplayDefault])
   const savedDisplay = useMemo(() => parseProjectDisplayDefault(sourceView?.display), [sourceView?.display])
-  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault })
+  const relevanceViewer = useMemo(() => {
+    if (!currentViewerId) return undefined
+    const activeTeamIds = teams.map(team => team.id)
+    return { id: currentViewerId, activeTeamIds }
+  }, [currentViewerId, teams])
+  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer })
   const [createOpen, setCreateOpen] = useState(false)
   const [createStatus, setCreateStatus] = useState(defaultCreateStatus)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
