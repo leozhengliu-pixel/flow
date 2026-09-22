@@ -22,7 +22,7 @@ export interface CollaborativeEditorProps {
   onPresence: (users: User[]) => void
   onChange: (snapshot: DescriptionSnapshot) => void
   onPersist: (snapshot: DescriptionSnapshot) => Promise<void>
-  /** Optional slot for DocumentContentContext / agent / minimap hosts. */
+  /** Optional slot for DocumentContentContext consumers / agent / minimap hosts (LS-0211). */
   contentContext?: ReactNode
   /** When false, hide the inline presence strip (e.g. header already shows avatars). */
   showPresence?: boolean

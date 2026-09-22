@@ -86,6 +86,12 @@ import {
 } from "./settings-primitives";
 
 import "./personal-settings.css";
+import {
+  applyThemeTransfer,
+  buildThemeTransferPayload,
+  parseThemeTransfer,
+  serializeThemeTransfer,
+} from "@/lib/theme-transfer";
 import { AccountShortcutsSettingsPage } from "./account-shortcuts-settings";
 
 export type PersonalSettingsValues = Record<string, string | boolean>;
@@ -196,6 +202,13 @@ const PERSONAL_ZH: Record<string, string> = {
   "Dark high contrast": "深色高对比",
   "Choose the light appearance variant": "选择浅色外观变体",
   "Choose the dark appearance variant": "选择深色外观变体",
+  "Could not import theme preferences": "无法导入主题偏好",
+  "Theme preferences imported": "主题偏好已导入",
+  "Could not copy theme preferences": "无法复制主题偏好",
+  "Theme preferences copied": "主题偏好已复制",
+  "Copy or import interface and code theme preferences as JSON": "以 JSON 复制或导入界面与代码主题偏好",
+  "Import theme": "导入主题",
+  "Export theme": "导出主题",
   "Select or customize your interface color scheme": "选择或自定义界面配色方案",
   "System preference": "跟随系统",
   Light: "浅色",
@@ -898,6 +911,47 @@ function Preferences({
             ])}
             onChange={(v) => setValue("darkTheme", v)}
           />
+        </PersonalRow>
+        <PersonalRow
+          title={p("Export theme")}
+          description={p("Copy or import interface and code theme preferences as JSON")}
+        >
+          <div className="personal-theme-transfer">
+            <Action
+              onClick={() => {
+                const payload = buildThemeTransferPayload({
+                  interfaceTheme: String(values.interfaceTheme ?? ""),
+                  codeTheme: String(values.codeTheme ?? ""),
+                  codeFont: String(values.codeFont ?? ""),
+                  fontSize: String(values.fontSize ?? ""),
+                });
+                void navigator.clipboard
+                  .writeText(serializeThemeTransfer(payload))
+                  .then(() => toast.success(p("Theme preferences copied")))
+                  .catch(() => toast.error(p("Could not copy theme preferences")));
+              }}
+            >
+              {p("Export theme")}
+            </Action>
+            <Action
+              onClick={() => {
+                const raw = window.prompt(p("Import theme"));
+                if (!raw) return;
+                try {
+                  const next = applyThemeTransfer(parseThemeTransfer(raw));
+                  if (next.interfaceTheme) setValue("interfaceTheme", next.interfaceTheme);
+                  if (next.codeTheme) setValue("codeTheme", next.codeTheme);
+                  if (next.codeFont) setValue("codeFont", next.codeFont);
+                  if (next.fontSize) setValue("fontSize", next.fontSize);
+                  toast.success(p("Theme preferences imported"));
+                } catch {
+                  toast.error(p("Could not import theme preferences"));
+                }
+              }}
+            >
+              {p("Import theme")}
+            </Action>
+          </div>
         </PersonalRow>
       </PersonalSection>
       <PersonalSection title={p("Desktop application")}>

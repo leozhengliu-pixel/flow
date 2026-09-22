@@ -339,3 +339,10 @@
   .personal-signing-key-header p{font-size:13px;line-height:19px}
   .personal-signing-key-card{min-height:365px;padding:16px 12px}
 }
+
+.personal-theme-transfer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
