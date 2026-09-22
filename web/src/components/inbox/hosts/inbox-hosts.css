@@ -77,9 +77,9 @@
 }
 
 .flow-inbox-host__primary {
-  border-color: #5e6ad2;
-  background: #5e6ad2;
-  color: #fff;
+  border-color: var(--accent-primary);
+  background: var(--accent-primary);
+  color: var(--on-accent);
 }
 
 .flow-inbox-host__primary:disabled {
@@ -230,7 +230,7 @@
   padding: 14px 12px;
   border-radius: 10px;
   border-top-color: transparent;
-  background: color-mix(in srgb, #5e6ad2 8%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 8%, transparent);
 }
 
 .flow-inbox-host__update header {
@@ -353,7 +353,7 @@
 .flow-inbox-priority-settings__hint {
   padding: 12px 14px;
   border-radius: 8px;
-  background: color-mix(in srgb, #5e6ad2 10%, transparent);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
 
 .flow-inbox-priority-settings__count {
@@ -402,7 +402,7 @@
 }
 
 .flow-inbox-priority-settings__toggle.is-on {
-  background: #5e6ad2;
+  background: var(--accent-primary);
 }
 
 .flow-inbox-priority-settings__toggle:disabled {
@@ -417,7 +417,7 @@
   width: 16px;
   height: 16px;
   border-radius: 99px;
-  background: #fff;
+  background: var(--on-accent);
   transition: transform 120ms ease;
 }
 
@@ -432,10 +432,10 @@
 }
 
 .flow-inbox-host__health-pill.is-onTrack,
-.flow-inbox-host__health-dot.is-onTrack { color: #10b981; }
+.flow-inbox-host__health-dot.is-onTrack { color: var(--success); }
 .flow-inbox-host__health-pill.is-atRisk,
-.flow-inbox-host__health-dot.is-atRisk { color: #f59e0b; }
+.flow-inbox-host__health-dot.is-atRisk { color: var(--priority-high); }
 .flow-inbox-host__health-pill.is-offTrack,
-.flow-inbox-host__health-dot.is-offTrack { color: #ef4444; }
+.flow-inbox-host__health-dot.is-offTrack { color: var(--priority-urgent); }
 .flow-inbox-host__health-pill.is-noUpdate,
-.flow-inbox-host__health-dot.is-noUpdate { color: #94a3b8; }
+.flow-inbox-host__health-dot.is-noUpdate { color: var(--status-neutral); }
