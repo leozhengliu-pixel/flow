@@ -746,6 +746,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/relations", s.createRelation)
 	mux.HandleFunc("DELETE /api/issues/{id}/relations/{relationId}", s.deleteRelation)
 	mux.HandleFunc("POST /api/issues/{id}/attachments", s.createAttachment)
+	mux.HandleFunc("POST /api/issues/{id}/attachments/from-url", s.createAttachmentFromURL)
 	mux.HandleFunc("POST /api/issues/{id}/links", s.createIssueLink)
 	mux.HandleFunc("POST /api/issues/{id}/reminders", s.createIssueReminder)
 	mux.HandleFunc("POST /api/issues/{id}/loop-runs", s.createIssueLoopRun)
@@ -4120,13 +4121,24 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 	var input domain.CommentUpdateInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
-		writeError(w, http.StatusBadRequest, "body is required")
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if !commentUpdateHasBody(input) && input.Resolved == nil && input.ThreadSummary == nil {
+		writeError(w, http.StatusBadRequest, "body or resolved is required")
 		return
 	}
 	issueID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated, current domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.updated", issueID, input, func(data *domain.Bootstrap) error {
+	eventType := "comment.updated"
+	if input.Resolved != nil && !commentUpdateHasBody(input) {
+		if *input.Resolved {
+			eventType = "comment.resolved"
+		} else {
+			eventType = "comment.unresolved"
+		}
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, issueID, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound
@@ -4135,17 +4147,13 @@ func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 			current = data.Comments[issueID][index]
 			return errConflict
 		}
-		now := time.Now().UTC()
-		data.Comments[issueID][index].Body = strings.TrimSpace(input.Body)
-		data.Comments[issueID][index].BodyData = input.BodyData
-		data.Comments[issueID][index].EditedAt = &now
-		data.Comments[issueID][index].Version++
-		updated = data.Comments[issueID][index]
 		issue, issueErr := issueByID(data, issueID)
 		if issueErr != nil {
 			return issueErr
 		}
-		activity := appendActivity(data, issueID, "comment.updated", data.Viewer, map[string]string{"commentId": commentID})
+		applyCommentPatch(&data.Comments[issueID][index], input, data.Comments[issueID], teamResolvedThreadSummaries(data, issue.Team.ID))
+		updated = data.Comments[issueID][index]
+		activity := appendActivity(data, issueID, eventType, data.Viewer, map[string]string{"commentId": commentID})
 		appendIssueNotifications(data, *issue, activity, &updated)
 		return nil
 	})

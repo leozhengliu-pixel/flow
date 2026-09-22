@@ -1637,16 +1637,23 @@ type InitiativeUpdate struct {
 	Attachments  []Attachment        `json:"attachments"`
 }
 
+type CommentThreadSummary struct {
+	Content   string `json:"content"`
+	EvalLogID string `json:"evalLogId,omitempty"`
+}
+
 type Comment struct {
-	ID        string              `json:"id"`
-	Version   int64               `json:"version"`
-	Body      string              `json:"body"`
-	BodyData  map[string]any      `json:"bodyData,omitempty"`
-	ParentID  *string             `json:"parentId,omitempty"`
-	Reactions map[string][]string `json:"reactions"`
-	CreatedAt time.Time           `json:"createdAt"`
-	EditedAt  *time.Time          `json:"editedAt,omitempty"`
-	User      User                `json:"user"`
+	ID            string                `json:"id"`
+	Version       int64                 `json:"version"`
+	Body          string                `json:"body"`
+	BodyData      map[string]any        `json:"bodyData,omitempty"`
+	ParentID      *string               `json:"parentId,omitempty"`
+	Resolved      bool                  `json:"resolved,omitempty"`
+	ThreadSummary *CommentThreadSummary `json:"threadSummary,omitempty"`
+	Reactions     map[string][]string   `json:"reactions"`
+	CreatedAt     time.Time             `json:"createdAt"`
+	EditedAt      *time.Time            `json:"editedAt,omitempty"`
+	User          User                  `json:"user"`
 }
 
 type ActivityEvent struct {
@@ -2012,9 +2019,11 @@ type CommentCreateInput struct {
 }
 
 type CommentUpdateInput struct {
-	Body            string         `json:"body"`
-	BodyData        map[string]any `json:"bodyData,omitempty"`
-	ExpectedVersion *int64         `json:"expectedVersion,omitempty"`
+	Body            string                `json:"body"`
+	BodyData        map[string]any        `json:"bodyData,omitempty"`
+	ExpectedVersion *int64                `json:"expectedVersion,omitempty"`
+	Resolved        *bool                 `json:"resolved,omitempty"`
+	ThreadSummary   *CommentThreadSummary `json:"threadSummary,omitempty"`
 }
 type ReactionInput struct {
 	Emoji string `json:"emoji"`

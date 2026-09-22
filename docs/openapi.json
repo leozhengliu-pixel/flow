@@ -7709,6 +7709,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/issues/{id}/attachments/from-url": {
+      "post": {
+        "operationId": "post_issues_id_attachments_from_url",
+        "tags": [
+          "issues"
+        ],
+        "summary": "POST /api/issues/{id}/attachments/from-url",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/issues/{id}/comments": {
       "post": {
         "operationId": "post_issues_id_comments",
