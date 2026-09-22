@@ -92,3 +92,21 @@ export {
   type GroupedIssueFilterBlocksOptions,
   type IssueFilterBlockGroup,
 } from './grouped-issue-filter-blocks'
+
+export {
+  blocksDivider,
+  flattenGroupedTeamFilterBlocks,
+  getGroupedTeamFilterBlocks,
+  groupedTeamFilterBlocks,
+  type TeamFilterBlockDivider,
+} from './grouped-team-filter-blocks'
+
+export {
+  TeamFilterBlocks,
+  allTeamFilterBlocks,
+  createdAtBlock,
+  membersBlock,
+  ownersBlock,
+  privateBlock,
+} from './team-filter-blocks'
+
