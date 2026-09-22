@@ -190,6 +190,12 @@ const PERSONAL_ZH: Record<string, string> = {
   "When enabled, GIFs and animated emojis remain static until hovered":
     "启用后，GIF 和动态 Emoji 在悬停前保持静止",
   "Interface theme": "界面主题",
+  "Light theme": "浅色主题",
+  "Dark theme": "深色主题",
+  "Light high contrast": "浅色高对比",
+  "Dark high contrast": "深色高对比",
+  "Choose the light appearance variant": "选择浅色外观变体",
+  "Choose the dark appearance variant": "选择深色外观变体",
   "Select or customize your interface color scheme": "选择或自定义界面配色方案",
   "System preference": "跟随系统",
   Light: "浅色",
@@ -863,6 +869,34 @@ function Preferences({
               "Dark",
             ])}
             onChange={(v) => setValue("interfaceTheme", v)}
+          />
+        </PersonalRow>
+        <PersonalRow
+          title={p("Light theme")}
+          description={p("Choose the light appearance variant")}
+        >
+          <PersonalSelect
+            label={p("Light theme")}
+            value={String(values.lightTheme || "Light")}
+            options={localizedOptions(p, [
+              "Light",
+              "Light high contrast",
+            ])}
+            onChange={(v) => setValue("lightTheme", v)}
+          />
+        </PersonalRow>
+        <PersonalRow
+          title={p("Dark theme")}
+          description={p("Choose the dark appearance variant")}
+        >
+          <PersonalSelect
+            label={p("Dark theme")}
+            value={String(values.darkTheme || "Dark")}
+            options={localizedOptions(p, [
+              "Dark",
+              "Dark high contrast",
+            ])}
+            onChange={(v) => setValue("darkTheme", v)}
           />
         </PersonalRow>
       </PersonalSection>
