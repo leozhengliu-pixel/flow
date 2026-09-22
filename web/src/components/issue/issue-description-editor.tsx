@@ -26,6 +26,7 @@ import { DescriptionCallout } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
 import { MentionExtension } from './editor/mention-extension'
+import { InlineCommentMark } from './editor/inline-comment-mark'
 import { MentionMenu } from './editor/mention-menu'
 import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
@@ -157,6 +158,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       DescriptionCallout,
       DescriptionDiagram,
       MentionExtension,
+      InlineCommentMark,
       SlashCommandExtension,
       ...(collaborationSession ? [
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
@@ -523,6 +525,7 @@ function schemaExtensions() {
     DescriptionCallout,
     DescriptionDiagram,
     MentionExtension,
+    InlineCommentMark,
     SlashCommandExtension,
   ]
 }
