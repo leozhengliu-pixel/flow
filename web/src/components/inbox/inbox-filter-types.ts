@@ -4,7 +4,9 @@ import type { PersonIdentity } from '@/lib/people'
 /** The predicates exposed by Flow's Inbox filter picker. */
 export type InboxFilterProperty =
   | 'notificationType'
+  | 'subscription'
   | 'from'
+  | 'team'
   | 'project'
   | 'initiative'
   | 'issuePriority'
@@ -43,9 +45,17 @@ export const INBOX_NOTIFICATION_TYPE_OPTIONS = [
   { id: 'status', label: 'Status changes', keywords: 'status state issue' },
   { id: 'subscription', label: 'Subscriptions', keywords: 'subscription subscribed' },
   { id: 'system', label: 'System notifications', keywords: 'system' },
+  { id: 'oauthApproval', label: 'Application approvals', keywords: 'oauth approval application' },
+  { id: 'welcome', label: 'Welcome messages', keywords: 'welcome onboarding' },
   { id: 'triage', label: 'Triage', keywords: 'triage' },
   { id: 'project', label: 'Updates', keywords: 'project update' },
 ] satisfies InboxFilterOption[]
+
+/** LS-0430 Subscription filter block values. */
+export const INBOX_SUBSCRIPTION_OPTIONS = [
+  { id: 'subscribed', label: 'Subscribed', keywords: 'following subscribe' },
+  { id: 'unsubscribed', label: 'Not subscribed', keywords: 'unfollow' },
+] as const
 
 export const INBOX_REVIEW_STATUS_OPTIONS = [
   { id: 'draft', label: 'Draft', color: 'var(--status-neutral)' },
