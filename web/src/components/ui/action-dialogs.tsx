@@ -146,6 +146,7 @@ export function ActionDialogHost() {
     <Dialog open={Boolean(request)} onOpenChange={open => !open && onCancel()}>
       <DialogContent
         className="action-dialog"
+        overlayClassName="action-dialog-overlay"
         aria-hidden={!request || undefined}
         inert={!request || undefined}
         onOpenAutoFocus={openAutoFocus}
