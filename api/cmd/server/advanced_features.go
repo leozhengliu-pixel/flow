@@ -130,12 +130,13 @@ func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
 }
 
 type customerRequestInput struct {
-	CustomerID string  `json:"customerId,omitempty"`
-	Body       *string `json:"body,omitempty"`
-	Source     *string `json:"source,omitempty"`
-	SourceURL  *string `json:"sourceUrl,omitempty"`
-	IssueID    *string `json:"issueId,omitempty"`
-	ProjectID  *string `json:"projectId,omitempty"`
+	CustomerID string   `json:"customerId,omitempty"`
+	Body       *string  `json:"body,omitempty"`
+	Source     *string  `json:"source,omitempty"`
+	SourceURL  *string  `json:"sourceUrl,omitempty"`
+	IssueID    *string  `json:"issueId,omitempty"`
+	ProjectID  *string  `json:"projectId,omitempty"`
+	Priority   *float64 `json:"priority,omitempty"`
 }
 
 type releaseInput struct {
@@ -768,6 +769,9 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		if input.ProjectID != nil {
 			created.ProjectID = *input.ProjectID
 		}
+		if input.Priority != nil {
+			created.Priority = *input.Priority
+		}
 		data.CustomerRequests = append([]domain.CustomerRequest{created}, data.CustomerRequests...)
 		for _, customer := range data.Customers {
 			if customer.ID == created.CustomerID {
@@ -817,6 +821,9 @@ func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			item.ProjectID = *input.ProjectID
+		}
+		if input.Priority != nil {
+			item.Priority = *input.Priority
 		}
 		item.UpdatedAt = time.Now().UTC()
 		updated = *item

@@ -202,6 +202,7 @@ export interface IssueLabel {
   createdAt?: string;
   lastAppliedAt?: string;
   archivedAt?: string;
+  favorite?: boolean;
 }
 export interface LabelGroup {
   id: UUID;
