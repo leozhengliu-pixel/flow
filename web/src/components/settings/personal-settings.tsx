@@ -86,6 +86,8 @@ import {
 } from "./settings-primitives";
 
 import "./personal-settings.css";
+import { ResetApplicationControl } from "./reset-application";
+import "./reset-application.css";
 import {
   applyThemeTransfer,
   buildThemeTransferPayload,
@@ -139,6 +141,11 @@ const PERSONAL_ZH: Record<string, string> = {
   "Record shortcut": "录制快捷键",
   "Shortcut already in use by": "快捷键已被占用：",
   "Restore default": "恢复默认",
+  "Reset application": "重置应用",
+  "Reset and reload": "重置并重新加载",
+  "This clears local drafts, caches, and view preferences on this device, then reloads Flow. Server data is not deleted.": "这将清除本机草稿、缓存与视图偏好并重新加载 Flow。不会删除服务器数据。",
+  "Support": "支持",
+
   then: "然后",
   Navigation: "导航",
   Profile: "个人资料",
@@ -992,6 +999,16 @@ function Preferences({
             checked={Boolean(values.assignStarted)}
             onChange={(v) => setValue("assignStarted", v)}
           />
+        </PersonalRow>
+      </PersonalSection>
+      <PersonalSection title={p("Support")}>
+        <PersonalRow
+          title={p("Reset application")}
+          description={p(
+            "This clears local drafts, caches, and view preferences on this device, then reloads Flow. Server data is not deleted.",
+          )}
+        >
+          <ResetApplicationControl />
         </PersonalRow>
       </PersonalSection>
     </>

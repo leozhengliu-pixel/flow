@@ -271,6 +271,8 @@ import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { applyRealtimePatch, canApplyRealtimePatch } from '@/store/apply-realtime-patch'
 import { ActiveTeamProvider } from '@/lib/active-team'
+import { PendingDeletedTeamsProvider } from '@/hooks/use-pending-deleted-teams'
+import { ResetApplication } from '@/components/settings/reset-application'
 import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
@@ -3933,6 +3935,7 @@ function App() {
   );
   if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
   if (!authReady) return withStore(<AppStartup />);
+  if (location.pathname === '/reset') return withStore(<ResetApplication />);
   const handleAuthenticated = async (authenticated: AuthSession, returnTo?: string) => {
     setSession(authenticated);
     const nextAccount = await fetchAccountBootstrap();
@@ -4401,7 +4404,7 @@ function App() {
       )
     : issueSavedViews.filter((view) => view.scope !== "team");
   return withStore(
-    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><ActiveTeamProvider><div className="app">
+    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><ActiveTeamProvider><PendingDeletedTeamsProvider><div className="app">
       <Sidebar
         onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))}
         account={account}
@@ -6344,7 +6347,7 @@ function App() {
           <History />
         </button>
       </div>
-    </div></ActiveTeamProvider></PeopleProvider>
+    </div></PendingDeletedTeamsProvider></ActiveTeamProvider></PeopleProvider>
   );
 }
 

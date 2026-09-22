@@ -1,0 +1,38 @@
+.reset-application {
+  min-height: 40vh;
+}
+
+.reset-application-error {
+  margin: 24px;
+  color: var(--semantic-danger);
+  font: 500 13px/20px var(--font-sans, "Inter Variable", system-ui, sans-serif);
+}
+
+.reset-application-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.reset-application-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border-translucent, var(--theme-border));
+  border-radius: 8px;
+  background: var(--theme-surface-1, var(--bg-panel));
+  color: var(--theme-text-secondary, var(--text-secondary));
+  font: 400 13px/20px var(--font-sans, "Inter Variable", system-ui, sans-serif);
+}
+
+.reset-application-confirm p {
+  margin: 0;
+}
+
+.reset-application-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
