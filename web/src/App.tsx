@@ -4510,6 +4510,7 @@ function App() {
             onReload={async () => {
               acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
             }}
+            onCreateIssue={() => openCreateIssue()}
           />
         )}
         {page === "analytics" && route.kind === "analytics" && (
