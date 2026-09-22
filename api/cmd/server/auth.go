@@ -99,9 +99,18 @@ type workspaceKeyContextKey struct{}
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.authDisabled {
-			r = r.WithContext(store.ContextWithRealtimeClient(r.Context(), r.Header.Get("X-Client-ID")))
+			viewer := s.store.Account().Viewer
+			ctx := context.WithValue(r.Context(), authUserContextKey{}, viewer)
+			ctx = store.ContextWithActor(ctx, viewer)
+			ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
+			r = r.WithContext(ctx)
+			if !s.authorizeWorkspaceRequest(w, r, viewer) {
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
 		}
-		if s.authDisabled || publicAuthPath(r.URL.Path) {
+		if publicAuthPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -423,16 +432,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
 	}
-	if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
-		cookie, err := r.Cookie(sessionCookieName)
-		durationDays := data.WorkspaceSettings.SessionDurationDays
-		if durationDays < 1 {
-			durationDays = 30
-		}
-		if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
-			clearSessionCookie(w, r)
-			writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
-			return false
+	if !s.authDisabled {
+		if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
+			cookie, err := r.Cookie(sessionCookieName)
+			durationDays := data.WorkspaceSettings.SessionDurationDays
+			if durationDays < 1 {
+				durationDays = 30
+			}
+			if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
+				clearSessionCookie(w, r)
+				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
+				return false
+			}
 		}
 	}
 	role, status, err := data.ViewerRole, "active", error(nil)

@@ -1754,6 +1754,10 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if actor, ok := actorFromContext(ctx); ok {
 		viewer = actor
 	}
+	if viewer.ID == "" {
+		viewer = bootstrapViewer()
+		s.viewer = viewer
+	}
 	data := EmptyWorkspace(name, urlKey, region, viewer)
 	event := &domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "workspace.created", AggregateID: data.Workspace.ID, Payload: json.RawMessage(fmt.Sprintf(`{"urlKey":%q}`, urlKey)), CreatedAt: time.Now().UTC()}
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
@@ -1764,8 +1768,15 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	s.workspaces[urlKey] = stored
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now)
-	_, _ = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, viewer.ID, urlKey, now)
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,display_name=excluded.display_name,active=excluded.active,updated_at=excluded.updated_at`, viewer.ID, nullableString(viewer.Email), viewer.Name, viewer.DisplayName, viewer.AvatarURL, "", nullableTime(viewer.EmailVerified, time.Now().UTC()), boolInt(viewer.Active), now, now); err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("auth user: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now); err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("workspace membership: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, viewer.ID, urlKey, now); err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("auth account state: %w", err)
+	}
 	if len(data.Teams) > 0 {
 		_, _ = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role,joined_at=excluded.joined_at`, data.Workspace.ID, data.Teams[0].ID, viewer.ID, "owner", now)
 	}
