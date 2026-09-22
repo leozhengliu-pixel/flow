@@ -193,6 +193,20 @@ export function resetPassword(
     jsonRequest("POST", { token, password }),
   );
 }
+
+export function tokenAuthLogin(input: {
+  email: string
+  authToken: string
+  service?: string
+  inviteLink?: string
+  forceReauth?: boolean
+}): Promise<AuthSession> {
+  return request('/api/auth/token-login', jsonRequest('POST', input))
+}
+
+export function requestMagicLink(email: string): Promise<{ sent: boolean; loginToken?: string }> {
+  return request('/api/auth/magic-link', jsonRequest('POST', { email }))
+}
 export function fetchInvitationPreview(
   token: string,
 ): Promise<InvitationPreview> {
