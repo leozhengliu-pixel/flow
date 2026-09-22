@@ -89,3 +89,31 @@ describe('theme persistence', () => {
     ).toBe('Dark')
   })
 })
+
+describe('theme generation wiring', () => {
+  it('applyTheme writes generated CSS vars and high-contrast variant', async () => {
+    const { initializeTheme, applyTheme } = await import('./theme')
+    initializeTheme()
+    applyTheme({
+      interfaceTheme: 'Dark',
+      darkTheme: 'Dark high contrast',
+      lightTheme: 'Light',
+    })
+    expect(document.documentElement.dataset.theme).toBe('dark')
+    expect(document.documentElement.dataset.themeVariant).toBe('dark-high-contrast')
+    expect(document.documentElement.style.getPropertyValue('--bg-panel')).toMatch(/lch\(8%/)
+  })
+
+  it('applyTheme light high contrast sets variant and panel token', async () => {
+    const { initializeTheme, applyTheme } = await import('./theme')
+    initializeTheme()
+    applyTheme({
+      interfaceTheme: 'Light',
+      lightTheme: 'Light high contrast',
+      darkTheme: 'Dark',
+    })
+    expect(document.documentElement.dataset.theme).toBe('light')
+    expect(document.documentElement.dataset.themeVariant).toBe('light-high-contrast')
+    expect(document.documentElement.style.getPropertyValue('--bg-panel')).toMatch(/lch\(98/)
+  })
+})
