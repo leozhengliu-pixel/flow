@@ -30,6 +30,7 @@ import { InlineCommentMark } from './editor/inline-comment-mark'
 import { MentionMenu } from './editor/mention-menu'
 import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
+import { CollabEditing } from '@/components/editor/collab-editing'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
 import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRecovery, readDescriptionRecovery, writeDescriptionRecovery } from './editor/description-recovery'
@@ -163,6 +164,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       ...(collaborationSession ? [
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
         CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { ...collaboration.viewer, name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),
+        CollabEditing,
       ] : []),
     ],
     content: collaborationSession ? undefined : initial.content,
