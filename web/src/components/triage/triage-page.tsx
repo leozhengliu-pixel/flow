@@ -4,7 +4,7 @@ import { IssuesSplitViewPage } from '@/components/issues-split-view'
 import { PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, Team } from '@/types/flow'
-import { FastTriageAcceptEditor } from './fast-triage-accept-editor'
+import { LazyFastTriageAcceptEditorLoader } from './lazy-fast-triage-accept-editor-loader'
 import { TriageEmptyPage, TriageNotSelectedPage } from './triage-not-selected-page'
 import './triage.css'
 
@@ -89,7 +89,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
     issues.length === 0 ? (
       <TriageEmptyPage onCreate={onCreateIssue} />
     ) : selected ? (
-      <FastTriageAcceptEditor
+      <LazyFastTriageAcceptEditorLoader
         issue={selected}
         data={data}
         team={team}

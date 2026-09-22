@@ -1,0 +1,128 @@
+.flow-team-automation-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+}
+
+.flow-team-automation-settings__copy {
+  margin: 0;
+  font-size: 13px;
+  color: var(--theme-text-secondary);
+}
+
+.flow-team-automation-settings__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.flow-team-automation-settings__heading h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--theme-text-primary);
+}
+
+.flow-team-automation-settings__icon {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.flow-team-automation-settings__icon:hover {
+  background: var(--bg-hover);
+}
+
+.flow-team-automation-settings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flow-team-automation-settings__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: 0.5px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-card);
+  color: inherit;
+  cursor: pointer;
+}
+
+button.flow-team-automation-settings__row:hover,
+.flow-team-automation-settings__row:hover {
+  background: var(--bg-hover);
+}
+
+.flow-team-automation-settings__row strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+}
+
+.flow-team-automation-settings__row small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--theme-text-tertiary);
+}
+
+.flow-team-automation-settings__row > span,
+.flow-team-automation-settings__row > button {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--accent-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.flow-team-automation-settings__error {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--semantic-danger-text, var(--semantic-danger));
+}
+
+.flow-team-automation-settings__empty {
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--theme-text-secondary);
+}
+
+.flow-team-automation-settings__empty p {
+  margin: 6px 0 12px;
+  font-size: 13px;
+}
+
+.flow-team-automation-settings__empty button,
+.flow-team-automation-settings__cta {
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  padding: 0 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.flow-team-automation-settings__cta {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}

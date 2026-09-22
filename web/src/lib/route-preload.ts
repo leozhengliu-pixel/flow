@@ -43,6 +43,12 @@ export async function preloadRoute(path: string) {
     const { preloadSettingsPage } = await import('@/components/settings/settings-page')
     await preloadSettingsPage(route.page, route)
   }
+  if (route.kind === 'team-triage') {
+    const { preloadFastTriageAcceptEditor } = await import(
+      '@/components/triage/lazy-fast-triage-accept-editor-loader'
+    )
+    await preloadFastTriageAcceptEditor()
+  }
 }
 
 /** Exclude downloads, external/new-tab links, hashes, and routes owned by the server. */

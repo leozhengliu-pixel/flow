@@ -3673,6 +3673,33 @@ export const zhCN: Record<string, string> = {
   "Build custom automations to create or update issues":
     "构建自定义自动化以创建或更新事项",
   "No integrations found": "没有找到集成",
+  'Find automations…': '查找自动化…',
+  'Alphabetical': '按名称',
+  'Open Loops': '打开 Loops',
+  'No matching automations': '没有匹配的自动化',
+  'Try a different search.': '试试其他搜索条件。',
+  'Agent automations (Loops) live under Loops. Durable workflow rules stay here.': '智能体自动化（Loops）在 Loops 中；持久工作流规则保留在此。',
+  'Automation surfaces': '自动化界面',
+  'Triage memories': '分诊记忆',
+  'Memories': '记忆',
+  'Memory content': '记忆内容',
+  'Add memory': '添加记忆',
+  'Delete memory': '删除记忆',
+  'No memories yet': '还没有记忆',
+  'Add remembered context to improve future triage suggestions.': '添加记忆上下文以改进后续分诊建议。',
+  'Add context the triage agent should remember…': '添加分诊智能体应记住的上下文…',
+  'Could not save memories': '无法保存记忆',
+  'Context remembered for this team to improve future triage suggestions. Memories are shared with teammates who can manage triage settings.': '为团队记住的上下文可改进后续分诊建议。可管理分诊设置的成员共享这些记忆。',
+  'Automation runs for workflows scoped to this team. Open a run to retry failures.': '此团队范围内工作流的自动化运行记录。打开运行可重试失败项。',
+  'Team workflows': '团队工作流',
+  'View runs': '查看运行',
+  'No team automations': '没有团队自动化',
+  'Create a workflow with this team, or manage workspace automations.': '为此团队创建工作流，或管理工作区自动化。',
+  'Open automations': '打开自动化',
+  'Could not retry run': '无法重试运行',
+  'Order': '排序',
+  'Remembered context that improves triage suggestions': '改进分诊建议的记忆上下文',
+  'Team-scoped automation execution history': '团队范围的自动化执行历史'
 };
 
 Object.assign(zhCN, {

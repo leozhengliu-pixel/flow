@@ -521,6 +521,7 @@ type TeamSettings struct {
 	TriageRequirePriority   bool                 `json:"triageRequirePriority"`
 	TriageAction            string               `json:"triageAction"`
 	TriageRules             []TeamAutomationRule `json:"triageRules"`
+	TriageMemories          []TeamTriageMemory   `json:"triageMemories,omitempty"`
 	AgentSkills             []TeamAgentSkill     `json:"agentSkills"`
 	AgentConnectors         []TeamAgentConnector `json:"agentConnectors,omitempty"`
 	ProjectUpdatePrompt     string               `json:"projectUpdatePrompt"`
@@ -546,6 +547,14 @@ type TeamAgentSkill struct {
 	Name         string `json:"name"`
 	Instructions string `json:"instructions"`
 	Enabled      bool   `json:"enabled"`
+}
+
+type TeamTriageMemory struct {
+	ID            string `json:"id"`
+	Content       string `json:"content"`
+	CreatedAt     string `json:"createdAt"`
+	UpdatedAt     string `json:"updatedAt"`
+	SubjectUserID string `json:"subjectUserId,omitempty"`
 }
 
 type IssueTemplate struct {
@@ -2181,6 +2190,7 @@ type TeamSettingsMutationInput struct {
 	TriageRequirePriority   *bool                 `json:"triageRequirePriority,omitempty"`
 	TriageAction            *string               `json:"triageAction,omitempty"`
 	TriageRules             *[]TeamAutomationRule `json:"triageRules,omitempty"`
+	TriageMemories          *[]TeamTriageMemory   `json:"triageMemories,omitempty"`
 	AgentSkills             *[]TeamAgentSkill     `json:"agentSkills,omitempty"`
 	AgentConnectors         *[]TeamAgentConnector `json:"agentConnectors,omitempty"`
 	ProjectUpdatePrompt     *string               `json:"projectUpdatePrompt,omitempty"`

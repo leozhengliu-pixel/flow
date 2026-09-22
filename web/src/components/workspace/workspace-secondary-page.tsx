@@ -46,6 +46,7 @@ import { updateIssue } from "@/lib/api";
 import { toast } from "sonner";
 import { filterLabelItems, LabelPageToolbar } from "./label-page-toolbar";
 import "./workspace-secondary-page.css";
+import { AutomationsPage } from "@/components/automation/automations-page";
 
 export type WorkspaceSecondaryKind =
   | "diary"
@@ -411,33 +412,7 @@ function AutomationPage({ data, kind, workflowId, workflowRunId, editing, onRelo
   }
 
   return (
-    <section className="secondary-content">
-      <div className="secondary-section-heading">
-        <div>
-          <h2>{t("Automations")}</h2>
-          <p>{t("Run durable automations on a schedule or when issues are created.")}</p>
-        </div>
-      </div>
-      <div className="secondary-list">
-        {workflows.map(item => (
-          <a
-            className="secondary-list-row"
-            href={`/${data.workspace.urlKey}/automation/${encodeURIComponent(item.id)}`}
-            onClick={event => { event.preventDefault(); onNavigate(`/${data.workspace.urlKey}/automation/${encodeURIComponent(item.id)}`); }}
-            key={item.id}
-          >
-            <div className={`secondary-status-dot ${item.enabled ? "is-on" : ""}`} />
-            <div className="secondary-row-main">
-              <strong>{item.name}</strong>
-              <small>{item.trigger} · {item.lastRunStatus || t("Never run")}</small>
-            </div>
-            <span className="secondary-row-meta">{item.lastRunAt ? formatDate(item.lastRunAt, { dateStyle: "medium" }) : ""}</span>
-            <ChevronRight size={15} />
-          </a>
-        ))}
-      </div>
-      {!workflows.length && <EmptyState title={t("No automations yet")} body={t("Create an automation to automate repetitive work.")} />}
-    </section>
+    <AutomationsPage data={data} workflows={workflows} onNavigate={onNavigate} />
   );
 }
 
