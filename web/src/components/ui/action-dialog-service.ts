@@ -7,6 +7,8 @@ export type DateOrIntervalResult = {
 
 export type DiffPromptResult = "accept" | "reject" | "cancel";
 
+export type DialogChoice = { id: string; label: string };
+
 export type DropdownPromptOption = {
   id: string;
   label: string;
@@ -84,6 +86,16 @@ export type DialogRequest =
       cancelLabel?: string;
       danger: boolean;
       resolve: (value: DiffPromptResult) => void;
+    }
+  | {
+      kind: "choice";
+      title: string;
+      description?: string;
+      confirmLabel: string;
+      danger: boolean;
+      choices: DialogChoice[];
+      defaultChoice: string;
+      resolve: (value: string | null) => void;
     };
 
 const queue: DialogRequest[] = [];
@@ -248,6 +260,34 @@ export const subscribeActionDialogs = (listener: () => void) => {
   };
 };
 
+
+/** Confirm dialog with radio choices (applyToSubTeams / allowSubTeams). */
+export function confirmChoiceAction(
+  title: string,
+  options: {
+    description?: string;
+    confirmLabel?: string;
+    danger?: boolean;
+    choices: DialogChoice[];
+    defaultChoice?: string;
+  },
+) {
+  return new Promise<string | null>((resolve) => {
+    const choices = options.choices;
+    queue.push({
+      kind: "choice",
+      title,
+      description: options.description,
+      confirmLabel: options.confirmLabel ?? "Confirm",
+      danger: options.danger ?? false,
+      choices,
+      defaultChoice: options.defaultChoice ?? choices[0]?.id ?? "",
+      resolve,
+    });
+    emit();
+  });
+}
+
 export function completeActionDialog(result: boolean | string | DateOrIntervalResult | DiffPromptResult | null) {
   const current = queue.shift();
   if (!current) return;
@@ -259,6 +299,7 @@ export function completeActionDialog(result: boolean | string | DateOrIntervalRe
     case "date":
     case "stringValidated":
     case "dropdown":
+    case "choice":
       current.resolve(typeof result === "string" ? result : null);
       break;
     case "dateOrInterval":

@@ -631,6 +631,51 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 				*target = *value
 			}
 		}
+		if input.IssueSharingEnabled != nil {
+			settings.IssueSharingEnabled = *input.IssueSharingEnabled
+		}
+		if input.IssueSharingPermission != nil {
+			if !slices.Contains(permissionValues, *input.IssueSharingPermission) {
+				return errInvalid
+			}
+			settings.IssueSharingPermission = *input.IssueSharingPermission
+		}
+		if input.ApplyToSubTeams != nil && *input.ApplyToSubTeams {
+			for _, descendantID := range teamDescendantIDsIncludingRetired(data, teamID) {
+				if descendantID == teamID {
+					continue
+				}
+				child := teamSettings(data, descendantID)
+				if input.MembershipRestriction != nil {
+					child.MembershipRestriction = settings.MembershipRestriction
+				}
+				if input.SettingsPermission != nil {
+					child.SettingsPermission = settings.SettingsPermission
+				}
+				if input.LabelPermission != nil {
+					child.LabelPermission = settings.LabelPermission
+				}
+				if input.TemplatePermission != nil {
+					child.TemplatePermission = settings.TemplatePermission
+				}
+				if input.AgentSkillPermission != nil {
+					child.AgentSkillPermission = settings.AgentSkillPermission
+				}
+				if input.LoopPermission != nil {
+					child.LoopPermission = settings.LoopPermission
+				}
+				if input.MemberPermission != nil {
+					child.MemberPermission = settings.MemberPermission
+				}
+				if input.IssueSharingEnabled != nil {
+					child.IssueSharingEnabled = settings.IssueSharingEnabled
+				}
+				if input.IssueSharingPermission != nil {
+					child.IssueSharingPermission = settings.IssueSharingPermission
+				}
+				data.TeamSettings[descendantID] = child
+			}
+		}
 		if input.SlackChannelID != nil {
 			settings.SlackChannelID = strings.TrimSpace(*input.SlackChannelID)
 		}
@@ -1492,6 +1537,21 @@ func statesForTeamSeen(data *domain.Bootstrap, teamID string, seen map[string]bo
 	})
 	return result
 }
+func stateForTeamByType(data *domain.Bootstrap, teamID, stateType string) *domain.WorkflowState {
+	states := statesForTeam(data, teamID)
+	for index := range states {
+		if states[index].Type == stateType && !states[index].Reserved {
+			return &states[index]
+		}
+	}
+	for index := range states {
+		if states[index].Type == stateType {
+			return &states[index]
+		}
+	}
+	return nil
+}
+
 func stateForTeam(data *domain.Bootstrap, teamID, stateID string) *domain.WorkflowState {
 	settings := data.TeamSettings[teamID]
 	if settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {

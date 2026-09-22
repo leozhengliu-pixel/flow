@@ -1,0 +1,105 @@
+.retire-team-dialog {
+  z-index: 1501;
+  width: min(480px, calc(100vw - 24px));
+  padding: 20px;
+  border-radius: 12px;
+  background: var(--theme-surface-2);
+  color: var(--theme-text-primary);
+  box-shadow: var(--shadow-dialog);
+}
+.retire-team-dialog h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.retire-team-lead {
+  margin: 9px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.retire-team-section {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 0.5px solid var(--theme-border-translucent, var(--theme-border));
+}
+.retire-team-section h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.retire-team-hint,
+.retire-team-summary {
+  margin: 6px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.retire-team-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+.retire-team-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 13px;
+  color: var(--theme-text-primary);
+  cursor: pointer;
+}
+.retire-team-choice input {
+  margin: 0;
+}
+.retire-team-target {
+  margin-top: 10px;
+}
+.retire-team-progress {
+  margin-top: 16px;
+}
+.retire-team-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--theme-text-secondary);
+}
+.retire-team-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--theme-control);
+}
+.retire-team-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-primary);
+  transition: width 120ms ease;
+}
+.retire-team-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 20px;
+}
+.retire-team-footer .settings-action.danger {
+  border-color: var(--semantic-danger);
+  background: var(--semantic-danger);
+  color: var(--on-danger);
+}
+.retire-team-footer .settings-action:disabled {
+  opacity: 0.45;
+}
+.retire-team-footer .settings-action{
+  height:30px;
+  padding:0 11px;
+  border:.5px solid var(--theme-border);
+  border-radius:7px;
+  background:var(--theme-surface-1);
+  color:var(--theme-text-primary);
+  font:500 12px var(--font);
+  cursor:pointer;
+}
+.retire-team-footer .settings-action:hover{background:var(--theme-surface-hover, var(--bg-hover))}
