@@ -28,13 +28,13 @@ describe('InitiativeAgentSidebarContainer (LS-0299)', () => {
     expect(screen.getByText('Wave3 body')).toBeInTheDocument()
   })
 
-  it('shows stub empty state without children', () => {
+  it('shows the entity agent panel without children', () => {
     render(
       <I18nProvider>
         <InitiativeAgentSidebarContainer initiative={initiative} open onOpenChange={vi.fn()} />
       </I18nProvider>,
     )
-    expect(screen.getByText('Agent')).toBeInTheDocument()
+    expect(screen.getByLabelText('Entity agent panel')).toBeInTheDocument()
   })
 })
 
