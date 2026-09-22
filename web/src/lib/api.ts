@@ -2380,6 +2380,8 @@ export type LoopMutation = Partial<
     | "allowChangesOutsideTrigger"
     | "allowExternalSync"
     | "enabled"
+    | "ownerId"
+    | "trustedSourceKeys"
   >
 >;
 export function listLoops(): Promise<Loop[]> {
@@ -2734,6 +2736,8 @@ export type WorkflowDefinitionInput = {
   actions: WorkflowAction[];
   enabled?: boolean;
   maxAttempts?: number;
+  ownerId?: string;
+  trustedSourceKeys?: string[];
 };
 export function listWorkflowDefinitions(): Promise<WorkflowDefinition[]> {
   return request("/api/workflows");

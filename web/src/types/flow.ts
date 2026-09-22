@@ -147,6 +147,7 @@ export interface Team {
   icon?: string;
   private?: boolean;
   externalSource?: string;
+  sourceMetadata?: IssueSourceMetadata;
   retiredAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -290,6 +291,13 @@ export interface DocumentContentDraft {
   version: number;
   createdAt: string;
   updatedAt: string;
+}
+export interface IssueSourceMetadata {
+  type?: string;
+  subType?: string;
+  displayName?: string;
+  id?: string;
+  emailIntakeMetadata?: { trusted?: boolean };
 }
 export interface Issue {
   isSummary?: boolean;
@@ -582,6 +590,8 @@ export interface WorkflowDefinition {
   lastRunStatus?: string;
   consecutiveErrors: number;
   creatorId: UUID;
+  ownerId?: UUID;
+  trustedSourceKeys?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -846,6 +856,8 @@ export interface Loop {
   allowChangesOutsideTrigger: boolean;
   allowExternalSync: boolean;
   enabled: boolean;
+  ownerId?: UUID;
+  trustedSourceKeys?: string[];
   creator: User;
   lastRunAt?: string;
   nextRunAt?: string;
@@ -1055,6 +1067,9 @@ export interface WorkspaceSettings {
   scimRoleGroups?: Record<string, string>;
   scimTeamGroupMapping?: Record<string, string>;
   scimDefaultRole?: string;
+  /** Wave 10 LS-0094 — none | allowlist */
+  trustedSourcesMode?: "none" | "allowlist";
+  trustedSourcesAllowlist?: string[];
 }
 export interface ReleasePipeline {
   id: UUID;
