@@ -3,8 +3,12 @@ import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import { useHydrateModelsInMarkdown } from '@/hooks/use-hydrate-models-in-markdown'
 
 export function AgentRichText({ ariaLabel = 'AI message', className, content }: { ariaLabel?: string; className: string; content: string }) {
+  // LS-0738 — MarkdownViewer path for Agent messages.
+  useHydrateModelsInMarkdown(content)
+
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
