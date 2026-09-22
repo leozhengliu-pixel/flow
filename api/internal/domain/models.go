@@ -522,6 +522,7 @@ type TeamSettings struct {
 	TriageAction            string               `json:"triageAction"`
 	TriageRules             []TeamAutomationRule `json:"triageRules"`
 	AgentSkills             []TeamAgentSkill     `json:"agentSkills"`
+	AgentConnectors         []TeamAgentConnector `json:"agentConnectors,omitempty"`
 	ProjectUpdatePrompt     string               `json:"projectUpdatePrompt"`
 	ResolvedSummaries       bool                 `json:"resolvedThreadSummaries"`
 	ShowInitiatives         bool                 `json:"showInitiatives"`
@@ -928,8 +929,28 @@ type CommitSigningKey struct {
 }
 
 // CodingAgentSettings holds workspace-wide coding-agent policy (LS-0125).
+// CodingAgentEnvironment is a reusable coding-session environment (LS-0117).
+type CodingAgentEnvironment struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Repository   string `json:"repository"`
+	SetupCommand string `json:"setupCommand,omitempty"`
+	Archived     bool   `json:"archived,omitempty"`
+}
+
+// TeamAgentConnector is a team-scoped MCP connector entry (LS-0572).
+type TeamAgentConnector struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Enabled bool   `json:"enabled"`
+}
+
 type CodingAgentSettings struct {
-	CommitSigningEnabled bool `json:"commitSigningEnabled"`
+	CommitSigningEnabled bool                     `json:"commitSigningEnabled"`
+	Harness              string                   `json:"harness,omitempty"`
+	Model                string                   `json:"model,omitempty"`
+	Environments         []CodingAgentEnvironment `json:"environments,omitempty"`
 }
 
 type WorkspaceSettings struct {
@@ -2161,6 +2182,7 @@ type TeamSettingsMutationInput struct {
 	TriageAction            *string               `json:"triageAction,omitempty"`
 	TriageRules             *[]TeamAutomationRule `json:"triageRules,omitempty"`
 	AgentSkills             *[]TeamAgentSkill     `json:"agentSkills,omitempty"`
+	AgentConnectors         *[]TeamAgentConnector `json:"agentConnectors,omitempty"`
 	ProjectUpdatePrompt     *string               `json:"projectUpdatePrompt,omitempty"`
 	ResolvedSummaries       *bool                 `json:"resolvedThreadSummaries,omitempty"`
 	ShowInitiatives         *bool                 `json:"showInitiatives,omitempty"`
