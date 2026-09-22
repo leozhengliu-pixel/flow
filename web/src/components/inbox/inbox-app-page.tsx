@@ -6,17 +6,21 @@ import { NoProjectIcon, PriorityIcon, ProjectIcon, WorkflowStatusGlyph } from '@
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { batchNotifications, updateInboxNotification } from '@/lib/api'
 import {
+  AutomationInboxView,
   InitiativeOverviewInboxView,
   InitiativeUpdatesInboxView,
+  OAuthClientApprovalInboxView,
   ProjectOverviewInboxView,
   ProjectUpdatesInboxView,
+  WelcomeMessageInboxView,
   classifyInboxHost,
   notificationTypeMatchesPriorityRules,
   readPriorityInboxRuleState,
 } from './hosts'
+import { automationPath, automationRunsPath, automationsPath, settingsPath } from '@/lib/app-routes'
 
 import { type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
-import { INBOX_NOTIFICATION_TYPE_OPTIONS, INBOX_REVIEW_STATUS_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
+import { INBOX_NOTIFICATION_TYPE_OPTIONS, INBOX_REVIEW_STATUS_OPTIONS, INBOX_SUBSCRIPTION_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
 import { inboxActorOptions, inboxNotificationCategory, matchesInboxFilter as notificationMatchesFilter } from './inbox-filter-model'
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
@@ -42,11 +46,16 @@ interface InboxProjection extends InboxNotificationRowData {
   projectId?: string
   initiativeId?: string
   initiativeIds: string[]
+  teamIds: string[]
+  subscribed?: boolean
   issuePriority: number
   issueStatusType: string
   reviewId?: string
   reviewStatus?: string
   updateId?: string
+  policyId?: string
+  workflowId?: string
+  runId?: string
   hostKind?: ReturnType<typeof classifyInboxHost>
 }
 
@@ -264,11 +273,69 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
               sourceType: projection.sourceType,
               sourceId: projection.sourceId,
               identifier: projection.identifier,
+              category: data.notifications.find(item => item.id === projection.id)?.category,
             })
           : 'other')
 
       if (projection?.identifier === 'pulseSummary') {
         return { content: <div className="flow-inbox-project-reminder"><h2>Pulse summary</h2><p>{projection.body}</p><a href={`/${data.workspace.urlKey}/pulse`}>Open Pulse</a></div> }
+      }
+
+      if (hostKind === 'oauth-approval') {
+        return {
+          content: (
+            <OAuthClientApprovalInboxView
+              policyId={projection?.policyId || projection?.sourceId}
+              fallbackName={projection?.title}
+              actorName={projection?.actor}
+              additionalPermissions={/additional/i.test(data.notifications.find(item => item.id === projection?.id)?.type ?? '')}
+              onOpenSettings={() => {
+                if (onOpenSettings) onOpenSettings()
+                else window.location.assign(settingsPath(data.workspace.urlKey, 'security'))
+              }}
+              onResolved={() => { void onReload() }}
+            />
+          ),
+        }
+      }
+
+      if (hostKind === 'automation') {
+        const workflow = data.workflowDefinitions?.find(item => item.id === projection?.workflowId || item.id === projection?.sourceId)
+        const loop = data.loops?.find(item => item.id === projection?.workflowId || item.id === projection?.sourceId)
+        const automationId = workflow?.id ?? loop?.id
+        return {
+          content: (
+            <AutomationInboxView
+              workflow={workflow}
+              loop={loop}
+              runId={projection?.runId}
+              actorName={projection?.actor}
+              onOpenAutomation={() => {
+                if (automationId) window.location.assign(automationPath(data.workspace.urlKey, automationId))
+                else window.location.assign(automationsPath(data.workspace.urlKey))
+              }}
+              onOpenRuns={automationId ? () => {
+                window.location.assign(automationRunsPath(data.workspace.urlKey, automationId, projection?.runId))
+              } : undefined}
+            />
+          ),
+        }
+      }
+
+      if (hostKind === 'welcome') {
+        return {
+          content: (
+            <WelcomeMessageInboxView
+              workspaceName={data.workspace.name}
+              welcomeMessage={data.workspaceSettings.welcomeMessage}
+              actorName={projection?.actor}
+              onOpenSettings={() => {
+                if (onOpenSettings) onOpenSettings()
+                else window.location.assign(settingsPath(data.workspace.urlKey, 'workspace'))
+              }}
+            />
+          ),
+        }
       }
 
       if (hostKind === 'project-updates' && project) {
@@ -383,7 +450,7 @@ function readInboxFilters(): InboxFilterCondition[] {
   if (!raw) return []
   try {
     const decoded = decodeInboxFilters(raw)
-    const allowed = new Set<InboxFilterCondition['property']>(['notificationType', 'from', 'project', 'initiative', 'issuePriority', 'issueStatusType', 'reviewStatus'])
+    const allowed = new Set<InboxFilterCondition['property']>(['notificationType', 'subscription', 'from', 'team', 'project', 'initiative', 'issuePriority', 'issueStatusType', 'reviewStatus'])
     const values = Array.isArray(decoded) ? decoded.filter(item => item && allowed.has(item.property) && Array.isArray(item.values)) : []
     return normalizeInboxFilters(values)
   } catch {
@@ -430,7 +497,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     if (notification.reviewId) {
       const review = data.reviews.find(item => item.id === notification.reviewId)
       if (!review || notification.deletedAt || notification.archivedAt) return []
-      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, snoozedUntil: notification.snoozedUntil, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
+      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, snoozedUntil: notification.snoozedUntil, initiativeIds: [], teamIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
@@ -468,6 +535,7 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         snoozedUntil: notification.snoozedUntil,
         projectId: reminderProject.id,
         initiativeIds: data.initiatives.filter(initiative => initiative.projectIds.includes(reminderProject.id)).map(initiative => initiative.id),
+        teamIds: reminderProject.teamIds ?? [],
         issuePriority: 0,
         issueStatusType: 'started' as const,
         updateId: notification.sourceType === 'projectUpdate' ? notification.sourceId : undefined,
@@ -487,27 +555,51 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         sourceType: notification.sourceType,
         sourceId: notification.sourceId,
         identifier: notification.type === 'pulseSummary' ? 'pulseSummary' : undefined,
+        category: notification.category,
       })
       const isInitiative = Boolean(initiative) || /initiative/i.test(notification.type) || notification.sourceType === 'initiative'
+      const trustTitle = hostKind === 'oauth-approval'
+        ? 'Application approval'
+        : hostKind === 'welcome'
+          ? `Welcome to ${data.workspace.name}`
+          : hostKind === 'automation'
+            ? (data.workflowDefinitions?.find(item => item.id === notification.sourceId)?.name
+              ?? data.loops?.find(item => item.id === notification.sourceId)?.name
+              ?? 'Automation')
+            : initiative?.name || genericNotificationTitle(notification)
+      const trustBody = hostKind === 'oauth-approval'
+        ? `${notification.actor.displayName} requested application access`
+        : hostKind === 'welcome'
+          ? (data.workspaceSettings.welcomeMessage?.trim() || 'Welcome to the workspace')
+          : hostKind === 'automation'
+            ? `${notification.actor.displayName} shared an automation update`
+            : notification.type === 'pulseSummary'
+              ? `${notification.occurrenceCount} project and initiative updates`
+              : notification.type === 'initiativeReminder'
+                ? `${notification.actor.displayName} set a reminder`
+                : /initiativeUpdate/i.test(notification.type)
+                  ? `${notification.actor.displayName} shared an initiative update`
+                  : withOccurrence(genericNotificationBody(notification), notification.occurrenceCount)
+      const notificationType = hostKind === 'oauth-approval'
+        ? 'oauthApproval'
+        : hostKind === 'welcome'
+          ? 'welcome'
+          : hostKind === 'automation'
+            ? 'loop'
+            : inboxNotificationCategory(notification)
       return [{
         id: notification.id,
         issueId: '',
         sourceType: 'activity' as const,
         sourceId: notification.sourceId,
-        notificationType: inboxNotificationCategory(notification),
+        notificationType,
         actorId: notification.actor.id,
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: isInitiative ? 'project' as const : 'generic' as const,
         identifier: notification.type === 'initiativeReminder' ? 'Reminder' : notification.type === 'pulseSummary' ? 'pulseSummary' : genericNotificationTitle(notification),
-        title: initiative?.name || genericNotificationTitle(notification),
-        body: notification.type === 'pulseSummary'
-          ? `${notification.occurrenceCount} project and initiative updates`
-          : notification.type === 'initiativeReminder'
-            ? `${notification.actor.displayName} set a reminder`
-            : /initiativeUpdate/i.test(notification.type)
-              ? `${notification.actor.displayName} shared an initiative update`
-              : withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        title: trustTitle,
+        body: trustBody,
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),
@@ -515,9 +607,13 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         snoozedUntil: notification.snoozedUntil,
         initiativeId: initiative?.id,
         initiativeIds: initiative ? [initiative.id] : [],
+        teamIds: [],
         issuePriority: 0,
         issueStatusType: 'started' as const,
         updateId: notification.sourceType === 'initiativeUpdate' ? notification.sourceId : undefined,
+        policyId: hostKind === 'oauth-approval' ? notification.sourceId : undefined,
+        workflowId: hostKind === 'automation' ? notification.sourceId : undefined,
+        runId: hostKind === 'automation' && notification.activityId ? notification.activityId : undefined,
         hostKind: isInitiative
           ? (hostKind === 'initiative-overview' ? 'initiative-overview' : 'initiative-updates')
           : hostKind,
@@ -548,6 +644,8 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
       snoozedUntil: notification.snoozedUntil,
       projectId: issue.project?.id,
       initiativeIds: issue.project ? data.initiatives.filter(initiative => initiative.projectIds.includes(issue.project!.id)).map(initiative => initiative.id) : [],
+      teamIds: issue.team?.id ? [issue.team.id] : [],
+      subscribed: issue.subscriberIds.includes(data.viewer.id),
       issuePriority: issue.priority,
       issueState: issue.state,
       issueStatusType: issue.state.name.toLowerCase() === 'triage' ? 'triage' : issue.state.name.toLowerCase() === 'duplicate' ? 'duplicate' : issue.state.type,
@@ -677,7 +775,12 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
 
   return {
     notificationType: INBOX_NOTIFICATION_TYPE_OPTIONS.map(option => ({ ...option, count: count('notificationType', option.id) })),
+    subscription: INBOX_SUBSCRIPTION_OPTIONS.map(option => ({ ...option, count: count('subscription', option.id) })),
     from: inboxActorOptions(candidates, data.users),
+    team: [
+      { id: '__none__', label: 'No team', keywords: 'none empty', count: count('team', '__none__') },
+      ...data.teams.map(team => ({ id: team.id, label: team.name, color: team.color, count: count('team', team.id), i18nIgnore: true })),
+    ],
     project: [
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
       ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectIcon size={15} style={{ color: project.color }} />, count: count('project', project.id), i18nIgnore: true })),

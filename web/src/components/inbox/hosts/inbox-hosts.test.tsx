@@ -2,17 +2,27 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Initiative, Project, ProjectUpdate, User } from '@/types/flow'
+import type { Initiative, Project, ProjectUpdate, User, WorkflowDefinition } from '@/types/flow'
 
+import { AutomationInboxView } from './automation-inbox-view'
 import { classifyInboxHost } from './inbox-host-types'
+import { InboxActionControls } from './inbox-action-controls'
 import { InitiativeUpdatesInboxView } from './initiative-updates-inbox-view'
+import { OAuthClientApprovalInboxView } from './oauth-client-approval-inbox-view'
 import { PriorityInboxSettings } from './priority-inbox-settings'
 import {
   defaultPriorityInboxRuleState,
   notificationTypeMatchesPriorityRules,
 } from './priority-inbox-settings-metadata'
+import { ProjectNotificationInboxHeader } from './project-notification-inbox-components'
 import { ProjectOverviewInboxView } from './project-overview-inbox-view'
 import { ProjectUpdatesInboxView } from './project-updates-inbox-view'
+import { WelcomeMessageInboxView } from './welcome-message-inbox-view'
+
+vi.mock('@/lib/api-client', () => ({
+  request: vi.fn().mockResolvedValue([]),
+  jsonRequest: vi.fn((method: string, body: unknown) => ({ method, body: JSON.stringify(body) })),
+}))
 
 const viewer = {
   id: 'user-1',
@@ -89,6 +99,21 @@ const initiative = {
   updatedAt: '2026-09-20T00:00:00.000Z',
 } as Initiative
 
+const workflow = {
+  id: 'wf-1',
+  name: 'Triage new issues',
+  description: 'Assign and label incoming triage issues.',
+  trigger: 'issueCreated',
+  conditions: {},
+  actions: [],
+  enabled: true,
+  maxAttempts: 3,
+  consecutiveErrors: 0,
+  creatorId: viewer.id,
+  createdAt: '2026-09-01T00:00:00.000Z',
+  updatedAt: '2026-09-20T00:00:00.000Z',
+} as WorkflowDefinition
+
 describe('classifyInboxHost', () => {
   it('routes project and initiative update/overview notification types', () => {
     expect(classifyInboxHost({ type: 'projectUpdateCreated', projectId: 'p1' })).toBe('project-updates')
@@ -99,6 +124,12 @@ describe('classifyInboxHost', () => {
     expect(classifyInboxHost({ type: 'initiativeOverview', sourceType: 'initiative', sourceId: 'i1' })).toBe(
       'initiative-overview',
     )
+  })
+
+  it('routes oauth, automation, and welcome notification types', () => {
+    expect(classifyInboxHost({ type: 'oauthClientApprovalCreated' })).toBe('oauth-approval')
+    expect(classifyInboxHost({ type: 'agentAutomationFailed', category: 'loops' })).toBe('automation')
+    expect(classifyInboxHost({ type: 'workspaceWelcome' })).toBe('welcome')
   })
 })
 
@@ -167,5 +198,91 @@ describe('priority inbox settings metadata', () => {
     const toggle = screen.getByRole('switch', { name: /Disable Assigned to you/i })
     await user.click(toggle)
     expect(screen.getByRole('switch', { name: /Enable Assigned to you/i })).toBeInTheDocument()
+  })
+})
+
+describe('OAuthClientApprovalInboxView', () => {
+  it('renders approve/decline chrome without honesty banners', () => {
+    render(
+      <OAuthClientApprovalInboxView
+        policyId="pol-1"
+        fallbackName="Acme MCP"
+        actorName="Ada Lovelace"
+        onOpenSettings={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Third-party application')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open in settings' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Decline' })).toBeInTheDocument()
+    expect(screen.queryByText(/not implemented|coming soon|gap/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('AutomationInboxView', () => {
+  it('shows automation run chrome', () => {
+    render(
+      <AutomationInboxView
+        workflow={workflow}
+        run={{ id: 'run-1', status: 'failed', trigger: 'issueCreated', attempt: 2, startedAt: '2026-09-22T10:00:00.000Z', error: 'Webhook timed out' }}
+        onOpenAutomation={vi.fn()}
+        onOpenRuns={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Triage new issues')).toBeInTheDocument()
+    expect(screen.getByText('Failed')).toBeInTheDocument()
+    expect(screen.getByText('Webhook timed out')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open automation' })).toBeInTheDocument()
+  })
+})
+
+describe('WelcomeMessageInboxView', () => {
+  it('renders workspace welcome content', () => {
+    render(
+      <WelcomeMessageInboxView
+        workspaceName="Flow"
+        welcomeMessage="Glad you are here — start with Inbox."
+        onOpenSettings={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Welcome to Flow')).toBeInTheDocument()
+    expect(screen.getByText(/Glad you are here/)).toBeInTheDocument()
+    expect(screen.getByText('Key features')).toBeInTheDocument()
+  })
+})
+
+describe('InboxActionControls', () => {
+  it('exposes subscribe, snooze, and delete actions', async () => {
+    const user = userEvent.setup()
+    const onSubscribeChange = vi.fn()
+    const onDelete = vi.fn()
+    render(
+      <InboxActionControls
+        showSubscribe
+        subscribed={false}
+        onSubscribeChange={onSubscribeChange}
+        onSnooze={vi.fn()}
+        onDelete={onDelete}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Subscribe' }))
+    expect(onSubscribeChange).toHaveBeenCalledWith(true)
+    await user.click(screen.getByRole('button', { name: 'Delete notification' }))
+    expect(onDelete).toHaveBeenCalled()
+  })
+})
+
+describe('ProjectNotificationInboxHeader', () => {
+  it('renders shared project notification chrome', () => {
+    render(
+      <ProjectNotificationInboxHeader
+        project={project}
+        onOpenProject={vi.fn()}
+        onSetupNotifications={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Launch Flow')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Project notifications' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open project' })).toBeInTheDocument()
   })
 })

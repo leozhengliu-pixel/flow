@@ -39,7 +39,15 @@ describe('inbox filters', () => {
     expect(added[0].operator).toBe('is')
   })
 
+  it('supports subscription and team as first-class Inbox properties', () => {
+    const subscription = toggleInboxFilterValue([], 'subscription', { id: 'subscribed', label: 'Subscribed' })
+    expect(subscription[0]).toMatchObject({ property: 'subscription', values: [{ value: 'subscribed' }] })
+    const team = toggleInboxFilterValue([], 'team', { id: 'team-1', label: 'Platform' })
+    expect(team[0]).toMatchObject({ property: 'team', values: [{ value: 'team-1' }] })
+  })
+
   it('supports review status as a first-class Inbox property', () => {
+
     const filters = toggleInboxFilterValue([], 'reviewStatus', { id: 'approved', label: 'Approved' })
     expect(filters).toEqual([expect.objectContaining({ property: 'reviewStatus', operator: 'is', values: [{ value: 'approved', valueLabel: 'Approved' }] })])
     expect(updateInboxFilterOperator(filters, filters[0].id, 'isNot')[0].operator).toBe('isNot')

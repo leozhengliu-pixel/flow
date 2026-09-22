@@ -1,4 +1,4 @@
-/** Inbox detail host routing helpers for P1-A update + overview surfaces. */
+/** Inbox detail host routing helpers for update, overview, and P2-C trust hosts. */
 
 export type InboxHostKind =
   | 'project-updates'
@@ -6,6 +6,9 @@ export type InboxHostKind =
   | 'project-overview'
   | 'initiative-overview'
   | 'project-reminder'
+  | 'oauth-approval'
+  | 'automation'
+  | 'welcome'
   | 'other'
 
 const PROJECT_UPDATE_TYPES = new Set([
@@ -48,6 +51,26 @@ const INITIATIVE_OVERVIEW_TYPES = new Set([
   'initiativeAddedAsMember',
 ])
 
+const OAUTH_APPROVAL_TYPES = new Set([
+  'oauthClientApprovalCreated',
+  'oauthClientApproval',
+  'oauthClientApprovalAdditional',
+])
+
+const AUTOMATION_TYPES = new Set([
+  'agentAutomation',
+  'agentAutomationRun',
+  'agentAutomationFailed',
+  'agentAutomationSucceeded',
+  'automationRun',
+  'automationFailed',
+  'loop',
+  'loopRun',
+  'loopFailed',
+])
+
+const WELCOME_TYPES = new Set(['workspaceWelcome', 'welcomeMessage'])
+
 export function classifyInboxHost(input: {
   type: string
   projectId?: string
@@ -55,9 +78,22 @@ export function classifyInboxHost(input: {
   sourceType?: string
   sourceId?: string
   identifier?: string
+  category?: string
 }): InboxHostKind {
   const type = input.type
   if (input.identifier === 'pulseSummary') return 'other'
+  if (OAUTH_APPROVAL_TYPES.has(type) || /oauthClientApproval/i.test(type)) return 'oauth-approval'
+  if (WELCOME_TYPES.has(type) || type === 'workspaceWelcome') return 'welcome'
+  if (
+    AUTOMATION_TYPES.has(type)
+    || /agentAutomation|automationRun|loopRun/i.test(type)
+    || input.category === 'loops'
+    || input.sourceType === 'loop'
+    || input.sourceType === 'workflow'
+    || input.sourceType === 'automation'
+  ) {
+    return 'automation'
+  }
   if (PROJECT_UPDATE_TYPES.has(type)) return 'project-updates'
   if (INITIATIVE_UPDATE_TYPES.has(type)) return 'initiative-updates'
   if (PROJECT_OVERVIEW_TYPES.has(type)) return 'project-overview'

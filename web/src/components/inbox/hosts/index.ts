@@ -15,4 +15,18 @@ export {
   type PriorityInboxRuleId,
   type PriorityInboxRuleState,
 } from './priority-inbox-settings-metadata'
+export {
+  OAuthClientApprovalInboxView,
+  type OAuthClientApprovalInboxViewProps,
+  type OAuthClientApprovalPolicy,
+} from './oauth-client-approval-inbox-view'
+export { AutomationInboxView, type AutomationInboxViewProps } from './automation-inbox-view'
+export { WelcomeMessageInboxView, type WelcomeMessageInboxViewProps } from './welcome-message-inbox-view'
+export { InboxActionControls, type InboxActionControlsProps } from './inbox-action-controls'
+export {
+  ProjectNotificationDetails,
+  ProjectNotificationInboxHeader,
+  type ProjectNotificationDetailsProps,
+  type ProjectNotificationInboxHeaderProps,
+} from './project-notification-inbox-components'
 export { classifyInboxHost, healthLabel, type InboxHostKind } from './inbox-host-types'

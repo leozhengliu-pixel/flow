@@ -43,4 +43,11 @@ describe('Inbox filter model', () => {
     expect(inboxNotificationCategory({category:'mentions',type:'issueMention'})).toBe('mention')
     expect(inboxNotificationCategory({category:'statusChanges',type:'issueStatusChanged'},'status')).toBe('status')
   })
+
+  it('matches team and subscription filter blocks (LS-0430)', () => {
+    expect(matchesInboxFilter({ ...review, teamIds: ['team-1'] }, filter('team', 'team-1'))).toBe(true)
+    expect(matchesInboxFilter({ ...review, teamIds: [] }, filter('team', '__none__'))).toBe(true)
+    expect(matchesInboxFilter({ ...review, subscribed: true }, filter('subscription', 'subscribed'))).toBe(true)
+    expect(matchesInboxFilter({ ...review, subscribed: false }, filter('subscription', 'unsubscribed'))).toBe(true)
+  })
 })
