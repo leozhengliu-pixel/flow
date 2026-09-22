@@ -753,6 +753,9 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if input.AgentSkills != nil {
 			settings.AgentSkills = slices.Clone(*input.AgentSkills)
 		}
+		if input.AgentConnectors != nil {
+			settings.AgentConnectors = slices.Clone(*input.AgentConnectors)
+		}
 		if input.ProjectUpdatePrompt != nil {
 			settings.ProjectUpdatePrompt = strings.TrimSpace(*input.ProjectUpdatePrompt)
 		}
@@ -1204,7 +1207,7 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 			MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{},
 			StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none",
 			ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{},
-			AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true,
+			AgentSkills: []domain.TeamAgentSkill{}, AgentConnectors: []domain.TeamAgentConnector{}, ResolvedSummaries: true, ShowInitiatives: true,
 		}
 		states := statesForTeam(data, teamID)
 		if len(states) > 0 {
@@ -1266,6 +1269,9 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	}
 	if settings.AgentSkills == nil {
 		settings.AgentSkills = []domain.TeamAgentSkill{}
+	}
+	if settings.AgentConnectors == nil {
+		settings.AgentConnectors = []domain.TeamAgentConnector{}
 	}
 	if settings.InheritIssueEstimation && settings.ParentTeamID != "" {
 		parent := teamSettings(data, settings.ParentTeamID)

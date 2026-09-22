@@ -62,6 +62,8 @@ export type SettingsPageId =
   | "project-statuses"
   | "project-updates"
   | "ai"
+  | "coding-sessions"
+  | "coding-environments"
   | "initiatives"
   | "initiative-labels"
   | "documents"
@@ -97,6 +99,7 @@ export type TeamSettingsSection =
   | "triage"
   | "cycles"
   | "agents"
+  | "agent-connectors"
   | "agent-skills"
   | "default-favorites"
   | "ai-updates"
@@ -1698,6 +1701,8 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "project-statuses",
   "project-updates",
   "ai",
+  "coding-sessions",
+  "coding-environments",
   "initiatives",
   "initiative-labels",
   "documents",
@@ -1733,6 +1738,7 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "triage",
   "cycles",
   "agents",
+  "agent-connectors",
   "agent-skills",
   "default-favorites",
 ]);
