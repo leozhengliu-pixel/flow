@@ -15,7 +15,7 @@ export type ViewsResource = "issues" | "projects";
 export type InitiativesRouteView = "active" | "planned" | "all";
 export type InitiativeRouteTab =
   "overview" | "activity" | "projects" | "new" | "view";
-export type ReleasePipelineTab = "releases" | "changelog" | "archive";
+export type ReleasePipelineTab = "releases" | "changelog" | "archive" | "deleted";
 export type ReleaseRouteTab = "issues" | "release-notes";
 export type PulseRouteView = "following" | "popular" | "all";
 export type ReviewRouteTab = "overview" | "review" | "changes";
@@ -42,7 +42,8 @@ export type TeamArchiveTab =
   | "recently-deleted"
   | "recently-deleted-projects"
   | "recently-deleted-initiatives"
-  | "recently-deleted-documents";
+  | "recently-deleted-documents"
+  | "recently-deleted-releases";
 export type SettingsPageId =
   | "preferences"
   | "shortcuts"
@@ -371,6 +372,7 @@ const TEAM_ARCHIVE_TABS = new Set<TeamArchiveTab>([
   "recently-deleted-projects",
   "recently-deleted-initiatives",
   "recently-deleted-documents",
+  "recently-deleted-releases",
 ]);
 
 export function parseAppRoute(pathname: string, search = ""): AppRoute {
@@ -565,6 +567,19 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       workspaceSlug,
       pipelineSlug: third,
       tab: "archive",
+    };
+  if (
+    section === "pipeline" &&
+    third &&
+    fourth === "releases" &&
+    fifth === "deleted" &&
+    segments.length === 5
+  )
+    return {
+      kind: "release-pipeline",
+      workspaceSlug,
+      pipelineSlug: third,
+      tab: "deleted",
     };
   if (
     section === "pipeline" &&
@@ -1604,7 +1619,13 @@ export function releasePipelinePath(
   pipelineSlug: string,
   tab: ReleasePipelineTab = "releases",
 ) {
-  return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(pipelineSlug)}/${tab === "archive" ? "releases/archived" : tab}`;
+  const leaf =
+    tab === "archive"
+      ? "releases/archived"
+      : tab === "deleted"
+        ? "releases/deleted"
+        : tab;
+  return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(pipelineSlug)}/${leaf}`;
 }
 export function releasePath(
   workspaceSlug: string,

@@ -281,6 +281,9 @@ func trashTeamIDs(data *domain.Bootstrap, value any) []string {
 	case domain.Document:
 		ids = slices.Clone(item.TeamIDs)
 	case domain.Release:
+		if pipeline := releasePipelineByID(data, item.PipelineID); pipeline != nil {
+			ids = append(ids, pipeline.TeamIDs...)
+		}
 		for _, projectID := range item.ProjectIDs {
 			if project, err := fullProjectByID(data, projectID); err == nil {
 				ids = append(ids, project.TeamIDs...)

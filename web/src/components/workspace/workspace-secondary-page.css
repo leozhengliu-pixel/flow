@@ -27,3 +27,6 @@
 
 .flow-triage-host{min-height:0;flex:1;display:flex;flex-direction:column;padding:0;overflow:hidden}
 .flow-triage-host .flow-triage-page{flex:1}
+.board-content.team-board-host{width:100%;max-width:none;margin:0;padding:12px 0 0;display:flex;flex-direction:column;min-height:0;height:calc(100vh - 52px);overflow:hidden}
+.board-content.team-board-host .secondary-board-toolbar{padding:0 16px;margin-bottom:8px;flex:0 0 auto}
+.board-content.team-board-host > [role="list"]{flex:1 1 auto;min-height:0}

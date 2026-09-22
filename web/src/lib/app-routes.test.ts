@@ -14,6 +14,7 @@ import {
   newAPIKeyPath,
   newSigningKeyPath,
   parseAppRoute,
+  releasePipelinePath,
   projectPath,
   projectSavedViewEditPath,
   projectSavedViewPath,
@@ -282,4 +283,22 @@ describe("application routes", () => {
       resourceType: "issue",
     });
   });
+  it("parses pipeline deleted releases and archive tabs", () => {
+    expect(parseAppRoute("/acme/pipeline/app/releases/deleted")).toEqual({
+      kind: "release-pipeline",
+      workspaceSlug: "acme",
+      pipelineSlug: "app",
+      tab: "deleted",
+    });
+    expect(parseAppRoute("/acme/pipeline/app/releases/archived")).toEqual({
+      kind: "release-pipeline",
+      workspaceSlug: "acme",
+      pipelineSlug: "app",
+      tab: "archive",
+    });
+    expect(releasePipelinePath("acme", "app", "deleted")).toBe(
+      "/acme/pipeline/app/releases/deleted",
+    );
+  });
+
 });
