@@ -172,6 +172,7 @@ const TEAM_SEARCH_SECTIONS: SettingsTeamSearchGroup[] = [
     keywords: ['coding agents', 'loops'],
     items: [
       { title: 'Connected agents', keywords: ['coding agents'] },
+      { title: 'Agent connectors', keywords: ['mcp', 'connectors'] },
       { title: 'Loops', keywords: ['agent automations'] },
     ],
   },
@@ -494,7 +495,9 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
         items: [
           { title: 'Flow Agent', keywords: ['assistant'] },
           { title: 'Code Intelligence', keywords: ['code search'] },
-          { title: 'Coding Sessions', keywords: ['agents'] },
+          { title: 'Coding Sessions', keywords: ['agents', 'coding sessions', 'harness'] },
+          { title: 'Coding environments', keywords: ['environments', 'coding'] },
+          { title: 'Trusted sources', keywords: ['allowlist', 'trusted sources', 'agent safety'] },
           { title: 'Loops', keywords: ['automations'] },
           { title: 'Triage Intelligence', keywords: ['triage', 'suggestions', 'duplicates'] },
         ],

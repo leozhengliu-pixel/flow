@@ -1,0 +1,15 @@
+.agent-trusted-sources-settings {
+  display: grid;
+  gap: 12px;
+}
+.agent-trusted-sources-settings > header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 560;
+}
+.agent-trusted-sources-settings > header p {
+  margin: 4px 0 0;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
