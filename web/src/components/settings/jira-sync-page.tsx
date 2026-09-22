@@ -536,12 +536,6 @@ export function JiraSyncPage({ data, mode, jiraProjectId, onBack, onReload }: Pr
             ) : null}
           </WizardStep>
         ) : null}
-
-        <p className="jira-pixel-note">
-          {t(
-            "UI note: Linear pixel follow-up pending — compare this wizard with Linear …/integrations/jira/sync/new.",
-          )}
-        </p>
       </div>
     </div>
   );

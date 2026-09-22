@@ -63,8 +63,6 @@ it("walks SelectProjects → ConfigureSync → StatusMapping with honest empty r
   await waitFor(() =>
     expect(screen.getByText(/Live projects unavailable/i)).toBeInTheDocument(),
   );
-  expect(screen.getByText(/Linear pixel follow-up/i)).toBeInTheDocument();
-
   fireEvent.change(screen.getByLabelText(/Jira project ID/i), {
     target: { value: "10000" },
   });
