@@ -717,7 +717,7 @@ function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy }: { mess
   const { t } = useI18n();
   const running = parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
-  const [open, setOpen] = useState(running || failed);
+  const [open, setOpen] = useState(running || failed || parts.length > 0);
   useEffect(() => {
     if (running || failed) setOpen(true);
   }, [failed, running]);
