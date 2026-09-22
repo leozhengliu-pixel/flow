@@ -75,6 +75,25 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       page: "shortcuts",
     });
+
+    expect(parseAppRoute("/acme/settings/asks")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+    });
+    expect(parseAppRoute("/acme/settings/asks/email-intake/new")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksEmailIntakeMode: "new",
+    });
+    expect(parseAppRoute("/acme/settings/asks/slack-conn-1")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksIntegrationId: "slack-conn-1",
+    });
+
     expect(
       parseAppRoute("/acme/settings/account/security/api-keys/new"),
     ).toEqual({
