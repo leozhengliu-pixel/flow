@@ -98,8 +98,18 @@ import {
   uploadWorkspaceLogo,
   deleteWorkspaceLogo,
   verifyIdentityProvider,
+  disableWorkspaceInviteLink,
+  fetchWorkspaceInviteLink,
+  rotateWorkspaceInviteLink,
 } from "@/lib/api";
 import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
+import {
+  applicationEditPath,
+  applicationSettingsPath,
+  identityProviderSettingsPath,
+} from "@/lib/app-routes";
+import { useNavigate } from "react-router-dom";
+import { OAuthAppImage } from "./application-header";
 import type {
   APIKey,
   BootstrapData,
@@ -204,6 +214,18 @@ const NewAsksEmailIntakePage = lazyPage(
   () => import("./asks-settings"),
   "NewAsksEmailIntakePage",
 );
+const IdentityProviderSettingsPage = lazyPage(
+  () => import("./identity-provider-settings-page"),
+  "IdentityProviderSettingsPage",
+);
+const ApplicationDetailsPage = lazyPage(
+  () => import("./application-pages"),
+  "ApplicationDetailsPage",
+);
+const ApplicationEditPage = lazyPage(
+  () => import("./application-pages"),
+  "ApplicationEditPage",
+);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -272,6 +294,9 @@ type SettingsPageProps = {
   asksEmailIntakeMode?: "new";
   onOpenAsksSlack?: (integrationId: string) => void;
   onOpenAsksEmailIntake?: () => void;
+  identityProviderId?: string;
+  applicationId?: string;
+  applicationMode?: "detail" | "edit";
   issueTemplateMode?: "new" | "new-form" | "edit";
   issueTemplateId?: string;
   projectTemplateMode?: "new" | "edit";
@@ -956,6 +981,24 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
+  if (page === "applications" && props.applicationId && props.applicationMode === "edit")
+    return (
+      <ApplicationEditPage
+        data={props.data}
+        applicationId={props.applicationId}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("applications")}
+      />
+    );
+  if (page === "applications" && props.applicationId)
+    return (
+      <ApplicationDetailsPage
+        data={props.data}
+        applicationId={props.applicationId}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("applications")}
+      />
+    );
   if (page === "applications")
     return <ApplicationsPage data={props.data} onReload={props.onReload} />;
   if (page === "import-export")
@@ -1070,6 +1113,15 @@ function SettingsBody(
       </div>
     );
   }
+  if (page === "security" && props.identityProviderId)
+    return (
+      <IdentityProviderSettingsPage
+        data={props.data}
+        providerId={props.identityProviderId}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("security")}
+      />
+    );
   if (page === "security")
     return (
       <>
@@ -2949,6 +3001,10 @@ function SecurityPage({
           "inviteLinksEnabled",
           "Allow members to invite people with a workspace link.",
         )}
+        <WorkspaceInviteLinkRow
+          data={data}
+          enabled={Boolean(settings.inviteLinksEnabled)}
+        />
         <Row
           title="Allow guest accounts"
           description="Guest invitations are rejected when this is disabled"
@@ -3132,6 +3188,7 @@ function ApiPage({
   onCreateAPIKey?: () => void;
   onReload: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>(["read", "write"]);
@@ -3173,12 +3230,32 @@ function ApiPage({
         {data.oauthApplications.map((item) => (
           <Row
             key={item.id}
-            title={item.name}
+            title={
+              <span className="settings-inline-title">
+                <OAuthAppImage app={item} size={22} />
+                <span data-i18n-ignore>{item.name}</span>
+              </span>
+            }
             description={`${item.clientId} · ${item.scopes.join(", ")}`}
           >
-            <ActionButton onClick={() => setEditingOAuth(item)}>
-              Configure
-            </ActionButton>
+            <div className="settings-inline-actions">
+              <ActionButton
+                onClick={() =>
+                  navigate(
+                    applicationSettingsPath(data.workspace.urlKey, item.id),
+                  )
+                }
+              >
+                Open
+              </ActionButton>
+              <ActionButton
+                onClick={() =>
+                  navigate(applicationEditPath(data.workspace.urlKey, item.id))
+                }
+              >
+                Edit
+              </ActionButton>
+            </div>
           </Row>
         ))}
         {!data.oauthApplications.length && (
@@ -3411,16 +3488,60 @@ function ApplicationsPage({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const authorizations = (data.oauthAuthorizations ?? []).filter(
     (item) => !item.revokedAt,
   );
-  const empty = !data.integrationConnections.length && !authorizations.length;
+  const empty =
+    !data.integrationConnections.length &&
+    !authorizations.length &&
+    !data.oauthApplications.length;
   return (
     <>
       <PageTitle description="Third-party applications authorized for this workspace.">
         Applications
       </PageTitle>
-      <Section>
+      <Section title="Workspace OAuth applications">
+        {data.oauthApplications.map((item) => (
+          <Row
+            key={item.id}
+            title={
+              <span className="settings-inline-title">
+                <OAuthAppImage app={item} size={22} />
+                <span data-i18n-ignore>{item.name}</span>
+              </span>
+            }
+            description={`${item.clientId} · ${item.scopes.join(", ")}`}
+          >
+            <div className="settings-inline-actions">
+              <ActionButton
+                onClick={() =>
+                  navigate(
+                    applicationSettingsPath(data.workspace.urlKey, item.id),
+                  )
+                }
+              >
+                Open
+              </ActionButton>
+              <ActionButton
+                onClick={() =>
+                  navigate(applicationEditPath(data.workspace.urlKey, item.id))
+                }
+              >
+                Edit
+              </ActionButton>
+            </div>
+          </Row>
+        ))}
+        {!data.oauthApplications.length && (
+          <div className="settings-empty compact">
+            <AppWindow size={24} />
+            <h3>No OAuth applications</h3>
+            <p>Create developer applications from the API settings page.</p>
+          </div>
+        )}
+      </Section>
+      <Section title="Authorized applications">
         {authorizations.map((item) => (
           <Row
             key={item.id}
@@ -3976,6 +4097,98 @@ function AuthenticationPage({
     </>
   );
 }
+function WorkspaceInviteLinkRow({
+  data,
+  enabled,
+}: {
+  data: BootstrapData;
+  enabled: boolean;
+}) {
+  const [link, setLink] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!enabled) {
+      setLink("");
+      return;
+    }
+    void fetchWorkspaceInviteLink(data.workspace.urlKey)
+      .then(async (result) => {
+        if ("token" in result && result.enabled) {
+          setLink(`${window.location.origin}/join/${result.token}`);
+          return;
+        }
+        const rotated = await rotateWorkspaceInviteLink(data.workspace.urlKey);
+        setLink(`${window.location.origin}/join/${rotated.token}`);
+      })
+      .catch(() => setLink(""));
+  }, [data.workspace.urlKey, enabled]);
+  if (!enabled) return null;
+  return (
+    <Row
+      title="Workspace invite link"
+      description={
+        link || "Generate a shareable join link for this workspace."
+      }
+    >
+      <div className="settings-inline-actions">
+        <ActionButton
+          disabled={!link || busy}
+          onClick={() => {
+            if (!link) return;
+            void navigator.clipboard.writeText(link);
+            toast.success("Invite link copied");
+          }}
+        >
+          Copy link
+        </ActionButton>
+        <ActionButton
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void rotateWorkspaceInviteLink(data.workspace.urlKey)
+              .then((rotated) => {
+                setLink(`${window.location.origin}/join/${rotated.token}`);
+                toast.success("Invite link rotated");
+              })
+              .catch((error) =>
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not rotate invite link",
+                ),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          Rotate
+        </ActionButton>
+        <ActionButton
+          danger
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void disableWorkspaceInviteLink(data.workspace.urlKey)
+              .then(() => {
+                setLink("");
+                toast.success("Invite link disabled");
+              })
+              .catch((error) =>
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not disable invite link",
+                ),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          Disable
+        </ActionButton>
+      </div>
+    </Row>
+  );
+}
+
 function EnterpriseIdentityProviders({
   data,
   onReload,
@@ -3983,6 +4196,7 @@ function EnterpriseIdentityProviders({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState<IdentityProvider | null | undefined>(
       undefined,
     ),
@@ -4038,6 +4252,18 @@ function EnterpriseIdentityProviders({
               }
             >
               Verify
+            </ActionButton>
+            <ActionButton
+              onClick={() =>
+                navigate(
+                  identityProviderSettingsPath(
+                    data.workspace.urlKey,
+                    item.id,
+                  ),
+                )
+              }
+            >
+              Open
             </ActionButton>
             <ActionButton onClick={() => setEditing(item)}>
               Configure

@@ -99,9 +99,18 @@ type workspaceKeyContextKey struct{}
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.authDisabled {
-			r = r.WithContext(store.ContextWithRealtimeClient(r.Context(), r.Header.Get("X-Client-ID")))
+			viewer := s.store.Account().Viewer
+			ctx := context.WithValue(r.Context(), authUserContextKey{}, viewer)
+			ctx = store.ContextWithActor(ctx, viewer)
+			ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
+			r = r.WithContext(ctx)
+			if !s.authorizeWorkspaceRequest(w, r, viewer) {
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
 		}
-		if s.authDisabled || publicAuthPath(r.URL.Path) {
+		if publicAuthPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -362,7 +371,7 @@ func publicAuthPath(path string) bool {
 	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
-	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/")
+	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/")
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -423,16 +432,18 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
 	}
-	if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
-		cookie, err := r.Cookie(sessionCookieName)
-		durationDays := data.WorkspaceSettings.SessionDurationDays
-		if durationDays < 1 {
-			durationDays = 30
-		}
-		if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
-			clearSessionCookie(w, r)
-			writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
-			return false
+	if !s.authDisabled {
+		if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
+			cookie, err := r.Cookie(sessionCookieName)
+			durationDays := data.WorkspaceSettings.SessionDurationDays
+			if durationDays < 1 {
+				durationDays = 30
+			}
+			if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
+				clearSessionCookie(w, r)
+				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
+				return false
+			}
 		}
 	}
 	role, status, err := data.ViewerRole, "active", error(nil)
@@ -490,7 +501,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	if !s.resourceAllowed(r, key, user.ID) {
+	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
+	// team-scoped resourceAllowed checks must not block local/dev fixtures.
+	if !s.authDisabled && !s.resourceAllowed(r, key, user.ID) {
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
 		return false
 	}

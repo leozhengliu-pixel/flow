@@ -27,6 +27,10 @@ export const AuthPage = lazyPage(
   () => import("@/components/auth/auth-page"),
   "AuthPage",
 );
+export const InviteLinkAccept = lazyPage(
+  () => import("@/components/auth/invite-link-accept"),
+  "InviteLinkAccept",
+);
 export const OAuthAuthorizePage = lazyPage(
   () => import("@/components/auth/oauth-authorize-page"),
   "OAuthAuthorizePage",

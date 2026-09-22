@@ -1,0 +1,43 @@
+.identity-provider-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -8px 0 18px;
+}
+
+.identity-provider-help {
+  margin: 0 0 12px;
+  color: var(--color-text-secondary, #6b6f76);
+  font-size: 13px;
+}
+
+.identity-provider-role-row {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.identity-provider-secret {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-primary, rgba(0, 0, 0, 0.08));
+  background: var(--color-bg-secondary, #f7f8fa);
+  display: grid;
+  gap: 8px;
+}
+
+.identity-provider-secret p {
+  margin: 0;
+  font-size: 13px;
+}
+
+:root[data-theme="dark"] .identity-provider-secret,
+.dark .identity-provider-secret {
+  background: var(--color-bg-tertiary, #23252b);
+  border-color: rgba(255, 255, 255, 0.08);
+}
