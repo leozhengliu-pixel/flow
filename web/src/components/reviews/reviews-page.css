@@ -235,3 +235,30 @@
 .code-review-access-actions button:hover{background:var(--theme-surface-2)}
 .code-review-access-actions button.primary:hover{filter:brightness(1.05)}
 .code-review-access.is-banner{flex-direction:row;align-items:flex-start;justify-content:flex-start;gap:12px;padding:12px 16px;border:1px solid var(--theme-border);border-radius:8px;text-align:left}
+/* LS-0537 — honest Shell-only foundation notice (Wave 1 Diff engine) */
+.reviews-foundation-banner {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border-bottom: 0.5px solid var(--theme-border);
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+.reviews-foundation-banner span {
+  max-width: 920px;
+}
+.review-diff-compute-status {
+  margin-left: 8px;
+  color: var(--theme-text-tertiary);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 500;
+}
+.review-changes-toolbar .review-diff-compute-status {
+  margin-left: 10px;
+}

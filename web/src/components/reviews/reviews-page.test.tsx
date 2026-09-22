@@ -4,6 +4,8 @@ import type { ReactNode } from 'react';
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 
+import { BackgroundReviewProcessor } from "@/lib/background-review-processor";
+
 import { I18nProvider } from "@/i18n/i18n";
 import { makeBootstrap, viewer, teammate } from "@/test/fixtures";
 import type { CodeReview } from "@/types/flow";
@@ -20,7 +22,10 @@ vi.mock("@/lib/api", async (importOriginal) => ({
 
 import { ReviewsPage } from "./reviews-page";
 const render = (ui: ReactNode) => renderUI(<MemoryRouter>{ui}</MemoryRouter>);
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  BackgroundReviewProcessor.resetForTests();
+});
 
 const review: CodeReview = {
   id: "review-1",
@@ -92,6 +97,9 @@ it("renders provider review activity and submits the compact comment composer", 
     </I18nProvider>,
   );
 
+  expect(
+    screen.getByText(/Reviews remains Shell-only: DiffComputer/),
+  ).toBeVisible();
   expect(screen.getByText("Opened by")).toBeVisible();
   expect(screen.getByText(/with 1 commit/)).toBeVisible();
   expect(screen.getByText("requested review from")).toBeVisible();
@@ -220,7 +228,15 @@ it("renders split and unified diff rows and posts an inline comment", async () =
     "aria-pressed",
     "true",
   );
-  expect(screen.getByText((_text,element)=>element?.tagName==='CODE'&&element.textContent==='const answer = value + 1;')).toBeVisible();
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        (_text, element) =>
+          element?.tagName === "CODE" &&
+          element.textContent === "const answer = value + 1;",
+      ),
+    ).toBeVisible(),
+  );
   await user.click(screen.getByRole("button", { name: "Unified" }));
   expect(screen.getByRole("button", { name: "Unified" })).toHaveAttribute(
     "aria-pressed",
