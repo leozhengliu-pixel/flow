@@ -80,6 +80,7 @@ import type {
   User,
   UserSettings,
   Webhook,
+  WebhookSecretPayload,
   WorkflowState,
   Workspace,
   WorkspaceMember,
@@ -1114,7 +1115,7 @@ export function createWebhook(
     Webhook,
     "name" | "url" | "resourceTypes" | "teamIds" | "enabled"
   > & { applicationId?: string },
-): Promise<Webhook> {
+): Promise<Webhook & { secret?: string }> {
   return request("/api/webhooks", jsonRequest("POST", input));
 }
 export function updateWebhook(
@@ -1132,6 +1133,18 @@ export function fetchWebhookFailures(
   id: string,
 ): Promise<WebhookFailureEvent[]> {
   return request(`/api/webhooks/${id}/failures`);
+}
+
+/** LS-0711 — rotate signing secret; raw secret returned once. */
+export function rotateWebhookSecret(
+  id: string,
+): Promise<Webhook & { secret: string }> {
+  return request(`/api/webhooks/${id}/rotate-secret`, { method: "POST" });
+}
+
+/** LS-0711 — revoke signing secret. */
+export function revokeWebhookSecret(id: string): Promise<void> {
+  return request(`/api/webhooks/${id}/revoke-secret`, { method: "POST" });
 }
 export function createTeam(
   workspaceKey: string,

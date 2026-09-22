@@ -27,6 +27,13 @@ import {
 } from "@/lib/api";
 import type { BootstrapData, IntegrationConnection } from "@/types/flow";
 import { integrationHasCodeAccess } from "@/lib/code-access";
+import {
+  GITHUB_ENTERPRISE_CLOUD,
+  gitHubSettingsPageMetadata,
+  githubMetadataItemEnabled,
+  isGithubEnterpriseCloudConnection,
+  type GitHubSettingsMetadataItem,
+} from "@/lib/github-settings-metadata";
 import { SettingsSelect } from "./settings-primitives";
 
 import "./code-integration-settings.css";
@@ -44,7 +51,12 @@ export function CodeIntegrationSettings({
 }) {
   const { t, formatDate } = useI18n();
   const connections = data.integrationConnections.filter(
-    (item) => item.provider === provider,
+    (item) =>
+      item.provider === provider &&
+      !(
+        provider === "github" &&
+        isGithubEnterpriseCloudConnection(item.config)
+      ),
   );
   const [editing, setEditing] = useState(false),
     [busy, setBusy] = useState(false),
@@ -418,6 +430,14 @@ export function CodeIntegrationSettings({
           </div>
         </section>
       )}
+      {provider === "github" && (
+        <GitHubEnterpriseCloudSection
+          data={data}
+          busy={busy}
+          setBusy={setBusy}
+          onReload={onReload}
+        />
+      )}
       {connections[0] && (
         <>
           <IntegrationOptions
@@ -571,7 +591,7 @@ function IntegrationOptions({
   ) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const options = [
+  const linkbackOptions = [
     [
       "privateLinkbacks",
       provider === "github"
@@ -581,9 +601,32 @@ function IntegrationOptions({
     ["publicLinkbacks", "Public repositories"],
     ["includeDescriptions", "Include issue descriptions in linkbacks"],
     ["magicWords", "Link commits to issues with magic words"],
-    ["reviewGuides", "Generate Pull Request guides"],
-    ["autoLink", "Automatically link Flow issues"],
   ] as const;
+
+  const pullRequestItems = Object.values(
+    gitHubSettingsPageMetadata.sections.pullRequests.items,
+  );
+
+  const renderToggle = (
+    key: string,
+    label: string,
+    description: string | undefined,
+    checked: boolean,
+  ) => (
+    <div className="code-setting-row" key={key}>
+      <div>
+        <strong>{t(label)}</strong>
+        {description ? <span>{t(description)}</span> : null}
+      </div>
+      <Toggle
+        checked={checked}
+        label={t(label)}
+        onChange={(value) => onChange(connection, key, String(value))}
+        size="regular"
+      />
+    </div>
+  );
+
   return (
     <>
       <section className="code-integration-section">
@@ -613,36 +656,242 @@ function IntegrationOptions({
           />
         </div>
       </section>
+      {provider === "github" && (
+        <section
+          className="code-integration-section"
+          aria-labelledby="github-pull-requests-heading"
+        >
+          <div className="code-section-title">
+            <div>
+              <h2 id="github-pull-requests-heading">
+                {t(gitHubSettingsPageMetadata.sections.pullRequests.title)}
+              </h2>
+              <p>
+                {t(
+                  "Configure how Flow links pull requests to issues and generates review guides.",
+                )}
+              </p>
+            </div>
+          </div>
+          {pullRequestItems.map((item: GitHubSettingsMetadataItem) => {
+            if (!item.configKey) return null;
+            return renderToggle(
+              item.configKey,
+              item.title,
+              item.description,
+              githubMetadataItemEnabled(item, connection.config),
+            );
+          })}
+        </section>
+      )}
       <section className="code-integration-section">
         <h2>{t("Linkbacks")}</h2>
-        {options.map(([key, label]) => {
+        {linkbackOptions.map(([key, label]) => {
           const checked =
             connection.config?.[key] ??
-            (key === "privateLinkbacks" ||
-            key === "includeDescriptions" ||
-            key === "reviewGuides"
+            (key === "privateLinkbacks" || key === "includeDescriptions"
               ? "true"
               : "false");
-          return (
-            <div className="code-setting-row" key={key}>
-              <div>
-                <strong>{t(label)}</strong>
-                {key === "reviewGuides" && (
-                  <span>
-                    {t("Generate guided reviews for new pull requests")}
-                  </span>
-                )}
-              </div>
-              <Toggle
-                checked={checked === "true"}
-                label={t(label)}
-                onChange={(value) => onChange(connection, key, String(value))}
-                size="regular"
-              />
-            </div>
-          );
+          return renderToggle(key, label, undefined, checked === "true");
         })}
+        {provider === "gitlab" &&
+          renderToggle(
+            "reviewGuides",
+            "Generate Pull Request guides",
+            "Generate guided reviews for new merge requests",
+            (connection.config?.reviewGuides ?? "true") === "true",
+          )}
+        {provider === "gitlab" &&
+          renderToggle(
+            "autoLink",
+            "Automatically link Flow issues",
+            "Link a matching issue automatically when a merge request is opened.",
+            (connection.config?.autoLink ?? "false") === "true",
+          )}
       </section>
     </>
+  );
+}
+
+/** LS-0282 — GitHub Enterprise Cloud settings section (product connect pattern). */
+function GitHubEnterpriseCloudSection({
+  data,
+  busy,
+  setBusy,
+  onReload,
+}: {
+  data: BootstrapData;
+  busy: boolean;
+  setBusy: (value: boolean) => void;
+  onReload: () => Promise<void>;
+}) {
+  const { t, formatDate } = useI18n();
+  const [hostname, setHostname] = useState("");
+  const [editing, setEditing] = useState(false);
+  const connections = data.integrationConnections.filter(
+    (item) =>
+      item.provider === "github" &&
+      isGithubEnterpriseCloudConnection(item.config),
+  );
+
+  const connect = async () => {
+    const value = hostname.trim().replace(/^https?:\/\//, "").replace(/\/$/, "");
+    if (!value) return;
+    setBusy(true);
+    try {
+      await connectIntegration("github", {
+        name: value,
+        config: {
+          organization: value,
+          enterpriseUrl: value,
+          enterpriseCloud: "true",
+          kind: "enterprise-cloud",
+        },
+      });
+      await onReload();
+      setHostname("");
+      setEditing(false);
+      toast.success(t("GitHub Enterprise Cloud configuration saved"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("Could not connect GitHub Enterprise Cloud"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async (connection: IntegrationConnection) => {
+    setBusy(true);
+    try {
+      await disconnectIntegrationConnection("github", connection.id);
+      await onReload();
+      toast.success(t("GitHub Enterprise Cloud disconnected"));
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t("Could not disconnect GitHub Enterprise Cloud"),
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section
+      className="code-integration-section"
+      aria-labelledby="github-enterprise-cloud-heading"
+    >
+      <div className="code-section-title">
+        <div>
+          <h2 id="github-enterprise-cloud-heading">
+            {t(GITHUB_ENTERPRISE_CLOUD.title)}
+          </h2>
+          <p>{t(GITHUB_ENTERPRISE_CLOUD.description)}</p>
+        </div>
+        {connections.length > 0 && !editing && (
+          <button
+            type="button"
+            className="code-primary"
+            onClick={() => setEditing(true)}
+          >
+            <Plus />
+            {t(GITHUB_ENTERPRISE_CLOUD.connectLabel)}
+          </button>
+        )}
+      </div>
+      {connections.map((connection) => (
+        <div className="code-connection-row" key={connection.id}>
+          <div className="code-provider-avatar github">
+            <GitPullRequest />
+          </div>
+          <div>
+            <strong data-i18n-ignore>
+              {connection.config?.enterpriseUrl ||
+                connection.config?.organization ||
+                connection.name}
+            </strong>
+            <span>
+              {t(
+                connection.status === "connected"
+                  ? "Enabled by"
+                  : "Configured by",
+              )}{" "}
+              <b data-i18n-ignore>
+                {data.users.find((user) => user.id === connection.connectedBy)
+                  ?.displayName ?? data.viewer.displayName}
+              </b>{" "}
+              ·{" "}
+              {formatDate(connection.createdAt, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="code-manage"
+            disabled={busy}
+            onClick={() => void disconnect(connection)}
+          >
+            <Unplug />
+            {t("Disconnect")}
+          </button>
+        </div>
+      ))}
+      {(editing || !connections.length) && (
+        <div className="code-connect-form">
+          <div className="code-form-heading">
+            <GitPullRequest />
+            <strong>{t(GITHUB_ENTERPRISE_CLOUD.connectLabel)}</strong>
+            {connections.length > 0 && (
+              <button
+                type="button"
+                aria-label={t("Cancel")}
+                onClick={() => {
+                  setEditing(false);
+                  setHostname("");
+                }}
+              >
+                <X />
+              </button>
+            )}
+          </div>
+          <label>
+            {t(GITHUB_ENTERPRISE_CLOUD.hostnameLabel)}
+            <input
+              autoFocus
+              aria-label={t(GITHUB_ENTERPRISE_CLOUD.hostnameLabel)}
+              placeholder={GITHUB_ENTERPRISE_CLOUD.hostnamePlaceholder}
+              value={hostname}
+              onChange={(event) => setHostname(event.target.value)}
+            />
+          </label>
+          <footer>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(false);
+                setHostname("");
+              }}
+            >
+              {t("Cancel")}
+            </button>
+            <button
+              type="button"
+              className="code-primary"
+              disabled={busy || !hostname.trim()}
+              onClick={() => void connect()}
+            >
+              {busy ? t("Connecting…") : t("Connect")}
+            </button>
+          </footer>
+        </div>
+      )}
+    </section>
   );
 }
