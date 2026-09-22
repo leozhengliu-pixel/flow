@@ -42,10 +42,10 @@ export const AuthGoogleCallbackPage = lazyPage(
 export const MobileAuthPage = lazyPage(
   () => import("@/components/auth/mobile-auth-page"),
   "MobileAuthPage",
+);
 export const InviteLinkAccept = lazyPage(
   () => import("@/components/auth/invite-link-accept"),
   "InviteLinkAccept",
-);
 );
 export const OAuthAuthorizePage = lazyPage(
   () => import("@/components/auth/oauth-authorize-page"),
