@@ -121,7 +121,7 @@ export function ProjectDetailsSidebar({ featureFlags, issueSummary, availableIss
 
     <ActivitySidebarSection
       entityId={project.id}
-      items={events.map(event => ({ id: event.id, createdAt: event.createdAt ?? project.createdAt, category: 'property' as const, userNames: [event.actor], text: event.text, actorLabel: event.actor } satisfies ActivitySidebarItem))}
+      items={events.map(event => ({ id: event.id, createdAt: event.createdAt, category: 'property' as const, userNames: [event.actor], text: event.text, actorLabel: event.actor } satisfies ActivitySidebarItem))}
       onSeeAll={() => onTabChange('activity')}
       open={activityOpen}
       onOpenChange={setActivityOpen}
@@ -666,10 +666,10 @@ function ProgressRing({ completed, engaged, total }: { completed: number; engage
 }
 
 function projectEvents(project: Project, updates: ProjectUpdate[], viewer: User) {
-  const events = updates.map(update => ({ id: update.id, actor: update.user.displayName, text: `posted an ${update.health === 'noUpdate' ? '' : update.health.replace(/[A-Z]/g, match => ` ${match.toLowerCase()}`)} update`, date: formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true }) }))
-  if (project.priority > 0) events.push({ id: 'priority', actor: project.lead?.displayName ?? viewer.displayName, text: `changed priority from No priority to ${project.priorityLabel}`, date: format(new Date(project.updatedAt), 'MMM d') })
-  if (project.lead) events.push({ id: 'lead', actor: project.lead.displayName, text: 'assigned themselves as a lead', date: format(new Date(project.updatedAt), 'MMM d') })
-  events.push({ id: 'created', actor: project.lead?.displayName ?? viewer.displayName, text: 'created the project', date: format(new Date(project.createdAt), 'MMM d') })
+  const events = updates.map(update => ({ id: update.id, actor: update.user.displayName, text: `posted an ${update.health === 'noUpdate' ? '' : update.health.replace(/[A-Z]/g, match => ` ${match.toLowerCase()}`)} update`, date: formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true }), createdAt: update.createdAt }))
+  if (project.priority > 0) events.push({ id: 'priority', actor: project.lead?.displayName ?? viewer.displayName, text: `changed priority from No priority to ${project.priorityLabel}`, date: format(new Date(project.updatedAt), 'MMM d'), createdAt: project.updatedAt })
+  if (project.lead) events.push({ id: 'lead', actor: project.lead.displayName, text: 'assigned themselves as a lead', date: format(new Date(project.updatedAt), 'MMM d'), createdAt: project.updatedAt })
+  events.push({ id: 'created', actor: project.lead?.displayName ?? viewer.displayName, text: 'created the project', date: format(new Date(project.createdAt), 'MMM d'), createdAt: project.createdAt })
   return events
 }
 
