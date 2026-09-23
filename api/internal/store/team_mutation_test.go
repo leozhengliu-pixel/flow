@@ -753,3 +753,121 @@ func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
 		t.Fatal("imported project update lost")
 	}
 }
+
+func deleteScopedTeam(t *testing.T, repo *SQLiteStore, workspace, teamID string) {
+	t.Helper()
+	err := repo.MutateWorkspace(context.Background(), workspace, "team.deleted", teamID, nil, func(next *domain.Bootstrap) error {
+		if len(next.Teams) <= 1 {
+			return errors.New("a workspace needs at least one team")
+		}
+		index := slices.IndexFunc(next.Teams, func(team domain.Team) bool { return team.ID == teamID })
+		if index < 0 {
+			return errors.New("not found")
+		}
+		next.Teams = slices.Delete(next.Teams, index, index+1)
+		delete(next.TeamSettings, teamID)
+		delete(next.CycleSettings, teamID)
+		next.States = slices.DeleteFunc(next.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
+		next.Labels = slices.DeleteFunc(next.Labels, func(label domain.IssueLabel) bool { return label.Scope == teamID })
+		next.Cycles = slices.DeleteFunc(next.Cycles, func(cycle domain.Cycle) bool { return cycle.TeamID == teamID })
+		next.TeamMembers = slices.DeleteFunc(next.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID })
+		for id, settings := range next.TeamSettings {
+			if settings.ParentTeamID == teamID {
+				settings.ParentTeamID = ""
+				next.TeamSettings[id] = settings
+			}
+		}
+		for i := range next.Projects {
+			if slices.Contains(next.Projects[i].TeamIDs, teamID) {
+				next.Projects[i].TeamIDs = slices.DeleteFunc(next.Projects[i].TeamIDs, func(id string) bool { return id == teamID })
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTeamDeletedWritesOnlyThatTeam(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 40)
+	before := len(repo.Bootstrap().Teams)
+	writes := auditWrites(t, repo)
+	deleteScopedTeam(t, repo, key, "bulk-team-00000")
+	changes := writes()
+	if changes["workspace_states"] != 0 || changes["issue_records"] != 0 {
+		t.Fatalf("team delete rewrote the catalog: %+v", changes)
+	}
+	if changes["workspace_metadata_records"] == 0 || changes["workspace_metadata_records"] > 40 {
+		t.Fatalf("team delete write count is not bounded to the team: %+v", changes)
+	}
+	var events int
+	if err := repo.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM domain_events WHERE event_type='team.deleted' AND aggregate_id=?`, "bulk-team-00000").Scan(&events); err != nil || events != 1 {
+		t.Fatalf("team.deleted events=%d err=%v", events, err)
+	}
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := repo.Bootstrap()
+	if len(reloaded.Teams) != before-1 || domain.TeamIndex(&reloaded, "bulk-team-00000") >= 0 {
+		t.Fatalf("deleted team still loaded: %d", len(reloaded.Teams))
+	}
+	if _, ok := reloaded.TeamSettings["bulk-team-00000"]; ok {
+		t.Fatal("deleted team settings survived reload")
+	}
+}
+
+func TestTeamDeletedWriteCountStaysConstantAsWorkspaceGrows(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 30)
+	writes := auditWrites(t, repo)
+	deleteScopedTeam(t, repo, key, "bulk-team-00000")
+	small := writes()
+	importOrgTeamBatch(t, repo, key, "grow", 180)
+	writes()
+	deleteScopedTeam(t, repo, key, "bulk-team-00001")
+	large := writes()
+	if !reflect.DeepEqual(small, large) {
+		t.Fatalf("team delete write count grew with workspace size: small=%+v large=%+v", small, large)
+	}
+}
+
+func TestTeamDeletedClearsChildParentAndIssues(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 8)
+	patchTeamParent(t, repo, key, "bulk-team-00001", "bulk-team-00000")
+	if _, err := repo.db.ExecContext(context.Background(), `INSERT INTO issue_records(workspace_key,id,identifier,team_id,state_id,state_type,priority,assignee_id,project_id,creator_id,cycle_id,parent_id,sort_order,title,archived,version,created_at,updated_at,collection_order,data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?),(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		key, "owned-issue", "OWN-1", "bulk-team-00000", "", "", 0, "", "", "", "", "", 0, "owned", 0, 0, "", "", 1, []byte(`{}`),
+		key, "other-issue", "OTH-1", "bulk-team-00002", "", "", 0, "", "", "", "", "", 0, "other", 0, 0, "", "", 2, []byte(`{}`),
+	); err != nil {
+		t.Fatal(err)
+	}
+	deleteScopedTeam(t, repo, key, "bulk-team-00000")
+	if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	reloaded := repo.Bootstrap()
+	if reloaded.TeamSettings["bulk-team-00001"].ParentTeamID != "" {
+		t.Fatalf("child parent survived: %q", reloaded.TeamSettings["bulk-team-00001"].ParentTeamID)
+	}
+	var owned, other int
+	if err := repo.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM issue_records WHERE workspace_key=? AND team_id=?`, key, "bulk-team-00000").Scan(&owned); err != nil || owned != 0 {
+		t.Fatalf("owned issues=%d err=%v", owned, err)
+	}
+	if err := repo.db.QueryRowContext(context.Background(), `SELECT COUNT(*) FROM issue_records WHERE workspace_key=? AND id=?`, key, "other-issue").Scan(&other); err != nil || other != 1 {
+		t.Fatalf("unrelated issue=%d err=%v", other, err)
+	}
+}

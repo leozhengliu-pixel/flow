@@ -55,6 +55,8 @@ type teamMutationSnapshot struct {
 	oldUsers          []domain.User
 	oldProjects       []domain.Project
 	oldImportSettings map[string]domain.TeamSettings
+
+	deletion *teamDeletionSnapshot
 }
 
 // These events cannot share the generic clone: that path copies every team and
@@ -72,7 +74,7 @@ func metadataTeamMutation(event string, payload any) bool {
 		return true
 	}
 	switch event {
-	case "team.created", "team.settings_updated":
+	case "team.created", "team.settings_updated", "team.deleted":
 		return true
 	case "team.updated":
 		return metadataFieldsOnly(payload, "name", "color", "icon")
@@ -130,6 +132,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		}
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
+			if snap.deletion != nil {
+				s.workspaces[workspaceKey] = next
+			}
 			return err
 		}
 		previousValues := json.RawMessage(nil)
@@ -139,7 +144,13 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		upserts, err := collectDirtyTeamRecords(eventType, aggregateID, &snap, next)
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
+			if snap.deletion != nil {
+				s.workspaces[workspaceKey] = next
+			}
 			return err
+		}
+		if snap.deletion != nil {
+			upserts = append(upserts, collectTeamDeletionRecords(snap.deletion, next)...)
 		}
 		membersChanged := len(next.Members) != snap.membersLen
 		teamMembersChanged := len(next.TeamMembers) != snap.teamMembersLen
@@ -153,6 +164,9 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
 			if err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged); err != nil {
 				rollbackTeamMutation(&next, &snap, aggregateID)
+				if snap.deletion != nil {
+					s.workspaces[workspaceKey] = next
+				}
 				return err
 			}
 		}
@@ -207,6 +221,10 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 	}
 	if catalogImportMutation(eventType) {
 		snapshotImportCatalog(&snap, eventType, data)
+		return snap
+	}
+	if eventType == "team.deleted" {
+		snap.deletion = snapshotTeamDeletion(hintID, data)
 		return snap
 	}
 	if hintID == "" {
@@ -275,6 +293,9 @@ func snapshotScopedLabels(data *domain.Bootstrap, scopes []string) map[int]domai
 }
 
 func rollbackTeamMutation(next *domain.Bootstrap, snap *teamMutationSnapshot, aggregateID string) {
+	if restoreTeamDeletion(next, snap.deletion) {
+		return
+	}
 	restoreCatalogByID(next.Teams, snap.oldTeams, func(item domain.Team) string { return item.ID })
 	restoreCatalogByID(next.Users, snap.oldUsers, func(item domain.User) string { return item.ID })
 	restoreCatalogByID(next.Projects, snap.oldProjects, func(item domain.Project) string { return item.ID })
@@ -361,6 +382,9 @@ func cycleIDKnown(ids []string, target string) bool {
 
 func noteTeamMutationIndexes(eventType, aggregateID string, snap *teamMutationSnapshot, next *domain.Bootstrap) {
 	switch eventType {
+	case "team.deleted":
+		domain.RebuildTeamDirectory(next)
+		return
 	case "team.created", "alm.org_teams_imported":
 		domain.NoteTeamsAppended(next, snap.teamsLen)
 	case "team.updated":
@@ -693,8 +717,18 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 			}
 		}
 	}
-	if err := writeMetadataRecordUpserts(ctx, tx, workspaceKey, upserts); err != nil {
+	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, upserts); err != nil {
 		return err
+	}
+	if event != nil && event.Type == "team.deleted" {
+		if err := deleteTeamOwnedIssueRecords(ctx, tx, workspaceKey, event.AggregateID); err != nil {
+			return err
+		}
+		if next.Workspace.ID != "" {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=?`, next.Workspace.ID, event.AggregateID); err != nil {
+				return err
+			}
+		}
 	}
 	if membersChanged {
 		raw, err := json.Marshal(next.Members)
@@ -737,8 +771,26 @@ type metadataRecordChange struct {
 	field  string
 	key    string
 	insert bool
+	drop   bool
 	order  int
 	raw    json.RawMessage
+}
+
+func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string, changes []metadataRecordChange) error {
+	upserts := make([]metadataRecordChange, 0, len(changes))
+	for _, change := range changes {
+		if !change.drop {
+			upserts = append(upserts, change)
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key); err != nil {
+			return err
+		}
+		if err := syncMetadataSearchDocument(ctx, tx, workspace, change.field, change.key, nil); err != nil {
+			return err
+		}
+	}
+	return writeMetadataRecordUpserts(ctx, tx, workspace, upserts)
 }
 
 func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string, upserts []metadataRecordChange) error {
