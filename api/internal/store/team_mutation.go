@@ -90,6 +90,8 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
+	var deletedIssues bool
+	var deletedProjectRefs bool
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	apply := func() error {
 		s.mu.Lock()
@@ -154,6 +156,12 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		}
 		membersChanged := len(next.Members) != snap.membersLen
 		teamMembersChanged := len(next.TeamMembers) != snap.teamMembersLen
+		if eventType == "team.deleted" {
+			// Membership rows live in team_memberships. Rewriting the root
+			// teamMembers array would marshal every member in the workspace.
+			membersChanged = false
+			teamMembersChanged = false
+		}
 		if len(upserts) > 0 || membersChanged || teamMembersChanged {
 			payloadRaw, err := json.Marshal(payload)
 			if err != nil {
@@ -162,7 +170,11 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 			event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
 			realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
-			if err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged); err != nil {
+			removedIssues, err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged)
+			if snap.deletion != nil {
+				snap.deletion.removedIssues = removedIssues
+			}
+			if err != nil {
 				rollbackTeamMutation(&next, &snap, aggregateID)
 				if snap.deletion != nil {
 					s.workspaces[workspaceKey] = next
@@ -171,6 +183,10 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 		}
 		noteTeamMutationIndexes(eventType, aggregateID, &snap, &next)
+		if snap.deletion != nil {
+			deletedIssues = snap.deletion.removedIssues > 0
+			deletedProjectRefs = snap.deletion.projectsTouched
+		}
 		next = collectionMetadata(next)
 		s.workspaces[workspaceKey] = next
 		s.lastWorkspaceKey = workspaceKey
@@ -191,7 +207,11 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	if event.ID == "" {
 		return nil
 	}
-	s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
+	if eventType == "team.deleted" {
+		s.invalidateDeletedTeamCache(ctx, workspaceKey, deletedIssues, deletedProjectRefs)
+	} else {
+		s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
+	}
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, event)
 	}
@@ -383,7 +403,9 @@ func cycleIDKnown(ids []string, target string) bool {
 func noteTeamMutationIndexes(eventType, aggregateID string, snap *teamMutationSnapshot, next *domain.Bootstrap) {
 	switch eventType {
 	case "team.deleted":
-		domain.RebuildTeamDirectory(next)
+		if next.TeamByID != nil && len(next.TeamByID) != len(next.Teams) {
+			domain.RebuildTeamDirectory(next)
+		}
 		return
 	case "team.created", "alm.org_teams_imported":
 		domain.NoteTeamsAppended(next, snap.teamsLen)
@@ -703,54 +725,56 @@ func lenForField(next domain.Bootstrap, field string) int {
 	}
 }
 
-func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) error {
+func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback()
 	if event != nil && event.Type == "team.settings_updated" {
 		var change map[string]json.RawMessage
 		if json.Unmarshal(event.Payload, &change) == nil && change["parentTeamId"] != nil {
 			if err := syncTeamAncestorMembers(ctx, tx, next, event.AggregateID); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
 	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, upserts); err != nil {
-		return err
+		return 0, err
 	}
+	var removedIssues int64
 	if event != nil && event.Type == "team.deleted" {
-		if err := deleteTeamOwnedIssueRecords(ctx, tx, workspaceKey, event.AggregateID); err != nil {
-			return err
+		removedIssues, err = deleteTeamOwnedIssueRecords(ctx, tx, workspaceKey, event.AggregateID)
+		if err != nil {
+			return 0, err
 		}
 		if next.Workspace.ID != "" {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=?`, next.Workspace.ID, event.AggregateID); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
 	if membersChanged {
 		raw, err := json.Marshal(next.Members)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if err := writeRootCollectionArray(ctx, tx, workspaceKey, "members", raw); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	if teamMembersChanged {
 		raw, err := json.Marshal(next.TeamMembers)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if err := writeRootCollectionArray(ctx, tx, workspaceKey, "teamMembers", raw); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	if event != nil {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)
@@ -758,13 +782,13 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 		viewerRaw, _ = json.Marshal(next.Viewer)
 	}
 	if err := writeAccountMetadata(ctx, tx, workspaceKey, viewerRaw); err != nil {
-		return err
+		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return 0, err
 	}
 	s.cacheMetadataUpserts(ctx, workspaceKey, upserts)
-	return nil
+	return removedIssues, nil
 }
 
 type metadataRecordChange struct {
