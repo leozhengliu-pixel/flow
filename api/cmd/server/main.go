@@ -1677,54 +1677,11 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
 	workspaceKey, teamID := r.PathValue("workspaceKey"), r.PathValue("teamId")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
-		if len(data.Teams) <= 1 {
-			return fmt.Errorf("a workspace needs at least one team")
-		}
-		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
-		if index < 0 {
+		err := store.ApplyTeamDeletion(data, teamID)
+		if errors.Is(err, store.ErrTeamNotFound) {
 			return errNotFound
 		}
-		data.Teams = slices.Delete(data.Teams, index, index+1)
-		removeResourcePreferences(data, "team", teamID)
-		issueIDs := map[string]bool{}
-		for _, issue := range data.Issues {
-			if issue.Team.ID == teamID {
-				issueIDs[issue.ID] = true
-			}
-		}
-		data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return issue.Team.ID == teamID })
-		for issueID := range issueIDs {
-			delete(data.Comments, issueID)
-			delete(data.Activities, issueID)
-			removeResourcePreferences(data, "issue", issueID)
-		}
-		for _, cycle := range data.Cycles {
-			if cycle.TeamID == teamID {
-				removeResourcePreferences(data, "cycle", cycle.ID)
-			}
-		}
-		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.TeamID == teamID })
-		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.Scope == teamID })
-		for projectIndex := range data.Projects {
-			data.Projects[projectIndex].TeamIDs = removeString(data.Projects[projectIndex].TeamIDs, teamID)
-		}
-		for pipelineIndex := range data.ReleasePipelines {
-			data.ReleasePipelines[pipelineIndex].TeamIDs = removeString(data.ReleasePipelines[pipelineIndex].TeamIDs, teamID)
-		}
-		data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID })
-		data.TeamResourceSections = slices.DeleteFunc(data.TeamResourceSections, func(section domain.TeamResourceSection) bool { return section.TeamID == teamID })
-		data.TeamPinnedResources = slices.DeleteFunc(data.TeamPinnedResources, func(resource domain.TeamPinnedResource) bool { return resource.TeamID == teamID })
-		delete(data.TeamSettings, teamID)
-		delete(data.CycleSettings, teamID)
-		data.States = slices.DeleteFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
-		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool { return template.TeamID == teamID })
-		for childID, settings := range data.TeamSettings {
-			if settings.ParentTeamID == teamID {
-				settings.ParentTeamID = ""
-				data.TeamSettings[childID] = settings
-			}
-		}
-		return nil
+		return err
 	})
 	if err == nil && !s.authDisabled {
 		data, _ := s.store.BootstrapFor(workspaceKey)
