@@ -408,11 +408,29 @@ func (s *SQLiteStore) cacheMetadataUpserts(ctx context.Context, workspace string
 	if cache == nil || workspace == "" {
 		return
 	}
+	dropped := map[string][]string{}
 	for _, change := range changes {
 		if change.drop {
+			dropped[change.field] = append(dropped[change.field], change.key)
 			continue
 		}
 		_ = cache.CacheHSet(ctx, s.metadataFieldKey(workspace, change.field), change.key, encodeMetadataCacheValue(change.order, change.raw))
+	}
+	for field, keys := range dropped {
+		_ = cache.CacheHDel(ctx, s.metadataFieldKey(workspace, field), keys...)
+	}
+}
+
+func (s *SQLiteStore) invalidateDeletedTeamCache(ctx context.Context, workspace string, issues, projects bool) {
+	cache := s.hotCache()
+	if cache == nil || workspace == "" {
+		return
+	}
+	if issues {
+		_, _ = cache.CacheIncr(ctx, s.issueQueryGenKey(workspace))
+	}
+	if projects {
+		_, _ = cache.CacheIncr(ctx, s.projectQueryGenKey(workspace))
 	}
 }
 
@@ -441,7 +459,7 @@ func hotCacheTouch(eventType string) (issueEntity, issueQuery, projectQuery, met
 	case strings.HasPrefix(eventType, "issue."), strings.HasPrefix(eventType, "comment."), strings.Contains(eventType, "attachment"), strings.HasPrefix(eventType, "relation."):
 		return true, true, false, false
 	case eventType == "team.deleted":
-		return false, true, true, true
+		return false, false, false, false
 	case strings.HasPrefix(eventType, "project."), strings.HasPrefix(eventType, "label."), eventType == "alm.projects_imported":
 		return false, true, true, true
 	case strings.HasPrefix(eventType, "team."), eventType == "alm.org_teams_imported", eventType == "alm.users_imported":

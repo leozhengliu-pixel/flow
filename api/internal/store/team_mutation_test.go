@@ -757,32 +757,7 @@ func TestUserAndProjectImportPersistsUpdates(t *testing.T) {
 func deleteScopedTeam(t *testing.T, repo *SQLiteStore, workspace, teamID string) {
 	t.Helper()
 	err := repo.MutateWorkspace(context.Background(), workspace, "team.deleted", teamID, nil, func(next *domain.Bootstrap) error {
-		if len(next.Teams) <= 1 {
-			return errors.New("a workspace needs at least one team")
-		}
-		index := slices.IndexFunc(next.Teams, func(team domain.Team) bool { return team.ID == teamID })
-		if index < 0 {
-			return errors.New("not found")
-		}
-		next.Teams = slices.Delete(next.Teams, index, index+1)
-		delete(next.TeamSettings, teamID)
-		delete(next.CycleSettings, teamID)
-		next.States = slices.DeleteFunc(next.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
-		next.Labels = slices.DeleteFunc(next.Labels, func(label domain.IssueLabel) bool { return label.Scope == teamID })
-		next.Cycles = slices.DeleteFunc(next.Cycles, func(cycle domain.Cycle) bool { return cycle.TeamID == teamID })
-		next.TeamMembers = slices.DeleteFunc(next.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID })
-		for id, settings := range next.TeamSettings {
-			if settings.ParentTeamID == teamID {
-				settings.ParentTeamID = ""
-				next.TeamSettings[id] = settings
-			}
-		}
-		for i := range next.Projects {
-			if slices.Contains(next.Projects[i].TeamIDs, teamID) {
-				next.Projects[i].TeamIDs = slices.DeleteFunc(next.Projects[i].TeamIDs, func(id string) bool { return id == teamID })
-			}
-		}
-		return nil
+		return ApplyTeamDeletion(next, teamID)
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -799,6 +774,10 @@ func TestTeamDeletedWritesOnlyThatTeam(t *testing.T) {
 	before := len(repo.Bootstrap().Teams)
 	writes := auditWrites(t, repo)
 	deleteScopedTeam(t, repo, key, "bulk-team-00000")
+	live := repo.Bootstrap()
+	if domain.TeamIndex(&live, "bulk-team-00001") < 0 || live.TeamByKey["bt0001"] != "bulk-team-00001" {
+		t.Fatalf("team directory was rebuilt incorrectly: index=%d key=%q", domain.TeamIndex(&live, "bulk-team-00001"), live.TeamByKey["bt0001"])
+	}
 	changes := writes()
 	if changes["workspace_states"] != 0 || changes["issue_records"] != 0 {
 		t.Fatalf("team delete rewrote the catalog: %+v", changes)
