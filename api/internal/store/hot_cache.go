@@ -409,6 +409,9 @@ func (s *SQLiteStore) cacheMetadataUpserts(ctx context.Context, workspace string
 		return
 	}
 	for _, change := range changes {
+		if change.drop {
+			continue
+		}
 		_ = cache.CacheHSet(ctx, s.metadataFieldKey(workspace, change.field), change.key, encodeMetadataCacheValue(change.order, change.raw))
 	}
 }
@@ -437,6 +440,8 @@ func hotCacheTouch(eventType string) (issueEntity, issueQuery, projectQuery, met
 	switch {
 	case strings.HasPrefix(eventType, "issue."), strings.HasPrefix(eventType, "comment."), strings.Contains(eventType, "attachment"), strings.HasPrefix(eventType, "relation."):
 		return true, true, false, false
+	case eventType == "team.deleted":
+		return false, true, true, true
 	case strings.HasPrefix(eventType, "project."), strings.HasPrefix(eventType, "label."), eventType == "alm.projects_imported":
 		return false, true, true, true
 	case strings.HasPrefix(eventType, "team."), eventType == "alm.org_teams_imported", eventType == "alm.users_imported":
