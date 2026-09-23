@@ -665,6 +665,12 @@ function App() {
         navigateTo(reviewsPath(data.workspace.urlKey));
         return;
       }
+      if (inSequence && sequence.key === "g" && pressed === "s" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"));
+        return;
+      }
       if (pressed === "n" || pressed === "g") {
         shortcutSequence.current = { key: pressed, at: now };
         return;

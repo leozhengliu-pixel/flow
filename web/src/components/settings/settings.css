@@ -13,6 +13,11 @@
 .settings-search-collapse{width:24px!important;height:24px!important;display:grid!important;place-items:center;padding:0!important;color:var(--theme-text-tertiary)!important}
 .settings-search-collapse svg{width:12px!important;height:12px!important;transition:transform .15s ease}
 .settings-search-collapse[aria-expanded=false] svg{transform:rotate(-90deg)}
+.settings-content:has(>.settings-shortcuts-not-found){width:100%;max-width:none;min-height:100%;padding:0;display:grid;place-items:center}
+.settings-shortcuts-not-found{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--theme-text-secondary)}
+.settings-shortcuts-not-found>svg{margin-bottom:8px;color:var(--theme-text-secondary)}
+.settings-shortcuts-not-found strong{font-size:13px;font-weight:600;color:var(--theme-text-primary)}
+.settings-shortcuts-not-found span{font-size:13px}
 .settings-search-group-items{display:flex;flex-direction:column;gap:1px;padding:1px 0 3px 25px}
 .settings-search-result{display:flex!important;height:28px!important;align-items:center!important;padding:0 8px!important;color:var(--theme-text-secondary)!important;font-weight:450!important;text-align:left}
 .settings-search-result.is-section{color:var(--theme-text-primary)!important}

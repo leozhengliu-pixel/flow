@@ -109,6 +109,9 @@ export function routeInfo(
   }
 
   if (route.kind === "settings") {
+    if (route.page === "shortcuts") {
+      return { title: "Not found", pinnedTitle: "Not found", icon: "settings" };
+    }
     if (BILLING_SETTINGS.has(route.page)) {
       return { title: "Settings", pinnedTitle: "Settings", icon: "settings" };
     }
