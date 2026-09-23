@@ -69,4 +69,11 @@ describe("routeInfo", () => {
       ).title,
     ).toBe("Settings");
   });
+
+  it("does not title the retired shortcuts route as a settings page", () => {
+    expect(routeInfo(
+      { kind: "settings", workspaceSlug: "acme", page: "shortcuts" },
+      data,
+    ).title).toBe("Not found");
+  });
 });

@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';
 import { SidebarTeamMenu } from './sidebar-team-menu';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
@@ -811,7 +812,6 @@ export function Sidebar({
       <KeyboardShortcutsDialog
         open={shortcutsOpen}
         onOpenChange={setShortcutsOpen}
-        workspaceSlug={workspaceSlug}
       />
     </>
   );
@@ -2293,71 +2293,6 @@ function HelpMenu({
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
-  );
-}
-
-function KeyboardShortcutsDialog({
-  open,
-  onOpenChange,
-  workspaceSlug,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  workspaceSlug: string;
-}) {
-  const { t } = useI18n();
-  const groups = [
-    [
-      "Navigation",
-      [
-        ["Search workspace", "⌘ K"],
-        ["Go to Inbox", "G then I"],
-        ["Go to My issues", "G then M"],
-        ["Open settings", "G then S"],
-      ],
-    ],
-    [
-      "Create",
-      [
-        ["Create issue", "C"],
-        ["Create project", "N then P"],
-        ["Create initiative", "N then I"],
-      ],
-    ],
-    [
-      "General",
-      [
-        ["Close menu or dialog", "Esc"],
-        ["Move through menus", "↑ / ↓"],
-        ["Choose focused item", "Enter"],
-      ],
-    ],
-  ] as const;
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sidebar-shortcuts-dialog">
-        <DialogTitle>Keyboard shortcuts</DialogTitle>
-        {groups.map(([title, items]) => (
-          <section key={title}>
-            <h3>{title}</h3>
-            {items.map(([label, keys]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <kbd>{keys}</kbd>
-              </div>
-            ))}
-          </section>
-        ))}
-        <div className="sidebar-shortcuts-customize">
-          <a
-            href={settingsPath(workspaceSlug, "shortcuts")}
-            onClick={() => onOpenChange(false)}
-          >
-            {t("Customize in Settings")}
-          </a>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
