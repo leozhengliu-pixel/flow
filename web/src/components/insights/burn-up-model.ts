@@ -47,8 +47,8 @@ function eachDayInclusive(start: string, end: string): string[] {
   return days
 }
 
-function issueWeight(issue: Issue, measure: BurnUpMeasure): number {
-  if (measure === 'estimate') return Math.max(0, Number(issue.estimate ?? 0))
+function issueWeight(issue: Issue, measure: BurnUpMeasure, unestimated: number): number {
+  if (measure === 'estimate') return issue.estimate === undefined || issue.estimate === null ? unestimated : Math.max(0, Number(issue.estimate))
   return 1
 }
 
@@ -83,7 +83,7 @@ function issueCompletedByDay(issue: Issue, day: string): boolean {
 export function computeBurnUpSeries(
   cycle: Pick<Cycle, 'id' | 'startsAt' | 'endsAt'>,
   issues: Issue[],
-  options: { measure?: BurnUpMeasure; asOf?: string | Date } = {},
+  options: { measure?: BurnUpMeasure; asOf?: string | Date; unestimatedValue?: number } = {},
 ): BurnUpSeries {
   const measure = options.measure ?? 'issue_count'
   const start = utcDay(cycle.startsAt)
@@ -101,7 +101,7 @@ export function computeBurnUpSeries(
       // Scope on day: issues created on/before day (and in cycle).
       const created = utcDay(issue.createdAt)
       if (created > date) continue
-      const weight = issueWeight(issue, measure)
+      const weight = issueWeight(issue, measure, options.unestimatedValue ?? 0)
       scope += weight
       if (issueCompletedByDay(issue, date)) completed += weight
       else if (issueStartedByDay(issue, date)) started += weight

@@ -648,6 +648,10 @@ export async function updateWorkspacePreferences(
 export function fetchWorkspacePreferences(workspaceKey: string): Promise<WorkspaceSettings> {
   return request('/api/workspace/preferences', { headers: { 'X-Workspace-Key': workspaceKey } });
 }
+/** Sends the workspace welcome message to the current user's inbox. */
+export function testWelcomeMessage(): Promise<{ sent: boolean }> {
+  return request("/api/workspace/welcome-message/test", { method: "POST" });
+}
 export function updateWorkspaceAgentGuidance(instructions:string):Promise<{instructions:string}> {return request('/api/workspace/agent-guidance',jsonRequest('PATCH',{instructions}));}
 export function createWorkspaceLabel(input: {
   name: string;

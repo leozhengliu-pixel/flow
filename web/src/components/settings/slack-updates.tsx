@@ -105,7 +105,7 @@ export function SlackUpdates({
           "Updates are only posted to Slack for workspace-level initiatives or initiatives led by a public team",
         )
       : t(
-          "Updates are only posted to Slack for workspace-level projects or projects owned by a public team.",
+          "Updates are only posted to Slack when associated with at least one non-private team",
         );
 
   const actionLabel = connected ? t("Disconnect") : t("Connect");

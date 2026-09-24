@@ -3784,6 +3784,13 @@ Object.assign(zhCN, {
     "项目状态定义项目推进所经过的工作流。",
   "Update cadence": "更新频率",
   "No expectation": "不要求更新",
+  "Short status reports about the progress and health of your projects. Project members regularly post updates, and subscribers automatically receive them in their inbox.":
+    "关于项目进展和健康状况的简短状态报告。项目成员定期发布更新，订阅者会在收件箱中自动收到。",
+  "Configure how often updates are expected on projects. Project leads will receive reminders to post updates.":
+    "配置项目需要更新的频率。项目负责人会收到发布更新的提醒。",
+  "No expectation for updates": "不要求更新",
+  "Updates are only posted to Slack when associated with at least one non-private team":
+    "仅当更新关联至少一个非私有团队时才会发布到 Slack",
   "Project update notifications": "项目更新通知",
   "Configure when project updates are expected and where reminders are sent.":
     "配置项目更新频率及提醒发送位置。",

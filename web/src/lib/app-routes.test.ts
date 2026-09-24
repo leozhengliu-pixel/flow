@@ -321,7 +321,7 @@ describe('settings aliases and deep links', () => {
     expect(parseAppRoute('/acme/settings/ai/coding-sessions')).toMatchObject({ kind: 'settings', page: 'coding-sessions' })
     expect(parseAppRoute('/acme/settings/ai/coding-sessions/environments')).toMatchObject({ kind: 'settings', page: 'coding-environments' })
     expect(parseAppRoute('/acme/settings/skill/skill_1/edit')).toMatchObject({ kind: 'settings', page: 'agents', agentSkillMode: 'edit', agentSkillId: 'skill_1' })
-    expect(parseAppRoute('/acme/settings/workspace/welcome-message')).toMatchObject({ kind: 'settings', page: 'workspace' })
+    expect(parseAppRoute('/acme/settings/workspace/welcome-message')).toMatchObject({ kind: 'settings', page: 'workspace', workspaceView: 'welcome-message' })
     expect(parseAppRoute('/acme/settings/labels')).toMatchObject({ kind: 'settings', page: 'issue-labels' })
     expect(parseAppRoute('/acme/settings/teams/ENG/labels')).toMatchObject({ kind: 'settings', page: 'team', teamKey: 'ENG', teamSection: 'issue-labels' })
   })

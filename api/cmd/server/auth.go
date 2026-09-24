@@ -1896,6 +1896,9 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	membership, err := s.store.AcceptInvitation(r.Context(), input.Token, authUser(r).ID)
+	if err == nil {
+		s.sendWelcomeMessage(r.Context(), membership.Workspace.URLKey, authUser(r).ID)
+	}
 	respondMutation(w, err, http.StatusOK, membership)
 }
 

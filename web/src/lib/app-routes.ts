@@ -293,6 +293,8 @@ export type AppRoute =
       identityProviderId?: string;
       applicationId?: string;
       applicationMode?: "detail" | "edit";
+      /** `/settings/workspace/welcome-message`. */
+      workspaceView?: "welcome-message";
       /** `/settings/api/keys`: every API key issued in the workspace. */
       apiView?: "keys";
       /** `/settings/api/webhooks/:id` ("new" for a new webhook). */
@@ -400,8 +402,6 @@ function settingsAlias(rest: string[]): string[] | undefined {
     return third === "environments" ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
   if (first === "skill" && second && second !== "new" && third === "edit" && rest.length === 3)
     return ["skill", second];
-  if (first === "workspace" && second === "welcome-message" && rest.length === 2)
-    return ["workspace"];
   if (first === "labels" && rest.length === 1) return ["issue-labels"];
   if (first === "teams" && second && third === "labels" && rest.length === 3)
     return ["teams", second, "issue-labels"];
@@ -428,6 +428,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
         search,
       );
   }
+  if (section === "settings" && third === "workspace" && fourth === "welcome-message" && segments.length === 4)
+    return { kind: "settings", workspaceSlug, page: "workspace", workspaceView: "welcome-message" };
   if (section === "settings" && third === "api" && fourth === "keys" && segments.length === 4)
     return { kind: "settings", workspaceSlug, page: "api", apiView: "keys" };
   if (

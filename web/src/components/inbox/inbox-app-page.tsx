@@ -427,6 +427,32 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     // Billing/usage alerts are intentionally excluded from Flow's product
     // surface; they belong to the removed commercial account area.
     if (notification.type === 'usageAlert') return []
+    if (notification.type === 'welcomeMessage') {
+      if (notification.deletedAt || notification.archivedAt) return []
+      const content = (data.workspaceSettings.welcomeMessage ?? '').trim()
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: 'activity' as const,
+        sourceId: notification.sourceId,
+        notificationType: inboxNotificationCategory(notification),
+        actorId: notification.actor.id,
+        actor: notification.actor.displayName,
+        actorAvatarUrl: notification.actor.avatarUrl,
+        kind: 'generic' as const,
+        identifier: 'Welcome',
+        title: data.workspaceSettings.welcomeMessageTitle?.trim() || `Welcome to ${data.workspace.name}`,
+        body: content.split('\n').find(line => line.trim()) ?? '',
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        initiativeIds: [],
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+      }]
+    }
     if (notification.reviewId) {
       const review = data.reviews.find(item => item.id === notification.reviewId)
       if (!review || notification.deletedAt || notification.archivedAt) return []

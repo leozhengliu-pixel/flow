@@ -25,6 +25,7 @@ import {
   Braces,
   Building2,
   ChevronDown,
+  ChevronRight,
   CircleDot,
   Code2,
   FileText,
@@ -289,6 +290,7 @@ type SettingsPageProps = {
   teamKey?: string;
   teamSection?: TeamSettingsSection;
   releasePipelineMode?: "new" | "edit";
+  workspaceView?: "welcome-message";
   apiView?: "keys";
   webhookId?: string;
   releasePipelineSlug?: string;
@@ -302,6 +304,7 @@ type SettingsPageProps = {
   asksEmailIntakeMode?: "new";
   onOpenAsksSlack?: (integrationId: string) => void;
   onOpenAsksEmailIntake?: () => void;
+  onOpenWelcomeMessage?: () => void;
   identityProviderId?: string;
   applicationId?: string;
   applicationMode?: "detail" | "edit";
@@ -966,6 +969,14 @@ function SettingsBody(
     return (
       <ProjectUpdateSettings data={props.data} onReload={props.onReload} />
     );
+  if (page === "workspace" && props.workspaceView === "welcome-message")
+    return (
+      <WelcomeMessageSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("workspace")}
+        onReload={props.onReload}
+      />
+    );
   if (page === "workspace") return <WorkspacePage {...props} />;
   if (page === "teams")
     return (
@@ -1395,10 +1406,22 @@ function WorkspacePage(
         </Row>
       </Section>
       <Section title="Member onboarding">
-        <WelcomeMessageSettingsPage
-          value={props.data.workspaceSettings.welcomeMessage ?? ""}
-          onCommit={(value) => void savePreferences({ welcomeMessage: value })}
-        />
+        <Row
+          title="Welcome message"
+          description="Configure a message that new users will receive when they join the workspace"
+          className="personal-row-link"
+          role="button"
+          tabIndex={0}
+          onClick={() => props.onOpenWelcomeMessage?.()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") props.onOpenWelcomeMessage?.();
+          }}
+        >
+          <span className="personal-row-link-meta">
+            {props.data.workspaceSettings.welcomeMessageEnabled ? "Enabled" : "Disabled"}
+            <ChevronRight size={14} />
+          </span>
+        </Row>
         <Row title="Default home view">
           <Select
             label="Default home view"
