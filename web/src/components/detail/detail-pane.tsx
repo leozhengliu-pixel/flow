@@ -194,7 +194,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   </section>
 }
 
-const PREVIEW_STATE_LABEL:Record<DeployPreview['state'],string>={ready:'Preview ready',building:'Preview building',pending:'Preview pending',failed:'Preview failed',inactive:'Preview inactive'}
+const PREVIEW_STATE_LABEL:Record<DeployPreview['state'],string>={ready:'Ready',building:'Building',pending:'Pending',failed:'Failed',inactive:'Inactive'}
 /** Linear deploy previews: one chip per environment from the linked pull requests. */
 export function DeployPreviews({reviews}:{reviews:CodeReview[]}){
   const{t}=useI18n()
