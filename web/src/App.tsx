@@ -5218,6 +5218,7 @@ function App() {
         )}
         {page === "my-issues" && route.kind === "my-issues" && (
           <MyIssuesPage
+            renderIssuePreview={renderIssuePreview}
             key={route.view}
             data={data}
             initialView={route.view}

@@ -115,6 +115,7 @@ export function ProjectIssueDisplayMenu({
   return (
     <MyIssuesDisplayMenu
       hiddenProperties={["project"]}
+      hideSplit
       toggles={["triage", "archived"]}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
       resetLabel="Reset to default"
@@ -477,7 +478,7 @@ export function ProjectIssues({
         onChange={onFiltersChange}
       />
       {issueData?.issueCollectionPaged ? <PagedIssueList
-        data={issueData} query={pagedQuery} layout={display.layout}
+        data={issueData} query={pagedQuery} layout={display.layout === 'board' ? 'board' : 'list'}
         onLoadedIssuesChange={setLoadedIssues} onOpenIssueRecord={onOpenIssue}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         collapsedGroupIds={collapsed} displayProperties={display.properties}
