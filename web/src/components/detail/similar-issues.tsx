@@ -1,4 +1,5 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { listIssueRecords } from '@/lib/api'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { Copy } from 'lucide-react'
 import { StatusIcon } from '@/components/issue/issue-icons'
@@ -32,12 +33,23 @@ export function similarIssues(issue: Issue, issues: Issue[], limit = 3, threshol
 }
 
 /** Linear "Similar issues / Possible duplicates" with one-click Mark as duplicate. */
-export function SimilarIssues({ issue, issues, onOpen, onMarkDuplicate }: { issue: Issue; issues: Issue[]; onOpen: (issue: Issue) => void; onMarkDuplicate: (issue: Issue) => void }) {
-  const matches = useMemo(() => similarIssues(issue, issues), [issue, issues])
+export function SimilarIssues({ issue, issues, workspaceKey, onOpen, onMarkDuplicate }: { issue: Issue; issues: Issue[]; workspaceKey?: string; onOpen: (issue: Issue) => void; onMarkDuplicate: (issue: Issue) => void }) {
+  // Deep links and paged workspaces only hold a few issues locally: compare against the team's recent issues.
+  const teamIssueCount = issues.filter(item => item.team.id === issue.team.id).length
+  const [remote, setRemote] = useState<Issue[]>([])
+  useEffect(() => {
+    if (teamIssueCount > 50) return
+    const controller = new AbortController()
+    listIssueRecords({ teamId: issue.team.id, archived: 'false', sort: 'updatedAt', direction: 'desc', limit: 250 }, controller.signal, workspaceKey)
+      .then(page => setRemote(page.items)).catch(() => undefined)
+    return () => controller.abort()
+  }, [issue.team.id, teamIssueCount, workspaceKey])
+  const pool = useMemo(() => { const byId = new Map(remote.map(item => [item.id, item])); for (const item of issues) byId.set(item.id, item); return [...byId.values()] }, [issues, remote])
+  const matches = useMemo(() => similarIssues(issue, pool), [issue, pool])
   if (!matches.length || issue.relations.some(relation => relation.type === 'duplicate')) return null
   return <section className="issue-detail-section similar-issues" aria-label="Similar issues">
     <header><strong>{matches.some(match => match.score >= 0.7) ? 'Possible duplicates' : 'Similar issues'}</strong><span>{matches.length}</span></header>
-    {matches.map(({ candidate }) => <div className="linked-issue similar-issue-row" key={candidate.id}>
+    {matches.map(({ candidate }) => <div className="similar-issue-row" key={candidate.id}>
       <StatusIcon state={candidate.state} size={14}/>
       <button type="button" className="similar-issue-open" onClick={() => onOpen(candidate)}><strong data-i18n-ignore>{candidate.identifier}</strong><span data-i18n-ignore>{candidate.title}</span></button>
       <FlowTooltip label={`Mark as duplicate of ${candidate.identifier}`}><button type="button" className="similar-issue-duplicate" onClick={() => onMarkDuplicate(candidate)}><Copy size={12}/>Mark as duplicate</button></FlowTooltip>

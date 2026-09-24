@@ -51,6 +51,8 @@ export interface IssueExplorerPageProps {
   scopeFilter?: (issue: Issue) => boolean
   /** Server query equivalent of `scopeFilter` for paged workspaces. */
   scopeConditions?: Record<string, unknown>[]
+  /** Surface defaults on top of the team-view defaults (for example member profiles show triage issues). */
+  defaultDisplayOverrides?: Partial<MyIssuesDisplayOptions>
   viewHref: (view: TeamIssuesRouteView) => string
   savedView?: SavedView
   duplicateFrom?: SavedView
@@ -81,7 +83,7 @@ export interface IssueExplorerPageProps {
   onDeleteIssues: (issueIds: string[]) => Promise<void>
 }
 
-export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${preferenceScope ?? storageScope}:${boardRoute ? 'board' : view}`
   const sourceView = savedView ?? duplicateFrom
@@ -90,7 +92,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const teamViewKey = boardRoute ? 'board' : view
   const [teamDefault, setTeamDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined)
   const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
-  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault))
+  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
   const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [drillRows, setDrillRows] = useState<MyIssuesRowData[]>()
@@ -132,12 +134,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const activeInsightRows = useMemo(() => insightRows.filter(row => !row.archivedAt), [insightRows])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const pagedQuery = useMemo(() => {
-    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display)
+    const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
+    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
     return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, { data }), ...conditions, ...(scopeConditions ?? [])] } }
-  }, [display, filters, initialInsightFilters?.teamIds, scope, scopeConditions, view])
+  }, [data, display, filters, initialInsightFilters?.teamIds, scope, scopeConditions, view])
   const insightQuery = useMemo(() => ({
     teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
     includeSubTeams: scope.kind === 'team',
@@ -210,7 +213,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     writeValue(personalViewKey ?? `${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] }))
   }
   const resetDisplay = () => {
-    const next = savedView ? displayFromSavedView(savedView, savedView.view) : withTeamDefault({ ...defaultDisplay(view), ...(boardRoute ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault)
+    const next = savedView ? displayFromSavedView(savedView, savedView.view) : withTeamDefault({ ...defaultDisplay(view, defaultDisplayOverrides), ...(boardRoute ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault)
     setDisplay(next)
     removeValue(personalViewKey ?? `${preferencesKey}:display`)
   }
@@ -424,7 +427,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onTotalChange={setPagedTotal}
         onLoadedIssuesChange={setPagedIssues}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={split ? splitProperties : display.properties}
+        displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         propertyOptions={rowOptions}
         selectedIds={selection.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
@@ -440,7 +443,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         selectedIds={selection.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={split ? splitProperties : display.properties}
+        displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
@@ -567,7 +570,8 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
   }
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values = new Map<string, MyIssuesSummaryItem>(); for (const item of items) values.set(item.id, { ...item, count: (values.get(item.id)?.count ?? 0) + 1 }); return [...values.values()].sort((a, b) => b.count - a.count) }
-function defaultDisplay(view: TeamIssuesRouteView): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', properties: new Set(defaultMyIssuesDisplayOptions.properties) } }
+/** Linear defaults: team/workspace/custom views hide triage issues (they live in Triage). */
+function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, properties: new Set(defaultMyIssuesDisplayOptions.properties), ...overrides } }
 function initialPropertyFilters(data: BootstrapData, labelId?: string, statusId?: string): MyIssuesAppliedFilter[] | undefined {
   const filters: MyIssuesAppliedFilter[] = []
   const label = data.labels.find(item => item.id === labelId)
@@ -590,7 +594,7 @@ function insightPropertyFilters(data: BootstrapData, filters: NonNullable<IssueE
 }
 function filterInsightTeams(issues: Issue[], teamIds?: string[]) { return teamIds?.length ? issues.filter(issue=>teamIds.includes(issue.team.id)) : issues }
 function readFilters(key: string): MyIssuesAppliedFilter[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
-function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view), ...(board ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
+function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view, overrides), ...(board ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }
 function writeValue(key: string, value: string) { try { localStorage.setItem(key, value) } catch { /* Preferences are best-effort. */ } }
 function removeValue(key: string) { try { localStorage.removeItem(key) } catch { /* Preferences are best-effort. */ } }

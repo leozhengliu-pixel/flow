@@ -6634,6 +6634,7 @@ function issueIdentifierScope(raw: string | null) {
   const wanted = new Set(identifiers);
   return {
     preferenceScope: "identifiers",
+    defaultDisplayOverrides: { showTriageIssues: true },
     resourceHeader: { title: `${identifiers.length} ${identifiers.length === 1 ? "issue" : "issues"}` },
     scopeFilter: (issue: Issue) => wanted.has(issue.identifier.toUpperCase()),
     scopeConditions: [{ field: "identifier", operator: "in", values: identifiers }],

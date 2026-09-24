@@ -245,7 +245,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         query={myIssuesPagedQuery}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={split ? splitProperties : controller.display.properties}
+        displayProperties={split || (controller.detailsOpen && previewIssueId) ? splitProperties : controller.display.properties}
         propertyOptions={rowOptions}
         selectedIds={controller.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
@@ -276,7 +276,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         selectedIds={controller.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={split ? splitProperties : controller.display.properties}
+        displayProperties={split || (controller.detailsOpen && previewIssueId) ? splitProperties : controller.display.properties}
         nestedSubIssues={controller.display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}

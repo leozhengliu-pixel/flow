@@ -36,6 +36,7 @@ export function MemberProfilePage({ data, user, view, onNavigate, onOpenIssue, o
     scope={{ kind: 'workspace' }}
     view="all"
     preferenceScope={`member:${user.id}:${view}`}
+    defaultDisplayOverrides={{ showTriageIssues: true, grouping: 'none' }}
     scopeFilter={scopeFilter}
     scopeConditions={scopeConditions}
     resourceHeader={{
