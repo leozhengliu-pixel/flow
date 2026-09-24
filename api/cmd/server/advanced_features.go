@@ -1725,7 +1725,7 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		paused := slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type)
 		if paused && sla.PausedAt == nil {
 			if rule.BusinessHours {
-				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue))
+				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue), slaWorkWeek(data))
 			}
 			sla.PausedAt, sla.Status = &now, "paused"
 			recordSLAEvent(data, issue.ID, sla.ID, "paused", now)
@@ -1751,7 +1751,7 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		if sla.PausedAt == nil {
 			sla.RemainingMinutes = int(sla.DueAt.Sub(now).Minutes())
 			if rule.BusinessHours {
-				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue))
+				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue), slaWorkWeek(data))
 			}
 			if now.After(sla.DueAt) && sla.BreachedAt == nil {
 				sla.BreachedAt, sla.Status = &now, "breached"
@@ -1791,16 +1791,28 @@ func (s *server) updateProjectUpdateSettings(w http.ResponseWriter, r *http.Requ
 
 func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Enabled *bool `json:"enabled"`
+		Enabled  *bool   `json:"enabled"`
+		WorkWeek *string `json:"workWeek"`
 	}
-	if !decodeJSON(w, r, &input) || input.Enabled == nil {
-		writeError(w, http.StatusBadRequest, "enabled is required")
+	if !decodeJSON(w, r, &input) || (input.Enabled == nil && input.WorkWeek == nil) {
+		writeError(w, http.StatusBadRequest, "enabled or workWeek is required")
 		return
 	}
-	result := map[string]any{"enabled": *input.Enabled}
+	if input.WorkWeek != nil && *input.WorkWeek != slaWorkWeekMonFri && *input.WorkWeek != slaWorkWeekSunThu {
+		writeError(w, http.StatusBadRequest, "workWeek must be monFri or sunThu")
+		return
+	}
+	var result map[string]any
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
 		if data.Settings == nil {
 			data.Settings = map[string]any{}
+		}
+		result = map[string]any{"enabled": slaEnabled(data), "workWeek": slaWorkWeek(data)}
+		if input.Enabled != nil {
+			result["enabled"] = *input.Enabled
+		}
+		if input.WorkWeek != nil {
+			result["workWeek"] = *input.WorkWeek
 		}
 		data.Settings["sla"] = result
 		appendAudit(data, "updated", "sla_settings", "workspace", result)

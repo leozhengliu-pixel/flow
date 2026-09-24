@@ -929,6 +929,8 @@ func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 	return a.TeamID == b.TeamID && a.Description == b.Description && a.Timezone == b.Timezone &&
 		a.EstimateType == b.EstimateType && a.EstimateAllowZero == b.EstimateAllowZero && a.EstimateExtended == b.EstimateExtended &&
 		boolPointerEqual(a.EstimateCountUnestimated, b.EstimateCountUnestimated) && a.DefaultStateID == b.DefaultStateID &&
+		a.DefaultIssueTemplateForMembersID == b.DefaultIssueTemplateForMembersID && a.DefaultIssueTemplateForNonMembersID == b.DefaultIssueTemplateForNonMembersID &&
+		a.DefaultProjectTemplateID == b.DefaultProjectTemplateID &&
 		a.DefaultPriority == b.DefaultPriority && a.IssueEmailEnabled == b.IssueEmailEnabled &&
 		a.DetailedHistory == b.DetailedHistory && a.Access == b.Access &&
 		a.MembershipRestriction == b.MembershipRestriction && a.SettingsPermission == b.SettingsPermission &&

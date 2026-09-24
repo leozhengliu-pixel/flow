@@ -505,6 +505,10 @@ type TeamSettings struct {
 	LoopPermission          string               `json:"loopPermission"`
 	MemberPermission        string               `json:"memberPermission"`
 	PinnedViewPermission    string               `json:"pinnedViewPermission"`
+	// Templates preselected when creating issues/projects for this team.
+	DefaultIssueTemplateForMembersID    string `json:"defaultIssueTemplateForMembersId,omitempty"`
+	DefaultIssueTemplateForNonMembersID string `json:"defaultIssueTemplateForNonMembersId,omitempty"`
+	DefaultProjectTemplateID            string `json:"defaultProjectTemplateId,omitempty"`
 	// Estimate scale options (see the web estimates module).
 	EstimateAllowZero bool `json:"estimateAllowZero"`
 	EstimateExtended  bool `json:"estimateExtended"`
@@ -2224,6 +2228,9 @@ type TeamSettingsMutationInput struct {
 	LoopPermission          *string               `json:"loopPermission,omitempty"`
 	MemberPermission        *string               `json:"memberPermission,omitempty"`
 	PinnedViewPermission    *string               `json:"pinnedViewPermission,omitempty"`
+	DefaultIssueTemplateForMembersID    *string `json:"defaultIssueTemplateForMembersId,omitempty"`
+	DefaultIssueTemplateForNonMembersID *string `json:"defaultIssueTemplateForNonMembersId,omitempty"`
+	DefaultProjectTemplateID            *string `json:"defaultProjectTemplateId,omitempty"`
 	EstimateAllowZero        *bool   `json:"estimateAllowZero,omitempty"`
 	EstimateExtended         *bool   `json:"estimateExtended,omitempty"`
 	EstimateCountUnestimated *bool   `json:"estimateCountUnestimated,omitempty"`

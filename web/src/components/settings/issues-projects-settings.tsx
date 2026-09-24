@@ -3378,7 +3378,7 @@ export function SLASettings({
           <h1>{t("SLAs")}</h1>
           <p>
             {t(
-              "Set response and resolution expectations for issues that match defined rules.",
+              "Service-level agreements (SLAs) automatically apply deadlines to issues when they match predefined parameters. While often used to define response times to customer issues, they can also be used to define internal standards for bug and time-sensitive issue resolution.",
             )}{" "}
             <a
               href="https://flow.app/docs/sla"
@@ -3396,7 +3396,7 @@ export function SLASettings({
           <span>
             <strong>{t("Enable SLAs")}</strong>
             <small>
-              {t("Apply SLA rules and deadlines across your workspace.")}
+              {t("Workspace-wide access to issue SLA automations and notifications")}
             </small>
           </span>
           <SettingsToggle
@@ -3408,6 +3408,25 @@ export function SLASettings({
             }
           />
         </div>
+        {enabled && (
+          <div className="ip-setting-row">
+            <span>
+              <strong>{t("Work week")}</strong>
+              <small>{t("Used to determine business day SLAs")}</small>
+            </span>
+            <SettingsSelect
+              label={t("Work week")}
+              value={settings.workWeek === "sunThu" ? "sunThu" : "monFri"}
+              options={[
+                { value: "monFri", label: "Mon-Fri" },
+                { value: "sunThu", label: "Sun-Thu" },
+              ]}
+              onChange={(value) =>
+                run(() => updateSLASettings({ workWeek: value as "monFri" | "sunThu" }))
+              }
+            />
+          </div>
+        )}
       </section>
       <section className="ip-settings-section">
         <header>
