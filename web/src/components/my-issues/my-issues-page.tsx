@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { IssueRowActionsProvider } from './issue-row-actions'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
@@ -173,7 +174,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
   }
 
-  return <>
+  return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue) }}>
     <MyIssuesSurface
       activeView={controller.view}
       detailsOpen={controller.detailsOpen}
@@ -306,7 +307,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       />}
     </MyIssuesSurface>
     <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} destructiveActions={['archive', 'delete']} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
-  </>
+  </IssueRowActionsProvider>
 }
 
 function issuesForView(data: BootstrapData, view: MyIssuesView, includeArchived = false) {
