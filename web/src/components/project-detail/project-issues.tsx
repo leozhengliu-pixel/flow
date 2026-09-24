@@ -20,15 +20,20 @@ import {
   ISSUE_FILTER_LABELS,
   applyExplorerFilters,
   explorerFilterOptions,
+  executeExplorerBulkAction,
+  explorerBoardGroupUpdate,
+  explorerBulkOptions,
   explorerPropertyOptions,
+  explorerUpdateForProperty,
   issueHierarchyFields,
-  nestedIssueProjection,
+  issueToExplorerRow,
 } from "@/components/issue-explorer/issue-explorer-model";
+import { buildIssueGroups, groupMoveUpdate, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
+import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
 import {
   MyIssuesList,
   type MyIssuesContextAction,
   type MyIssuesEditableProperty,
-  type MyIssuesGroupData,
   type MyIssuesRowData,
   type MyIssuesRowPropertyOptions,
 } from "@/components/my-issues/my-issues-list";
@@ -36,7 +41,6 @@ import type {
   MyIssuesDisplayOptions,
   MyIssuesFilterKey,
   MyIssuesFilterOption,
-  MyIssuesGrouping,
   MyIssuesProperty,
 } from "@/components/my-issues/my-issues-surface";
 import { IssueBoard } from "@/components/issue-explorer/issue-board";
@@ -46,13 +50,12 @@ import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import type {
   BootstrapData,
   Issue,
-  IssueUpdateInput,
   ProjectMilestone,
   SavedView,
 } from "@/types/flow";
 import type { ProjectDetailProps } from "./project-detail-types";
+import { DEFAULT_PROJECT_ISSUE_DISPLAY } from "./project-issue-display";
 import { PRIORITY_LABELS } from "./project-detail-types";
-import { toggleGroupedLabelIds } from "@/lib/labels";
 
 export type ProjectIssueFilters = MyIssuesAppliedFilter[];
 export type ProjectIssueProperty = MyIssuesProperty;
@@ -111,6 +114,9 @@ export function ProjectIssueDisplayMenu({
   return (
     <MyIssuesDisplayMenu
       hiddenProperties={["project"]}
+      toggles={["triage", "archived"]}
+      onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
+      resetLabel="Reset to default"
       onChange={onChange}
       onOpenChange={setOpen}
       open={open}
@@ -305,27 +311,13 @@ export function ProjectIssues({
   const [deleteTarget, setDeleteTarget] = useState<Issue>();
   const [loadedIssues, setLoadedIssues] = useState<Issue[]>([]);
   const pagedQuery = useMemo<IssueQueryInput>(() => {
-    const conditions: Record<string, unknown>[] = [issueFiltersToQueryAst(filters)];
+    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' });
-    if (display.completedWindow === 'none') conditions.push({ field: 'status', operator: 'notIn', values: ['completed', 'canceled'] });
-    return { projectId: project.id, groupBy: display.grouping === 'focus' ? 'status' : display.grouping,
-      sort: display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder',
-      direction: display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc', filter: { and: conditions } };
+    return { projectId: project.id, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } };
   }, [project.id, milestoneScope, filters, display]);
   const visible = useMemo(
-    () =>
-      sortIssues(
-        applyExplorerFilters(projectIssues, filters, issueData)
-          .filter((issue) => display.showSubIssues || !issue.parentId)
-          .filter(
-            (issue) =>
-              display.completedWindow !== "none" ||
-              !["completed", "canceled"].includes(issue.state.type),
-          ),
-        display,
-      ),
-    [display, filters, issueData, projectIssues],
+    () => applyExplorerFilters(projectIssues, filters, issueData),
+    [filters, issueData, projectIssues],
   );
   const allStates = useMemo(
     () =>
@@ -334,13 +326,11 @@ export function ProjectIssues({
       ),
     [issues, workflowStates, project.teamIds],
   );
-  const groups = useMemo(
-    () => {
-      const cycleNames = new Map((cycles ?? []).map(cycle => [cycle.id, cycle.name]));
-      return groupIssues(visible, display, allStates).map(group => ({ ...group, issues: group.issues.map(row => ({ ...row, cycleName: cycleNames.get(row.cycleId ?? '') })) }));
-    },
-    [allStates, cycles, display, visible],
-  );
+  const groups = useMemo(() => {
+    const cycleNames = new Map((cycles ?? []).map(cycle => [cycle.id, cycle.name]));
+    const rows = visible.map(issue => issueData ? issueToExplorerRow(issue, issueData.workspace.urlKey, issueData.issues, issueData) : { ...toRowData(issue, visible), cycleName: cycleNames.get(issue.cycleId ?? '') });
+    return buildIssueGroups(rows, display, { data: issueData, states: allStates });
+  }, [allStates, cycles, display, issueData, visible]);
   const rowIssues = useMemo(
     () => new Map([...projectIssues, ...loadedIssues].map((issue) => [issue.id, issue])),
     [projectIssues, loadedIssues],
@@ -414,20 +404,8 @@ export function ProjectIssues({
     property: MyIssuesEditableProperty,
     value: string | string[],
   ) => {
-    if (property === "priority")
-      await onUpdateIssue(row.id, { priority: Number(value) });
-    else if (property === "status")
-      await onUpdateIssue(row.id, { stateId: String(value) });
-    else if (property === "assignee")
-      await onUpdateIssue(row.id, { assigneeId: String(value) });
-    else if (property === "labels")
-      await onUpdateIssue(row.id, { labelIds: value as string[] });
-    else if (property === "dueDate")
-      await onUpdateIssue(row.id, { dueDate: String(value) });
-    else if (property === "project")
-      await onUpdateIssue(row.id, { projectId: String(value) });
-    else if (property === "cycle")
-      await onUpdateIssue(row.id, { cycleId: String(value) });
+    const input = explorerUpdateForProperty(property, value);
+    if (input) await onUpdateIssue(row.id, input);
   };
   const contextAction = (
     row: MyIssuesRowData,
@@ -442,6 +420,7 @@ export function ProjectIssues({
       );
     else if (action === "openIn") onOpenIssue(issue);
   };
+  const selectedRows = useMemo(() => groups.flatMap(group => group.issues).filter((row, index, all) => selected.has(row.id) && all.findIndex(item => item.id === row.id) === index), [groups, selected]);
   const select = (issueId: string, isSelected: boolean) =>
     setSelected((current) => {
       const next = new Set(current);
@@ -467,13 +446,9 @@ export function ProjectIssues({
     const groupUpdate =
       sourceGroupId === targetGroupId
         ? {}
-        : projectBoardGroupUpdate(
-            row,
-            display.grouping,
-            targetGroupId,
-            allStates,
-            labels,
-          );
+        : issueData
+          ? explorerBoardGroupUpdate(row, display.grouping, targetGroupId, issueData)
+          : groupMoveUpdate(row, display.grouping, targetGroupId, { states: allStates }) ?? {};
     void onUpdateIssue(row.id, { sortOrder, ...groupUpdate });
   };
 
@@ -562,7 +537,26 @@ export function ProjectIssues({
           </button>
         </div>
       )}
-      {selected.size > 0 && (
+      {issueData ? (
+        <MyIssuesBulkActionBar
+          selectedIssues={selectedRows}
+          destructiveActions={["archive", "delete"]}
+          actionOptions={(action) => explorerBulkOptions(action, explorerPropertyOptions(issueData, projectIssues))}
+          onAction={(action, _issues, value) => {
+            void executeExplorerBulkAction({
+              action,
+              ids: selectedRows.map((row) => row.id),
+              value,
+              data: issueData,
+              issuesById: rowIssues,
+              onUpdateIssue,
+              onUpdateIssues: (ids, input) => Promise.all(ids.map((id) => onUpdateIssue(id, input))),
+              onDeleteIssues,
+            }).then(() => setSelected(new Set()));
+          }}
+          onClear={() => setSelected(new Set())}
+        />
+      ) : selected.size > 0 && (
         <div className="project-issues__bulk">
           <span>{selected.size} selected</span>
           <button onClick={() => setSelected(new Set())} type="button">
@@ -621,115 +615,6 @@ export function ProjectIssues({
   );
 }
 
-function groupIssues(
-  issues: Issue[],
-  display: MyIssuesDisplayOptions,
-  allStates: Issue["state"][],
-): MyIssuesGroupData[] {
-  const grouping = display.grouping === "focus" ? "status" : display.grouping;
-  let rows = issues.map((issue) => toRowData(issue, issues));
-  const nested = display.nestedSubIssues
-    ? nestedIssueProjection(rows)
-    : undefined;
-  if (nested) rows = nested.rows;
-  if (grouping === "none")
-    return [{ id: "all", label: "All issues", issues: rows }];
-  const groups = new Map<string, MyIssuesGroupData>();
-  for (const issue of rows) {
-    const group = groupForRow(nested?.roots.get(issue.id) ?? issue, grouping);
-    const current = groups.get(group.id) ?? { ...group, issues: [] };
-    current.issues.push(issue);
-    groups.set(group.id, current);
-  }
-  if (grouping === "status" && display.showEmptyGroups)
-    for (const state of allStates)
-      if (!groups.has(state.id))
-        groups.set(state.id, {
-          id: state.id,
-          label: state.name,
-          stateType: state.type,
-          state,
-          createContext: { stateId: state.id },
-          issues: [],
-        });
-  let result = [...groups.values()];
-  if (grouping === "status") {
-    const order = new Map(allStates.map((state, index) => [state.id, index]));
-    result.sort(
-      (left, right) => (order.get(left.id) ?? 99) - (order.get(right.id) ?? 99),
-    );
-  } else result.sort((left, right) => left.label.localeCompare(right.label));
-  return display.groupOrder === "desc" ? result.reverse() : result;
-}
-function groupForRow(
-  issue: MyIssuesRowData,
-  grouping: MyIssuesGrouping,
-): Omit<MyIssuesGroupData, "issues"> {
-  if (grouping === "status")
-    return {
-      id: issue.state.id,
-      label: issue.state.name,
-      stateType: issue.state.type,
-      state: issue.state,
-      createContext: { stateId: issue.state.id },
-    };
-  if (grouping === "priority")
-    return {
-      id: `priority-${issue.priority}`,
-      label: PRIORITY_LABELS[issue.priority],
-      createContext: { priority: issue.priority },
-    };
-  if (grouping === "assignee")
-    return {
-      id: issue.assignee?.id ?? "unassigned",
-      label: issue.assignee?.name ?? "No assignee",
-      createContext: { assigneeId: issue.assignee?.id ?? "" },
-    };
-  if (grouping === "label") {
-    const label = issue.labels?.[0];
-    return { id: label?.id ?? "no-label", label: label?.name ?? "No label", createContext: { labelIds: label ? [label.id] : [] } };
-  }
-  return { id: "project", label: issue.project?.name ?? "Project" };
-}
-function projectBoardGroupUpdate(
-  row: MyIssuesRowData,
-  grouping: MyIssuesGrouping,
-  targetGroupId: string,
-  states: Issue["state"][],
-  labels: ProjectDetailProps["labels"],
-): IssueUpdateInput {
-  if (
-    grouping === "status" &&
-    states.some((state) => state.id === targetGroupId)
-  )
-    return { stateId: targetGroupId };
-  if (grouping === "priority" && targetGroupId.startsWith("priority-"))
-    return { priority: Number(targetGroupId.slice("priority-".length)) };
-  if (grouping === "assignee")
-    return { assigneeId: targetGroupId === "unassigned" ? "" : targetGroupId };
-  if (grouping === "label") {
-    if (targetGroupId === "no-label") return { labelIds: [] };
-    return {
-      labelIds: toggleGroupedLabelIds(
-        (row.labels ?? []).map((label) => label.id),
-        targetGroupId,
-        labels,
-      ),
-    };
-  }
-  return {};
-}
-function sortIssues(issues: Issue[], display: MyIssuesDisplayOptions) {
-  return [...issues].sort((left, right) => {
-    if (display.ordering === "priority")
-      return left.priority - right.priority || left.sortOrder - right.sortOrder;
-    if (display.ordering === "importance")
-      return left.sortOrder - right.sortOrder;
-    if (display.ordering === "created")
-      return +new Date(right.createdAt) - +new Date(left.createdAt);
-    return +new Date(right.updatedAt) - +new Date(left.updatedAt);
-  });
-}
 function displaySnapshot(display: MyIssuesDisplayOptions) {
   return { ...display, properties: [...display.properties] };
 }

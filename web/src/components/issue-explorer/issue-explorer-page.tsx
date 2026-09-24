@@ -500,7 +500,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         view={insightsView}
       />}
     </IssueExplorerSurface>
-    <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
+    <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} destructiveActions={['archive', 'delete']} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
   </>
 }
 

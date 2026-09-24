@@ -10,6 +10,7 @@ import { filterValues } from '@/components/my-issues/my-issues-filter-types'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
+import { confirmAction } from '@/components/ui/action-dialog-service'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
   ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
@@ -313,7 +314,7 @@ export function explorerBulkOptions(action: MyIssuesBulkAction, options: Explore
   if (action === 'subscribers') return options.assignee.filter(option => option.id)
 }
 
-export async function executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }: {
+export async function executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }: {
   action: MyIssuesBulkAction
   ids: string[]
   value?: string
@@ -321,7 +322,13 @@ export async function executeExplorerBulkAction({ action, ids, value, data, issu
   issuesById: Map<string, Issue>
   onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>
   onUpdateIssues: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]>
+  onDeleteIssues?: (ids: string[]) => Promise<void>
 }): Promise<Issue[] | void> {
+  if (action === 'archive') return onUpdateIssues(ids, { archived: true })
+  if (action === 'delete') {
+    if (onDeleteIssues && await confirmAction(ids.length === 1 ? `Delete ${issuesById.get(ids[0])?.identifier ?? 'issue'}?` : `Delete ${ids.length} issues?`, { description: 'This cannot be undone.', confirmLabel: 'Delete' })) await onDeleteIssues(ids)
+    return
+  }
   if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
   if (action === 'labels' && value != null) {
     const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
