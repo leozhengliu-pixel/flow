@@ -6,6 +6,7 @@ import { createComment, createRelation, updateIssue } from '@/lib/api'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, Team, WorkflowState } from '@/types/flow'
+import './triage.css'
 
 type TriageAction = 'decline' | 'duplicate' | 'snooze'
 
