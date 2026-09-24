@@ -349,6 +349,8 @@ export interface Issue {
   parentId?: UUID;
   recurrence?: "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
+  /** Triage snooze: hidden from the triage queue until this time. */
+  snoozedUntil?: string;
   subscriberIds: UUID[];
   reactions: Record<string, UUID[]>;
   subIssueIds: UUID[];
@@ -2188,6 +2190,8 @@ export interface IssueUpdateInput {
   archived?: boolean;
   recurrence?: "" | "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
+  /** RFC3339 time, or "" to clear. */
+  snoozedUntil?: string;
   parentId?: string;
   sortOrder?: number;
 }

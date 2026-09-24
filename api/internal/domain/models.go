@@ -434,6 +434,7 @@ type Issue struct {
 	ParentID               *string             `json:"parentId,omitempty"`
 	Recurrence             string              `json:"recurrence,omitempty"`
 	NextOccurrenceAt       *time.Time          `json:"nextOccurrenceAt,omitempty"`
+	SnoozedUntil           *time.Time          `json:"snoozedUntil,omitempty"`
 	SubscriberIDs          []string            `json:"subscriberIds"`
 	Reactions              map[string][]string `json:"reactions"`
 	SubIssueIDs            []string            `json:"subIssueIds"`
@@ -2082,6 +2083,8 @@ type IssueUpdateInput struct {
 	SortOrder               *float64       `json:"sortOrder,omitempty"`
 	Recurrence              *string        `json:"recurrence,omitempty"`
 	NextOccurrenceAt        *string        `json:"nextOccurrenceAt,omitempty"`
+	// SnoozedUntil hides a triage issue until the time passes; "" clears it.
+	SnoozedUntil *string `json:"snoozedUntil,omitempty"`
 }
 
 type IssueLinkInput struct {
