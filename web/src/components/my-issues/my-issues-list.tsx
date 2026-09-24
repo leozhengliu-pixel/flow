@@ -76,6 +76,8 @@ export interface MyIssuesRowData {
   autoClosed?: boolean
   autoClosedAt?: string
   triagedAt?: string
+  /** In the team's triage queue (triage enabled, backlog, never accepted). */
+  triage?: boolean
   templateId?: string
   initiativeIds?: string[]
   projectStatusId?: string
@@ -84,6 +86,8 @@ export interface MyIssuesRowData {
   projectLabelIds?: string[]
   projectLeadId?: string
   projectMilestoneNames?: string[]
+  /** Name of the milestone this issue is in (not the project's first milestone). */
+  milestoneName?: string
   projectMilestoneId?: string
   milestoneProgress?: number
   rawMilestoneDate?: string
@@ -133,7 +137,7 @@ export interface MyIssuesRowData {
   viewMatch?: boolean
 }
 
-export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number }
+export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number; /** Set on sub-groups (display sub-grouping / board rows). */ parentGroupId?: string; parentLabel?: string }
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
@@ -160,6 +164,7 @@ export interface MyIssuesListProps {
 
 type MyIssuesListEntry =
   | { key: string; kind: 'group'; group: MyIssuesGroupData; collapsed: boolean }
+  | { key: string; kind: 'parent'; label: string; count: number }
   | { key: string; kind: 'issue'; issue: MyIssuesRowData; nestedLines: readonly boolean[]; groupEnd: boolean }
 
 const VIRTUALIZATION_THRESHOLD = 80
@@ -171,19 +176,22 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
 }
 
 export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached }: MyIssuesListProps) {
-  const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap(group => {
+  const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
-    if (collapsed) return [header]
+    const parent: MyIssuesListEntry[] = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId ? [{ key: `parent:${group.parentGroupId}`, kind: 'parent', label: group.parentLabel ?? '', count: groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0) }] : []
+    if (collapsed) return [...parent, header]
     const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
-    return [header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
+    return [...parent, header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
   }), [collapsedGroupIds, groups, nestedSubIssues])
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return <MyIssuesListEmpty/>
   let identifierLength = 6
   for (const group of groups) for (const issue of group.issues) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
-  const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'group'
+  const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
+    ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
+    : entry.kind === 'group'
     ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
     : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
@@ -200,10 +208,12 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}
   />
   return <div className={styles.list} role="list" aria-label="Issues" style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}>
-    {groups.map(group => {
+    {groups.map((group, index) => {
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
-      return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
+      const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
+      return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
+        {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
         <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
@@ -211,8 +221,13 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   </div>
 }
 
+/** Top-level header when a sub-grouping is active (Linear renders the primary group above its sub-groups). */
+function MyIssuesParentGroupHeader({ label, count }: { label: string; count: number }) {
+  return <header className={styles.parentGroupHeader}><span data-i18n-ignore className={styles.groupName}>{label}</span><span className={styles.groupCount}>{count}</span></header>
+}
+
 export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
-  return <header className={styles.groupHeader}>
+  return <header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined}>
     <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
     <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
     {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
@@ -271,7 +286,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} label={label}/>)}</span>}/> : null}
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={styles.dueDate}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
-            {displayProperties.has('milestone') && issue.projectMilestoneNames?.[0] ? <span className={styles.dueDate} aria-label={`Milestone ${issue.projectMilestoneNames[0]}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.projectMilestoneNames[0]}</span></span> : null}
+            {displayProperties.has('milestone') && issue.milestoneName ? <span className={styles.dueDate} aria-label={`Milestone ${issue.milestoneName}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.milestoneName}</span></span> : null}
             {displayProperties.has('customers') && issue.customerNames?.length ? <span className={styles.badgeGroup}>{issue.customerNames.map(name => <span className={styles.badge} key={name}><span data-i18n-ignore>{name}</span></span>)}</span> : null}
             {displayProperties.has('customerRevenue') && customerRevenueTotal(issue) > 0 ? <span className={styles.badge} aria-label={`Customer revenue ${formatRowCustomerRevenue(customerRevenueTotal(issue))}`}>{formatRowCustomerRevenue(customerRevenueTotal(issue))}</span> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}

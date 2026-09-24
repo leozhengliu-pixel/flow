@@ -4,7 +4,8 @@ import { ArrowDownUp, Check, ChevronDown, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
-import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesProperty } from './my-issues-surface'
+import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
+import { GROUPING_LABELS, ORDERING_LABELS, defaultOrderDirection } from '@/components/issue-explorer/issue-grouping'
 import styles from './my-issues-display-menu.module.css'
 
 export interface MyIssuesDisplayMenuProps {
@@ -14,23 +15,24 @@ export interface MyIssuesDisplayMenuProps {
   onChange: (options: MyIssuesDisplayOptions) => void
   hiddenProperties?: MyIssuesProperty[]
   availableGroupings?: MyIssuesGrouping[]
+  /** Orderings the backing query can execute (server-paged lists support fewer). */
+  availableOrderings?: MyIssuesOrdering[]
+  /** View toggles this surface can honor (Linear showTriageIssues / showArchivedItems / showSubTeamIssues). */
+  toggles?: ('triage' | 'archived' | 'subTeam')[]
   hideSubGrouping?: boolean
+  /** Footer actions (Linear "Reset to view default" / "Save as default for view"). */
+  onReset?: () => void
+  resetLabel?: string
+  onSaveDefault?: () => void
+  saveDefaultLabel?: string
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
 
-const groupingOptions: { value: MyIssuesGrouping; label: string }[] = [
-  { value: 'none', label: 'No grouping' },
-  { value: 'focus', label: 'Focus' },
-  { value: 'status', label: 'Status' },
-  { value: 'agent', label: 'Agent' },
-  { value: 'project', label: 'Project' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'cycle', label: 'Cycle' },
-  { value: 'label', label: 'Label' },
-  { value: 'team', label: 'Team' },
-  { value: 'customer', label: 'Customer' },
-]
+const GROUPING_ORDER: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'agent', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'parent', 'sla', 'customer', 'release', 'activityDate']
+const groupingOptions: { value: MyIssuesGrouping; label: string }[] = GROUPING_ORDER.map(value => ({ value, label: GROUPING_LABELS[value] }))
+const ORDERING_ORDER: MyIssuesOrdering[] = ['importance', 'title', 'status', 'assignee', 'priority', 'estimate', 'created', 'updated', 'myActivity', 'dueDate', 'linkCount', 'customerCount', 'customerRevenue', 'timeInStatus']
+const orderingOptions: { value: MyIssuesOrdering; label: string }[] = ORDERING_ORDER.map(value => ({ value, label: ORDERING_LABELS[value] }))
 
 const subGroupingOptions = groupingOptions.filter(option => option.value !== 'focus')
 
@@ -66,7 +68,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, hideSubGrouping = false, open, onOpenChange, options, onChange }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
@@ -76,7 +78,9 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
     change({ properties })
   }
   const visibleGroupingOptions = availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions
-  const visibleSubGroupingOptions = availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions
+  const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions).filter(option => option.value === 'none' || option.value !== options.grouping)
+  const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
+  const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
@@ -107,15 +111,33 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             </div>
           </div>
           {!hideSubGrouping && <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={visibleSubGroupingOptions} onChange={subGrouping => change({ subGrouping })} />}
-          <SelectField disabled={options.grouping === 'focus'} label="Ordering" value={options.ordering} options={[{ value: 'importance' as const, label: 'Importance' }, { value: 'priority' as const, label: 'Priority' }, { value: 'created' as const, label: 'Created' }, { value: 'updated' as const, label: 'Updated' }]} onChange={ordering => change({ ordering })} />
+          <div className={styles.groupingControl}>
+            <span className={styles.rowLabel}>{t('Ordering')}</span>
+            <div className={styles.groupingActions}>
+              <button
+                type="button"
+                className={styles.orderButton}
+                disabled={options.grouping === 'focus'}
+                aria-label={`Ordering direction: ${direction === 'asc' ? 'ascending' : 'descending'}`}
+                title={t('Direction')}
+                data-order={direction}
+                onClick={() => change({ orderDirection: direction === 'asc' ? 'desc' : 'asc' })}
+              ><ArrowDownUp size={14} /></button>
+              <SelectControl ariaLabel="Ordering" disabled={options.grouping === 'focus'} value={options.ordering} options={visibleOrderingOptions} onChange={ordering => change({ ordering, orderDirection: undefined })} />
+            </div>
+          </div>
           <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
           <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />
+          {toggles.includes('triage') && <SwitchRow label="Show triage issues" checked={options.showTriageIssues !== false} onChange={showTriageIssues => change({ showTriageIssues })} />}
+          {toggles.includes('archived') && <SwitchRow label="Show archived issues" checked={Boolean(options.showArchived)} onChange={showArchived => change({ showArchived })} />}
+          {toggles.includes('subTeam') && <SwitchRow label="Show sub-team issues" checked={options.showSubTeamIssues !== false} onChange={showSubTeamIssues => change({ showSubTeamIssues })} />}
         </section>
 
         <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
+          {options.layout === 'list' && <SwitchRow label="Show empty groups" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           {options.layout === 'list' && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
           <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
@@ -127,6 +149,10 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
         </section>
+        {(onReset || onSaveDefault) && <footer className={styles.footer}>
+          {onReset && <button type="button" className={styles.footerButton} onClick={onReset}>{t(resetLabel)}</button>}
+          {onSaveDefault && <button type="button" className={`${styles.footerButton} ${styles.footerPrimary}`} onClick={onSaveDefault}>{t(saveDefaultLabel)}</button>}
+        </footer>}
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>

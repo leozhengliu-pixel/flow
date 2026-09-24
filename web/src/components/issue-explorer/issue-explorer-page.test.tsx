@@ -45,6 +45,9 @@ describe('complete issue grouping', () => {
     await waitFor(() => expect(screen.getByText('In progress').closest('header')).toHaveTextContent('230'))
     expect(container.querySelectorAll('a[href*="/issue/"]').length).toBeLessThan(80)
     fireEvent.click(screen.getByRole('button', { name: 'Group by priority' }))
+    // Priority groups follow Linear order: Urgent before High.
+    await waitFor(() => expect(screen.getByText('Urgent').closest('header')).toHaveTextContent('160'))
+    fireEvent.click(within(screen.getByText('Urgent').closest('header')!).getByRole('button', { name: 'Collapse group' }))
     await waitFor(() => expect(screen.getByText('High').closest('header')).toHaveTextContent('230'))
   })
 

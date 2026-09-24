@@ -37,24 +37,8 @@ export function LabelPageToolbar({
 }: LabelPageToolbarProps) {
   const { t } = useI18n()
   const [searchOpen, setSearchOpen] = useState(Boolean(search))
-  const favorite = Boolean(findFavorite(data.favorites, data.viewer.id, 'label', label.id) || label.favorite)
   const showArchived = Boolean(label.archivedAt)
   const enableTriageOption = resourceType === 'issue' && triageOptionAvailable(data)
-
-  const archive = async () => {
-    const next = showArchived ? '' : new Date().toISOString()
-    const teamId = label.scope && label.scope !== 'Workspace' ? label.scope : undefined
-    const archivedAt = next // '' clears archive on REST
-    if (teamId && data.teams.some((team) => team.id === teamId || team.key === teamId)) {
-      const team = data.teams.find((item) => item.id === teamId || item.key === teamId)
-      if (team) await updateTeamLabel(team.id, label.id, { archivedAt })
-      else await updateWorkspaceLabel(label.id, { archivedAt })
-    } else {
-      await updateWorkspaceLabel(label.id, { archivedAt })
-    }
-    await onReload?.()
-    if (!showArchived) onArchived?.()
-  }
 
   return (
     <div className="label-page-toolbar">
@@ -102,6 +86,34 @@ export function LabelPageToolbar({
             {t('Triage')}
           </button>
         )}
+        <LabelActions data={data} label={label} onReload={onReload} onArchived={onArchived} />
+      </div>
+    </div>
+  )
+}
+
+
+/** Favorite + options for a label page; also used as the header actions of the label issue view. */
+export function LabelActions({ data, label, onReload, onArchived }: { data: BootstrapData; label: IssueLabel; onReload?: () => Promise<void> | void; onArchived?: () => void }) {
+  const { t } = useI18n()
+  const favorite = Boolean(findFavorite(data.favorites, data.viewer.id, 'label', label.id) || label.favorite)
+  const showArchived = Boolean(label.archivedAt)
+  const archive = async () => {
+    const next = showArchived ? '' : new Date().toISOString()
+    const teamId = label.scope && label.scope !== 'Workspace' ? label.scope : undefined
+    const archivedAt = next // '' clears archive on REST
+    if (teamId && data.teams.some((team) => team.id === teamId || team.key === teamId)) {
+      const team = data.teams.find((item) => item.id === teamId || item.key === teamId)
+      if (team) await updateTeamLabel(team.id, label.id, { archivedAt })
+      else await updateWorkspaceLabel(label.id, { archivedAt })
+    } else {
+      await updateWorkspaceLabel(label.id, { archivedAt })
+    }
+    await onReload?.()
+    if (!showArchived) onArchived?.()
+  }
+
+  return <>
         <button
           aria-label={favorite ? t('Remove from favorites') : t('Add to favorites')}
           aria-pressed={favorite}
@@ -136,9 +148,7 @@ export function LabelPageToolbar({
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
-      </div>
-    </div>
-  )
+  </>
 }
 
 export function triageOptionAvailable(data: BootstrapData) {

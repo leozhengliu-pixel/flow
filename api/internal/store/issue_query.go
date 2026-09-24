@@ -610,10 +610,13 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
 	column := "sort_order"
+	expression := ""
 	switch query.Sort {
 	case "", "sortOrder":
 	case "priority":
+		// Linear orders "No priority" (0) after Low (4).
 		column = "priority"
+		expression = "(CASE WHEN i.priority=0 THEN 5 ELSE i.priority END)"
 	case "createdAt":
 		column = "created_at"
 	case "updatedAt":
@@ -622,6 +625,9 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		column = "title"
 	default:
 		return page, ErrIssueQuery
+	}
+	if expression == "" {
+		expression = "i." + column
 	}
 	direction := "ASC"
 	if query.Direction == "desc" {
@@ -668,7 +674,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		if direction == "DESC" {
 			operator = "<"
 		}
-		where += " AND (i." + column + operator + "? OR (i." + column + "=? AND i.id" + operator + "?))"
+		where += " AND (" + expression + operator + "? OR (" + expression + "=? AND i.id" + operator + "?))"
 		args = append(args, value, value, cursor.ID)
 	}
 	payload := "i.data"
@@ -679,7 +685,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	if query.Summary && query.IncludeDescription {
 		descriptionColumn = "COALESCE(" + s.jsonText("i.data", "description") + ", '')"
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+",i."+column+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY i."+column+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+","+expression+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY "+expression+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return page, err
 	}

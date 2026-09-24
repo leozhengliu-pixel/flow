@@ -39,3 +39,6 @@
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}
 .checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .rowDate{display:flex;align-items:center;justify-content:center;gap:4px}.rowDate svg{flex:0 0 12px}
+/* Sub-grouping: primary header sits above indented sub-group headers. */
+.parentGroupHeader{height:32px;margin:6px 8px 2px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--theme-text-primary)}
+.groupHeader[data-subgroup]{margin-left:24px}
