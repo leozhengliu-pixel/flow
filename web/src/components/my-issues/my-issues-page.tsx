@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { IssueRowActionsProvider } from './issue-row-actions'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -10,11 +12,10 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, t
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
-import { applyExplorerFilters, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
-import { setGroupedLabelSelected } from '@/lib/labels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { fetchIssueRecord } from '@/lib/api'
 import { toast } from 'sonner'
@@ -32,6 +33,8 @@ export interface MyIssuesPageProps {
   onNavigateView?: (view: MyIssuesView, href: string) => void
   onOpenIssue: (issue: Issue, sequence?: string[]) => void
   onOpenSidebar?: () => void
+  /** Full issue view for the split layout / preview pane. */
+  renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
   onPersistDisplay?: (view: MyIssuesView, options: MyIssuesDisplayOptions) => Promise<void>
   onPersistFilters?: (view: MyIssuesView, filters: MyIssuesAppliedFilter[]) => Promise<void>
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
@@ -40,7 +43,7 @@ export interface MyIssuesPageProps {
 
 const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
-export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
+export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
@@ -60,19 +63,25 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
+  const groupingContext = useMemo(() => ({ data }), [data])
   const controller = useMyIssuesController({
     drillRows,
     workspaceSlug,
     initialView,
     initialGroups,
     initialDisplay: defaultMyIssuesDisplayOptions,
+    groupingContext,
     adapter: {
       navigate: href => onNavigateView?.(viewFromHref(href), href),
       persistDisplay: (view, options) => onPersistDisplay?.(view, options) ?? Promise.resolve(),
       persistFilters: onPersistFilters,
-      executeBulk: async (action, ids, value) => (await executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
+      executeBulk: async (action, ids, value) => (await executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
     },
   })
+  const myIssuesPagedQuery = useMemo(() => {
+    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(controller.display)
+    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+  }, [controller.display, controller.filters, data.viewer.id, projectedView])
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
     const fieldLabel = FILTER_LABELS[field]
@@ -148,17 +157,36 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
   const displayedGroups = controller.visibleGroups
-  const boardGroups = useMemo(() => myIssuesBoardGroups(displayedGroups, controller.display, data), [controller.display, displayedGroups, data])
+  // Empty status columns come from the shared grouping engine (showEmptyGroups).
+  const boardGroups = displayedGroups
   const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
-  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
-  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
+  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity',shared:'Shared with me'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const split = controller.display.layout === 'split'
+  const splitRowIds = useMemo(() => data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : displayedGroups.flatMap(group => group.issues.map(issue => issue.id)), [data.issueCollectionPaged, displayedGroups, pagedIssues])
+  useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
+  useEffect(() => {
+    if (!split) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true],[role=textbox],[role=dialog]'))) return
+      const key = event.key.toLowerCase()
+      const step = key === 'j' || key === 'arrowdown' ? 1 : key === 'k' || key === 'arrowup' ? -1 : 0
+      if (!step) return
+      event.preventDefault()
+      const next = splitRowIds[Math.max(0, Math.min(splitRowIds.length - 1, splitRowIds.indexOf(previewIssueId ?? '') + step))]
+      if (next) setPreviewIssueId(next)
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [previewIssueId, split, splitRowIds])
+  const splitProperties = useMemo(() => new Set([...controller.display.properties].filter(property => property === 'id' || property === 'status' || property === 'priority' || property === 'assignee')), [controller.display.properties])
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
   const previewRow = previewIssue ? toRow(previewIssue, workspaceSlug, data, issueMatchesView(previewIssue, data, projectedView)) : undefined
   const openRow = (row: MyIssuesRowData) => {
     const sequence = boundedIssueSequence(displayedGroups.find(group => group.issues.some(issue => issue.id === row.id))?.issues.map(issue => issue.id) ?? [row.id], row.id)
     const issue = issuesById.get(row.id)
-    if (controller.detailsOpen) {
+    if (controller.detailsOpen || split) {
       setPreviewIssueId(row.id)
       return
     }
@@ -166,12 +194,20 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
   }
 
-  return <>
+  return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue) }}>
     <MyIssuesSurface
       activeView={controller.view}
       detailsOpen={controller.detailsOpen}
       insightsOpen={insightsOpen}
       displayOptions={controller.display}
+      displayMenuProps={{
+        availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+        availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
+        toggles: ['triage'],
+        groups: groupSummaries(displayedGroups),
+        onReset: () => controller.changeDisplay(defaultMyIssuesDisplayOptions),
+        resetLabel: 'Reset to default',
+      }}
       filterOpenSignal={filterOpenSignal}
       filters={controller.filters}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
@@ -197,23 +233,24 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       />}
     >
       <IssuesSplitLayout
-        detailsOpen={controller.detailsOpen}
+        detailsOpen={controller.detailsOpen || split}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         onLoadedIssuesChange={setPagedIssues}
-        layout={controller.display.layout}
+        layout={controller.display.layout === 'board' ? 'board' : 'list'}
         hiddenGroupIds={controller.display.hiddenGroupIds}
         onHideGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...controller.display.hiddenGroupIds, id] })}
         onShowGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(value => value !== id) })}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
-        query={{ archived: 'false', groupBy: controller.display.grouping === 'focus' ? 'status' : controller.display.grouping, sort: controller.display.ordering === 'created' ? 'createdAt' : controller.display.ordering === 'updated' ? 'updatedAt' : controller.display.ordering === 'priority' ? 'priority' : 'sortOrder', direction: controller.display.ordering === 'created' || controller.display.ordering === 'updated' ? 'desc' : 'asc', filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }}
+        query={myIssuesPagedQuery}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={controller.display.properties}
+        displayProperties={split || (controller.detailsOpen && previewIssueId) ? splitProperties : controller.display.properties}
         propertyOptions={rowOptions}
         selectedIds={controller.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         mutationErrors={mutationErrors}
-        onOpenIssueRecord={onOpenIssue}
+        onOpenIssueRecord={split ? issue => setPreviewIssueId(issue.id) : onOpenIssue}
         onCreateIssue={group => onCreateIssue?.(group.createContext)}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onPropertyChange={changeProperty}
@@ -233,12 +270,13 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onPropertyChange={changeProperty}
         onSelectIssue={controller.selectIssue}
       /> : <MyIssuesList
-        groups={displayedGroups}
+        groups={displayedGroups.filter(group => !controller.display.hiddenGroupIds.includes(group.id) && !controller.display.hiddenGroupIds.includes(group.parentGroupId ?? ''))}
         loading={loading}
         error={error}
         selectedIds={controller.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={controller.display.properties}
+        displayProperties={split || (controller.detailsOpen && previewIssueId) ? splitProperties : controller.display.properties}
         nestedSubIssues={controller.display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
@@ -257,6 +295,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
             workspaceSlug={workspaceSlug}
             origin={{ type: 'myIssues', view: controller.view }}
             selectedIssue={previewRow}
+            preview={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
             summary={previewRow ? undefined : controller.summary}
             onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else controller.setDetailsOpen(false) }}
             onSummaryItemSelect={summaryFilter}
@@ -291,8 +330,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         }}
       />}
     </MyIssuesSurface>
-    <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
-  </>
+    <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} destructiveActions={['archive', 'delete']} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
+  </IssueRowActionsProvider>
 }
 
 function issuesForView(data: BootstrapData, view: MyIssuesView, includeArchived = false) {
@@ -304,7 +343,15 @@ function issueMatchesView(issue: Issue, data: BootstrapData, view: MyIssuesView)
   if (view === 'created') return issue.creator.id === data.viewer.id
   if (view === 'subscribed') return issue.subscriberIds.includes(data.viewer.id)
   if (view === 'activity') return Boolean(data.activities[issue.id]?.some(activity => activity.actor.id === data.viewer.id))
+  if (view === 'shared') return isSharedWithViewer(issue, data)
   return issue.assignee?.id === data.viewer.id
+}
+
+/** Linear "Shared with me": issues granted to the viewer directly, or visible only through a share. */
+function isSharedWithViewer(issue: Issue, data: BootstrapData) {
+  if (issue.permissions?.some(permission => permission.subjectType === 'user' && permission.subjectId === data.viewer.id)) return true
+  const memberOf = data.teamMembers.some(member => member.teamId === issue.team.id && member.userId === data.viewer.id)
+  return !memberOf && Boolean(issue.permissions?.length) && data.teams.find(team => team.id === issue.team.id)?.private === true
 }
 
 function issuesWithHierarchyContext(primary: Issue[], issues: Issue[]) {
@@ -325,17 +372,6 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
   return [...groups.values()]
 }
 
-function myIssuesBoardGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions, data: BootstrapData) {
-  if (display.layout !== 'board' || !display.showEmptyGroups || display.grouping !== 'status') return groups
-  const byId = new Map(groups.map(group => [group.id, group]))
-  for (const state of data.states) {
-    if (!byId.has(state.id)) byId.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, createContext: { stateId: state.id }, issues: [] })
-  }
-  const order = new Map(data.states.map((state, index) => [state.id, index]))
-  const sorted = [...byId.values()].sort((left, right) => (order.get(left.id) ?? 99) - (order.get(right.id) ?? 99))
-  return display.groupOrder === 'desc' ? sorted.reverse() : sorted
-}
-
 function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData, viewMatch = true): MyIssuesRowData {
   const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined
   return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), viewMatch, sla:sla?{...sla,ruleName:rule?.name}:undefined }
@@ -349,19 +385,6 @@ function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof expl
   if (action === 'labels') return options.labels
   if (action === 'dueDate') return dueDateOptions()
   if (action === 'subscribers') return options.assignee.filter(option => option.id)
-}
-
-async function executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }: { action: MyIssuesBulkAction; ids: string[]; value?: string; data: BootstrapData; issuesById: Map<string, Issue>; onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>; onUpdateIssues: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]> }): Promise<Issue[] | void> {
-  if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
-  if (action === 'labels' && value != null) {
-    const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
-    return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: setGroupedLabelSelected(issue.labels.map(label => label.id), value, data.labels, selected) }) }))
-  }
-  if (action === 'subscribers' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { subscriberIds: issue.subscriberIds.includes(value) ? issue.subscriberIds : [...issue.subscriberIds, value] }) }))
-  if (action === 'removeSubscribers') return Promise.all(ids.map(id => onUpdateIssue(id, { subscriberIds: [] })))
-  if (action === 'unassignMe') return onUpdateIssues(ids, { assigneeId: '' })
-  const update = updateForAction(action, value)
-  if (update) return onUpdateIssues(ids, update)
 }
 
 function updateForAction(action: MyIssuesBulkAction | MyIssuesContextAction, value?: string): IssueUpdateInput | undefined {
@@ -404,7 +427,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
 function replaceRow(groups: MyIssuesGroupData[], row: MyIssuesRowData) { return groups.map(group => ({ ...group, issues: group.issues.map(issue => issue.id === row.id ? row : issue) })) }
 function reorderMyIssuesGroups(groups: MyIssuesGroupData[], row: MyIssuesRowData, grouping: MyIssuesDisplayOptions['grouping'], targetGroupId: string, targetIndex: number) {
   const replaced = groups.map(group => ({ ...group, issues: group.issues.filter(issue => issue.id !== row.id) }))
-  const target = replaced.find(group => group.id === targetGroupId || (grouping === 'focus' && targetGroupId === 'other-active' && group.id === 'other-active'))
+  const target = replaced.find(group => group.id === targetGroupId || false)
   if (target) {
     const issues = [...target.issues]
     issues.splice(Math.max(0, Math.min(targetIndex, issues.length)), 0, row)
@@ -418,29 +441,13 @@ function withoutKey(map: Map<string, string>, key: string) { const next = new Ma
 function withKey(map: Map<string, string>, key: string, value: string) { const next = new Map(map); next.set(key, value); return next }
 function readInsights(key:string):Record<string,unknown>{try{const value=JSON.parse(localStorage.getItem(key)??'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return {}}}
 
-async function copyIssues(action: MyIssuesBulkAction, ids: string[], issuesById: Map<string, Issue>, workspaceSlug: string) {
-  const issues = ids.map(id => issuesById.get(id)).filter(Boolean) as Issue[]
-  const lines = issues.map(issue => {
-    const url = issueUrl(workspaceSlug, issue.identifier)
-    if (action === 'copyId') return issue.identifier
-    if (action === 'copyUrl') return url
-    if (action === 'copyTitle') return issue.title
-    if (action === 'copyTitleLink') return `[${issue.title}](${url})`
-    if (action === 'copyDescriptionMarkdown') return issue.description
-    if (action === 'copyBranch') return `${issue.identifier.toLowerCase()}-${slug(issue.title)}`
-    if (action === 'copyPrompt') return `${issue.identifier}: ${issue.title}\n\n${issue.description}`
-    return `# ${issue.identifier}: ${issue.title}\n\n${issue.description}\n\n${url}`
-  })
-  await navigator.clipboard.writeText(lines.join('\n\n'))
-}
 
 function dueDateOptions(): MyIssuesBulkActionOption[] {
   const date = new Date(), day = 86_400_000
   return [{ id: '', label: 'No due date' }, { id: isoDate(date), label: 'Today' }, { id: isoDate(new Date(date.getTime() + day)), label: 'Tomorrow' }, { id: isoDate(new Date(date.getTime() + day * 7)), label: 'In one week' }]
 }
-function stateIdForGroup(group: MyIssuesGroupData, data: BootstrapData) { return group.id === 'other-active' ? data.states.find(state => state.type === 'started')?.id : group.id }
+function stateIdForGroup(group: MyIssuesGroupData, data: BootstrapData) { return group.createContext?.stateId ?? (group.id === 'focus-active' ? data.states.find(state => state.type === 'started')?.id : data.states.find(state => state.id === group.id)?.id) }
 function viewFromHref(href: string): MyIssuesView { return (href.split('/').at(-1) as MyIssuesView) ?? 'assigned' }
 function issueUrl(workspaceSlug: string, identifier: string) { return `${location.origin}/${workspaceSlug}/issue/${identifier}` }
 function clampPriority(value: number): 0 | 1 | 2 | 3 | 4 { return Math.max(0, Math.min(4, value)) as 0 | 1 | 2 | 3 | 4 }
 function isoDate(date: Date) { return date.toISOString().slice(0, 10) }
-function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) }

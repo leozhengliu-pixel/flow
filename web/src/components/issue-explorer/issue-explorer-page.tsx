@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
 import { boundedIssueSequence } from '@/lib/navigation-context'
@@ -14,7 +15,7 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, M
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
 import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { PagedIssueList } from './paged-issue-list'
-import { fetchIssueRecord } from '@/lib/api'
+import { fetchIssueRecord, updateStructuredTeamSettings } from '@/lib/api'
 import { toast } from 'sonner'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
@@ -31,6 +32,7 @@ import {
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
@@ -39,6 +41,18 @@ export interface IssueExplorerPageProps {
   initialInsightFilters?: { teamIds?: string[]; stateIds?: string[]; assigneeIds?: string[]; labelIds?: string[] }
   scope: { kind: 'team'; team: Team } | { kind: 'workspace' }
   view: TeamIssuesRouteView
+  /** `/team/:key/board`: the same view with its own board-layout preferences. */
+  boardRoute?: boolean
+  /** Overrides the localStorage preference scope (label pages, member profiles…). */
+  preferenceScope?: string
+  /** Titled header for resource-scoped issue views. */
+  resourceHeader?: { icon?: ReactNode; title: ReactNode; actions?: ReactNode; tabs?: { id: string; label: string; href: string; active: boolean; onSelect: () => void }[] }
+  /** Extra row predicate applied before filters (for example issues of one member). */
+  scopeFilter?: (issue: Issue) => boolean
+  /** Server query equivalent of `scopeFilter` for paged workspaces. */
+  scopeConditions?: Record<string, unknown>[]
+  /** Surface defaults on top of the team-view defaults (for example member profiles show triage issues). */
+  defaultDisplayOverrides?: Partial<MyIssuesDisplayOptions>
   viewHref: (view: TeamIssuesRouteView) => string
   savedView?: SavedView
   duplicateFrom?: SavedView
@@ -69,12 +83,16 @@ export interface IssueExplorerPageProps {
   onDeleteIssues: (issueIds: string[]) => Promise<void>
 }
 
-export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
-  const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${storageScope}:${view}`
+  const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${preferenceScope ?? storageScope}:${boardRoute ? 'board' : view}`
   const sourceView = savedView ?? duplicateFrom
   const [filters, setFilters] = useState<MyIssuesAppliedFilter[]>(() => sourceView ? filtersFromSavedView(sourceView) : initialInsightFilters ? insightPropertyFilters(data, initialInsightFilters) : initialPropertyFilters(data, initialLabelId, initialStatusId) ?? readFilters(`${preferencesKey}:filters`))
-  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => sourceView ? displayFromSavedView(sourceView, view) : readDisplay(`${preferencesKey}:display`, view))
+  // Saved views keep a personal display layer on top of the view default (Linear "Reset to view default").
+  const teamViewKey = boardRoute ? 'board' : view
+  const [teamDefault, setTeamDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined)
+  const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
+  const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
   const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [drillRows, setDrillRows] = useState<MyIssuesRowData[]>()
@@ -101,8 +119,9 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
 
   useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
 
-  const scopeTeamIds = useMemo(() => scope.kind === 'team' ? teamHierarchy(data.teams, data.teamSettings).subtree(scope.team.id) : undefined, [data.teams, data.teamSettings, scope])
-  const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, false, scopeTeamIds), initialInsightFilters?.teamIds), [data.issues, initialInsightFilters?.teamIds, scope, scopeTeamIds, view])
+  const showSubTeams = display.showSubTeamIssues !== false
+  const scopeTeamIds = useMemo(() => scope.kind === 'team' ? (showSubTeams ? teamHierarchy(data.teams, data.teamSettings).subtree(scope.team.id) : new Set([scope.team.id])) : undefined, [data.teams, data.teamSettings, scope, showSubTeams])
+  const scopedIssues = useMemo(() => filterInsightTeams(issuesForScope(data.issues, scope, view, Boolean(display.showArchived), scopeTeamIds), initialInsightFilters?.teamIds).filter(issue => !scopeFilter || scopeFilter(issue)), [data.issues, display.showArchived, initialInsightFilters?.teamIds, scope, scopeFilter, scopeTeamIds, view])
   const insightIssues = useMemo(() => insightsOpen ? filterInsightTeams(issuesForScope(data.issues, scope, view, true, scopeTeamIds), initialInsightFilters?.teamIds) : [], [data.issues, initialInsightFilters?.teamIds, insightsOpen, scope, scopeTeamIds, view])
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
@@ -115,17 +134,17 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const activeInsightRows = useMemo(() => insightRows.filter(row => !row.archivedAt), [insightRows])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
   const pagedQuery = useMemo(() => {
-    const conditions: Record<string, unknown>[] = []
+    const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
+    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
-    if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' })
-    if (display.completedWindow === 'none') conditions.push({ field: 'status', operator: 'notIn', values: ['completed', 'canceled'] })
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams: scope.kind === 'team', archived: 'false' as const, groupBy: display.grouping === 'focus' ? 'status' : display.grouping, sort: (display.ordering === 'created' ? 'createdAt' : display.ordering === 'updated' ? 'updatedAt' : display.ordering === 'priority' ? 'priority' : 'sortOrder') as 'priority'|'createdAt'|'updatedAt'|'sortOrder', direction: (display.ordering === 'created' || display.ordering === 'updated' ? 'desc' : 'asc') as 'asc'|'desc', filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } }
-  }, [display.grouping, display.ordering, display.showSubIssues, display.completedWindow, filters, initialInsightFilters?.teamIds, scope, view])
+    const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, { data }), ...conditions, ...(scopeConditions ?? [])] } }
+  }, [data, display, filters, initialInsightFilters?.teamIds, scope, scopeConditions, view])
   const insightQuery = useMemo(() => ({
     teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
     includeSubTeams: scope.kind === 'team',
-    filter: { and: [issueFiltersToQueryAst(filters), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
+    filter: { and: [issueFiltersToQueryAst(filters, { data }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
   }), [filters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   useActionGroupsForSelection(['Issues', 'Projects'])
@@ -147,10 +166,31 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     if (!savedView || hydratedSavedViewId.current === savedView.id) return
     hydratedSavedViewId.current = savedView.id
     setFilters(filtersFromSavedView(savedView))
-    setDisplay(displayFromSavedView(savedView, savedView.view))
+    setDisplay(readPersonalDisplay(`${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display`, savedView, savedView.view))
   }, [savedView])
 
-  useEffect(() => { if (!detailsOpen) setPreviewIssueId(undefined) }, [detailsOpen])
+  const split = display.layout === 'split'
+  useEffect(() => { if (!detailsOpen && !split) setPreviewIssueId(undefined) }, [detailsOpen, split])
+  // Split layout (Linear `split`: narrow list beside the selected issue) always has a selection.
+  const flatRowIds = useMemo(() => groups.flatMap(group => group.issues.map(issue => issue.id)), [groups])
+  const splitRowIds = data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : flatRowIds
+  useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
+  useEffect(() => {
+    if (!split) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true],[role=textbox],[role=dialog]'))) return
+      const key = event.key.toLowerCase()
+      const step = key === 'j' || key === 'arrowdown' ? 1 : key === 'k' || key === 'arrowup' ? -1 : 0
+      if (!step) return
+      event.preventDefault()
+      const index = splitRowIds.indexOf(previewIssueId ?? '')
+      const next = splitRowIds[Math.max(0, Math.min(splitRowIds.length - 1, index + step))]
+      if (next) setPreviewIssueId(next)
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [previewIssueId, split, splitRowIds])
+  const splitProperties = useMemo(() => new Set([...display.properties].filter(property => property === 'id' || property === 'status' || property === 'priority' || property === 'assignee')), [display.properties])
 
   useEffect(() => {
     if (creatingView) setViewEditor('create')
@@ -169,15 +209,42 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   const persistFilters = (next: MyIssuesAppliedFilter[]) => { setFilters(next); writeValue(`${preferencesKey}:filters`, JSON.stringify(next)) }
   const changeDisplay = (next: MyIssuesDisplayOptions) => {
     setDisplay(next)
-    writeValue(`${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] }))
-    if (savedView && onUpdateSavedView) void onUpdateSavedView(savedView.id, { resource: 'issues', scope: savedView.scope, teamId: savedView.teamId, ownerId: savedView.ownerId, view: savedView.view, filters, display: displaySnapshot(next) }).catch(() => undefined)
+    // Never write through to a shared saved view; "Save as default for view" does that explicitly.
+    writeValue(personalViewKey ?? `${preferencesKey}:display`, JSON.stringify({ ...next, properties: [...next.properties] }))
+  }
+  const resetDisplay = () => {
+    const next = savedView ? displayFromSavedView(savedView, savedView.view) : withTeamDefault({ ...defaultDisplay(view, defaultDisplayOverrides), ...(boardRoute ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault)
+    setDisplay(next)
+    removeValue(personalViewKey ?? `${preferencesKey}:display`)
+  }
+  const saveDisplayAsViewDefault = savedView && onUpdateSavedView ? () => {
+    void onUpdateSavedView(savedView.id, { resource: 'issues', scope: savedView.scope, teamId: savedView.teamId, ownerId: savedView.ownerId, view: savedView.view, filters: filtersFromSavedView(savedView), display: displaySnapshot(display) })
+      .then(() => { if (personalViewKey) removeValue(personalViewKey); toast.success('Saved as default for view') })
+      .catch(() => toast.error('Could not save view default'))
+  } : scope.kind === 'team' ? () => {
+    const snapshot = displaySnapshot(display)
+    void updateStructuredTeamSettings(scope.team.id, { issueViewDefaults: { [teamViewKey]: snapshot } })
+      .then(() => { setTeamDefault(snapshot); removeValue(`${preferencesKey}:display`); toast.success(`Saved as ${scope.team.name} default`) })
+      .catch(() => toast.error('Could not save team default'))
+  } : undefined
+  const menuGroups = groupSummaries(groups)
+  const listGroups = groups.filter(group => !display.hiddenGroupIds.includes(group.id) && !display.hiddenGroupIds.includes(group.parentGroupId ?? ''))
+  const displayMenuProps = {
+    groups: menuGroups,
+    availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+    availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
+    toggles: (scope.kind === 'team' ? ['triage', 'archived', 'subTeam'] : ['triage', 'archived']) as ('triage' | 'archived' | 'subTeam')[],
+    onReset: resetDisplay,
+    resetLabel: savedView ? 'Reset to view default' : teamDefault ? 'Reset to team default' : 'Reset to default',
+    onSaveDefault: saveDisplayAsViewDefault,
+    saveDefaultLabel: savedView ? 'Save as default for view' : 'Save as team default',
   }
   const changeDetails = (open: boolean) => { setDetailsOpen(open); if (open) setInsightsOpen(false); writeValue(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, String(open)) }
   const changeInsights = (open: boolean) => { setInsightsOpen(open); if (open) { setDetailsOpen(false); setPreviewIssueId(undefined) } }
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
     const issue = issuesById.get(row.id)
     if (!issue) { void fetchIssueRecord(row.id, undefined, data.workspace.urlKey).then(issue => onOpenIssue(issue, boundedIssueSequence(rows.map(row => row.id), issue.id))).catch(() => toast.error('Could not load issue')); return }
-    if (detailsOpen) setPreviewIssueId(issue.id)
+    if (detailsOpen || split) setPreviewIssueId(issue.id)
     else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
   }
   const splitOrigin = savedView
@@ -221,7 +288,9 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
   }
   const contextAction = async (row: MyIssuesRowData, action: MyIssuesContextAction) => {
     if (action === 'delete') { if (await confirmAction(`Delete ${row.identifier}?`,{description:'This cannot be undone.',confirmLabel:'Delete'})) await onDeleteIssues([row.id]); return }
-    if (action === 'copy') { await navigator.clipboard.writeText(`${location.origin}${row.href}`); return }
+    if (action === 'copy' || action === 'copyUrl') { await navigator.clipboard.writeText(`${location.origin}${row.href}`); return }
+    if (action === 'copyId') { await navigator.clipboard.writeText(row.identifier); return }
+    if (action === 'copyTitle') { await navigator.clipboard.writeText(row.title); return }
     const update = explorerUpdateForAction(action)
     if (update) await updateOne(row, update)
   }
@@ -281,7 +350,8 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
     onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
   />
 
-  return <>
+  const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue) }
+  return <IssueRowActionsProvider value={rowActions}>
     <IssueExplorerSurface
       scopeName={scope.kind === 'team' ? scope.team.name : data.workspace.name}
       scopeTeam={scope.kind === 'team' ? scope.team : undefined}
@@ -311,6 +381,8 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       onToggleFavorite={() => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
       viewActions={savedViewMenu}
       onOpenSidebar={onOpenSidebar}
+      displayMenuProps={displayMenuProps}
+      resourceHeader={resourceHeader}
       viewEditor={viewEditor && (viewEditor === 'edit' && savedView ? <EditCustomViewHeader
         orgKey={data.workspace.urlKey}
         viewId={savedView.id}
@@ -342,12 +414,12 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
       </>}
     >
       <IssuesSplitLayout
-        detailsOpen={detailsOpen && !insightsOpen}
+        detailsOpen={(detailsOpen || split) && !insightsOpen}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         query={pagedQuery}
-        layout={display.layout}
+        layout={display.layout === 'board' ? 'board' : 'list'}
         hiddenGroupIds={display.hiddenGroupIds}
         onHideGroup={id => changeDisplay({ ...display, hiddenGroupIds: [...display.hiddenGroupIds, id] })}
         onShowGroup={id => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(value => value !== id) })}
@@ -355,21 +427,23 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         onTotalChange={setPagedTotal}
         onLoadedIssuesChange={setPagedIssues}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={display.properties}
+        displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         propertyOptions={rowOptions}
         selectedIds={selection.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         mutationErrors={mutationErrors}
-        onOpenIssueRecord={onOpenIssue}
+        onOpenIssueRecord={split ? issue => setPreviewIssueId(issue.id) : onOpenIssue}
         onCreateIssue={group => onCreateIssue?.(scope.kind === 'team' ? { ...group.createContext, teamId: scope.team.id } : group.createContext)}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onPropertyChange={changeProperty}
         onSelectIssue={selection.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
-      /> : display.layout === 'list' ? <MyIssuesList
-        groups={groups}
+      /> : display.layout !== 'board' ? <MyIssuesList
+        groups={listGroups}
         selectedIds={selection.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={display.properties}
+        displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
@@ -467,8 +541,8 @@ export function IssueExplorerPage({ data, initialLabelId, initialStatusId, initi
         view={insightsView}
       />}
     </IssueExplorerSurface>
-    <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
-  </>
+    <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} destructiveActions={['archive', 'delete']} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
+  </IssueRowActionsProvider>
 }
 
 function exportIssuesCsv(rows: MyIssuesRowData[], name: string) {
@@ -496,7 +570,8 @@ function deriveSummary(groups: MyIssuesGroupData[]): MyIssuesDetailsSummary {
   }
 }
 function countItems(items: Omit<MyIssuesSummaryItem, 'count'>[]) { const values = new Map<string, MyIssuesSummaryItem>(); for (const item of items) values.set(item.id, { ...item, count: (values.get(item.id)?.count ?? 0) + 1 }); return [...values.values()].sort((a, b) => b.count - a.count) }
-function defaultDisplay(view: TeamIssuesRouteView): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', properties: new Set(defaultMyIssuesDisplayOptions.properties) } }
+/** Linear defaults: team/workspace/custom views hide triage issues (they live in Triage). */
+function defaultDisplay(view: TeamIssuesRouteView, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { return { ...defaultMyIssuesDisplayOptions, grouping: 'status', completedWindow: view === 'all' ? 'all' : 'none', showTriageIssues: false, properties: new Set(defaultMyIssuesDisplayOptions.properties), ...overrides } }
 function initialPropertyFilters(data: BootstrapData, labelId?: string, statusId?: string): MyIssuesAppliedFilter[] | undefined {
   const filters: MyIssuesAppliedFilter[] = []
   const label = data.labels.find(item => item.id === labelId)
@@ -519,14 +594,23 @@ function insightPropertyFilters(data: BootstrapData, filters: NonNullable<IssueE
 }
 function filterInsightTeams(issues: Issue[], teamIds?: string[]) { return teamIds?.length ? issues.filter(issue=>teamIds.includes(issue.team.id)) : issues }
 function readFilters(key: string): MyIssuesAppliedFilter[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
-function readDisplay(key: string, view: TeamIssuesRouteView): MyIssuesDisplayOptions { const fallback = defaultDisplay(view); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
+function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view, overrides), ...(board ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }
 function writeValue(key: string, value: string) { try { localStorage.setItem(key, value) } catch { /* Preferences are best-effort. */ } }
+function removeValue(key: string) { try { localStorage.removeItem(key) } catch { /* Preferences are best-effort. */ } }
+function readPersonalDisplay(key: string, view: SavedView, routeView: TeamIssuesRouteView): MyIssuesDisplayOptions {
+  const fallback = displayFromSavedView(view, routeView)
+  try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback }
+}
 function readOrder(key: string): string[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : [] } catch { return [] } }
 function filtersFromSavedView(view: SavedView): MyIssuesAppliedFilter[] { return Array.isArray(view.filters) ? view.filters as MyIssuesAppliedFilter[] : [] }
 function displayFromSavedView(view: SavedView, routeView: TeamIssuesRouteView): MyIssuesDisplayOptions {
   const fallback = defaultDisplay(routeView)
   const value = view.display && typeof view.display === 'object' ? view.display : {}
   return { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties as MyIssuesProperty[] : [...fallback.properties]) } as MyIssuesDisplayOptions
+}
+function withTeamDefault(display: MyIssuesDisplayOptions, teamDefault?: Record<string, unknown>): MyIssuesDisplayOptions {
+  if (!teamDefault) return display
+  return { ...display, ...teamDefault, properties: new Set(Array.isArray(teamDefault.properties) ? teamDefault.properties as MyIssuesProperty[] : [...display.properties]) } as MyIssuesDisplayOptions
 }
 function displaySnapshot(display: MyIssuesDisplayOptions): Record<string, unknown> { return { ...display, properties: [...display.properties] } }

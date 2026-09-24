@@ -15,6 +15,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { MyIssuesList } from "@/components/my-issues/my-issues-list";
+import { createIssueDisplayOptions } from "@/components/my-issues/my-issues-display-defaults";
+import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
+import { buildIssueGroups } from "@/components/issue-explorer/issue-grouping";
 import { toast } from "sonner";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -274,6 +278,7 @@ export function CustomerDetailPage({
             </>
           )}
         </section>
+        <CustomerIssues data={data} customer={customer} onOpenIssue={id => onOpenResource("issue", id)} />
         <div className="customer-requests-heading">
           <span>Requests</span>
           <small>{requests.length}</small>
@@ -603,5 +608,24 @@ function CustomerRequestComposer({
         ]}/>
       </label>
     </div>
+  );
+}
+
+/** Linear customer view: issues linked through this customer's requests, on the shared issue row. */
+function CustomerIssues({ data, customer, onOpenIssue }: { data: BootstrapData; customer: Customer; onOpenIssue: (id: string) => void }) {
+  const [grouping, setGrouping] = useState<"status" | "priority" | "assignee" | "none">("status");
+  const issueIds = new Set(data.customerRequests.filter((request) => request.customerId === customer.id && request.issueId && !request.archivedAt).map((request) => request.issueId!));
+  const rows = data.issues.filter((issue) => issueIds.has(issue.id) && !issue.archivedAt).map((issue) => issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data));
+  if (!rows.length) return null;
+  const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping, completedWindow: "all" }), { data });
+  return (
+    <section className="customer-issues" aria-label="Customer issues">
+      <div className="customer-requests-heading">
+        <span>Issues</span>
+        <small>{rows.length}</small>
+        <SelectControl label="Grouping" value={grouping} onChange={(value) => setGrouping(value as typeof grouping)} options={[{ value: "status", label: "Status" }, { value: "priority", label: "Priority" }, { value: "assignee", label: "Assignee" }, { value: "none", label: "No grouping" }]} />
+      </div>
+      <MyIssuesList groups={groups} displayProperties={new Set(["id", "status", "priority", "labels", "assignee", "updated"])} onOpenIssue={(row) => onOpenIssue(row.id)} />
+    </section>
   );
 }

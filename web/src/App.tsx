@@ -168,6 +168,7 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
+import { LabelActions } from "@/components/workspace/label-page-toolbar";
 import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
@@ -4514,14 +4515,13 @@ function App() {
           route.kind === "automation-new" ||
           route.kind === "automation-detail" ||
           route.kind === "automation-runs" ||
-          route.kind === "team-board" ||
           route.kind === "team-triage" ||
           route.kind === "team-updates" ||
           route.kind === "team-update" ||
           route.kind === "team-resources" ||
           route.kind === "team-links" ||
           route.kind === "release-note" ||
-          route.kind === "label"
+          (route.kind === "label" && route.resourceType !== "issue")
         ) && (
           <WorkspaceSecondaryPage
             data={data}
@@ -4910,6 +4910,11 @@ function App() {
                 }
                 onOpenIssue={openIssue}
                 onUpdateIssue={updateIssueFromPage}
+                onUpdateIssues={updateIssuesFromPage}
+                onDeleteIssues={deleteIssuesFromPage}
+                onCreateIssue={(context) => openCreateIssue(context)}
+                renderIssuePreview={renderIssuePreview}
+                onOpenSidebar={() => setMobileSidebarOpen(true)}
               />
             ) : (
               <RouteNotFound
@@ -5010,7 +5015,7 @@ function App() {
               onUpdateIssue={updateIssueById}
               renderIssuePreview={renderIssuePreview}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onCreateIssue={() => openCreateIssue({ teamId: cycleTeam.id, cycleId: selectedCycle.id })}
+              onCreateIssue={(context) => openCreateIssue({ ...context, teamId: cycleTeam.id, cycleId: selectedCycle.id })}
               onReload={refreshActivity}
               onNavigate={navigateTo}
             />
@@ -5213,6 +5218,7 @@ function App() {
         )}
         {page === "my-issues" && route.kind === "my-issues" && (
           <MyIssuesPage
+            renderIssuePreview={renderIssuePreview}
             key={route.view}
             data={data}
             initialView={route.view}
@@ -5225,6 +5231,38 @@ function App() {
             onDeleteIssues={deleteIssuesFromPage}
           />
         )}
+        {page === "workspace-issues" && route.kind === "label" && route.resourceType === "issue" && (() => {
+          // Linear `label` view: the full issue view scoped to one label.
+          const label = data.labels.find((item) => item.name === route.resourceName && (item.resourceType ?? "issue") === "issue");
+          if (!label) return <main className="main-panel"><p className="secondary-empty">Label not found</p></main>;
+          return (
+            <IssueExplorerPage
+              key={`label-${label.id}`}
+              data={data}
+              scope={{ kind: "workspace" }}
+              view="all"
+              preferenceScope={`label:${label.id}`}
+              resourceHeader={{
+                icon: <span aria-hidden="true" className="label-page-toolbar__icon" style={{ background: label.color }} />,
+                title: <span data-i18n-ignore>{label.name}</span>,
+                actions: <LabelActions data={data} label={label} onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))} />,
+              }}
+              scopeFilter={(issue) => issue.labels.some((item) => item.id === label.id)}
+              scopeConditions={[{ field: "labels", values: [label.id] }]}
+              viewHref={(view) => workspaceIssuesPath(data.workspace.urlKey, view)}
+              onNavigateView={(view) => navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))}
+              onCreateSavedView={addSavedView}
+              onNavigateSavedView={(view) => navigateTo(workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)))}
+              onOpenSidebar={() => setMobileSidebarOpen(true)}
+              onOpenIssue={openIssue}
+              renderIssuePreview={renderIssuePreview}
+              onCreateIssue={(context) => openCreateIssue({ ...context, labelIds: [...new Set([...(context?.labelIds ?? []), label.id])] })}
+              onUpdateIssue={updateIssueFromPage}
+              onUpdateIssues={updateIssuesFromPage}
+              onDeleteIssues={deleteIssuesFromPage}
+            />
+          );
+        })()}
         {page === "workspace-issues" && route.kind === "workspace-issues" && (
           <IssueExplorerPage
             key={`workspace-${route.view}-${location.search}`}
@@ -5236,6 +5274,7 @@ function App() {
             initialStatusId={
               new URLSearchParams(location.search).get("status") ?? undefined
             }
+            {...issueIdentifierScope(new URLSearchParams(location.search).get("ids"))}
             scope={{ kind: "workspace" }}
             view={route.view}
             viewHref={(view) =>
@@ -5273,9 +5312,10 @@ function App() {
             onDeleteIssues={deleteIssuesFromPage}
           />
         )}
-        {page === "team-issues" && route.kind === "team-issues" && (
+        {page === "team-issues" && (route.kind === "team-issues" || route.kind === "team-board") && (
           <IssueExplorerPage
-            key={`${route.teamKey}-${route.view}`}
+            key={`${route.teamKey}-${route.kind === "team-board" ? "board" : route.view}`}
+            boardRoute={route.kind === "team-board"}
             data={data}
             initialStatusId={
               new URLSearchParams(location.search).get("status") ?? undefined
@@ -5287,7 +5327,7 @@ function App() {
                   team.key.toLowerCase() === route.teamKey.toLowerCase(),
               )!,
             }}
-            view={route.view}
+            view={route.kind === "team-board" ? "all" : route.view}
             viewHref={(view) =>
               teamIssuesPath(data.workspace.urlKey, route.teamKey, view)
             }
@@ -6384,13 +6424,13 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "pulse") return "pulse";
   if (route.kind === "my-issues") return "my-issues";
   if (route.kind === "reviews" || route.kind === "review") return "reviews";
-  if (route.kind === "team-issues") return "team-issues";
+  // The team board is the team issue view with the board layout (Linear `/team/:key/board`).
+  if (route.kind === "team-issues" || route.kind === "team-board") return "team-issues";
   if (
     route.kind === "team-overview" ||
     route.kind === "team-documents" ||
     route.kind === "team-loops" ||
     route.kind === "team-members" ||
-    route.kind === "team-board" ||
     route.kind === "team-triage" ||
     route.kind === "team-updates" ||
     route.kind === "team-update" ||
@@ -6586,3 +6626,17 @@ function nextOccurrence(recurrence: "daily" | "weekly" | "monthly") {
 }
 
 export default App;
+
+/** Linear `issueIdentifiers` view: `?ids=ENG-1,ENG-2` narrows the workspace issue view to those issues. */
+function issueIdentifierScope(raw: string | null) {
+  const identifiers = [...new Set((raw ?? "").split(/[\s,]+/).map((value) => value.trim().toUpperCase()).filter(Boolean))].slice(0, 500);
+  if (!identifiers.length) return {};
+  const wanted = new Set(identifiers);
+  return {
+    preferenceScope: "identifiers",
+    defaultDisplayOverrides: { showTriageIssues: true },
+    resourceHeader: { title: `${identifiers.length} ${identifiers.length === 1 ? "issue" : "issues"}` },
+    scopeFilter: (issue: Issue) => wanted.has(issue.identifier.toUpperCase()),
+    scopeConditions: [{ field: "identifier", operator: "in", values: identifiers }],
+  };
+}

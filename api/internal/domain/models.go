@@ -434,6 +434,7 @@ type Issue struct {
 	ParentID               *string             `json:"parentId,omitempty"`
 	Recurrence             string              `json:"recurrence,omitempty"`
 	NextOccurrenceAt       *time.Time          `json:"nextOccurrenceAt,omitempty"`
+	SnoozedUntil           *time.Time          `json:"snoozedUntil,omitempty"`
 	SubscriberIDs          []string            `json:"subscriberIds"`
 	Reactions              map[string][]string `json:"reactions"`
 	SubIssueIDs            []string            `json:"subIssueIds"`
@@ -531,6 +532,9 @@ type TeamSettings struct {
 	InheritProjectStatuses  bool                 `json:"inheritProjectStatuses"`
 	InheritCycles           bool                 `json:"inheritCycles"`
 	ParentTeamID            string               `json:"parentTeamId,omitempty"`
+	// IssueViewDefaults holds team default display options per issue view
+	// ("all", "active", "backlog", "board"); opaque to the server.
+	IssueViewDefaults map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
 }
 
 type TeamAutomationRule struct {
@@ -2082,6 +2086,8 @@ type IssueUpdateInput struct {
 	SortOrder               *float64       `json:"sortOrder,omitempty"`
 	Recurrence              *string        `json:"recurrence,omitempty"`
 	NextOccurrenceAt        *string        `json:"nextOccurrenceAt,omitempty"`
+	// SnoozedUntil hides a triage issue until the time passes; "" clears it.
+	SnoozedUntil *string `json:"snoozedUntil,omitempty"`
 }
 
 type IssueLinkInput struct {
@@ -2190,6 +2196,7 @@ type TeamSettingsMutationInput struct {
 	InheritWorkflowStatuses *bool                 `json:"inheritWorkflowStatuses,omitempty"`
 	InheritProjectStatuses  *bool                 `json:"inheritProjectStatuses,omitempty"`
 	InheritCycles           *bool                 `json:"inheritCycles,omitempty"`
+	IssueViewDefaults       map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
 	ParentTeamID            *string               `json:"parentTeamId,omitempty"`
 }
 

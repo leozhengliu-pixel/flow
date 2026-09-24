@@ -26,7 +26,6 @@ import { AutomationOwnerSelect } from "@/components/automation/automation-owner-
 import { AutomationTrustedSourceEditor } from "@/components/automation/automation-trusted-source-editor";
 import type {
   BootstrapData,
-  Issue,
   ReleaseNote,
   Team,
   TeamPinnedResource,
@@ -40,10 +39,6 @@ import { useI18n } from "@/i18n/i18n";
 import { MeetingPage } from "@/components/meetings/meeting-page";
 import { DiaryPage } from "@/components/diary/diary-page";
 import { TriagePage } from "@/components/triage";
-import { IssueBoard } from "@/components/issue-explorer/issue-board";
-import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
-import { updateIssue } from "@/lib/api";
-import { toast } from "sonner";
 import { filterLabelItems, LabelPageToolbar } from "./label-page-toolbar";
 import "./workspace-secondary-page.css";
 
@@ -116,7 +111,6 @@ export function WorkspaceSecondaryPage(props: Props) {
       {(kind === "automations" || kind === "automation-new" || kind === "automation-detail" || kind === "automation-runs") && (
         <AutomationPage {...props} />
       )}
-      {kind === "team-board" && team && <TeamBoard data={data} team={team} onNavigate={props.onNavigate} onReload={props.onReload} />}
       {(kind === "team-updates" || kind === "team-update") && team && <TeamUpdates data={data} team={team} single={kind === "team-update"} onNavigate={props.onNavigate} />}
       {(kind === "team-resources" || kind === "team-links") && team && <ResourcesPage data={data} team={team} linksOnly={kind === "team-links"} />}
       {kind === "release-note" && <ReleaseNotePage data={data} note={props.releaseNote} />}
@@ -443,44 +437,6 @@ function AutomationPage({ data, kind, workflowId, workflowRunId, editing, onRelo
 
 function RunsList({ runs, workflowRunId, onRetry }: { runs: WorkflowRun[]; workflowRunId?: string; onRetry: (id: string) => void }) { const { t, formatDate } = useI18n(); return <div className="secondary-list" role="list">{runs.map(run => <article className={`secondary-list-row ${run.id === workflowRunId ? "is-selected" : ""}`} key={run.id}><div className={`secondary-status-dot ${run.status === "succeeded" ? "is-on" : run.status === "failed" ? "is-failed" : ""}`} /><div className="secondary-row-main"><strong>{run.status === "failed" ? t("Failed") : run.status === "succeeded" ? t("Succeeded") : t("Running")}</strong><small>{formatDate(run.startedAt, { dateStyle: "medium", timeStyle: "short" })}</small></div>{run.error && <span className="secondary-row-error">{run.error}</span>}{run.status === "failed" && <button className="secondary-icon-button" type="button" onClick={() => onRetry(run.id)} aria-label={t("Retry")} title={t("Retry")}><RefreshCw size={14} /></button>}</article>)}{!runs.length && <EmptyState title={t("No runs yet")} body={t("Run this automation to see execution history.")} />}</div>; }
 
-function TeamBoard({ data, team, onNavigate, onReload }: { data: BootstrapData; team: Team; onNavigate: (path: string) => void; onReload: () => Promise<void> }) {
-  const { t } = useI18n();
-  const [hiddenGroupIds, setHiddenGroupIds] = useState<string[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const issues = data.issues.filter(issue => issue.team.id === team.id && !issue.archivedAt);
-  const states = data.states.filter(state => state.teamId === team.id);
-  const properties = useMemo(() => new Set(["id", "status", "priority", "assignee", "labels", "project", "dueDate"] as import("@/components/my-issues/my-issues-surface").MyIssuesProperty[]), []);
-  const groups = useMemo(() => {
-    const rows = issues.map(issue => issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data));
-    return states.map(state => ({
-      id: state.id,
-      label: state.name,
-      stateType: state.type,
-      state: { id: state.id, name: state.name, type: state.type, color: state.color },
-      createContext: { stateId: state.id, teamId: team.id },
-      issues: rows.filter(row => row.state.id === state.id),
-    }));
-  }, [data, issues, states, team.id]);
-  if (!states.length) {
-    return <section className="secondary-content board-content"><EmptyState title={t("No workflow states")} body={t("Configure workflow states for this team to use the board.")} /></section>;
-  }
-  return <section className="secondary-content board-content team-board-host" aria-label={t("Issue board")}>
-    <div className="secondary-board-toolbar"><span>{issues.length} {t("issues")}</span></div>
-    <IssueBoard
-      groups={groups}
-      hiddenGroupIds={hiddenGroupIds}
-      properties={properties}
-      selectedIds={selectedIds}
-      onCreateIssue={() => toast.message(t("Create new issue"))}
-      onHideGroup={id => setHiddenGroupIds(current => [...new Set([...current, id])])}
-      onShowGroup={id => setHiddenGroupIds(current => current.filter(value => value !== id))}
-      onMove={(row, _source, target) => { void updateIssue(row.id, { stateId: target }).then(onReload).catch(error => toast.error(error instanceof Error ? error.message : t("Could not update issue"))) }}
-      onOpenIssue={row => onNavigate(row.href ?? `/${data.workspace.urlKey}/issue/${encodeURIComponent(row.identifier)}`)}
-      onSelectIssue={(id, selected) => setSelectedIds(current => { const next = new Set(current); if (selected) next.add(id); else next.delete(id); return next })}
-    />
-  </section>;
-}
-function IssueCard({ issue }: { issue: Issue }) { return <article className="secondary-issue-card"><span>{issue.identifier}</span><strong>{issue.title}</strong><small>{issue.priorityLabel}</small></article>; }
 
 function TeamUpdates({ data, team, single, onNavigate: _onNavigate }: { data: BootstrapData; team: Team; single: boolean; onNavigate: (path: string) => void }) { const { t, formatDate } = useI18n(); const projects = data.projects.filter(project => project.teamIds.includes(team.id)); const updates = projects.flatMap(project => (data.projectUpdates[project.id] || []).map(update => ({ update, project }))).sort((a, b) => b.update.createdAt.localeCompare(a.update.createdAt)); const visible = single ? updates.slice(0, 1) : updates; return <section className="secondary-content"><div className="secondary-section-heading"><div><h2>{t("Team updates")}</h2><p>{t("Share progress, decisions, and risks with your team.")}</p></div></div><div className="secondary-list">{visible.map(({ update, project }) => { const author = update.user?.displayName || update.user?.name || t("Unknown"); return <article className="secondary-update-card" key={update.id}><div className="secondary-update-head"><strong>{project.name}</strong><span>{formatDate(update.createdAt, { dateStyle: "medium" })}</span></div><p>{update.body || t("No update text")}</p><div className="secondary-update-foot"><UserAvatar name={author} avatarUrl={update.user?.avatarUrl} /><span>{author}</span><span className="secondary-health">{update.health}</span><MessageSquare size={13} />{update.comments?.length ?? 0}</div></article>; })}</div>{!visible.length && <EmptyState title={t("No updates yet")} body={t("Project updates for this team will appear here.")} />}</section>; }
 
@@ -494,10 +450,6 @@ function LabelPage({ data, labelName, resourceType = "issue", onReload }: { data
   const [triageOnly, setTriageOnly] = useState(false);
   const label = data.labels.find(item => item.name === labelName && (item.resourceType ?? "issue") === resourceType) || data.labels.find(item => (item.resourceType ?? "issue") === resourceType);
   const labelId = label?.id;
-  const issues = useMemo(() => {
-    if (!labelId) return [];
-    return filterLabelItems(data.issues.filter(issue => issue.labels.some(item => item.id === labelId)), { search, triageOnly, resourceType, teamSettings: data.teamSettings });
-  }, [data.issues, data.teamSettings, labelId, resourceType, search, triageOnly]);
   const projects = useMemo(() => {
     if (!labelId) return [];
     return filterLabelItems(data.projects.filter(project => project.labelIds.includes(labelId)).map(project => ({ ...project, title: project.name })), { search, triageOnly: false, resourceType });
@@ -511,7 +463,7 @@ function LabelPage({ data, labelName, resourceType = "issue", onReload }: { data
     ? projects.map(project => <article className="secondary-list-row" key={project.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{project.name}</strong><small>{t("Project")}</small></div></article>)
     : resourceType === "initiative"
       ? initiatives.map(initiative => <article className="secondary-list-row" key={initiative.id}><div className="secondary-row-icon"><FileText size={16} /></div><div className="secondary-row-main"><strong data-i18n-ignore>{initiative.name}</strong><small>{t("Initiative")}</small></div></article>)
-      : issues.map(issue => <IssueCard issue={issue as Issue} key={issue.id} />);
+      : [];
   return <section className="secondary-content">
     <LabelPageToolbar data={data} label={label} resourceType={resourceType} search={search} triageOnly={triageOnly} onReload={onReload} onSearchChange={setSearch} onTriageOnlyChange={setTriageOnly} />
     <div className="secondary-list">{rows}</div>

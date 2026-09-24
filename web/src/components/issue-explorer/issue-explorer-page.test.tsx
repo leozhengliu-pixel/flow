@@ -45,6 +45,9 @@ describe('complete issue grouping', () => {
     await waitFor(() => expect(screen.getByText('In progress').closest('header')).toHaveTextContent('230'))
     expect(container.querySelectorAll('a[href*="/issue/"]').length).toBeLessThan(80)
     fireEvent.click(screen.getByRole('button', { name: 'Group by priority' }))
+    // Priority groups follow Linear order: Urgent before High.
+    await waitFor(() => expect(screen.getByText('Urgent').closest('header')).toHaveTextContent('160'))
+    fireEvent.click(within(screen.getByText('Urgent').closest('header')!).getByRole('button', { name: 'Collapse group' }))
     await waitFor(() => expect(screen.getByText('High').closest('header')).toHaveTextContent('230'))
   })
 
@@ -66,5 +69,18 @@ describe('complete issue grouping', () => {
     expect(mounted).toBeLessThan(80)
     rerender(page({ ...data, issues: data.issues.slice(1) }))
     await waitFor(() => expect(screen.getByText('Backlog').closest('header')).toHaveTextContent('9999'))
+  })
+
+  it('split layout previews the first issue and follows j/k', async () => {
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })))
+    const data = dataWithGroups(2, 1)
+    localStorage.setItem(`${data.workspace.urlKey}:issue-explorer:workspace:all:display`, JSON.stringify({ layout: 'split', grouping: 'none', completedWindow: 'all' }))
+    const preview = vi.fn((issue: { identifier: string }) => <div>Preview {issue.identifier}</div>)
+    render(page(data, { renderIssuePreview: preview as never }))
+    await waitFor(() => expect(preview).toHaveBeenCalled())
+    const first = (preview.mock.calls.at(-1)![0] as { identifier: string }).identifier
+    fireEvent.keyDown(document.body, { key: 'j' })
+    await waitFor(() => expect((preview.mock.calls.at(-1)![0] as { identifier: string }).identifier).not.toBe(first))
+    vi.unstubAllGlobals()
   })
 })
