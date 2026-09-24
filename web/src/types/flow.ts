@@ -1932,6 +1932,12 @@ export interface TeamSettings {
   loopPermission: "allMembers" | "teamMembers" | "owners";
   memberPermission: "allMembers" | "teamMembers" | "owners";
   pinnedViewPermission?: "allMembers" | "teamMembers" | "owners";
+  /** Template preselected when team members create issues for this team. */
+  defaultIssueTemplateForMembersId?: string;
+  /** Template preselected when people outside the team create issues for it. */
+  defaultIssueTemplateForNonMembersId?: string;
+  /** Template preselected when creating projects for this team. */
+  defaultProjectTemplateId?: string;
   issueSharingEnabled?: boolean;
   issueSharingPermission?: "allMembers" | "teamMembers" | "owners";
   slackChannelId?: string;

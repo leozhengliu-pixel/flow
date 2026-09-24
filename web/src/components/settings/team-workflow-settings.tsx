@@ -2348,6 +2348,7 @@ function TemplatesSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const { settings, save } = useTeamSettings(data, team, onReload);
   const [type, setType] = useState<"issue" | "project" | "document">("issue");
   const [editing, setEditing] = useState<
     IssueTemplate | ProjectTemplate | DocumentTemplate | null | undefined
@@ -2429,6 +2430,44 @@ function TemplatesSettings({
           )}
         </div>
       </TeamSection>
+      {type === "issue" && templates.length > 0 && (
+        <TeamSection
+          title="Default issue template"
+          description="Pre-select a template when creating an issue for this team. Form templates can’t be used as a default for team members."
+        >
+          <SelectRow
+            title="Issues created by team members"
+            value={settings.defaultIssueTemplateForMembersId ?? ""}
+            options={["", ...templates.filter((item) => (item as IssueTemplate).templateType !== "customForm").map((item) => item.id)]}
+            labels={{ "": "No template", ...Object.fromEntries(templates.map((item) => [item.id, item.name])) }}
+            entityOptions={templates.map((item) => item.id)}
+            onChange={(value) => void save({ defaultIssueTemplateForMembersId: value })}
+          />
+          <SelectRow
+            title="Issues created by non-team members"
+            value={settings.defaultIssueTemplateForNonMembersId ?? ""}
+            options={["", ...templates.map((item) => item.id)]}
+            labels={{ "": "No template", ...Object.fromEntries(templates.map((item) => [item.id, item.name])) }}
+            entityOptions={templates.map((item) => item.id)}
+            onChange={(value) => void save({ defaultIssueTemplateForNonMembersId: value })}
+          />
+        </TeamSection>
+      )}
+      {type === "project" && templates.length > 0 && (
+        <TeamSection
+          title="Default project template"
+          description="Pre-select a template when creating a project for this team"
+        >
+          <SelectRow
+            title="Projects created"
+            value={settings.defaultProjectTemplateId ?? ""}
+            options={["", ...templates.map((item) => item.id)]}
+            labels={{ "": "No template", ...Object.fromEntries(templates.map((item) => [item.id, item.name])) }}
+            entityOptions={templates.map((item) => item.id)}
+            onChange={(value) => void save({ defaultProjectTemplateId: value })}
+          />
+        </TeamSection>
+      )}
       {editing !== undefined &&
         (type === "document" ? (
           <DocumentTemplateEditor
