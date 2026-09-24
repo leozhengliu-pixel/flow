@@ -32,7 +32,7 @@ import {
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
-import { PAGED_GROUPINGS, PAGED_ORDERINGS, pagedDisplayQuery } from './issue-grouping'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 
 export interface IssueExplorerPageProps {
   data: BootstrapData
@@ -217,7 +217,10 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       .then(() => { if (personalViewKey) removeValue(personalViewKey); toast.success('Saved as default for view') })
       .catch(() => toast.error('Could not save view default'))
   } : undefined
+  const menuGroups = groupSummaries(groups)
+  const listGroups = groups.filter(group => !display.hiddenGroupIds.includes(group.id) && !display.hiddenGroupIds.includes(group.parentGroupId ?? ''))
   const displayMenuProps = {
+    groups: menuGroups,
     availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
     toggles: (scope.kind === 'team' ? ['triage', 'archived', 'subTeam'] : ['triage', 'archived']) as ('triage' | 'archived' | 'subTeam')[],
@@ -425,7 +428,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onSelectIssue={selection.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
       /> : display.layout !== 'board' ? <MyIssuesList
-        groups={groups}
+        groups={listGroups}
         selectedIds={selection.selectedIds}
         activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
