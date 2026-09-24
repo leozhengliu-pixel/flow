@@ -31,16 +31,15 @@ describe('ResolvedComment', () => {
     expect(onResolve).toHaveBeenCalledWith(false)
   })
 
-  it('offers Resolve for open threads', () => {
-    const onResolve = vi.fn()
+  it('adds no thread bar to open threads (they resolve from the comment menu)', () => {
     render(
       <I18nProvider>
-        <ResolvedComment comment={base} onResolve={onResolve}>
+        <ResolvedComment comment={base} onResolve={vi.fn()}>
           <div>open</div>
         </ResolvedComment>
       </I18nProvider>,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }))
-    expect(onResolve).toHaveBeenCalledWith(true)
+    expect(screen.getByText('open')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Comment thread' })).toBeNull()
   })
 })
