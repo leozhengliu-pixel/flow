@@ -1909,6 +1909,8 @@ export interface TeamSettings {
   progressOrder: "first" | "last" | "noAction";
   releaseAutomations: TeamAutomationRule[];
   triageEnabled: boolean;
+  /** Team default display options per issue view (all / active / backlog / board). */
+  issueViewDefaults?: Record<string, Record<string, unknown>>;
   triageRequirePriority: boolean;
   triageAction: string;
   triageRules: TeamAutomationRule[];
@@ -1924,8 +1926,10 @@ export interface TeamSettings {
   parentTeamId?: UUID;
 }
 export interface TeamSettingsMutationInput extends Partial<
-  Omit<TeamSettings, "teamId">
+  Omit<TeamSettings, "teamId" | "issueViewDefaults">
 > {
+  /** null clears a view's team default. */
+  issueViewDefaults?: Record<string, Record<string, unknown> | null>;
   identifier?: string;
   applyToSubTeams?: boolean;
 }

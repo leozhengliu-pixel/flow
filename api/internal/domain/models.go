@@ -532,6 +532,9 @@ type TeamSettings struct {
 	InheritProjectStatuses  bool                 `json:"inheritProjectStatuses"`
 	InheritCycles           bool                 `json:"inheritCycles"`
 	ParentTeamID            string               `json:"parentTeamId,omitempty"`
+	// IssueViewDefaults holds team default display options per issue view
+	// ("all", "active", "backlog", "board"); opaque to the server.
+	IssueViewDefaults map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
 }
 
 type TeamAutomationRule struct {
@@ -2193,6 +2196,7 @@ type TeamSettingsMutationInput struct {
 	InheritWorkflowStatuses *bool                 `json:"inheritWorkflowStatuses,omitempty"`
 	InheritProjectStatuses  *bool                 `json:"inheritProjectStatuses,omitempty"`
 	InheritCycles           *bool                 `json:"inheritCycles,omitempty"`
+	IssueViewDefaults       map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
 	ParentTeamID            *string               `json:"parentTeamId,omitempty"`
 }
 
