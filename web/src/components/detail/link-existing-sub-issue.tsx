@@ -21,7 +21,7 @@ export function LinkExistingSubIssue({ parent, data, onIssueUpdated, label = fal
   }
   const command = usePropertyCommand({ open, options, onOpenChange: setOpen, onSelect: option => link(option.id) })
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger asChild><button type="button" className={label ? 'issue-empty-sub-issue-action link-existing-sub-issue' : 'sub-issues-create'} aria-label="Link existing issue as sub-issue" title="Link existing issue as sub-issue…"><Link2 size={label ? 16 : 14}/>{label ? 'Link existing issue' : null}</button></Popover.Trigger>
+    <Popover.Trigger asChild><button type="button" className={label ? 'issue-empty-sub-issue-action link-existing-sub-issue' : 'sub-issues-create'} aria-label="Link existing issue as sub-issue"><Link2 size={label ? 16 : 14}/>{label ? 'Link existing issue' : null}</button></Popover.Trigger>
     <Popover.Portal><Popover.Content data-flow-motion="floating" className="link-sub-issue-menu" align="end" sideOffset={4} collisionPadding={10} onKeyDown={command.onKeyDown}>
       <input ref={command.inputRef} autoFocus aria-label="Search issues" placeholder="Link existing issue as sub-issue…" value={command.query} onChange={event => command.onQueryChange(event.target.value)}/>
       <div role="listbox">{command.filteredOptions.slice(0, 10).map(option => <button key={option.id} type="button" role="option" aria-selected={command.activeId === option.id} onPointerMove={() => command.setActiveId(option.id)} onClick={() => command.choose(option)} data-i18n-ignore>{option.label}</button>)}</div>
