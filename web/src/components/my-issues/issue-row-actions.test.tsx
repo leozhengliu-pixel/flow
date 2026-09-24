@@ -12,7 +12,7 @@ describe('row context menu', () => {
     const onUpdateIssue = vi.fn(async () => data.issues[0])
     const row = issueToExplorerRow(data.issues[0], data.workspace.urlKey, data.issues, data)
     render(<I18nProvider><IssueRowActionsProvider value={{ data, onUpdateIssue }}>
-      <MyIssuesList groups={[{ id: 'all', label: 'All', issues: [row] }]} onPropertyChange={() => undefined} onContextAction={() => undefined}/>
+      <MyIssuesList groups={[{ id: 'all', label: 'All', issues: [row] }]} onPropertyChange={vi.fn()} onContextAction={vi.fn()}/>
     </IssueRowActionsProvider></I18nProvider>)
     fireEvent.contextMenu(screen.getByRole('link', { name: new RegExp(row.identifier) }))
     expect(await screen.findByText(/^(Subscribe|Unsubscribe)$/)).toBeInTheDocument()

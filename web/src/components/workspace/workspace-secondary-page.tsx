@@ -26,7 +26,6 @@ import { AutomationOwnerSelect } from "@/components/automation/automation-owner-
 import { AutomationTrustedSourceEditor } from "@/components/automation/automation-trusted-source-editor";
 import type {
   BootstrapData,
-  Issue,
   ReleaseNote,
   Team,
   TeamPinnedResource,
