@@ -21,7 +21,8 @@ export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 
 export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'sla' | 'estimate' | 'release' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'myActivity' | 'created' | 'updated' | 'pullRequests'
 
 export interface MyIssuesDisplayOptions {
-  layout: 'list' | 'board'
+  /** Linear layouts: split = narrow list beside the selected issue. */
+  layout: 'list' | 'board' | 'split'
   grouping: MyIssuesGrouping
   groupOrder: 'asc' | 'desc'
   subGrouping: MyIssuesGrouping

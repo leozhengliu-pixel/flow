@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
-import { ArrowDownUp, Check, ChevronDown, LayoutGrid, List } from 'lucide-react'
+import { ArrowDownUp, Check, ChevronDown, Columns2, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
@@ -20,6 +20,8 @@ export interface MyIssuesDisplayMenuProps {
   /** View toggles this surface can honor (Linear showTriageIssues / showArchivedItems / showSubTeamIssues). */
   toggles?: ('triage' | 'archived' | 'subTeam')[]
   hideSubGrouping?: boolean
+  /** Surfaces without an issue preview pane cannot offer the split layout. */
+  hideSplit?: boolean
   /** Footer actions (Linear "Reset to view default" / "Save as default for view"). */
   onReset?: () => void
   resetLabel?: string
@@ -68,7 +70,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
@@ -93,6 +95,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
+          {!hideSplit && <button type="button" role="tab" aria-selected={options.layout === 'split'} onClick={() => change({ layout: 'split' })}><Columns2 size={13} />{t('Split')}</button>}
         </div>
 
         <section className={styles.section} aria-label={t('Grouping options')}>

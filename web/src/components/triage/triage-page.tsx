@@ -67,8 +67,8 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null
-      if (!selected || event.metaKey || event.ctrlKey || event.altKey || target?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return
+      const target = event.target
+      if (!selected || event.metaKey || event.ctrlKey || event.altKey || (target instanceof Element && target.closest('input,textarea,[contenteditable=true],[role=textbox],[role=dialog]'))) return
       const key = event.key.toLowerCase()
       if (key === '1') { event.preventDefault(); document.querySelector<HTMLButtonElement>('.flow-fast-triage-accept__submit')?.click() }
       else if (key === '2') { event.preventDefault(); setAction('duplicate') }

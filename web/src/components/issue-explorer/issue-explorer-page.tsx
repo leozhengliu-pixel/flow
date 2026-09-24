@@ -164,7 +164,28 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     setDisplay(readPersonalDisplay(`${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display`, savedView, savedView.view))
   }, [savedView])
 
-  useEffect(() => { if (!detailsOpen) setPreviewIssueId(undefined) }, [detailsOpen])
+  const split = display.layout === 'split'
+  useEffect(() => { if (!detailsOpen && !split) setPreviewIssueId(undefined) }, [detailsOpen, split])
+  // Split layout (Linear `split`: narrow list beside the selected issue) always has a selection.
+  const flatRowIds = useMemo(() => groups.flatMap(group => group.issues.map(issue => issue.id)), [groups])
+  const splitRowIds = data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : flatRowIds
+  useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
+  useEffect(() => {
+    if (!split) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true],[role=textbox],[role=dialog]'))) return
+      const key = event.key.toLowerCase()
+      const step = key === 'j' || key === 'arrowdown' ? 1 : key === 'k' || key === 'arrowup' ? -1 : 0
+      if (!step) return
+      event.preventDefault()
+      const index = splitRowIds.indexOf(previewIssueId ?? '')
+      const next = splitRowIds[Math.max(0, Math.min(splitRowIds.length - 1, index + step))]
+      if (next) setPreviewIssueId(next)
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [previewIssueId, split, splitRowIds])
+  const splitProperties = useMemo(() => new Set([...display.properties].filter(property => property === 'id' || property === 'status' || property === 'priority' || property === 'assignee')), [display.properties])
 
   useEffect(() => {
     if (creatingView) setViewEditor('create')
@@ -209,7 +230,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
     const issue = issuesById.get(row.id)
     if (!issue) { void fetchIssueRecord(row.id, undefined, data.workspace.urlKey).then(issue => onOpenIssue(issue, boundedIssueSequence(rows.map(row => row.id), issue.id))).catch(() => toast.error('Could not load issue')); return }
-    if (detailsOpen) setPreviewIssueId(issue.id)
+    if (detailsOpen || split) setPreviewIssueId(issue.id)
     else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
   }
   const splitOrigin = savedView
@@ -379,12 +400,12 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       </>}
     >
       <IssuesSplitLayout
-        detailsOpen={detailsOpen && !insightsOpen}
+        detailsOpen={(detailsOpen || split) && !insightsOpen}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         query={pagedQuery}
-        layout={display.layout}
+        layout={display.layout === 'board' ? 'board' : 'list'}
         hiddenGroupIds={display.hiddenGroupIds}
         onHideGroup={id => changeDisplay({ ...display, hiddenGroupIds: [...display.hiddenGroupIds, id] })}
         onShowGroup={id => changeDisplay({ ...display, hiddenGroupIds: display.hiddenGroupIds.filter(value => value !== id) })}
@@ -392,21 +413,23 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onTotalChange={setPagedTotal}
         onLoadedIssuesChange={setPagedIssues}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={display.properties}
+        displayProperties={split ? splitProperties : display.properties}
         propertyOptions={rowOptions}
         selectedIds={selection.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         mutationErrors={mutationErrors}
-        onOpenIssueRecord={onOpenIssue}
+        onOpenIssueRecord={split ? issue => setPreviewIssueId(issue.id) : onOpenIssue}
         onCreateIssue={group => onCreateIssue?.(scope.kind === 'team' ? { ...group.createContext, teamId: scope.team.id } : group.createContext)}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onPropertyChange={changeProperty}
         onSelectIssue={selection.selectIssue}
         onContextAction={(row, action) => { void contextAction(row, action) }}
-      /> : display.layout === 'list' ? <MyIssuesList
+      /> : display.layout !== 'board' ? <MyIssuesList
         groups={groups}
         selectedIds={selection.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={display.properties}
+        displayProperties={split ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
