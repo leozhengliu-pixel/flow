@@ -2355,6 +2355,7 @@ export const zhCN: Record<string, string> = {
   "Show snoozed": "显示已稍后提醒",
   "Not released": "未发布",
   "Row options": "行选项",
+  "Building filters…": "正在生成筛选条件…",
   "Select all in row": "选择该行全部",
   "Expand all rows": "展开所有行",
   "Collapse all rows": "折叠所有行",

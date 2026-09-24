@@ -1,3 +1,4 @@
+import { aiIssueFilter } from '@/lib/api'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 
 /**
@@ -60,4 +61,26 @@ function plural(value: string) { return value.endsWith('s') ? value : `${value}s
 function containsWord(text: string, word: string) {
   if (/[㐀-鿿]/.test(word)) return text.includes(word)
   return new RegExp(`(^|[^\\p{L}\\p{N}])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^\\p{L}\\p{N}])`, 'u').test(text)
+}
+
+/**
+ * LLM-backed AI filter: the Flow Agent maps the sentence onto the same vocabulary (validated server-side).
+ * Falls back to the rule-based parser when no Agent is configured, the call fails, or nothing matched.
+ */
+export async function resolveAIFilter(query: string, optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined, signal?: AbortSignal, viewerId?: string): Promise<ParsedFilter[]> {
+  const vocabulary: Record<string, { id: string; label: string }[]> = {}
+  for (const field of FIELDS) {
+    const options = flatten(optionsFor(field) ?? []).filter(option => option.label).slice(0, 300)
+    if (options.length) vocabulary[field] = options.map(option => ({ id: option.id, label: option.id === viewerId ? `${option.label} (me)` : option.label }))
+  }
+  vocabulary.dates = DATE_PHRASES.filter(phrase => phrase.id !== 'completed-last-month').map(phrase => ({ id: phrase.id, label: phrase.label }))
+  vocabulary.ai = [{ id: 'completed-last-month', label: 'Completed in the past month' }]
+  try {
+    const response = await aiIssueFilter(query, vocabulary, signal)
+    const parsed = response.filters.map(item => ({ field: item.field as MyIssuesFilterKey, option: item.option }))
+    if (parsed.length) return parsed
+  } catch (error) {
+    if (signal?.aborted) throw error
+  }
+  return parseNaturalLanguageFilter(query, optionsFor, viewerId)
 }
