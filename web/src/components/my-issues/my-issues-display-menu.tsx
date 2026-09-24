@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
-import { ArrowDownUp, Check, ChevronDown, Columns2, LayoutGrid, List } from 'lucide-react'
+import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
@@ -22,6 +22,8 @@ export interface MyIssuesDisplayMenuProps {
   hideSubGrouping?: boolean
   /** Surfaces without an issue preview pane cannot offer the split layout. */
   hideSplit?: boolean
+  /** Current groups for the Group ordering panel (Linear ViewOptionsGroupsPanel): hide / show each group. */
+  groups?: { id: string; label: string; count: number }[]
   /** Footer actions (Linear "Reset to view default" / "Save as default for view"). */
   onReset?: () => void
   resetLabel?: string
@@ -70,7 +72,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
@@ -152,6 +154,18 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
         </section>
+        {groups.length > 1 && options.grouping !== 'none' && <section className={styles.section} aria-label={t('Group ordering')}>
+          <span className={styles.sectionLabel}>{t('Groups')}</span>
+          <div className={styles.groupList}>
+            {groups.map(group => {
+              const hidden = options.hiddenGroupIds.includes(group.id)
+              return <button key={group.id} type="button" className={styles.groupToggle} data-hidden={hidden || undefined} aria-pressed={!hidden} aria-label={`${hidden ? t('Show group') : t('Hide group')} ${group.label}`} onClick={() => change({ hiddenGroupIds: hidden ? options.hiddenGroupIds.filter(id => id !== group.id) : [...options.hiddenGroupIds, group.id] })}>
+                {hidden ? <EyeOff size={13}/> : <Eye size={13}/>}<span data-i18n-ignore>{group.label}</span><small>{group.count}</small>
+              </button>
+            })}
+          </div>
+          {!options.showEmptyGroups && <p className={styles.groupHint}>{t('Empty groups are hidden')}</p>}
+        </section>}
         {(onReset || onSaveDefault) && <footer className={styles.footer}>
           {onReset && <button type="button" className={styles.footerButton} onClick={onReset}>{t(resetLabel)}</button>}
           {onSaveDefault && <button type="button" className={`${styles.footerButton} ${styles.footerPrimary}`} onClick={onSaveDefault}>{t(saveDefaultLabel)}</button>}

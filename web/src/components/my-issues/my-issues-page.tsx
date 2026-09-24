@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
-import { PAGED_GROUPINGS, PAGED_ORDERINGS, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -204,6 +204,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
         availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
         toggles: ['triage'],
+        groups: groupSummaries(displayedGroups),
         onReset: () => controller.changeDisplay(defaultMyIssuesDisplayOptions),
         resetLabel: 'Reset to default',
       }}
@@ -269,7 +270,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onPropertyChange={changeProperty}
         onSelectIssue={controller.selectIssue}
       /> : <MyIssuesList
-        groups={displayedGroups}
+        groups={displayedGroups.filter(group => !controller.display.hiddenGroupIds.includes(group.id) && !controller.display.hiddenGroupIds.includes(group.parentGroupId ?? ''))}
         loading={loading}
         error={error}
         selectedIds={controller.selectedIds}
