@@ -1,5 +1,7 @@
 import type {
   AccountBootstrap,
+  ThreadSubscription,
+  ThreadSubscriptionState,
   AccountSessionInfo,
   APIKey,
   Ask,
@@ -2487,6 +2489,20 @@ export function deleteComment(
 ): Promise<void> {
   return request(`/api/issues/${issueId}/comments/${commentId}`, {
     method: "DELETE",
+  });
+}
+/** Subscribe to or mute one comment thread; `null` clears the explicit choice. */
+export function setThreadSubscription(
+  issueId: string,
+  commentId: string,
+  state: ThreadSubscriptionState | null,
+): Promise<ThreadSubscription | void> {
+  const path = `/api/issues/${issueId}/comments/${commentId}/subscription`;
+  if (!state) return request(path, { method: "DELETE" });
+  return request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
   });
 }
 export function toggleCommentReaction(

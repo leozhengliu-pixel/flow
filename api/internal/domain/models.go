@@ -1461,6 +1461,23 @@ type Subscription struct {
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
+// ThreadSubscription is a user's explicit choice for one comment thread
+// (the root comment and its replies). Thread participants are subscribed
+// implicitly; "muted" silences a thread even for issue subscribers.
+type ThreadSubscription struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"userId"`
+	IssueID   string    `json:"issueId"`
+	CommentID string    `json:"commentId"`
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type ThreadSubscriptionInput struct {
+	State string `json:"state"`
+}
+
 type SubscriptionMutationInput struct {
 	Events *[]string `json:"events,omitempty"`
 }
@@ -1801,6 +1818,7 @@ type Bootstrap struct {
 	Favorites                     []Favorite                         `json:"favorites"`
 	FavoriteFolders               []FavoriteFolder                   `json:"favoriteFolders"`
 	Subscriptions                 []Subscription                     `json:"subscriptions"`
+	ThreadSubscriptions           []ThreadSubscription               `json:"threadSubscriptions"`
 	AuditLog                      []AuditLogEntry                    `json:"auditLog"`
 	Trash                         []TrashEntry                       `json:"trash"`
 	ImportJobs                    []ImportJob                        `json:"importJobs"`
