@@ -34,9 +34,9 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   const state=useMemo(()=>readSearchState(params),[params])
   const {query,tab}=state
   const normalizedQuery=query.trim()
+  const [draft, setDraft] = useState(query)
   // Pasting several identifiers ("ENG-1 ENG-2") offers Linear's issue-identifiers list view.
   const identifierList=useMemo(()=>[...new Set(draft.toUpperCase().match(/\b[A-Z][A-Z0-9]{0,9}-\d+\b/g)??[])],[draft])
-  const [draft, setDraft] = useState(query)
   const [response, setResponse] = useState<SearchResponse>({ results: [], history: [], recent: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
