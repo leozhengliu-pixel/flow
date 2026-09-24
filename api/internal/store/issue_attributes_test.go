@@ -31,6 +31,11 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 			completed := time.Date(2026, 9, 8, 1, 0, 0, 0, time.UTC)
 			issue.ProjectMilestoneID, issue.DueDate, issue.Estimate, issue.CompletedAt = &milestone, &due, &estimate, &completed
 			issue.Labels = []domain.IssueLabel{{ID: "first-label"}, {ID: "second-label"}}
+			issue.Relations = []domain.IssueRelation{{ID: "rel-" + issue.ID, Type: "blocked_by", IssueID: issue.ID, RelatedIssueID: base.ID}}
+			issue.Attachments = []domain.Attachment{{ID: "att-" + issue.ID, URL: "https://example.test"}}
+			issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs = true, "session-1", []string{"suggested"}
+		} else {
+			issue.Relations, issue.Attachments, issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs = nil, nil, false, "", nil
 		}
 		rows[i] = issue
 	}
@@ -49,6 +54,13 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 			{IssueFilter{Field: "completedAt", Operator: "after", Values: []string{"2026-09-08"}}, 310},
 			{IssueFilter{Field: "estimate", Operator: "gt", Values: []string{"9"}}, 310},
 			{IssueFilter{Field: "estimate", Operator: "isEmpty"}, 310},
+			{IssueFilter{Field: "relation:blocked_by", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "relation:blocks", Operator: "isNotEmpty"}, 0},
+			{IssueFilter{Field: "hasLinks", Operator: "isEmpty"}, 310},
+			{IssueFilter{Field: "autoClosed", Values: []string{"true"}}, 310},
+			{IssueFilter{Field: "agentSessionId", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggestedLabel:suggested", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Not: &IssueFilter{Or: []IssueFilter{{Field: "relation:blocked_by", Operator: "isNotEmpty"}, {Field: "hasLinks", Operator: "isNotEmpty"}}}}, 310},
 		} {
 			page, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, Filter: IssueFilter{And: []IssueFilter{{Field: "status", Values: []string{"attribute-state"}}, test.filter}}, IncludeTotal: true, Limit: 1})
 			if err != nil || page.Total != test.want {
@@ -83,6 +95,19 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := repository.db.ExecContext(ctx, `UPDATE issue_attribute_migrations SET last_id=?,complete=0 WHERE workspace_key=?`, "attribute-0249", workspace); err != nil {
+		t.Fatal(err)
+	}
+	repository.Close()
+	repository, err = OpenSQLiteTestFixture(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(repository)
+	// A workspace indexed by attribute version 1 is re-indexed once for the new fields.
+	if _, err := repository.db.ExecContext(ctx, `DELETE FROM issue_attribute_records WHERE workspace_key=? AND field LIKE 'relation:%'`, workspace); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.db.ExecContext(ctx, `UPDATE issue_attribute_migrations SET last_id='',complete=1 WHERE workspace_key=?`, workspace); err != nil {
 		t.Fatal(err)
 	}
 	repository.Close()
