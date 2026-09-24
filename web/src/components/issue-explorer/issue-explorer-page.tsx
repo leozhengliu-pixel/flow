@@ -134,12 +134,12 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters), ...conditions, ...(scopeConditions ?? [])] } }
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, { data }), ...conditions, ...(scopeConditions ?? [])] } }
   }, [display, filters, initialInsightFilters?.teamIds, scope, scopeConditions, view])
   const insightQuery = useMemo(() => ({
     teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
     includeSubTeams: scope.kind === 'team',
-    filter: { and: [issueFiltersToQueryAst(filters), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
+    filter: { and: [issueFiltersToQueryAst(filters, { data }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
   }), [filters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   useActionGroupsForSelection(['Issues', 'Projects'])

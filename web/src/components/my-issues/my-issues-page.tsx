@@ -78,7 +78,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   })
   const myIssuesPagedQuery = useMemo(() => {
     const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(controller.display)
-    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
   }, [controller.display, controller.filters, data.viewer.id, projectedView])
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
@@ -159,7 +159,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const boardGroups = displayedGroups
   const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
-  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
+  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
   const previewRow = previewIssue ? toRow(previewIssue, workspaceSlug, data, issueMatchesView(previewIssue, data, projectedView)) : undefined

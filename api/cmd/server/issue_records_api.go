@@ -74,6 +74,10 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		for _, child := range node.Or {
 			result.Or = append(result.Or, convert(child))
 		}
+		if node.Not != nil {
+			negated := convert(*node.Not)
+			result.Not = &negated
+		}
 		return result
 	}
 	query.Filter = convert(root)

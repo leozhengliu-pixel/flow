@@ -314,7 +314,7 @@ export function ProjectIssues({
   const pagedQuery = useMemo<IssueQueryInput>(() => {
     const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    return { projectId: project.id, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters), ...conditions] } };
+    return { projectId: project.id, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
   }, [project.id, milestoneScope, filters, display]);
   const visible = useMemo(
     () => applyExplorerFilters(projectIssues, filters, issueData),

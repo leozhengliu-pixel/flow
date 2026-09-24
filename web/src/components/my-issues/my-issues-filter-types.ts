@@ -1,5 +1,6 @@
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { combineModelFilters } from '@/components/filter/filter-block-helper'
+import { filterToQueryNode, type IssueFilterQueryContext } from '@/components/issue-explorer/issue-filter-query'
 
 export type MyIssuesFilterOperator = 'is' | 'isNot'
 export interface MyIssuesFilterValue { value: string; valueLabel: string; color?: string }
@@ -36,7 +37,9 @@ const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
 }
 
 /** Convert the existing filter-bar state into a composable AND expression (FilterBlockHelper). */
-export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[]): IssueQueryAstNode {
+export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[], context?: IssueFilterQueryContext): IssueQueryAstNode {
+  // With workspace context every filter-menu field is translated to the server vocabulary.
+  if (context) return { and: filters.map(filter => filterToQueryNode(filter, context)) }
   const leaves = filters.map(filter => ({
     field: QUERY_FIELDS[filter.field] ?? filter.field,
     operator: filter.operator,
