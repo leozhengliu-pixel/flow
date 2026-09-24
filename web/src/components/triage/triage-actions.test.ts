@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WorkflowState } from '@/types/flow'
-import { canceledState, isSnoozed, snoozePresets } from './triage-actions'
+import { canceledState, isSnoozed, snoozePresets } from './triage-model'
 
 const state = (id: string, name: string, type: WorkflowState['type'], teamId = 'team'): WorkflowState => ({ id, name, type, teamId, color: '#999', position: 0 } as WorkflowState)
 
