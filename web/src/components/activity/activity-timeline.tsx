@@ -1,5 +1,5 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, MessageSquareReply, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
+import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { Composer } from '@/components/editor/composer'
@@ -135,59 +135,68 @@ export function ActivityTimeline({
             key={`${item.kind}-${item.id}`}
           >
             {item.kind === 'event' ? (
-              <div className="activity-event-icon">
-                <ActivityEventIcon event={item} context={context} />
-              </div>
+              <>
+                <div className="activity-event-icon">
+                  <ActivityEventIcon event={item} context={context} />
+                </div>
+                <div>
+                  <ActivityRow event={item} description={item.description} />
+                </div>
+              </>
             ) : (
-              <Avatar name={item.user.displayName} />
-            )}
-            <div>
-              {item.kind === 'event' ? (
-                <ActivityRow event={item} description={item.description} />
-              ) : (
-                <ResolvedComment
-                  comment={item}
-                  threadSummariesEnabled={threadSummariesEnabled}
-                  busy={busy === item.id}
-                  onResolve={
-                    onResolve
-                      ? (resolved) =>
-                          run(item.id, async () => {
-                            await onResolve(item.id, resolved)
-                            if (parentId) inlineCommentsState.resolveMark(parentType, parentId, item.id, resolved)
-                          })
-                      : undefined
-                  }
-                >
+              <ResolvedComment
+                comment={item}
+                threadSummariesEnabled={threadSummariesEnabled}
+                busy={busy === item.id}
+                onResolve={
+                  onResolve
+                    ? (resolved) =>
+                        run(item.id, async () => {
+                          await onResolve(item.id, resolved)
+                          if (parentId) inlineCommentsState.resolveMark(parentType, parentId, item.id, resolved)
+                        })
+                    : undefined
+                }
+              >
+                {/* Linear comment thread: one card with the root comment, its replies and a reply input. */}
+                <div className="comment-thread" data-has-replies={(replies.get(item.id) ?? []).length > 0 || undefined}>
                   <article className="comment-card" data-activity-anchor={`comment-${item.id}`}>
                     <header>
+                      <Avatar name={item.user.displayName} />
                       <strong data-i18n-ignore>{item.user.displayName}</strong>
                       <a href={`#comment-${item.id}`} title={format(new Date(item.createdAt), 'PPpp')}>
                         {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
                       </a>
-                      {item.editedAt && <span>edited</span>}
-                      <CommentMenu
-                        id={item.id}
-                        own={item.user.id === viewerId}
-                        body={item.body}
-                        resolved={Boolean(item.resolved)}
-                        thread={changeThread ? {
-                          state: explicitThreadState(item.id),
-                          participating: item.user.id === viewerId || Boolean(replies.get(item.id)?.some(reply => reply.user.id === viewerId)),
-                          onChange: state => changeThread(item.id, state),
-                        } : undefined}
-                        onEdit={() => setEditing(item.id)}
-                        onDelete={() => setDeleting(item)}
-                        onResolve={
-                          onResolve
-                            ? () =>
-                                run(item.id, async () => {
-                                  await onResolve(item.id, !item.resolved)
-                                  if (parentId) inlineCommentsState.resolveMark(parentType, parentId, item.id, !item.resolved)
-                                })
-                            : undefined
-                        }
-                      />
+                      {item.editedAt && <span>{t('(edited)')}</span>}
+                      <div className="comment-card__actions">
+                        <EmojiPicker align="end" onSelect={(emoji) => run(item.id, () => onReaction(item.id, emoji))}>
+                          <button type="button" aria-label="Add reaction">
+                            <SmilePlus size={14} />
+                          </button>
+                        </EmojiPicker>
+                        <CommentMenu
+                          id={item.id}
+                          own={item.user.id === viewerId}
+                          body={item.body}
+                          resolved={Boolean(item.resolved)}
+                          thread={changeThread ? {
+                            state: explicitThreadState(item.id),
+                            participating: item.user.id === viewerId || Boolean(replies.get(item.id)?.some(reply => reply.user.id === viewerId)),
+                            onChange: state => changeThread(item.id, state),
+                          } : undefined}
+                          onEdit={() => setEditing(item.id)}
+                          onDelete={() => setDeleting(item)}
+                          onResolve={
+                            onResolve
+                              ? () =>
+                                  run(item.id, async () => {
+                                    await onResolve(item.id, !item.resolved)
+                                    if (parentId) inlineCommentsState.resolveMark(parentType, parentId, item.id, !item.resolved)
+                                  })
+                              : undefined
+                          }
+                        />
+                      </div>
                     </header>
                     {editing === item.id ? (
                       <Composer
@@ -215,38 +224,55 @@ export function ActivityTimeline({
                       viewerId={viewerId}
                       onToggle={(emoji) => run(item.id, () => onReaction(item.id, emoji))}
                     />
-                    <div className="comment-actions">
-                      <EmojiPicker align="start" onSelect={(emoji) => run(item.id, () => onReaction(item.id, emoji))}>
-                        <button type="button" aria-label="Add reaction">
-                          <SmilePlus size={13} />
-                          <span>Add reaction</span>
-                        </button>
-                      </EmojiPicker>
-                      <button type="button" aria-label="Reply" onClick={() => setReplying((current) => (current === item.id ? null : item.id))}>
-                        <MessageSquareReply size={13} />
-                        <span>Reply</span>
-                      </button>
-                    </div>
-                    {(replies.get(item.id) ?? []).map((reply) => (
-                      <div className="comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}>
+                  </article>
+                  {(replies.get(item.id) ?? []).map((reply) => (
+                    <article className="comment-card comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}>
+                      <header>
                         <Avatar name={reply.user.displayName} />
-                        <div>
-                          <header>
-                            <strong>{reply.user.displayName}</strong>
-                            <time>{formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}</time>
-                          </header>
-                          <div className="reply-body">
-                            <RichComment body={reply.body} data={reply.bodyData} version={reply.version} />
-                          </div>
-                          <ReactionPills
-                            reactions={reply.reactions}
-                            viewerId={viewerId}
-                            onToggle={(emoji) => run(reply.id, () => onReaction(reply.id, emoji))}
+                        <strong data-i18n-ignore>{reply.user.displayName}</strong>
+                        <a href={`#comment-${reply.id}`} title={format(new Date(reply.createdAt), 'PPpp')}>
+                          {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
+                        </a>
+                        {reply.editedAt && <span>{t('(edited)')}</span>}
+                        <div className="comment-card__actions">
+                          <EmojiPicker align="end" onSelect={(emoji) => run(reply.id, () => onReaction(reply.id, emoji))}>
+                            <button type="button" aria-label="Add reaction">
+                              <SmilePlus size={14} />
+                            </button>
+                          </EmojiPicker>
+                          <CommentMenu
+                            id={reply.id}
+                            own={reply.user.id === viewerId}
+                            body={reply.body}
+                            onEdit={() => setEditing(reply.id)}
+                            onDelete={() => setDeleting(reply)}
                           />
                         </div>
-                      </div>
-                    ))}
-                    {replying === item.id && (
+                      </header>
+                      {editing === reply.id ? (
+                        <Composer
+                          compact
+                          initialValue={reply.body}
+                          initialData={reply.bodyData}
+                          placeholder="Edit comment…"
+                          onUpload={onUpload}
+                          onCancel={() => setEditing(null)}
+                          onSubmit={async (body, data) => { await onEdit(reply.id, body, data); setEditing(null) }}
+                        />
+                      ) : (
+                        <div className="comment-body reply-body">
+                          <RichComment body={reply.body} data={reply.bodyData} version={reply.version} />
+                        </div>
+                      )}
+                      <ReactionPills
+                        reactions={reply.reactions}
+                        viewerId={viewerId}
+                        onToggle={(emoji) => run(reply.id, () => onReaction(reply.id, emoji))}
+                      />
+                    </article>
+                  ))}
+                  {replying === item.id ? (
+                    <div className="comment-thread__composer">
                       <Composer
                         compact
                         placeholder="Leave a reply…"
@@ -257,11 +283,15 @@ export function ActivityTimeline({
                           setReplying(null)
                         }}
                       />
-                    )}
-                  </article>
-                </ResolvedComment>
-              )}
-            </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="comment-thread__reply" aria-label="Reply" onClick={() => setReplying(item.id)}>
+                      <span>{t('Leave a reply…')}</span>
+                    </button>
+                  )}
+                </div>
+              </ResolvedComment>
+            )}
           </div>
         ))}
       </div>

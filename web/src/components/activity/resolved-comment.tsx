@@ -19,7 +19,8 @@ export type ResolvedCommentProps = {
 }
 
 /**
- * Resolve / unresolve chrome + optional thread summary for activity Comment hosts (LS-0531).
+ * Resolved-thread chrome (Linear shows it only once a thread is resolved; open threads resolve from
+ * the comment menu). Re-open + optional thread summary for activity Comment hosts (LS-0531).
  * Pairs with `inlineCommentsState` marks and the orphaned `resolvedThreadSummaries` setting.
  */
 export function ResolvedComment({
@@ -47,7 +48,7 @@ export function ResolvedComment({
 
   return (
     <div className={`resolved-comment${resolved ? ' resolved-comment--resolved' : ''}`} data-comment-id={comment.id} data-resolved={resolved ? 'true' : 'false'}>
-      {(resolved || onResolve) && (
+      {resolved && (
         <div className="resolved-comment__bar" role="group" aria-label={t('Comment thread')}>
           <span className="resolved-comment__bar-label">
             {resolved ? <CheckCircle2 size={14} aria-hidden /> : null}
@@ -62,11 +63,10 @@ export function ResolvedComment({
             {onResolve && (
               <button
                 type="button"
-                className={resolved ? undefined : 'is-primary'}
                 disabled={busy}
-                onClick={() => void onResolve(!resolved)}
+                onClick={() => void onResolve(false)}
               >
-                {resolved ? <><RotateCcw size={12} aria-hidden /> {t('Re-open')}</> : t('Resolve')}
+                <RotateCcw size={12} aria-hidden /> {t('Re-open')}
               </button>
             )}
           </div>

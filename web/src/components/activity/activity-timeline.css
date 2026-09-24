@@ -159,3 +159,134 @@
 .issue-activity-timeline .reply-body pre code { padding: 0; background: transparent; }
 .issue-activity-timeline .comment-body a,
 .issue-activity-timeline .reply-body a { color: var(--accent-primary); }
+
+/* Linear comment thread (IssueCommentsAndHistory / Comment): one card per thread that spans 8px past the
+   timeline column, covers the connecting line, and holds the root comment, replies and a reply input. */
+.issue-activity-timeline .timeline-item.comment { display: block; padding: 8px 0; }
+.issue-activity-timeline .comment-thread {
+  position: relative;
+  z-index: 1;
+  margin: 0 -8px;
+  border: .5px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  overflow: clip;
+}
+.issue-activity-timeline .comment-thread .comment-card { position: relative; padding: 14px 16px; border-radius: 0; }
+.issue-activity-timeline .comment-thread .comment-card + .comment-card,
+.issue-activity-timeline .comment-thread .comment-card + .comment-thread__reply,
+.issue-activity-timeline .comment-thread .comment-card + .comment-thread__composer { border-top: .5px solid var(--theme-border); }
+.issue-activity-timeline .comment-thread .comment-card > header {
+  height: 20px;
+  min-height: 20px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+.issue-activity-timeline .comment-thread .comment-card > header > .avatar {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  flex: 0 0 18px;
+  margin-right: 9px;
+  color: var(--on-accent);
+  font-size: 8px;
+  line-height: 18px;
+}
+.issue-activity-timeline .comment-thread .comment-card > header > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.issue-activity-timeline .comment-thread .comment-card > header > a,
+.issue-activity-timeline .comment-thread .comment-card > header > span:not(.avatar) {
+  margin-left: 6px;
+  color: var(--theme-text-tertiary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.issue-activity-timeline .comment-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 8px;
+  opacity: 0;
+  transition: opacity .15s ease;
+}
+.issue-activity-timeline .comment-card:hover .comment-card__actions,
+.issue-activity-timeline .comment-card:focus-within .comment-card__actions,
+.issue-activity-timeline .comment-card__actions:has([data-state=open]) { opacity: 1; }
+.issue-activity-timeline .comment-card__actions button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  opacity: 1;
+}
+.issue-activity-timeline .comment-card__actions button:hover,
+.issue-activity-timeline .comment-card__actions button[data-state=open] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.issue-activity-timeline .comment-thread .comment-body {
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font-size: 15px;
+  line-height: 24px;
+}
+.issue-activity-timeline .comment-thread .comment-body p,
+.issue-activity-timeline .comment-thread .comment-body li { color: inherit; font-size: 15px; line-height: 24px; }
+.issue-activity-timeline .comment-thread .reaction-pills,
+.issue-activity-timeline .comment-thread [data-reaction-pills] { margin-top: 10px; }
+.issue-activity-timeline .comment-thread .composer { margin: 10px -4px 0; }
+.issue-activity-timeline .comment-thread__reply {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 0 0 8px 8px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  font: 400 13px/20px var(--font);
+  text-align: left;
+  cursor: text;
+}
+.issue-activity-timeline .comment-thread__reply:hover { color: var(--theme-text-secondary); }
+.issue-activity-timeline .comment-thread__composer { padding: 8px 12px 12px; }
+.issue-activity-timeline .comment-thread__composer .composer { margin: 0; }
+.issue-activity-timeline .resolved-comment { gap: 0; }
+.issue-activity-timeline .resolved-comment__bar { margin-bottom: 6px; }
+:root[data-theme="light"] .issue-activity-timeline .comment-thread {
+  border-color: lch(91.9 0 282);
+  background: lch(100 0 282);
+  box-shadow: lch(0 0 0 / .02) 0 3px 6px -2px, lch(0 0 0 / .04) 0 1px 1px 0;
+}
+:root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-body { border: 0; background: transparent; }
+.issue-activity-timeline .comment-thread .reaction-pills:empty { display: none; }
+.issue-activity-timeline .comment-thread .comment-reply {
+  display: block;
+  grid-template-columns: none;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 0;
+}
+.issue-activity-timeline .comment-thread .comment-reply strong { display: inline; font-size: 13px; line-height: 20px; }
+.issue-activity-timeline .comment-thread .comment-reply > header > .avatar { align-self: center; margin-top: 0; }
+:root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-card > header > .avatar { color: var(--on-accent); }
