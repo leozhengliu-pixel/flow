@@ -15,5 +15,5 @@
 .issue-deploy-preview svg{width:11px;height:11px;color:var(--theme-text-tertiary)}
 .issue-deploy-preview__dot{width:6px;height:6px;border-radius:9999px;background:var(--theme-text-tertiary)}
 .issue-deploy-preview__dot[data-state=ready]{background:var(--semantic-success)}
-.issue-deploy-preview__dot[data-state=building],.issue-deploy-preview__dot[data-state=pending]{background:var(--semantic-warning)}
+.issue-deploy-preview__dot[data-state=building],.issue-deploy-preview__dot[data-state=pending]{background:var(--inbox-status-started)}
 .issue-deploy-preview__dot[data-state=failed]{background:var(--semantic-danger-text)}

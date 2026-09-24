@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
-import { ChevronRight, FilePlus2, Link2, Menu, Plus, Search, Star, Trash2 } from 'lucide-react'
+import { FilePlus2, Link2, Plus, Search, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 

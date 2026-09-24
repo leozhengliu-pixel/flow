@@ -14,6 +14,7 @@ import { ThemedToaster } from './components/ui/themed-toaster'
 import { ActionDialogHost } from './components/ui/action-dialogs'
 import { LightboxEditorProvider } from './components/editor/lightbox-editor-provider'
 import { TooltipProvider } from './components/ui/tooltip'
+import { TitleTooltipBridge } from './components/ui/title-tooltip-bridge'
 import './i18n/i18n.css'
 import { FlowMotionProvider } from './components/ui/motion'
 import './styles/motion.css'
@@ -29,6 +30,7 @@ createRoot(document.getElementById('root')!).render(
           <TooltipProvider delayDuration={450} skipDelayDuration={300}>
             <App />
           </TooltipProvider>
+          <TitleTooltipBridge />
           <ThemedToaster />
           <ActionDialogHost />
         </LightboxEditorProvider>
