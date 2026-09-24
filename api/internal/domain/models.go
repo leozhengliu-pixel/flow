@@ -1365,6 +1365,7 @@ type CodeReview struct {
 	Checks          []ReviewCheck `json:"checks"`
 	Files           []ReviewFile  `json:"files"`
 	Events          []ReviewEvent `json:"events"`
+	Previews        []DeployPreview `json:"previews,omitempty"`
 	Favorite        bool          `json:"favorite"`
 	Draft           bool          `json:"draft"`
 	QuickToReview   bool          `json:"quickToReview"`
@@ -1372,6 +1373,29 @@ type CodeReview struct {
 	UpdatedAt       time.Time     `json:"updatedAt"`
 	MergedAt        *time.Time    `json:"mergedAt,omitempty"`
 	ClosedAt        *time.Time    `json:"closedAt,omitempty"`
+}
+
+// DeployPreview is one environment deployment for a pull request's head
+// branch (Vercel / Netlify / GitHub deployments), shown on linked issues.
+type DeployPreview struct {
+	ID          string    `json:"id"`
+	Provider    string    `json:"provider"`
+	Environment string    `json:"environment"`
+	URL         string    `json:"url"`
+	LogURL      string    `json:"logUrl,omitempty"`
+	State       string    `json:"state"`
+	CommitSHA   string    `json:"commitSha,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type DeployPreviewInput struct {
+	Environment string `json:"environment"`
+	URL         string `json:"url"`
+	LogURL      string `json:"logUrl"`
+	State       string `json:"state"`
+	CommitSHA   string `json:"commitSha"`
+	Provider    string `json:"provider"`
 }
 
 type SLARule struct {
@@ -1459,6 +1483,23 @@ type Subscription struct {
 	ResourceID   string    `json:"resourceId"`
 	Events       []string  `json:"events,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// ThreadSubscription is a user's explicit choice for one comment thread
+// (the root comment and its replies). Thread participants are subscribed
+// implicitly; "muted" silences a thread even for issue subscribers.
+type ThreadSubscription struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"userId"`
+	IssueID   string    `json:"issueId"`
+	CommentID string    `json:"commentId"`
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type ThreadSubscriptionInput struct {
+	State string `json:"state"`
 }
 
 type SubscriptionMutationInput struct {
@@ -1801,6 +1842,7 @@ type Bootstrap struct {
 	Favorites                     []Favorite                         `json:"favorites"`
 	FavoriteFolders               []FavoriteFolder                   `json:"favoriteFolders"`
 	Subscriptions                 []Subscription                     `json:"subscriptions"`
+	ThreadSubscriptions           []ThreadSubscription               `json:"threadSubscriptions"`
 	AuditLog                      []AuditLogEntry                    `json:"auditLog"`
 	Trash                         []TrashEntry                       `json:"trash"`
 	ImportJobs                    []ImportJob                        `json:"importJobs"`

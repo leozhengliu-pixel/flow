@@ -19,6 +19,8 @@
   animation: flow-tooltip-in 100ms ease-out;
 }
 
+.flow-tooltip-content--title { height: auto; white-space: pre-line; }
+.flow-tooltip-content--title .flow-tooltip-copy { overflow-wrap: anywhere; }
 .flow-tooltip-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .flow-tooltip-shortcut { color: var(--theme-text-tertiary); font: 10px/1 var(--font-monospace); }
 

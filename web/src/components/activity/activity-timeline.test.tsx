@@ -92,6 +92,30 @@ describe('issue activity timeline', () => {
     expect(copy).toHaveBeenCalledWith(`${location.href.split('#')[0]}#comment-comment-one`)
   })
 
+  it('subscribes to and mutes a single comment thread', async () => {
+    const user = userEvent.setup()
+    const other = { ...viewer, id: 'someone-else', displayName: 'Someone' }
+    const root = { id: 'root', body: 'Question', user: other, createdAt: '2026-09-08T06:00:00Z', reactions: {} } as Comment
+    const change = vi.fn().mockResolvedValue(undefined)
+    const props = { events: [], comments: [root], viewerId: viewer.id, onReply: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), onReaction: vi.fn(), onThreadSubscription: change }
+    const { rerender } = render(<I18nProvider><ActivityTimeline {...props}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Subscribe to thread' }))
+    expect(change).toHaveBeenCalledWith('root', 'subscribed')
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unsubscribe from thread' }))
+    expect(change).toHaveBeenLastCalledWith('root', null)
+
+    // Participants follow implicitly, so unsubscribing mutes the thread.
+    const reply = { ...root, id: 'reply', parentId: 'root', user: viewer }
+    rerender(<I18nProvider><ActivityTimeline {...props} comments={[{ ...root, id: 'root-2' }, { ...reply, parentId: 'root-2' }]}/></I18nProvider>)
+    await user.click(screen.getAllByRole('button', { name: 'Comment options' })[0])
+    await user.click(screen.getByRole('menuitem', { name: 'Unsubscribe from thread' }))
+    expect(change).toHaveBeenLastCalledWith('root-2', 'muted')
+    await user.click(screen.getAllByRole('button', { name: 'Comment options' })[0])
+    expect(screen.getByRole('menuitem', { name: 'Unmute thread' })).toBeInTheDocument()
+  })
+
   it('parses markdown comments and replies through RichComment', async () => {
     const comment = { id: 'comment-one', version: 1, body: '## Root heading\n\nRoot paragraph.', user: viewer, createdAt: '2026-09-01T00:00:00Z', reactions: {} } as Comment
     const reply = { ...comment, id: 'reply-one', parentId: 'comment-one', version: 2, body: '- reply item' }

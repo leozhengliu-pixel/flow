@@ -462,6 +462,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/reviews", s.listReviews)
 	mux.HandleFunc("GET /api/reviews/{id}", s.getReview)
 	mux.HandleFunc("PATCH /api/reviews/{id}", s.updateReview)
+	mux.HandleFunc("PUT /api/reviews/{id}/previews", s.putReviewPreview)
 	mux.HandleFunc("POST /api/reviews/{id}/submit", s.submitReview)
 	mux.HandleFunc("POST /api/reviews/{id}/comments", s.commentOnReview)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
@@ -529,6 +530,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/meetings/{id}", s.updateMeeting)
 	mux.HandleFunc("DELETE /api/meetings/{id}", s.deleteMeeting)
 	mux.HandleFunc("GET /api/search/semantic", s.semanticSearch)
+	mux.HandleFunc("POST /api/ai/issue-filter", s.aiIssueFilter)
 	mux.HandleFunc("GET /api/search/filter-suggestions", s.filterSuggestions)
 	mux.HandleFunc("GET /api/projects/{id}/relations", s.listProjectRelations)
 	mux.HandleFunc("POST /api/projects/{id}/relations", s.createProjectRelation)
@@ -623,6 +625,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/issue-records/{id}/context", s.getIssueRecordContext)
 	mux.HandleFunc("GET /api/issue-records/{id}/history", s.getIssueRecordHistory)
 	mux.HandleFunc("GET /api/issue-records/{id}/related", s.getIssueRecordRelated)
+	mux.HandleFunc("GET /api/issue-records/{id}/similar", s.getIssueRecordSimilar)
 	mux.HandleFunc("POST /api/issue-records/visibility", s.issueRecordVisibility)
 	mux.HandleFunc("PATCH /api/issue-records/{id}", s.updateIssueRecord)
 	mux.HandleFunc("DELETE /api/issue-records/{id}", s.issueRecordAlias(s.deleteIssue))
@@ -634,6 +637,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/issue-records/{id}/permissions/{permissionId}", s.issueRecordAlias(s.deleteIssuePermission))
 	mux.HandleFunc("POST /api/issue-records/{id}/reactions", s.issueRecordAlias(s.toggleIssueReaction))
 	mux.HandleFunc("POST /api/issue-records/{id}/comments", s.issueRecordAlias(s.createComment))
+	mux.HandleFunc("PUT /api/issue-records/{id}/comments/{commentId}/subscription", s.issueRecordAlias(s.setThreadSubscription))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/comments/{commentId}/subscription", s.issueRecordAlias(s.clearThreadSubscription))
 	mux.HandleFunc("PATCH /api/issue-records/{id}/comments/{commentId}", s.issueRecordAlias(s.updateComment))
 	mux.HandleFunc("DELETE /api/issue-records/{id}/comments/{commentId}", s.issueRecordAlias(s.deleteComment))
 	mux.HandleFunc("POST /api/issue-records/{id}/comments/{commentId}/reactions", s.issueRecordAlias(s.toggleCommentReaction))
@@ -740,6 +745,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/reactions", s.toggleIssueReaction)
 	mux.HandleFunc("POST /api/issues/batch", s.batchUpdate)
 	mux.HandleFunc("POST /api/issues/{id}/comments", s.createComment)
+	mux.HandleFunc("PUT /api/issues/{id}/comments/{commentId}/subscription", s.setThreadSubscription)
+	mux.HandleFunc("DELETE /api/issues/{id}/comments/{commentId}/subscription", s.clearThreadSubscription)
 	mux.HandleFunc("PATCH /api/issues/{id}/comments/{commentId}", s.updateComment)
 	mux.HandleFunc("DELETE /api/issues/{id}/comments/{commentId}", s.deleteComment)
 	mux.HandleFunc("POST /api/issues/{id}/comments/{commentId}/reactions", s.toggleCommentReaction)
@@ -975,6 +982,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 		}
 	}
 	data.PushSubscriptions = slices.DeleteFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool { return item.UserID != data.Viewer.ID })
+	data.ThreadSubscriptions = slices.DeleteFunc(data.ThreadSubscriptions, func(item domain.ThreadSubscription) bool { return item.UserID != data.Viewer.ID })
 	for index := range data.PushSubscriptions {
 		data.PushSubscriptions[index].P256DH = ""
 		data.PushSubscriptions[index].Auth = ""
@@ -4134,6 +4142,9 @@ func (s *server) deleteComment(w http.ResponseWriter, r *http.Request) {
 		if len(data.Comments[issueID]) == before {
 			return errNotFound
 		}
+		data.ThreadSubscriptions = slices.DeleteFunc(data.ThreadSubscriptions, func(item domain.ThreadSubscription) bool {
+			return item.IssueID == issueID && item.CommentID == commentID
+		})
 		appendActivity(data, issueID, "comment.deleted", data.Viewer, map[string]string{"commentId": commentID})
 		return nil
 	})

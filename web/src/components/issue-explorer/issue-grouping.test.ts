@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createIssueDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import { buildIssueGroups, focusDescriptor, groupMoveUpdate, issueComparator, pagedDisplayQuery, withinCompletedWindow } from './issue-grouping'
+import { buildIssueGroups, focusDescriptor, groupMoveUpdate, issueComparator, labelGroups, pagedDisplayQuery, withinCompletedWindow } from './issue-grouping'
 
 const NOW = Date.parse('2026-09-24T12:00:00Z')
 const open = { id: 'todo', name: 'Todo', type: 'unstarted' as const, color: '#999' }
@@ -22,6 +22,27 @@ describe('issue grouping engine', () => {
     const a = { id: 'a', name: 'Bug', color: '#f00' }, b = { id: 'b', name: 'Frontend', color: '#0f0' }
     const groups = buildIssueGroups([row('1', { labels: [a, b] }), row('2')], createIssueDisplayOptions({ grouping: 'label', completedWindow: 'all' }))
     expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['Bug', ['1']], ['Frontend', ['1']], ['No label', ['2']]])
+  })
+
+  it('groups by one label group, keeps empty member groups, and swaps the exclusive label on move', () => {
+    const type = { id: 'type', name: 'Type', color: '#000' }
+    const bug = { id: 'bug', name: 'Bug', color: '#f00', groupId: 'type' }, feature = { id: 'feature', name: 'Feature', color: '#0f0', groupId: 'type' }, chore = { id: 'chore', name: 'Chore', color: '#00f', groupId: 'type' }
+    const ui = { id: 'ui', name: 'UI', color: '#999' }
+    const data = { states: [], cycles: [], projects: [], users: [], teams: [], releases: [], labels: [type, bug, feature, chore, ui] } as never
+    expect(labelGroups([type, bug, feature, chore, ui]).map(label => label.id)).toEqual(['type'])
+    const rows = [row('1', { labels: [bug, ui] }), row('2', { labels: [feature] }), row('3', { labels: [ui] })]
+    const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'labelGroup', labelGroupId: 'type', showEmptyGroups: true, completedWindow: 'all' }), { data })
+    expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['Bug', ['1']], ['Chore', []], ['Feature', ['2']], ['No Type', ['3']]])
+    expect(groupMoveUpdate(rows[0], 'labelGroup', 'labelgroup-feature', { labelGroupId: 'type' })).toEqual({ labelIds: ['ui', 'feature'] })
+    expect(groupMoveUpdate(rows[0], 'labelGroup', 'labelgroup-none', { labelGroupId: 'type' })).toEqual({ labelIds: ['ui'] })
+  })
+
+  it('groups by release date, newest day first, with unreleased last', () => {
+    const releases = [{ id: 'r1', name: 'v1', releasedAt: '2026-09-24T08:00:00' }, { id: 'r2', name: 'v2', releasedAt: '2026-09-23T08:00:00' }, { id: 'r3', name: 'v3' }]
+    const data = { states: [], cycles: [], projects: [], users: [], teams: [], releases } as never
+    const rows = [row('1', { releaseIds: ['r2'] }), row('2', { releaseIds: ['r1'] }), row('3', { releaseIds: ['r3'] }), row('4')]
+    const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping: 'releaseDate', completedWindow: 'all' }), { data, now: Date.parse('2026-09-24T12:00:00') })
+    expect(groups.map(group => [group.label, group.issues.map(issue => issue.id)])).toEqual([['Today', ['2']], ['Yesterday', ['1']], ['Not released', ['3', '4']]])
   })
 
   it('groups by customer and agent by their real identity', () => {

@@ -1,9 +1,10 @@
 import { format, formatDistanceToNow } from 'date-fns'
-import { CheckCircle2, Copy, Edit3, Ellipsis, Link2, MessageSquareReply, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
-import type { ActivityEvent, Comment, WorkflowState } from '@/types/flow'
+import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, MessageSquareReply, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
+import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { Composer } from '@/components/editor/composer'
 import { useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useActivityHighlight, useActivityHighlightTarget, type ActivityHighlightTarget } from './activity-highlight'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { RichComment } from './rich-comment'
@@ -32,6 +33,8 @@ export function ActivityTimeline({
   onReaction,
   onResolve,
   onUpload,
+  threadSubscriptions,
+  onThreadSubscription,
 }: {
   events: ActivityEvent[]
   comments: Comment[]
@@ -47,8 +50,21 @@ export function ActivityTimeline({
   onReaction: (id: string, emoji: string) => Promise<void>
   onResolve?: (id: string, resolved: boolean) => Promise<void>
   onUpload?: (file: File) => Promise<string>
+  /** The viewer's explicit thread choices; participants follow threads implicitly. */
+  threadSubscriptions?: ThreadSubscription[]
+  onThreadSubscription?: (commentId: string, state: ThreadSubscriptionState | null) => Promise<void>
 }) {
   const { t } = useI18n()
+  const [threadOverrides, setThreadOverrides] = useState<Record<string, ThreadSubscriptionState | null>>({})
+  const explicitThreadState = (rootId: string): ThreadSubscriptionState | null => rootId in threadOverrides
+    ? threadOverrides[rootId]
+    : threadSubscriptions?.find(item => item.commentId === rootId && item.userId === viewerId)?.state ?? null
+  const changeThread = onThreadSubscription
+    ? (rootId: string, state: ThreadSubscriptionState | null) => void run(rootId, async () => {
+      await onThreadSubscription(rootId, state)
+      setThreadOverrides(current => ({ ...current, [rootId]: state }))
+    }).catch(error => toast.error(error instanceof Error ? error.message : t('Could not update thread subscription')))
+    : undefined
   const [replying, setReplying] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Comment | null>(null)
@@ -155,6 +171,11 @@ export function ActivityTimeline({
                         own={item.user.id === viewerId}
                         body={item.body}
                         resolved={Boolean(item.resolved)}
+                        thread={changeThread ? {
+                          state: explicitThreadState(item.id),
+                          participating: item.user.id === viewerId || Boolean(replies.get(item.id)?.some(reply => reply.user.id === viewerId)),
+                          onChange: state => changeThread(item.id, state),
+                        } : undefined}
                         onEdit={() => setEditing(item.id)}
                         onDelete={() => setDeleting(item)}
                         onResolve={
@@ -306,6 +327,7 @@ function CommentMenu({
   own,
   body,
   resolved,
+  thread,
   onEdit,
   onDelete,
   onResolve,
@@ -314,10 +336,13 @@ function CommentMenu({
   own: boolean
   body: string
   resolved?: boolean
+  thread?: { state: ThreadSubscriptionState | null; participating: boolean; onChange: (state: ThreadSubscriptionState | null) => void }
   onEdit: () => void
   onDelete: () => void
   onResolve?: () => void
 }) {
+  const { t } = useI18n()
+  const following = thread ? thread.state === 'subscribed' || (thread.participating && thread.state !== 'muted') : false
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -334,6 +359,33 @@ function CommentMenu({
           <Copy size={14} />
           Copy content as Markdown
         </DropdownMenuItem>
+        {thread && (
+          <>
+            <DropdownMenuSeparator />
+            {following ? (
+              <DropdownMenuItem onSelect={() => thread.onChange(thread.participating ? 'muted' : null)}>
+                <BellOff size={14} />
+                {t('Unsubscribe from thread')}
+              </DropdownMenuItem>
+            ) : thread.state === 'muted' ? (
+              <DropdownMenuItem onSelect={() => thread.onChange(null)}>
+                <Bell size={14} />
+                {t('Unmute thread')}
+              </DropdownMenuItem>
+            ) : (
+              <>
+                <DropdownMenuItem onSelect={() => thread.onChange('subscribed')}>
+                  <Bell size={14} />
+                  {t('Subscribe to thread')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => thread.onChange('muted')}>
+                  <BellOff size={14} />
+                  {t('Mute thread')}
+                </DropdownMenuItem>
+              </>
+            )}
+          </>
+        )}
         {onResolve && (
           <>
             <DropdownMenuSeparator />

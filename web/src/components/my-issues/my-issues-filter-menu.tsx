@@ -126,21 +126,29 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
 }
 
 import { PersonHover } from '@/components/property/person-info'
-import { parseNaturalLanguageFilter } from './natural-language-filter'
+import { resolveAIFilter } from './natural-language-filter'
 import { isPeopleProperty } from '@/lib/people'
 
 function ValueMenu({ field, filters, label, onClose, onToggle, onToggleAny, options, optionsFor }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; onToggleAny: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[]; optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined }) {
   const { t } = useI18n()
   const selectedIds = useMemo(() => filters.filter(filter => filter.field === field).flatMap(filter => filter.values?.map(value => value.value) ?? [filter.value]), [field, filters])
   const command = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
+  const [aiPending, setAiPending] = useState(false)
+  const runAIFilter = (query: string) => {
+    setAiPending(true)
+    void resolveAIFilter(query, optionsFor).then(parsed => {
+      if (parsed.length) { for (const item of parsed) onToggleAny(item.field, item.option); onClose() }
+      else onToggle(field, interpretAIQuery(query))
+    }).finally(() => setAiPending(false))
+  }
 
   return <Popover.Portal>
     <Popover.Content data-flow-motion="floating" className={styles.valueMenu} data-field={field} side="left" align="start" alignOffset={-43} sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
       <div className={styles.valueSearch}>
-        <input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={field==='content'?t('Filter by content…'):field==='ai'?t('AI filter'):t('Filter…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event=>{if(event.key!=='Enter'||!command.query.trim())return;if(field==='content'){event.preventDefault();event.stopPropagation();onToggle(field,{id:`query:${command.query.trim()}`,label:command.query.trim()})}else if(field==='ai'){event.preventDefault();event.stopPropagation();const parsed=parseNaturalLanguageFilter(command.query,optionsFor);if(parsed.length){for(const item of parsed)onToggleAny(item.field,item.option);onClose()}else onToggle(field,interpretAIQuery(command.query))}}}/>
+        <input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={field==='content'?t('Filter by content…'):field==='ai'?t('AI filter'):t('Filter…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event=>{if(event.key!=='Enter'||!command.query.trim())return;if(field==='content'){event.preventDefault();event.stopPropagation();onToggle(field,{id:`query:${command.query.trim()}`,label:command.query.trim()})}else if(field==='ai'){event.preventDefault();event.stopPropagation();if(!aiPending)runAIFilter(command.query)}}}/>
       </div>
       <div className={styles.valueList} role="listbox" aria-label={label} aria-multiselectable="true">
-        {!command.filteredOptions.length && <div className={styles.empty}>{t('No results')}</div>}
+        {aiPending ? <div className={styles.empty} role="status">{t('Building filters…')}</div> : !command.filteredOptions.length && <div className={styles.empty}>{t('No results')}</div>}
         <FilterValueItems field={field} options={command.filteredOptions} activeId={command.activeId} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={next=>next.id==='content-prompt'?command.inputRef.current?.focus():command.choose(next)}/>
       </div>
     </Popover.Content>
