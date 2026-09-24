@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -60,12 +61,14 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const issuesById = useMemo(() => new Map([...data.issues, ...pagedIssues].map(issue => [issue.id, issue])), [data.issues, pagedIssues])
   const rowOptions = useMemo(() => explorerPropertyOptions(data, sourceIssues), [data, sourceIssues])
 
+  const groupingContext = useMemo(() => ({ data }), [data])
   const controller = useMyIssuesController({
     drillRows,
     workspaceSlug,
     initialView,
     initialGroups,
     initialDisplay: defaultMyIssuesDisplayOptions,
+    groupingContext,
     adapter: {
       navigate: href => onNavigateView?.(viewFromHref(href), href),
       persistDisplay: (view, options) => onPersistDisplay?.(view, options) ?? Promise.resolve(),
@@ -73,6 +76,10 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       executeBulk: async (action, ids, value) => (await executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
     },
   })
+  const myIssuesPagedQuery = useMemo(() => {
+    const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(controller.display)
+    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+  }, [controller.display, controller.filters, data.viewer.id, projectedView])
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
     const fieldLabel = FILTER_LABELS[field]
@@ -148,7 +155,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     addFilter(field, { id: item.id, label: item.label, color: item.color })
   }
   const displayedGroups = controller.visibleGroups
-  const boardGroups = useMemo(() => myIssuesBoardGroups(displayedGroups, controller.display, data), [controller.display, displayedGroups, data])
+  // Empty status columns come from the shared grouping engine (showEmptyGroups).
+  const boardGroups = displayedGroups
   const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
   const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
@@ -172,6 +180,13 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       detailsOpen={controller.detailsOpen}
       insightsOpen={insightsOpen}
       displayOptions={controller.display}
+      displayMenuProps={{
+        availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
+        availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
+        toggles: ['triage'],
+        onReset: () => controller.changeDisplay(defaultMyIssuesDisplayOptions),
+        resetLabel: 'Reset to default',
+      }}
       filterOpenSignal={filterOpenSignal}
       filters={controller.filters}
       filterOptions={field => explorerFilterOptions(field, rowOptions)}
@@ -207,7 +222,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onHideGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...controller.display.hiddenGroupIds, id] })}
         onShowGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(value => value !== id) })}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
-        query={{ archived: 'false', groupBy: controller.display.grouping === 'focus' ? 'status' : controller.display.grouping, sort: controller.display.ordering === 'created' ? 'createdAt' : controller.display.ordering === 'updated' ? 'updatedAt' : controller.display.ordering === 'priority' ? 'priority' : 'sortOrder', direction: controller.display.ordering === 'created' || controller.display.ordering === 'updated' ? 'desc' : 'asc', filter: { and: [issueFiltersToQueryAst(controller.filters), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }}
+        query={myIssuesPagedQuery}
         collapsedGroupIds={collapsedGroups}
         displayProperties={controller.display.properties}
         propertyOptions={rowOptions}
@@ -325,17 +340,6 @@ function groupIssues(issues: Issue[], workspaceSlug: string, data: BootstrapData
   return [...groups.values()]
 }
 
-function myIssuesBoardGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions, data: BootstrapData) {
-  if (display.layout !== 'board' || !display.showEmptyGroups || display.grouping !== 'status') return groups
-  const byId = new Map(groups.map(group => [group.id, group]))
-  for (const state of data.states) {
-    if (!byId.has(state.id)) byId.set(state.id, { id: state.id, label: state.name, stateType: state.type, state, createContext: { stateId: state.id }, issues: [] })
-  }
-  const order = new Map(data.states.map((state, index) => [state.id, index]))
-  const sorted = [...byId.values()].sort((left, right) => (order.get(left.id) ?? 99) - (order.get(right.id) ?? 99))
-  return display.groupOrder === 'desc' ? sorted.reverse() : sorted
-}
-
 function toRow(issue: Issue, workspaceSlug: string, data: BootstrapData, viewMatch = true): MyIssuesRowData {
   const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined
   return { ...issueToExplorerRow(issue,workspaceSlug,data.issues,data), viewMatch, sla:sla?{...sla,ruleName:rule?.name}:undefined }
@@ -404,7 +408,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
 function replaceRow(groups: MyIssuesGroupData[], row: MyIssuesRowData) { return groups.map(group => ({ ...group, issues: group.issues.map(issue => issue.id === row.id ? row : issue) })) }
 function reorderMyIssuesGroups(groups: MyIssuesGroupData[], row: MyIssuesRowData, grouping: MyIssuesDisplayOptions['grouping'], targetGroupId: string, targetIndex: number) {
   const replaced = groups.map(group => ({ ...group, issues: group.issues.filter(issue => issue.id !== row.id) }))
-  const target = replaced.find(group => group.id === targetGroupId || (grouping === 'focus' && targetGroupId === 'other-active' && group.id === 'other-active'))
+  const target = replaced.find(group => group.id === targetGroupId || false)
   if (target) {
     const issues = [...target.issues]
     issues.splice(Math.max(0, Math.min(targetIndex, issues.length)), 0, row)
@@ -438,7 +442,7 @@ function dueDateOptions(): MyIssuesBulkActionOption[] {
   const date = new Date(), day = 86_400_000
   return [{ id: '', label: 'No due date' }, { id: isoDate(date), label: 'Today' }, { id: isoDate(new Date(date.getTime() + day)), label: 'Tomorrow' }, { id: isoDate(new Date(date.getTime() + day * 7)), label: 'In one week' }]
 }
-function stateIdForGroup(group: MyIssuesGroupData, data: BootstrapData) { return group.id === 'other-active' ? data.states.find(state => state.type === 'started')?.id : group.id }
+function stateIdForGroup(group: MyIssuesGroupData, data: BootstrapData) { return group.createContext?.stateId ?? (group.id === 'focus-active' ? data.states.find(state => state.type === 'started')?.id : data.states.find(state => state.id === group.id)?.id) }
 function viewFromHref(href: string): MyIssuesView { return (href.split('/').at(-1) as MyIssuesView) ?? 'assigned' }
 function issueUrl(workspaceSlug: string, identifier: string) { return `${location.origin}/${workspaceSlug}/issue/${identifier}` }
 function clampPriority(value: number): 0 | 1 | 2 | 3 | 4 { return Math.max(0, Math.min(4, value)) as 0 | 1 | 2 | 3 | 4 }
