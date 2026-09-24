@@ -351,6 +351,8 @@ export interface Issue {
   nextOccurrenceAt?: string;
   /** Triage snooze: hidden from the triage queue until this time. */
   snoozedUntil?: string;
+  /** Explicit shares (user / team / workspace grants) for private-team issues. */
+  permissions?: { subjectType: string; subjectId: string; role?: string }[];
   subscriberIds: UUID[];
   reactions: Record<string, UUID[]>;
   subIssueIds: UUID[];

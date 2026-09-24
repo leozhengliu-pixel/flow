@@ -80,7 +80,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   })
   const myIssuesPagedQuery = useMemo(() => {
     const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(controller.display)
-    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
+    return { archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }, ...conditions] } }
   }, [controller.display, controller.filters, data.viewer.id, projectedView])
 
   const addFilter = (field: MyIssuesFilterKey, option?: MyIssuesFilterOption) => {
@@ -161,8 +161,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const boardGroups = displayedGroups
   const allInsightRows=useMemo(()=>insightsOpen?applyExplorerFilters(issuesForView(data,projectedView,true),controller.filters,data).map(issue=>issueToExplorerRow(issue,workspaceSlug,data.issues,data)):[],[controller.filters,data,insightsOpen,projectedView,workspaceSlug])
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
-  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
-  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : projectedView === 'shared' ? 'sharedWith' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
+  const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity',shared:'Shared with me'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
   const split = controller.display.layout === 'split'
   const splitRowIds = useMemo(() => data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : displayedGroups.flatMap(group => group.issues.map(issue => issue.id)), [data.issueCollectionPaged, displayedGroups, pagedIssues])
   useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
@@ -342,7 +342,15 @@ function issueMatchesView(issue: Issue, data: BootstrapData, view: MyIssuesView)
   if (view === 'created') return issue.creator.id === data.viewer.id
   if (view === 'subscribed') return issue.subscriberIds.includes(data.viewer.id)
   if (view === 'activity') return Boolean(data.activities[issue.id]?.some(activity => activity.actor.id === data.viewer.id))
+  if (view === 'shared') return isSharedWithViewer(issue, data)
   return issue.assignee?.id === data.viewer.id
+}
+
+/** Linear "Shared with me": issues granted to the viewer directly, or visible only through a share. */
+function isSharedWithViewer(issue: Issue, data: BootstrapData) {
+  if (issue.permissions?.some(permission => permission.subjectType === 'user' && permission.subjectId === data.viewer.id)) return true
+  const memberOf = data.teamMembers.some(member => member.teamId === issue.team.id && member.userId === data.viewer.id)
+  return !memberOf && Boolean(issue.permissions?.length) && data.teams.find(team => team.id === issue.team.id)?.private === true
 }
 
 function issuesWithHierarchyContext(primary: Issue[], issues: Issue[]) {
