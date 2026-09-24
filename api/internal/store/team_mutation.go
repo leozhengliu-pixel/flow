@@ -927,13 +927,14 @@ func metadataLabelEqual(a, b domain.IssueLabel) bool {
 
 func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 	return a.TeamID == b.TeamID && a.Description == b.Description && a.Timezone == b.Timezone &&
-		a.EstimateType == b.EstimateType && a.DefaultStateID == b.DefaultStateID &&
+		a.EstimateType == b.EstimateType && a.EstimateAllowZero == b.EstimateAllowZero && a.EstimateExtended == b.EstimateExtended &&
+		boolPointerEqual(a.EstimateCountUnestimated, b.EstimateCountUnestimated) && a.DefaultStateID == b.DefaultStateID &&
 		a.DefaultPriority == b.DefaultPriority && a.IssueEmailEnabled == b.IssueEmailEnabled &&
 		a.DetailedHistory == b.DetailedHistory && a.Access == b.Access &&
 		a.MembershipRestriction == b.MembershipRestriction && a.SettingsPermission == b.SettingsPermission &&
 		a.LabelPermission == b.LabelPermission && a.TemplatePermission == b.TemplatePermission &&
 		a.AgentSkillPermission == b.AgentSkillPermission && a.LoopPermission == b.LoopPermission &&
-		a.MemberPermission == b.MemberPermission && a.IssueSharingEnabled == b.IssueSharingEnabled && a.IssueSharingPermission == b.IssueSharingPermission && a.SlackChannelID == b.SlackChannelID &&
+		a.MemberPermission == b.MemberPermission && a.PinnedViewPermission == b.PinnedViewPermission && a.IssueSharingEnabled == b.IssueSharingEnabled && a.IssueSharingPermission == b.IssueSharingPermission && a.SlackChannelID == b.SlackChannelID &&
 		a.SlackChannelName == b.SlackChannelName && maps.Equal(a.SlackNotifications, b.SlackNotifications) &&
 		maps.Equal(a.PRAutomations, b.PRAutomations) && a.AutoCloseParents == b.AutoCloseParents &&
 		a.AutoCloseSubIssues == b.AutoCloseSubIssues && a.AutoCloseStale == b.AutoCloseStale &&
@@ -946,4 +947,11 @@ func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 		a.ShowInitiatives == b.ShowInitiatives && a.InheritIssueEstimation == b.InheritIssueEstimation &&
 		a.InheritWorkflowStatuses == b.InheritWorkflowStatuses && a.InheritProjectStatuses == b.InheritProjectStatuses &&
 		a.InheritCycles == b.InheritCycles && a.ParentTeamID == b.ParentTeamID
+}
+
+func boolPointerEqual(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }

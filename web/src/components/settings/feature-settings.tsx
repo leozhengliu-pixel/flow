@@ -10,10 +10,8 @@ import { toast } from "sonner";
 import { IntegrationBrandIcon } from './integration-brand-icon';
 import { CodeIntelligenceSettingsSection } from './code-intelligence-settings';
 import {
-  availabilityLabel,
   integrationCategories,
   primaryIntegrations,
-  type IntegrationCatalogEntry,
 } from '@/lib/integration-catalog';
 import {
   DEFAULT_REPOSITORY_ACCESS,
@@ -26,15 +24,16 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import {
-  authorizeIntegration, createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
-  deleteDocumentTemplate, disconnectIntegration, disconnectIntegrationConnection, updateCustomEmoji, updateDocumentTemplate,
+  createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
+  deleteDocumentTemplate, updateCustomEmoji, updateDocumentTemplate,
   updateCustomerStatus, updateCustomerTier, updateIntegrationConnection, updateWorkspacePreferences,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
-import type { SettingsPageId, IntegrationProvider } from "@/lib/app-routes";
+import { loopsPath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
+import { useNavigate } from "react-router-dom";
 import type {
   BootstrapData, CustomEmoji, DocumentTemplate, FeatureOption, FeatureSettings,
-  IntegrationConnection, ReleasePipeline, WorkspaceSettings,
+  ReleasePipeline, WorkspaceSettings,
 } from "@/types/flow";
 
 import "./feature-settings.css";
@@ -44,7 +43,7 @@ import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingAgentSettingsPage } from "./coding-agent-settings";
 
-type FeaturePageId = Extract<SettingsPageId, "ai"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
+type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: () => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
@@ -105,6 +104,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   if (page === "coding-sessions") return <CodingAgentSettingsPage data={data} settings={settings} onReload={onReload} onOpenEnvironments={() => onNavigateSettings?.("coding-environments")} />;
   if (page === "coding-environments") return <CodingAgentSettingsPage data={data} settings={settings} mode="environments" onReload={onReload} />;
   if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onOpenIntegration={onOpenIntegration} onNavigateSettings={onNavigateSettings}/>;
+  if (page === "loops") return <LoopsFeatureSettings data={data} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onSaveWorkspace={save} onReload={onReload}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
@@ -113,6 +113,25 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   if (page === "asks") return <AsksSettingsPage data={data} settings={settings} busy={busy || !['admin', 'owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload} onOpenSlack={onOpenAsksSlack} onOpenEmailIntake={onOpenAsksEmailIntake}/>;
   if (page === "emojis") return <EmojisPage data={data} onReload={onReload}/>;
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
+}
+
+function LoopsFeatureSettings({data,settings,busy,setEnabled,setFeature,onSaveWorkspace,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;onReload:()=>Promise<void>;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onSaveWorkspace:(next:Parameters<typeof updateWorkspacePreferences>[0])=>Promise<void>}) {
+  const navigate = useNavigate();
+  const enabled = settings.featureFlags.loops ?? true;
+  const repositoryAccess: RepositoryAccessSettings = { ...DEFAULT_REPOSITORY_ACCESS, ...(settings.featureSettings.repositoryAccess ?? {}) };
+  return <FeatureShell title="Loops" description="Agent workflows that run on a schedule or on changes in your workspace.">
+    <FeatureCard>
+      <FeatureRow title="Enable Loops"><Toggle checked={enabled} disabled={busy} label="Enable Loops" onChange={value=>setEnabled("loops",value)}/></FeatureRow>
+      <FeatureRow title="Loops" description="View all existing loops and create new ones"><FeatureButton disabled={!enabled} onClick={()=>navigate(loopsPath(data.workspace.urlKey))}>View loops</FeatureButton></FeatureRow>
+    </FeatureCard>
+    {enabled&&<FeatureSection title="Permissions">
+      <FeatureCard>
+        <FeatureRow title="Code Intelligence" description="Let Loops use Code Intelligence for workspace-connected repos"><Toggle checked={repositoryAccess.allowAutomationAccess} disabled={busy} label="Code Intelligence" onChange={value=>setFeature("repositoryAccess",{...repositoryAccess,allowAutomationAccess:value})}/></FeatureRow>
+        <FeatureRow title="Allow external sources to trigger loops" description="Select which external sources can trigger loops"><Toggle checked={settings.externalLoopTriggers===true} disabled={busy} label="Allow external sources to trigger loops" onChange={value=>void onSaveWorkspace({externalLoopTriggers:value})}/></FeatureRow>
+      </FeatureCard>
+    </FeatureSection>}
+    {enabled&&<AgentTrustedSourcesSettings data={data} settings={settings} disabled={busy} onReload={onReload} />}
+  </FeatureShell>;
 }
 
 function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegration,onNavigateSettings}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onOpenIntegration:(provider:IntegrationProvider|string)=>void;onNavigateSettings?: (page: SettingsPageId) => void}) {
@@ -190,9 +209,6 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
         onReload={onReload}
         onOpenEnvironments={() => onNavigateSettings?.("coding-environments")}
       />
-    </FeatureSection>
-    <FeatureSection title="Trusted sources" description="Allowlist external sources that agents and loops may trust.">
-      <AgentTrustedSourcesSettings data={data} settings={settings} disabled={busy} onReload={onReload} />
     </FeatureSection>
     <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
   </FeatureShell>;
@@ -364,27 +380,16 @@ function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<voi
   return <div className="feature-wide"><FeatureShell title="Emojis"><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by name")} placeholder={t("Filter by name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Emoji state" value={showArchived?"archived":"active"} options={[{value:"active",label:"Active emojis"},{value:"archived",label:"Archived"}]} onChange={value=>setShowArchived(value==="archived")}/><span/><input ref={fileRef} aria-label={t("Emoji image")} className="feature-file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={event=>choose(event.target.files?.[0])}/><FeatureButton onClick={()=>fileRef.current?.click()}>Upload</FeatureButton></div>{emojis.length?<div className="feature-emoji-grid">{emojis.map(item=><div key={item.id}><img src={item.imageUrl} alt=""/><strong data-i18n-ignore>:{item.name}:</strong><span>{t("by")} <b data-i18n-ignore>{item.creator.displayName}</b></span><FeatureButton aria-label={`${t(item.archivedAt?"Restore":"Archive")}: ${item.name}`} onClick={()=>void archive(item)}>{item.archivedAt?"Restore":"Archive"}</FeatureButton></div>)}</div>:<FeatureEmpty icon={Smile} title={showArchived?"No archived emojis":"No emojis"}/>} {upload&&<EmojiDialog input={upload} onClose={()=>setUpload(null)} onReload={onReload}/>}</FeatureShell></div>;
 }
 
-function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(provider:IntegrationProvider|string)=>void;onReload:()=>Promise<void>}) {
+function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:IntegrationProvider|string)=>void;onReload:()=>Promise<void>}) {
   const {t}=useI18n();
-  const [query,setQuery]=useState(""); const [category,setCategory]=useState("All"); const [busy,setBusy]=useState("");
-  const catalog = primaryIntegrations();
-  const categories = ["All", ...integrationCategories(catalog)];
-  const list = catalog.filter(item => (category === "All" || item.category === category) && `${item.name} ${item.description}`.toLowerCase().includes(query.toLowerCase()));
+  const [query,setQuery]=useState("");
+  // Only integrations with a working backend are listed; placeholders are not.
+  const catalog = primaryIntegrations().filter(item => item.availability === "supported");
+  const normalized = query.trim().toLowerCase();
+  const list = catalog.filter(item => !normalized || `${item.name} ${item.description}`.toLowerCase().includes(normalized));
+  const sections = integrationCategories(list).map(category => ({ category, items: list.filter(item => item.category === category) }));
   const enabledCount = data.integrationConnections.filter(item => item.status === "connected" || item.status === "configured").length
     + (data.oauthAuthorizations ?? []).filter(item => !item.revokedAt).length;
-  const toggleSlack = async (item: IntegrationCatalogEntry, connection?: IntegrationConnection) => {
-    if (item.connectProvider !== "slack") return;
-    setBusy("slack");
-    try {
-      if (connection?.status === "connected") await disconnectIntegration("slack");
-      else await authorizeIntegration("slack", { name: item.name, config: { mode: "workspace" } }, Boolean(connection));
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      setBusy("");
-    }
-  };
   return <div className="feature-integrations"><FeatureShell title="Integrations" description="Enhance your Flow experience with a wide variety of add-ons and integrations">
     <div className="feature-integration-toolbar">
       <div className="feature-integration-search"><Search size={16}/><input aria-label={t("Search integrations")} placeholder={t("Search integrations")} value={query} onChange={event=>setQuery(event.target.value)}/></div>
@@ -392,53 +397,25 @@ function IntegrationsPage({data,onOpen,onReload}:{data:BootstrapData;onOpen:(pro
         {t("Enabled")}{enabledCount ? ` (${enabledCount})` : ""} <ChevronRight size={14}/>
       </button>
     </div>
-    <div className="feature-categories" role="tablist" aria-label={t("Integration categories")}>{categories.map(value=><button role="tab" aria-selected={category===value} key={value} onClick={()=>setCategory(value)}>{t(value)}</button>)}</div>
-    <div className="feature-integration-grid">{list.map(item=>{
-      const connection = item.connectProvider
-        ? data.integrationConnections.find(value => value.provider === item.connectProvider)
-        : undefined;
-      const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
-      const connected = connection?.status === "connected";
-      const supported = item.availability === "supported";
-      const onClick = () => {
-        if (!supported) { onOpen(item.slug); return; }
-        if (code) { onOpen(item.connectProvider as IntegrationProvider); return; }
-        if (item.connectProvider === "slack") { void toggleSlack(item, connection); return; }
-        onOpen(item.slug);
-      };
-      return <article key={item.slug} data-availability={item.availability}>
-        {item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira"
-          ? <IntegrationBrandIcon provider={item.connectProvider}/>
-          : <span className="feature-row-icon integration-catalog-icon"><Sparkles size={16}/></span>}
-        <div>
-          <h3>
-            <span data-i18n-ignore>{item.name}</span>
-            {" "}
-            {connected && <small>{t("Connected")}</small>}
-            {!connected && !supported && <small className={`is-${item.availability}`}>{t(availabilityLabel(item.availability))}</small>}
-            {connection && connection.status !== "connected" && supported && <small>{t(connection.status === "error" ? "Connection failed" : "Not authorized")}</small>}
-          </h3>
-          <p>{t(item.description)}</p>
-          {connection?.lastError && <p role="status">{connection.lastError}</p>}
-        </div>
-        <FeatureButton
-          primary={supported && !connected}
-          danger={supported && connected && !code}
-          disabled={busy === item.connectProvider}
-          onClick={onClick}
-        >
-          {t(
-            !supported
-              ? (item.availability === "coming_soon" ? "Coming soon" : "Not supported")
-              : code
-                ? (connection ? "Manage" : "Connect")
-                : connected
-                  ? "Disconnect"
-                  : "Connect",
-          )}
-        </FeatureButton>
-      </article>;
-    })}</div>{!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
+    {sections.map(({category,items})=><section className="feature-integration-section" key={category}>
+      <h2>{t(category)}</h2>
+      <div className="feature-integration-cards">{items.map(item=>{
+        const connection = item.connectProvider ? data.integrationConnections.find(value => value.provider === item.connectProvider) : undefined;
+        const code = item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "jira";
+        return <button type="button" key={item.slug} className="feature-integration-card" onClick={() => onOpen(code ? item.connectProvider as IntegrationProvider : item.slug)}>
+          <span className="feature-integration-card-head">
+            <span className="feature-integration-card-icon">{item.connectProvider === "github" || item.connectProvider === "gitlab" || item.connectProvider === "slack" || item.connectProvider === "jira"
+              ? <IntegrationBrandIcon provider={item.connectProvider} size={20}/>
+              : <Sparkles size={16}/>}</span>
+            <strong data-i18n-ignore>{item.name}</strong>
+            {connection?.status === "connected" && <small>{t("Connected")}</small>}
+            {connection && connection.status === "error" && <small className="is-error">{t("Connection failed")}</small>}
+          </span>
+          <span className="feature-integration-card-description">{t(item.description)}</span>
+        </button>;
+      })}</div>
+    </section>)}
+    {!list.length&&<FeatureEmpty icon={Search} title="No integrations found"/>}
   </FeatureShell></div>;
 }
 

@@ -533,6 +533,9 @@ func featureForPath(path string) string {
 	if strings.HasPrefix(path, "/api/loops") {
 		return "loops"
 	}
+	if (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/")) && strings.HasSuffix(path, "/loop-runs") {
+		return "loops"
+	}
 	if strings.HasPrefix(path, "/api/issue-suggestions") ||
 		(strings.Contains(path, "/suggestions") && (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/"))) {
 		return "triage-intelligence"
@@ -614,6 +617,10 @@ func permissionForRequest(r *http.Request) string {
 		return "initiative"
 	case strings.HasPrefix(path, "/api/loops"):
 		return "loop"
+	case strings.HasPrefix(path, "/api/imports"), strings.HasPrefix(path, "/api/migrations"):
+		return "import"
+	case strings.HasPrefix(path, "/api/teams/") && (strings.Contains(path, "/resources") || strings.Contains(path, "/resource-sections")):
+		return "pinnedView"
 	default:
 		return ""
 	}
@@ -649,6 +656,16 @@ func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, ro
 		value = settings.AgentGuidancePermission
 		if value == "" {
 			value = "admins"
+		}
+	case "import":
+		value = settings.ImportPermission
+		if value == "" {
+			value = "admins"
+		}
+	case "pinnedView":
+		value = settings.PinnedViewPermission
+		if value == "" {
+			value = "members"
 		}
 	}
 	return roleSatisfiesWorkspacePermission(role, value)

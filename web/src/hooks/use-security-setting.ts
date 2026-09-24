@@ -27,7 +27,7 @@ export function useSecuritySetting(
   const [pendingValue, setPendingValue] = useState<string | null>(null)
 
   const value = normalizeSecurityPermission(
-    (settings[key] as string | undefined) ?? (key === 'agentGuidancePermission' ? 'admins' : 'members'),
+    (settings[key] as string | undefined) ?? (key === 'agentGuidancePermission' || key === 'importPermission' ? 'admins' : 'members'),
   )
 
   const roleOptions = useMemo(() => SECURITY_ROLE_OPTIONS, [])

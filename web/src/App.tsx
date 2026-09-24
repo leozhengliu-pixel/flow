@@ -4110,6 +4110,8 @@ function App() {
           teamKey={route.teamKey}
           teamSection={route.teamSection}
           releasePipelineMode={route.releasePipelineMode}
+          apiView={route.apiView}
+          webhookId={route.webhookId}
           releasePipelineSlug={route.releasePipelineSlug}
           integrationProvider={route.integrationProvider}
           integrationSlug={route.integrationSlug}

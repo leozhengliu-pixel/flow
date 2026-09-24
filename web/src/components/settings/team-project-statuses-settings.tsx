@@ -4,12 +4,12 @@
  */
 import { useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { ArrowLeft, CircleDot } from 'lucide-react'
+import { CircleDot } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateStructuredTeamSettings } from '@/lib/api'
 import type { BootstrapData, Team, TeamSettings } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
-import { SettingsRow, SettingsToggle } from './settings-primitives'
+import { SettingsRow, SettingsToggle, TeamSettingsCrumb } from './settings-primitives'
 import { ProjectStatusesSection } from './issues-projects-settings'
 import './issues-projects-settings.css'
 import './feature-settings.css'
@@ -102,13 +102,10 @@ export function TeamProjectStatusesSettingsPage({
       data-i18n-ignore
       data-testid="team-project-statuses-settings"
     >
+      <TeamSettingsCrumb team={team} onClick={onBack} />
       <header className="settings-page-header ip-page-header team-statuses-header">
-        <button aria-label={t('Back to team settings')} onClick={onBack} type="button">
-          <ArrowLeft size={14} />
-          <span data-i18n-ignore>{team.name}</span>
-        </button>
         <div>
-          <h1>{t('Project statuses')}</h1>
+          <h1>{t('Team project statuses')}</h1>
           <p>
             {t(
               'Project statuses define the workflow that projects go through from start to completion.',

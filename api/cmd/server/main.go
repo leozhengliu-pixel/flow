@@ -178,7 +178,7 @@ func newHandler(s *server) http.Handler {
 		s.realtime = newRealtimeHub()
 	}
 	s.store.SetRealtimeSink(s.publishRealtime)
-	s.store.SetWebhookSink(s.dispatchWebhookEvent)
+	s.store.SetWebhookSink(s.dispatchDomainEvent)
 	s.startCoordination()
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
@@ -664,6 +664,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/issues/{id}/permissions/{permissionId}", s.updateIssuePermission)
 	mux.HandleFunc("DELETE /api/issues/{id}/permissions/{permissionId}", s.deleteIssuePermission)
 	mux.HandleFunc("PATCH /api/teams/{id}/cycle-settings", s.updateCycleSettings)
+	mux.HandleFunc("DELETE /api/teams/{id}/cycles", s.deleteTeamCycles)
 	mux.HandleFunc("GET /api/teams/{id}/states", s.listWorkflowStates)
 	mux.HandleFunc("POST /api/teams/{id}/states", s.createWorkflowState)
 	mux.HandleFunc("PATCH /api/teams/{id}/states/{stateId}", s.updateWorkflowState)
@@ -2117,6 +2118,36 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeError(w, http.StatusNotFound, "shared view not found")
+}
+
+// deleteTeamCycles permanently removes a team's historical cycles. Cycles must
+// be disabled first so no active schedule is left pointing at deleted data.
+func (s *server) deleteTeamCycles(w http.ResponseWriter, r *http.Request) {
+	teamID := r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.team_cycles_deleted", teamID, nil, func(data *domain.Bootstrap) error {
+		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+			return errNotFound
+		}
+		if settings, exists := data.CycleSettings[teamID]; exists && settings.Enabled {
+			return fmt.Errorf("%w: disable cycles before deleting cycle data", errInvalid)
+		}
+		removed := map[string]bool{}
+		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool {
+			if cycle.TeamID != teamID {
+				return false
+			}
+			removed[cycle.ID] = true
+			return true
+		})
+		for index := range data.Issues {
+			if data.Issues[index].CycleID != nil && removed[*data.Issues[index].CycleID] {
+				data.Issues[index].CycleID = nil
+			}
+		}
+		appendAudit(data, "deleted", "team_cycles", teamID, map[string]any{"cycles": len(removed)})
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, map[string]bool{"deleted": err == nil})
 }
 
 func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
@@ -4849,7 +4880,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["priority"] = issue.PriorityLabel
 	}
 	if input.Estimate != nil {
-		if *input.Estimate < 0 {
+		// -1 clears the estimate. 0 is a real estimate only for teams that allow
+		// zero estimates; otherwise it also clears, as it always has.
+		if *input.Estimate < 0 && *input.Estimate != -1 {
 			return nil, fmt.Errorf("%w: invalid estimate", errInvalid)
 		}
 		if issue.Estimate != nil {
@@ -4857,7 +4890,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		} else {
 			changes["estimateBefore"] = "0"
 		}
-		if *input.Estimate == 0 {
+		if *input.Estimate < 0 || (*input.Estimate == 0 && !teamSettings(data, issue.Team.ID).EstimateAllowZero) {
 			issue.Estimate = nil
 		} else {
 			estimate := *input.Estimate
