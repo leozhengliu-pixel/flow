@@ -738,6 +738,29 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			}
 			settings.ReleaseAutomations = slices.Clone(*input.ReleaseAutomations)
 		}
+		if input.IssueViewDefaults != nil {
+			// Team default display per issue view; a JSON null value removes that view's default.
+			if len(input.IssueViewDefaults) > 8 {
+				return errInvalid
+			}
+			if settings.IssueViewDefaults == nil {
+				settings.IssueViewDefaults = map[string]json.RawMessage{}
+			}
+			for view, value := range input.IssueViewDefaults {
+				if !slices.Contains([]string{"all", "active", "backlog", "board"}, view) || len(value) > 16<<10 {
+					return errInvalid
+				}
+				if string(value) == "null" {
+					delete(settings.IssueViewDefaults, view)
+					continue
+				}
+				var object map[string]any
+				if json.Unmarshal(value, &object) != nil {
+					return errInvalid
+				}
+				settings.IssueViewDefaults[view] = slices.Clone(value)
+			}
+		}
 		if input.TriageEnabled != nil {
 			settings.TriageEnabled = *input.TriageEnabled
 		}
