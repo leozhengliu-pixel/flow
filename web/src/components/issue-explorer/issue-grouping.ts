@@ -339,3 +339,16 @@ export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.no
   const groupBy = display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
   return { sort, direction, groupBy, archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
 }
+
+/** Top-level groups (sub-groups roll up to their parent) for the display menu's group list. */
+export function groupSummaries(groups: MyIssuesGroupData[]) {
+  const summary = new Map<string, { id: string; label: string; count: number }>()
+  for (const group of groups) {
+    const id = group.parentGroupId ?? group.id
+    const current = summary.get(id) ?? { id, label: group.parentLabel ?? group.label, count: 0 }
+    current.count += group.issues.length
+    summary.set(id, current)
+  }
+  return [...summary.values()]
+}
+
