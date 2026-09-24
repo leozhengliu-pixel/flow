@@ -217,6 +217,18 @@ const NewAsksEmailIntakePage = lazyPage(
   () => import("./asks-settings"),
   "NewAsksEmailIntakePage",
 );
+const AsksWebSettingsWizardPage = lazyPage(
+  () => import("./asks-web-settings"),
+  "AsksWebSettingsWizardPage",
+);
+const AsksWebSettingsPage = lazyPage(
+  () => import("./asks-web-settings"),
+  "AsksWebSettingsPage",
+);
+const AsksWebPageSettingsPage = lazyPage(
+  () => import("./asks-web-settings"),
+  "AsksWebPageSettingsPage",
+);
 const IdentityProviderSettingsPage = lazyPage(
   () => import("./identity-provider-settings-page"),
   "IdentityProviderSettingsPage",
@@ -239,7 +251,7 @@ const WorkflowAutomationSettings = lazyPage(
 );
 
 // oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
-export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'jiraSyncMode' | 'agentSkillMode' | 'asksIntegrationId' | 'asksEmailIntakeMode'> = {}) {
+export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'jiraSyncMode' | 'agentSkillMode' | 'asksIntegrationId' | 'asksEmailIntakeMode' | 'asksWebFormsMode'> = {}) {
   if (options.agentSkillMode) return
   if (['preferences', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
@@ -261,6 +273,9 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
   if (page === 'asks' && options.asksEmailIntakeMode) return NewAsksEmailIntakePage.preload()
   if (page === 'asks' && options.asksIntegrationId) return AsksSlackSettingsPage.preload()
+  if (page === 'asks' && (options.asksWebFormsMode === 'new' || options.asksWebFormsMode === 'edit')) return AsksWebSettingsWizardPage.preload()
+  if (page === 'asks' && options.asksWebFormsMode === 'settings') return AsksWebSettingsPage.preload()
+  if (page === 'asks' && (options.asksWebFormsMode === 'page' || options.asksWebFormsMode === 'page-new')) return AsksWebPageSettingsPage.preload()
   if (['ai', 'coding-sessions', 'coding-environments', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
@@ -295,8 +310,14 @@ type SettingsPageProps = {
   onOpenJiraSyncEdit?: (jiraProjectId: string) => void;
   asksIntegrationId?: string;
   asksEmailIntakeMode?: "new";
+  asksWebFormsMode?: "new" | "edit" | "settings" | "page" | "page-new";
+  asksWebSettingsId?: string;
+  asksWebPageId?: string;
   onOpenAsksSlack?: (integrationId: string) => void;
   onOpenAsksEmailIntake?: () => void;
+  onOpenAsksWebFormsWizard?: (id?: string) => void;
+  onOpenAsksWebFormsSettings?: (id: string) => void;
+  onOpenAsksWebFormsPage?: (settingsId: string, pageId?: string) => void;
   identityProviderId?: string;
   applicationId?: string;
   applicationMode?: "detail" | "edit";
@@ -1081,6 +1102,51 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
+  if (page === "asks" && props.asksWebFormsMode === "new")
+    return (
+      <AsksWebSettingsWizardPage
+        data={props.data}
+        onBack={() => props.onNavigate("asks")}
+        onComplete={(id) => props.onOpenAsksWebFormsSettings?.(id)}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksWebFormsMode === "edit" && props.asksWebSettingsId)
+    return (
+      <AsksWebSettingsWizardPage
+        data={props.data}
+        settingsId={props.asksWebSettingsId}
+        onBack={() => props.onOpenAsksWebFormsSettings?.(props.asksWebSettingsId!)}
+        onComplete={(id) => props.onOpenAsksWebFormsSettings?.(id)}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksWebFormsMode === "settings" && props.asksWebSettingsId)
+    return (
+      <AsksWebSettingsPage
+        data={props.data}
+        settingsId={props.asksWebSettingsId}
+        onBack={() => props.onNavigate("asks")}
+        onReload={props.onReload}
+        onOpenWizard={(id) => props.onOpenAsksWebFormsWizard?.(id)}
+        onOpenPage={(settingsId, pageId) => props.onOpenAsksWebFormsPage?.(settingsId, pageId)}
+        onAddPage={(settingsId) => props.onOpenAsksWebFormsPage?.(settingsId, "new")}
+      />
+    );
+  if (
+    page === "asks" &&
+    (props.asksWebFormsMode === "page" || props.asksWebFormsMode === "page-new") &&
+    props.asksWebSettingsId
+  )
+    return (
+      <AsksWebPageSettingsPage
+        data={props.data}
+        settingsId={props.asksWebSettingsId}
+        pageId={props.asksWebFormsMode === "page-new" ? "new" : props.asksWebPageId}
+        onBack={() => props.onOpenAsksWebFormsSettings?.(props.asksWebSettingsId!)}
+        onReload={props.onReload}
+      />
+    );
   if (page === "asks" && props.asksEmailIntakeMode === "new")
     return (
       <NewAsksEmailIntakePage
@@ -1179,6 +1245,9 @@ function SettingsBody(
         onNavigateSettings={props.onNavigate}
         onOpenAsksSlack={props.onOpenAsksSlack}
         onOpenAsksEmailIntake={props.onOpenAsksEmailIntake}
+        onOpenAsksWebFormsWizard={props.onOpenAsksWebFormsWizard}
+        onOpenAsksWebFormsSettings={props.onOpenAsksWebFormsSettings}
+        onOpenAsksWebFormsPage={props.onOpenAsksWebFormsPage}
       />
     );
   return (

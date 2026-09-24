@@ -286,6 +286,10 @@ export type AppRoute =
       asksIntegrationId?: string;
       /** Asks email intake wizard (`/settings/asks/email-intake/new`). */
       asksEmailIntakeMode?: "new";
+      /** Asks web forms (`/settings/asks/web-forms/...`). */
+      asksWebFormsMode?: "new" | "edit" | "settings" | "page" | "page-new";
+      asksWebSettingsId?: string;
+      asksWebPageId?: string;
       identityProviderId?: string;
       applicationId?: string;
       applicationMode?: "detail" | "edit";
@@ -918,6 +922,81 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "settings" &&
     third === "asks" &&
+    fourth === "web-forms" &&
+    fifth === "new" &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksWebFormsMode: "new",
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth === "web-forms" &&
+    fifth &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksWebFormsMode: "settings",
+      asksWebSettingsId: decodeURIComponent(fifth),
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth === "web-forms" &&
+    fifth &&
+    sixth === "edit" &&
+    segments.length === 6
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksWebFormsMode: "edit",
+      asksWebSettingsId: decodeURIComponent(fifth),
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth === "web-forms" &&
+    fifth &&
+    sixth === "pages" &&
+    segments[6] === "new" &&
+    segments.length === 7
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksWebFormsMode: "page-new",
+      asksWebSettingsId: decodeURIComponent(fifth),
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth === "web-forms" &&
+    fifth &&
+    sixth === "pages" &&
+    segments[6] &&
+    segments.length === 7
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksWebFormsMode: "page",
+      asksWebSettingsId: decodeURIComponent(fifth),
+      asksWebPageId: decodeURIComponent(segments[6]),
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
     fourth === "email-intake" &&
     fifth === "new" &&
     segments.length === 5
@@ -933,6 +1012,7 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     third === "asks" &&
     fourth &&
     fourth !== "email-intake" &&
+    fourth !== "web-forms" &&
     segments.length === 4
   )
     return {
@@ -1840,6 +1920,35 @@ export function asksSlackSettingsPath(
 }
 export function newAsksEmailIntakePath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/settings/asks/email-intake/new`;
+}
+
+export function newAsksWebFormsPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/asks/web-forms/new`;
+}
+export function asksWebFormsSettingsPath(
+  workspaceSlug: string,
+  settingsId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/asks/web-forms/${encode(settingsId)}`;
+}
+export function asksWebFormsEditPath(
+  workspaceSlug: string,
+  settingsId: string,
+) {
+  return `${asksWebFormsSettingsPath(workspaceSlug, settingsId)}/edit`;
+}
+export function newAsksWebPagePath(
+  workspaceSlug: string,
+  settingsId: string,
+) {
+  return `${asksWebFormsSettingsPath(workspaceSlug, settingsId)}/pages/new`;
+}
+export function asksWebPageSettingsPath(
+  workspaceSlug: string,
+  settingsId: string,
+  pageId: string,
+) {
+  return `${asksWebFormsSettingsPath(workspaceSlug, settingsId)}/pages/${encode(pageId)}`;
 }
 export function workspaceSavedViewPath(workspaceSlug: string, viewId: string) {
   return `${workspaceRootPath(workspaceSlug)}/view/${encode(viewId)}`;
