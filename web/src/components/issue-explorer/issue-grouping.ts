@@ -324,7 +324,7 @@ export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', '
 export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated']
 
 /** Sort, direction, groupBy and display-derived conditions for `PagedIssueList` queries. */
-export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now()) {
+export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = []) {
   const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated'] ?? 'sortOrder'
   const direction = display.orderDirection ?? defaultOrderDirection(display.ordering)
   const conditions: Record<string, unknown>[] = []
@@ -336,6 +336,8 @@ export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.no
     const since = new Date(now - days * DAY).toISOString()
     conditions.push({ or: [open, { field: 'completedAt', operator: 'after', values: [since] }, { field: 'canceledAt', operator: 'after', values: [since] }] })
   }
+  // Hide untriaged backlog issues of triage-enabled teams, like the local isTriage() check.
+  if (display.showTriageIssues === false && triageTeamIds.length) conditions.push({ not: { and: [{ field: 'team', operator: 'in', values: triageTeamIds }, { field: 'statusType', operator: 'in', values: ['backlog'] }, { field: 'triagedAt', operator: 'isEmpty' }] } })
   const groupBy = display.grouping === 'focus' ? 'status' : PAGED_GROUPINGS.includes(display.grouping) ? display.grouping : 'status'
   return { sort, direction, groupBy, archived: display.showArchived ? 'all' as const : 'false' as const, conditions }
 }

@@ -56,27 +56,27 @@ export function IssueRowExtendedMenuItems({ row }: { row: MyIssuesRowData }) {
 
   return <>
     <ContextMenu.Separator className={styles.menuSeparator}/>
-    {row.assignee?.id !== viewerId && <Item label="Assign to me" shortcut="I" onSelect={() => void update({ assigneeId: viewerId }, 'Assigned to you')}/>}
+    {row.assignee?.id !== viewerId && <Item top label="Assign to me" shortcut="I" onSelect={() => void update({ assigneeId: viewerId }, 'Assigned to you')}/>}
     {estimateType !== 'notUsed' && <Sub label="Estimate" shortcut="⇧ E">{estimates.map(value => <Item key={value} label={value ? `${value} point${value === 1 ? '' : 's'}` : 'No estimate'} checked={(row.estimate ?? 0) === value} onSelect={() => void update({ estimate: value })}/>)}</Sub>}
     {milestones.length > 0 && <Sub label="Milestone">{[{ id: '', name: 'No milestone' }, ...milestones].map(milestone => <Item key={milestone.id || 'none'} label={milestone.name} checked={(row.projectMilestoneId ?? '') === milestone.id} onSelect={() => void update({ projectMilestoneId: milestone.id })}/>)}</Sub>}
     <Sub label="Set parent issue…"><IssueSearch data={data} exclude={row.id} onPick={target => void update({ parentId: target.id }, `Sub-issue of ${target.identifier}`)}/>{row.parentId && <Item label="Remove parent" onSelect={() => void update({ parentId: '' })}/>}</Sub>
     <Sub label="Relations">{RELATIONS.map(relation => <Sub key={relation.type} label={relation.label}><IssueSearch data={data} exclude={row.id} onPick={target => void createRelation(row.id, relation.type, target.id).then(() => toast.success(`${relation.label.replace('…', '')} ${target.identifier}`)).catch(() => toast.error('Could not add relation'))}/></Sub>)}</Sub>
     {data.teams.length > 1 && <Sub label="Move to team…" shortcut="⌘ ⇧ M">{data.teams.filter(team => team.id !== row.teamId).map(team => <Item key={team.id} label={team.name} onSelect={() => void update({ teamId: team.id }, `Moved to ${team.name}`)}/>)}</Sub>}
     <ContextMenu.Separator className={styles.menuSeparator}/>
-    <Item label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="⇧ S" onSelect={() => issue && void update({ subscriberIds: subscribed ? issue.subscriberIds.filter(id => id !== viewerId) : [...issue.subscriberIds, viewerId] }, subscribed ? 'Unsubscribed' : 'Subscribed')}/>
-    <Item label={favorite ? 'Remove from favorites' : 'Favorite'} shortcut="⌥ F" onSelect={() => void toggleFavoriteFor(data, 'issue', row.id, !favorite, favorite)}/>
+    <Item top label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="⇧ S" onSelect={() => issue && void update({ subscriberIds: subscribed ? issue.subscriberIds.filter(id => id !== viewerId) : [...issue.subscriberIds, viewerId] }, subscribed ? 'Unsubscribed' : 'Subscribed')}/>
+    <Item top label={favorite ? 'Remove from favorites' : 'Favorite'} shortcut="⌥ F" onSelect={() => void toggleFavoriteFor(data, 'issue', row.id, !favorite, favorite)}/>
     <Sub label="Remind me" shortcut="H"><Item label="Tomorrow" onSelect={() => remind(1)}/><Item label="In 3 days" onSelect={() => remind(3)}/><Item label="Next week" onSelect={() => remind(7)}/></Sub>
     <ContextMenu.Separator className={styles.menuSeparator}/>
-    <Item label="Copy git branch name" shortcut="⌘ ⇧ ." onSelect={() => copy(`${row.identifier.toLowerCase()}-${row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}`, 'Branch name copied')}/>
-    <Item label="Copy as Markdown link" onSelect={() => copy(`[${row.identifier} ${row.title}](${url})`, 'Link copied')}/>
-    <Item label="Open in new tab" onSelect={() => { window.open(url, '_blank', 'noopener') }}/>
-    <Item label="Make a copy…" onSelect={() => makeCopy()}/>
-    <Item label="Archive" onSelect={() => void update({ archived: true }, `${row.identifier} archived`)}/>
+    <Item top label="Copy branch name" shortcut="⌘ ⇧ ." onSelect={() => copy(`${row.identifier.toLowerCase()}-${row.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)}`, 'Branch name copied')}/>
+    <Item top label="Copy as Markdown link" onSelect={() => copy(`[${row.identifier} ${row.title}](${url})`, 'Link copied')}/>
+    <Item top label="Open in new tab" onSelect={() => { window.open(url, '_blank', 'noopener') }}/>
+    <Item top label="Make a copy…" onSelect={() => makeCopy()}/>
+    <Item top label="Archive" onSelect={() => void update({ archived: true }, `${row.identifier} archived`)}/>
   </>
 }
 
-function Item({ label, shortcut, checked, onSelect }: { label: string; shortcut?: string; checked?: boolean; onSelect: () => void }) {
-  return <ContextMenu.Item className={styles.submenuItem} onSelect={onSelect}><span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
+function Item({ label, shortcut, checked, top = false, onSelect }: { label: string; shortcut?: string; checked?: boolean; top?: boolean; onSelect: () => void }) {
+  return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}><span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
 }
 
 function Sub({ label, shortcut, children }: { label: string; shortcut?: string; children: ReactNode }) {
