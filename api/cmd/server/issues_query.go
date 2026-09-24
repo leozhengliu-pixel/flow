@@ -160,7 +160,8 @@ func compareQueryIssues(left, right domain.Issue, field, direction string) int {
 	var cmp int
 	switch strings.ToLower(field) {
 	case "priority":
-		cmp = compareInt(left.Priority, right.Priority)
+		// "No priority" (0) sorts after Low (4), matching the SQL store.
+		cmp = compareInt(priorityRank(left.Priority), priorityRank(right.Priority))
 	case "createdat":
 		cmp = compareTime(left.CreatedAt, right.CreatedAt)
 	case "updatedat":
@@ -778,4 +779,11 @@ func decodeCursor(cursor string) int {
 		return 0
 	}
 	return offset
+}
+
+func priorityRank(priority int) int {
+	if priority == 0 {
+		return 5
+	}
+	return priority
 }

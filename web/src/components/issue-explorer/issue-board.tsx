@@ -36,7 +36,38 @@ export function boardDropRejectReason(issue: MyIssuesRowData, sourceGroup: MyIss
   return null
 }
 
-export function IssueBoard({ groups, hiddenGroupIds = [], properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', canDrop, onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
+type IssueBoardProps = Parameters<typeof IssueBoardColumns>[0]
+
+/**
+ * Board entry point. With a sub-grouping ("Rows"), groups arrive as `column::row` pairs from
+ * `buildIssueGroups`; they are rendered as horizontal swimlanes, each lane a row of the same columns.
+ */
+export function IssueBoard(props: IssueBoardProps) {
+  const lanes = useMemo(() => {
+    if (!props.groups.some(group => group.parentGroupId)) return undefined
+    const byLane = new Map<string, { id: string; label: string; groups: MyIssuesGroupData[] }>()
+    for (const group of props.groups) {
+      const laneId = group.id.split('::')[1] ?? 'all'
+      const lane = byLane.get(laneId) ?? { id: laneId, label: group.label, groups: [] }
+      lane.groups.push({ ...group, label: group.parentLabel ?? group.label })
+      byLane.set(laneId, lane)
+    }
+    return [...byLane.values()]
+  }, [props.groups])
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  if (!lanes) return <IssueBoardColumns {...props}/>
+  return <div className={styles.swimlanes}>
+    {lanes.map(lane => <section key={lane.id} className={styles.swimlane} aria-label={lane.label}>
+      <header className={styles.swimlaneHeader}>
+        <button type="button" aria-expanded={!collapsed.has(lane.id)} aria-label={collapsed.has(lane.id) ? 'Expand row' : 'Collapse row'} onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(lane.id)) next.delete(lane.id); else next.add(lane.id); return next })}>▾</button>
+        <span data-i18n-ignore>{lane.label}</span><span>{lane.groups.reduce((total, group) => total + group.issues.length, 0)}</span>
+      </header>
+      {!collapsed.has(lane.id) && <div className={styles.swimlaneBoard}><IssueBoardColumns {...props} groups={lane.groups} hiddenGroupIds={(props.hiddenGroupIds ?? []).flatMap(id => [id, `${id}::${lane.id}`])} onHideGroup={props.onHideGroup ? id => props.onHideGroup!(id.split('::')[0]) : undefined}/></div>}
+    </section>)}
+  </div>
+}
+
+function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', canDrop, onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
   groups: MyIssuesGroupData[]
   hiddenGroupIds?: string[]
   properties: ReadonlySet<MyIssuesProperty>
