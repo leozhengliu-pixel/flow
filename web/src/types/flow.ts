@@ -1312,6 +1312,18 @@ export interface ReviewEvent {
   actor: User;
   createdAt: string;
 }
+/** A preview environment deployed from a pull request's head branch. */
+export interface DeployPreview {
+  id: UUID;
+  provider: string;
+  environment: string;
+  url: string;
+  logUrl?: string;
+  state: "pending" | "building" | "ready" | "failed" | "inactive";
+  commitSha?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface CodeReview {
   id: UUID;
   slugId: string;
@@ -1337,6 +1349,7 @@ export interface CodeReview {
   checks: ReviewCheck[];
   files: ReviewFile[];
   events: ReviewEvent[];
+  previews?: DeployPreview[];
   favorite: boolean;
   draft: boolean;
   quickToReview: boolean;

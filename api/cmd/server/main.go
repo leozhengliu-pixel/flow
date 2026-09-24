@@ -462,6 +462,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/reviews", s.listReviews)
 	mux.HandleFunc("GET /api/reviews/{id}", s.getReview)
 	mux.HandleFunc("PATCH /api/reviews/{id}", s.updateReview)
+	mux.HandleFunc("PUT /api/reviews/{id}/previews", s.putReviewPreview)
 	mux.HandleFunc("POST /api/reviews/{id}/submit", s.submitReview)
 	mux.HandleFunc("POST /api/reviews/{id}/comments", s.commentOnReview)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
