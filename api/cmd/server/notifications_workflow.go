@@ -1788,9 +1788,25 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 	} else if activity.Metadata["state"] != "" {
 		baseCategory = "statusChanges"
 	}
+	// Comments in a thread reach its watchers (participants and explicit
+	// subscribers); a muted thread stays silent for issue subscribers too.
+	threadMuted := map[string]bool{}
+	if comment != nil && activity.Type != "comment.updated" {
+		if rootID, ok := threadRootID(data.Comments[issue.ID], comment.ID); ok {
+			var watchers []string
+			watchers, threadMuted = threadAudience(data, issue.ID, rootID)
+			if rootID != comment.ID {
+				for _, watcherID := range watchers {
+					if _, assigned := recipients[watcherID]; !assigned {
+						recipients[watcherID] = baseCategory
+					}
+				}
+			}
+		}
+	}
 	if activity.Type != "comment.updated" {
 		for _, subscriberID := range issue.SubscriberIDs {
-			if _, assigned := recipients[subscriberID]; !assigned {
+			if _, assigned := recipients[subscriberID]; !assigned && !threadMuted[subscriberID] {
 				recipients[subscriberID] = baseCategory
 			}
 		}
