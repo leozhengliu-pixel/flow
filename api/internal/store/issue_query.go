@@ -20,11 +20,13 @@ import (
 var ErrIssueQuery = errors.New("invalid issue query")
 
 type IssueFilter struct {
-	And      []IssueFilter `json:"and,omitempty"`
-	Or       []IssueFilter `json:"or,omitempty"`
-	Field    string        `json:"field,omitempty"`
-	Operator string        `json:"operator,omitempty"`
-	Values   []string      `json:"values,omitempty"`
+	And []IssueFilter `json:"and,omitempty"`
+	Or  []IssueFilter `json:"or,omitempty"`
+	// Not negates a compound child (for example "is not" on a translated filter).
+	Not      *IssueFilter `json:"not,omitempty"`
+	Field    string       `json:"field,omitempty"`
+	Operator string       `json:"operator,omitempty"`
+	Values   []string     `json:"values,omitempty"`
 }
 
 type IssueRecordQuery struct {
@@ -305,6 +307,14 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			clauses = append(clauses, "("+strings.Join(children, group.join)+")")
 		}
 	}
+	if node.Not != nil {
+		sql, values, err := compileIssueFilter(*node.Not, depth+1, remaining)
+		if err != nil {
+			return "", nil, err
+		}
+		clauses = append(clauses, "NOT ("+sql+")")
+		args = append(args, values...)
+	}
 	if node.Field != "" {
 		if node.Field == "customerId" || node.Field == "customers" {
 			clause, values, err := compileCustomerFilter(node)
@@ -315,7 +325,7 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			args = append(args, values...)
 			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 		}
-		if issueAttributeFields[node.Field] {
+		if isIssueAttributeField(node.Field) {
 			clause, values, err := compileIssueAttribute(node)
 			if err != nil {
 				return "", nil, err
