@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
 import { boundedIssueSequence } from '@/lib/navigation-context'
@@ -252,7 +253,9 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   }
   const contextAction = async (row: MyIssuesRowData, action: MyIssuesContextAction) => {
     if (action === 'delete') { if (await confirmAction(`Delete ${row.identifier}?`,{description:'This cannot be undone.',confirmLabel:'Delete'})) await onDeleteIssues([row.id]); return }
-    if (action === 'copy') { await navigator.clipboard.writeText(`${location.origin}${row.href}`); return }
+    if (action === 'copy' || action === 'copyUrl') { await navigator.clipboard.writeText(`${location.origin}${row.href}`); return }
+    if (action === 'copyId') { await navigator.clipboard.writeText(row.identifier); return }
+    if (action === 'copyTitle') { await navigator.clipboard.writeText(row.title); return }
     const update = explorerUpdateForAction(action)
     if (update) await updateOne(row, update)
   }
@@ -312,7 +315,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
   />
 
-  return <>
+  const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue) }
+  return <IssueRowActionsProvider value={rowActions}>
     <IssueExplorerSurface
       scopeName={scope.kind === 'team' ? scope.team.name : data.workspace.name}
       scopeTeam={scope.kind === 'team' ? scope.team : undefined}
@@ -501,7 +505,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       />}
     </IssueExplorerSurface>
     <MyIssuesBulkActionBar selectedIssues={selection.selectedIssues} destructiveActions={['archive', 'delete']} actionOptions={action => explorerBulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void executeExplorerBulkAction({ action, ids: selection.selectedIssues.map(issue => issue.id), value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }).then(() => selection.clearSelection()) }} onClear={selection.clearSelection}/>
-  </>
+  </IssueRowActionsProvider>
 }
 
 function exportIssuesCsv(rows: MyIssuesRowData[], name: string) {

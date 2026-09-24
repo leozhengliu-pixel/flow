@@ -30,6 +30,7 @@ import {
 } from "@/components/issue-explorer/issue-explorer-model";
 import { buildIssueGroups, groupMoveUpdate, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
 import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
+import { IssueRowActionsProvider } from "@/components/my-issues/issue-row-actions";
 import {
   MyIssuesList,
   type MyIssuesContextAction,
@@ -414,10 +415,12 @@ export function ProjectIssues({
     const issue = rowIssues.get(row.id);
     if (!issue) return;
     if (action === "delete") setDeleteTarget(issue);
-    else if (action === "copy")
+    else if (action === "copy" || action === "copyUrl")
       void navigator.clipboard.writeText(
         `${location.origin}/${location.pathname.split("/")[1]}/issue/${issue.identifier}`,
       );
+    else if (action === "copyId") void navigator.clipboard.writeText(issue.identifier);
+    else if (action === "copyTitle") void navigator.clipboard.writeText(issue.title);
     else if (action === "openIn") onOpenIssue(issue);
   };
   const selectedRows = useMemo(() => groups.flatMap(group => group.issues).filter((row, index, all) => selected.has(row.id) && all.findIndex(item => item.id === row.id) === index), [groups, selected]);
@@ -452,7 +455,7 @@ export function ProjectIssues({
     void onUpdateIssue(row.id, { sortOrder, ...groupUpdate });
   };
 
-  return (
+  const content = (
     <div className="project-issues" data-layout={display.layout} data-paged={issueData?.issueCollectionPaged || undefined}>
       {milestoneScope && (
         <div className="project-issues__milestone-scope">
@@ -613,6 +616,7 @@ export function ProjectIssues({
       </Dialog.Root>
     </div>
   );
+  return issueData ? <IssueRowActionsProvider value={{ data: issueData, onUpdateIssue, onDeleteIssues, onOpenIssue }}>{content}</IssueRowActionsProvider> : content;
 }
 
 function displaySnapshot(display: MyIssuesDisplayOptions) {
