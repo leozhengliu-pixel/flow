@@ -274,9 +274,9 @@
 .issue-activity-timeline .resolved-comment { gap: 0; }
 .issue-activity-timeline .resolved-comment__bar { margin-bottom: 6px; }
 :root[data-theme="light"] .issue-activity-timeline .comment-thread {
-  border-color: lch(91.9 0 282);
-  background: lch(100 0 282);
-  box-shadow: lch(0 0 0 / .02) 0 3px 6px -2px, lch(0 0 0 / .04) 0 1px 1px 0;
+  border-color: var(--theme-border);
+  background: var(--theme-surface-1);
+  box-shadow: var(--shadow-control);
 }
 :root[data-theme="light"] .issue-activity-timeline .comment-thread .comment-body { border: 0; background: transparent; }
 .issue-activity-timeline .comment-thread .reaction-pills:empty { display: none; }
