@@ -48,6 +48,7 @@ export function describeIssueActivity(event: ActivityEvent, context?: ActivityCo
     return changes.length ? changes.join(', ') : t('updated releases')
   }
   if (event.type === 'issue.review_linked' || event.type === 'issue.review_unlinked') return phrase(event.type.endsWith('unlinked') ? 'unlinked pull request {review}' : 'linked pull request {review}', { review: [m.repository, m.reviewNumber && `#${m.reviewNumber}`].filter(Boolean).join(' ') })
+  if (event.type === 'issue.preview_ready') return phrase('deployed preview {environment}', { environment: m.environment || 'Preview' })
   if (event.type === 'issue.relation_added') {
     const target = context?.issues.find(issue => issue.id === m.relatedIssueId)
     const relation = ({ blocks: 'marked this as blocking {issue}', blocked_by: 'marked this as blocked by {issue}', duplicate: 'marked this as a duplicate of {issue}', parent_of: 'marked this as parent of {issue}', sub_issue_of: 'marked this as a sub-issue of {issue}' } as Record<string, string>)[m.type] ?? 'related this to {issue}'

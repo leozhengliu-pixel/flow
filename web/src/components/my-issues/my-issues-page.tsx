@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
-import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
+import { PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, labelGroups, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
 import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
 import { issueFiltersToQueryAst } from './my-issues-filter-types'
@@ -142,7 +142,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         ? (after.sortOrder ?? 0) + 1
         : (row.sortOrder ?? 0)
     const grouping = controller.display.grouping
-    const groupUpdate = explorerBoardGroupUpdate(row, grouping, targetGroupId, data)
+    const groupUpdate = explorerBoardGroupUpdate(row, grouping, targetGroupId, data, controller.display.labelGroupId)
     if (!Object.keys(groupUpdate).length && sourceGroupId !== targetGroupId) return
     const update: IssueUpdateInput = { ...groupUpdate, sortOrder }
     const snapshot = controller.groups
@@ -205,6 +205,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
         toggles: ['triage'],
         groups: groupSummaries(displayedGroups),
+        labelGroupOptions: labelGroups(data.labels),
         onReset: () => controller.changeDisplay(defaultMyIssuesDisplayOptions),
         resetLabel: 'Reset to default',
       }}
