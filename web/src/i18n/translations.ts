@@ -1,4 +1,5 @@
 export const zhCN: Record<string, string> = {
+  "View {count} issues": "查看 {count} 个事项",
   "Save as team default": "保存为团队默认",
   "Reset to team default": "恢复团队默认",
   "Groups": "分组",

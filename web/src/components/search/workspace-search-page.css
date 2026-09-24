@@ -89,3 +89,4 @@
 :root[data-theme="light"] .workspace-search-menu .menu-item small,:root[data-theme="light"] .workspace-search-condition>button:last-child,:root[data-theme="light"] .workspace-search-filter-chips>span,:root[data-theme="light"] .workspace-search-pending{color:var(--theme-text-secondary)}
 :root[data-theme="light"] .workspace-search-filter-chips>span{border-color:var(--border)}
 :root[data-theme="light"] .workspace-search-filter-chips strong{color:var(--theme-text-primary)}
+.workspace-search-identifiers{margin:8px 0;display:flex;align-items:center;gap:8px;padding:8px 12px;border:.5px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;text-decoration:none}.workspace-search-identifiers span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.workspace-search-identifiers:hover{background:var(--bg-subtle)}
