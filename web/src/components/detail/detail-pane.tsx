@@ -7,10 +7,11 @@ import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-m
 import { useDescriptionSelectionActions } from './description-selection-actions'
 import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
 import { toast } from 'sonner'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import * as Dialog from '@radix-ui/react-dialog'
-import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone, WorkflowState } from '@/types/flow'
+import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, DeployPreview, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone, WorkflowState } from '@/types/flow'
 import { Button } from '@/components/ui/button'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { PagedActivityTimeline } from '@/components/activity/paged-activity-timeline'
@@ -193,9 +194,18 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   </section>
 }
 
+const PREVIEW_STATE_LABEL:Record<DeployPreview['state'],string>={ready:'Preview ready',building:'Preview building',pending:'Preview pending',failed:'Preview failed',inactive:'Preview inactive'}
+/** Linear deploy previews: one chip per environment from the linked pull requests. */
+export function DeployPreviews({reviews}:{reviews:CodeReview[]}){
+  const{t}=useI18n()
+  const previews=reviews.flatMap(review=>(review.previews??[]).filter(preview=>preview.state!=='inactive').map(preview=>({preview,review})))
+  if(!previews.length)return null
+  return <div className="issue-deploy-previews" aria-label={t('Previews')}>{previews.map(({preview,review})=>{const href=preview.state==='ready'?preview.url:preview.logUrl||preview.url;const body=<><span className="issue-deploy-preview__dot" data-state={preview.state} aria-hidden/><span data-i18n-ignore>{preview.environment}</span><small>{t(PREVIEW_STATE_LABEL[preview.state])}</small>{href&&<ExternalLink/>}</>;return <FlowTooltip key={`${review.id}-${preview.id}`} label={`${review.repositoryOwner}/${review.repositoryName} #${review.number}${preview.commitSha?` · ${preview.commitSha.slice(0,7)}`:''}`}>{href?<a className="issue-deploy-preview" data-state={preview.state} href={href} target="_blank" rel="noreferrer">{body}</a>:<span className="issue-deploy-preview" data-state={preview.state} tabIndex={0}>{body}</span>}</FlowTooltip>})}</div>
+}
+
 function IssueCodeReviews({actions,reviews}:{actions?:IssueOptionsActions;reviews:CodeReview[]}){
   const[collapsed,setCollapsed]=useState(false)
-  return <section className="issue-detail-section issue-code-reviews"><header><button aria-expanded={!collapsed} aria-label={collapsed?'Expand pull requests section':'Collapse pull requests section'} onClick={()=>setCollapsed(value=>!value)} type="button"><ChevronDown/><span>Pull requests</span></button><span>{reviews.length}</span></header>{!collapsed&&reviews.map(review=><a className="issue-code-review" href={review.url} key={review.id} rel="noreferrer" target="_blank"><GitPullRequest/><span><strong data-i18n-ignore>{review.title}</strong><small data-i18n-ignore>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span><em data-status={review.status}>{review.status==='inReview'?'In review':review.status[0].toUpperCase()+review.status.slice(1)}</em><ExternalLink className="issue-code-review__external"/><button aria-label={`Unlink pull request ${review.title}`} disabled={!actions} onClick={event=>{event.preventDefault();event.stopPropagation();void actions?.unlinkReview(review.id)}} type="button"><X/></button></a>)}</section>
+  return <section className="issue-detail-section issue-code-reviews"><header><button aria-expanded={!collapsed} aria-label={collapsed?'Expand pull requests section':'Collapse pull requests section'} onClick={()=>setCollapsed(value=>!value)} type="button"><ChevronDown/><span>Pull requests</span></button><span>{reviews.length}</span></header>{!collapsed&&reviews.map(review=><a className="issue-code-review" href={review.url} key={review.id} rel="noreferrer" target="_blank"><GitPullRequest/><span><strong data-i18n-ignore>{review.title}</strong><small data-i18n-ignore>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span><em data-status={review.status}>{review.status==='inReview'?'In review':review.status[0].toUpperCase()+review.status.slice(1)}</em><ExternalLink className="issue-code-review__external"/><button aria-label={`Unlink pull request ${review.title}`} disabled={!actions} onClick={event=>{event.preventDefault();event.stopPropagation();void actions?.unlinkReview(review.id)}} type="button"><X/></button></a>)}{!collapsed&&<DeployPreviews reviews={reviews}/>}</section>
 }
 
 type SubIssueProperty='priority'|'sla'|'id'|'status'|'labels'|'milestone'|'cycle'|'dueDate'|'links'|'customers'|'customerRevenue'|'assignee'
