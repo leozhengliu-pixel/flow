@@ -34,6 +34,8 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
   const state=useMemo(()=>readSearchState(params),[params])
   const {query,tab}=state
   const normalizedQuery=query.trim()
+  // Pasting several identifiers ("ENG-1 ENG-2") offers Linear's issue-identifiers list view.
+  const identifierList=useMemo(()=>[...new Set(draft.toUpperCase().match(/\b[A-Z][A-Z0-9]{0,9}-\d+\b/g)??[])],[draft])
   const [draft, setDraft] = useState(query)
   const [response, setResponse] = useState<SearchResponse>({ results: [], history: [], recent: [] })
   const [loading, setLoading] = useState(true)
@@ -135,6 +137,7 @@ export function WorkspaceSearchPage({ onOpenSidebar, onOpenResult, getResultHref
     <section className="workspace-search-content" aria-live="polite">
       {state.filters.length>0&&<SearchFilterChips state={state} users={users} onChange={updateState}/>}
       {inputPending&&<div className="workspace-search-pending" role="status">{t('Press Enter to search')}</div>}
+      {identifierList.length>1&&<a className="workspace-search-identifiers" href={`${location.pathname.replace(/\/search.*$/,'')}/issues/all?ids=${encodeURIComponent(identifierList.join(','))}`}>{t('View {count} issues').replace('{count}',String(identifierList.length))}<span data-i18n-ignore>{identifierList.join(', ')}</span></a>}
       {!normalizedQuery && resultsReady && <RecentSearches history={response.history} onSearch={runSearch} onClear={async () => { try{await clearSearchHistory(); setResponse(current => ({ ...current, history: [] }))}catch(reason){setError(reason instanceof Error?reason.message:t('Could not clear search history'))} }}/>}
       {!normalizedQuery && resultsReady && !response.history.length && !results.length && <SearchEmpty/>}
       {loading && !inputPending && <SearchLoading/>}

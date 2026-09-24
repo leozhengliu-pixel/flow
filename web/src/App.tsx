@@ -5274,6 +5274,7 @@ function App() {
             initialStatusId={
               new URLSearchParams(location.search).get("status") ?? undefined
             }
+            {...issueIdentifierScope(new URLSearchParams(location.search).get("ids"))}
             scope={{ kind: "workspace" }}
             view={route.view}
             viewHref={(view) =>
@@ -6625,3 +6626,16 @@ function nextOccurrence(recurrence: "daily" | "weekly" | "monthly") {
 }
 
 export default App;
+
+/** Linear `issueIdentifiers` view: `?ids=ENG-1,ENG-2` narrows the workspace issue view to those issues. */
+function issueIdentifierScope(raw: string | null) {
+  const identifiers = [...new Set((raw ?? "").split(/[\s,]+/).map((value) => value.trim().toUpperCase()).filter(Boolean))].slice(0, 500);
+  if (!identifiers.length) return {};
+  const wanted = new Set(identifiers);
+  return {
+    preferenceScope: "identifiers",
+    resourceHeader: { title: `${identifiers.length} ${identifiers.length === 1 ? "issue" : "issues"}` },
+    scopeFilter: (issue: Issue) => wanted.has(issue.identifier.toUpperCase()),
+    scopeConditions: [{ field: "identifier", operator: "in", values: identifiers }],
+  };
+}
