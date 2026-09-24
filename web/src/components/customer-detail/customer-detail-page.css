@@ -554,3 +554,4 @@
 .customer-requests-heading > button:last-child {
   margin-left: 0;
 }
+.customer-issues{margin-bottom:24px}.customer-issues .customer-requests-heading>label,.customer-issues .customer-requests-heading>div:last-child{margin-left:auto}
