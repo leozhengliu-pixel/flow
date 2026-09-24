@@ -967,6 +967,10 @@ type CodingAgentSettings struct {
 type WorkspaceSettings struct {
 	FiscalMonth                  string              `json:"fiscalMonth"`
 	WelcomeMessage               string              `json:"welcomeMessage,omitempty"`
+	WelcomeMessageEnabled        bool                `json:"welcomeMessageEnabled"`
+	WelcomeMessageTitle          string              `json:"welcomeMessageTitle,omitempty"`
+	WelcomeMessageEditedByID     string              `json:"welcomeMessageEditedById,omitempty"`
+	WelcomeMessageEditedAt       *time.Time          `json:"welcomeMessageEditedAt,omitempty"`
 	DefaultHomeView              string              `json:"defaultHomeView,omitempty"`
 	GuestsAllowed                bool                `json:"guestsAllowed"`
 	RequireTwoFactor             bool                `json:"requireTwoFactor"`

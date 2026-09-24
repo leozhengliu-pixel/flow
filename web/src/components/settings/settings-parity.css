@@ -418,3 +418,8 @@ html:root .settings-app .settings-main .feature-integration-card-description { c
 html:root .settings-app .settings-main .team-settings-header > div { display: flex; flex-direction: column; align-items: flex-start; }
 html:root .settings-app .settings-main .team-settings-header > div > p { margin: 4px 0 0; color: var(--set-desc); font-size: 13px; line-height: 22px; }
 html:root .settings-app .settings-main .team-access-note { margin: -16px 16px 28px; padding: 0; color: var(--set-desc); }
+
+/* Agent personalization: groups spaced like sections */
+html:root .settings-app .settings-main .personal-agent-groups .settings-group + .settings-group,
+html:root .settings-app .settings-main .personal-agent-groups .settings-group + * { margin-top: 40px; }
+html:root .settings-app .settings-main .personal-agent-groups .personal-agent-guidance { border: 0; border-radius: 10px; background: transparent; }

@@ -10,11 +10,13 @@ export function CycleGraph({
   issues,
   compact = false,
   measure = 'issue_count',
+  unestimatedValue = 0,
 }: {
   cycle: Cycle
   issues: Issue[]
   compact?: boolean
   measure?: BurnUpMeasure
+  unestimatedValue?: number
 }) {
-  return <BurnUpGraph cycle={cycle} issues={issues} compact={compact} measure={measure} />
+  return <BurnUpGraph cycle={cycle} issues={issues} compact={compact} measure={measure} unestimatedValue={unestimatedValue} />
 }

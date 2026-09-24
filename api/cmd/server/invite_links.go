@@ -144,6 +144,8 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 	for _, key := range s.store.WorkspaceKeys() {
 		var membership domain.WorkspaceMembership
 		found := false
+		joined := false
+		joinedUserID := ""
 		err := s.store.MutateWorkspace(r.Context(), key, "workspace_invite_link.joined", input.Token, nil, func(workspace *domain.Bootstrap) error {
 			materializeDevelopmentMembers(workspace)
 			if workspace.WorkspaceInviteLink == nil || !workspace.WorkspaceInviteLink.Enabled || workspace.WorkspaceInviteLink.Token != input.Token {
@@ -179,6 +181,7 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 			if !slices.ContainsFunc(workspace.Users, func(item domain.User) bool { return item.ID == memberUser.ID }) {
 				workspace.Users = append(workspace.Users, memberUser)
 			}
+			joined, joinedUserID = true, memberUser.ID
 			workspace.Members = append(workspace.Members, domain.WorkspaceMember{
 				User:       memberUser,
 				Role:       "member",
@@ -196,6 +199,9 @@ func (s *server) joinOrganization(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if err == nil && found {
+			if joined {
+				s.sendWelcomeMessage(r.Context(), membership.Workspace.URLKey, joinedUserID)
+			}
 			writeJSON(w, http.StatusOK, membership)
 			return
 		}

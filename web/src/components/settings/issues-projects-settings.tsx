@@ -3566,7 +3566,7 @@ export function ProjectUpdateSettings({
           <h1>{t("Project updates")}</h1>
           <p>
             {t(
-              "Configure when project updates are expected and where reminders are sent.",
+              "Short status reports about the progress and health of your projects. Project members regularly post updates, and subscribers automatically receive them in their inbox.",
             )}{" "}
             <a
               href="https://flow.app/docs/project-updates"
@@ -3582,11 +3582,11 @@ export function ProjectUpdateSettings({
       <section className="ip-settings-section">
         <header>
           <h3>{t("Update schedule")}</h3>
+          <p>{t("Configure how often updates are expected on projects. Project leads will receive reminders to post updates.")}</p>
         </header>
         <div className="ip-setting-row">
           <span>
-            <strong>{t("Update cadence")}</strong>
-            <small>{cadenceLabel}</small>
+            <strong>{cadence ? cadenceLabel : t("No expectation for updates")}</strong>
           </span>
           {editing ? (
             <div className="ip-update-editor">

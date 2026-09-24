@@ -4111,6 +4111,7 @@ function App() {
           teamSection={route.teamSection}
           releasePipelineMode={route.releasePipelineMode}
           apiView={route.apiView}
+          workspaceView={route.workspaceView}
           webhookId={route.webhookId}
           releasePipelineSlug={route.releasePipelineSlug}
           integrationProvider={route.integrationProvider}
@@ -4124,6 +4125,9 @@ function App() {
           }
           onOpenAsksEmailIntake={() =>
             navigateTo(newAsksEmailIntakePath(data.workspace.urlKey))
+          }
+          onOpenWelcomeMessage={() =>
+            navigateTo(`${settingsPath(data.workspace.urlKey, 'workspace')}/welcome-message`)
           }
           identityProviderId={route.identityProviderId}
           applicationId={route.applicationId}

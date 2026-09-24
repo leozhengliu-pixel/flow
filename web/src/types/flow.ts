@@ -1063,6 +1063,10 @@ export type AuthServiceId = "google" | "email" | "passkey" | "saml" | "appUser";
 export interface WorkspaceSettings {
   fiscalMonth: string;
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
+  welcomeMessageTitle?: string;
+  welcomeMessageEditedById?: string;
+  welcomeMessageEditedAt?: string;
   defaultHomeView?: string;
   guestsAllowed: boolean;
   requireTwoFactor: boolean;
