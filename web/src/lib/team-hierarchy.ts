@@ -1,7 +1,7 @@
 import type { Team, TeamSettings } from '@/types/flow'
 
 export const MAX_TEAM_DEPTH = 4
-export type TeamHierarchySettings = Record<string, Pick<TeamSettings, 'parentTeamId'> & Partial<Pick<TeamSettings, 'access'>>>
+export type TeamHierarchySettings = Record<string, Pick<TeamSettings, 'parentTeamId'> & Partial<Pick<TeamSettings, 'access' | 'defaultProjectTemplateId'>>>
 
 export function resolvedTeamSettings(settings: Record<string, TeamSettings>, teamId: string, seen = new Set<string>()): TeamSettings | undefined {
   const current = settings[teamId]

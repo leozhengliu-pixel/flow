@@ -581,7 +581,7 @@ export function ProjectsPage({
     />}
     <NewProjectDialog
       agentSkills={agentSkills}
-      initialTemplateId={initialTemplateId}
+      initialTemplateId={initialTemplateId ?? (scopeTeamId ? teamSettings?.[scopeTeamId]?.defaultProjectTemplateId || undefined : undefined)}
       defaultStatus={createStatus}
       dependencies={projects.filter(project => !project.archivedAt).map(project => ({ id: project.id, label: project.name, icon: normalizeProjectIcon(project.icon), color: project.color, group: viewerId && (project.lead?.id === viewerId || (project.memberIds ?? []).includes(viewerId)) ? 'your' : 'other', previewData: { summary: project.summary || project.description, status: project.status.name, milestone: (project.milestones ?? [])[0]?.name, team: (project.teamIds ?? []).map(id => teams.find(team => team.id === id)?.name).filter(Boolean).join(', '), lead: project.lead?.displayName, member: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.displayName).find(Boolean), memberAvatarUrl: (project.memberIds ?? []).map(id => users.find(user => user.id === id)?.avatarUrl).find(Boolean), priority: project.priorityLabel, targetDate: project.targetDate, progress: Math.round(project.progress * 100), issueCount: project.issueCount } }))}
       initiatives={initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, groupLabel: initiative.status ? `${initiative.status[0].toUpperCase()}${initiative.status.slice(1)}` : undefined }))}

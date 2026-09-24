@@ -1654,8 +1654,10 @@ export function deleteSLARule(id: string): Promise<void> {
   return request(`/api/sla-rules/${id}`, { method: "DELETE" });
 }
 export function updateSLASettings(input: {
-  enabled: boolean;
-}): Promise<{ enabled: boolean }> {
+  enabled?: boolean;
+  /** Business week used by business-hour SLAs. */
+  workWeek?: "monFri" | "sunThu";
+}): Promise<{ enabled: boolean; workWeek: "monFri" | "sunThu" }> {
   return request("/api/sla-settings", jsonRequest("PUT", input));
 }
 export function updateProjectUpdateSettings(

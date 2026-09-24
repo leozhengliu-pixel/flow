@@ -568,6 +568,36 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			}
 			settings.EstimateType = *input.EstimateType
 		}
+		for _, pick := range []struct {
+			value   *string
+			target  *string
+			project bool
+			members bool
+		}{
+			{input.DefaultIssueTemplateForMembersID, &settings.DefaultIssueTemplateForMembersID, false, true},
+			{input.DefaultIssueTemplateForNonMembersID, &settings.DefaultIssueTemplateForNonMembersID, false, false},
+			{input.DefaultProjectTemplateID, &settings.DefaultProjectTemplateID, true, false},
+		} {
+			if pick.value == nil {
+				continue
+			}
+			id := strings.TrimSpace(*pick.value)
+			if id != "" {
+				if pick.project {
+					if !slices.ContainsFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool { return item.ID == id }) {
+						return errInvalid
+					}
+				} else {
+					index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == id })
+					// Form templates collect input from requesters, so they
+					// cannot be the default for the team's own members.
+					if index < 0 || (pick.members && data.IssueTemplates[index].TemplateType == "customForm") {
+						return errInvalid
+					}
+				}
+			}
+			*pick.target = id
+		}
 		if input.EstimateAllowZero != nil {
 			settings.EstimateAllowZero = *input.EstimateAllowZero
 		}
