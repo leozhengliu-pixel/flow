@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from './issue-row-actions'
 import { PAGED_GROUPINGS, PAGED_ORDERINGS, pagedDisplayQuery } from '@/components/issue-explorer/issue-grouping'
 import { boundedIssueSequence } from '@/lib/navigation-context'
@@ -33,6 +33,8 @@ export interface MyIssuesPageProps {
   onNavigateView?: (view: MyIssuesView, href: string) => void
   onOpenIssue: (issue: Issue, sequence?: string[]) => void
   onOpenSidebar?: () => void
+  /** Full issue view for the split layout / preview pane. */
+  renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
   onPersistDisplay?: (view: MyIssuesView, options: MyIssuesDisplayOptions) => Promise<void>
   onPersistFilters?: (view: MyIssuesView, filters: MyIssuesAppliedFilter[]) => Promise<void>
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
@@ -41,7 +43,7 @@ export interface MyIssuesPageProps {
 
 const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
-export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
+export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
@@ -161,12 +163,30 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const insightRows = useMemo(() => allInsightRows.filter(row => !row.archivedAt), [allInsightRows])
   const insightQuery = useMemo(() => ({ filter: { and: [issueFiltersToQueryAst(controller.filters, { data }), { field: projectedView === 'created' ? 'creator' : projectedView === 'subscribed' ? 'subscribers' : projectedView === 'activity' ? 'myActivity' : 'assignee', values: [data.viewer.id] }] } }), [controller.filters, projectedView, data.viewer.id])
   const insightsView:SavedView={id:`my-issues-${controller.view}`,name:({assigned:'Assigned to me',created:'Created by me',subscribed:'Subscribed',activity:'Activity'} as const)[controller.view],description:'',resource:'issues',scope:'personal',ownerId:data.viewer.id,view:'all',filters:controller.filters,display:{},insights:insightsConfig,createdAt:'',updatedAt:''}
+  const split = controller.display.layout === 'split'
+  const splitRowIds = useMemo(() => data.issueCollectionPaged ? pagedIssues.map(issue => issue.id) : displayedGroups.flatMap(group => group.issues.map(issue => issue.id)), [data.issueCollectionPaged, displayedGroups, pagedIssues])
+  useEffect(() => { if (split && (!previewIssueId || !splitRowIds.includes(previewIssueId)) && splitRowIds[0]) setPreviewIssueId(splitRowIds[0]) }, [previewIssueId, split, splitRowIds])
+  useEffect(() => {
+    if (!split) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || (event.target instanceof Element && event.target.closest('input,textarea,[contenteditable=true],[role=textbox],[role=dialog]'))) return
+      const key = event.key.toLowerCase()
+      const step = key === 'j' || key === 'arrowdown' ? 1 : key === 'k' || key === 'arrowup' ? -1 : 0
+      if (!step) return
+      event.preventDefault()
+      const next = splitRowIds[Math.max(0, Math.min(splitRowIds.length - 1, splitRowIds.indexOf(previewIssueId ?? '') + step))]
+      if (next) setPreviewIssueId(next)
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [previewIssueId, split, splitRowIds])
+  const splitProperties = useMemo(() => new Set([...controller.display.properties].filter(property => property === 'id' || property === 'status' || property === 'priority' || property === 'assignee')), [controller.display.properties])
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
   const previewRow = previewIssue ? toRow(previewIssue, workspaceSlug, data, issueMatchesView(previewIssue, data, projectedView)) : undefined
   const openRow = (row: MyIssuesRowData) => {
     const sequence = boundedIssueSequence(displayedGroups.find(group => group.issues.some(issue => issue.id === row.id))?.issues.map(issue => issue.id) ?? [row.id], row.id)
     const issue = issuesById.get(row.id)
-    if (controller.detailsOpen) {
+    if (controller.detailsOpen || split) {
       setPreviewIssueId(row.id)
       return
     }
@@ -212,23 +232,24 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       />}
     >
       <IssuesSplitLayout
-        detailsOpen={controller.detailsOpen}
+        detailsOpen={controller.detailsOpen || split}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
         onLoadedIssuesChange={setPagedIssues}
-        layout={controller.display.layout}
+        layout={controller.display.layout === 'board' ? 'board' : 'list'}
         hiddenGroupIds={controller.display.hiddenGroupIds}
         onHideGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: [...controller.display.hiddenGroupIds, id] })}
         onShowGroup={id => controller.changeDisplay({ ...controller.display, hiddenGroupIds: controller.display.hiddenGroupIds.filter(value => value !== id) })}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         query={myIssuesPagedQuery}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={controller.display.properties}
+        displayProperties={split ? splitProperties : controller.display.properties}
         propertyOptions={rowOptions}
         selectedIds={controller.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         mutationErrors={mutationErrors}
-        onOpenIssueRecord={onOpenIssue}
+        onOpenIssueRecord={split ? issue => setPreviewIssueId(issue.id) : onOpenIssue}
         onCreateIssue={group => onCreateIssue?.(group.createContext)}
         onGroupCollapsedChange={(id, collapsed) => setCollapsedGroups(current => { const next = new Set(current); if (collapsed) next.add(id); else next.delete(id); return next })}
         onPropertyChange={changeProperty}
@@ -252,8 +273,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         loading={loading}
         error={error}
         selectedIds={controller.selectedIds}
+        activeIssueId={split ? previewIssueId : undefined}
         collapsedGroupIds={collapsedGroups}
-        displayProperties={controller.display.properties}
+        displayProperties={split ? splitProperties : controller.display.properties}
         nestedSubIssues={controller.display.nestedSubIssues}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
@@ -272,6 +294,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
             workspaceSlug={workspaceSlug}
             origin={{ type: 'myIssues', view: controller.view }}
             selectedIssue={previewRow}
+            preview={previewIssue && renderIssuePreview ? renderIssuePreview(previewIssue, () => setPreviewIssueId(undefined)) : undefined}
             summary={previewRow ? undefined : controller.summary}
             onClose={() => { if (previewIssueId) setPreviewIssueId(undefined); else controller.setDetailsOpen(false) }}
             onSummaryItemSelect={summaryFilter}
