@@ -44,7 +44,7 @@ export function MemberProfilePage({ data, user, view, onNavigate, onOpenIssue, o
       tabs: (['assigned', 'created'] as const).map(id => ({ id, label: id === 'assigned' ? 'Assigned' : 'Created', href: memberProfilePath(data.workspace.urlKey, user.name, id), active: view === id, onSelect: () => onNavigate(id) })),
     }}
     viewHref={() => memberProfilePath(data.workspace.urlKey, user.name, view)}
-    onNavigateView={() => undefined}
+    onNavigateView={() => onNavigate(view)}
     onOpenIssue={onOpenIssue}
     renderIssuePreview={renderIssuePreview}
     onOpenSidebar={onOpenSidebar}

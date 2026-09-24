@@ -342,7 +342,7 @@
 .flow-triage-actions__hint{margin:0;color:var(--issue-muted);font-size:12px}
 .flow-triage-actions__popover textarea,.flow-triage-actions__search input{width:100%;box-sizing:border-box;padding:6px 8px;border:.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font:inherit;resize:vertical}
 .flow-triage-actions__confirm{align-self:flex-end;height:28px;display:flex;align-items:center;gap:6px;padding:0 12px;border:0;border-radius:9999px;background:var(--bg-active);color:var(--text);cursor:pointer}
-.flow-triage-actions__confirm.is-danger{color:var(--danger,#f17178)}
+.flow-triage-actions__confirm.is-danger{color:var(--semantic-danger-text)}
 .flow-triage-actions__search [role=listbox],.flow-triage-actions__presets{display:flex;flex-direction:column;margin-top:4px}
 .flow-triage-actions__search [role=option],.flow-triage-actions__presets button{height:30px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .flow-triage-actions__search [aria-selected=true],.flow-triage-actions__search [role=option]:hover,.flow-triage-actions__presets button:hover{background:var(--bg-active)}
