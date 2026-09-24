@@ -11,6 +11,14 @@ export function ReviewCode({content,path,theme:themeOverride,font:fontOverride}:
   const language=hljs.getLanguage(name)&&content.length<10000?name:'plaintext'
   const html=useMemo(()=>hljs.highlight(content,{language,ignoreIllegals:true}).value,[content,language])
   const font=Math.max(10,Math.min(24,Number.parseInt(fontOverride??preferences.codeFont??'12',10)||12))
-  const theme=(themeOverride??preferences.codeTheme??'Flow Light').toLowerCase().replaceAll(' ','-')
+  const theme=resolveCodeTheme(themeOverride??preferences.codeTheme).toLowerCase().replaceAll(' ','-')
   return <code data-i18n-ignore data-code-theme={theme} className="review-code" style={{'--review-code-size':`${font}px`} as CSSProperties} dangerouslySetInnerHTML={{__html:html}}/>
+}
+
+export const MATCH_INTERFACE_CODE_THEME='Match interface theme'
+
+/** Unset or "Match interface theme" follows the current interface theme. */
+export function resolveCodeTheme(value:string|undefined) {
+  if(!value||value===MATCH_INTERFACE_CODE_THEME) return document.documentElement.dataset.theme==='light'?'Flow Light':'Flow Dark'
+  return value
 }

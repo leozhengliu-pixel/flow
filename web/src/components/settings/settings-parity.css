@@ -1,0 +1,420 @@
+/*
+ * Settings chrome shared by every settings page family (settings-*, personal-*,
+ * feature-*). Values are measured from the reference app in both themes at
+ * 1470x704; the --set-* colors live in styles/tokens.css. `html:root
+ * .settings-app` keeps this layer above the per-page and per-theme overrides
+ * regardless of stylesheet order.
+ */
+
+/* Sidebar */
+html:root .settings-app .settings-back {
+  box-sizing: border-box;
+  width: max-content;
+  height: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 13px 4px;
+  padding: 0 12px 0 6px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  color: var(--set-nav);
+  font: 500 13px/28px var(--font);
+}
+html:root .settings-app .settings-back:hover { background: var(--bg-hover); color: var(--set-nav-active); }
+html:root .settings-app .settings-search { flex: 0 0 28px; margin-bottom: 29px; }
+html:root .settings-app .settings-search input {
+  height: 28px;
+  padding: 6px 25px 6px 32px;
+  border: .5px solid var(--set-search-border);
+  background: var(--set-search-bg);
+  box-shadow: var(--set-search-shadow);
+  font: 500 13px var(--font);
+}
+html:root .settings-app .settings-sidebar nav section { margin-bottom: 15px; }
+html:root .settings-app .settings-sidebar nav h2 {
+  height: 16px;
+  margin: 0 0 5px;
+  padding: 0 10px;
+  color: var(--set-nav);
+  font: 500 13px/16px var(--font);
+}
+html:root .settings-app .settings-sidebar nav button {
+  height: 28px;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  margin-bottom: 1px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--set-nav);
+  font: 500 13px var(--font);
+}
+html:root .settings-app .settings-sidebar nav button:hover { color: var(--set-nav-active); }
+html:root .settings-app .settings-sidebar nav button.active {
+  background: var(--set-nav-active-bg);
+  color: var(--set-nav-active);
+}
+
+/* Panel */
+html:root .settings-app .settings-main {
+  border: .5px solid var(--set-panel-border);
+  background: var(--set-panel-bg);
+}
+
+/* Page header and sections */
+html:root .settings-app .settings-main .settings-page-header h1,
+html:root .settings-app .settings-main .personal-page-header h1,
+html:root .settings-app .settings-main .feature-header h1 {
+  color: var(--set-text);
+  letter-spacing: -.16px;
+}
+html:root .settings-app .settings-main .settings-page-header,
+html:root .settings-app .settings-main .personal-page-header { min-height: 32px; margin-bottom: 32px; }
+html:root .settings-app .settings-main .settings-section,
+html:root .settings-app .settings-main .personal-section { margin-bottom: 48px; }
+html:root .settings-app .settings-main .feature-section { margin-top: 48px; }
+html:root .settings-app .settings-main .settings-section > h3,
+html:root .settings-app .settings-main .settings-section-title h3,
+html:root .settings-app .settings-main .personal-section > h3,
+html:root .settings-app .settings-main .feature-section > header h2 { color: var(--set-text); }
+
+/* Cards */
+html:root .settings-app .settings-main .settings-card,
+html:root .settings-app .settings-main .feature-card {
+  border: 0;
+  border-radius: 10px;
+  background: var(--set-card);
+  box-shadow: var(--set-card-shadow);
+}
+
+/* Rows: 16px padding, 12px gap, separator inset 16px */
+html:root .settings-app .settings-main .settings-card > .settings-row,
+html:root .settings-app .settings-main .feature-card > .feature-row {
+  position: relative;
+  box-sizing: border-box;
+  min-height: 60px;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 0;
+}
+html:root .settings-app .settings-main .settings-card > .settings-row:not(:last-child)::after,
+html:root .settings-app .settings-main .feature-card > .feature-row:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  height: 0;
+  border-bottom: .5px solid var(--set-sep);
+  background: none;
+}
+html:root .settings-app .settings-main .settings-row > .settings-row-copy,
+html:root .settings-app .settings-main .feature-row > div { gap: 3px; }
+html:root .settings-app .settings-main .settings-row strong,
+html:root .settings-app .settings-main .feature-row strong {
+  color: var(--set-label);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+}
+html:root .settings-app .settings-main .settings-row .settings-row-copy > span,
+html:root .settings-app .settings-main .feature-row > div > span {
+  color: var(--set-desc);
+  font-size: 12px;
+  font-weight: 450;
+  line-height: normal;
+}
+
+/* Controls */
+html:root .settings-app .settings-main .settings-select,
+html:root .settings-app .settings-main .personal-select,
+html:root .settings-app .settings-main .feature-select {
+  height: 30px;
+  border: .5px solid transparent;
+  border-radius: 8px;
+  background: var(--set-control);
+  box-shadow: var(--set-control-shadow);
+  color: var(--set-control-text);
+  font-weight: 400;
+}
+html:root .settings-app .settings-main .settings-action:not(.danger),
+html:root .settings-app .settings-main .personal-action:not(.danger),
+html:root .settings-app .settings-main .feature-button:not(.danger) {
+  height: 32px;
+  padding: 0 12px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: var(--set-button);
+  box-shadow: var(--set-button-shadow);
+  color: var(--set-button-text);
+  font-weight: 500;
+}
+html:root .settings-app .settings-main .settings-action:not(.danger):not(.primary):hover:not(:disabled),
+html:root .settings-app .settings-main .personal-action:not(.danger):not(.primary):hover:not(:disabled),
+html:root .settings-app .settings-main .feature-button:not(.danger):not(.primary):hover:not(:disabled) { background: var(--bg-hover); }
+html:root .settings-app .settings-main .settings-action.primary,
+html:root .settings-app .settings-main .personal-action.primary,
+html:root .settings-app .settings-main .feature-button.primary {
+  background: var(--set-primary);
+  box-shadow: var(--set-primary-shadow);
+  color: var(--set-primary-text);
+}
+html:root .settings-app .settings-main .settings-action.primary:hover:not(:disabled),
+html:root .settings-app .settings-main .personal-action.primary:hover:not(:disabled),
+html:root .settings-app .settings-main .feature-button.primary:hover:not(:disabled) {
+  background: color-mix(in lch, var(--set-primary) 88%, white);
+}
+
+/* Titled groups inside a section: title + description above their own card */
+html:root .settings-app .settings-main .settings-group + .settings-group { margin-top: 24px; }
+html:root .settings-app .settings-main .settings-group > header { margin: 0 16px 12px; }
+html:root .settings-app .settings-main .settings-group > header strong {
+  display: block;
+  color: var(--set-group-title);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+}
+html:root .settings-app .settings-main .settings-group > header p {
+  margin: 3px 0 0;
+  color: var(--set-group-desc);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+/* A row that opens a sub-page (e.g. Priority notifications) */
+html:root .settings-app .settings-main .personal-row-link { cursor: pointer; }
+html:root .settings-app .settings-main .personal-row-link:hover { background: var(--bg-hover); }
+html:root .settings-app .settings-main .personal-row-link.is-disabled { cursor: default; opacity: .5; }
+html:root .settings-app .settings-main .personal-row-link.is-disabled:hover { background: none; }
+html:root .settings-app .settings-main .personal-row-link-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--set-desc);
+  font-size: 12px;
+}
+
+/* Push notification channel rows */
+html:root .settings-app .settings-main .personal-channel strong { color: var(--set-label); font: 500 13px/normal var(--font); }
+html:root .settings-app .settings-main .personal-channel small { color: var(--set-desc); font: 450 12px/normal var(--font); }
+html:root .settings-app .settings-main .personal-channel-icon { width: 20px; height: 20px; background: none; color: var(--set-desc); }
+html:root .settings-app .settings-main .personal-channel { grid-template-columns: 20px 1fr 16px; border-bottom: 0; position: relative; }
+html:root .settings-app .settings-main .personal-channel:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  border-bottom: .5px solid var(--set-sep);
+}
+html:root .settings-app .settings-main .personal-channel > svg { transform: rotate(-90deg); }
+
+/* Top-left crumb inside the panel ("‹ [icon] Team"), measured at panel +9/+11 */
+html:root .settings-app .settings-main { position: relative; }
+html:root .settings-app .settings-main .settings-crumb {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 8px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--set-nav);
+  font: 500 13px/28px var(--font);
+  white-space: nowrap;
+}
+html:root .settings-app .settings-main .settings-crumb:hover { background: var(--bg-hover); color: var(--set-nav-active); }
+html:root .settings-app .settings-main .settings-crumb-icon { width: 16px; height: 16px; display: grid; place-items: center; }
+html:root .settings-app .settings-main .settings-crumb-icon svg { width: 16px; height: 16px; }
+html:root .settings-app .settings-main .settings-crumb ~ .settings-page-header,
+html:root .settings-app .settings-main .settings-crumb + * { position: static; }
+html:root .settings-app .settings-main .domain-labels-inherited {
+  grid-column: 1 / -1;
+  margin: 32px 0 0;
+  color: var(--set-desc);
+  font-size: 13px;
+  text-align: center;
+}
+html:root .settings-app .settings-main .domain-labels-inherited strong { color: var(--set-label); font-weight: 500; }
+html:root .settings-app .settings-main .domain-labels-empty.is-team { grid-column: title / -1; height: 44px; justify-content: flex-start; color: var(--set-desc); }
+
+/* Labels tables (workspace + team): full-bleed filter bar, header directly below */
+html:root .settings-app .settings-main .domain-labels-header { margin-bottom: 12px; }
+html:root .settings-app .settings-main .domain-labels-toolbar {
+  height: 44px;
+  margin: 0;
+  padding: 0 56px 0 50px;
+  border-top: .5px solid var(--set-sep);
+}
+html:root .settings-app .settings-main .domain-labels-search,
+html:root .settings-app .settings-main .domain-labels-search input { height: 28px; }
+html:root .settings-app .settings-main .domain-labels-search input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--set-label);
+  font-weight: 500;
+}
+html:root .settings-app .settings-main .domain-labels-table-header button { font-weight: 450; }
+html:root .settings-app .settings-main > .settings-content:has(.domain-labels-header) { padding-left: 0; padding-right: 0; }
+
+/* Team members table: Name / Email / Role / menu */
+html:root .settings-app .settings-main .settings-team-members-page .settings-members-columns,
+html:root .settings-app .settings-main .settings-team-members-page .settings-member-directory-row {
+  grid-template-columns: minmax(200px, 1.5fr) minmax(160px, 1fr) 160px 36px;
+}
+html:root .settings-app .settings-main .settings-team-members-scim {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 48px 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--set-card);
+  box-shadow: var(--set-card-shadow);
+  font-size: 13px;
+}
+html:root .settings-app .settings-main .settings-team-members-scim span { color: var(--set-desc); }
+html:root .settings-app .settings-main .settings-team-members-empty { padding: 14px 48px; color: var(--set-desc); font-size: 13px; }
+html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { padding-left: 8px; padding-right: 8px; }
+html:root .settings-app .settings-main .settings-team-members-page > .settings-page-header { margin-bottom: 24px; }
+
+/* Workspace teams table */
+html:root .settings-app .settings-main > .settings-content:has(.settings-teams-page) { width: 100%; max-width: 100%; padding: 64px 8px 96px; }
+html:root .settings-app .settings-main .settings-teams-page > .settings-page-header { margin-bottom: 24px; }
+html:root .settings-app .settings-main .settings-teams-page .settings-members-columns,
+html:root .settings-app .settings-main .settings-teams-page .settings-member-directory-row {
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 1.2fr) 120px 90px 80px 90px 36px;
+}
+html:root .settings-app .settings-main .settings-teams-row { cursor: pointer; }
+html:root .settings-app .settings-main .settings-teams-row:hover { background: var(--bg-hover); }
+html:root .settings-app .settings-main .settings-teams-row > span:first-child { display: flex; align-items: center; gap: 10px; }
+html:root .settings-app .settings-main .settings-teams-row strong { color: var(--set-label); font-weight: 500; }
+html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { grid-template-columns: 300px max-content 1fr auto auto; margin-inline: 48px; }
+html:root .settings-app .settings-main .settings-teams-row small { color: var(--set-desc); font-size: 13px; }
+html:root .settings-app .settings-main .settings-teams-description { overflow: hidden; color: var(--set-desc); text-overflow: ellipsis; white-space: nowrap; }
+html:root .settings-app .settings-main .settings-teams-page .settings-members-group,
+html:root .settings-app .settings-main .settings-team-members-page .settings-members-group {
+  margin: 0 8px;
+  border-radius: 6px;
+  background: var(--set-card);
+  color: var(--set-desc);
+}
+html:root .settings-app .settings-main .settings-teams-page .settings-members-group strong { color: var(--set-group-title); font-weight: 500; }
+
+/* A card row that opens something: icon box, name, chevron (Import assistant sources) */
+html:root .settings-app .settings-main .settings-link-row {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 66px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: var(--set-label);
+  font: 500 13px var(--font);
+  text-align: left;
+  cursor: pointer;
+}
+html:root .settings-app .settings-main .settings-link-row:hover:not(:disabled) { background: var(--bg-hover); }
+html:root .settings-app .settings-main .settings-link-row:disabled { cursor: default; opacity: .6; }
+html:root .settings-app .settings-main .settings-link-row:not(:last-of-type)::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 0;
+  border-bottom: .5px solid var(--set-sep);
+}
+html:root .settings-app .settings-main .settings-link-row-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--set-control);
+  color: var(--set-desc);
+}
+html:root .settings-app .settings-main .settings-link-row > svg { color: var(--set-desc); }
+html:root .settings-app .settings-main .settings-link-row strong { font-weight: 500; }
+html:root .settings-app .settings-main .settings-link-row-icon svg [fill]:not([fill="none"]) { fill: currentColor; }
+
+/* Empty/action row at the end of a list card ("No webhooks" … "+ New webhook") */
+html:root .settings-app .settings-main .settings-row--action strong { color: var(--set-desc); font-weight: 450; }
+html:root .settings-app .settings-main .settings-row--action .settings-action:not(.primary) { background: transparent; }
+html:root .settings-app .settings-main .settings-row--action .settings-action:not(.primary):hover { background: var(--bg-hover); }
+html:root .settings-app .settings-main .settings-inline-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--set-label);
+  font: inherit;
+  cursor: pointer;
+}
+html:root .settings-app .settings-main .settings-inline-link:hover { text-decoration: underline; }
+html:root .settings-app .settings-main .settings-page-header p { max-width: none; }
+
+/* Integrations: large search, then category sections of 3-column cards */
+html:root .settings-app .settings-main .feature-integration-toolbar { display: flex; align-items: center; gap: 12px; margin: 40px 0 48px; }
+html:root .settings-app .settings-main .feature-integration-search {
+  flex: 1;
+  height: 45px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border: .5px solid var(--set-search-border);
+  border-radius: 10px;
+  background: var(--set-panel-bg);
+  color: var(--set-desc);
+}
+html:root .settings-app .settings-main .feature-integration-search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--set-label); font: 450 15px var(--font); }
+html:root .settings-app .settings-main .feature-integration-section + .feature-integration-section { margin-top: 48px; }
+html:root .settings-app .settings-main .feature-integration-section > h2 { margin: 0 16px 16px; color: var(--set-desc); font-size: 12px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
+html:root .settings-app .settings-main .feature-integration-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+html:root .settings-app .settings-main .feature-integration-card {
+  min-height: 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: .5px solid var(--set-search-border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--set-label);
+  text-align: left;
+  cursor: pointer;
+}
+html:root .settings-app .settings-main .feature-integration-card:hover { background: var(--bg-hover); }
+html:root .settings-app .settings-main .feature-integration-card-head { display: flex; align-items: center; gap: 10px; }
+html:root .settings-app .settings-main .feature-integration-card-head strong { font: 500 14px var(--font); }
+html:root .settings-app .settings-main .feature-integration-card-head small { margin-left: auto; color: var(--set-desc); font-size: 12px; }
+html:root .settings-app .settings-main .feature-integration-card-head small.is-error { color: var(--semantic-danger); }
+html:root .settings-app .settings-main .feature-integration-card-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--set-control);
+}
+html:root .settings-app .settings-main .feature-integration-card-description { color: var(--set-desc); font: 450 14px/20px var(--font); }
+@media (max-width: 760px) {
+  html:root .settings-app .settings-main .feature-integration-cards { grid-template-columns: 1fr; }
+}
+
+/* Team page header: title with an optional description underneath */
+html:root .settings-app .settings-main .team-settings-header > div { display: flex; flex-direction: column; align-items: flex-start; }
+html:root .settings-app .settings-main .team-settings-header > div > p { margin: 4px 0 0; color: var(--set-desc); font-size: 13px; line-height: 22px; }
+html:root .settings-app .settings-main .team-access-note { margin: -16px 16px 28px; padding: 0; color: var(--set-desc); }

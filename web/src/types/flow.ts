@@ -1084,6 +1084,8 @@ export interface WorkspaceSettings {
   disableAdminBypass?: boolean;
   initiativePermission?: string;
   loopPermission?: string;
+  importPermission?: string;
+  pinnedViewPermission?: string;
   agentGuidancePermission?: string;
   agentInstructions?: string;
   preventGuestAgents?: boolean;
@@ -1906,7 +1908,13 @@ export interface TeamSettings {
   teamId: UUID;
   description?: string;
   timezone: string;
-  estimateType: "notUsed" | "exponential" | "fibonacci" | "flow";
+  estimateType: "notUsed" | "exponential" | "fibonacci" | "flow" | "tShirt";
+  /** Allow 0 as an estimate value. */
+  estimateAllowZero?: boolean;
+  /** Add the two larger values to the scale. */
+  estimateExtended?: boolean;
+  /** Count unestimated issues as 1 point instead of 0. */
+  estimateCountUnestimated?: boolean;
   defaultStateId: UUID;
   defaultPriority: number;
   issueEmailEnabled: boolean;
@@ -1919,6 +1927,7 @@ export interface TeamSettings {
   agentSkillPermission: "allMembers" | "teamMembers" | "owners";
   loopPermission: "allMembers" | "teamMembers" | "owners";
   memberPermission: "allMembers" | "teamMembers" | "owners";
+  pinnedViewPermission?: "allMembers" | "teamMembers" | "owners";
   issueSharingEnabled?: boolean;
   issueSharingPermission?: "allMembers" | "teamMembers" | "owners";
   slackChannelId?: string;

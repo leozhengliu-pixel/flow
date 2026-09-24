@@ -55,7 +55,7 @@ describe('TeamProjectStatusesSettingsPage (LS-0595)', () => {
       </I18nProvider>,
     )
     expect(screen.getByTestId('team-project-statuses-settings')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Project statuses' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Team project statuses' })).toBeInTheDocument()
     expect(screen.getByText('Inherit statuses from workspace')).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Project statuses' })).toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: 'Inherit statuses from workspace' }))

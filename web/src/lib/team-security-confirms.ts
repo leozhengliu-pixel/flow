@@ -7,7 +7,8 @@ export type TeamPermissionKey =
   | "templatePermission"
   | "agentSkillPermission"
   | "loopPermission"
-  | "memberPermission";
+  | "memberPermission"
+  | "pinnedViewPermission";
 
 const PERMISSION_RANK: Record<string, number> = {
   owners: 0,

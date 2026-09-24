@@ -677,6 +677,8 @@ export function createLabelGroup(input: {
   color?: string;
   description?: string;
   resourceType: "issue" | "project" | "initiative";
+  /** Team ID for a team-owned group; omit for a workspace group. */
+  scope?: string;
 }): Promise<LabelGroup> {
   return request("/api/label-groups", jsonRequest("POST", input));
 }
@@ -2337,6 +2339,10 @@ export function deleteCycleResource(
 export function getCycleCalendarFeed(id: string): Promise<{ url: string }> {
   return request(`/api/cycles/${id}/calendar-token`, { method: "POST" });
 }
+/** Permanently deletes a team's cycle history; cycles must be disabled. */
+export function deleteTeamCycles(teamId: string): Promise<{ deleted: boolean }> {
+  return request(`/api/teams/${teamId}/cycles`, { method: "DELETE" });
+}
 export function updateCycleSettings(
   teamId: string,
   input: CycleSettingsMutationInput,
@@ -2950,7 +2956,11 @@ export function fetchTeamLabels(teamId: string): Promise<IssueLabel[]> {
 }
 export function createTeamLabel(
   teamId: string,
-  input: Pick<IssueLabel, "name" | "color"> & { description?: string },
+  input: Pick<IssueLabel, "name" | "color"> & {
+    description?: string;
+    resourceType?: "issue" | "project";
+    groupId?: string;
+  },
 ): Promise<IssueLabel> {
   return request(`/api/teams/${teamId}/labels`, jsonRequest("POST", input));
 }

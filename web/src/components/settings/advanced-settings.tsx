@@ -1,7 +1,9 @@
 import {
   Check,
+  ChevronRight,
   Clock3,
   Download,
+  FileSpreadsheet,
   GitCompareArrows,
   RotateCcw,
   Upload,
@@ -35,7 +37,36 @@ import type {
   MigrationJob,
 } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
+import { IntegrationBrandIcon } from "./integration-brand-icon";
 import { SettingsSelect } from "./settings-primitives";
+
+/** Import sources: each tool's CSV export maps through the same column mapper. */
+const IMPORT_SOURCES = [
+  { id: "asana", name: "Asana", icon: <AsanaMark /> },
+  { id: "shortcut", name: "Shortcut", icon: <ShortcutMark /> },
+  { id: "github", name: "GitHub", icon: <IntegrationBrandIcon provider="github" size={16} /> },
+  { id: "jira", name: "Jira", icon: <IntegrationBrandIcon provider="jira" size={16} /> },
+  { id: "file", name: "CSV or JSON", icon: <FileSpreadsheet size={16} /> },
+] as const;
+
+function AsanaMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      <circle cx="8" cy="4.6" r="2.9" />
+      <circle cx="3.6" cy="11" r="2.9" />
+      <circle cx="12.4" cy="11" r="2.9" />
+    </svg>
+  );
+}
+
+function ShortcutMark() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="2" width="12" height="12" rx="3" />
+      <path d="M5 11 11 5M7 5h4v4" />
+    </svg>
+  );
+}
 
 export {
   ProjectUpdateSettings,
@@ -56,6 +87,8 @@ export function ImportExportSettings({
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [includePrivate, setIncludePrivate] = useState(false);
+  const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const inputRef = useRef<HTMLInputElement>(null);
   const warnings = useMemo(
     () => (job ? importMappingWarnings(job, mapping, data) : []),
@@ -87,21 +120,21 @@ export function ImportExportSettings({
         value.headers.find((header) => names.includes(header.toLowerCase())) ??
         "";
       setMapping({
-        sourceId: find("id", "identifier", "issue id"),
+        sourceId: find("id", "identifier", "issue id", "task id", "issue key", "number"),
         title: find("title", "name", "summary"),
-        description: find("description", "body", "details"),
+        description: find("description", "body", "details", "notes"),
         priority: find("priority"),
-        status: find("status", "state"),
+        status: find("status", "state", "section/column"),
         estimate: find("estimate", "points"),
-        assignee: find("assignee", "assignee email", "owner"),
+        assignee: find("assignee", "assignee email", "owner", "owners", "assignees"),
         labels: find("labels", "label", "tags"),
-        project: find("project", "project name"),
+        project: find("project", "project name", "projects", "epic", "milestone"),
         dueDate: find("due date", "due_date", "duedate"),
         createdAt: find("created", "created at", "created_at"),
-        updatedAt: find("updated", "updated at", "updated_at"),
+        updatedAt: find("updated", "updated at", "updated_at", "last modified"),
         startedAt: find("started", "started at", "started_at"),
         triagedAt: find("triaged", "triaged at", "triaged_at"),
-        completedAt: find("completed", "completed at", "completed_at"),
+        completedAt: find("completed", "completed at", "completed_at", "resolved", "closed_at"),
         canceledAt: find(
           "canceled",
           "cancelled",
@@ -109,7 +142,7 @@ export function ImportExportSettings({
           "cancelled at",
         ),
         archivedAt: find("archived", "archived at", "archived_at"),
-        parentId: find("parent issue", "parent", "parent id"),
+        parentId: find("parent issue", "parent", "parent id", "parent task"),
       });
       await onReload();
     } catch (error) {
@@ -123,7 +156,7 @@ export function ImportExportSettings({
   const startExport = async (format: "json" | "csv") => {
     setExporting(true);
     try {
-      await createExport(format, false);
+      await createExport(format, admin && includePrivate);
       await onReload();
     } finally {
       setExporting(false);
@@ -138,31 +171,35 @@ export function ImportExportSettings({
       </header>
       <section className="settings-section">
         <h3>Import assistant</h3>
+        <p className="settings-section-description">
+          If you use another service to track issues, this tool will create a copy of them in Flow.
+        </p>
         <div className="settings-card">
-          <div className="settings-row">
-            <div>
-              <strong>CSV or JSON</strong>
-              <span>
-                Upload issue data, preview parsed rows, then map source columns
-                to Flow fields.
-              </span>
-            </div>
+          {IMPORT_SOURCES.map((source) => (
             <button
-              className="settings-action"
+              key={source.id}
+              className="settings-link-row"
+              type="button"
               disabled={uploading}
               onClick={() => inputRef.current?.click()}
             >
-              <Upload size={14} />
-              {uploading ? "Parsing…" : "Choose file"}
+              <span className="settings-link-row-icon">{source.icon}</span>
+              <strong data-i18n-ignore={source.id !== "file" || undefined}>
+                {source.id === "file" && uploading ? t("Parsing…") : source.name}
+              </strong>
+              <ChevronRight size={14} />
             </button>
-            <input
-              ref={inputRef}
-              hidden
-              type="file"
-              accept=".csv,.json,text/csv,application/json"
-              onChange={(e) => void pick(e.target.files?.[0])}
-            />
-          </div>
+          ))}
+          <input
+            ref={inputRef}
+            hidden
+            type="file"
+            accept=".csv,.json,text/csv,application/json"
+            onChange={(e) => {
+              void pick(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
           {job && job.status === "mapping" && (
             <div className="advanced-import-mapping">
               <div>
@@ -310,33 +347,41 @@ export function ImportExportSettings({
       <MigrationAssistant data={data} onReload={onReload} />
       <section className="settings-section">
         <h3>Export</h3>
+        <p className="settings-section-description">
+          You can export your issue data in CSV or JSON format. Exports run in the background and appear below when ready to download.
+        </p>
         <div className="settings-card">
           <div className="settings-row">
-            <div>
-              <strong>Complete workspace data</strong>
-              <span>
-                Create a background export in JSON or an issue-focused CSV.
-              </span>
+            <div className="settings-row-copy">
+              <strong>Issue data</strong>
             </div>
             <div className="settings-control">
-              <button
-                className="settings-action"
-                disabled={exporting}
-                onClick={() => void startExport("csv")}
-              >
-                <Download size={14} />
-                CSV
-              </button>
-              <button
-                className="settings-action"
-                disabled={exporting}
-                onClick={() => void startExport("json")}
-              >
-                <Download size={14} />
-                JSON
-              </button>
+              <SettingsSelect
+                label="Export format"
+                value="Export…"
+                options={["Export…", "CSV", "JSON"]}
+                onChange={(value) => {
+                  if (value === "CSV" || value === "JSON") void startExport(value === "CSV" ? "csv" : "json");
+                }}
+              />
             </div>
           </div>
+          {admin && (
+            <div className="settings-row">
+              <div className="settings-row-copy">
+                <strong>Include private teams</strong>
+              </div>
+              <div className="settings-control">
+                <SettingsSelect
+                  label="Include private teams"
+                  value={includePrivate ? "All" : "None"}
+                  options={["None", "All"]}
+                  onChange={(value) => setIncludePrivate(value === "All")}
+                />
+              </div>
+            </div>
+          )}
+          {exporting && <div className="advanced-job"><Clock3 size={14} /><span><strong>Starting export…</strong></span></div>}
           {data.exportJobs.slice(0, 5).map((item) => (
             <div className="advanced-job" key={item.id}>
               {item.status === "completed" ? (

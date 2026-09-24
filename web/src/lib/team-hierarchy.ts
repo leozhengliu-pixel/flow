@@ -9,7 +9,15 @@ export function resolvedTeamSettings(settings: Record<string, TeamSettings>, tea
   seen.add(teamId)
   if (!current.inheritIssueEstimation || !current.parentTeamId) return current
   const parent = resolvedTeamSettings(settings, current.parentTeamId, seen)
-  return parent ? { ...current, estimateType: parent.estimateType } : current
+  return parent
+    ? {
+        ...current,
+        estimateType: parent.estimateType,
+        estimateAllowZero: parent.estimateAllowZero,
+        estimateExtended: parent.estimateExtended,
+        estimateCountUnestimated: parent.estimateCountUnestimated,
+      }
+    : current
 }
 
 export function teamHierarchy(teams: Team[], settings: TeamHierarchySettings = {}, projectedParents: Record<string, string> = {}) {

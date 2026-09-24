@@ -47,7 +47,7 @@ func refreshProjectProgressHistories(data *domain.Bootstrap, now time.Time) bool
 		started := make([]domain.ProjectProgressHistoryPoint, 0, len(points))
 		progress := make([]domain.ProjectProgressHistoryPoint, 0, len(points))
 		for _, date := range points {
-			scopeCount, startedCount, completedCount, backlogCount, unstartedCount, scopeEstimate, startedEstimate, completedEstimate := progressCounts(states, data.Activities, issues, date)
+			scopeCount, startedCount, completedCount, backlogCount, unstartedCount, scopeEstimate, startedEstimate, completedEstimate := progressCounts(states, data.Activities, issues, date, data.TeamSettings)
 			issueCount = append(issueCount, domain.ProjectProgressHistoryPoint{Date: date, Value: float64(scopeCount), ScopeEstimate: scopeEstimate, ScopeCount: scopeCount})
 			scope = append(scope, domain.ProjectProgressHistoryPoint{Date: date, Value: scopeEstimate, ScopeEstimate: scopeEstimate, ScopeCount: scopeCount})
 			completed = append(completed, domain.ProjectProgressHistoryPoint{Date: date, Value: completedEstimate, CompletedIssueCount: completedCount, CompletedEstimate: completedEstimate})
@@ -100,7 +100,7 @@ func weeklyProgressDates(start, end time.Time) []time.Time {
 // snapshot contains only the current state, so recorded state transition
 // activities are replayed backwards to avoid flattening every history point
 // to today's state.
-func progressCounts(states map[string]domain.WorkflowState, activities map[string][]domain.ActivityEvent, issues []domain.Issue, date time.Time) (scope, started, completed, backlog, unstarted int, scopeEstimate, startedEstimate, completedEstimate float64) {
+func progressCounts(states map[string]domain.WorkflowState, activities map[string][]domain.ActivityEvent, issues []domain.Issue, date time.Time, teamSettings map[string]domain.TeamSettings) (scope, started, completed, backlog, unstarted int, scopeEstimate, startedEstimate, completedEstimate float64) {
 	for _, issue := range issues {
 		if utcDay(issue.CreatedAt).After(date) {
 			continue
@@ -110,7 +110,7 @@ func progressCounts(states map[string]domain.WorkflowState, activities map[strin
 			continue
 		}
 		scope++
-		estimate := historicalIssueEstimate(activities[issue.ID], issue, date)
+		estimate := historicalIssueEstimate(activities[issue.ID], issue, date, unestimatedPoints(teamSettings, issue.Team.ID))
 		scopeEstimate += estimate
 		switch state.Type {
 		case "started":
@@ -141,9 +141,18 @@ func countedProgressState(stateType string) bool {
 	}
 }
 
-func issueEstimate(issue domain.Issue) float64 {
+// unestimatedPoints is what an unestimated issue counts as: 1 point unless the
+// team turned off "Count unestimated issues".
+func unestimatedPoints(teamSettings map[string]domain.TeamSettings, teamID string) float64 {
+	if settings, ok := teamSettings[teamID]; ok && settings.EstimateCountUnestimated != nil && !*settings.EstimateCountUnestimated {
+		return 0
+	}
+	return 1
+}
+
+func issueEstimate(issue domain.Issue, unestimated float64) float64 {
 	if issue.Estimate == nil {
-		return 1
+		return unestimated
 	}
 	return max(*issue.Estimate, 0)
 }
@@ -166,8 +175,8 @@ func historicalIssueState(events []domain.ActivityEvent, current domain.Workflow
 	return state
 }
 
-func historicalIssueEstimate(events []domain.ActivityEvent, issue domain.Issue, date time.Time) float64 {
-	estimate := issueEstimate(issue)
+func historicalIssueEstimate(events []domain.ActivityEvent, issue domain.Issue, date time.Time, unestimated float64) float64 {
+	estimate := issueEstimate(issue, unestimated)
 	for index := len(events) - 1; index >= 0; index-- {
 		event := events[index]
 		if utcDay(event.CreatedAt).After(date) && event.Type == "issue.updated" {

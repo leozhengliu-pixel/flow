@@ -556,6 +556,8 @@ type labelGroupInput struct {
 	Description  *string `json:"description,omitempty"`
 	ResourceType *string `json:"resourceType,omitempty"`
 	ArchivedAt   *string `json:"archivedAt,omitempty"`
+	// Scope is a team ID for team-owned groups; empty means workspace.
+	Scope *string `json:"scope,omitempty"`
 }
 
 func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
@@ -574,6 +576,12 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 			return "", errInvalid
 		}
 		created = domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Scope: "Workspace", ResourceType: resource, CreatedAt: time.Now().UTC()}
+		if input.Scope != nil && *input.Scope != "" && *input.Scope != "Workspace" {
+			if !teamExists(data, *input.Scope) {
+				return "", errNotFound
+			}
+			created.Scope = *input.Scope
+		}
 		if input.Color != nil {
 			created.Color = *input.Color
 		}
