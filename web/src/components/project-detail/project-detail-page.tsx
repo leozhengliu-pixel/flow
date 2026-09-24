@@ -447,6 +447,9 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               <ProjectIssueDisplayMenu
                 display={issueDisplay}
                 onChange={changeIssueDisplay}
+                issueData={props.issueData}
+                issues={projectIssues}
+                filters={issueFilters}
               />
             </>
           )}

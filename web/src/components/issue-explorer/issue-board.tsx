@@ -60,11 +60,33 @@ export function IssueBoard(props: IssueBoardProps) {
     {lanes.map(lane => <section key={lane.id} className={styles.swimlane} aria-label={lane.label}>
       <header className={styles.swimlaneHeader}>
         <button type="button" aria-expanded={!collapsed.has(lane.id)} aria-label={collapsed.has(lane.id) ? 'Expand row' : 'Collapse row'} onClick={() => setCollapsed(current => { const next = new Set(current); if (next.has(lane.id)) next.delete(lane.id); else next.add(lane.id); return next })}>▾</button>
-        <span data-i18n-ignore>{lane.label}</span><span>{lane.groups.reduce((total, group) => total + group.issues.length, 0)}</span>
+        <span data-i18n-ignore>{lane.label}</span><span className={styles.swimlaneCount}>{lane.groups.reduce((total, group) => total + group.issues.length, 0)}</span>
+        <SwimlaneMenu
+          collapsed={collapsed.has(lane.id)}
+          onSelectAll={() => lane.groups.forEach(group => group.issues.forEach(issue => props.onSelectIssue(issue.id, true, false)))}
+          onToggle={() => setCollapsed(current => { const next = new Set(current); if (next.has(lane.id)) next.delete(lane.id); else next.add(lane.id); return next })}
+          onExpandAll={() => setCollapsed(new Set())}
+          onCollapseAll={() => setCollapsed(new Set(lanes.map(item => item.id)))}
+        />
       </header>
       {!collapsed.has(lane.id) && <div className={styles.swimlaneBoard}><IssueBoardColumns {...props} groups={lane.groups} hiddenGroupIds={(props.hiddenGroupIds ?? []).flatMap(id => [id, `${id}::${lane.id}`])} onHideGroup={props.onHideGroup ? id => props.onHideGroup!(id.split('::')[0]) : undefined}/></div>}
     </section>)}
   </div>
+}
+
+/** Linear swimlane menu: select the row's issues, and collapse / expand one or all rows. */
+function SwimlaneMenu({ collapsed, onSelectAll, onToggle, onExpandAll, onCollapseAll }: { collapsed: boolean; onSelectAll: () => void; onToggle: () => void; onExpandAll: () => void; onCollapseAll: () => void }) {
+  const { t } = useI18n()
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild><button className={styles.headerButton} type="button" aria-label={t('Row options')}><Ellipsis size={14}/></button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Row options')} className={styles.columnMenu} align="start" sideOffset={4}>
+      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onSelectAll}>{t('Select all in row')}</DropdownMenu.Item>
+      <DropdownMenu.Separator className={styles.columnMenuSeparator}/>
+      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onToggle}>{t(collapsed ? 'Expand row' : 'Collapse row')}</DropdownMenu.Item>
+      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onExpandAll}>{t('Expand all rows')}</DropdownMenu.Item>
+      <DropdownMenu.Item className={styles.columnMenuItem} onSelect={onCollapseAll}>{t('Collapse all rows')}</DropdownMenu.Item>
+    </DropdownMenu.Content></DropdownMenu.Portal>
+  </DropdownMenu.Root>
 }
 
 function IssueBoardColumns({ groups, hiddenGroupIds = [], properties, propertyOptions = EMPTY_OPTIONS, selectedIds, createIssueLabel = 'Add new issue', canDrop, onCreateIssue, onHideGroup, onShowGroup, onMove, onOpenIssue, onPropertyChange, onSelectIssue }: {
