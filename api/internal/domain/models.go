@@ -504,6 +504,13 @@ type TeamSettings struct {
 	AgentSkillPermission    string               `json:"agentSkillPermission"`
 	LoopPermission          string               `json:"loopPermission"`
 	MemberPermission        string               `json:"memberPermission"`
+	PinnedViewPermission    string               `json:"pinnedViewPermission"`
+	// Estimate scale options (see the web estimates module).
+	EstimateAllowZero bool `json:"estimateAllowZero"`
+	EstimateExtended  bool `json:"estimateExtended"`
+	// EstimateCountUnestimated is nil for teams created before the option,
+	// which keeps the historical behavior of counting them as 1 point.
+	EstimateCountUnestimated *bool `json:"estimateCountUnestimated,omitempty"`
 	IssueSharingEnabled     bool                 `json:"issueSharingEnabled"`
 	IssueSharingPermission  string               `json:"issueSharingPermission,omitempty"`
 	SlackChannelID          string               `json:"slackChannelId,omitempty"`
@@ -981,6 +988,8 @@ type WorkspaceSettings struct {
 	DisableAdminBypass           bool                `json:"disableAdminBypass"`
 	InitiativePermission         string            `json:"initiativePermission,omitempty"`
 	LoopPermission               string            `json:"loopPermission,omitempty"`
+	ImportPermission             string            `json:"importPermission,omitempty"`
+	PinnedViewPermission         string            `json:"pinnedViewPermission,omitempty"`
 	AgentGuidancePermission      string            `json:"agentGuidancePermission,omitempty"`
 	AgentInstructions            string            `json:"agentInstructions,omitempty"`
 	PreventGuestAgents           bool              `json:"preventGuestAgents"`
@@ -2210,6 +2219,10 @@ type TeamSettingsMutationInput struct {
 	AgentSkillPermission    *string               `json:"agentSkillPermission,omitempty"`
 	LoopPermission          *string               `json:"loopPermission,omitempty"`
 	MemberPermission        *string               `json:"memberPermission,omitempty"`
+	PinnedViewPermission    *string               `json:"pinnedViewPermission,omitempty"`
+	EstimateAllowZero        *bool   `json:"estimateAllowZero,omitempty"`
+	EstimateExtended         *bool   `json:"estimateExtended,omitempty"`
+	EstimateCountUnestimated *bool   `json:"estimateCountUnestimated,omitempty"`
 	IssueSharingEnabled      *bool                 `json:"issueSharingEnabled,omitempty"`
 	IssueSharingPermission   *string               `json:"issueSharingPermission,omitempty"`
 	ApplyToSubTeams          *bool                 `json:"applyToSubTeams,omitempty"`
@@ -2266,6 +2279,9 @@ type IssueLabelMutationInput struct {
 	Description *string `json:"description,omitempty"`
 	Color       *string `json:"color,omitempty"`
 	ArchivedAt  *string `json:"archivedAt,omitempty"`
+	// ResourceType and GroupID are honored when a team label is created.
+	ResourceType *string `json:"resourceType,omitempty"`
+	GroupID      *string `json:"groupId,omitempty"`
 }
 
 type BatchIssueUpdateInput struct {

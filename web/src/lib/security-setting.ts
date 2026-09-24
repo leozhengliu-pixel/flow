@@ -17,6 +17,8 @@ export type SecuritySettingKey =
   | 'initiativePermission'
   | 'loopPermission'
   | 'agentGuidancePermission'
+  | 'importPermission'
+  | 'pinnedViewPermission'
 
 export type SecurityRoleOption = {
   label: string

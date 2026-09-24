@@ -30,7 +30,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { useI18n } from "@/i18n/i18n";
 import { toggleFavoriteFor } from "@/lib/favorites";
-import { commentOnReview, submitReview, updateIntegrationConnection, updateReview } from "@/lib/api";
+import { commentOnReview, submitReview, updateIntegrationConnection, updateReview, updateUserSettings } from "@/lib/api";
 import {
   integrationSettingsPath,
   issuePath,
@@ -504,6 +504,10 @@ function ReviewDetail({
   const mergeWithMethod = async (method: MergeMethod) => {
     setMergeMethod(method);
     await onMutate({ status: "merged", mergeMethod: method });
+    // The last merge method used becomes the default for the next pull request.
+    const mergeStrategy = { squash: "Squash and merge", merge: "Merge commit", rebase: "Rebase and merge" }[method];
+    if (data.userSettings[data.viewer.id]?.mergeStrategy !== mergeStrategy)
+      void updateUserSettings({ mergeStrategy }).catch(() => undefined);
   };
   return (
     <>

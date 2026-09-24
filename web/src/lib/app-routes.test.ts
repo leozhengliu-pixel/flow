@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   initiativePath,
+  settingsPath,
   issuePath,
   automationNewPath,
   automationPath,
@@ -314,3 +315,24 @@ describe("application routes", () => {
   });
 
 });
+
+describe('settings aliases and deep links', () => {
+  it('maps reference settings URLs onto Flow pages', () => {
+    expect(parseAppRoute('/acme/settings/ai/coding-sessions')).toMatchObject({ kind: 'settings', page: 'coding-sessions' })
+    expect(parseAppRoute('/acme/settings/ai/coding-sessions/environments')).toMatchObject({ kind: 'settings', page: 'coding-environments' })
+    expect(parseAppRoute('/acme/settings/skill/skill_1/edit')).toMatchObject({ kind: 'settings', page: 'agents', agentSkillMode: 'edit', agentSkillId: 'skill_1' })
+    expect(parseAppRoute('/acme/settings/workspace/welcome-message')).toMatchObject({ kind: 'settings', page: 'workspace' })
+    expect(parseAppRoute('/acme/settings/labels')).toMatchObject({ kind: 'settings', page: 'issue-labels' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/labels')).toMatchObject({ kind: 'settings', page: 'team', teamKey: 'ENG', teamSection: 'issue-labels' })
+  })
+
+  it('parses API, webhook, loops, and notification sub-pages', () => {
+    expect(parseAppRoute('/acme/settings/api/keys')).toMatchObject({ kind: 'settings', page: 'api', apiView: 'keys' })
+    expect(parseAppRoute('/acme/settings/api/webhooks/new')).toMatchObject({ kind: 'settings', page: 'api', webhookId: 'new' })
+    expect(parseAppRoute('/acme/settings/api/webhooks/hook_1/edit')).toMatchObject({ kind: 'settings', page: 'api', webhookId: 'hook_1' })
+    expect(parseAppRoute('/acme/settings/loops')).toMatchObject({ kind: 'settings', page: 'loops' })
+    expect(parseAppRoute('/acme/settings/account/notifications/priority-filter')).toMatchObject({ kind: 'settings', page: 'notifications', notificationChannel: 'priority-filter' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/project-labels')).toMatchObject({ kind: 'settings', page: 'team', teamSection: 'project-labels' })
+    expect(settingsPath('acme', 'coding-sessions')).toBe('/acme/settings/ai/coding-sessions')
+  })
+})

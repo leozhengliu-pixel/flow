@@ -12,11 +12,10 @@ import { persistUserSettings } from '@/lib/settings-persistence';
 import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
-import { AgentTrustedSourcesSettings } from './agent-trusted-sources-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
-import type { SecuritySettingKey } from '@/lib/security-setting';
+import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
 import {
   Activity,
   AppWindow,
@@ -30,7 +29,7 @@ import {
   Code2,
   FileText,
   Flame,
-  FileClock,
+  Repeat2,
   History,
   Import,
   Upload,
@@ -75,7 +74,6 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import {
   connectIntegration,
   createAgentSkill,
-  createAPIKey,
   createIdentityProvider,
   createOAuthApplication,
   deleteIdentityProvider,
@@ -104,11 +102,14 @@ import {
   fetchWorkspaceInviteLink,
   rotateWorkspaceInviteLink,
 } from "@/lib/api";
-import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
+import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
 import {
+  apiKeysSettingsPath,
   applicationEditPath,
   applicationSettingsPath,
   identityProviderSettingsPath,
+  settingsPath,
+  webhookSettingsPath,
 } from "@/lib/app-routes";
 import { agentSkillsSettingsBackLink } from "@/lib/agent-skills-settings-back-link";
 import { useNavigate } from "react-router-dom";
@@ -121,9 +122,7 @@ import type {
   OAuthApplication,
   ProjectTemplate,
   ReleasePipeline,
-  Team,
   UserSettings,
-  Webhook,
   WorkspaceMutationInput,
   WorkspaceMember,
   WorkspaceSettings,
@@ -133,6 +132,8 @@ import { TeamCreatePage } from '@/lib/route-pages';
 import {
   SettingsPageTitle as PageTitle,
   SettingsRow as Row,
+  SettingsCrumb,
+  SettingsGroup as Group,
   SettingsSection as Section,
   SettingsSelect as Select,
   SettingsToggle as Toggle,
@@ -143,7 +144,9 @@ import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from ".
 import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
+import "./settings-parity.css";
 import { WebhookEditPage } from "./webhook-edit-page";
+import { WorkspaceTeamsSettings } from "./workspace-teams-settings";
 import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
@@ -278,14 +281,16 @@ type SettingListItem = {
 type SettingsPageProps = {
   data: BootstrapData;
   page: SettingsPageId;
-  notificationChannel?: 'desktop'|'mobile'|'email'|'slack';
-  onNavigateNotification?: (channel?: 'desktop'|'mobile'|'email'|'slack') => void;
+  notificationChannel?: NotificationSettingsView;
+  onNavigateNotification?: (channel?: NotificationSettingsView) => void;
   apiKeyMode?: "new" | "detail" | "edit";
   apiKeyId?: string;
   signingKeyMode?: "new";
   teamKey?: string;
   teamSection?: TeamSettingsSection;
   releasePipelineMode?: "new" | "edit";
+  apiView?: "keys";
+  webhookId?: string;
   releasePipelineSlug?: string;
   integrationProvider?: IntegrationProvider;
   integrationSlug?: string;
@@ -372,9 +377,8 @@ const NAV: { title: string; items: NavItem[] }[] = [
     title: "Features",
     items: [
       { id: "ai", label: "AI & Agents", icon: Sparkles },
-      { id: "coding-sessions", label: "Coding sessions", icon: Code2 },
+      { id: "loops", label: "Loops", icon: Repeat2 },
       { id: "initiatives", label: "Initiatives", icon: Zap },
-      { id: "initiative-labels", label: "Initiative labels", icon: Tag },
       { id: "documents", label: "Documents", icon: FileText },
       { id: "customer-requests", label: "Customer requests", icon: UsersRound },
       { id: "releases", label: "Releases", icon: Rocket },
@@ -391,8 +395,6 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "teams", label: "Teams", icon: UsersRound },
       { id: "members", label: "Members", icon: UserRound },
       { id: "security", label: "Security", icon: ShieldCheck },
-      { id: "authentication", label: "Authentication", icon: KeyRound },
-      { id: "audit-log", label: "Audit log", icon: FileClock },
       { id: "api", label: "API", icon: Braces },
       { id: "applications", label: "Applications", icon: AppWindow },
       { id: "import-export", label: "Import & export", icon: Import },
@@ -425,7 +427,7 @@ const DEFAULT_VALUES: StoredSettings["values"] = {
   codeReviewsEnabled: true,
   autoConvertDrafts: false,
   mergeStrategy: "Squash and merge",
-  codeTheme: "Flow Light",
+  codeTheme: "Match interface theme",
   codeFont: "12px, Regular, Default",
   reviewCommentsFilter: "Exclude Bots",
   reviewRequests: true,
@@ -967,10 +969,11 @@ function SettingsBody(
   if (page === "workspace") return <WorkspacePage {...props} />;
   if (page === "teams")
     return (
-      <TeamsPage
+      <WorkspaceTeamsSettings
         data={props.data}
         onCreate={props.onCreateTeam}
         onOpen={(team) => props.onNavigate("team", team.key)}
+        onReload={props.onReload}
       />
     );
   if (page === "members")
@@ -980,7 +983,9 @@ function SettingsBody(
     return (
       <ApiPage
         data={props.data}
-        onCreateAPIKey={props.onCreateAPIKey}
+        apiView={props.apiView}
+        webhookId={props.webhookId}
+        onNavigate={props.onNavigate}
         onReload={props.onReload}
       />
     );
@@ -1108,6 +1113,7 @@ function SettingsBody(
         team={team}
         section={props.teamSection ?? "overview"}
         onNavigate={(section) => props.onNavigate("team", team.key, section)}
+        onOpenTeams={() => props.onNavigate("teams")}
         onReload={props.onReload}
       />
     ) : (
@@ -1129,11 +1135,6 @@ function SettingsBody(
     return (
       <>
         <SecurityPage data={props.data} onReload={props.onReload} onNavigate={props.onNavigate} />
-        <SecuritySupplement
-          data={props.data}
-          onNavigate={props.onNavigate}
-          onReload={props.onReload}
-        />
       </>
     );
   if (page === "authentication")
@@ -1143,6 +1144,7 @@ function SettingsBody(
   if (
     [
       "ai",
+      "loops",
       "coding-sessions",
       "coding-environments",
       "initiatives",
@@ -1160,6 +1162,7 @@ function SettingsBody(
         page={
           page as
             | "ai"
+            | "loops"
             | "coding-sessions"
             | "coding-environments"
             | "initiatives"
@@ -1291,34 +1294,6 @@ function ActionButton({
     >
       {children}
     </button>
-  );
-}
-
-function FieldRow({
-  title,
-  description,
-  value,
-  onCommit,
-}: {
-  title: string;
-  description?: string;
-  value: string;
-  onCommit: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <Row title={title} description={description}>
-      <input
-        className="settings-input"
-        aria-label={title}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          if (draft !== value) onCommit(draft);
-        }}
-      />
-    </Row>
   );
 }
 
@@ -1611,55 +1586,6 @@ function download(filename: string, content: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function TeamsPage({
-  data,
-  onCreate,
-  onOpen,
-}: {
-  data: BootstrapData;
-  onCreate: () => void;
-  onOpen: (team: Team) => void;
-}) {
-  return (
-    <>
-      <PageTitle
-        description="Teams organize issues, projects, cycles, and views."
-        action={
-          <ActionButton primary onClick={onCreate}>
-            New team
-          </ActionButton>
-        }
-      >
-        Teams
-      </PageTitle>
-      <Section>
-        {data.teams.map((team) => (
-          <button
-            className="settings-team-row"
-            key={team.id}
-            onClick={() => onOpen(team)}
-          >
-            <span className="settings-team-icon" style={{ color: team.color }}>
-              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-            </span>
-            <div>
-              <strong data-i18n-ignore>{team.name}</strong>
-              <span>
-                {team.key} ·{" "}
-                {
-                  data.issues.filter((issue) => issue.team.id === team.id)
-                    .length
-                }{" "}
-                issues
-              </span>
-            </div>
-            <ChevronDown size={14} />
-          </button>
-        ))}
-      </Section>
-    </>
-  );
-}
 export function MembersPage({
   data,
   onReload,
@@ -2065,105 +1991,6 @@ export function MembersPage({
           </footer>
         </DialogContent>
       </Dialog>
-    </>
-  );
-}
-
-function SecuritySupplement({
-  data,
-  onNavigate,
-  onReload,
-}: {
-  data: BootstrapData;
-  onNavigate: (page: SettingsPageId) => void;
-  onReload: () => Promise<void>;
-}) {
-  const [uploadPolicyOpen,setUploadPolicyOpen] = useState(false);
-  const [privacyDialog,setPrivacyDialog] = useState<"support"|"health"|null>(null);
-  const settings = data.workspaceSettings;
-  const save = async (patch: Partial<WorkspaceSettings>) => {
-    try {
-      await updateWorkspacePreferences(patch);
-      await onReload();
-      toast.success("Security policy saved");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save policy",
-      );
-    }
-  };
-  return (
-    <>
-      <Section title="File uploads">
-        <Row
-          title="Restrict file uploads"
-          description="Restrict uploaded file types. Images and videos remain allowed."
-        >
-          <ActionButton onClick={()=>setUploadPolicyOpen(true)}>Configure</ActionButton>
-        </Row>
-      </Section>
-      {uploadPolicyOpen && <UploadPolicyDialog settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setUploadPolicyOpen(false)}/>}
-      <Section title="Application approvals">
-        <Row
-          title="Review third-party applications"
-          description="Control which applications can be installed to your workspace"
-        >
-          <Toggle
-            label="Review third-party applications"
-            checked={Boolean(settings.reviewThirdPartyApplications)}
-            onChange={(value) =>
-              void save({ reviewThirdPartyApplications: value })
-            }
-          />
-        </Row>
-        <Row
-          title="Reduce personal information from support integrations"
-          description="Personal information from support integrations will not be stored"
-        >
-          <ActionButton onClick={()=>setPrivacyDialog("support")}>Configure</ActionButton>
-        </Row>
-      </Section>
-      <Section title="MCP connections">
-        <Row
-          title="Active MCP connections"
-          description={`${data.oauthAuthorizations.filter((item) => !item.revokedAt).length} active connections across workspace members`}
-        >
-          <ActionButton onClick={() => onNavigate("applications")}>
-            Review
-          </ActionButton>
-        </Row>
-        <Row
-          title="Allowed MCP connectors"
-          description="Choose which MCP connectors Flow Agent can use"
-        >
-          <Select
-            label="Allowed MCP connectors"
-            value={
-              (settings.allowedMcpConnectors ?? "all") === "all"
-                ? "All connectors"
-                : "Approved connectors"
-            }
-            options={["All connectors", "Approved connectors"]}
-            onChange={(value) =>
-              void save({
-                allowedMcpConnectors:
-                  value === "All connectors" ? "all" : "approved",
-              })
-            }
-          />
-        </Row>
-      </Section>
-      <Section title="Compliance">
-        <Row
-          title="HIPAA compliance"
-          description="Enable privacy and security measures for protected health information"
-        >
-          <ActionButton onClick={()=>setPrivacyDialog("health")}>Configure</ActionButton>
-        </Row>
-      </Section>
-      <section className="settings-stack"><AgentTrustedSourcesSettings data={data} settings={data.workspaceSettings} onReload={onReload} /></section>
-      <ApplicationPolicySettings admin={data.viewerRole==="admin"||data.viewerRole==="owner"}/>
-      {privacyDialog&&<DataPrivacyDialog kind={privacyDialog} settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setPrivacyDialog(null)}/>}
     </>
   );
 }
@@ -2967,6 +2794,8 @@ function SecurityPage({
   onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
 }) {
   const [settings, setSettings] = useState(data.workspaceSettings);
+  const [uploadPolicyOpen, setUploadPolicyOpen] = useState(false);
+  const [privacyDialog, setPrivacyDialog] = useState<"support" | "health" | null>(null);
   useEffect(
     () => setSettings(data.workspaceSettings),
     [data.workspaceSettings],
@@ -2987,7 +2816,7 @@ function SecurityPage({
   const toggle = (
     title: string,
     key: keyof WorkspaceSettings,
-    description: string,
+    description?: string,
   ) => (
     <Row title={title} description={description}>
       <Toggle
@@ -2997,172 +2826,190 @@ function SecurityPage({
       />
     </Row>
   );
+  const services = settings.allowedAuthServices?.length
+    ? settings.allowedAuthServices
+    : [
+        ...(settings.googleAuthEnabled !== false ? (["google"] as const) : []),
+        ...(settings.emailAuthEnabled !== false ? (["email"] as const) : []),
+      ];
+  const toggleService = (service: "google" | "email", enabled: boolean) => {
+    const next = enabled
+      ? Array.from(new Set([...services, service]))
+      : services.filter((item) => item !== service && !(service === "email" && item === "passkey"));
+    void save({
+      ...settings,
+      allowedAuthServices: next as WorkspaceSettings["allowedAuthServices"],
+      googleAuthEnabled: next.includes("google"),
+      emailAuthEnabled: next.includes("email") || next.includes("passkey"),
+    });
+  };
+  const permission = (title: string, settingKey: SecuritySettingKey, description: string) => (
+    <PermissionRow title={title} description={description} settingKey={settingKey} settings={settings} save={save} />
+  );
+  const identityProviders = data.identityProviders?.length ?? 0;
   return (
     <>
-      <PageTitle description="Manage authentication, permissions, and access policies for your workspace.">
-        Security
-      </PageTitle>
-      <Section title="Workspace access">
-        {toggle(
-          "Invite links",
-          "inviteLinksEnabled",
-          "Allow members to invite people with a workspace link.",
-        )}
-        <WorkspaceInviteLinkRow
-          data={data}
-          enabled={Boolean(settings.inviteLinksEnabled)}
-        />
-        <Row
-          title="Allow guest accounts"
-          description="Guest invitations are rejected when this is disabled"
-        >
-          <Toggle
-            label="Allow guest accounts"
-            checked={settings.guestsAllowed}
-            onChange={(value) =>
-              void save({ ...settings, guestsAllowed: value })
-            }
+      <PageTitle>Security</PageTitle>
+      <Section grouped title="Workspace access">
+        <Group title="Invite links" description="A uniquely generated invite link allows anyone with the link to join your workspace">
+          {toggle("Enable invite links", "inviteLinksEnabled")}
+          <WorkspaceInviteLinkRow data={data} enabled={Boolean(settings.inviteLinksEnabled)} />
+        </Group>
+        <Group title="Workspace login and restrictions" description="Anyone with an email address at these domains is allowed to sign up for this workspace.">
+          <ApprovedDomainRows
+            domains={settings.allowedDomains ?? []}
+            onChange={(allowedDomains) => void save({ ...settings, allowedDomains })}
           />
-        </Row>
+        </Group>
+        <Group title="Authentication methods" description="Admins and guests can always authenticate via Google and email/passkeys—even when disabled for members">
+          <Row title="Google authentication" description="When enabled, this is available to all workspace members and guests">
+            <Toggle label="Google authentication" checked={services.includes("google")} onChange={(value) => toggleService("google", value)} />
+          </Row>
+          <Row title="Email & passkey authentication" description="When enabled, this is available to all workspace members and guests">
+            <Toggle label="Email & passkey authentication" checked={services.includes("email") || services.includes("passkey")} onChange={(value) => toggleService("email", value)} />
+          </Row>
+          <Row title="SAML & SCIM" description={identityProviders ? `${identityProviders} identity provider${identityProviders === 1 ? "" : "s"} configured` : "Manage logins via an identity provider’s SSO"}>
+            <ActionButton onClick={() => onNavigate("authentication")}>Configure</ActionButton>
+          </Row>
+          {toggle("Disable authentication bypass for admins", "disableAdminBypass", "When enabled, admins are restricted to the enabled authentication methods")}
+          {toggle("Require two-factor authentication", "requireTwoFactor", "Require a second factor for all members")}
+          <Row title="Session duration" description="How long members stay signed in before re-authenticating">
+            <Select
+              label="Session duration"
+              value={`${settings.sessionDurationDays} days`}
+              options={["7 days", "30 days", "90 days"]}
+              onChange={(value) => void save({ ...settings, sessionDurationDays: Number(value.split(" ")[0]) })}
+            />
+          </Row>
+          {toggle("Allow guest accounts", "guestsAllowed", "Guest invitations are rejected when this is disabled")}
+        </Group>
       </Section>
-      <Section title="Authentication">
-        <Row
-          title="Authentication settings"
-          description="Manage SAML/OIDC identity providers and allowed login methods."
-        >
-          <ActionButton onClick={() => onNavigate("authentication")}>
-            Open Authentication
-          </ActionButton>
-        </Row>
-        <Row
-          title="Require two-factor authentication"
-          description="Require a second factor for all members."
-        >
-          <Toggle
-            label="Require two-factor authentication"
-            checked={settings.requireTwoFactor}
-            onChange={(value) =>
-              void save({ ...settings, requireTwoFactor: value })
-            }
-          />
-        </Row>
-        {toggle(
-          "Disable authentication bypass for admins",
-          "disableAdminBypass",
-          "When enabled, admins are restricted to the enabled authentication methods",
-        )}
-        <Row title="Session duration">
-          <Select
-            label="Session duration"
-            value={`${settings.sessionDurationDays} days`}
-            options={["7 days", "30 days", "90 days"]}
-            onChange={(value) =>
-              void save({
-                ...settings,
-                sessionDurationDays: Number(value.split(" ")[0]),
-              })
-            }
-          />
-        </Row>
-      </Section>
-      <Section title="Workspace login and restrictions">
-        <FieldRow
-          title="Approved email domains"
-          description="Anyone with an email address at these domains is allowed to sign up for this workspace."
-          value={(settings.allowedDomains ?? []).join(", ")}
-          onCommit={(value) =>
-            void save({
-              ...settings,
-              allowedDomains: value
-                .split(",")
-                .map((item) => item.trim())
-                .filter(Boolean),
-            })
-          }
-        />
-      </Section>
-      <Section title="Workspace management">
-        <PermissionRow
-          title="New user invitations"
-          settingKey="invitePermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="Team creation"
-          settingKey="teamCreatePermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="Manage workspace labels"
-          settingKey="labelPermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="Manage workspace templates"
-          settingKey="templatePermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="Workspace initiatives"
-          settingKey="initiativePermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="Manage loops"
-          settingKey="loopPermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="Modify agent guidance"
-          settingKey="agentGuidancePermission"
-          settings={settings}
-          save={save}
-        />
-        <PermissionRow
-          title="API key creation"
-          settingKey="apiKeyPermission"
-          settings={settings}
-          save={save}
-        />
+      <Section grouped title="Workspace management">
+        <Group title="Permissions" description="Choose who can perform various actions across the workspace">
+          {permission("New user invitations", "invitePermission", "Who can invite new members to the workspace")}
+          {permission("Team creation", "teamCreatePermission", "Who can create new teams")}
+          {permission("Workspace initiatives", "initiativePermission", "Who can create workspace level initiatives")}
+          {permission("Manage workspace labels", "labelPermission", "Who can create, update, and delete workspace labels")}
+          {permission("Manage workspace templates", "templatePermission", "Who can manage workspace templates")}
+          {permission("Manage pinned views", "pinnedViewPermission", "Who can pin views to team pages and edit, reorder, or remove them")}
+          {permission("Manage loops", "loopPermission", "Who can create, update, and delete workspace loops")}
+          {permission("API key creation", "apiKeyPermission", "Who can create API keys to interact with the Flow API on their behalf")}
+          {permission("Import data", "importPermission", "Who can import data from other services")}
+          {permission("Modify agent guidance", "agentGuidancePermission", "Who can modify workspace-level agent guidance prompts")}
+        </Group>
+        <Group title="File uploads" description="Restrict the file types users are allowed to upload. Images and videos remain allowed.">
+          <Row title="Restrict file uploads" description={settings.restrictFileUploads ? `${settings.allowedFileExtensions?.length ?? 0} allowed file types` : undefined}>
+            <ActionButton onClick={() => setUploadPolicyOpen(true)}>Configure</ActionButton>
+          </Row>
+        </Group>
+        <Group title="Audit log" description="Review security-relevant events across the workspace">
+          <Row title="Audit log">
+            <ActionButton onClick={() => onNavigate("audit-log")}>Open</ActionButton>
+          </Row>
+        </Group>
       </Section>
       <Section title="Integrations & applications">
-        {toggle(
-          "Prevent guests from interacting with agents in the workspace",
-          "preventGuestAgents",
-          "Restrict agent invocation to full workspace members only",
-        )}
-        {toggle(
-          "Enable Flow Agent web search",
-          "agentWebSearch",
-          "Allow Flow Agent to search the public web for current information and cite sources",
-        )}
-        {toggle(
-          "Allow external sources to trigger loops",
-          "externalLoopTriggers",
-          "Select which external sources can trigger loops",
-        )}
-        {toggle(
-          "Enable Flow Agent MCP connectors",
-          "mcpConnectorsEnabled",
-          "Allow Flow Agent to use MCP connectors",
-        )}
+        {toggle("Review third-party applications", "reviewThirdPartyApplications", "Control which applications can be installed to your workspace")}
+        <Row title="Reduce personal information from support integrations" description="Personal information from support integrations won’t be stored">
+          <ActionButton onClick={() => setPrivacyDialog("support")}>Configure</ActionButton>
+        </Row>
+        {toggle("Prevent guests from interacting with agents in the workspace", "preventGuestAgents", "Restrict agent invocation to full workspace members only")}
       </Section>
+      <ApplicationPolicySettings admin={data.viewerRole === "admin" || data.viewerRole === "owner"} />
+      <Section grouped title="AI & Agents">
+        <Group title="Web search" description="Let Flow Agent use current public information">
+          {toggle("Enable Flow Agent web search", "agentWebSearch", "Allow Flow Agent to search the public web for current information and cite sources")}
+        </Group>
+        <Group title="Trusted external sources">
+          <Row title="External sources" description="Manage allowed sources in Loops settings">
+            <ActionButton onClick={() => onNavigate("loops")}>Open Loops settings</ActionButton>
+          </Row>
+        </Group>
+        <Group title="MCP connectors">
+          {toggle("Enable Flow Agent MCP connectors", "mcpConnectorsEnabled", "Allow Flow Agent to use MCP connectors")}
+          <Row title="Active MCP connections" description="Review MCP connections from all workspace members">
+            <ActionButton onClick={() => onNavigate("applications")}>Review</ActionButton>
+          </Row>
+          <Row title="Allowed MCP connectors" description="Choose which MCP connectors Flow Agent can use">
+            <Select
+              label="Allowed MCP connectors"
+              value={(settings.allowedMcpConnectors ?? "all") === "all" ? "All connectors" : "Approved connectors"}
+              options={["All connectors", "Approved connectors"]}
+              onChange={(value) => void save({ ...settings, allowedMcpConnectors: value === "All connectors" ? "all" : "approved" })}
+            />
+          </Row>
+        </Group>
+      </Section>
+      <Section title="Compliance">
+        <Row title="HIPAA compliance" description="Enable privacy and security measures to ensure that Protected Health Information is handled appropriately">
+          <ActionButton onClick={() => setPrivacyDialog("health")}>Configure</ActionButton>
+        </Row>
+      </Section>
+      {uploadPolicyOpen && <UploadPolicyDialog settings={settings} onSave={async (patch) => { await updateWorkspacePreferences(patch); await onReload(); }} onClose={() => setUploadPolicyOpen(false)} />}
+      {privacyDialog && <DataPrivacyDialog kind={privacyDialog} settings={settings} onSave={async (patch) => { await updateWorkspacePreferences(patch); await onReload(); }} onClose={() => setPrivacyDialog(null)} />}
+    </>
+  );
+}
+function ApprovedDomainRows({
+  domains,
+  onChange,
+}: {
+  domains: string[];
+  onChange: (domains: string[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const commit = () => {
+    const domain = draft.trim().toLowerCase().replace(/^@/, "");
+    setAdding(false);
+    setDraft("");
+    if (domain && !domains.includes(domain)) onChange([...domains, domain]);
+  };
+  return (
+    <>
+      {domains.length === 0 && !adding && (
+        <Row title="No approved email domains" className="settings-row--empty">
+          <ActionButton onClick={() => setAdding(true)}><Plus size={14} />Add domain</ActionButton>
+        </Row>
+      )}
+      {domains.map((domain) => (
+        <Row key={domain} title={domain}>
+          <ActionButton onClick={() => onChange(domains.filter((item) => item !== domain))}>Remove</ActionButton>
+        </Row>
+      ))}
+      {adding ? (
+        <Row title="New domain">
+          <input
+            autoFocus
+            className="settings-input"
+            aria-label="Domain"
+            placeholder="example.com"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commit();
+              if (event.key === "Escape") { setAdding(false); setDraft(""); }
+            }}
+            onBlur={commit}
+          />
+        </Row>
+      ) : domains.length > 0 && (
+        <Row title="Add another domain">
+          <ActionButton onClick={() => setAdding(true)}><Plus size={14} />Add domain</ActionButton>
+        </Row>
+      )}
     </>
   );
 }
 function PermissionRow({
   title,
+  description,
   settingKey,
   settings,
   save,
 }: {
   title: string;
+  description?: string;
   settingKey: SecuritySettingKey;
   settings: WorkspaceSettings;
   save: (next: WorkspaceSettings) => Promise<void>;
@@ -3170,7 +3017,7 @@ function PermissionRow({
   const security = useSecuritySetting(settingKey, settings, save);
   return (
     <>
-      <Row title={title}>
+      <Row title={title} description={description}>
         <Select
           label={title}
           value={security.value}
@@ -3196,62 +3043,62 @@ function PermissionRow({
 }
 function ApiPage({
   data,
-  onCreateAPIKey,
+  apiView,
+  webhookId,
+  onNavigate,
   onReload,
 }: {
   data: BootstrapData;
-  onCreateAPIKey?: () => void;
+  apiView?: "keys";
+  webhookId?: string;
+  onNavigate: (page: SettingsPageId) => void;
   onReload: () => Promise<void>;
 }) {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>(["read", "write"]);
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [secret, setSecret] = useState("");
+  const [settings, setSettings] = useState(data.workspaceSettings);
+  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
   const [editingOAuth, setEditingOAuth] = useState<
     OAuthApplication | null | undefined
   >(undefined);
-  const [editingWebhook, setEditingWebhook] = useState<
-    Webhook | null | undefined
-  >(undefined);
-  const items = (data.apiKeys ?? []).filter(
-    (item) => item.creatorId === data.viewer.id && !item.revokedAt,
-  );
-  if (editingWebhook !== undefined) {
+  const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
+  const apiPath = settingsPath(data.workspace.urlKey, "api");
+  const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt);
+  if (webhookId) {
+    const webhook = webhookId === "new" ? null : data.webhooks.find((item) => item.id === webhookId);
+    if (webhook === undefined)
+      return (
+        <div className="settings-empty">
+          <h3>Webhook not found</h3>
+          <ActionButton onClick={() => navigate(apiPath)}>Back to API</ActionButton>
+        </div>
+      );
     return (
       <WebhookEditPage
         data={data}
-        webhook={editingWebhook}
-        onClose={() => setEditingWebhook(undefined)}
+        webhook={webhook}
+        onClose={() => navigate(apiPath)}
         onSaved={onReload}
       />
     );
   }
-  const submit = async () => {
+  if (apiView === "keys")
+    return <IssuedApiKeysPage data={data} onBack={() => navigate(apiPath)} onReload={onReload} />;
+  const save = async (next: WorkspaceSettings) => {
+    setSettings(next);
     try {
-      const result = await createAPIKey({ name, scopes, teamIds });
-      setSecret(result.secret);
+      await updateWorkspacePreferences(next);
       await onReload();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not create API key",
-      );
+      setSettings(data.workspaceSettings);
+      toast.error(error instanceof Error ? error.message : "Could not save policy");
     }
-  };
-  const reset = () => {
-    setOpen(false);
-    setSecret("");
-    setName("");
-    setTeamIds([]);
-    setScopes(["read", "write"]);
   };
   return (
     <>
-      <PageTitle description="Developer applications, webhooks, and member API access.">
+      <PageTitle description="Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.">
         API
       </PageTitle>
-      <Section title="OAuth applications">
+      <Section title="OAuth applications" description="Manage your organization's OAuth applications.">
         {data.oauthApplications.map((item) => (
           <Row
             key={item.id}
@@ -3283,21 +3130,14 @@ function ApiPage({
             </div>
           </Row>
         ))}
-        {!data.oauthApplications.length && (
-          <div className="settings-empty compact">
-            <AppWindow size={24} />
-            <h3>No OAuth applications</h3>
-            <p>Create an application for third-party OAuth access.</p>
-          </div>
-        )}
-        <div className="settings-section-action">
+        <Row title={data.oauthApplications.length ? "" : "No OAuth applications"} className="settings-row--action">
           <ActionButton onClick={() => setEditingOAuth(null)}>
             <Plus size={14} />
             New OAuth application
           </ActionButton>
-        </div>
+        </Row>
       </Section>
-      <Section title="Webhooks">
+      <Section title="Webhooks" description="Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.">
         {data.webhooks.map((item) => (
           <Row
             key={item.id}
@@ -3312,182 +3152,60 @@ function ApiPage({
                   void updateWebhook(item.id, { enabled: value }).then(onReload)
                 }
               />
-              <ActionButton onClick={() => setEditingWebhook(item)}>
+              <ActionButton onClick={() => navigate(webhookSettingsPath(data.workspace.urlKey, item.id))}>
                 Configure
               </ActionButton>
             </div>
           </Row>
         ))}
-        {!data.webhooks.length && (
-          <div className="settings-empty compact">
-            <Radio size={24} />
-            <h3>No webhooks</h3>
-            <p>Send workspace events to an HTTPS endpoint.</p>
-          </div>
-        )}
-        <div className="settings-section-action">
-          <ActionButton onClick={() => setEditingWebhook(null)}>
+        <Row title={data.webhooks.length ? "" : "No webhooks"} className="settings-row--action">
+          <ActionButton onClick={() => navigate(webhookSettingsPath(data.workspace.urlKey, "new"))}>
             <Plus size={14} />
             New webhook
           </ActionButton>
-        </div>
+        </Row>
       </Section>
-      <Section title="Personal API keys">
+      <Section
+        title="API keys"
+        description={
+          <>
+            Control whether workspace members can create personal API keys. View your own keys in{" "}
+            <button type="button" className="settings-inline-link" onClick={() => onNavigate("account-security")}>
+              Security &amp; access
+            </button>{" "}
+            settings.
+          </>
+        }
+      >
+        {admin ? (
+          <PermissionRow
+            title="API key creation"
+            description="Choose which members can create personal API keys"
+            settingKey="apiKeyPermission"
+            settings={settings}
+            save={save}
+          />
+        ) : (
+          <Row title="API key creation" description="Choose which members can create personal API keys">
+            <span className="settings-static">{securityPermissionLabel(settings.apiKeyPermission)}</span>
+          </Row>
+        )}
         <Row
-          title="Member API key creation"
-          description="Controlled by the workspace Security policy."
+          title="Issued keys"
+          description={admin ? "View and manage API keys created by workspace members" : "API keys you created"}
+          className="personal-row-link"
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate(apiKeysSettingsPath(data.workspace.urlKey))}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") navigate(apiKeysSettingsPath(data.workspace.urlKey));
+          }}
         >
-          <span className="settings-static">
-            {data.workspaceSettings.apiKeyPermission === "admins"
-              ? "Admins only"
-              : "All members"}
+          <span className="personal-row-link-meta">
+            {issuedKeys.length ? `${issuedKeys.length} ${issuedKeys.length === 1 ? "key" : "keys"}` : "No API keys"}
           </span>
         </Row>
-        {items.map((item) => (
-          <Row
-            key={item.id}
-            title={item.name}
-            description={`${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${(item.teamIds ?? []).length ? `${(item.teamIds ?? []).length} teams` : "all teams"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
-          >
-            <ActionButton
-              danger
-              onClick={() => void revokeAPIKey(item.id).then(onReload)}
-            >
-              Revoke
-            </ActionButton>
-          </Row>
-        ))}
-        {!items.length && (
-          <div className="settings-empty compact">
-            <Braces size={24} />
-            <h3>No personal API keys</h3>
-            <p>Create a scoped key to access the Flow API.</p>
-          </div>
-        )}
-        <div className="settings-section-action">
-          <ActionButton
-            onClick={() =>
-              onCreateAPIKey ? onCreateAPIKey() : setOpen(true)
-            }
-          >
-            <Plus size={14} />
-            New API key
-          </ActionButton>
-        </div>
       </Section>
-      <Dialog
-        open={open}
-        onOpenChange={(value) => (value ? setOpen(true) : reset())}
-      >
-        <DialogContent className="settings-confirm">
-          <DialogTitle>
-            {secret ? "API key created" : "New API key"}
-          </DialogTitle>
-          {secret ? (
-            <>
-              <p>This secret is shown once.</p>
-              <input
-                className="settings-input"
-                readOnly
-                value={secret}
-                onFocus={(event) => event.currentTarget.select()}
-              />
-              <footer>
-                <ActionButton
-                  onClick={() => {
-                    void navigator.clipboard.writeText(secret);
-                    toast.success("Copied");
-                  }}
-                >
-                  Copy
-                </ActionButton>
-                <ActionButton primary onClick={reset}>
-                  Done
-                </ActionButton>
-              </footer>
-            </>
-          ) : (
-            <>
-              <label>
-                Name
-                <input
-                  className="settings-input"
-                  autoFocus
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </label>
-              <label>
-                Scopes
-                <div className="settings-segmented">
-                  <button
-                    className={scopes.includes("read") ? "active" : ""}
-                    onClick={() =>
-                      setScopes((current) =>
-                        current.includes("read")
-                          ? current.filter((x) => x !== "read")
-                          : [...current, "read"],
-                      )
-                    }
-                  >
-                    Read
-                  </button>
-                  <button
-                    className={scopes.includes("write") ? "active" : ""}
-                    onClick={() =>
-                      setScopes((current) =>
-                        current.includes("write")
-                          ? current.filter((x) => x !== "write")
-                          : [...current, "write"],
-                      )
-                    }
-                  >
-                    Write
-                  </button>
-                </div>
-              </label>
-              <fieldset className="settings-check-list">
-                <legend>Team access</legend>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={!teamIds.length}
-                    onChange={() => setTeamIds([])}
-                  />
-                  All teams
-                </label>
-                {data.teams.map((team) => (
-                  <label key={team.id}>
-                    <input
-                      type="checkbox"
-                      checked={teamIds.includes(team.id)}
-                      onChange={(event) =>
-                        setTeamIds((current) =>
-                          event.target.checked
-                            ? [...current, team.id]
-                            : current.filter((id) => id !== team.id),
-                        )
-                      }
-                    />
-                    <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-                    <span data-i18n-ignore>{team.name}</span>
-                  </label>
-                ))}
-              </fieldset>
-              <footer>
-                <ActionButton onClick={reset}>Cancel</ActionButton>
-                <ActionButton
-                  primary
-                  disabled={!name.trim() || !scopes.length}
-                  onClick={() => void submit()}
-                >
-                  Create key
-                </ActionButton>
-              </footer>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
       {editingOAuth !== undefined && (
         <OAuthEditor
           app={editingOAuth}
@@ -3495,6 +3213,50 @@ function ApiPage({
           onSaved={onReload}
         />
       )}
+    </>
+  );
+}
+function IssuedApiKeysPage({
+  data,
+  onBack,
+  onReload,
+}: {
+  data: BootstrapData;
+  onBack: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
+  const keys = (data.apiKeys ?? []).filter((item) => !item.revokedAt);
+  const creator = (id: string) => data.users.find((user) => user.id === id)?.displayName ?? "Unknown";
+  return (
+    <>
+      <SettingsCrumb onClick={onBack}>API</SettingsCrumb>
+      <PageTitle description={admin ? "API keys created by members of this workspace." : "API keys you created in this workspace."}>
+        Issued keys
+      </PageTitle>
+      <Section>
+        {keys.map((item) => (
+          <Row
+            key={item.id}
+            title={<span data-i18n-ignore>{item.name}</span>}
+            description={`${creator(item.creatorId)} · ${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
+          >
+            {(admin || item.creatorId === data.viewer.id) && (
+              <ActionButton
+                danger
+                onClick={() =>
+                  void revokeAPIKey(item.id)
+                    .then(onReload)
+                    .catch((error) => toast.error(error instanceof Error ? error.message : "Could not revoke key"))
+                }
+              >
+                Revoke
+              </ActionButton>
+            )}
+          </Row>
+        ))}
+        {!keys.length && <Row title="No API keys" />}
+      </Section>
     </>
   );
 }

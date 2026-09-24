@@ -563,10 +563,20 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			settings.Timezone = strings.TrimSpace(*input.Timezone)
 		}
 		if input.EstimateType != nil {
-			if !slices.Contains([]string{"notUsed", "exponential", "fibonacci", "flow"}, *input.EstimateType) {
+			if !slices.Contains([]string{"notUsed", "exponential", "fibonacci", "flow", "tShirt"}, *input.EstimateType) {
 				return errInvalid
 			}
 			settings.EstimateType = *input.EstimateType
+		}
+		if input.EstimateAllowZero != nil {
+			settings.EstimateAllowZero = *input.EstimateAllowZero
+		}
+		if input.EstimateExtended != nil {
+			settings.EstimateExtended = *input.EstimateExtended
+		}
+		if input.EstimateCountUnestimated != nil {
+			value := *input.EstimateCountUnestimated
+			settings.EstimateCountUnestimated = &value
 		}
 		if input.DefaultStateID != nil {
 			requestedID := *input.DefaultStateID
@@ -623,6 +633,7 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			input.AgentSkillPermission: &settings.AgentSkillPermission,
 			input.LoopPermission:       &settings.LoopPermission,
 			input.MemberPermission:     &settings.MemberPermission,
+			input.PinnedViewPermission: &settings.PinnedViewPermission,
 		} {
 			if value != nil {
 				if !slices.Contains(permissionValues, *value) {
@@ -666,6 +677,9 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 				}
 				if input.MemberPermission != nil {
 					child.MemberPermission = settings.MemberPermission
+				}
+				if input.PinnedViewPermission != nil {
+					child.PinnedViewPermission = settings.PinnedViewPermission
 				}
 				if input.IssueSharingEnabled != nil {
 					child.IssueSharingEnabled = settings.IssueSharingEnabled
@@ -1008,6 +1022,24 @@ func (s *server) createTeamLabel(w http.ResponseWriter, r *http.Request) {
 			return "", errNotFound
 		}
 		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: teamID, ResourceType: "issue", CreatedAt: time.Now().UTC()}
+		if input.ResourceType != nil && *input.ResourceType != "" {
+			resource := strings.TrimSpace(*input.ResourceType)
+			if resource != "issue" && resource != "project" {
+				return "", errInvalid
+			}
+			created.ResourceType = resource
+		}
+		if input.GroupID != nil && *input.GroupID != "" {
+			groupIndex := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == *input.GroupID })
+			if groupIndex < 0 {
+				return "", errNotFound
+			}
+			group := data.LabelGroups[groupIndex]
+			if group.ArchivedAt != nil || group.ResourceType != created.ResourceType || (group.Scope != teamID && group.Scope != "Workspace" && group.Scope != "") {
+				return "", errInvalid
+			}
+			created.GroupID = group.ID
+		}
 		if input.Color != nil {
 			created.Color = *input.Color
 		}
@@ -1265,6 +1297,9 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	}
 	if settings.MemberPermission == "" {
 		settings.MemberPermission = "allMembers"
+	}
+	if settings.PinnedViewPermission == "" {
+		settings.PinnedViewPermission = "allMembers"
 	}
 	if settings.SlackNotifications == nil {
 		settings.SlackNotifications = map[string]bool{}

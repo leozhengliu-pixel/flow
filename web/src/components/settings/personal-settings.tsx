@@ -7,10 +7,13 @@ import {
   type ReactNode,
 } from "react";
 import { PriorityInboxSettings } from '@/components/inbox/hosts'
+import { readPriorityInboxRuleState } from '@/components/inbox/hosts/priority-inbox-settings-metadata'
 import {
   Bot,
   Check,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   Clipboard,
   ExternalLink,
@@ -34,7 +37,7 @@ import { NotificationChannelSettings } from './notification-channel-settings';
 import { ApplicationPolicySettings } from './application-policy-settings';
 import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';
 import { roleSatisfiesSecurityPermission } from '@/lib/security-setting'
-import { ReviewCode } from '@/components/reviews/review-code';
+import { MATCH_INTERFACE_CODE_THEME, ReviewCode } from '@/components/reviews/review-code';
 import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -63,7 +66,7 @@ import {
   unlinkAccountIdentity,
   updatePasskey,
 } from "@/lib/api";
-import type { SettingsPageId } from "@/lib/app-routes";
+import type { NotificationSettingsView, SettingsPageId } from "@/lib/app-routes";
 import { agentSkillPath, newAgentSkillPath } from "@/lib/app-routes";
 import type {
   APIKey,
@@ -79,6 +82,7 @@ import { TeamIcon } from "@/components/issue/issue-icons";
 import {
   SettingsPageTitle,
   SettingsRow,
+  SettingsGroup,
   SettingsSection,
   SettingsSelect,
   SettingsToggle,
@@ -97,8 +101,8 @@ export type PersonalSettingsValues = Record<string, string | boolean>;
 
 type Props = {
   page: SettingsPageId;
-  notificationChannel?: 'desktop'|'mobile'|'email'|'slack';
-  onNavigateNotification?: (channel?: 'desktop'|'mobile'|'email'|'slack') => void;
+  notificationChannel?: NotificationSettingsView;
+  onNavigateNotification?: (channel?: NotificationSettingsView) => void;
   apiKeyMode?: "new" | "detail" | "edit";
   apiKeyId?: string;
   signingKeyMode?: "new";
@@ -183,6 +187,8 @@ const PERSONAL_ZH: Record<string, string> = {
     "启用后，GIF 和动态 Emoji 在悬停前保持静止",
   "Interface theme": "界面主题",
   "Light theme": "浅色主题",
+  "Theme to use for light system appearance": "系统为浅色外观时使用的主题",
+  "Theme to use for dark system appearance": "系统为深色外观时使用的主题",
   "Dark theme": "深色主题",
   "Light high contrast": "浅色高对比",
   "Dark high contrast": "深色高对比",
@@ -240,6 +246,12 @@ const PERSONAL_ZH: Record<string, string> = {
   "Enabled for all notifications": "已为所有通知启用",
   "Not connected": "未连接",
   "Updates from Flow": "Flow 更新",
+  "Changelog": "更新日志",
+  "Manage how notifications are organized in your inbox": "管理通知在收件箱中的组织方式",
+  "Separate important notifications from the rest of your inbox": "将重要通知与收件箱中的其他通知分开",
+  "Priority notifications": "优先通知",
+  "Choose which notifications are treated as priority": "选择哪些通知被视为优先",
+  "types": "种类型",
   "Subscribe to product announcements and important changes from the Flow team":
     "订阅 Flow 团队的产品公告和重要变更",
   "Show updates in sidebar": "在侧边栏显示更新",
@@ -312,6 +324,9 @@ const PERSONAL_ZH: Record<string, string> = {
   "Merge commit": "创建合并提交",
   "Rebase and merge": "变基并合并",
   "Code theme": "代码主题",
+  "Match interface theme": "跟随界面主题",
+  "Syntax highlighting theme used in code diffs": "代码差异中使用的语法高亮主题",
+  "Matches your interface theme unless overridden": "默认跟随界面主题，可单独覆盖",
   "Select the syntax highlighting theme used in code diffs and viewers":
     "选择代码差异和查看器使用的语法高亮主题",
   "Flow Light": "Flow 浅色",
@@ -615,6 +630,7 @@ function PersonalSection({
   title,
   description,
   children,
+  grouped,
 }: {
   action?: ReactNode;
   className?: string;
@@ -623,9 +639,11 @@ function PersonalSection({
   title?: string;
   description?: string;
   children: ReactNode;
+  grouped?: boolean;
 }) {
   return (
     <SettingsSection
+      grouped={grouped}
       action={action}
       className={`personal-section${className ? ` ${className}` : ""}`}
       description={description}
@@ -782,21 +800,6 @@ function Preferences({
           />
         </PersonalRow>
       </PersonalSection>
-      <PersonalSection title={p("Inbox")}>
-        <PersonalRow
-          title={p("Priority inbox")}
-          description={p(
-            "Customize which notification types appear in the Priority inbox tab",
-          )}
-        >
-          <div style={{ width: '100%' }}>
-            <PriorityInboxSettings
-              priorityInboxEnabled={Boolean(values.priorityInbox ?? true)}
-              onEnablePriorityInbox={() => setValue("priorityInbox", true)}
-            />
-          </div>
-        </PersonalRow>
-      </PersonalSection>
       <PersonalSection title={p("Interface and theme")}>
         <PersonalRow
           title={p("App sidebar")}
@@ -868,9 +871,9 @@ function Preferences({
             onChange={(v) => setValue("interfaceTheme", v)}
           />
         </PersonalRow>
-        <PersonalRow
-          title={p("Light theme")}
-          description={p("Choose the light appearance variant")}
+        {String(values.interfaceTheme) === "System preference" && <PersonalRow
+          title={p("Light")}
+          description={p("Theme to use for light system appearance")}
         >
           <PersonalSelect
             label={p("Light theme")}
@@ -881,10 +884,10 @@ function Preferences({
             ])}
             onChange={(v) => setValue("lightTheme", v)}
           />
-        </PersonalRow>
-        <PersonalRow
-          title={p("Dark theme")}
-          description={p("Choose the dark appearance variant")}
+        </PersonalRow>}
+        {String(values.interfaceTheme) === "System preference" && <PersonalRow
+          title={p("Dark")}
+          description={p("Theme to use for dark system appearance")}
         >
           <PersonalSelect
             label={p("Dark theme")}
@@ -895,7 +898,7 @@ function Preferences({
             ])}
             onChange={(v) => setValue("darkTheme", v)}
           />
-        </PersonalRow>
+        </PersonalRow>}
         <PersonalRow
           title={p("Export theme")}
           description={p("Copy or import interface and code theme preferences as JSON")}
@@ -937,6 +940,29 @@ function Preferences({
             </Action>
           </div>
         </PersonalRow>
+      </PersonalSection>
+      <PersonalSection>
+        <PersonalRow
+          title={p("Code theme")}
+          description={p("Matches your interface theme unless overridden")}
+        >
+          <CodeThemeSelect value={String(values.codeTheme)} p={p} onChange={(v) => setValue("codeTheme", v)} />
+        </PersonalRow>
+        <PersonalRow title={p("Font")}>
+          <PersonalSelect
+            label={p("Code font")}
+            value={String(values.codeFont)}
+            options={localizedOptions(p, [
+              "12px, Regular, Default",
+              "13px, Regular, Default",
+              "14px, Regular, Default",
+            ])}
+            onChange={(v) => setValue("codeFont", v)}
+          />
+        </PersonalRow>
+        <pre className="personal-code-preview" data-i18n-ignore>
+          <ReviewCode path="preview.ts" theme={values.codeTheme ? String(values.codeTheme) : undefined} font={String(values.codeFont)} content={'const config = {\n  apiUrl: "https://api.example.com",\n  timeout: 5000,\n  debug: true\n};'}/>
+        </pre>
       </PersonalSection>
       <PersonalSection title={p("Desktop application")}>
         <PersonalRow
@@ -1150,11 +1176,12 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
     data.pushSubscriptions ?? [],
   );
   const [channel, setChannel] = useState<
-    "desktop" | "mobile" | "email" | "slack" | null
+    NotificationSettingsView | null
   >(notificationChannel ?? null);
   useEffect(() => setChannel(notificationChannel ?? null),[notificationChannel]);
-  const openChannel = (next: 'desktop'|'mobile'|'email'|'slack'|null) => { setChannel(next); onNavigateNotification?.(next ?? undefined) };
+  const openChannel = (next: NotificationSettingsView|null) => { setChannel(next); onNavigateNotification?.(next ?? undefined) };
   useEffect(() => setPreferences(initial), [initial]);
+  const [priorityTypes, setPriorityTypes] = useState(() => Object.values(readPriorityInboxRuleState()).filter(Boolean).length);
   useEffect(() => {
     void listPushSubscriptions()
       .then(setPushSubscriptions)
@@ -1175,6 +1202,15 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
       );
     }
   };
+  if (channel === 'priority-filter') return <>
+    <button className="settings-notification-back" type="button" onClick={()=>openChannel(null)}><ChevronLeft size={14}/>{p('Notifications')}</button>
+    <PersonalPageTitle description={p("Choose which notifications are treated as priority")}>{p("Priority notifications")}</PersonalPageTitle>
+    <PriorityInboxSettings
+      priorityInboxEnabled={Boolean(values.priorityInbox)}
+      onEnablePriorityInbox={() => setValue("priorityInbox", true)}
+      onChange={(rules) => setPriorityTypes(Object.values(rules).filter(Boolean).length)}
+    />
+  </>;
   if (channel === 'desktop' || channel === 'email') return <>
     <NotificationChannelSettings channel={channel} preferences={preferences} save={save} onBack={()=>openChannel(null)} p={p}/>
     {channel === 'desktop' && <PersonalSection title={p('Devices')}>
@@ -1189,6 +1225,32 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
   return (
     <>
       <PersonalPageTitle>{p("Notifications")}</PersonalPageTitle>
+      <PersonalSection
+        title={p("Inbox")}
+        description={p("Manage how notifications are organized in your inbox")}
+      >
+        <PersonalRow
+          title={p("Priority inbox")}
+          description={p("Separate important notifications from the rest of your inbox")}
+        >
+          <SettingsToggle
+            label={p("Priority inbox")}
+            checked={Boolean(values.priorityInbox)}
+            onChange={(v) => setValue("priorityInbox", v)}
+          />
+        </PersonalRow>
+        <PersonalRow
+          className={values.priorityInbox ? "personal-row-link" : "personal-row-link is-disabled"}
+          title={p("Priority notifications")}
+          description={p("Choose which notifications are treated as priority")}
+          role="button"
+          tabIndex={values.priorityInbox ? 0 : -1}
+          onClick={() => { if (values.priorityInbox) openChannel("priority-filter"); }}
+          onKeyDown={(event) => { if (values.priorityInbox && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openChannel("priority-filter"); } }}
+        >
+          <span className="personal-row-link-meta">{priorityTypes} {p("types")}<ChevronRight size={14} /></span>
+        </PersonalRow>
+      </PersonalSection>
       <PersonalSection
         title={p("Push notifications")}
         description={p(
@@ -1226,11 +1288,13 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
         />
       </PersonalSection>
       <PersonalSection
+        grouped
         title={p("Updates from Flow")}
         description={p(
           "Subscribe to product announcements and important changes from the Flow team",
         )}
       >
+        <SettingsGroup title={p("Changelog")}>
         <PersonalRow
           title={p("Show updates in sidebar")}
           description={p(
@@ -1255,8 +1319,8 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
             onChange={(v) => setValue("changelogNewsletter", v)}
           />
         </PersonalRow>
-      </PersonalSection>
-      <PersonalSection title={p("Marketing")}>
+        </SettingsGroup>
+        <SettingsGroup title={p("Marketing")}>
         <PersonalRow
           title={p("Marketing and onboarding")}
           description={p(
@@ -1269,8 +1333,8 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
             onChange={(v) => setValue("marketingUpdates", v)}
           />
         </PersonalRow>
-      </PersonalSection>
-      <PersonalSection title={p("Other updates")}>
+        </SettingsGroup>
+        <SettingsGroup title={p("Other updates")}>
         <PersonalRow
           title={p("Invite accepted")}
           description={p("Email when invitees accept an invite")}
@@ -1303,6 +1367,7 @@ function Notifications({ data, values, setValue, onReload, p, notificationChanne
             onChange={(v) => setValue("dpaUpdates", v)}
           />
         </PersonalRow>
+        </SettingsGroup>
       </PersonalSection>
     </>
   );
@@ -1332,6 +1397,31 @@ function NotificationChannel({
       </span>
       <ChevronDown size={14} />
     </button>
+  );
+}
+
+function CodeThemeSelect({
+  value,
+  onChange,
+  p,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  p: PersonalProps["p"];
+}) {
+  return (
+    <PersonalSelect
+      label={p("Code theme")}
+      value={value && value !== "undefined" ? value : MATCH_INTERFACE_CODE_THEME}
+      options={localizedOptions(p, [
+        MATCH_INTERFACE_CODE_THEME,
+        "Flow Light",
+        "Flow Dark",
+        "GitHub Light",
+        "GitHub Dark",
+      ])}
+      onChange={onChange}
+    />
   );
 }
 
@@ -1365,67 +1455,11 @@ function CodeReviews({
           />
         </PersonalRow>
         <PersonalRow
-          title={p("Auto-convert draft pull requests")}
-          description={p(
-            "Automatically mark your drafts as ready upon approval or requesting a review",
-          )}
-        >
-          <SettingsToggle
-            label={p("Auto-convert draft pull requests")}
-            checked={Boolean(values.autoConvertDrafts)}
-            onChange={(v) => setValue("autoConvertDrafts", v)}
-          />
-        </PersonalRow>
-        <PersonalRow
-          title={p("Merge strategy")}
-          description={p("Choose the default merge strategy for pull requests")}
-        >
-          <PersonalSelect
-            label={p("Merge strategy")}
-            value={String(values.mergeStrategy)}
-            options={localizedOptions(p, [
-              "Squash and merge",
-              "Merge commit",
-              "Rebase and merge",
-            ])}
-            onChange={(v) => setValue("mergeStrategy", v)}
-          />
-        </PersonalRow>
-      </PersonalSection>
-      <PersonalSection>
-        <PersonalRow
           title={p("Code theme")}
-          description={p(
-            "Select the syntax highlighting theme used in code diffs and viewers",
-          )}
+          description={p("Syntax highlighting theme used in code diffs")}
         >
-          <PersonalSelect
-            label={p("Code theme")}
-            value={String(values.codeTheme)}
-            options={localizedOptions(p, [
-              "Flow Light",
-              "Flow Dark",
-              "GitHub Light",
-              "GitHub Dark",
-            ])}
-            onChange={(v) => setValue("codeTheme", v)}
-          />
+          <CodeThemeSelect value={String(values.codeTheme)} p={p} onChange={(v) => setValue("codeTheme", v)} />
         </PersonalRow>
-        <PersonalRow title={p("Font")}>
-          <PersonalSelect
-            label={p("Code font")}
-            value={String(values.codeFont)}
-            options={localizedOptions(p, [
-              "12px, Regular, Default",
-              "13px, Regular, Default",
-              "14px, Regular, Default",
-            ])}
-            onChange={(v) => setValue("codeFont", v)}
-          />
-        </PersonalRow>
-        <pre className="personal-code-preview" data-i18n-ignore>
-          <ReviewCode path="preview.ts" theme={String(values.codeTheme)} font={String(values.codeFont)} content={'const config = {\n  apiUrl: "https://api.example.com",\n  timeout: 5000,\n  debug: true\n};'}/>
-        </pre>
       </PersonalSection>
       <PersonalSection
         title={p("Notifications")}

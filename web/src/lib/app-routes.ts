@@ -45,6 +45,8 @@ export type TeamArchiveTab =
   | "recently-deleted-initiatives"
   | "recently-deleted-documents"
   | "recently-deleted-releases";
+/** Sub-pages of account notification settings. */
+export type NotificationSettingsView = "desktop" | "mobile" | "email" | "slack" | "priority-filter";
 export type SettingsPageId =
   | "preferences"
   | "shortcuts"
@@ -62,6 +64,7 @@ export type SettingsPageId =
   | "project-statuses"
   | "project-updates"
   | "ai"
+  | "loops"
   | "coding-sessions"
   | "coding-environments"
   | "initiatives"
@@ -91,6 +94,7 @@ export type TeamSettingsSection =
   | "members"
   | "notifications"
   | "issue-labels"
+  | "project-labels"
   | "templates"
   | "recurring-issues"
   | "statuses"
@@ -260,7 +264,7 @@ export type AppRoute =
       kind: "settings";
       workspaceSlug: string;
       page: SettingsPageId;
-      notificationChannel?: 'desktop' | 'mobile' | 'email' | 'slack';
+      notificationChannel?: NotificationSettingsView;
       /** Nested personal-security flows (for example API-key creation/detail). */
       apiKeyMode?: "new" | "detail" | "edit";
       /** Dedicated commit-signing-key upload flow. */
@@ -289,6 +293,10 @@ export type AppRoute =
       identityProviderId?: string;
       applicationId?: string;
       applicationMode?: "detail" | "edit";
+      /** `/settings/api/keys`: every API key issued in the workspace. */
+      apiView?: "keys";
+      /** `/settings/api/webhooks/:id` ("new" for a new webhook). */
+      webhookId?: string;
     }
   | {
       kind: "team-views";
@@ -382,6 +390,24 @@ const TEAM_ARCHIVE_TABS = new Set<TeamArchiveTab>([
   "recently-deleted-releases",
 ]);
 
+/**
+ * Settings URLs that the reference app uses for pages Flow keeps elsewhere.
+ * Returns the canonical settings segments, or undefined when no alias applies.
+ */
+function settingsAlias(rest: string[]): string[] | undefined {
+  const [first, second, third] = rest;
+  if (first === "ai" && second === "coding-sessions")
+    return third === "environments" ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
+  if (first === "skill" && second && second !== "new" && third === "edit" && rest.length === 3)
+    return ["skill", second];
+  if (first === "workspace" && second === "welcome-message" && rest.length === 2)
+    return ["workspace"];
+  if (first === "labels" && rest.length === 1) return ["issue-labels"];
+  if (first === "teams" && second && third === "labels" && rest.length === 3)
+    return ["teams", second, "issue-labels"];
+  return undefined;
+}
+
 export function parseAppRoute(pathname: string, search = ""): AppRoute {
   const segments = pathname
     .split("/")
@@ -394,6 +420,24 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "workspace-onboarding" };
   const [workspaceSlug, section, third, fourth, fifth, sixth] = segments;
   if (!section) return { kind: "workspace-root", workspaceSlug };
+  if (section === "settings") {
+    const alias = settingsAlias(segments.slice(2));
+    if (alias)
+      return parseAppRoute(
+        `/${[workspaceSlug, "settings", ...alias].map(encode).join("/")}`,
+        search,
+      );
+  }
+  if (section === "settings" && third === "api" && fourth === "keys" && segments.length === 4)
+    return { kind: "settings", workspaceSlug, page: "api", apiView: "keys" };
+  if (
+    section === "settings" &&
+    third === "api" &&
+    fourth === "webhooks" &&
+    fifth &&
+    (segments.length === 5 || (segments.length === 6 && sixth === "edit" && fifth !== "new"))
+  )
+    return { kind: "settings", workspaceSlug, page: "api", webhookId: fifth };
   if (section === "inbox" && segments.length === 2)
     return { kind: "inbox", workspaceSlug };
   if (section === "inbox" && (third === "priority" || third === "other") && segments.length === 3)
@@ -689,8 +733,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 4
   )
     return { kind: "settings", workspaceSlug, page: "account-security" };
-  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack'].includes(fifth) && segments.length === 5)
-    return {kind:'settings',workspaceSlug,page:'notifications',notificationChannel:fifth as 'desktop'|'mobile'|'email'|'slack'};
+  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack','priority-filter'].includes(fifth) && segments.length === 5)
+    return {kind:'settings',workspaceSlug,page:'notifications',notificationChannel:fifth as NotificationSettingsView};
   if (
     section === "settings" &&
     third === "account" &&
@@ -1702,6 +1746,7 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "project-statuses",
   "project-updates",
   "ai",
+  "loops",
   "coding-sessions",
   "coding-environments",
   "initiatives",
@@ -1731,6 +1776,7 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "members",
   "notifications",
   "issue-labels",
+  "project-labels",
   "templates",
   "recurring-issues",
   "statuses",
@@ -1743,6 +1789,12 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "agent-skills",
   "default-favorites",
 ]);
+export function apiKeysSettingsPath(workspaceSlug: string) {
+  return `${settingsPath(workspaceSlug, "api")}/keys`;
+}
+export function webhookSettingsPath(workspaceSlug: string, webhookId: string) {
+  return `${settingsPath(workspaceSlug, "api")}/webhooks/${encode(webhookId)}`;
+}
 export function settingsPath(
   workspaceSlug: string,
   page: SettingsPageId,
@@ -1750,6 +1802,8 @@ export function settingsPath(
   teamSection?: TeamSettingsSection,
 ) {
   const root = `${workspaceRootPath(workspaceSlug)}/settings`;
+  if (page === "coding-sessions") return `${root}/ai/coding-sessions`;
+  if (page === "coding-environments") return `${root}/ai/coding-sessions/environments`;
   if (page === "team" && teamKey) {
     if (!teamSection || teamSection === "overview")
       return `${root}/teams/${encode(teamKey)}`;
