@@ -1,5 +1,7 @@
 import type {
   AccountBootstrap,
+  ThreadSubscription,
+  ThreadSubscriptionState,
   AccountSessionInfo,
   APIKey,
   Ask,
@@ -456,6 +458,11 @@ export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { 
 }
 export function fetchIssueRelated(id: string, signal?: AbortSignal): Promise<Issue[]> {
   return request(`/api/issue-records/${encodeURIComponent(id)}/related`,{signal})
+}
+export type SimilarIssueMatch = { issue: Issue; score: number; possibleDuplicate: boolean; matchedTerms: string[] }
+/** Server-ranked similar issues (TF-IDF over title and description, synonym-aware, workspace-wide). */
+export function fetchSimilarIssues(id: string, signal?: AbortSignal, workspaceKey?: string): Promise<{ results: SimilarIssueMatch[] }> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}/similar?limit=5`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
 export function fetchVisibleIssueIds(workspaceKey: string, ids: string[]): Promise<{ids:string[]}> {
   return request('/api/issue-records/visibility', {...jsonRequest('POST',{ids}),headers:{'Content-Type':'application/json','X-Workspace-Key':workspaceKey}})
@@ -2489,6 +2496,20 @@ export function deleteComment(
     method: "DELETE",
   });
 }
+/** Subscribe to or mute one comment thread; `null` clears the explicit choice. */
+export function setThreadSubscription(
+  issueId: string,
+  commentId: string,
+  state: ThreadSubscriptionState | null,
+): Promise<ThreadSubscription | void> {
+  const path = `/api/issues/${issueId}/comments/${commentId}/subscription`;
+  if (!state) return request(path, { method: "DELETE" });
+  return request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
+  });
+}
 export function toggleCommentReaction(
   issueId: string,
   commentId: string,
@@ -3527,6 +3548,11 @@ export function updateMeeting(
 }
 export function deleteMeeting(id: string): Promise<void> {
   return request(`/api/meetings/${id}`, { method: "DELETE" });
+}
+export type AIFilterVocabulary = Record<string, { id: string; label: string }[]>
+/** LLM filter parsing via the Flow Agent; 503 when no Agent is configured. */
+export function aiIssueFilter(query: string, fields: AIFilterVocabulary, signal?: AbortSignal): Promise<{ filters: { field: string; option: { id: string; label: string } }[] }> {
+  return request("/api/ai/issue-filter", { ...jsonRequest("POST", { query, fields, today: new Date().toISOString().slice(0, 10) }), signal });
 }
 export function semanticSearch(
   query: string,

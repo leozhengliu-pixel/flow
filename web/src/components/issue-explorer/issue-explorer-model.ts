@@ -362,14 +362,14 @@ export function explorerUpdateForProperty(property: MyIssuesEditableProperty, va
 }
 
 /** Build the persisted property change when a card is moved between board groups. */
-export function explorerBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, data: BootstrapData): IssueUpdateInput {
+export function explorerBoardGroupUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping, targetGroupId: string, data: BootstrapData, labelGroupId?: string): IssueUpdateInput {
   const groupId = targetGroupId.split('::')[0]
   if (grouping === 'label' && groupId.startsWith('label-') && groupId !== 'label-none') {
     const labelId = groupId.slice('label-'.length)
     const current = (row.labels ?? []).map(label => label.id)
     return current.includes(labelId) ? {} : { labelIds: toggleGroupedLabelIds(current, labelId, data.labels) }
   }
-  return groupMoveUpdate(row, grouping, groupId, { data }) ?? {}
+  return groupMoveUpdate(row, grouping, groupId, { data, labelGroupId }) ?? {}
 }
 
 export function optimisticExplorerRow(row: MyIssuesRowData, input: IssueUpdateInput, data: BootstrapData): MyIssuesRowData {

@@ -17,7 +17,7 @@ import {
 } from '@/components/content-view'
 
 export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity' | 'shared'
-export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'activityDate' | 'none'
+export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'releaseDate' | 'labelGroup' | 'activityDate' | 'none'
 export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 'priority' | 'estimate' | 'created' | 'updated' | 'myActivity' | 'dueDate' | 'linkCount' | 'customerCount' | 'customerRevenue' | 'timeInStatus'
 export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'sla' | 'estimate' | 'release' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'myActivity' | 'created' | 'updated' | 'pullRequests'
 
@@ -25,6 +25,8 @@ export interface MyIssuesDisplayOptions {
   /** Linear layouts: split = narrow list beside the selected issue. */
   layout: 'list' | 'board' | 'split'
   grouping: MyIssuesGrouping
+  /** The parent label group used by the `labelGroup` grouping (Linear "group by label group"). */
+  labelGroupId?: string
   groupOrder: 'asc' | 'desc'
   subGrouping: MyIssuesGrouping
   ordering: MyIssuesOrdering

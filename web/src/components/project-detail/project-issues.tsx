@@ -28,7 +28,7 @@ import {
   issueHierarchyFields,
   issueToExplorerRow,
 } from "@/components/issue-explorer/issue-explorer-model";
-import { buildIssueGroups, groupMoveUpdate, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
+import { buildIssueGroups, groupMoveUpdate, groupSummaries, labelGroups, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
 import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
 import { IssueRowActionsProvider } from "@/components/my-issues/issue-row-actions";
 import {
@@ -107,16 +107,30 @@ export function ProjectIssueFilterMenu({
 export function ProjectIssueDisplayMenu({
   display,
   onChange,
+  issueData,
+  issues = [],
+  filters = [],
 }: {
   display: MyIssuesDisplayOptions;
   onChange: (display: MyIssuesDisplayOptions) => void;
+  issueData?: ProjectDetailProps["issueData"];
+  issues?: Issue[];
+  filters?: MyIssuesAppliedFilter[];
 }) {
   const [open, setOpen] = useState(false);
+  // Group ordering panel (Linear ViewOptionsGroupsPanel): the groups this view currently shows.
+  const groups = useMemo(() => {
+    if (!open || !issueData) return [];
+    const rows = applyExplorerFilters(issues, filters, issueData).map((issue) => issueToExplorerRow(issue, issueData.workspace.urlKey, issueData.issues, issueData));
+    return groupSummaries(buildIssueGroups(rows, { ...display, hiddenGroupIds: [] }, { data: issueData }));
+  }, [display, filters, issueData, issues, open]);
   return (
     <MyIssuesDisplayMenu
       hiddenProperties={["project"]}
       hideSplit
       toggles={["triage", "archived"]}
+      groups={groups}
+      labelGroupOptions={issueData ? labelGroups(issueData.labels) : []}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}
       resetLabel="Reset to default"
       onChange={onChange}
@@ -262,7 +276,7 @@ export function ProjectNewView({
           issues={projectIssues}
           onChange={onFiltersChange}
         />
-        <ProjectIssueDisplayMenu display={display} onChange={onDisplayChange} />
+        <ProjectIssueDisplayMenu display={display} onChange={onDisplayChange} issueData={props.issueData} issues={projectIssues} filters={filters} />
       </div>
       <ProjectIssues
         {...props}
@@ -331,7 +345,8 @@ export function ProjectIssues({
   const groups = useMemo(() => {
     const cycleNames = new Map((cycles ?? []).map(cycle => [cycle.id, cycle.name]));
     const rows = visible.map(issue => issueData ? issueToExplorerRow(issue, issueData.workspace.urlKey, issueData.issues, issueData) : { ...toRowData(issue, visible), cycleName: cycleNames.get(issue.cycleId ?? '') });
-    return buildIssueGroups(rows, display, { data: issueData, states: allStates });
+    const hidden = new Set(display.hiddenGroupIds);
+    return buildIssueGroups(rows, display, { data: issueData, states: allStates }).filter(group => !hidden.has(group.id) && !hidden.has(group.parentGroupId ?? ''));
   }, [allStates, cycles, display, issueData, visible]);
   const rowIssues = useMemo(
     () => new Map([...projectIssues, ...loadedIssues].map((issue) => [issue.id, issue])),
@@ -451,8 +466,8 @@ export function ProjectIssues({
       sourceGroupId === targetGroupId
         ? {}
         : issueData
-          ? explorerBoardGroupUpdate(row, display.grouping, targetGroupId, issueData)
-          : groupMoveUpdate(row, display.grouping, targetGroupId, { states: allStates }) ?? {};
+          ? explorerBoardGroupUpdate(row, display.grouping, targetGroupId, issueData, display.labelGroupId)
+          : groupMoveUpdate(row, display.grouping, targetGroupId, { states: allStates, labelGroupId: display.labelGroupId }) ?? {};
     void onUpdateIssue(row.id, { sortOrder, ...groupUpdate });
   };
 

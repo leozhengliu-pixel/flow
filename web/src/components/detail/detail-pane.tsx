@@ -5,12 +5,13 @@ import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
 import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useDescriptionSelectionActions } from './description-selection-actions'
-import { fetchIssueRecord } from '@/lib/api'
+import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
 import { toast } from 'sonner'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import * as Dialog from '@radix-ui/react-dialog'
-import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone, WorkflowState } from '@/types/flow'
+import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, DeployPreview, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone, WorkflowState } from '@/types/flow'
 import { Button } from '@/components/ui/button'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { PagedActivityTimeline } from '@/components/activity/paged-activity-timeline'
@@ -161,7 +162,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
         {historyLoading&&<div className="issue-history-state" role="status">{t('Loading activity...')}</div>}
         {historyError&&!historyLoading&&<div className="issue-history-state" role="alert"><span>{t('Could not load activity')}: {historyError}</span>{onRetryHistory&&<Button variant="ghost" size="sm" onClick={onRetryHistory}><RotateCw size={14}/>{t('Retry')}</Button>}</div>}
-        <EntityActivityPanel entityId={issue.id} entityTitle={issue.title} entityType="issue" allowAgent><div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile}/></ClientEditorProvider></div></EntityActivityPanel><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
+        <EntityActivityPanel entityId={issue.id} entityTitle={issue.title} entityType="issue" allowAgent><div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider></div></EntityActivityPanel><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
       </article>
       <div className="issue-agent-rail">
         <div className="issue-agent-rail__toggle">
@@ -193,9 +194,18 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   </section>
 }
 
+const PREVIEW_STATE_LABEL:Record<DeployPreview['state'],string>={ready:'Ready',building:'Building',pending:'Pending',failed:'Failed',inactive:'Inactive'}
+/** Linear deploy previews: one chip per environment from the linked pull requests. */
+export function DeployPreviews({reviews}:{reviews:CodeReview[]}){
+  const{t}=useI18n()
+  const previews=reviews.flatMap(review=>(review.previews??[]).filter(preview=>preview.state!=='inactive').map(preview=>({preview,review})))
+  if(!previews.length)return null
+  return <div className="issue-deploy-previews" aria-label={t('Previews')}>{previews.map(({preview,review})=>{const href=preview.state==='ready'?preview.url:preview.logUrl||preview.url;const body=<><span className="issue-deploy-preview__dot" data-state={preview.state} aria-hidden/><span data-i18n-ignore>{preview.environment}</span><small>{t(PREVIEW_STATE_LABEL[preview.state])}</small>{href&&<ExternalLink/>}</>;return <FlowTooltip key={`${review.id}-${preview.id}`} label={`${review.repositoryOwner}/${review.repositoryName} #${review.number}${preview.commitSha?` · ${preview.commitSha.slice(0,7)}`:''}`}>{href?<a className="issue-deploy-preview" data-state={preview.state} href={href} target="_blank" rel="noreferrer">{body}</a>:<span className="issue-deploy-preview" data-state={preview.state} tabIndex={0}>{body}</span>}</FlowTooltip>})}</div>
+}
+
 function IssueCodeReviews({actions,reviews}:{actions?:IssueOptionsActions;reviews:CodeReview[]}){
   const[collapsed,setCollapsed]=useState(false)
-  return <section className="issue-detail-section issue-code-reviews"><header><button aria-expanded={!collapsed} aria-label={collapsed?'Expand pull requests section':'Collapse pull requests section'} onClick={()=>setCollapsed(value=>!value)} type="button"><ChevronDown/><span>Pull requests</span></button><span>{reviews.length}</span></header>{!collapsed&&reviews.map(review=><a className="issue-code-review" href={review.url} key={review.id} rel="noreferrer" target="_blank"><GitPullRequest/><span><strong data-i18n-ignore>{review.title}</strong><small data-i18n-ignore>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span><em data-status={review.status}>{review.status==='inReview'?'In review':review.status[0].toUpperCase()+review.status.slice(1)}</em><ExternalLink className="issue-code-review__external"/><button aria-label={`Unlink pull request ${review.title}`} disabled={!actions} onClick={event=>{event.preventDefault();event.stopPropagation();void actions?.unlinkReview(review.id)}} type="button"><X/></button></a>)}</section>
+  return <section className="issue-detail-section issue-code-reviews"><header><button aria-expanded={!collapsed} aria-label={collapsed?'Expand pull requests section':'Collapse pull requests section'} onClick={()=>setCollapsed(value=>!value)} type="button"><ChevronDown/><span>Pull requests</span></button><span>{reviews.length}</span></header>{!collapsed&&reviews.map(review=><a className="issue-code-review" href={review.url} key={review.id} rel="noreferrer" target="_blank"><GitPullRequest/><span><strong data-i18n-ignore>{review.title}</strong><small data-i18n-ignore>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span><em data-status={review.status}>{review.status==='inReview'?'In review':review.status[0].toUpperCase()+review.status.slice(1)}</em><ExternalLink className="issue-code-review__external"/><button aria-label={`Unlink pull request ${review.title}`} disabled={!actions} onClick={event=>{event.preventDefault();event.stopPropagation();void actions?.unlinkReview(review.id)}} type="button"><X/></button></a>)}{!collapsed&&<DeployPreviews reviews={reviews}/>}</section>
 }
 
 type SubIssueProperty='priority'|'sla'|'id'|'status'|'labels'|'milestone'|'cycle'|'dueDate'|'links'|'customers'|'customerRevenue'|'assignee'

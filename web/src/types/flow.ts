@@ -1312,6 +1312,18 @@ export interface ReviewEvent {
   actor: User;
   createdAt: string;
 }
+/** A preview environment deployed from a pull request's head branch. */
+export interface DeployPreview {
+  id: UUID;
+  provider: string;
+  environment: string;
+  url: string;
+  logUrl?: string;
+  state: "pending" | "building" | "ready" | "failed" | "inactive";
+  commitSha?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface CodeReview {
   id: UUID;
   slugId: string;
@@ -1337,6 +1349,7 @@ export interface CodeReview {
   checks: ReviewCheck[];
   files: ReviewFile[];
   events: ReviewEvent[];
+  previews?: DeployPreview[];
   favorite: boolean;
   draft: boolean;
   quickToReview: boolean;
@@ -1456,6 +1469,17 @@ export interface Subscription {
   events?: string[];
   createdAt: string;
 }
+/** A user's explicit choice for one comment thread (root comment and replies). Participants follow threads implicitly. */
+export interface ThreadSubscription {
+  id: UUID;
+  userId: UUID;
+  issueId: UUID;
+  commentId: UUID;
+  state: ThreadSubscriptionState;
+  createdAt: string;
+  updatedAt: string;
+}
+export type ThreadSubscriptionState = "subscribed" | "muted";
 export interface AuditLogEntry {
   id: UUID;
   actor: User;
@@ -1804,6 +1828,7 @@ export interface BootstrapData {
   favorites: Favorite[];
   favoriteFolders: FavoriteFolder[];
   subscriptions: Subscription[];
+  threadSubscriptions?: ThreadSubscription[];
   auditLog: AuditLogEntry[];
   trash: TrashEntry[];
   importJobs: ImportJob[];

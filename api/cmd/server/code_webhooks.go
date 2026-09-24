@@ -49,6 +49,10 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	if eventID == "" {
 		eventID = fmt.Sprintf("%x", sha256.Sum256(body))
 	}
+	if deployment, ok := parseDeploymentWebhook(provider, r.Header, body); ok {
+		s.applyDeploymentWebhook(w, r, provider, eventID, deployment)
+		return
+	}
 	var event externalCodeReviewEvent
 	if err := json.Unmarshal(body, &event); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid webhook payload")

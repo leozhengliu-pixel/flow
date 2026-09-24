@@ -16,7 +16,9 @@ const DAY = 86_400_000
 
 export interface IssueGroupingContext {
   /** Workspace data when available; grouping degrades to row-only information without it. */
-  data?: Pick<BootstrapData, 'states' | 'cycles' | 'projects' | 'users' | 'teams' | 'releases'> & Partial<Pick<BootstrapData, 'customers'>>
+  data?: Pick<BootstrapData, 'states' | 'cycles' | 'projects' | 'users' | 'teams' | 'releases'> & Partial<Pick<BootstrapData, 'customers' | 'labels'>>
+  /** Parent label for the `labelGroup` grouping. */
+  labelGroupId?: string
   /** States a status grouping should always show (for empty groups / board columns). */
   states?: MyIssuesRowData['state'][]
   /** Manual order override (drag-and-drop) keyed by issue id. */
@@ -29,7 +31,7 @@ export type GroupDescriptor = Omit<MyIssuesGroupData, 'issues'> & { rank: number
 export const GROUPING_LABELS: Record<MyIssuesGrouping, string> = {
   none: 'No grouping', focus: 'Focus', status: 'Status', assignee: 'Assignee', agent: 'Agent', project: 'Project',
   milestone: 'Milestone', priority: 'Priority', cycle: 'Cycle', label: 'Label', team: 'Team', customer: 'Customer',
-  parent: 'Parent issue', sla: 'SLA status', release: 'Release', activityDate: 'Activity date',
+  parent: 'Parent issue', sla: 'SLA status', release: 'Release', releaseDate: 'Release date', labelGroup: 'Label group', activityDate: 'Activity date',
 }
 
 export const ORDERING_LABELS: Record<MyIssuesOrdering, string> = {
@@ -96,8 +98,35 @@ export function groupDescriptors(row: MyIssuesRowData, grouping: MyIssuesGroupin
       if (!ids.length) return [{ id: 'release-none', label: 'No release', rank: 'z' }]
       return ids.map(id => { const release = data?.releases?.find(item => item.id === id); return { id: `release-${id}`, label: release?.name ?? 'Release', rank: release?.releasedAt ?? release?.targetDate ?? release?.name ?? id } })
     }
+    case 'releaseDate': {
+      const released = (row.releaseIds ?? []).map(id => data?.releases?.find(item => item.id === id)?.releasedAt).filter((value): value is string => Boolean(value)).sort()
+      return [releaseDayDescriptor(released[0], context.now ?? Date.now())]
+    }
+    case 'labelGroup': {
+      const group = context.labelGroupId ? data?.labels?.find(label => label.id === context.labelGroupId) : undefined
+      const members = (row.labels ?? []).filter(label => context.labelGroupId && label.groupId === context.labelGroupId)
+      if (!members.length) return [{ id: 'labelgroup-none', label: `No ${group?.name ?? 'label'}`, rank: '1', createContext: { labelIds: [] } }]
+      return members.map(label => ({ id: `labelgroup-${label.id}`, label: label.name, rank: `0${label.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }))
+    }
     case 'activityDate': return [activityDescriptor(row.myActivityAt ?? row.updatedAt, context.now ?? Date.now())]
   }
+}
+
+/** Linear "Release date": issues bucketed by the day they first shipped, newest first. */
+function releaseDayDescriptor(value: string | undefined, now: number): GroupDescriptor {
+  if (!value) return { id: 'releasedate-none', label: 'Not released', rank: Number.MAX_SAFE_INTEGER }
+  const day = new Date(value); day.setHours(0, 0, 0, 0)
+  const today = new Date(now); today.setHours(0, 0, 0, 0)
+  const offset = Math.round((today.getTime() - day.getTime()) / DAY)
+  const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+  const label = offset === 0 ? 'Today' : offset === 1 ? 'Yesterday' : day.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(day.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }) })
+  return { id: `releasedate-${key}`, label, rank: -day.getTime() }
+}
+
+/** Parent labels that have child labels: the choices for the `labelGroup` grouping. */
+export function labelGroups(labels: Pick<BootstrapData['labels'][number], 'id' | 'name' | 'groupId' | 'archivedAt'>[]) {
+  const parents = new Set(labels.filter(label => label.groupId && !label.archivedAt).map(label => label.groupId!))
+  return labels.filter(label => parents.has(label.id) && !label.archivedAt)
 }
 
 function statusDescriptor(state: MyIssuesRowData['state'], context: IssueGroupingContext): GroupDescriptor {
@@ -223,7 +252,14 @@ export function buildIssueGroups(rows: MyIssuesRowData[], display: MyIssuesDispl
   if (nested) projected = nested.rows
   const rootOf = (row: MyIssuesRowData) => nested?.roots.get(row.id) ?? row
   const grouping = display.grouping
+  options = { ...options, labelGroupId: display.labelGroupId ?? options.labelGroupId }
   const primary = collect(projected, row => groupDescriptors(rootOf(row), grouping, options))
+  if (display.showEmptyGroups && grouping === 'labelGroup' && options.labelGroupId) {
+    for (const label of options.data?.labels?.filter(item => item.groupId === options.labelGroupId && !item.archivedAt) ?? []) {
+      const descriptor: GroupDescriptor = { id: `labelgroup-${label.id}`, label: label.name, rank: `0${label.name.toLocaleLowerCase()}`, createContext: { labelIds: [label.id] } }
+      if (!primary.has(descriptor.id)) primary.set(descriptor.id, { descriptor, issues: [] })
+    }
+  }
   if (display.showEmptyGroups && grouping === 'status') {
     for (const state of options.states ?? options.data?.states ?? []) {
       if (!primary.has(state.id) && withinCompletedWindow({ state } as MyIssuesRowData, display.completedWindow === 'none' ? 'none' : 'all')) primary.set(state.id, { descriptor: statusDescriptor(state, options), issues: [] })
@@ -313,6 +349,12 @@ export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping
       if (id === 'label-none') return { labelIds: [] }
       const labelId = id.slice(6)
       return current.includes(labelId) ? undefined : { labelIds: [...current, labelId] }
+    }
+    case 'labelGroup': {
+      // Labels in a group are exclusive: swap the row's label from this group for the target one.
+      if (!id.startsWith('labelgroup-')) return undefined
+      const keep = (row.labels ?? []).filter(label => !context.labelGroupId || label.groupId !== context.labelGroupId).map(label => label.id)
+      return id === 'labelgroup-none' ? { labelIds: keep } : { labelIds: [...keep, id.slice(11)] }
     }
     default: return undefined
   }

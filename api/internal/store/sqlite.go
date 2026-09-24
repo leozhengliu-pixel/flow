@@ -802,6 +802,9 @@ func normalize(data *domain.Bootstrap) {
 	if data.Subscriptions == nil {
 		data.Subscriptions = []domain.Subscription{}
 	}
+	if data.ThreadSubscriptions == nil {
+		data.ThreadSubscriptions = []domain.ThreadSubscription{}
+	}
 	if data.AuditLog == nil {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
