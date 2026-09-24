@@ -11,11 +11,10 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, t
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
-import { applyExplorerFilters, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
-import { setGroupedLabelSelected } from '@/lib/labels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { fetchIssueRecord } from '@/lib/api'
 import { toast } from 'sonner'
@@ -73,7 +72,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       navigate: href => onNavigateView?.(viewFromHref(href), href),
       persistDisplay: (view, options) => onPersistDisplay?.(view, options) ?? Promise.resolve(),
       persistFilters: onPersistFilters,
-      executeBulk: async (action, ids, value) => (await executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
+      executeBulk: async (action, ids, value) => (await executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }))?.map(issue => toRow(issue, workspaceSlug, data, issueMatchesView(issue, data, projectedView))),
     },
   })
   const myIssuesPagedQuery = useMemo(() => {
@@ -306,7 +305,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         }}
       />}
     </MyIssuesSurface>
-    <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
+    <MyIssuesBulkActionBar selectedIssues={controller.selectedIssues} destructiveActions={['archive', 'delete']} loading={controller.bulkLoading} error={controller.bulkError} actionOptions={action => bulkOptions(action, rowOptions)} onAction={(action, _issues, value) => { void controller.executeBulk(action, value) }} onClear={controller.clearSelection}/>
   </>
 }
 
@@ -353,19 +352,6 @@ function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof expl
   if (action === 'labels') return options.labels
   if (action === 'dueDate') return dueDateOptions()
   if (action === 'subscribers') return options.assignee.filter(option => option.id)
-}
-
-async function executeBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues }: { action: MyIssuesBulkAction; ids: string[]; value?: string; data: BootstrapData; issuesById: Map<string, Issue>; onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>; onUpdateIssues: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]> }): Promise<Issue[] | void> {
-  if (action.startsWith('copy')) { await copyIssues(action, ids, issuesById, data.workspace.urlKey); return }
-  if (action === 'labels' && value != null) {
-    const selected = !ids.every(id => issuesById.get(id)?.labels.some(label => label.id === value))
-    return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { labelIds: setGroupedLabelSelected(issue.labels.map(label => label.id), value, data.labels, selected) }) }))
-  }
-  if (action === 'subscribers' && value != null) return Promise.all(ids.map(id => { const issue = issuesById.get(id)!; return onUpdateIssue(id, { subscriberIds: issue.subscriberIds.includes(value) ? issue.subscriberIds : [...issue.subscriberIds, value] }) }))
-  if (action === 'removeSubscribers') return Promise.all(ids.map(id => onUpdateIssue(id, { subscriberIds: [] })))
-  if (action === 'unassignMe') return onUpdateIssues(ids, { assigneeId: '' })
-  const update = updateForAction(action, value)
-  if (update) return onUpdateIssues(ids, update)
 }
 
 function updateForAction(action: MyIssuesBulkAction | MyIssuesContextAction, value?: string): IssueUpdateInput | undefined {
@@ -422,21 +408,6 @@ function withoutKey(map: Map<string, string>, key: string) { const next = new Ma
 function withKey(map: Map<string, string>, key: string, value: string) { const next = new Map(map); next.set(key, value); return next }
 function readInsights(key:string):Record<string,unknown>{try{const value=JSON.parse(localStorage.getItem(key)??'{}');return value&&typeof value==='object'&&!Array.isArray(value)?value:{}}catch{return {}}}
 
-async function copyIssues(action: MyIssuesBulkAction, ids: string[], issuesById: Map<string, Issue>, workspaceSlug: string) {
-  const issues = ids.map(id => issuesById.get(id)).filter(Boolean) as Issue[]
-  const lines = issues.map(issue => {
-    const url = issueUrl(workspaceSlug, issue.identifier)
-    if (action === 'copyId') return issue.identifier
-    if (action === 'copyUrl') return url
-    if (action === 'copyTitle') return issue.title
-    if (action === 'copyTitleLink') return `[${issue.title}](${url})`
-    if (action === 'copyDescriptionMarkdown') return issue.description
-    if (action === 'copyBranch') return `${issue.identifier.toLowerCase()}-${slug(issue.title)}`
-    if (action === 'copyPrompt') return `${issue.identifier}: ${issue.title}\n\n${issue.description}`
-    return `# ${issue.identifier}: ${issue.title}\n\n${issue.description}\n\n${url}`
-  })
-  await navigator.clipboard.writeText(lines.join('\n\n'))
-}
 
 function dueDateOptions(): MyIssuesBulkActionOption[] {
   const date = new Date(), day = 86_400_000
@@ -447,4 +418,3 @@ function viewFromHref(href: string): MyIssuesView { return (href.split('/').at(-
 function issueUrl(workspaceSlug: string, identifier: string) { return `${location.origin}/${workspaceSlug}/issue/${identifier}` }
 function clampPriority(value: number): 0 | 1 | 2 | 3 | 4 { return Math.max(0, Math.min(4, value)) as 0 | 1 | 2 | 3 | 4 }
 function isoDate(date: Date) { return date.toISOString().slice(0, 10) }
-function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) }
