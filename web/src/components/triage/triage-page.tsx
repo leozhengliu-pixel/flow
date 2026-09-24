@@ -34,7 +34,7 @@ const ORDERINGS: { value: TriageOrdering; label: string }[] = [
   { value: 'oldest', label: 'Oldest' },
   { value: 'dueDate', label: 'Due date' },
 ]
-const ROW_PROPERTIES = new Set<MyIssuesProperty>(['id', 'status', 'priority', 'labels', 'assignee', 'created'])
+const ROW_PROPERTIES = new Set<MyIssuesProperty>(['id', 'priority', 'created'])
 
 /**
  * Triage on the shared list row and filter engine, with Accept / Decline / Mark as duplicate / Snooze
@@ -115,7 +115,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
         {visible.length ? <MyIssuesList
           groups={groups}
           displayProperties={ROW_PROPERTIES}
-          selectedIds={selectedId ? new Set([selectedId]) : undefined}
+          activeIssueId={selectedId ?? undefined}
           onOpenIssue={row => setSelectedId(row.id)}
         /> : issues.length > 0 ? <div className="flow-triage-list__empty-filter">{t('No issues match these filters')}</div> : null}
       </div>

@@ -16,7 +16,7 @@ describe('row context menu', () => {
     </IssueRowActionsProvider></I18nProvider>)
     fireEvent.contextMenu(screen.getByRole('link', { name: new RegExp(row.identifier) }))
     expect(await screen.findByText(/^(Subscribe|Unsubscribe)$/)).toBeInTheDocument()
-    for (const label of ['Assign to me', 'Set parent issue…', 'Relations', 'Remind me', 'Copy git branch name', 'Open in new tab', 'Make a copy…', 'Archive']) expect(await screen.findByText(label)).toBeInTheDocument()
+    for (const label of ['Assign to me', 'Set parent issue…', 'Relations', 'Remind me', 'Copy branch name', 'Open in new tab', 'Make a copy…', 'Archive']) expect(await screen.findByText(label)).toBeInTheDocument()
     fireEvent.click(screen.getByText('Assign to me'))
     expect(onUpdateIssue).toHaveBeenCalledWith(row.id, { assigneeId: data.viewer.id })
   })
