@@ -1,0 +1,124 @@
+.flow-update-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 28px 48px;
+}
+
+.flow-update-page__chrome {
+  border-bottom: 0.5px solid var(--theme-border);
+  padding-bottom: 12px;
+}
+
+.flow-update-page__title-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.flow-update-page__back,
+.flow-update-page__actions > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--theme-text-tertiary);
+  cursor: pointer;
+  display: inline-flex;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.flow-update-page__back:hover,
+.flow-update-page__actions > button:hover {
+  background: var(--theme-control-hover);
+  color: var(--theme-text-primary);
+}
+
+.flow-update-page__titles {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.flow-update-page__titles h1 {
+  color: var(--theme-text-primary);
+  font-size: 18px;
+  font-weight: 550;
+  margin: 0;
+}
+
+.flow-update-page__entity {
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.flow-update-page__entity:hover {
+  color: var(--theme-text-primary);
+  text-decoration: underline;
+}
+
+.flow-update-page__actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.flow-update-page__body {
+  border: 0.5px solid var(--theme-border);
+  border-radius: 10px;
+  background: var(--theme-surface-1);
+  box-shadow: var(--shadow);
+  padding: 18px 20px 24px;
+}
+
+.flow-update-page__byline {
+  align-items: center;
+  color: var(--theme-text-tertiary);
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.flow-update-page__byline > strong {
+  color: var(--theme-text-secondary);
+  font-weight: 500;
+}
+
+.flow-update-page__byline .avatar {
+  font-size: 8px;
+  height: 20px;
+  width: 20px;
+}
+
+.flow-update-page__health {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.flow-update-page__health > i {
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  display: block;
+  height: 10px;
+  width: 10px;
+}
+
+.flow-update-page__health.is-onTrack { color: var(--semantic-success); }
+.flow-update-page__health.is-atRisk { color: var(--semantic-warning); }
+.flow-update-page__health.is-offTrack { color: var(--semantic-danger); }
+
+.flow-update-page__content {
+  color: var(--theme-text-primary);
+  font-size: 14px;
+  line-height: 22px;
+}

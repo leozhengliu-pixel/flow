@@ -124,6 +124,7 @@ export type PageId =
   | "inbox"
   | "search"
   | "pulse"
+  | "summary-update"
   | "reviews"
   | "my-issues"
   | "workspace-issues"
