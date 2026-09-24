@@ -1,12 +1,13 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronRight, FilePlus2, Link2, Menu, Plus, Search, Star, Trash2 } from 'lucide-react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerBulkOptions, explorerFilterOptions, explorerPropertyOptions, explorerUpdateForProperty, issueToExplorerRow, ISSUE_FILTER_LABELS } from '@/components/issue-explorer/issue-explorer-model'
 import { buildIssueGroups, groupSummaries } from '@/components/issue-explorer/issue-grouping'
+import { useScopedIssueRecords } from '@/hooks/use-scoped-issue-records'
 import { MyIssuesBulkActionBar } from '@/components/my-issues/my-issues-bulk-action-bar'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
@@ -23,7 +24,6 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey } from '@/components/my-issues/my-issues-surface'
 import { createCycleResource, createDocument, deleteCycleResource } from '@/lib/api'
 import { cyclePath, documentPath, teamCyclesPath } from '@/lib/app-routes'
-import { labelsForResource } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Cycle, CycleMutationInput, Issue, IssueUpdateInput, Team } from '@/types/flow'
 import { CycleActions } from './cycle-menus'
@@ -39,12 +39,14 @@ export function CycleDetailPage({cycle,team,data,onBack,onUpdateCycle,onStartCyc
   const setDisplay=(next:MyIssuesDisplayOptions|((current:MyIssuesDisplayOptions)=>MyIssuesDisplayOptions))=>setDisplayState(current=>{const value=typeof next==='function'?next(current):next;try{localStorage.setItem(displayKey,JSON.stringify({...value,properties:[...value.properties]}))}catch{/* best-effort */}return value})
   // Linear forces completed cycles to a list with every completed issue shown.
   const effectiveDisplay:MyIssuesDisplayOptions=cycle.status==='completed'?{...display,layout:'list',completedWindow:'all'}:display
-  const allCycleIssues=data.issues.filter(issue=>issue.cycleId===cycle.id&&!issue.archivedAt&&issue.team.id===team.id)
+  const cyclePredicate=useCallback((issue:Issue)=>issue.cycleId===cycle.id&&!issue.archivedAt&&issue.team.id===team.id,[cycle.id,team.id])
+  const cycleQuery=useMemo(()=>({teamId:team.id,archived:'false' as const,filter:{field:'cycle',operator:'in',values:[cycle.id]}}),[cycle.id,team.id])
+  const {issues:allCycleIssues}=useScopedIssueRecords(data,cycleQuery,cyclePredicate)
   const cycleIssues=applyExplorerFilters(allCycleIssues,filters,data)
   const teamStates=data.states.filter(state=>state.teamId===team.id)
   const rows=cycleIssues.map(issue=>issueToExplorerRow(issue,data.workspace.urlKey,data.issues,data)),groups=buildIssueGroups(rows,effectiveDisplay,{data,states:teamStates.length?teamStates:data.states}),propertyOptions=explorerPropertyOptions(data,allCycleIssues),stats=cycleStats(cycle,data.issues),preview=data.issues.find(issue=>issue.id===previewId),start=formatCycleDay(cycle.startsAt),end=formatCycleDay(cycle.endsAt),earliestUpcoming=[...data.cycles].filter(item=>item.teamId===team.id&&item.status==='upcoming').sort((a,b)=>a.startsAt.localeCompare(b.startsAt))[0]?.id,derivedStatus=cycle.status==='upcoming'&&cycle.id!==earliestUpcoming?'planned':cycle.status
   const selection=useMyIssuesSelection(groups)
-  const issuesById=new Map(data.issues.map(issue=>[issue.id,issue]))
+  const issuesById=new Map([...allCycleIssues,...data.issues].map(issue=>[issue.id,issue]))
   const updateById=async(id:string,input:IssueUpdateInput)=>{const issue=issuesById.get(id);if(!issue)throw new Error('Issue not found');await onUpdateIssue(issue,input);return issuesById.get(id)??issue}
   const updateProperty=async(row:MyIssuesRowData,property:MyIssuesEditableProperty,value:string|string[])=>{const input=explorerUpdateForProperty(property,value);if(input)await updateById(row.id,input)}
   const moveIssue=(row:MyIssuesRowData,_source:string,targetGroupId:string,targetIndex:number)=>{const target=groups.find(group=>group.id===targetGroupId);const others=target?.issues.filter(issue=>issue.id!==row.id)??[];const sortOrder=targetIndex===0?(others[0]?.sortOrder??1)-1:targetIndex>=others.length?(others.at(-1)?.sortOrder??0)+1:((others[targetIndex-1]?.sortOrder??0)+(others[targetIndex]?.sortOrder??0))/2;void updateById(row.id,{sortOrder,...explorerBoardGroupUpdate(row,effectiveDisplay.grouping,targetGroupId,data)}).catch(error=>toast.error(error instanceof Error?error.message:t('Could not update issue')))}

@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { createComment, createRelation, updateIssue } from '@/lib/api'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData, Issue, Team, WorkflowState } from '@/types/flow'
+import type { BootstrapData, Issue, Team } from '@/types/flow'
+import { canceledState, duplicateState, snoozePresets } from './triage-model'
 import './triage.css'
 
 type TriageAction = 'decline' | 'duplicate' | 'snooze'
@@ -78,26 +79,3 @@ function DuplicatePicker({ issue, issues, disabled, onPick }: { issue: Issue; is
   </div>
 }
 
-export function canceledState(states: WorkflowState[], teamId: string) {
-  const scoped = states.filter(state => !state.teamId || state.teamId === teamId)
-  return scoped.find(state => state.type === 'canceled' && !/duplicate/i.test(state.name)) ?? scoped.find(state => state.type === 'canceled')
-}
-
-function duplicateState(states: WorkflowState[], teamId: string) {
-  return states.find(state => (!state.teamId || state.teamId === teamId) && state.type === 'canceled' && /duplicate/i.test(state.name))
-}
-
-export function snoozePresets(now = new Date()) {
-  const at = (days: number) => { const date = new Date(now); date.setDate(date.getDate() + days); date.setHours(8, 0, 0, 0); return date }
-  const monday = at(((8 - now.getDay()) % 7) || 7)
-  return [
-    { label: 'Tomorrow', until: at(1) },
-    { label: 'Next week', until: monday },
-    { label: 'In two weeks', until: at(14) },
-    { label: 'In a month', until: at(30) },
-  ]
-}
-
-export function isSnoozed(issue: Pick<Issue, 'snoozedUntil'>, now = Date.now()) {
-  return Boolean(issue.snoozedUntil && Date.parse(issue.snoozedUntil) > now)
-}

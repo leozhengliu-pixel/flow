@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useScopedIssueRecords } from '@/hooks/use-scoped-issue-records'
 import { IssuesSplitViewPage } from '@/components/issues-split-view'
 import { MyIssuesList } from '@/components/my-issues/my-issues-list'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
@@ -12,7 +13,8 @@ import { Toggle } from '@/components/ui/toggle'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, Team } from '@/types/flow'
 import { FastTriageAcceptEditor } from './fast-triage-accept-editor'
-import { TriageActions, isSnoozed } from './triage-actions'
+import { TriageActions } from './triage-actions'
+import { isSnoozed } from './triage-model'
 import { TriageEmptyPage, TriageNotSelectedPage } from './triage-not-selected-page'
 import './triage.css'
 
@@ -46,8 +48,11 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
   const [ordering, setOrdering] = useState<TriageOrdering>('startedTriage')
   const [showSnoozed, setShowSnoozed] = useState(false)
   const [action, setAction] = useState<'decline' | 'duplicate' | 'snooze'>()
-  const [issues, setIssues] = useState<Issue[]>(() => triageIssues(data, team.id))
-  useEffect(() => { setIssues(triageIssues(data, team.id)) }, [data, team.id])
+  const triagePredicate = useCallback((issue: Issue) => isTriageCandidate(issue, team.id), [team.id])
+  const triageQuery = useMemo(() => ({ teamId: team.id, archived: 'false' as const, filter: { and: [{ field: 'status', operator: 'in', values: ['backlog'] }, { field: 'triagedAt', operator: 'isEmpty' }] } }), [team.id])
+  const { issues: scopedIssues } = useScopedIssueRecords(data, triageQuery, triagePredicate)
+  const [issues, setIssues] = useState<Issue[]>(scopedIssues)
+  useEffect(() => { setIssues(scopedIssues) }, [scopedIssues])
 
   const options = useMemo(() => explorerPropertyOptions(data, issues), [data, issues])
   const visible = useMemo(() => sortTriage(applyExplorerFilters(issues.filter(issue => showSnoozed || !isSnoozed(issue)), filters, data), ordering), [data, filters, issues, ordering, showSnoozed])
@@ -137,8 +142,12 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
   )
 }
 
+function isTriageCandidate(issue: Issue, teamId: string) {
+  return issue.team.id === teamId && issue.state.type === 'backlog' && !issue.triagedAt && !issue.archivedAt
+}
+
 export function triageIssues(data: BootstrapData, teamId: string): Issue[] {
-  return data.issues.filter(issue => issue.team.id === teamId && issue.state.type === 'backlog' && !issue.triagedAt && !issue.archivedAt)
+  return data.issues.filter(issue => isTriageCandidate(issue, teamId))
 }
 
 function sortTriage(issues: Issue[], ordering: TriageOrdering) {
