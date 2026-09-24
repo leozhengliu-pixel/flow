@@ -10,6 +10,8 @@ import {
 } from "react";
 import { Bot, History } from "lucide-react";
 import { AppStartup } from '@/components/layout/app-startup';
+import { FeatureFlagDrawerHost } from '@/components/panel/feature-flag-drawer';
+import { startSecurityExtensionDetector } from '@/lib/security-extension-detector';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
 import {
@@ -6350,6 +6352,8 @@ function App() {
           <History />
         </button>
       </div>
+      <FeatureFlagDrawerHost workspaceFlags={featureFlags} />
+      <SecurityExtensionDetectorBoot />
     </div></ActiveTeamProvider></PeopleProvider>
   );
 }
@@ -6585,4 +6589,12 @@ function nextOccurrence(recurrence: "daily" | "weekly" | "monthly") {
   return date;
 }
 
+function SecurityExtensionDetectorBoot() {
+  useEffect(() => {
+    startSecurityExtensionDetector();
+  }, []);
+  return null;
+}
+
 export default App;
+

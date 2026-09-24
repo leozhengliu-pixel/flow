@@ -1,3 +1,4 @@
+import { AutomationsEmptyStateIcon } from "@/components/automation/automations-empty-state-icon";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
@@ -413,12 +414,7 @@ function LoopEmpty({ onCreate }: { onCreate: () => void }) {
 }
 
 function LoopEmptyIllustration() {
-  return <svg aria-label="No loops illustration" className="loops-empty-illustration" fill="none" viewBox="0 0 120 120">
-    <defs><linearGradient id="loops-empty-gradient" gradientUnits="userSpaceOnUse" x1="0" x2="120" y1="0" y2="120" spreadMethod="repeat"><stop offset="0" stopColor="var(--theme-text-primary)"/><stop offset=".38" stopColor="var(--theme-text-primary)"/><stop offset=".5" stopColor="var(--theme-text-secondary)"/><stop offset=".62" stopColor="var(--theme-text-primary)"/><stop offset="1" stopColor="var(--theme-text-primary)"/><animateTransform attributeName="gradientTransform" dur="1.8s" from="0 0" repeatCount="3" to="120 120" type="translate"/></linearGradient></defs>
-    <ellipse cx="60" cy="60" rx="51" ry="22" stroke="url(#loops-empty-gradient)" strokeWidth="1.5" transform="rotate(45 60 60)"/>
-    <ellipse cx="60" cy="60" rx="51" ry="22" stroke="var(--theme-text-secondary)" strokeWidth="1.5" transform="rotate(-45 60 60)"/>
-    <ellipse cx="60" cy="60" rx="50" ry="21" stroke="var(--theme-border-strong)" strokeWidth="1.5" transform="rotate(90 60 60)"/>
-  </svg>
+  return <AutomationsEmptyStateIcon aria-label="No loops illustration" className="loops-empty-illustration" height={120} width={120} />
 }
 
 function LoopEditor({
