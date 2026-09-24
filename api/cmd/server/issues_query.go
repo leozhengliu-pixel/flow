@@ -31,6 +31,7 @@ type issueQueryResponse struct {
 type issueQueryNode struct {
 	And      []issueQueryNode `json:"and,omitempty"`
 	Or       []issueQueryNode `json:"or,omitempty"`
+	Not      *issueQueryNode  `json:"not,omitempty"`
 	Field    string           `json:"field,omitempty"`
 	Operator string           `json:"operator,omitempty"`
 	Value    json.RawMessage  `json:"value,omitempty"`
@@ -160,7 +161,8 @@ func compareQueryIssues(left, right domain.Issue, field, direction string) int {
 	var cmp int
 	switch strings.ToLower(field) {
 	case "priority":
-		cmp = compareInt(left.Priority, right.Priority)
+		// "No priority" (0) sorts after Low (4), matching the SQL store.
+		cmp = compareInt(priorityRank(left.Priority), priorityRank(right.Priority))
 	case "createdat":
 		cmp = compareTime(left.CreatedAt, right.CreatedAt)
 	case "updatedat":
@@ -204,6 +206,9 @@ func decodeIssueQuery(raw string) (issueQueryNode, error) {
 				return false
 			}
 		}
+		if n.Not != nil && !validate(*n.Not, depth+1) {
+			return false
+		}
 		return true
 	}
 	if !validate(node, 0) {
@@ -213,7 +218,7 @@ func decodeIssueQuery(raw string) (issueQueryNode, error) {
 }
 
 func (node issueQueryNode) empty() bool {
-	return node.Field == "" && len(node.And) == 0 && len(node.Or) == 0
+	return node.Field == "" && len(node.And) == 0 && len(node.Or) == 0 && node.Not == nil
 }
 
 func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bool {
@@ -235,6 +240,9 @@ func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bo
 		if !matched {
 			return false
 		}
+	}
+	if node.Not != nil && node.Not.matches(issue, data) {
+		return false
 	}
 	if node.Field == "" {
 		return true
@@ -778,4 +786,11 @@ func decodeCursor(cursor string) int {
 		return 0
 	}
 	return offset
+}
+
+func priorityRank(priority int) int {
+	if priority == 0 {
+		return 5
+	}
+	return priority
 }

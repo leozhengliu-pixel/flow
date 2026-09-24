@@ -59,6 +59,7 @@ describe('MyIssuesList virtualization', () => {
         createdAt: '2026-09-07T00:00:00.000Z',
         updatedAt: '2026-09-07T00:00:00.000Z',
         projectMilestoneNames: ['车商城316迭代'],
+        milestoneName: '车商城316迭代',
         customerNames: ['Acme'],
         customerRevenues: [12000],
       }],

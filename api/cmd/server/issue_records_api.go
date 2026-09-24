@@ -74,6 +74,10 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		for _, child := range node.Or {
 			result.Or = append(result.Or, convert(child))
 		}
+		if node.Not != nil {
+			negated := convert(*node.Not)
+			result.Not = &negated
+		}
 		return result
 	}
 	query.Filter = convert(root)
@@ -680,6 +684,15 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 			current = issue.NextOccurrenceAt.UTC().Format(time.RFC3339)
 		}
 		if strings.TrimSpace(*input.NextOccurrenceAt) != current && !(strings.TrimSpace(*input.NextOccurrenceAt) == "" && issue.NextOccurrenceAt == nil) {
+			return false
+		}
+	}
+	if input.SnoozedUntil != nil {
+		current := ""
+		if issue.SnoozedUntil != nil {
+			current = issue.SnoozedUntil.UTC().Format(time.RFC3339)
+		}
+		if strings.TrimSpace(*input.SnoozedUntil) != current {
 			return false
 		}
 	}

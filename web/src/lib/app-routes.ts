@@ -8,7 +8,7 @@ import type {
 } from "@/types/flow";
 
 export type MyIssuesRouteView =
-  "assigned" | "created" | "subscribed" | "activity";
+  "assigned" | "created" | "subscribed" | "activity" | "shared";
 export type ProjectRouteTab = "overview" | "activity" | "issues" | "new";
 export type TeamIssuesRouteView = "active" | "backlog" | "all";
 export type ViewsResource = "issues" | "projects";
@@ -353,6 +353,7 @@ const MY_ISSUES_VIEWS = new Set<MyIssuesRouteView>([
   "created",
   "subscribed",
   "activity",
+  "shared",
 ]);
 const PROJECT_TABS = new Set<ProjectRouteTab>([
   "overview",

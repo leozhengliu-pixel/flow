@@ -10,7 +10,7 @@ import { PersonHover } from '@/components/property/person-info'
 import { usePeopleDirectory } from '@/components/property/people-context'
 import { directoryPerson, personMatchesQuery, personSearchText } from '@/lib/people'
 
-export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs'
+export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs' | 'archive' | 'delete'
 export interface MyIssuesBulkActionOption { id: string; label: string; color?: string }
 
 export interface MyIssuesBulkActionBarProps {
@@ -21,6 +21,8 @@ export interface MyIssuesBulkActionBarProps {
   onAction: (action: MyIssuesBulkAction, issues: MyIssuesRowData[], value?: string) => void
   onAskFlow?: (issues: MyIssuesRowData[]) => void
   onClear: () => void
+  /** Destructive actions are listed only when the host can perform them. */
+  destructiveActions?: ('archive' | 'delete')[]
 }
 
 const actions: { id: MyIssuesBulkAction; label: string; shortcut?: string }[] = [
@@ -33,9 +35,11 @@ const actions: { id: MyIssuesBulkAction; label: string; shortcut?: string }[] = 
   { id: 'copyContentMarkdown', label: 'Copy issue content as Markdown', shortcut: '⌘ ⌥ C' }, { id: 'copyBranch', label: 'Copy git branch name', shortcut: '⌘ ⇧ .' },
   { id: 'copyPrompt', label: 'Copy as prompt', shortcut: '⌘ ⌥ P' }, { id: 'subscribers', label: 'Change subscribers...', shortcut: '⌘ ⇧ S' },
   { id: 'removeSubscribers', label: 'Remove all subscribers' }, { id: 'markAs', label: 'Mark issue as...' },
+  { id: 'archive', label: 'Archive' }, { id: 'delete', label: 'Delete', shortcut: '⌘ ⌫' },
 ]
 
-export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, actionOptions, onAction, onAskFlow, onClear }: MyIssuesBulkActionBarProps) {
+export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, actionOptions, onAction, onAskFlow, onClear, destructiveActions = [] }: MyIssuesBulkActionBarProps) {
+  const availableActions = actions.filter(action => (action.id !== 'archive' && action.id !== 'delete') || destructiveActions.includes(action.id))
   const directory = usePeopleDirectory()
   const [open, setOpen] = useState(false)
   const [pendingAction, setPendingAction] = useState<MyIssuesBulkAction>()
@@ -61,7 +65,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
         <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
         <Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pendingAction
           ? actionOptions?.(pendingAction)?.map(option => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span></Command.Item></PersonHover> })
-          : actions.map(action => <Command.Item key={action.id} value={action.label} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
+          : availableActions.map(action => <Command.Item key={action.id} value={action.label} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
       </Command>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
     <AgentChatPanel issues={agentIssues} onClose={()=>{setAgentOpen(false);setAgentIssues([])}} open={agentOpen}/>

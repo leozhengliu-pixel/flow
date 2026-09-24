@@ -5002,6 +5002,19 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		changes["nextOccurrenceAt"] = *input.NextOccurrenceAt
 	}
+	if input.SnoozedUntil != nil {
+		if strings.TrimSpace(*input.SnoozedUntil) == "" {
+			issue.SnoozedUntil = nil
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *input.SnoozedUntil)
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid snooze time", errInvalid)
+			}
+			parsed = parsed.UTC()
+			issue.SnoozedUntil = &parsed
+		}
+		changes["snoozedUntil"] = *input.SnoozedUntil
+	}
 	if input.LabelIDs != nil {
 		issue.Labels = labelsByIDForResource(data, *input.LabelIDs, "issue")
 		if len(issue.Labels) != len(*input.LabelIDs) {

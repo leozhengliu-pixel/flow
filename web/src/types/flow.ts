@@ -349,6 +349,10 @@ export interface Issue {
   parentId?: UUID;
   recurrence?: "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
+  /** Triage snooze: hidden from the triage queue until this time. */
+  snoozedUntil?: string;
+  /** Explicit shares (user / team / workspace grants) for private-team issues. */
+  permissions?: { subjectType: string; subjectId: string; role?: string }[];
   subscriberIds: UUID[];
   reactions: Record<string, UUID[]>;
   subIssueIds: UUID[];
@@ -1905,6 +1909,8 @@ export interface TeamSettings {
   progressOrder: "first" | "last" | "noAction";
   releaseAutomations: TeamAutomationRule[];
   triageEnabled: boolean;
+  /** Team default display options per issue view (all / active / backlog / board). */
+  issueViewDefaults?: Record<string, Record<string, unknown>>;
   triageRequirePriority: boolean;
   triageAction: string;
   triageRules: TeamAutomationRule[];
@@ -1920,8 +1926,10 @@ export interface TeamSettings {
   parentTeamId?: UUID;
 }
 export interface TeamSettingsMutationInput extends Partial<
-  Omit<TeamSettings, "teamId">
+  Omit<TeamSettings, "teamId" | "issueViewDefaults">
 > {
+  /** null clears a view's team default. */
+  issueViewDefaults?: Record<string, Record<string, unknown> | null>;
   identifier?: string;
   applyToSubTeams?: boolean;
 }
@@ -2188,6 +2196,8 @@ export interface IssueUpdateInput {
   archived?: boolean;
   recurrence?: "" | "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
+  /** RFC3339 time, or "" to clear. */
+  snoozedUntil?: string;
   parentId?: string;
   sortOrder?: number;
 }

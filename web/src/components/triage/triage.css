@@ -322,3 +322,28 @@
     overflow: auto;
   }
 }
+
+/* Shared-row triage list header, controls and the Decline / Duplicate / Snooze actions. */
+.flow-triage-list__title{display:flex;align-items:center;gap:8px}
+.flow-triage-list__title span{color:var(--issue-muted);font-size:12px}
+.flow-triage-list__title>button,.flow-triage-list__icon{margin-left:auto}
+.flow-triage-list__icon{width:28px;height:28px;display:grid;place-items:center;border:.5px solid transparent;border-radius:9999px;background:var(--bg-subtle);color:var(--issue-muted)}
+.flow-triage-list__controls{display:flex;align-items:center;justify-content:space-between;gap:12px;color:var(--issue-muted);font-size:12px}
+.flow-triage-list__controls label{display:flex;align-items:center;gap:8px}
+.flow-triage-list__rows{min-height:0;flex:1;overflow:auto}
+.flow-triage-detail{min-height:0;height:100%;display:flex;flex-direction:column;overflow:auto}
+.flow-triage-detail__snoozed{margin:0 20px 16px;color:var(--issue-muted);font-size:12px}
+.flow-triage-actions{display:flex;justify-content:flex-end;gap:6px;padding:0 20px 20px}
+.flow-triage-actions__button{height:28px;display:flex;align-items:center;gap:6px;padding:0 10px;border:.5px solid var(--border);border-radius:9999px;background:transparent;color:var(--text);font-size:12px;cursor:pointer}
+.flow-triage-actions__button:hover,.flow-triage-actions__button[data-state=open]{background:var(--bg-active)}
+.flow-triage-actions__button kbd{min-width:16px;height:16px;display:grid;place-items:center;border-radius:4px;background:var(--bg-subtle);color:var(--issue-muted);font:500 10px/1 inherit}
+.flow-triage-actions__button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.flow-triage-actions__popover{z-index:650;width:300px;display:flex;flex-direction:column;gap:8px;padding:10px;border:.5px solid var(--popover-border);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--text);font-size:13px}
+.flow-triage-actions__hint{margin:0;color:var(--issue-muted);font-size:12px}
+.flow-triage-actions__popover textarea,.flow-triage-actions__search input{width:100%;box-sizing:border-box;padding:6px 8px;border:.5px solid var(--border);border-radius:8px;background:transparent;color:var(--text);font:inherit;resize:vertical}
+.flow-triage-actions__confirm{align-self:flex-end;height:28px;display:flex;align-items:center;gap:6px;padding:0 12px;border:0;border-radius:9999px;background:var(--bg-active);color:var(--text);cursor:pointer}
+.flow-triage-actions__confirm.is-danger{color:var(--semantic-danger-text)}
+.flow-triage-actions__search [role=listbox],.flow-triage-actions__presets{display:flex;flex-direction:column;margin-top:4px}
+.flow-triage-actions__search [role=option],.flow-triage-actions__presets button{height:30px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+.flow-triage-actions__search [aria-selected=true],.flow-triage-actions__search [role=option]:hover,.flow-triage-actions__presets button:hover{background:var(--bg-active)}
+.flow-triage-actions__presets small{color:var(--issue-muted);font-size:12px}

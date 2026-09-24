@@ -5,7 +5,8 @@ import { consolidateFilters, toggleFilterOption, updateFilterOperator, updateFil
 import type { MyIssuesGroupData, MyIssuesRowData } from './my-issues-list'
 import { useMyIssuesSelection } from './use-my-issues-state'
 import type { MyIssuesDisplayOptions, MyIssuesProperty, MyIssuesView } from './my-issues-surface'
-import { matchesExplorerFilter, nestedIssueProjection } from '@/components/issue-explorer/issue-explorer-model'
+import { matchesExplorerFilter } from '@/components/issue-explorer/issue-explorer-model'
+import { buildIssueGroups, type IssueGroupingContext } from '@/components/issue-explorer/issue-grouping'
 
 export interface MyIssuesControllerAdapter {
   navigate: (href: string) => void
@@ -23,9 +24,11 @@ export interface MyIssuesControllerOptions {
   initialFilters?: MyIssuesAppliedFilter[]
   adapter: MyIssuesControllerAdapter
   drillRows?: MyIssuesRowData[]
+  /** Workspace context for status order, cycle and release groupings. */
+  groupingContext?: IssueGroupingContext
 }
 
-export function useMyIssuesController({ workspaceSlug, initialView, initialGroups, initialDisplay, initialFilters = [], adapter, drillRows }: MyIssuesControllerOptions) {
+export function useMyIssuesController({ workspaceSlug, initialView, initialGroups, initialDisplay, initialFilters = [], adapter, drillRows, groupingContext }: MyIssuesControllerOptions) {
   const [view, setView] = useState(initialView)
   const [groups, setGroups] = useState(initialGroups)
   const [filters, setFilters] = useState(() => readFilters(workspaceSlug, initialView, initialFilters))
@@ -38,7 +41,7 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
   const [bulkError, setBulkError] = useState<string>()
   const displayRequest = useRef(0)
   useEffect(() => setGroups(initialGroups), [initialGroups])
-  const visibleGroups = useMemo(() => projectGroups(drillRows ? [{ id: 'insights', label: 'Issues', issues: drillRows }] : applyFilters(groups, filters), display), [display, filters, groups, drillRows])
+  const visibleGroups = useMemo(() => projectGroups(drillRows ? [{ id: 'insights', label: 'Issues', issues: drillRows }] : applyFilters(groups, filters), display, groupingContext), [display, filters, groups, drillRows, groupingContext])
   const visibleSelection = useMyIssuesSelection(visibleGroups)
   const summary = useMemo(() => deriveSummary(visibleGroups), [visibleGroups])
   const counts = useMemo(() => ({ [view]: visibleGroups.reduce((total, group) => total + group.issues.length, 0) }) as Partial<Record<MyIssuesView, number>>, [view, visibleGroups])
@@ -114,64 +117,12 @@ function applyFilters(groups: MyIssuesGroupData[], filters: MyIssuesAppliedFilte
   return groups.map(group => ({ ...group, issues: group.issues.filter(issue => filters.every(filter => matchesExplorerFilter(issue, filter))) })).filter(group => group.issues.length)
 }
 
-function projectGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions): MyIssuesGroupData[] {
-  const completedCutoff = completedCutoffDate(display.completedWindow)
-  let issues = groups.flatMap(group => group.issues)
+function projectGroups(groups: MyIssuesGroupData[], display: MyIssuesDisplayOptions, context?: IssueGroupingContext): MyIssuesGroupData[] {
+  // Rows can appear in several source groups (for example multi-label); project each issue once.
+  const seen = new Set<string>()
+  let issues = groups.flatMap(group => group.issues).filter(issue => !seen.has(issue.id) && Boolean(seen.add(issue.id)))
   if (!display.nestedSubIssues) issues = issues.filter(issue => issue.viewMatch !== false)
-  issues = issues.filter(issue => {
-    if (!display.showSubIssues && issue.parentId) return false
-    if (display.completedWindow === 'none' && (issue.state.type === 'completed' || issue.state.type === 'canceled')) return false
-    if (display.completedWindow === 'all' || display.completedWindow === 'currentCycle' || (issue.state.type !== 'completed' && issue.state.type !== 'canceled')) return true
-    return new Date(issue.updatedAt).getTime() >= completedCutoff
-  })
-  issues = [...issues].sort(issueComparator(display.ordering, display.orderCompletedByRecency))
-  const nested = display.nestedSubIssues ? nestedIssueProjection(issues) : undefined
-  if (nested) issues = nested.rows
-  if (display.grouping === 'none') return [{ id: 'all-issues', label: 'All issues', issues }]
-
-  const projected = new Map<string, MyIssuesGroupData>()
-  for (const issue of issues) {
-    const group = groupForIssue(nested?.roots.get(issue.id) ?? issue, display.grouping)
-    const current = projected.get(group.id) ?? { ...group, issues: [] }
-    current.issues.push(issue)
-    projected.set(group.id, current)
-  }
-  const grouped = [...projected.values()]
-  return display.groupOrder === 'desc' ? grouped.reverse() : grouped
-}
-
-function groupForIssue(issue: MyIssuesRowData, grouping: MyIssuesDisplayOptions['grouping']): Omit<MyIssuesGroupData, 'issues'> {
-  if (grouping === 'status' || grouping === 'focus') {
-    const focused = grouping === 'focus' && issue.state.type === 'started'
-    return { id: focused ? 'other-active' : issue.state.id, label: focused ? 'Other active' : issue.state.name, stateType: issue.state.type, state: issue.state, createContext: focused ? undefined : { stateId: issue.state.id } }
-  }
-  if (grouping === 'priority') return { id: `priority-${issue.priority}`, label: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][issue.priority], createContext: { priority: issue.priority } }
-  if (grouping === 'project') return { id: `project-${issue.project?.id ?? 'none'}`, label: issue.project?.name ?? 'No project', createContext: issue.project ? { projectId: issue.project.id } : { projectId: '' } }
-  if (grouping === 'assignee') return { id: `assignee-${issue.assignee?.id ?? 'none'}`, label: issue.assignee?.name ?? 'No assignee', createContext: { assigneeId: issue.assignee?.id ?? '' } }
-  if (grouping === 'label') {
-    const label = issue.labels?.[0]
-    return { id: `label-${label?.id ?? 'none'}`, label: label?.name ?? 'No label', createContext: { labelIds: label ? [label.id] : [] } }
-  }
-  if (grouping === 'cycle') return { id: `cycle-${issue.cycleId ?? 'none'}`, label: issue.cycleName ?? 'No cycle', createContext: { cycleId: issue.cycleId ?? '' } }
-  if (grouping === 'team') return { id: `team-${issue.teamId ?? 'none'}`, label: issue.teamName ?? 'No team', createContext: { teamId: issue.teamId } }
-  if (grouping === 'agent') return { id: `agent-${issue.agentSessionId ?? 'none'}`, label: issue.agentSessionId ? 'Agent session' : 'No agent', createContext: { } }
-  return { id: `${grouping}-none`, label: grouping[0].toUpperCase() + grouping.slice(1) }
-}
-
-function issueComparator(ordering: MyIssuesDisplayOptions['ordering'], completedByRecency: boolean) {
-  return (left: MyIssuesRowData, right: MyIssuesRowData) => {
-    const bothCompleted = ['completed', 'canceled'].includes(left.state.type) && ['completed', 'canceled'].includes(right.state.type)
-    if (completedByRecency && bothCompleted) return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-    if (ordering === 'created') return Date.parse(right.createdAt) - Date.parse(left.createdAt)
-    if (ordering === 'updated') return Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
-    if (ordering === 'priority') return left.priority - right.priority || (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
-    return (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
-  }
-}
-
-function completedCutoffDate(window: MyIssuesDisplayOptions['completedWindow']) {
-  const days = window === 'pastDay' ? 1 : window === 'pastWeek' ? 7 : window === 'pastMonth' ? 30 : 0
-  return Date.now() - days * 86_400_000
+  return buildIssueGroups(issues, display, context)
 }
 
 function displayKey(workspace: string, view: MyIssuesView) { return `${workspace}:my-issues:${view}:display` }
