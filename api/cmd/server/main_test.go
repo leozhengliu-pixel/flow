@@ -625,6 +625,16 @@ func TestIssueOptionsPersistence(t *testing.T) {
 	if updated.Recurrence != "weekly" || updated.NextOccurrenceAt == nil || !updated.NextOccurrenceAt.Equal(nextOccurrence) {
 		t.Fatalf("recurrence was not returned: %#v", updated)
 	}
+	snoozeUntil := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
+	snoozed := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"snoozedUntil": snoozeUntil.Format(time.RFC3339)}, http.StatusOK)
+	if snoozed.SnoozedUntil == nil || !snoozed.SnoozedUntil.Equal(snoozeUntil) {
+		t.Fatalf("snooze was not stored: %#v", snoozed.SnoozedUntil)
+	}
+	unsnoozed := requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"snoozedUntil": ""}, http.StatusOK)
+	if unsnoozed.SnoozedUntil != nil {
+		t.Fatalf("snooze was not cleared: %#v", unsnoozed.SnoozedUntil)
+	}
+	requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"snoozedUntil": "tomorrow"}, http.StatusBadRequest)
 
 	link := requestJSON[domain.Attachment](t, handler, http.MethodPost, "/api/issues/"+issue.ID+"/links", map[string]any{
 		"url": "https://example.test/docs", "title": "Reference docs",
