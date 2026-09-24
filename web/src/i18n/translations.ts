@@ -1,4 +1,10 @@
 export const zhCN: Record<string, string> = {
+  "Save as team default": "保存为团队默认",
+  "Reset to team default": "恢复团队默认",
+  "Groups": "分组",
+  "Show group": "显示分组",
+  "Hide group": "隐藏分组",
+  "Empty groups are hidden": "空分组已隐藏",
   "Shared with me": "与我共享",
   "Show triage issues": "显示分诊事项",
   "Show sub-team issues": "显示子团队事项",
