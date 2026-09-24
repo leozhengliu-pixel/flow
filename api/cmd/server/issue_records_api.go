@@ -683,5 +683,14 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 			return false
 		}
 	}
+	if input.SnoozedUntil != nil {
+		current := ""
+		if issue.SnoozedUntil != nil {
+			current = issue.SnoozedUntil.UTC().Format(time.RFC3339)
+		}
+		if strings.TrimSpace(*input.SnoozedUntil) != current {
+			return false
+		}
+	}
 	return true
 }
