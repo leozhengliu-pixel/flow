@@ -1456,6 +1456,17 @@ export interface Subscription {
   events?: string[];
   createdAt: string;
 }
+/** A user's explicit choice for one comment thread (root comment and replies). Participants follow threads implicitly. */
+export interface ThreadSubscription {
+  id: UUID;
+  userId: UUID;
+  issueId: UUID;
+  commentId: UUID;
+  state: ThreadSubscriptionState;
+  createdAt: string;
+  updatedAt: string;
+}
+export type ThreadSubscriptionState = "subscribed" | "muted";
 export interface AuditLogEntry {
   id: UUID;
   actor: User;
@@ -1804,6 +1815,7 @@ export interface BootstrapData {
   favorites: Favorite[];
   favoriteFolders: FavoriteFolder[];
   subscriptions: Subscription[];
+  threadSubscriptions?: ThreadSubscription[];
   auditLog: AuditLogEntry[];
   trash: TrashEntry[];
   importJobs: ImportJob[];
