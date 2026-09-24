@@ -222,6 +222,10 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.SessionDurationDays < 1 || input.SessionDurationDays > 365 {
 			return errInvalid
 		}
+		if input.WelcomeMessage != data.WorkspaceSettings.WelcomeMessage || input.WelcomeMessageTitle != data.WorkspaceSettings.WelcomeMessageTitle {
+			editedAt := time.Now().UTC()
+			input.WelcomeMessageEditedByID, input.WelcomeMessageEditedAt = data.Viewer.ID, &editedAt
+		}
 		input.AllowedDomains = normalizedStrings(input.AllowedDomains)
 		for index := range input.AllowedDomains {
 			input.AllowedDomains[index] = strings.ToLower(strings.TrimPrefix(input.AllowedDomains[index], "@"))

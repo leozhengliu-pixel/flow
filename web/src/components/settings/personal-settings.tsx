@@ -3706,67 +3706,78 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
       >
         {p("Agent personalization")}
       </PersonalPageTitle>
-      <PersonalSection
-        title={p("Guidance")}
-        description={p(
-          "Provide personal instructions and context for Flow Agent when responding to conversations",
-        )}
-      >
-        <textarea
-          className="personal-agent-guidance"
-          aria-label={p("AI prompt rules")}
-          placeholder={p("Enter personal guidance for Flow Agent (optional)…")}
-          maxLength={4000}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            if (dirty) setValue("agentInstructions", draft);
-          }}
-        />
-      </PersonalSection>
-      <PersonalSection
-        title={p("Skills")}
-        description={p(
-          "Reusable prompts auto-selected by the agent or invoked via slash commands",
-        )}
-        action={
-          <NavLink
-            className="personal-skill-create"
-            to={newAgentSkillPath(data.workspace.urlKey)}
-            aria-label={p("Create skill")}
+      <PersonalSection grouped className="personal-agent-groups">
+        <SettingsGroup
+          title={p("Guidance")}
+          description={p(
+            "Provide personal instructions and context for Flow Agent when responding to conversations",
+          )}
+        >
+          <textarea
+            className="personal-agent-guidance"
+            aria-label={p("AI prompt rules")}
+            placeholder={p("Enter personal guidance for Flow Agent (optional)…")}
+            maxLength={4000}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              if (dirty) setValue("agentInstructions", draft);
+            }}
+          />
+        </SettingsGroup>
+        <SettingsGroup
+          title={p("Skills")}
+          description={p(
+            "Reusable prompts auto-selected by the agent or invoked via slash commands",
+          )}
+        >
+          {data.agentSkills.length > 0 && (
+            <div className="personal-agent-skills">
+              {data.agentSkills.map((skill) => (
+                <NavLink
+                  data-i18n-ignore
+                  key={skill.id}
+                  to={agentSkillPath(data.workspace.urlKey, skill.id)}
+                >
+                  <Bot />
+                  <span>
+                    <strong>{skill.name}</strong>
+                    <small>{skill.instructions}</small>
+                  </span>
+                </NavLink>
+              ))}
+            </div>
+          )}
+          <PersonalRow
+            className="settings-row--action"
+            title={data.agentSkills.length ? "" : p("No skills created")}
           >
-            <Plus size={14} />
-          </NavLink>
-        }
-      >
-        <div className="personal-agent-skills">
-          {data.agentSkills.map((skill) => (
             <NavLink
-              data-i18n-ignore
-              key={skill.id}
-              to={agentSkillPath(data.workspace.urlKey, skill.id)}
+              className="personal-skill-create"
+              to={newAgentSkillPath(data.workspace.urlKey)}
+              aria-label={p("Create skill")}
             >
-              <Bot />
-              <span>
-                <strong>{skill.name}</strong>
-                <small>{skill.instructions}</small>
-              </span>
+              <Plus size={14} />
             </NavLink>
-          ))}
-        </div>
-      </PersonalSection>
-      {data.workspaceSettings?.mcpConnectorsEnabled ? <ApplicationPolicySettings admin={false} /> : <PersonalSection
-        title={p("MCP connectors")}
-        description={p(
-          "Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings.",
+          </PersonalRow>
+        </SettingsGroup>
+        {data.workspaceSettings?.mcpConnectorsEnabled ? (
+          <ApplicationPolicySettings admin={false} />
+        ) : (
+          <SettingsGroup
+            title={p("MCP connectors")}
+            description={p(
+              "Add MCP connectors for use with Flow Agent. Workspace admins can manage available connectors in security settings.",
+            )}
+          >
+            <PersonalRow className="settings-row--action" title={p("Agent MCP access disabled in this workspace")}>
+              {(data.viewerRole === "admin" || data.viewerRole === "owner") && (
+                <Action onClick={() => onNavigate("security")}>{p("Configure")}</Action>
+              )}
+            </PersonalRow>
+          </SettingsGroup>
         )}
-      >
-        <PersonalRow title={p("Agent MCP access disabled in this workspace")}>
-          {(data.viewerRole==='admin'||data.viewerRole==='owner')&&<Action onClick={() => onNavigate("security")}>
-            {p("Configure")}
-          </Action>}
-        </PersonalRow>
-      </PersonalSection>}
+      </PersonalSection>
     </>
   );
 }

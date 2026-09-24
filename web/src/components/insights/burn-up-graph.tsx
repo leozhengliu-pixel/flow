@@ -18,6 +18,7 @@ export function BurnUpGraph({
   compact = false,
   measure = 'issue_count',
   activeTick,
+  unestimatedValue = 0,
 }: {
   cycle: Cycle
   issues: Issue[]
@@ -25,8 +26,10 @@ export function BurnUpGraph({
   measure?: BurnUpMeasure
   /** Optional override for legend hover tick (day index). */
   activeTick?: number
+  /** Points an unestimated issue contributes when measuring by estimate. */
+  unestimatedValue?: number
 }) {
-  const series = computeBurnUpSeries(cycle, issues, { measure })
+  const series = computeBurnUpSeries(cycle, issues, { measure, unestimatedValue })
   const tick = activeTick ?? series.activeTickIndex
   const point = series.days[tick] ?? series.days.at(-1)
   const width = 594
