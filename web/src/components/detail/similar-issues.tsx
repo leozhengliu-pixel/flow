@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { Copy } from 'lucide-react'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import type { Issue } from '@/types/flow'
@@ -39,7 +40,7 @@ export function SimilarIssues({ issue, issues, onOpen, onMarkDuplicate }: { issu
     {matches.map(({ candidate }) => <div className="linked-issue similar-issue-row" key={candidate.id}>
       <StatusIcon state={candidate.state} size={14}/>
       <button type="button" className="similar-issue-open" onClick={() => onOpen(candidate)}><strong data-i18n-ignore>{candidate.identifier}</strong><span data-i18n-ignore>{candidate.title}</span></button>
-      <button type="button" className="similar-issue-duplicate" onClick={() => onMarkDuplicate(candidate)} title={`Mark as duplicate of ${candidate.identifier}`}><Copy size={12}/>Mark as duplicate</button>
+      <FlowTooltip label={`Mark as duplicate of ${candidate.identifier}`}><button type="button" className="similar-issue-duplicate" onClick={() => onMarkDuplicate(candidate)}><Copy size={12}/>Mark as duplicate</button></FlowTooltip>
     </div>)}
   </section>
 }

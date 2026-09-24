@@ -1,4 +1,5 @@
 import { type ComponentPropsWithRef, type ReactNode } from 'react'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { Virtuoso } from 'react-virtuoso'
 import { Link2 } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
@@ -161,9 +162,7 @@ export function IssueExplorerSurface({
             ) : (
               savedViews.map(renderSavedView)
             )}
-            <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}>
-              <AddViewIcon />
-            </button>
+            <FlowTooltip label="Add new view" shortcut="⌥ V"><button className={styles.addView} type="button" aria-label="Add new view" onClick={onAddView}><AddViewIcon /></button></FlowTooltip>
           </nav>
         )
       }
