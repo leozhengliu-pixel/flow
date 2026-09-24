@@ -17,7 +17,28 @@ var issueAttributeFields = map[string]bool{
 	"projectMilestoneId": true, "estimate": true, "dueDate": true,
 	"completedAt": true, "canceledAt": true, "startedAt": true,
 	"templateId": true, "externalSource": true, "delegateId": true,
-	"firstLabel": true,
+	"firstLabel": true, "agentSessionId": true, "addedToCycle": true,
+	"hasLinks": true, "autoClosed": true, "triagedAt": true, "statusChangedAt": true,
+}
+
+// Multi-valued properties are indexed as one presence row per value
+// ("relation:blocked_by", "suggestedLabel:<id>") so filters stay index lookups.
+var issueAttributePrefixes = []string{"relation:", "suggestedLabel:"}
+
+// issueAttributeVersion is stored in issue_attribute_migrations.complete; bump it
+// when issueAttributes gains fields so existing issues are re-indexed once.
+const issueAttributeVersion = 2
+
+func isIssueAttributeField(field string) bool {
+	if issueAttributeFields[field] {
+		return true
+	}
+	for _, prefix := range issueAttributePrefixes {
+		if strings.HasPrefix(field, prefix) && len(field) > len(prefix) && len(field) <= 191 {
+			return true
+		}
+	}
+	return false
 }
 
 func issueAttributes(issue domain.Issue) map[string]string {
@@ -47,6 +68,29 @@ func issueAttributes(issue domain.Issue) map[string]string {
 	if len(issue.Labels) > 0 {
 		values["firstLabel"] = issue.Labels[0].ID
 	}
+	if issue.AgentSessionID != "" {
+		values["agentSessionId"] = issue.AgentSessionID
+	}
+	if issue.AddedToCycle != "" {
+		values["addedToCycle"] = issue.AddedToCycle
+	}
+	if len(issue.Attachments) > 0 {
+		values["hasLinks"] = "true"
+	}
+	if issue.AutoClosed {
+		values["autoClosed"] = "true"
+	}
+	for field, value := range map[string]*time.Time{"triagedAt": issue.TriagedAt, "statusChangedAt": issue.StatusChangedAt} {
+		if value != nil {
+			values[field] = value.UTC().Format(issueRecordTimestamp)
+		}
+	}
+	for _, relation := range issue.Relations {
+		values["relation:"+relation.Type] = "true"
+	}
+	for _, id := range issue.SuggestedLabelIDs {
+		values["suggestedLabel:"+id] = "true"
+	}
 	return values
 }
 
@@ -73,8 +117,15 @@ func (s *SQLiteStore) migrateIssueAttributes(ctx context.Context) error {
 			if err := s.db.QueryRowContext(ctx, `SELECT last_id,complete FROM issue_attribute_migrations WHERE workspace_key=?`, workspace).Scan(&last, &complete); err != nil {
 				return err
 			}
-			if complete == 1 {
+			if complete >= issueAttributeVersion {
 				break
+			}
+			if complete > 0 {
+				// Indexed by an older attribute version: re-index from the start.
+				if _, err := s.db.ExecContext(ctx, `UPDATE issue_attribute_migrations SET last_id='',complete=0 WHERE workspace_key=?`, workspace); err != nil {
+					return err
+				}
+				last, complete = "", 0
 			}
 			// The checkpoint and sparse rows commit together, so interrupted upgrades
 			// resume without retaining a workspace-sized array or restarting the scan.
@@ -113,7 +164,7 @@ func (s *SQLiteStore) migrateIssueAttributes(ctx context.Context) error {
 					last = batch[len(batch)-1].ID
 				}
 				if len(batch) < 250 {
-					complete = 1
+					complete = issueAttributeVersion
 				}
 				_, err = tx.ExecContext(ctx, `UPDATE issue_attribute_migrations SET last_id=?,complete=? WHERE workspace_key=?`, last, complete, workspace)
 				return err

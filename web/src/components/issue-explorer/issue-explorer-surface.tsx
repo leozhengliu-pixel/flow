@@ -1,8 +1,9 @@
 import { type ComponentPropsWithRef, type ReactNode } from 'react'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { Virtuoso } from 'react-virtuoso'
 import { Link2 } from 'lucide-react'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
-import { MyIssuesDisplayMenu } from '@/components/my-issues/my-issues-display-menu'
+import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
@@ -31,7 +32,7 @@ const SAVED_VIEW_VIRTUALIZATION_THRESHOLD = 40
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar,
+  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, displayMenuProps, resourceHeader,
 }: {
   children: ReactNode
   scopeName: string
@@ -64,6 +65,9 @@ export function IssueExplorerSurface({
   onSavedViewSelect?: (view: SavedView) => void
   onToggleFavorite?: () => void
   onOpenSidebar?: () => void
+  displayMenuProps?: Partial<Omit<MyIssuesDisplayMenuProps, 'open' | 'onOpenChange' | 'options' | 'onChange'>>
+  /** Titled resource views (label, member, customer…) instead of the team/workspace breadcrumb and tabs. */
+  resourceHeader?: { icon?: ReactNode; title: ReactNode; actions?: ReactNode; tabs?: { id: string; label: string; href: string; active: boolean; onSelect: () => void }[] }
 }) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
@@ -95,6 +99,8 @@ export function IssueExplorerSurface({
             </>
           }
         />
+      ) : resourceHeader ? (
+        <NewContentViewHeaderTitle icon={resourceHeader.icon} title={resourceHeader.title} actions={resourceHeader.actions} />
       ) : (
         <ContentViewHeaderBreadcrumb
           items={[
@@ -120,7 +126,11 @@ export function IssueExplorerSurface({
             <button className={`${styles.tab} ui-pill`} data-active="true" type="button">Issues</button>
             <button className={`${styles.tab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>Projects</button>
           </nav>
-        ) : savedView ? (
+        ) : resourceHeader?.tabs ? (
+          <nav className={styles.tabs} aria-label="Views">
+            {resourceHeader.tabs.map(tab => <a key={tab.id} href={tab.href} className={`${styles.tab} ui-pill`} data-active={tab.active} aria-current={tab.active ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); tab.onSelect() }}>{tab.label}</a>)}
+          </nav>
+        ) : savedView || resourceHeader ? (
           <span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span>
         ) : (
           <nav className={styles.tabs} aria-label={`${scopeName} issue views`}>
@@ -152,16 +162,14 @@ export function IssueExplorerSurface({
             ) : (
               savedViews.map(renderSavedView)
             )}
-            <button className={styles.addView} type="button" aria-label="Add new view" title="Add new view" onClick={onAddView}>
-              <AddViewIcon />
-            </button>
+            <FlowTooltip label="Add new view" shortcut="⌥ V"><button className={styles.addView} type="button" aria-label="Add new view" onClick={onAddView}><AddViewIcon /></button></FlowTooltip>
           </nav>
         )
       }
       end={
         <ToolbarButtonsNavigation className={styles.actions}>
           <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon /></ToolbarButton>} />
-          <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
+          <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
           <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
           </ToolbarButton>
