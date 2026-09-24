@@ -1641,7 +1641,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 			updated.SecretHash = secretHash(secret)
 		}
 		if updated.Name == "" {
-			updated.Name = strings.ToUpper(provider[:1]) + provider[1:]
+			updated.Name = integrationDisplayName(provider)
 		}
 		if index >= 0 {
 			updated.CreatedAt = data.IntegrationConnections[index].CreatedAt
@@ -1714,9 +1714,11 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		query.Set("response_type", "code")
 		query.Set("state", state)
 		scopes := connection.Scopes
-		if len(scopes) == 0 && provider == "figma" {
-			scopes = []string{"file_content:read", "file_metadata:read"}
-			connection.Scopes = scopes
+		if len(scopes) == 0 {
+			if defaults := defaultIntegrationOAuthScopes(provider); len(defaults) > 0 {
+				scopes = defaults
+				connection.Scopes = scopes
+			}
 		}
 		if len(scopes) > 0 {
 			query.Set("scope", strings.Join(scopes, " "))
@@ -1724,6 +1726,9 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		if provider == "jira" && strings.TrimSpace(connection.Config["mode"]) != "custom_personal" {
 			query.Set("audience", "api.atlassian.com")
 			query.Set("prompt", "consent")
+		}
+		if provider == "microsoftteams" {
+			query.Set("response_mode", "query")
 		}
 		u.RawQuery = query.Encode()
 		result = map[string]string{"provider": provider, "connectionId": connection.ID, "state": state, "authorizationURL": u.String()}
@@ -1816,7 +1821,7 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 	access, refresh, expiresIn := "", "", int64(0)
 	if providerError == "" && code != "" {
 		var exchangeErr error
-		access, refresh, expiresIn, exchangeErr = exchangeIntegrationToken(r.Context(), oauthConfig.TokenURL, oauthConfig, code, s.authDisabled)
+		access, refresh, expiresIn, exchangeErr = exchangeIntegrationToken(r.Context(), provider, oauthConfig.TokenURL, oauthConfig, code, s.authDisabled)
 		if exchangeErr != nil {
 			providerError = exchangeErr.Error()
 		}
@@ -1894,21 +1899,31 @@ func (s *server) finishIntegrationOAuthJSON(w http.ResponseWriter, r *http.Reque
 	s.finishIntegrationOAuth(w, r)
 }
 
-func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integrationOAuthConfig, code string, allowLocal bool) (string, string, int64, error) {
+func exchangeIntegrationToken(ctx context.Context, provider, tokenURL string, config integrationOAuthConfig, code string, allowLocal bool) (string, string, int64, error) {
 	local := allowLocal && safeLocalDevelopmentURL(tokenURL)
 	if !local && !safeOutboundHTTPS(ctx, tokenURL) {
 		return "", "", 0, errors.New("unsafe OAuth token endpoint")
 	}
-	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {config.ClientID}, "redirect_uri": {config.RedirectURI}}
+	values := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {config.RedirectURI}}
 	secret := config.ClientSecret
-	if secret != "" {
-		values.Set("client_secret", secret)
+	useBasic := strings.EqualFold(provider, "front")
+	if !useBasic {
+		values.Set("client_id", config.ClientID)
+		if secret != "" {
+			values.Set("client_secret", secret)
+		}
+	} else {
+		// Front requires HTTP Basic with client_id:client_secret (LS-0278).
+		values.Set("client_id", config.ClientID)
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(values.Encode()))
 	if err != nil {
 		return "", "", 0, fmt.Errorf("OAuth token exchange failed: %w", err)
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if useBasic {
+		request.SetBasicAuth(config.ClientID, secret)
+	}
 	client := secureOutboundClient(15 * time.Second)
 	if local {
 		client = &http.Client{Timeout: 15 * time.Second}
@@ -1958,9 +1973,15 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnprocessableEntity, "unsafe OAuth token endpoint")
 		return
 	}
-	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}, "client_id": {oauthConfig.ClientID}}
-	if oauthConfig.ClientSecret != "" {
-		values.Set("client_secret", oauthConfig.ClientSecret)
+	values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {snapshot.OAuthRefreshToken}}
+	useBasic := strings.EqualFold(provider, "front")
+	if !useBasic {
+		values.Set("client_id", oauthConfig.ClientID)
+		if oauthConfig.ClientSecret != "" {
+			values.Set("client_secret", oauthConfig.ClientSecret)
+		}
+	} else {
+		values.Set("client_id", oauthConfig.ClientID)
 	}
 	request, requestErr := http.NewRequestWithContext(r.Context(), http.MethodPost, oauthConfig.TokenURL, strings.NewReader(values.Encode()))
 	if requestErr != nil {
@@ -1968,6 +1989,9 @@ func (s *server) refreshIntegrationOAuth(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if useBasic {
+		request.SetBasicAuth(oauthConfig.ClientID, oauthConfig.ClientSecret)
+	}
 	client := secureOutboundClient(15 * time.Second)
 	if s.authDisabled && safeLocalDevelopmentURL(oauthConfig.TokenURL) {
 		client = &http.Client{Timeout: 15 * time.Second}
