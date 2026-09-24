@@ -15,7 +15,7 @@ import {
   ToolbarButtonsNavigation,
 } from '@/components/content-view'
 
-export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity'
+export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity' | 'shared'
 export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'activityDate' | 'none'
 export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 'priority' | 'estimate' | 'created' | 'updated' | 'myActivity' | 'dueDate' | 'linkCount' | 'customerCount' | 'customerRevenue' | 'timeInStatus'
 export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'sla' | 'estimate' | 'release' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'myActivity' | 'created' | 'updated' | 'pullRequests'
@@ -75,6 +75,7 @@ const views: { id: MyIssuesView; label: string }[] = [
   { id: 'created', label: 'Created' },
   { id: 'subscribed', label: 'Subscribed' },
   { id: 'activity', label: 'Activity' },
+  { id: 'shared', label: 'Shared with me' },
 ]
 
 const filterGroups = [

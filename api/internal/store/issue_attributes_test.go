@@ -34,8 +34,9 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 			issue.Relations = []domain.IssueRelation{{ID: "rel-" + issue.ID, Type: "blocked_by", IssueID: issue.ID, RelatedIssueID: base.ID}}
 			issue.Attachments = []domain.Attachment{{ID: "att-" + issue.ID, URL: "https://example.test"}}
 			issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs = true, "session-1", []string{"suggested"}
+			issue.Permissions = []domain.IssuePermission{{ID: "perm-" + issue.ID, IssueID: issue.ID, SubjectType: "user", SubjectID: "shared-user", Role: "viewer"}}
 		} else {
-			issue.Relations, issue.Attachments, issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs = nil, nil, false, "", nil
+			issue.Relations, issue.Attachments, issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs, issue.Permissions = nil, nil, false, "", nil, nil
 		}
 		rows[i] = issue
 	}
@@ -60,6 +61,7 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 			{IssueFilter{Field: "autoClosed", Values: []string{"true"}}, 310},
 			{IssueFilter{Field: "agentSessionId", Operator: "isNotEmpty"}, 310},
 			{IssueFilter{Field: "suggestedLabel:suggested", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "sharedWith", Values: []string{"shared-user"}}, 310},
 			{IssueFilter{Not: &IssueFilter{Or: []IssueFilter{{Field: "relation:blocked_by", Operator: "isNotEmpty"}, {Field: "hasLinks", Operator: "isNotEmpty"}}}}, 310},
 		} {
 			page, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, Filter: IssueFilter{And: []IssueFilter{{Field: "status", Values: []string{"attribute-state"}}, test.filter}}, IncludeTotal: true, Limit: 1})

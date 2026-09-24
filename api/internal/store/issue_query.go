@@ -316,6 +316,16 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 		args = append(args, values...)
 	}
 	if node.Field != "" {
+		if node.Field == "sharedWith" {
+			// Issues explicitly shared with these users (issue permission grants).
+			if len(node.Values) == 0 || len(node.Values) > 100 {
+				return "", nil, ErrIssueQuery
+			}
+			users, values := bindList("p.subject_id", node.Values)
+			clauses = append(clauses, "EXISTS (SELECT 1 FROM issue_permission_records p WHERE p.workspace_key=i.workspace_key AND p.issue_id=i.id AND p.subject_type='user' AND "+users+")")
+			args = append(args, values...)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		if node.Field == "customerId" || node.Field == "customers" {
 			clause, values, err := compileCustomerFilter(node)
 			if err != nil {
