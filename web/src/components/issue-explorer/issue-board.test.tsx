@@ -28,6 +28,27 @@ function setup(selected = false, properties = new Set<'status' | 'id' | 'cycle' 
 describe('issue board cards', () => {
   beforeEach(() => localStorage.clear())
 
+  it('selects every issue in a swimlane and collapses or expands all rows', async () => {
+    const user = userEvent.setup()
+    const other = { ...row, id: 'issue-2', identifier: 'FLOW-2', title: 'Second' }
+    const onSelectIssue = vi.fn()
+    const groups = [
+      { id: 'started::p1', label: 'Alpha', parentGroupId: 'started', parentLabel: 'In progress', issues: [row] },
+      { id: 'backlog::p1', label: 'Alpha', parentGroupId: 'backlog', parentLabel: 'Backlog', issues: [other] },
+      { id: 'started::p2', label: 'Beta', parentGroupId: 'started', parentLabel: 'In progress', issues: [] },
+    ]
+    render(<I18nProvider><IssueBoard groups={groups} selectedIds={new Set()} properties={new Set(['id'])} propertyOptions={options} onOpenIssue={vi.fn()} onSelectIssue={onSelectIssue} onMove={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getAllByRole('button', { name: 'Row options' })[0])
+    await user.click(screen.getByRole('menuitem', { name: 'Select all in row' }))
+    expect(onSelectIssue.mock.calls.map(call => call[0])).toEqual(['issue-1', 'issue-2'])
+    await user.click(screen.getAllByRole('button', { name: 'Row options' })[0])
+    await user.click(screen.getByRole('menuitem', { name: 'Collapse all rows' }))
+    expect(screen.getAllByRole('button', { name: 'Expand row' })).toHaveLength(2)
+    await user.click(screen.getAllByRole('button', { name: 'Row options' })[1])
+    await user.click(screen.getByRole('menuitem', { name: 'Expand all rows' }))
+    expect(screen.getAllByRole('button', { name: 'Collapse row' })).toHaveLength(2)
+  })
+
   it.each([false, true])('keeps the status picker visible when hovered (selected: %s)', async selected => {
     const user = userEvent.setup(); const { card } = setup(selected)
     await user.hover(card)

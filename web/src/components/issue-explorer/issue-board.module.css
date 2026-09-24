@@ -329,7 +329,8 @@
 .swimlanes{height:100%;overflow:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:8px}
 .swimlane{flex:0 0 auto}
 .swimlaneHeader{position:sticky;left:0;height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--theme-text-primary);font-size:13px;font-weight:500}
-.swimlaneHeader span:last-child{color:var(--issue-muted);font-size:12px;font-weight:400}
-.swimlaneHeader button{width:20px;height:20px;border:0;border-radius:999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
-.swimlaneHeader button[aria-expanded=false]{transform:rotate(-90deg)}
+.swimlaneHeader .swimlaneCount{color:var(--issue-muted);font-size:12px;font-weight:400}
+.columnMenuSeparator{height:1px;margin:4px 0;background:var(--theme-border-subtle)}
+.swimlaneHeader>button:first-child{width:20px;height:20px;border:0;border-radius:999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
+.swimlaneHeader>button:first-child[aria-expanded=false]{transform:rotate(-90deg)}
 .swimlaneBoard{height:min(560px,70vh)}
