@@ -330,6 +330,8 @@ export function TeamWorkflowSettings({
           team={team}
           onNavigate={onNavigate}
           onReload={onReload}
+          action={subPath}
+          onActionHandled={() => onNavigate("overview")}
         />
       )}
   {section === "agents" && <TeamAgentsSettings data={data} />}
@@ -419,15 +421,24 @@ function TeamOverview({
   team,
   onNavigate,
   onReload,
+  action,
+  onActionHandled,
 }: {
   data: BootstrapData;
   team: Team;
   onNavigate: (section: TeamSettingsSection) => void;
   onReload: () => Promise<void>;
+  /** Deep-linked action: "retire", "set-parent", "change-parent" or "remove-parent". */
+  action?: string;
+  onActionHandled: () => void;
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
   const [retireOpen, setRetireOpen] = useState(false);
+  useEffect(() => {
+    if (action === "retire" && !team.retiredAt) setRetireOpen(true);
+  }, [action, team.retiredAt]);
+  const parentAction = action === "set-parent" || action === "change-parent" ? "pick" : action === "remove-parent" ? "remove" : undefined;
   const descendantCount = Math.max(0, teamHierarchy(data.teams, data.teamSettings).subtree(team.id).size - 1);
   const retire = async () => {
     if (!team.retiredAt) {
@@ -537,7 +548,7 @@ function TeamOverview({
         title="Team hierarchy"
         description="Organize teams into a hierarchy of up to five levels."
       >
-        <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={value => { void save({parentTeamId: value}) }}/>
+        <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} action={parentAction} onActionHandled={onActionHandled} onChange={value => { void save({parentTeamId: value}) }}/>
       </TeamSection>
       <TeamSection title="Danger zone">
         <TeamRow
@@ -586,7 +597,10 @@ function TeamOverview({
       </TeamSection>
       <RetireTeamForm
         open={retireOpen}
-        onOpenChange={setRetireOpen}
+        onOpenChange={(open) => {
+          setRetireOpen(open);
+          if (!open && action === "retire") onActionHandled();
+        }}
         data={data}
         team={team}
         onReload={onReload}

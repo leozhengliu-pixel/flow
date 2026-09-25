@@ -218,6 +218,10 @@ const AsksSlackSettingsPage = lazyPage(
   () => import("./asks-settings"),
   "AsksSlackSettingsPage",
 );
+const AsksEmailIntakeDetailPage = lazyPage(
+  () => import("./asks-settings"),
+  "AsksEmailIntakeDetailPage",
+);
 const NewAsksEmailIntakePage = lazyPage(
   () => import("./asks-settings"),
   "NewAsksEmailIntakePage",
@@ -304,8 +308,9 @@ type SettingsPageProps = {
   onOpenJiraSyncEdit?: (jiraProjectId: string) => void;
   asksIntegrationId?: string;
   asksEmailIntakeMode?: "new";
+  asksEmailIntakeId?: string;
   onOpenAsksSlack?: (integrationId: string) => void;
-  onOpenAsksEmailIntake?: () => void;
+  onOpenAsksEmailIntake?: (addressId?: string) => void;
   onOpenWelcomeMessage?: () => void;
   onOpenCodingTools?: () => void;
   identityProviderId?: string;
@@ -1115,6 +1120,15 @@ function SettingsBody(
     return (
       <NewAsksEmailIntakePage
         data={props.data}
+        onBack={() => props.onNavigate("asks")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksEmailIntakeId)
+    return (
+      <AsksEmailIntakeDetailPage
+        data={props.data}
+        addressId={props.asksEmailIntakeId}
         onBack={() => props.onNavigate("asks")}
         onReload={props.onReload}
       />
