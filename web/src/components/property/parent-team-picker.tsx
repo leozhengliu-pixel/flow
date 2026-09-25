@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PropertyMenu } from './property-menu'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
@@ -7,12 +7,23 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
 import './parent-team-picker.css'
 
-export function ParentTeamPicker({ teams, settings, teamId = '', value = '', data, onChange }: {
+export function ParentTeamPicker({ teams, settings, teamId = '', value = '', data, onChange, action, onActionHandled }: {
   teams: Team[]; settings?: TeamHierarchySettings; teamId?: string; value?: string; data?: BootstrapData; onChange: (id: string) => void | Promise<void>
+  /** Deep-linked action: open the picker, or ask to remove the current parent. */
+  action?: 'pick' | 'remove'; onActionHandled?: () => void
 }) {
   const { t } = useI18n()
   const hierarchy = useMemo(() => teamHierarchy(teams, settings), [teams, settings])
   const [pendingParentId, setPendingParentId] = useState<string>()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const latest = useRef({ value, onActionHandled })
+  latest.current = { value, onActionHandled }
+  useEffect(() => {
+    if (action === 'pick') setPickerOpen(true)
+    else if (action === 'remove' && latest.current.value) setPendingParentId('')
+    else if (action === 'remove') latest.current.onActionHandled?.()
+  }, [action])
+  const finishAction = () => { if (action) onActionHandled?.() }
   const canManageTeam = useMemo(() => (candidate: Team) => {
     if (!data || data.viewerRole === 'admin' || data.viewerRole === 'owner') return true
     const ids = [candidate.id, ...(hierarchy.ancestors.get(candidate.id) ?? []).map(team => team.id)]
@@ -51,5 +62,5 @@ export function ParentTeamPicker({ teams, settings, teamId = '', value = '', dat
     return data.states.filter(state => affectedTeamIds.includes(state.teamId ?? '') && !parentStates.some(parent => parent.type === state.type && parent.name.toLowerCase() === state.name.toLowerCase())).length
   }, [affectedTeamIds, data, pendingParent, teamId])
   const selected = hierarchy.byId.get(value)
-  return <><PropertyMenu compact label={t('Parent team')} ariaLabel={t('Parent team')} selectedId={value} options={options} onChange={changeParent} searchPlaceholder={t('Set parent team…')} value={selected?.name ?? t('No parent team')} valueIsEntityName={Boolean(value)} trigger={selected ? <><TeamIcon team={selected} size={16}/><span title={hierarchy.path(value)}>{selected.name}</span></> : undefined} triggerClassName="mini-property-trigger parent-team-picker" surfaceClassName="parent-team-picker-menu"/><Dialog open={pendingParentId !== undefined} onOpenChange={open => !open && setPendingParentId(undefined)}><DialogContent className="parent-team-change-dialog"><DialogTitle>{pendingParentId ? <>{t('Set team under')} <span data-i18n-ignore>{teams.find(team => team.id === teamId)?.name ?? t('team')}</span> <span>{t('under')}</span> <span data-i18n-ignore>{pendingParent?.name ?? t('parent team')}</span></> : t('Remove parent team')}</DialogTitle><p>{pendingParentId ? t('This moves the team and its sub-teams. Members, issues, workflows, labels, templates, and cycles are synchronized with the parent team.') : t('This detaches the team and its sub-teams. Existing members and workflows are preserved, and inherited settings become independent.')}</p>{pendingParentId && <ul><li>{memberAdds} {t('members will be added to the parent team')}</li><li>{labelConflicts} {t('label names will be renamed to preserve uniqueness')}</li><li>{stateConflicts} {t('issue statuses will be mapped')}</li><li>{t('Cycle schedules will follow the parent team')}</li></ul>}<footer><button type="button" onClick={() => setPendingParentId(undefined)}>{t('Cancel')}</button><button className="primary" type="button" onClick={() => { const next = pendingParentId ?? ''; setPendingParentId(undefined); void onChange(next) }}>{pendingParentId ? t('Set parent team') : t('Remove parent team')}</button></footer></DialogContent></Dialog></>
+  return <><PropertyMenu compact label={t('Parent team')} ariaLabel={t('Parent team')} selectedId={value} options={options} onChange={changeParent} searchPlaceholder={t('Set parent team…')} value={selected?.name ?? t('No parent team')} valueIsEntityName={Boolean(value)} trigger={selected ? <><TeamIcon team={selected} size={16}/><span title={hierarchy.path(value)}>{selected.name}</span></> : undefined} triggerClassName="mini-property-trigger parent-team-picker" surfaceClassName="parent-team-picker-menu" open={pickerOpen} onOpenChange={open => { setPickerOpen(open); if (!open && action === 'pick' && pendingParentId === undefined) finishAction() }}/><Dialog open={pendingParentId !== undefined} onOpenChange={open => { if (!open) { setPendingParentId(undefined); finishAction() } }}><DialogContent className="parent-team-change-dialog"><DialogTitle>{pendingParentId ? <>{t('Set team under')} <span data-i18n-ignore>{teams.find(team => team.id === teamId)?.name ?? t('team')}</span> <span>{t('under')}</span> <span data-i18n-ignore>{pendingParent?.name ?? t('parent team')}</span></> : t('Remove parent team')}</DialogTitle><p>{pendingParentId ? t('This moves the team and its sub-teams. Members, issues, workflows, labels, templates, and cycles are synchronized with the parent team.') : t('This detaches the team and its sub-teams. Existing members and workflows are preserved, and inherited settings become independent.')}</p>{pendingParentId && <ul><li>{memberAdds} {t('members will be added to the parent team')}</li><li>{labelConflicts} {t('label names will be renamed to preserve uniqueness')}</li><li>{stateConflicts} {t('issue statuses will be mapped')}</li><li>{t('Cycle schedules will follow the parent team')}</li></ul>}<footer><button type="button" onClick={() => { setPendingParentId(undefined); finishAction() }}>{t('Cancel')}</button><button className="primary" type="button" onClick={() => { const next = pendingParentId ?? ''; setPendingParentId(undefined); finishAction(); void onChange(next) }}>{pendingParentId ? t('Set parent team') : t('Remove parent team')}</button></footer></DialogContent></Dialog></>
 }

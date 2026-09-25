@@ -290,6 +290,7 @@ export type AppRoute =
       asksIntegrationId?: string;
       /** Asks email intake wizard (`/settings/asks/email-intake/new`). */
       asksEmailIntakeMode?: "new";
+      asksEmailIntakeId?: string;
       identityProviderId?: string;
       applicationId?: string;
       applicationMode?: "detail" | "edit";
@@ -954,6 +955,10 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       teamKey: fourth,
       teamSection: `ai-${sixth}` as TeamSettingsSection,
     };
+  if (section === "settings" && third === "teams" && fourth && ["retire", "set-parent", "change-parent", "remove-parent"].includes(fifth) && segments.length === 5)
+    return { kind: "settings", workspaceSlug, page: "team", teamKey: fourth, teamSection: "overview", teamSubPath: fifth };
+  if (section === "settings" && third === "teams" && fourth && fifth === "triage" && sixth === "memories" && segments.length === 6)
+    return { kind: "settings", workspaceSlug, page: "team", teamKey: fourth, teamSection: "triage" };
   if (
     section === "settings" &&
     third === "teams" &&
@@ -997,6 +1002,11 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       page: "asks",
       asksEmailIntakeMode: "new",
     };
+  if (section === "settings" && third === "asks" && fourth === "email-intake" && fifth && fifth !== "new" && (segments.length === 5 || (segments.length === 6 && segments[5] === "edit")))
+    return { kind: "settings", workspaceSlug, page: "asks", asksEmailIntakeId: decodeURIComponent(fifth) };
+  // Web forms are not supported; their links land on the Asks page.
+  if (section === "settings" && third === "asks" && fourth === "web-forms")
+    return { kind: "settings", workspaceSlug, page: "asks" };
   if (
     section === "settings" &&
     third === "asks" &&
@@ -1832,7 +1842,7 @@ export function settingsPath(
   if (page === "coding-environments") return `${root}/ai/coding-sessions/environments`;
   if (page === "team" && teamKey) {
     if (!teamSection || teamSection === "overview")
-      return `${root}/teams/${encode(teamKey)}`;
+      return `${root}/teams/${encode(teamKey)}${teamSubPath ? `/${encode(teamSubPath)}` : ""}`;
     if (teamSection === "ai-updates")
       return `${root}/teams/${encode(teamKey)}/ai/updates`;
     if (teamSection === "ai-summaries")

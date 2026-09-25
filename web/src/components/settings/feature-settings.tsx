@@ -44,7 +44,7 @@ import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingAgentSettingsPage } from "./coding-agent-settings";
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
-type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: () => void };
+type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: (addressId?: string) => void };
 
 const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   initiativeUpdateSchedule: "none",

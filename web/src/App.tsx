@@ -4122,11 +4122,12 @@ function App() {
           jiraProjectId={route.jiraProjectId}
           asksIntegrationId={route.asksIntegrationId}
           asksEmailIntakeMode={route.asksEmailIntakeMode}
+          asksEmailIntakeId={route.asksEmailIntakeId}
           onOpenAsksSlack={(integrationId) =>
             navigateTo(asksSlackSettingsPath(data.workspace.urlKey, integrationId))
           }
-          onOpenAsksEmailIntake={() =>
-            navigateTo(newAsksEmailIntakePath(data.workspace.urlKey))
+          onOpenAsksEmailIntake={(addressId) =>
+            navigateTo(addressId ? `${settingsPath(data.workspace.urlKey, 'asks')}/email-intake/${encodeURIComponent(addressId)}` : newAsksEmailIntakePath(data.workspace.urlKey))
           }
           onOpenCodingTools={() =>
             navigateTo(`${settingsPath(data.workspace.urlKey, 'code-and-reviews')}/coding-tools`)
