@@ -398,3 +398,102 @@ html:root body .link-sub-issue-picker .link-sub-issue-identifier {
   margin-right: 8px;
   color: var(--pk-muted);
 }
+
+/* ── Command menu (⌘K) ─────────────────────────────────────────────────── */
+html:root body .command-dialog {
+  width: min(716px, calc(100vw - 32px));
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+html:root body .command-dialog .command-input {
+  height: auto;
+  gap: 8px;
+  padding: 6px 18px 0 6px;
+  border-bottom: 0;
+}
+html:root body .command-dialog .command-input input {
+  height: 40px;
+  padding: 11px 12px;
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .command-dialog .command-input input::placeholder {
+  color: var(--pk-faint);
+}
+html:root body .command-dialog .command-input > button {
+  color: var(--pk-faint);
+  font: 450 12px/normal var(--font);
+}
+html:root body .command-dialog .command-input > button kbd,
+html:root body .command-dialog .command-shortcut kbd {
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border: .5px solid var(--pk-divider);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pk-muted);
+  font: 450 11px/1 var(--font);
+}
+html:root body .command-dialog [cmdk-list] {
+  padding: 6px;
+}
+html:root body .command-dialog [cmdk-group-heading] {
+  height: 30px;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--pk-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+html:root body .command-dialog [cmdk-item]:not(#_) {
+  position: relative;
+  isolation: isolate;
+  height: 46px;
+  margin: 0;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .command-dialog [cmdk-item][data-selected=true]:not(#_) {
+  background: transparent;
+  color: var(--pk-text-strong);
+}
+/* The highlight sits 2px inside the 46px row, like the reference. */
+html:root body .command-dialog [cmdk-item][data-selected=true]::before {
+  content: "";
+  position: absolute;
+  inset: 2px 0;
+  z-index: -1;
+  border-radius: 8px;
+  background: var(--pk-hover);
+}
+html:root body .command-dialog .command-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+html:root body .command-dialog .command-item-icon {
+  color: var(--pk-text);
+}
+html:root body .command-dialog [cmdk-item][data-selected=true] .command-item-icon {
+  color: var(--pk-text-strong);
+}
+html:root body .command-dialog .command-shortcut,
+html:root body .command-dialog .command-shortcut small {
+  color: var(--pk-muted);
+  font-size: 11px;
+}
+html:root body .command-dialog .command-input input:not(#_) {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
