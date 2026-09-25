@@ -1,6 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { ChevronRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { createIssue, createIssueLink, createIssueReminder, createRelation, deleteRelation } from '@/lib/api'
@@ -205,7 +204,7 @@ function Item({ label, shortcut, checked, top = false, onSelect }: { label: stri
 }
 
 function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {

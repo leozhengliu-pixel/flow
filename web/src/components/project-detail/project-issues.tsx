@@ -118,6 +118,8 @@ export function ProjectIssueDisplayMenu({
   filters?: MyIssuesAppliedFilter[];
 }) {
   const [open, setOpen] = useState(false);
+  // The triage toggle appears when a team in the project uses triage.
+  const projectDisplayToggles: "triage"[] = issues.some((issue) => issueData?.teamSettings?.[issue.team.id]?.triageEnabled) ? ["triage"] : [];
   // Group ordering panel (Linear ViewOptionsGroupsPanel): the groups this view currently shows.
   const groups = useMemo(() => {
     if (!open || !issueData) return [];
@@ -128,7 +130,7 @@ export function ProjectIssueDisplayMenu({
     <MyIssuesDisplayMenu
       hiddenProperties={["project"]}
       hideSplit
-      toggles={["triage", "archived"]}
+      toggles={projectDisplayToggles}
       groups={groups}
       labelGroupOptions={issueData ? labelGroups(issueData.labels) : []}
       onReset={() => onChange(DEFAULT_PROJECT_ISSUE_DISPLAY)}

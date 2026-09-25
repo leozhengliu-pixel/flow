@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, ChevronRight, Clock3, Link2, PackageOpen, Plus } from 'lucide-react'
+import { Check, ChevronDown, Clock3, Link2, PackageOpen, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
@@ -369,7 +369,7 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
     {(options.cycle ?? []).some(option => option.id) && <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/>}
     <IssueRowMoreProperties row={issue}/></>}
     {editable && rowActions && <IssueRowActionGroups row={issue} onDelete={onAction ? () => onAction('delete') : undefined}/>}
-    {onAction&&!(editable&&rowActions)&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label="Copy"/><span>Copy</span><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
+    {onAction&&!(editable&&rowActions)&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label="Copy"/><span>Copy</span><span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
   </ContextMenu.Content>
 }
 
@@ -379,14 +379,14 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   const command = usePropertyCommand({ open: open && people, options, personOptions: people, selectedIds, onSelect: option => onSelect(option.id), onOpenChange: setOpen })
   const selected = new Set(selectedIds)
   const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options: people ? command.filteredOptions : options }]
-  return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
+  return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
     {people && <div className="property-command-search"><input ref={command.inputRef} aria-label="Search people" placeholder="Search people…" value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
     {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => <PersonHover key={option.id || 'none'} userId={people ? option.id : undefined}>{multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>}</PersonHover>)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function MyIssuesMenuItem({ action, danger, label, onAction, shortcut, submenu = true }: { action: MyIssuesContextAction; danger?: boolean; label: string; onAction: (action: MyIssuesContextAction) => void; shortcut?: string; submenu?: boolean }) {
-  return <ContextMenu.Item className={styles.menuItem} data-danger={danger} onSelect={() => onAction(action)}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}{submenu && <ChevronRight size={12}/>}</ContextMenu.Item>
+  return <ContextMenu.Item className={styles.menuItem} data-danger={danger} onSelect={() => onAction(action)}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}{submenu && <span className={styles.menuChevron} aria-hidden="true">▶</span>}</ContextMenu.Item>
 }
 
 function MyIssuesOptionIcon({ option }: { option: MyIssuesContextOption }) {
