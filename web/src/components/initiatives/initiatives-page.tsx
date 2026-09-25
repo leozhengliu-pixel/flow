@@ -18,6 +18,7 @@ import { DisplayIcon, FilterIcon as Filter, PlusIcon, SidebarIcon } from '@/comp
 import { SelectControl } from '@/components/ui/select-control'
 import { titleCase } from './initiative-model'
 import './initiatives.css'
+import { FilterGlyph } from '@/components/issue/filter-glyph'
 import './initiatives-list-parity.css'
 import './initiative-controls.css'
 import './initiative-hierarchy.css'
@@ -341,7 +342,7 @@ export function InitiativeFilterMenu({ filters, initiatives, users, teams, label
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button ui-pill" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="li-menu li-filter-menu" sideOffset={4} collisionPadding={8}>
     <div className="li-menu-search"><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
     {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><Sparkles size={14} aria-hidden/><span>AI filter</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}><ListFilter size={14} aria-hidden/><span>Advanced filter</span></DropdownMenu.Item><DropdownMenu.Separator/></>}
-    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger><InitiativeFilterIcon field={entry.id}/><span>{entry.label}</span><span className="li-menu-end li-filter-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
+    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger><FilterGlyph label={entry.label} fallback={<InitiativeFilterIcon field={entry.id}/>}/><span>{entry.label}</span><span className="li-menu-end li-filter-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 

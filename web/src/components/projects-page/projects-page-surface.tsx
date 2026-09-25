@@ -1,3 +1,4 @@
+import { FilterGlyph } from '@/components/issue/filter-glyph'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Virtuoso } from 'react-virtuoso'
 import { AlignLeft, BarChart3, Building2, CalendarDays, ChevronRight, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Sparkles, Tags, UserRound, Users } from 'lucide-react'
@@ -280,7 +281,7 @@ function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef, selectedFil
               onFocus={()=>command.setActiveId(item)}
               role="option"
               type="button"
-            ><ProjectFilterIcon field={item}/><span>{item}</span>{FILTER_CHILDREN.has(item) && <span className="lp-projects-filter__chevron" aria-hidden="true">▶</span>}</button>
+            ><FilterGlyph label={item} fallback={<ProjectFilterIcon field={item}/>}/><span>{item}</span>{FILTER_CHILDREN.has(item) && <span className="lp-projects-filter__chevron" aria-hidden="true">▶</span>}</button>
           })}
         </div>
       })}
