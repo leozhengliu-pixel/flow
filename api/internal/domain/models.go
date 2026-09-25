@@ -917,6 +917,10 @@ type UserSettings struct {
 	GitAttachmentFormat   string            `json:"gitAttachmentFormat"`
 	GitBranchMoveStarted  bool              `json:"gitBranchMoveStarted"`
 	CodingToolMoveStarted bool              `json:"codingToolMoveStarted"`
+	// Coding tools offered in an issue's "Work on issue" menu.
+	EnabledCodingTools        []string `json:"enabledCodingTools,omitempty"`
+	CustomDeepLinkURLTemplate string   `json:"customDeepLinkUrlTemplate,omitempty"`
+	CodingPromptTemplate      string   `json:"codingPromptTemplate,omitempty"`
 	ChangelogUpdates      bool              `json:"changelogUpdates"`
 	ChangelogNewsletter   bool              `json:"changelogNewsletter"`
 	MarketingUpdates      bool              `json:"marketingUpdates"`

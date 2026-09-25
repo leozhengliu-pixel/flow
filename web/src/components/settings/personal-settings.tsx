@@ -16,7 +16,6 @@ import {
   ChevronRight,
   CircleAlert,
   Clipboard,
-  ExternalLink,
   Ellipsis,
   GitFork,
   KeyRound,
@@ -118,6 +117,7 @@ type Props = {
   onReload: () => Promise<void>;
   onBack: () => void;
   onCustomizeSidebar: () => void;
+  onOpenCodingTools?: () => void;
 };
 
 type PersonalTranslate = (source: string) => string;
@@ -1430,6 +1430,7 @@ function CodeReviews({
   setValue,
   onNavigate,
   onCreateSigningKey,
+  onOpenCodingTools,
   p,
 }: PersonalProps) {
   return (
@@ -1551,7 +1552,7 @@ function CodeReviews({
             "Configure the external coding tools you can open issues in",
           )}
         >
-          <ExternalLink size={16} />
+          <Action onClick={() => onOpenCodingTools?.()}>{p("Configure")}</Action>
         </PersonalRow>
         <PersonalRow
           title={p("Git attachment format")}

@@ -1,13 +1,15 @@
 import * as Popover from '@radix-ui/react-popover'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { Command } from 'cmdk'
-import { Copy, Settings2, X } from 'lucide-react'
+import { Copy, ExternalLink, Settings2, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Presence, WorkflowState } from '@/types/flow'
 import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { FlowBranchIcon, FlowChevronIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
-import { issuePath } from '@/lib/app-routes'
+import { issuePath, settingsPath } from '@/lib/app-routes'
+import { enabledCodingTools, renderCodingPrompt, type CodingTool } from '@/lib/coding-tools'
 import { issueBreadcrumbs } from '@/lib/issue-navigation-context'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 
@@ -27,7 +29,11 @@ export function IssueHeader({ issue, states, presence = [], saveState, onRetrySa
   const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
   const breadcrumbs = issueBreadcrumbs(data, issue, returnPath)
-  const copyWork=useCallback(async(kind:'branch'|'prompt')=>{try{const text=kind==='branch'?configuredIssueBranch(issue,data):`# ${issue.identifier}: ${issue.title}\n\n${issue.description||'No description provided.'}\n\nIssue URL: ${location.href}`;await copyIssueForWork(text,kind,issue,data,onUpdate);toast.success(kind==='branch'?'Branch name copied to clipboard':'Prompt copied to clipboard')}catch(error){toast.error(error instanceof Error?error.message:'Could not write to clipboard')}},[issue,data,onUpdate])
+  const preferences=data.userSettings?.[data.viewer.id]
+  const tools=enabledCodingTools(preferences)
+  const buildPrompt=useCallback(()=>renderCodingPrompt(preferences?.codingPromptTemplate,{identifier:issue.identifier,title:issue.title,description:issue.description,branchName:configuredIssueBranch(issue,data),url:location.href}),[preferences?.codingPromptTemplate,issue,data])
+  const openInTool=useCallback(async(tool:CodingTool)=>{const url=tool.link(buildPrompt(),preferences??{});if(!url){toast.error('Add a custom link in coding tool settings first');return}window.open(url,/^https?:/i.test(url)?'_blank':'_self','noopener');try{await copyIssueForWork(buildPrompt(),'prompt',issue,data,onUpdate)}catch{/* opening the tool matters more than the clipboard */}},[buildPrompt,preferences,issue,data,onUpdate])
+  const copyWork=useCallback(async(kind:'branch'|'prompt')=>{try{const text=kind==='branch'?configuredIssueBranch(issue,data):buildPrompt();await copyIssueForWork(text,kind,issue,data,onUpdate);toast.success(kind==='branch'?'Branch name copied to clipboard':'Prompt copied to clipboard')}catch(error){toast.error(error instanceof Error?error.message:'Could not write to clipboard')}},[issue,data,onUpdate,buildPrompt])
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target))return;if((event.metaKey||event.ctrlKey)&&event.altKey&&event.key.toLowerCase()==='p'){event.preventDefault();void copyWork('prompt')} };addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[copyWork])
   const startWork=async()=>{if(working)return;const started=states.find(state=>state.type==='started');if(!started){toast.error('No started status is configured');return}if(issue.state.id===started.id){toast('Issue is already in progress');return}setWorking(true);try{await onUpdate({stateId:started.id});toast.success(`Moved ${issue.identifier} to ${started.name}`)}finally{setWorking(false)}}
   return <header className="issue-header">
@@ -39,17 +45,20 @@ export function IssueHeader({ issue, states, presence = [], saveState, onRetrySa
       <CommandButton label="Copy issue URL" shortcut="⌘ ⇧ ," onClick={()=>copyText(location.href,'Issue URL copied to clipboard')}><FlowUrlIcon/></CommandButton>
       <CommandButton label="Copy issue ID" shortcut="⌘ ." onClick={()=>copyText(issue.identifier,'Issue ID copied to clipboard')}><FlowIssueIdIcon/></CommandButton>
       <CommandButton label="Copy branch name" shortcut="⌘ ⇧ ." onClick={()=>void copyWork('branch')}><FlowBranchIcon/></CommandButton>
-      <div className="issue-work-control"><CommandButton label="Start work on issue" busy={working} onClick={()=>void startWork()}><FlowWorkIcon/></CommandButton><WorkMenu onCopyPrompt={()=>void copyWork('prompt')}/></div>
+      <div className="issue-work-control"><CommandButton label="Start work on issue" busy={working} onClick={()=>void startWork()}><FlowWorkIcon/></CommandButton><WorkMenu tools={tools} onOpenTool={tool=>void openInTool(tool)} onCopyPrompt={()=>void copyWork('prompt')} configurePath={`${settingsPath(data.workspace.urlKey,'code-and-reviews')}/coding-tools`}/></div>
     </div>
     <div className="issue-sequence" aria-label="Issue navigation"><span><strong>{position}</strong><i>/</i>{total}</span><div className="issue-sequence-buttons"><FlowTooltip label="Previous item" shortcut="K"><button type="button" aria-label="Go to previous item" disabled={!canGoPrevious} onClick={()=>onNavigate('previous')}><FlowPreviousIcon/></button></FlowTooltip><FlowTooltip label="Next item" shortcut="J"><button type="button" aria-label="Go to next item" disabled={!canGoNext} onClick={()=>onNavigate('next')}><FlowNextIcon/></button></FlowTooltip></div></div>
     <FlowTooltip label="Close" shortcut="Esc"><button className="issue-header-icon issue-header-close" type="button" aria-label="Close issue" aria-keyshortcuts="Escape" onClick={onClose}><X size={16}/></button></FlowTooltip>
   </header>
 }
 
-function WorkMenu({onCopyPrompt}:{onCopyPrompt:()=>void}){const[open,setOpen]=useState(false);useEffect(()=>{let armed=false;const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target)||event.metaKey||event.ctrlKey||event.altKey)return;if(event.key.toLowerCase()==='w'){armed=true;setTimeout(()=>{armed=false},900);return}if(armed&&event.key.toLowerCase()==='o'){event.preventDefault();setOpen(true);armed=false}};addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[]);return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button className="issue-command-button" type="button" aria-label="Work on issue"><FlowChevronIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className="work-menu" side="bottom" align="end" sideOffset={5} collisionPadding={10} onOpenAutoFocus={event=>event.preventDefault()}><Command loop><div className="work-menu-search"><Command.Input aria-label="Work on issue…" placeholder="Work on issue…" autoFocus/><kbd>W</kbd><span>then</span><kbd>O</kbd></div><Command.List><Command.Item onSelect={()=>{onCopyPrompt();setOpen(false)}}><Copy size={15}/><span>Copy as prompt</span><span className="work-menu-shortcut"><kbd>⌘</kbd><kbd>⌥</kbd><kbd>P</kbd></span></Command.Item><div className="work-menu-separator"/><Command.Item disabled aria-disabled="true"><Settings2 size={15}/><span>Configure coding tools…</span><small>External integration</small></Command.Item></Command.List></Command></Popover.Content></Popover.Portal></Popover.Root>}
+function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath}:{tools:CodingTool[];onOpenTool:(tool:CodingTool)=>void;onCopyPrompt:()=>void;configurePath:string}){const[open,setOpen]=useState(false);useEffect(()=>{let armed=false;const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target)||event.metaKey||event.ctrlKey||event.altKey)return;if(event.key.toLowerCase()==='w'){armed=true;setTimeout(()=>{armed=false},900);return}if(armed&&event.key.toLowerCase()==='o'){event.preventDefault();setOpen(true);armed=false}};addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[]);return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button className="issue-command-button" type="button" aria-label="Work on issue"><FlowChevronIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className="work-menu" side="bottom" align="end" sideOffset={5} collisionPadding={10} onOpenAutoFocus={event=>event.preventDefault()}><Command loop><div className="work-menu-search"><Command.Input aria-label="Work on issue…" placeholder="Work on issue…" autoFocus/><kbd>W</kbd><span>then</span><kbd>O</kbd></div><Command.List>{tools.map(tool=><Command.Item key={tool.id} value={`Open in ${tool.name}`} onSelect={()=>{onOpenTool(tool);setOpen(false)}}><ExternalLink size={15}/><span>Open in {tool.name}</span></Command.Item>)}<Command.Item onSelect={()=>{onCopyPrompt();setOpen(false)}}><Copy size={15}/><span>Copy as prompt</span><span className="work-menu-shortcut"><kbd>⌘</kbd><kbd>⌥</kbd><kbd>P</kbd></span></Command.Item><div className="work-menu-separator"/><ConfigureCodingToolsItem path={configurePath} onDone={()=>setOpen(false)}/></Command.List></Command></Popover.Content></Popover.Portal></Popover.Root>}
 
 function CommandButton({label,shortcut,onClick,busy,children}:{label:string;shortcut?:string;onClick?:()=>void;busy?:boolean;children:React.ReactNode}){return <FlowTooltip label={label} shortcut={shortcut}><button className="issue-command-button" type="button" aria-label={label} disabled={busy} onClick={onClick}>{busy?<span className="command-spinner"/>:children}</button></FlowTooltip>}
 async function copyText(text:string,message:string){try{await navigator.clipboard.writeText(text);toast.success(message)}catch{toast.error('Could not write to clipboard')}}
 function isEditable(target:EventTarget|null){return target instanceof HTMLInputElement||target instanceof HTMLTextAreaElement||(target instanceof HTMLElement&&target.isContentEditable)}
 function initials(value:string){return value.split(/\s+/).filter(Boolean).map(part=>part[0]).join('').slice(0,2).toUpperCase()||'?'}
 function activateLink(event:React.MouseEvent<HTMLAnchorElement>,action:()=>void){if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();action()}
+
+/** Mounted only while the work menu is open, so the header renders without a router. */
+function ConfigureCodingToolsItem({path,onDone}:{path:string;onDone:()=>void}){const navigate=useNavigate();return <Command.Item onSelect={()=>{onDone();navigate(path)}}><Settings2 size={15}/><span>Configure coding tools…</span></Command.Item>}

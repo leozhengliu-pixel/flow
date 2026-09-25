@@ -293,8 +293,12 @@ export type AppRoute =
       identityProviderId?: string;
       applicationId?: string;
       applicationMode?: "detail" | "edit";
+      /** Team sub-page, e.g. `templates/issue/new`. */
+      teamSubPath?: string;
       /** `/settings/workspace/welcome-message`. */
       workspaceView?: "welcome-message";
+      /** Nested personal settings view, e.g. coding tools under Code & reviews. */
+      accountView?: "coding-tools";
       /** `/settings/api/keys`: every API key issued in the workspace. */
       apiView?: "keys";
       /** `/settings/api/webhooks/:id` ("new" for a new webhook). */
@@ -428,6 +432,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
         search,
       );
   }
+  if (section === "settings" && third === "account" && fourth === "code-and-reviews" && fifth === "coding-tools" && segments.length === 5)
+    return { kind: "settings", workspaceSlug, page: "code-and-reviews", accountView: "coding-tools" };
   if (section === "settings" && third === "workspace" && fourth === "welcome-message" && segments.length === 4)
     return { kind: "settings", workspaceSlug, page: "workspace", workspaceView: "welcome-message" };
   if (section === "settings" && third === "api" && fourth === "keys" && segments.length === 4)
@@ -947,6 +953,22 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       page: "team",
       teamKey: fourth,
       teamSection: `ai-${sixth}` as TeamSettingsSection,
+    };
+  if (
+    section === "settings" &&
+    third === "teams" &&
+    fourth &&
+    (fifth === "templates" || fifth === "recurring-issues") &&
+    segments.length > 5 &&
+    segments.length <= 8
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "team",
+      teamKey: fourth,
+      teamSection: fifth,
+      teamSubPath: segments.slice(5).join("/"),
     };
   if (
     section === "settings" &&
@@ -1802,6 +1824,8 @@ export function settingsPath(
   page: SettingsPageId,
   teamKey?: string,
   teamSection?: TeamSettingsSection,
+  /** Sub-page within a team section, e.g. "issue/new" under templates. */
+  teamSubPath?: string,
 ) {
   const root = `${workspaceRootPath(workspaceSlug)}/settings`;
   if (page === "coding-sessions") return `${root}/ai/coding-sessions`;
@@ -1813,7 +1837,8 @@ export function settingsPath(
       return `${root}/teams/${encode(teamKey)}/ai/updates`;
     if (teamSection === "ai-summaries")
       return `${root}/teams/${encode(teamKey)}/ai/summaries`;
-    return `${root}/teams/${encode(teamKey)}/${teamSection}`;
+    const sub = teamSubPath ? `/${teamSubPath.split("/").map(encode).join("/")}` : "";
+    return `${root}/teams/${encode(teamKey)}/${teamSection}${sub}`;
   }
   if (page === "account-security") return `${root}/account/security`;
   return ACCOUNT_SETTINGS.has(page)

@@ -45,7 +45,7 @@
   border: .5px solid var(--border);
   border-radius: 8px;
   outline: 0;
-  background: var(--theme-surface-1);
+  background: transparent;
   color: var(--text);
   font: 13px/20px var(--font);
 }
