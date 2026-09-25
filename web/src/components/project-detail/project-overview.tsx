@@ -57,7 +57,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
       </div>
     </section>
 
-    {issueData?.workspaceSettings.featureFlags.initiatives !== false && <InitiativeSection initiatives={initiatives} project={project} save={save}/>}
+    {issueData?.workspaceSettings.featureFlags.initiatives !== false && (initiatives.length > 0 || Boolean(project.initiatives?.length)) && <InitiativeSection initiatives={initiatives} project={project} save={save}/>}
     <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save} onCreateLabel={onCreateLabel}/>
     <ResourceSection documents={documents} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
     {issueData?.workspaceSettings.featureFlags['customer-requests'] !== false && <ProjectCustomerNeedsSection issueData={issueData} project={project} save={save} />}
@@ -180,7 +180,7 @@ function InitiativeSection({ initiatives, project, save }: { initiatives: Props[
   const selected = initiatives.filter(initiative => (project.initiatives ?? []).includes(initiative.id))
   return <section className="project-overview__row-section"><h3>Initiatives</h3><div className="project-overview__row-content project-overview__initiatives">
     {selected.map(initiative => <span className="project-overview__initiative" data-i18n-ignore key={initiative.id}><Flag size={13}/>{initiative.name}</span>)}
-    <PropertyMenu compact hideSearch multiple label="Initiatives" value="Add initiative…" selectedIds={project.initiatives ?? []} options={options} icon={<Plus size={13}/>} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" surfaceClassName="project-details-sidebar__property-menu is-members is-initiatives" onChange={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
+    <PropertyMenu compact multiple label="Initiatives" value="Add initiative…" emptyLabel="No matching initiatives" selectedIds={project.initiatives ?? []} options={options} icon={<Plus size={13}/>} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" surfaceClassName="project-details-sidebar__property-menu is-members is-initiatives" onChange={id => void save({ initiatives: toggleString(project.initiatives ?? [], id) })}/>
   </div></section>
 }
 
