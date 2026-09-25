@@ -841,3 +841,54 @@ html:root body .issue-options-popover .issue-options-item[data-selected=true]:no
 html:root body .issue-options-submenu .issue-options-item[data-selected=true]:not(#_)::before {
   background: var(--pk-hover);
 }
+
+/* ── Workspace menu ────────────────────────────────────────────────────── */
+html:root body .workspace-primary-menu:not(#_),
+html:root body .workspace-switch-menu:not(#_) {
+  border: .5px solid var(--pk-border);
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .workspace-primary-menu [role=menuitem]:not(#_),
+html:root body .workspace-switch-menu [role=menuitem]:not(#_) {
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .workspace-primary-menu [role=menuitem]:not(#_)[data-highlighted],
+html:root body .workspace-switch-menu [role=menuitem]:not(#_)[data-highlighted] {
+  background: var(--pk-hover);
+}
+html:root body .workspace-shortcut:not(#_),
+html:root body .workspace-shortcut:not(#_) * {
+  color: var(--pk-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ── Sidebar dropdown menus (team menu and friends) ────────────────────── */
+html:root body .sidebar-popover:not(#_) {
+  border: .5px solid var(--pk-border);
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .sidebar-popover [role=menuitem]:not(#_),
+html:root body .sidebar-popover [role=menuitemcheckbox]:not(#_) {
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .sidebar-popover [role=menuitem]:not(#_)[data-highlighted],
+html:root body .sidebar-popover [role=menuitemcheckbox]:not(#_)[data-highlighted] {
+  background: var(--pk-hover);
+}
+html:root body .sidebar-popover [role=menuitem]:not(#_) > svg:first-child {
+  color: var(--pk-text);
+}
+html:root body .sidebar-popover [role=menuitem]:not(#_) kbd {
+  color: var(--pk-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
