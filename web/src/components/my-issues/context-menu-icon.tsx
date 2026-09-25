@@ -105,9 +105,9 @@ const GLYPHS: Record<string, string> = {
 export function ContextMenuIcon({ label }: { label: string }) {
   const glyph = GLYPHS[label];
   if (glyph) return <span className={styles.menuIcon} aria-hidden="true"><ViewGlyph icon={glyph} color="currentColor" style={{ width: 16, height: 16 }} /></span>;
-  if (label === "Priority") return <span className={styles.menuIcon} aria-hidden="true"><PriorityIcon priority={2} size={16} /></span>;
-  if (label === "Assignee") return <span className={styles.menuIcon} aria-hidden="true"><NoAssigneeIcon size={16} /></span>;
-  if (label === "Cycle") return <span className={styles.menuIcon} aria-hidden="true"><CycleIcon noCycle size={16} /></span>;
+  if (label === "Priority") return <span className={styles.menuIcon} aria-hidden="true"><PriorityIcon priority={2} size={16} aria-hidden aria-label={undefined} role={undefined}/></span>;
+  if (label === "Assignee") return <span className={styles.menuIcon} aria-hidden="true"><NoAssigneeIcon size={16} aria-hidden/></span>;
+  if (label === "Cycle") return <span className={styles.menuIcon} aria-hidden="true"><CycleIcon noCycle size={16} aria-hidden/></span>;
   const Icon = ICONS[label];
   const fallback = Icon ? <Icon className={styles.menuIcon} size={16} aria-hidden="true" /> : null;
   const action = IssueActionGlyph({ label, fallback: null });
