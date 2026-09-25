@@ -79,6 +79,9 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 			if err := s.preparePulseSummaries(ctx, key, now); err != nil {
 				return err
 			}
+			if err := s.purgeExpiredTeams(ctx, key, now); err != nil {
+				log.Printf("Team purge workspace=%s: %v", key, err)
+			}
 		}
 		if err := s.prepareDueNotificationDeliveries(ctx, key, now); err != nil {
 			return err

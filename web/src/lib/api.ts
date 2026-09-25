@@ -75,6 +75,7 @@ import type {
   SLARule,
   Subscription,
   Team,
+  DeletedTeam,
   TeamDefaultFavorite,
   TeamRole,
   TeamSettings,
@@ -1202,6 +1203,15 @@ export function deleteTeam(
   return request(
     `/api/workspaces/${encodeURIComponent(workspaceKey)}/teams/${teamId}`,
     { method: "DELETE" },
+  );
+}
+export function listDeletedTeams(workspaceKey: string): Promise<DeletedTeam[]> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/deleted-teams`);
+}
+export function restoreDeletedTeam(workspaceKey: string, teamId: string): Promise<Team> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/deleted-teams/${encodeURIComponent(teamId)}/restore`,
+    { method: "POST" },
   );
 }
 export function createCustomer(

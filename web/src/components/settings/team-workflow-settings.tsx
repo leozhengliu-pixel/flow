@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';
+import { DELETE_TEAM_DESCRIPTION } from '@/lib/team-deletion';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 
 import {
@@ -332,6 +333,7 @@ export function TeamWorkflowSettings({
           onReload={onReload}
           action={subPath}
           onActionHandled={() => onNavigate("overview")}
+          onOpenTeams={onOpenTeams}
         />
       )}
   {section === "agents" && <TeamAgentsSettings data={data} />}
@@ -423,6 +425,7 @@ function TeamOverview({
   onReload,
   action,
   onActionHandled,
+  onOpenTeams,
 }: {
   data: BootstrapData;
   team: Team;
@@ -431,6 +434,7 @@ function TeamOverview({
   /** Deep-linked action: "retire", "set-parent", "change-parent" or "remove-parent". */
   action?: string;
   onActionHandled: () => void;
+  onOpenTeams?: () => void;
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
@@ -469,13 +473,15 @@ function TeamOverview({
   const remove = async () => {
     if (
       !(await confirmAction(`Delete ${team.name}?`, {
-        description: t("This permanently deletes the team and its owned data."),
+        description: t(DELETE_TEAM_DESCRIPTION),
         confirmLabel: t("Delete team"),
       }))
     )
       return;
     try {
       await deleteTeam(data.workspace.urlKey, team.id);
+      toast.success(t("Team deleted"));
+      onOpenTeams?.();
       await onReload();
     } catch (error) {
       toast.error(message(error));
@@ -583,7 +589,7 @@ function TeamOverview({
         </TeamRow>
         <TeamRow
           title="Delete team"
-          description="Permanently delete this team and all of its owned data"
+          description="Permanently delete this team and all its data, with a 30-day restoration window"
         >
           <button
             type="button"
