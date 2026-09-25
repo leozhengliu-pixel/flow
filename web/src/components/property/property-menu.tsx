@@ -322,6 +322,10 @@ function iconFor(label: string) {
 
 function SearchShortcut({ value }: { value: string }) {
   const sequence = value.match(/^(.+?)(?:,)?\s+then\s+(.+)$/i)
-  if (!sequence) return <kbd>{value}</kbd>
+  if (!sequence) {
+    // Modifier combos ("⇧ E", "Shift P") render one keycap per key.
+    const keys = value.split(/\s+/).map(key => key === 'Shift' ? '⇧' : key)
+    return keys.length > 1 ? <span className="property-command-search-shortcut">{keys.map((key, index) => <kbd key={index}>{key}</kbd>)}</span> : <kbd>{value}</kbd>
+  }
   return <span className="property-command-search-shortcut"><kbd>{sequence[1]}</kbd><span data-i18n-ignore>then</span><kbd>{sequence[2]}</kbd></span>
 }
