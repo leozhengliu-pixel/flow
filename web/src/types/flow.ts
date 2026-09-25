@@ -1390,6 +1390,10 @@ export interface Webhook {
   /** Public prefix of the signing secret (never the full secret). */
   secretPrefix?: string;
   secretRevokedAt?: string;
+  /** The workspace audit log stream; managed from the audit log page. */
+  auditLog?: boolean;
+  failingSince?: string;
+  disabledReason?: string;
   createdAt: string;
   updatedAt: string;
 }
