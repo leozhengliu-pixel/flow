@@ -284,3 +284,78 @@ html:root body .person-info footer {
   color: var(--pk-text-strong);
   font-weight: 500;
 }
+
+/* ── Inline issue composer chips (sub-issues) ──────────────────────────── */
+html:root body .sub-issue-properties {
+  gap: 5px;
+}
+html:root body .sub-issue-properties > .sub-issue-team,
+html:root body .sub-issue-properties .core-property-trigger,
+html:root body .sub-issue-properties > .mini-property-trigger,
+html:root body .sub-issue-properties > .sub-issue-cycle-trigger,
+html:root body .sub-issue-properties > .sub-issue-more {
+  box-sizing: border-box;
+  height: 24px;
+  max-width: 140px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 6px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: var(--chip-bg);
+  box-shadow: var(--chip-ring);
+  color: var(--chip-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+}
+html:root body .sub-issue-properties .core-property-trigger > span,
+html:root body .sub-issue-properties > .mini-property-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html:root body .sub-issue-properties > .sub-issue-more {
+  width: 32px !important;
+  max-width: 32px !important;
+  flex: 0 0 32px !important;
+  justify-content: center;
+  padding: 0 2px !important;
+}
+html:root body .sub-issue-properties > .sub-issue-attach {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--chip-strong);
+}
+html:root body .sub-issue-properties > .sub-issue-team:disabled {
+  opacity: 1;
+}
+html:root body .sub-issue-properties > .mini-property-trigger:hover,
+html:root body .sub-issue-properties > .mini-property-trigger[aria-expanded=true],
+html:root body .sub-issue-properties > .sub-issue-cycle-trigger:hover,
+html:root body .sub-issue-properties .core-property-trigger:hover,
+html:root body .sub-issue-properties .core-property-trigger[aria-expanded=true],
+html:root body .sub-issue-properties > .sub-issue-more:hover,
+html:root body .sub-issue-properties > .sub-issue-more[data-state=open] {
+  background: var(--pk-hover);
+  color: var(--chip-strong);
+}
+html:root body .sub-issue-actions .sub-issue-cancel,
+html:root body .sub-issue-actions .sub-issue-create {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  color: var(--chip-strong);
+  font: 500 12px/12px var(--font);
+}
+html:root body .sub-issue-actions .sub-issue-create {
+  background: var(--chip-bg);
+  box-shadow: var(--chip-ring);
+}
+html:root body .sub-issue-actions .sub-issue-create:disabled {
+  color: var(--chip-text);
+}
