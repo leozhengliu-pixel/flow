@@ -425,3 +425,12 @@ html:root .settings-app .settings-main .personal-agent-groups .settings-group + 
 html:root .settings-app .settings-main .personal-agent-groups .personal-agent-guidance { border: 0; border-radius: 10px; background: transparent; }
 /* Row titles may wrap entity names in a span; keep the title styling. */
 html:root .settings-app .settings-main .settings-row strong span { color: inherit; font: inherit; }
+
+/* Icon-only buttons (e.g. "+" in empty states) stay square without side padding. */
+html:root .settings-app .settings-main .feature-empty .feature-button[aria-label],
+html:root .settings-app .settings-main .feature-list-title .feature-button[aria-label],
+html:root .settings-app .settings-main .feature-domain-row .feature-button[aria-label] {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
