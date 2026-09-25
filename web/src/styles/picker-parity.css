@@ -1,0 +1,286 @@
+/*
+ * Property pickers (status, priority, assignee, members, lead, labels,
+ * project, initiatives, …) matched to the reference in both themes. Colors
+ * come from the --pk-* tokens; geometry is shared.
+ */
+
+/* ── Surface ───────────────────────────────────────────────────────────── */
+html:root body .property-command-surface,
+html:root body .property-command-label-submenu,
+html:root body .project-label-submenu {
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+/* Single-select pickers size to their content like the reference. */
+html:root body .property-command-surface:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone):not(.property-command-project-labels) {
+  width: max-content;
+  min-width: 206px;
+  max-width: min(360px, calc(100vw - 20px));
+}
+
+/* ── Search header ─────────────────────────────────────────────────────── */
+html:root body .property-command-surface .property-command-search {
+  box-sizing: content-box;
+  height: 36px;
+  flex: 0 0 36px;
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root body .property-command-surface .property-command-search input {
+  height: 36px;
+  padding: 10px 0 9px;
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .property-command-surface .property-command-search input::placeholder {
+  color: var(--pk-muted);
+}
+html:root body .property-command-surface .property-command-search kbd {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 18px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  padding: 2px 4px;
+  border: .5px solid var(--pk-divider);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pk-muted);
+  font: 400 11px/12px var(--font);
+}
+html:root body .property-command-surface .property-command-search-shortcut > span {
+  color: var(--pk-muted);
+  font: 400 11px/17px var(--font);
+}
+
+/* ── Options ───────────────────────────────────────────────────────────── */
+html:root body .property-command-surface .property-command-options:not(.virtual-property-options) {
+  padding: 6px 0;
+}
+html:root body .property-command-surface .virtual-property-options [data-index] {
+  padding: 0;
+}
+html:root body .property-command-surface:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone):not(.property-command-project-labels) .property-command-options [role=option]:not(:has(.property-command-checkbox)) {
+  height: 32px;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: 0 18px 0 14px;
+  border-radius: 0;
+}
+/* Multi-select rows: checkbox, icon, label. Page-specific layouts may refine this. */
+.property-command-surface:not(.property-command-labels):not(.property-command-project-labels) .property-command-options [role=option]:has(.property-command-checkbox) {
+  height: 32px;
+  grid-template-columns: 16px 16px minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 0 18px 0 14px;
+  border-radius: 0;
+}
+html:root body .property-command-surface .property-command-options [role=option] {
+  color: var(--pk-text);
+  font: 450 13px/normal var(--font);
+}
+html:root body .property-command-surface .property-command-options [role=option][aria-selected=true] {
+  color: var(--pk-text-strong);
+}
+html:root body .property-command-surface .property-command-option-background {
+  inset: 0 6px;
+  border-radius: 8px;
+}
+html:root body .property-command-surface .property-command-options [role=option]:hover .property-command-option-background,
+html:root body .property-command-surface .property-command-options [role=option][aria-selected=true] .property-command-option-background,
+html:root body .property-command-surface .property-command-label-group-option:hover .property-command-option-background,
+html:root body .property-command-surface .property-command-label-group-option[aria-expanded=true] .property-command-option-background {
+  background: var(--pk-hover);
+}
+html:root body .property-command-surface .property-command-icon {
+  width: 16px;
+  height: 16px;
+}
+html:root body .property-command-surface .property-command-check {
+  width: 16px;
+  color: currentColor;
+}
+html:root body .property-command-surface .property-command-check svg {
+  width: 16px;
+  height: 16px;
+}
+/* Option shortcuts are plain numbers, not key caps. */
+html:root body .property-command-surface .property-command-options [role=option] > kbd {
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pk-muted);
+  font: 500 11px/1 var(--font);
+  text-align: right;
+}
+html:root body .property-command-surface .property-command-group {
+  height: 30px;
+  padding: 8px 14px;
+  color: var(--pk-muted);
+  font: 500 12px/normal var(--font);
+}
+html:root body .property-command-surface .people-menu-avatar,
+html:root body .property-command-surface .core-person-picker-avatar {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  font-size: 7px;
+}
+
+/* Checkboxes appear on hover, keyboard focus or when checked. Action rows
+   (invite, create) never show one. */
+html:root body .property-command-surface .property-command-options [role=option] .property-command-checkbox {
+  opacity: 0;
+}
+html:root body .property-command-surface .property-command-options [role=option]:is(:hover, [aria-selected=true], [aria-checked=true]) .property-command-checkbox {
+  opacity: 1;
+}
+html:root body .property-command-surface .property-command-options [role=option][id*="-__"] .property-command-checkbox {
+  visibility: hidden;
+}
+
+/* ── Person hover card ─────────────────────────────────────────────────── */
+html:root body .person-info-surface,
+html:root body .property-rich-hover.assignee-hover-surface,
+html:root body .person-info-surface.property-rich-hover {
+  width: auto;
+  min-width: 193px;
+  max-width: 280px;
+  padding: 6px;
+  border: .5px solid var(--pk-border);
+  border-radius: 8px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+html:root body .assignee-hover-preview {
+  width: auto;
+  padding: 0;
+  font-size: 12px;
+}
+html:root body .assignee-hover-preview header {
+  height: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 5px 6px;
+  border: 0;
+}
+html:root body .assignee-hover-preview header .avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  font-size: 13px;
+}
+html:root body .assignee-hover-preview header > div {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+html:root body .assignee-hover-preview header strong {
+  color: var(--pk-text-strong);
+  font: 500 13px/16px var(--font);
+}
+html:root body .assignee-hover-preview header > div span {
+  color: var(--pk-muted);
+  font: 450 12px/15px var(--font);
+}
+html:root body .assignee-hover-preview__details {
+  display: grid;
+  gap: 0;
+  margin-top: 5px;
+  padding: 5px 0 0;
+  border-top: .5px solid var(--pk-divider);
+}
+html:root body .assignee-hover-preview__details > span {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 5px;
+  color: var(--pk-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+}
+html:root body .assignee-hover-preview__details > span > span {
+  overflow: hidden;
+  color: var(--pk-text-strong);
+  text-overflow: ellipsis;
+}
+html:root body .assignee-hover-preview__details svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--pk-muted);
+}
+/* The presence dot sits centered in the 16px icon column. */
+html:root body .assignee-hover-preview__details i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  margin: 0 4.5px;
+  border-radius: 50%;
+}
+
+/* Identity details (user ID, email, role) stay for disambiguation, as compact rows. */
+html:root body .assignee-hover-preview > .person-identity-details,
+html:root body .person-info .person-identity-details {
+  margin: 5px 0 0;
+  padding: 5px 5px 0;
+  gap: 4px;
+  border-top: .5px solid var(--pk-divider);
+  font: 500 12px/18px var(--font);
+}
+html:root body .person-identity-details > div {
+  grid-template-columns: 64px minmax(0, 1fr);
+}
+html:root body .person-identity-details dt {
+  color: var(--pk-muted);
+}
+html:root body .person-identity-details dd {
+  color: var(--pk-text-strong);
+}
+html:root body .assignee-hover-preview > .person-identity-details + .assignee-hover-preview__details {
+  border-top: 0;
+  margin-top: 0;
+}
+/* Generic person card (PersonInfo). */
+html:root body .person-info {
+  padding: 5px;
+  font-size: 12px;
+}
+html:root body .person-info header {
+  gap: 10px;
+}
+html:root body .person-info-avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  font-size: 13px;
+}
+html:root body .person-info header strong {
+  color: var(--pk-text-strong);
+  font: 500 13px/16px var(--font);
+}
+html:root body .person-info header > div > span {
+  color: var(--pk-muted);
+  font: 450 12px/15px var(--font);
+}
+html:root body .person-info-badge {
+  border-color: var(--pk-divider);
+  color: var(--pk-muted);
+}
+html:root body .person-info footer {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: .5px solid var(--pk-divider);
+  color: var(--pk-text-strong);
+  font-weight: 500;
+}
