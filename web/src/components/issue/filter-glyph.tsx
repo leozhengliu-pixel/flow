@@ -25,9 +25,9 @@ export function FilterGlyph({ label, fallback }: { label: string; fallback: Reac
   const key = label.trim().toLowerCase()
   const sprite = SPRITE[key]
   if (sprite) return <ViewGlyph icon={sprite} color="currentColor" style={{ width: 14, height: 14 }}/>
-  if (key === 'priority') return <PriorityIcon priority={2} size={14}/>
-  if (PEOPLE.has(key)) return <NoAssigneeIcon size={14}/>
-  if (key === 'cycle') return <CycleIcon noCycle size={14}/>
+  if (key === 'priority') return <PriorityIcon priority={2} size={14} aria-hidden aria-label={undefined} role={undefined}/>
+  if (PEOPLE.has(key)) return <NoAssigneeIcon size={14} aria-hidden/>
+  if (key === 'cycle') return <CycleIcon noCycle size={14} aria-hidden/>
   if (key === 'relations') return <IssueActionGlyph label="Mark as" fallback={fallback}/>
   return <>{fallback}</>
 }
