@@ -1413,11 +1413,13 @@ func OmitDirectoryExcludedTeams(data *domain.Bootstrap) {
 	}
 	allowed := make(map[string]bool, len(data.Teams))
 	for _, team := range data.Teams {
-		if directoryExcludedTeam(team) && !memberOf[team.ID] {
+		if team.ArchivedAt != nil || directoryExcludedTeam(team) && !memberOf[team.ID] {
 			continue
 		}
 		allowed[team.ID] = true
 	}
+	// Memberships of deleted or hidden teams never leave with the payload.
+	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool { return !allowed[member.TeamID] })
 	if len(allowed) == len(data.Teams) {
 		return
 	}
@@ -1451,7 +1453,7 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 			break
 		}
 	}
-	if team == nil {
+	if team == nil || team.ArchivedAt != nil {
 		return false
 	}
 	memberRole := ""
@@ -1509,8 +1511,15 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 }
 
 func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest bool) {
+	archived := map[string]bool{}
+	for _, id := range ArchivedTeamIDs(*data) {
+		archived[id] = true
+	}
 	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !allowed[team.ID] })
 	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool {
+		if archived[issue.Team.ID] {
+			return true
+		}
 		if allowed[issue.Team.ID] {
 			return false
 		}

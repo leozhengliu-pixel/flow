@@ -149,8 +149,18 @@ export interface Team {
   externalSource?: string;
   sourceMetadata?: IssueSourceMetadata;
   retiredAt?: string;
+  /** Set while a deleted team is inside its restoration window. */
+  archivedAt?: string;
+  archivedById?: UUID;
   createdAt?: string;
   updatedAt?: string;
+}
+/** A deleted team that can still be restored until purgeAt. */
+export interface DeletedTeam extends Team {
+  archivedAt: string;
+  archivedBy?: User;
+  purgeAt: string;
+  issueCount: number;
 }
 export interface Customer {
   id: UUID;
