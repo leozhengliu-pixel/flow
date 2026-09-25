@@ -7,10 +7,12 @@ import { makeBootstrap } from "@/test/fixtures";
 import type { WorkspaceSettings } from "@/types/flow";
 import {
   createEmailIntakeAddress,
+  deleteEmailIntakeAddress,
   updateWorkspacePreferences,
   verifyEmailIntakeAddress,
 } from "@/lib/api";
 import {
+  AsksEmailIntakeDetailPage,
   AsksSettingsPage,
   AsksSlackSettingsPage,
   NewAsksEmailIntakePage,
@@ -21,6 +23,7 @@ vi.mock("@/lib/api", async (original) => ({
   updateWorkspacePreferences: vi.fn(),
   createEmailIntakeAddress: vi.fn(),
   verifyEmailIntakeAddress: vi.fn(),
+  deleteEmailIntakeAddress: vi.fn(),
   authorizeIntegration: vi.fn(),
   disconnectIntegration: vi.fn(),
 }));
@@ -73,12 +76,7 @@ it("shows honest Coming soon for web forms and opens Slack deep settings", () =>
       />
     </I18nProvider>,
   );
-  expect(screen.getByText("Coming soon")).toBeVisible();
-  expect(
-    screen.getByText(
-      "Custom web forms, domains, and SAML for Asks are not available yet.",
-    ),
-  ).toBeVisible();
+  expect(screen.queryByText("Web forms")).toBeNull();
   fireEvent.click(screen.getByText("Acme Slack"));
   expect(onOpenSlack).toHaveBeenCalledWith("slack-1");
 });
@@ -208,4 +206,35 @@ it("walks the email intake wizard through DNS verification", async () => {
     { featureSettings: { asksEmailAddresses: ["asks@mail.example.com"] } },
     "workspace",
   );
+});
+
+it("manages an Asks email address from its detail page", async () => {
+  const onBack = vi.fn();
+  const onReload = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(updateWorkspacePreferences).mockResolvedValue(settings);
+  vi.mocked(deleteEmailIntakeAddress).mockResolvedValue(undefined);
+  const data = makeBootstrap({
+    viewerRole: "admin",
+    workspaceSettings: {
+      ...settings,
+      featureSettings: { ...settings.featureSettings, asksEmailAddresses: ["help@acme.dev"] },
+    } as WorkspaceSettings,
+    teams: [{ id: "team-1", name: "Engineering", key: "ENG", color: "#5e6ad2" }],
+    emailIntakeAddresses: [
+      { id: "addr-1", teamId: "team-1", localPart: "help", domain: "acme.dev", address: "help@acme.dev", verificationState: "verified", aliases: [], enabled: true, createdAt: "", updatedAt: "" },
+    ],
+  } as never);
+  render(
+    <I18nProvider>
+      <AsksEmailIntakeDetailPage data={data} addressId="addr-1" onBack={onBack} onReload={onReload} />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "help@acme.dev" })).toBeVisible();
+  expect(screen.getByText("Engineering (ENG)")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await waitFor(() => expect(deleteEmailIntakeAddress).toHaveBeenCalledWith("team-1", "addr-1"));
+  expect(updateWorkspacePreferences).toHaveBeenCalledWith({
+    featureSettings: expect.objectContaining({ asksEmailAddresses: [] }),
+  });
+  await waitFor(() => expect(onBack).toHaveBeenCalled());
 });

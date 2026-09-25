@@ -31,6 +31,7 @@ import { useI18n } from "@/i18n/i18n";
 import {
   authorizeIntegration,
   createEmailIntakeAddress,
+  deleteEmailIntakeAddress,
   disconnectIntegration,
   updateWorkspacePreferences,
   verifyEmailIntakeAddress,
@@ -88,7 +89,8 @@ export function AsksSettingsPage({
   setFeature: SaveFeature;
   onReload: () => Promise<void>;
   onOpenSlack?: (integrationId: string) => void;
-  onOpenEmailIntake?: () => void;
+  /** Opens the email intake wizard, or an address detail page when given an id. */
+  onOpenEmailIntake?: (addressId?: string) => void;
 }) {
   const { t } = useI18n();
   const [emailOpen, setEmailOpen] = useState(false);
@@ -183,27 +185,20 @@ export function AsksSettingsPage({
       </FeatureSection>
 
       <FeatureSection
-        title="Web forms"
-        description="Collect Asks from a public web form on your own domain"
-      >
-        <div className="asks-coming-soon">
-          <strong>{t("Coming soon")}</strong>
-          <span>
-            {t(
-              "Custom web forms, domains, and SAML for Asks are not available yet.",
-            )}
-          </span>
-        </div>
-      </FeatureSection>
-
-      <FeatureSection
         title="Email"
         description="Allow anyone to submit Asks by emailing a custom address"
       >
         {emails.length ? (
           <FeatureCard>
-            {emails.map((email) => (
+            {emails.map((email) => {
+              const intake = data.emailIntakeAddresses.find((item) => item.address === email);
+              return (
               <FeatureRow key={email} icon={Mail} title={email} businessTitle>
+                {intake && onOpenEmailIntake && (
+                  <FeatureButton disabled={busy} onClick={() => onOpenEmailIntake(intake.id)}>
+                    Manage
+                  </FeatureButton>
+                )}
                 <FeatureButton
                   danger
                   disabled={busy}
@@ -217,7 +212,8 @@ export function AsksSettingsPage({
                   Remove
                 </FeatureButton>
               </FeatureRow>
-            ))}
+              );
+            })}
           </FeatureCard>
         ) : (
           <FeatureEmpty
@@ -1138,3 +1134,99 @@ function EmailDialog({
   );
 }
 
+
+/** Detail page for one Asks email address: status, team, verification, removal. */
+export function AsksEmailIntakeDetailPage({
+  data,
+  addressId,
+  onBack,
+  onReload,
+}: {
+  data: BootstrapData;
+  addressId: string;
+  onBack: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const intake = data.emailIntakeAddresses.find((item) => item.id === addressId);
+  const team = intake && data.teams.find((item) => item.id === intake.teamId);
+  const admin = ["admin", "owner"].includes(data.viewerRole);
+  const asksEmails = data.workspaceSettings.featureSettings?.asksEmailAddresses ?? [];
+  const run = async (action: () => Promise<unknown>, success: string, leave = false) => {
+    setBusy(true);
+    try {
+      await action();
+      await onReload();
+      toast.success(t(success));
+      if (leave) onBack();
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const back = (
+    <button type="button" className="asks-settings-back" onClick={onBack}>
+      <ChevronLeft size={14} />
+      {t("Back to Asks")}
+    </button>
+  );
+  if (!intake)
+    return (
+      <FeatureShell title="Email address not found">
+        {back}
+        <FeatureEmpty icon={Mail} title="This address may have been removed" />
+      </FeatureShell>
+    );
+  const removeFromAsks = () =>
+    updateWorkspacePreferences({
+      featureSettings: {
+        ...data.workspaceSettings.featureSettings,
+        asksEmailAddresses: asksEmails.filter((value) => value !== intake.address),
+      },
+    });
+  return (
+    <FeatureShell title={intake.address} description="Asks sent to this address create issues in the team below.">
+      {back}
+      <FeatureCard>
+        <FeatureRow icon={Mail} title="Status" description={intake.verificationState === "verified" ? "Verified and receiving email" : "Waiting for DNS verification"}>
+          {intake.verificationState !== "verified" && (
+            <FeatureButton
+              disabled={busy || !admin}
+              onClick={() => void run(() => verifyEmailIntakeAddress(intake.teamId, intake.id), "Address verified")}
+            >
+              Verify
+            </FeatureButton>
+          )}
+        </FeatureRow>
+        <FeatureRow title="Team" description={team ? `${team.name} (${team.key})` : t("Unknown team")} />
+      </FeatureCard>
+      <FeatureSection title="Danger zone">
+        <FeatureCard>
+          {asksEmails.includes(intake.address) && (
+            <FeatureRow title="Stop using for Asks" description="The address keeps working for team email intake">
+              <FeatureButton disabled={busy || !admin} onClick={() => void run(removeFromAsks, "Removed from Asks", true)}>
+                Remove
+              </FeatureButton>
+            </FeatureRow>
+          )}
+          <FeatureRow title="Delete address" description="Email sent to this address will no longer create issues">
+            <FeatureButton
+              danger
+              disabled={busy || !admin}
+              onClick={() =>
+                void run(async () => {
+                  if (asksEmails.includes(intake.address)) await removeFromAsks();
+                  await deleteEmailIntakeAddress(intake.teamId, intake.id);
+                }, "Email address deleted", true)
+              }
+            >
+              Delete
+            </FeatureButton>
+          </FeatureRow>
+        </FeatureCard>
+      </FeatureSection>
+    </FeatureShell>
+  );
+}
