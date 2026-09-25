@@ -13,7 +13,7 @@ import { IssueDescriptionEditor } from '@/components/issue/issue-description-edi
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
-import { createDraft, deleteDraft, fetchIssueSuggestionPreview, updateDraft } from '@/lib/api'
+import { createDraft, createRelation, deleteDraft, fetchIssueSuggestionPreview, updateDraft, updateIssue } from '@/lib/api'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
@@ -38,6 +38,7 @@ export interface CreateIssueInput {
   templateId?: string
   recurrence?: '' | 'daily' | 'weekly' | 'monthly'
   teamId?: string
+  parentId?: string
   createMore?: boolean
 }
 
@@ -374,8 +375,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
         labelIds: labelIds.filter(id => availableLabelIds.has(id)),
         templateId,
         recurrence,
+        parentId: initialContext?.parentId,
         createMore,
       })
+      if (initialContext?.related) await relateCreatedIssue(issue, initialContext.related)
       const uploads = onUpload ? await Promise.allSettled(files.map(file => onUpload(issue.id, file))) : []
       const failedUploads = uploads.filter(result => result.status === 'rejected').length
       removeStoredDraft(draftKey)
@@ -391,7 +394,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -586,3 +589,11 @@ function removeStoredDraft(key: string) {
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!) }
 function escapeAttribute(value: string) { return escapeHtml(value) }
 import { useCreateMotion } from '@/components/ui/motion';
+
+/** Links a newly created issue to the issue it was created from ("Create related"). */
+async function relateCreatedIssue(created: Issue, related: NonNullable<MyIssuesCreateContext['related']>) {
+  if (related.kind === 'parent') await updateIssue(related.issueId, { parentId: created.id })
+  else if (related.kind === 'blocked') await createRelation(related.issueId, 'blocks', created.id)
+  else if (related.kind === 'blocking') await createRelation(related.issueId, 'blocked_by', created.id)
+  else await createRelation(related.issueId, 'related', created.id)
+}

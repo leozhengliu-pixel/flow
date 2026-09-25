@@ -194,7 +194,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
     else void fetchIssueRecord(row.id, undefined, workspaceSlug).then(issue => onOpenIssue(issue, sequence)).catch(() => toast.error('Could not load issue'))
   }
 
-  return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue) }}>
+  return <IssueRowActionsProvider value={{ data, onUpdateIssue, onDeleteIssues, onOpenIssue: issue => onOpenIssue?.(issue), onCreateIssue }}>
     <MyIssuesSurface
       activeView={controller.view}
       detailsOpen={controller.detailsOpen}

@@ -12,7 +12,7 @@ import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
-import { IssueRowExtendedMenuItems } from './issue-row-actions'
+import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties, useIssueRowActions } from './issue-row-actions'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
@@ -50,6 +50,9 @@ export interface MyIssuesCreateContext {
   projectMilestoneId?: string
   cycleId?: string
   labelIds?: string[]
+  parentId?: string
+  /** Relate the new issue to an existing one once it is created. */
+  related?: { issueId: string; kind: 'related' | 'parent' | 'blocked' | 'blocking' }
 }
 
 export interface MyIssuesRowData {
@@ -354,6 +357,7 @@ function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (che
 }
 
 export function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
+  const rowActions = useIssueRowActions()
   return <ContextMenu.Content data-flow-motion="floating" className={styles.contextMenu} collisionPadding={10}>
     {editable&&<><ContextPropertySub label="Status" shortcut="S" options={options.status} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
@@ -361,9 +365,11 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
     <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], id, options.labels))}/>
     <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/>
-    <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/></>}
-    {editable && <IssueRowExtendedMenuItems row={issue}/>}
-    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label="Copy"/><span>Copy</span><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
+    {editable && <IssueRowEstimateItem row={issue}/>}
+    {(options.cycle ?? []).some(option => option.id) && <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/>}
+    <IssueRowMoreProperties row={issue}/></>}
+    {editable && rowActions && <IssueRowActionGroups row={issue} onDelete={onAction ? () => onAction('delete') : undefined}/>}
+    {onAction&&!(editable&&rowActions)&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label="Copy"/><span>Copy</span><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
   </ContextMenu.Content>
 }
 
