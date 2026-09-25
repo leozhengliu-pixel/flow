@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MoreHorizontal, Search } from "lucide-react";
+import { Archive, ArchiveRestore, MoreHorizontal, RotateCcw, Search, Settings, SquareStack, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -197,8 +197,12 @@ export function WorkspaceTeamsSettings({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="settings-member-action-menu">
-                  <DropdownMenuItem onSelect={() => onOpen(team)}>{t("Team settings")}</DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onOpen(team)}>
+                    <Settings size={16} />
+                    {t("Team settings")}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => navigate(teamIssuesPath(data.workspace.urlKey, team.key))}>
+                    <SquareStack size={16} />
                     {t("Go to all issues")}
                   </DropdownMenuItem>
                   {admin && (
@@ -223,6 +227,7 @@ export function WorkspaceTeamsSettings({
                           })()
                         }
                       >
+                        {team.retiredAt ? <ArchiveRestore size={16} /> : <Archive size={16} />}
                         {t(team.retiredAt ? "Restore team" : "Retire team…")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
@@ -240,6 +245,7 @@ export function WorkspaceTeamsSettings({
                           })()
                         }
                       >
+                        <Trash2 size={16} />
                         {t("Delete team…")}
                       </DropdownMenuItem>
                     </>
@@ -312,7 +318,10 @@ function DeletedTeamsTable({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="settings-member-action-menu">
-                <DropdownMenuItem onSelect={() => onRestore(team)}>{t("Restore team")}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onRestore(team)}>
+                  <RotateCcw size={16} />
+                  {t("Restore team")}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </span>

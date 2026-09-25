@@ -76,6 +76,8 @@ function resolveVariant(settings: ThemeSettings, theme: ResolvedTheme) {
   return resolveThemeVariant(theme, settings.lightTheme, settings.darkTheme).variant;
 }
 
+const LIGHT_STATIC_TOKENS = ["--theme-surface-1", "--theme-surface-2", "--theme-border", "--theme-border-strong"];
+
 function syncRoot(settings: ThemeSettings) {
   const theme = resolveTheme(settings);
   const root = document.documentElement;
@@ -86,6 +88,12 @@ function syncRoot(settings: ThemeSettings) {
   try {
     const generated = themeFromSettings(theme, settings.lightTheme, settings.darkTheme);
     applyGeneratedTheme(generated, root);
+    // The standard light theme keeps the surface and border tokens from
+    // tokens.css: Flow uses these names for popovers, controls and fields,
+    // where the generated palette's shade and hover values render too dark.
+    if (root.dataset.themeVariant === "light") {
+      for (const cssVar of LIGHT_STATIC_TOKENS) root.style.removeProperty(cssVar);
+    }
   } catch {
     // Fall back to static tokens.css if generation fails.
     clearGeneratedTheme(root);
