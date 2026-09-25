@@ -1,6 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Check, ChevronRight, SlidersHorizontal, X } from 'lucide-react'
+import { Check, SlidersHorizontal, X } from 'lucide-react'
 import { useState } from 'react'
 import type { BootstrapData } from '@/types/flow'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -34,7 +34,7 @@ function FilterFieldSubmenu({data,field,filters,onToggle}:{data:BootstrapData;fi
   const [query,setQuery]=useState('')
   const selected=new Set(filters.find(filter=>filter.field===field)?.values??[])
   const values=filterValues(data,field).filter(value=>value.label.toLowerCase().includes(query.trim().toLowerCase()))
-  return <DropdownMenu.Sub onOpenChange={open=>{if(!open)setQuery('')}}><DropdownMenu.SubTrigger><span>{pulseFilterLabels[field]}</span><ChevronRight className="pulse-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="pulse-menu pulse-filter-values" sideOffset={4} alignOffset={-5}><div className="pulse-menu-search"><input aria-label={pulseFilterLabels[field]} autoFocus placeholder={pulseFilterLabels[field]} value={query} onChange={event=>setQuery(event.target.value)}/></div>{values.map(value=><DropdownMenu.Item key={value.id} onSelect={event=>{event.preventDefault();onToggle(value.id)}}><span className="pulse-filter-checkbox">{selected.has(value.id)&&<CheckboxMark/>}</span><span data-i18n-ignore>{value.label}</span></DropdownMenu.Item>)}{!values.length&&<div className="pulse-filter-empty">No results</div>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+  return <DropdownMenu.Sub onOpenChange={open=>{if(!open)setQuery('')}}><DropdownMenu.SubTrigger><span>{pulseFilterLabels[field]}</span><span className="pulse-menu-end pulse-filter-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="pulse-menu pulse-filter-values" sideOffset={4} alignOffset={-5}><div className="pulse-menu-search"><input aria-label={pulseFilterLabels[field]} autoFocus placeholder={pulseFilterLabels[field]} value={query} onChange={event=>setQuery(event.target.value)}/></div>{values.map(value=><DropdownMenu.Item key={value.id} onSelect={event=>{event.preventDefault();onToggle(value.id)}}><span className="pulse-filter-checkbox">{selected.has(value.id)&&<CheckboxMark/>}</span><span data-i18n-ignore>{value.label}</span></DropdownMenu.Item>)}{!values.length&&<div className="pulse-filter-empty">No results</div>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
 }
 
 export function PulseFilterChips({data,filters,onChange}:{data:BootstrapData;filters:PulseFilter[];onChange:(filters:PulseFilter[])=>void}){

@@ -497,3 +497,308 @@ html:root body .command-dialog .command-input input:not(#_) {
   border-radius: 0;
   background: transparent;
 }
+
+/* ── Initiatives filter menu ───────────────────────────────────────────── */
+html:root body .li-menu.li-filter-menu:not(#_),
+html:root body .li-menu.li-filter-values:not(#_) {
+  padding: 0 0 6px;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .li-menu.li-filter-values:not(#_) {
+  padding-top: 0;
+  box-shadow: var(--pk-card-shadow);
+}
+html:root body .li-filter-menu .li-menu-search:not(#_),
+html:root body .li-filter-values .li-menu-search:not(#_) {
+  height: 36.5px;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 12px 0 14px;
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root body .li-filter-menu .li-menu-search input:not(#_),
+html:root body .li-filter-values .li-menu-search input:not(#_) {
+  height: 36px;
+  padding: 10px 0 9px;
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .li-filter-menu .li-menu-search input::placeholder { color: var(--pk-muted); }
+html:root body .li-filter-values .li-menu-search input::placeholder { color: var(--pk-faint); }
+html:root body .li-filter-menu .li-menu-search kbd:not(#_) {
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 4px;
+  border: .5px solid var(--pk-divider);
+  background: transparent;
+  color: var(--pk-muted);
+  font: 400 11px/1 var(--font);
+}
+html:root body .li-filter-menu [role=menuitem]:not(#_) {
+  height: 32px;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .li-filter-menu [role=menuitem]:not(#_)[data-highlighted],
+html:root body .li-filter-menu [role=menuitem]:not(#_)[data-state=open] {
+  background: var(--pk-hover);
+}
+html:root body .li-filter-menu [role=menuitem][data-disabled]:not(#_) {
+  color: var(--pk-muted);
+}
+html:root body .li-filter-menu [role=menuitem]:not(#_) > svg:first-child {
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  color: var(--pk-text);
+}
+html:root body .li-filter-menu .li-filter-chevron:not(#_) {
+  margin: 0 10px 0 auto;
+  color: var(--pk-faint);
+  font-size: 6px;
+  line-height: 1;
+}
+html:root body .li-filter-menu [role=separator]:not(#_) {
+  height: .5px;
+  margin: 5.5px 0;
+  background: var(--pk-divider);
+}
+html:root body .li-filter-values [role=menuitem]:not(#_) {
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .li-filter-values small:not(#_) {
+  color: var(--pk-faint);
+  font-size: 12px;
+  font-weight: 450;
+}
+/* Checkboxes appear on the active row or once checked, like the reference. */
+html:root body .li-filter-values [role=menuitem]:not([data-menu-active]):not(:hover) .li-filter-checkbox:not(:has(svg)) {
+  opacity: 0;
+}
+
+/* ── Projects filter menu ──────────────────────────────────────────────── */
+html:root body .lp-projects-filter:not(#_) {
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .lp-projects-filter__search:not(#_) {
+  height: 36.5px;
+  padding: 0 12px 0 14px;
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root body .lp-projects-filter__search:not(#_) input {
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .lp-projects-filter__search:not(#_) input::placeholder { color: var(--pk-muted); }
+html:root body .lp-projects-filter__search:not(#_) kbd {
+  box-sizing: border-box;
+  min-width: 18px;
+  width: auto;
+  height: 17px;
+  padding: 0 4px;
+  border: .5px solid var(--pk-divider);
+  color: var(--pk-muted);
+  font: 400 11px/16px var(--font);
+}
+html:root body .lp-projects-filter__list:not(#_) {
+  padding: 6px 0;
+}
+html:root body .lp-projects-filter__group + .lp-projects-filter__group:not(#_) {
+  margin-top: 5.5px;
+  padding-top: 5.5px;
+  border-top: .5px solid var(--pk-divider);
+}
+html:root body .lp-projects-filter__group button:not(#_) {
+  width: calc(100% - 12px);
+  height: 32px;
+  gap: 8px;
+  margin: 0 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .lp-projects-filter__group button:not(#_).is-active {
+  background: var(--pk-hover);
+}
+html:root body .lp-projects-filter__group button:not(#_) > svg:first-child {
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  color: var(--pk-text);
+}
+html:root body .lp-projects-filter__chevron {
+  flex: none;
+  margin-right: 10px;
+  color: var(--pk-faint);
+  font-size: 6px;
+  line-height: 1;
+}
+html:root body .lp-projects-filter__nested:not(#_) {
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+html:root body .lp-projects-filter__nested .lp-projects-filter__search:not(#_) input::placeholder { color: var(--pk-faint); }
+html:root body .lp-projects-filter__values:not(#_) {
+  padding: 6px 0;
+}
+html:root body .lp-projects-filter__values:not(#_) button {
+  width: calc(100% - 12px);
+  margin: 0 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .lp-projects-filter__values:not(#_) button:hover,
+html:root body .lp-projects-filter__values:not(#_) button.is-active,
+html:root body .lp-projects-filter__values:not(#_) button[aria-selected=true] {
+  background: var(--pk-hover);
+}
+html:root body .lp-projects-filter__values:not(#_) small {
+  color: var(--pk-faint);
+  font-size: 12px;
+  font-weight: 450;
+}
+html:root body .lp-projects-filter__values button:not(:hover):not(.is-active):not([aria-selected=true]) .lp-projects-filter__checkbox:not(:has(svg)) {
+  opacity: 0;
+}
+
+/* ── Member directory filter menu ──────────────────────────────────────── */
+html:root body .workspace-directory-filter-menu:not(#_),
+html:root body .workspace-directory-filter-submenu:not(#_) {
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .workspace-directory-filter-submenu:not(#_) { box-shadow: var(--pk-card-shadow); }
+html:root body .workspace-directory-filter-menu__search:not(#_) {
+  height: 36.5px;
+  padding: 0 12px 0 14px;
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root body .workspace-directory-filter-menu__search:not(#_) > svg { display: none; }
+html:root body .workspace-directory-filter-menu__search:not(#_) input {
+  height: 36px;
+  padding: 10px 0 9px;
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .workspace-directory-filter-menu__search:not(#_) input::placeholder { color: var(--pk-muted); }
+html:root body .workspace-directory-filter-menu__search.is-submenu:not(#_) input::placeholder { color: var(--pk-faint); }
+html:root body .workspace-directory-filter-menu__search:not(#_) kbd {
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 17px;
+  padding: 0 4px;
+  border: .5px solid var(--pk-divider);
+  background: transparent;
+  color: var(--pk-muted);
+  font: 400 11px/16px var(--font);
+}
+html:root body .workspace-directory-filter-menu__items:not(#_) { padding: 6px 0; }
+html:root body .workspace-directory-filter-menu__item:not(#_),
+html:root body .workspace-directory-filter-menu__choice:not(#_) {
+  height: 32px;
+  gap: 8px;
+  margin: 0 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .workspace-directory-filter-menu__item:not(#_)[data-highlighted],
+html:root body .workspace-directory-filter-menu__item:not(#_)[data-state=open],
+html:root body .workspace-directory-filter-menu__choice:not(#_)[data-highlighted] {
+  background: var(--pk-hover);
+}
+html:root body .workspace-directory-filter-menu__item:not(#_) > svg:first-child {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin: 0 1px;
+  color: var(--pk-text);
+}
+html:root body .workspace-directory-filter-menu__item > .workspace-directory-filter-menu__chevron:not(#_) {
+  flex: none;
+  margin: 0 10px 0 auto;
+  color: var(--pk-faint);
+  font-size: 6px;
+  line-height: 1;
+}
+
+/* ── Pulse filter menu ─────────────────────────────────────────────────── */
+html:root body .pulse-menu.pulse-filter-builder:not(#_),
+html:root body .pulse-menu.pulse-filter-values:not(#_) {
+  padding: 0 0 6px;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .pulse-menu.pulse-filter-values:not(#_) { box-shadow: var(--pk-card-shadow); }
+html:root body .pulse-filter-builder .pulse-menu-search:not(#_),
+html:root body .pulse-filter-values .pulse-menu-search:not(#_) {
+  height: 36.5px;
+  margin-bottom: 6px;
+  padding: 0 12px 0 14px;
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root body .pulse-filter-builder .pulse-menu-search:not(#_) input,
+html:root body .pulse-filter-values .pulse-menu-search:not(#_) input {
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .pulse-filter-builder .pulse-menu-search:not(#_) input::placeholder { color: var(--pk-muted); }
+html:root body .pulse-filter-values .pulse-menu-search:not(#_) input::placeholder { color: var(--pk-faint); }
+html:root body .pulse-filter-builder [role=menuitem]:not(#_),
+html:root body .pulse-filter-values [role=menuitem]:not(#_),
+html:root body .pulse-filter-values [role=menuitemcheckbox]:not(#_) {
+  width: calc(100% - 12px);
+  height: 32px;
+  gap: 8px;
+  margin: 0 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .pulse-filter-builder [role=menuitem]:not(#_)[data-highlighted],
+html:root body .pulse-filter-builder [role=menuitem]:not(#_)[data-state=open],
+html:root body .pulse-filter-values [role=menuitem]:not(#_)[data-highlighted],
+html:root body .pulse-filter-values [role=menuitemcheckbox]:not(#_)[data-highlighted] {
+  background: var(--pk-hover);
+}
+html:root body .pulse-filter-builder .pulse-filter-chevron:not(#_) {
+  margin: 0 10px 0 auto;
+  color: var(--pk-faint);
+  font-size: 6px;
+  line-height: 1;
+}
