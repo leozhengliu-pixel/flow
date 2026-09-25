@@ -57,6 +57,9 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if !slices.Contains([]string{"default", "daily", "weekly", "never"}, input.PulseSchedule) {
 			return errInvalid
 		}
+		if err := validateCodingToolSettings(&input); err != nil {
+			return err
+		}
 		data.UserSettings[actor.ID] = input
 		updated = input
 		return nil
@@ -2301,4 +2304,32 @@ func (s *server) deleteDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+var knownCodingTools = []string{"claudeCodeDesktop", "codex", "cursor", "devin", "windsurf", "factory", "conductor", "customUrl"}
+
+// validateCodingToolSettings keeps coding-tool launch settings safe to open:
+// only known tools, and a custom link that is a plain http(s) URL.
+func validateCodingToolSettings(input *domain.UserSettings) error {
+	tools := make([]string, 0, len(input.EnabledCodingTools))
+	for _, tool := range input.EnabledCodingTools {
+		if !slices.Contains(knownCodingTools, tool) {
+			return fmt.Errorf("%w: unknown coding tool %q", errInvalid, tool)
+		}
+		if !slices.Contains(tools, tool) {
+			tools = append(tools, tool)
+		}
+	}
+	input.EnabledCodingTools = tools
+	input.CustomDeepLinkURLTemplate = strings.TrimSpace(input.CustomDeepLinkURLTemplate)
+	if link := input.CustomDeepLinkURLTemplate; link != "" {
+		lower := strings.ToLower(link)
+		if len(link) > 2000 || (!strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://")) {
+			return fmt.Errorf("%w: custom link must be an http(s) URL", errInvalid)
+		}
+	}
+	if len(input.CodingPromptTemplate) > 8000 {
+		return fmt.Errorf("%w: prompt template is too long", errInvalid)
+	}
+	return nil
 }
