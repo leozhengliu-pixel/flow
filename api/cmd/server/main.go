@@ -295,6 +295,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/teams/{teamId}", s.updateTeam)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/teams/{teamId}", s.deleteTeam)
 	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/deleted-teams", s.listDeletedTeams)
+	mux.HandleFunc("GET /api/workspace/audit-log-stream", s.getAuditStream)
+	mux.HandleFunc("POST /api/workspace/audit-log-stream", s.createAuditStream)
+	mux.HandleFunc("PATCH /api/workspace/audit-log-stream", s.updateAuditStream)
+	mux.HandleFunc("DELETE /api/workspace/audit-log-stream", s.deleteAuditStream)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/deleted-teams/{teamId}/restore", s.restoreDeletedTeam)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invitations", s.createInvitation)
 	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/invite-link", s.getWorkspaceInviteLink)
@@ -944,6 +948,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 			})
 		}
 	}
+	// The audit log stream has its own endpoint and page.
+	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool { return item.AuditLog })
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
 		if data.APIKeys[index].Scopes != nil {

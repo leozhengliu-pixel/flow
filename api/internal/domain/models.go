@@ -1241,6 +1241,16 @@ type Webhook struct {
 	SecretHash      string     `json:"-"`
 	SecretPrefix    string     `json:"secretPrefix,omitempty"`
 	SecretRevokedAt *time.Time `json:"secretRevokedAt,omitempty"`
+	// AuditLog marks the workspace's audit log stream. It receives audit
+	// entries only, signed with a secret kept outside the workspace document.
+	AuditLog bool `json:"auditLog,omitempty"`
+	// Stream progress: the last delivered audit entry and retry state.
+	AuditCursorAt    *time.Time `json:"auditCursorAt,omitempty"`
+	AuditCursorID    string     `json:"auditCursorId,omitempty"`
+	DeliveryAttempts int        `json:"deliveryAttempts,omitempty"`
+	NextAttemptAt    *time.Time `json:"nextAttemptAt,omitempty"`
+	FailingSince     *time.Time `json:"failingSince,omitempty"`
+	DisabledReason   string     `json:"disabledReason,omitempty"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }

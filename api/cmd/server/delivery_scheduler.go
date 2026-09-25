@@ -86,6 +86,7 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		if err := s.prepareDueNotificationDeliveries(ctx, key, now); err != nil {
 			return err
 		}
+		s.streamAuditLog(ctx, key, now)
 		s.dispatchNotificationEmails(ctx, key)
 		s.dispatchNotificationDigests(ctx, key, now)
 		data, ok := s.store.WorkspaceMetadata(key)
