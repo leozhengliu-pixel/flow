@@ -60,9 +60,12 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 	}
 	if input.TriggerType != nil {
 		loop.TriggerType = *input.TriggerType
+		loop.NextRunAt = nil
 	}
 	if input.TriggerConfig != nil {
 		loop.TriggerConfig = input.TriggerConfig
+		// The schedule is recomputed from the new configuration.
+		loop.NextRunAt = nil
 	}
 	if input.Instructions != nil {
 		loop.Instructions = *input.Instructions
@@ -188,6 +191,7 @@ func (s *server) deleteLoop(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Loops = slices.Delete(data.Loops, index, index+1)
+		data.LoopRuns = slices.DeleteFunc(data.LoopRuns, func(run domain.LoopRun) bool { return run.LoopID == id })
 		return nil
 	})
 	respondMutation(w, err, http.StatusNoContent, nil)

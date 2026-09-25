@@ -360,6 +360,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/loops/{id}", s.getLoop)
 	mux.HandleFunc("PATCH /api/loops/{id}", s.updateLoop)
 	mux.HandleFunc("DELETE /api/loops/{id}", s.deleteLoop)
+	mux.HandleFunc("GET /api/loops/{id}/runs", s.listLoopRuns)
+	mux.HandleFunc("POST /api/loops/{id}/runs", s.runLoopNow)
 	mux.HandleFunc("GET /api/project-templates", s.listProjectTemplates)
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
@@ -903,6 +905,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	// through their paginated endpoints. Keeping them in the persisted settings
 	// envelope avoids a second transaction, but they must never leak through the
 	// workspace bootstrap response.
+	// Loop run history is served by /api/loops/{id}/runs.
+	data.LoopRuns = nil
 	delete(data.Settings, dashboardsSettingsKey)
 	delete(data.Settings, postsSettingsKey)
 	delete(data.Settings, feedSettingsKey)
