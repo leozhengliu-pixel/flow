@@ -234,7 +234,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     labelGroupOptions: labelGroups(data.labels),
     availableGroupings: data.issueCollectionPaged ? PAGED_GROUPINGS : undefined,
     availableOrderings: data.issueCollectionPaged ? PAGED_ORDERINGS : undefined,
-    toggles: (scope.kind === 'team' ? ['triage', 'archived', 'subTeam'] : ['triage', 'archived']) as ('triage' | 'archived' | 'subTeam')[],
+    toggles: displayToggles(scope.kind === 'team' ? scope.team.id : undefined, data),
     onReset: resetDisplay,
     resetLabel: savedView ? 'Reset to view default' : teamDefault ? 'Reset to team default' : 'Reset to default',
     onSaveDefault: saveDisplayAsViewDefault,
@@ -615,3 +615,13 @@ function withTeamDefault(display: MyIssuesDisplayOptions, teamDefault?: Record<s
   return { ...display, ...teamDefault, properties: new Set(Array.isArray(teamDefault.properties) ? teamDefault.properties as MyIssuesProperty[] : [...display.properties]) } as MyIssuesDisplayOptions
 }
 function displaySnapshot(display: MyIssuesDisplayOptions): Record<string, unknown> { return { ...display, properties: [...display.properties] } }
+
+/** Display toggles the reference offers: triage when a team in scope uses triage, sub-teams when the team has any. */
+function displayToggles(teamId: string | undefined, data: BootstrapData): ('triage' | 'subTeam')[] {
+  const settings = data.teamSettings ?? {}
+  const teamIds = teamId ? [teamId] : data.teams.map(team => team.id)
+  const toggles: ('triage' | 'subTeam')[] = []
+  if (teamIds.some(id => settings[id]?.triageEnabled)) toggles.push('triage')
+  if (teamId && Object.values(settings).some(item => item?.parentTeamId === teamId)) toggles.push('subTeam')
+  return toggles
+}

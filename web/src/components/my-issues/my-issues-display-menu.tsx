@@ -99,7 +99,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
-          {!hideSplit && <button type="button" role="tab" aria-selected={options.layout === 'split'} onClick={() => change({ layout: 'split' })}><Columns2 size={13} />{t('Split')}</button>}
+          {!hideSplit && options.layout === 'split' && <button type="button" role="tab" aria-selected={options.layout === 'split'} onClick={() => change({ layout: 'split' })}><Columns2 size={13} />{t('Split')}</button>}
         </div>
 
         <section className={styles.section} aria-label={t('Grouping options')}>

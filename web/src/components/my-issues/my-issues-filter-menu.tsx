@@ -10,6 +10,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surfac
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { useI18n } from '@/i18n/i18n'
 import styles from './my-issues-filter-menu.module.css'
+import { FilterGlyph } from '@/components/issue/filter-glyph'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 export type IssueFilterScope = 'issues' | 'project'
@@ -111,7 +112,7 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
                       onMouseMove={() => { if (hasValues && !directApply) setActiveField(field) }}
                       onSelect={() => { if (directApply) { const option=options?.(field)?.[0]; if(option){onToggle(field,option);close(false)} } else openValues(field) }}
                     >
-                      <span className={styles.rootIcon}><FilterFieldIcon field={field}/></span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
+                      <span className={styles.rootIcon}><FilterGlyph label={item.label} fallback={<FilterFieldIcon field={field}/>}/></span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
                     </Command.Item>
                   </Popover.Anchor>
                   {hasValues && !directApply && <ValueMenu field={field} filters={filters} label={item.label} options={options?.(field) ?? []} optionsFor={field => options?.(field)} onClose={() => setActiveField(undefined)} onToggle={choose} onToggleAny={onToggle}/>}
