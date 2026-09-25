@@ -50,6 +50,13 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
     if (autoFocus) requestAnimationFrame(() => inputRef.current?.focus())
   }, [autoFocus, open, resetKey])
 
+  // Options can arrive after the picker opens (fetched lists); highlight the first one once they do.
+  useEffect(() => {
+    if (!open || activeId !== undefined) return
+    const first = filteredOptions.find(option => !option.disabled && !option.searchOnly)
+    if (first) setActiveId(first.id)
+  }, [activeId, filteredOptions, open])
+
   const choose = (option: T) => {
     if (option.disabled) return
     if (closeOnSelect) onOpenChange(false)

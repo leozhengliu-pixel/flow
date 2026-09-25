@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import { createIssue, createIssueReminder, createRelation } from '@/lib/api'
 import { findFavorite, toggleFavoriteFor } from '@/lib/favorites'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { StatusIcon } from '@/components/issue/issue-icons'
+import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 import type { MyIssuesRowData } from './my-issues-list'
 import styles from './my-issues-list.module.css'
@@ -60,8 +62,8 @@ export function IssueRowExtendedMenuItems({ row }: { row: MyIssuesRowData }) {
     {row.assignee?.id !== viewerId && <Item top label="Assign to me" shortcut="I" onSelect={() => void update({ assigneeId: viewerId }, 'Assigned to you')}/>}
     {estimateType !== 'notUsed' && <Sub label="Estimate" shortcut="⇧ E">{estimates.map(value => <Item key={value} label={value ? `${value} point${value === 1 ? '' : 's'}` : 'No estimate'} checked={(row.estimate ?? 0) === value} onSelect={() => void update({ estimate: value })}/>)}</Sub>}
     {milestones.length > 0 && <Sub label="Milestone">{[{ id: '', name: 'No milestone' }, ...milestones].map(milestone => <Item key={milestone.id || 'none'} label={milestone.name} checked={(row.projectMilestoneId ?? '') === milestone.id} onSelect={() => void update({ projectMilestoneId: milestone.id })}/>)}</Sub>}
-    <Sub label="Set parent issue…"><IssueSearch data={data} exclude={row.id} onPick={target => void update({ parentId: target.id }, `Sub-issue of ${target.identifier}`)}/>{row.parentId && <Item label="Remove parent" onSelect={() => void update({ parentId: '' })}/>}</Sub>
-    <Sub label="Relations">{RELATIONS.map(relation => <Sub key={relation.type} label={relation.label}><IssueSearch data={data} exclude={row.id} onPick={target => void createRelation(row.id, relation.type, target.id).then(() => toast.success(`${relation.label.replace('…', '')} ${target.identifier}`)).catch(() => toast.error('Could not add relation'))}/></Sub>)}</Sub>
+    <Sub label="Set parent issue…" issueSearch><IssueSearch data={data} exclude={row.id} onPick={target => void update({ parentId: target.id }, `Sub-issue of ${target.identifier}`)}/>{row.parentId && <Item label="Remove parent" onSelect={() => void update({ parentId: '' })}/>}</Sub>
+    <Sub label="Relations">{RELATIONS.map(relation => <Sub key={relation.type} label={relation.label} issueSearch><IssueSearch data={data} exclude={row.id} onPick={target => void createRelation(row.id, relation.type, target.id).then(() => toast.success(`${relation.label.replace('…', '')} ${target.identifier}`)).catch(() => toast.error('Could not add relation'))}/></Sub>)}</Sub>
     {data.teams.length > 1 && <Sub label="Move to team…" shortcut="⌘ ⇧ M">{data.teams.filter(team => team.id !== row.teamId).map(team => <Item key={team.id} label={team.name} onSelect={() => void update({ teamId: team.id }, `Moved to ${team.name}`)}/>)}</Sub>}
     <ContextMenu.Separator className={styles.menuSeparator}/>
     <Item top label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="⇧ S" onSelect={() => issue && void update({ subscriberIds: subscribed ? issue.subscriberIds.filter(id => id !== viewerId) : [...issue.subscriberIds, viewerId] }, subscribed ? 'Unsubscribed' : 'Subscribed')}/>
@@ -80,16 +82,20 @@ function Item({ label, shortcut, checked, top = false, onSelect }: { label: stri
   return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}>{top && <ContextMenuIcon label={label}/>}<span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
 }
 
-function Sub({ label, shortcut, children }: { label: string; shortcut?: string; children: ReactNode }) {
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+function Sub({ label, shortcut, issueSearch = false, children }: { label: string; shortcut?: string; issueSearch?: boolean; children: ReactNode }) {
+  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={issueSearch ? `${styles.contextSubmenu} ${styles.issueSubmenu}` : styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {
   const [open, setOpen] = useState(true)
-  const options = useMemo(() => data.issues.filter(item => item.id !== exclude && !item.archivedAt).map(item => ({ id: item.id, label: `${item.identifier} ${item.title}` })), [data.issues, exclude])
-  const command = usePropertyCommand({ open, options, onOpenChange: setOpen, closeOnSelect: false, onSelect: option => { const target = data.issues.find(item => item.id === option.id); if (target) onPick(target) } })
-  return <div className="property-command-search" onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}>
-    <input ref={command.inputRef} aria-label="Search issues" placeholder="Search issues…" value={command.query} onChange={event => command.onQueryChange(event.target.value)}/>
-    {command.filteredOptions.slice(0, 8).map(option => <ContextMenu.Item key={option.id} className={styles.submenuItem} onSelect={() => command.choose(option)}><span data-i18n-ignore>{option.label}</span></ContextMenu.Item>)}
+  const candidates = useIssueCandidates(data, true)
+  const options = useMemo(() => candidates.filter(item => item.id !== exclude).map(item => ({ id: item.id, label: `${item.identifier} ${item.title}` })), [candidates, exclude])
+  const command = usePropertyCommand({ open, options, onOpenChange: setOpen, closeOnSelect: false, onSelect: option => { const target = candidates.find(item => item.id === option.id); if (target) onPick(target) } })
+  return <div onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}>
+    <div className={styles.issueSearch}><input ref={command.inputRef} aria-label="Search issues" placeholder="Search issues…" value={command.query} onChange={event => command.onQueryChange(event.target.value)}/></div>
+    <div className={styles.issueResults}>
+      {command.filteredOptions.slice(0, 8).map(option => { const target = candidates.find(item => item.id === option.id); return <ContextMenu.Item key={option.id} className={styles.submenuItem} onSelect={() => command.choose(option)}>{target && <StatusIcon state={target.state} size={14}/>}<span className={styles.issueIdentifier} data-i18n-ignore>{target?.identifier}</span><span data-i18n-ignore>{target?.title}</span></ContextMenu.Item> })}
+      {!command.filteredOptions.length && <div className={styles.issueEmpty}>No matching issues</div>}
+    </div>
   </div>
 }
