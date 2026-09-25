@@ -29,6 +29,7 @@ const (
 func (s *server) dispatchDomainEvent(workspace string, event domain.DomainEvent) {
 	s.dispatchWebhookEvent(workspace, event)
 	s.dispatchTeamSlackEvent(workspace, event)
+	s.dispatchLoopTriggers(workspace, event)
 }
 
 type teamSlackMessage struct {

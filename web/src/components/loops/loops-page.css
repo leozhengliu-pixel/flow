@@ -200,3 +200,18 @@
   border-top: 0.5px solid var(--theme-border);
   padding-top: 10px;
 }
+
+.loops-runs .loops-section-heading { display: flex; align-items: center; justify-content: space-between; }
+.loops-runs-next, .loops-runs-empty { margin: 0 0 12px; color: var(--theme-text-secondary); font-size: 13px; }
+.loops-runs-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.loops-run { padding: 10px 12px; border: 0.5px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-1); }
+.loops-run header { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.loops-run header i { width: 7px; height: 7px; border-radius: 50%; background: var(--semantic-success); }
+.loops-run.is-running header i { background: var(--accent-primary); }
+.loops-run.is-failed header i { background: var(--semantic-danger); }
+.loops-run header strong { color: var(--theme-text-primary); font-weight: 500; }
+.loops-run header span { color: var(--theme-text-secondary); }
+.loops-run header time { margin-left: auto; color: var(--theme-text-secondary); font-size: 12px; }
+.loops-run p { margin: 6px 0 0; color: var(--theme-text-primary); font-size: 13px; line-height: 19px; white-space: pre-wrap; }
+.loops-run .loops-run-error { color: var(--semantic-danger); }
+.loops-run small { display: block; margin-top: 6px; color: var(--theme-text-secondary); font-size: 12px; }
