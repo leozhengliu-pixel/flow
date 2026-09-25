@@ -885,6 +885,22 @@ export interface Loop {
   createdAt: string;
   updatedAt: string;
 }
+/** One execution of a loop by the agent runtime. */
+export interface LoopRun {
+  id: UUID;
+  loopId: UUID;
+  status: "running" | "completed" | "failed";
+  trigger: "manual" | "schedule" | "event";
+  eventType?: string;
+  entityType?: "issue" | "project" | "initiative" | "cycle";
+  entityId?: UUID;
+  entityIdentifier?: string;
+  output?: string;
+  toolCalls?: { name: string; status: "completed" | "error" | "blocked"; error?: string }[];
+  error?: string;
+  startedAt: string;
+  finishedAt?: string;
+}
 export interface TemplateMilestone {
   id: UUID;
   name: string;

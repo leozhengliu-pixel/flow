@@ -49,6 +49,7 @@ import type {
   FlowDocument,
   LabelGroup,
   Loop,
+  LoopRun,
   MigrationEntityMapping,
   MigrationJob,
   Notification,
@@ -2458,6 +2459,12 @@ export function updateLoop(id: string, input: LoopMutation): Promise<Loop> {
     `/api/loops/${encodeURIComponent(id)}`,
     jsonRequest("PATCH", input),
   );
+}
+export function listLoopRuns(id: string): Promise<LoopRun[]> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs`);
+}
+export function runLoopNow(id: string): Promise<LoopRun> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs`, { method: "POST" });
 }
 export function deleteLoop(id: string): Promise<void> {
   return request(`/api/loops/${encodeURIComponent(id)}`, { method: "DELETE" });
