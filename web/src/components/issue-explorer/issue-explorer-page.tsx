@@ -351,7 +351,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
   />
 
-  const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue) }
+  const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue), onCreateIssue }
   return <IssueRowActionsProvider value={rowActions}>
     <IssueExplorerSurface
       scopeName={scope.kind === 'team' ? scope.team.name : data.workspace.name}
