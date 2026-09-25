@@ -54,3 +54,14 @@
 .contextMenu{width:max-content;min-width:180px;max-width:calc(100vw - 20px)}
 .contextMenu .menuItem>span:not(:only-child){white-space:nowrap}
 .contextMenu .menuItem>kbd{padding-left:12px;white-space:nowrap}
+/* Issue search submenus (set parent, relations): picker header, then status icon, muted identifier, title. */
+.contextSubmenu.issueSubmenu{width:320px;padding:0}
+.issueSearch{height:36px;display:flex;align-items:center;padding:0 12px 0 14px;border-bottom:.5px solid var(--pk-divider)}
+.issueSearch input{flex:1;min-width:0;height:36px;padding:0;border:0;outline:0;background:transparent;color:var(--pk-text);font:400 13px/normal var(--font)}
+.issueSearch input::placeholder{color:var(--pk-muted)}
+.issueResults{padding:6px 0}
+.issueSubmenu .submenuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text)}
+.issueSubmenu .submenuItem[data-highlighted]{background:var(--pk-hover)}
+.issueSubmenu .submenuItem>svg{flex:0 0 14px}
+.issueSubmenu .submenuItem>.issueIdentifier{flex:none;color:var(--pk-muted)}
+.issueEmpty{height:32px;display:flex;align-items:center;padding:0 14px;color:var(--pk-muted);font-size:13px}
