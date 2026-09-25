@@ -1,0 +1,28 @@
+.settings-audit-recent {
+  margin: 32px 0 8px;
+  color: var(--theme-text-primary);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 23px;
+}
+.audit-stream-secret {
+  display: flex;
+  gap: 8px;
+}
+.audit-stream-secret input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.audit-stream-secret .feature-button {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+}
+.feature-dialog label > span[role="alert"] {
+  color: var(--semantic-danger, var(--theme-text-secondary));
+}
+.audit-stream-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

@@ -42,7 +42,7 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 	}
 	action := webhookAction(event.Type)
 	for _, webhook := range data.Webhooks {
-		if !webhook.Enabled || webhook.URL == "" || !webhookResourceTypeAllowed(webhook, resourceType) || !webhookTeamAllowed(webhook, event.Payload, data, event.AggregateID) {
+		if webhook.AuditLog || !webhook.Enabled || webhook.URL == "" || !webhookResourceTypeAllowed(webhook, resourceType) || !webhookTeamAllowed(webhook, event.Payload, data, event.AggregateID) {
 			continue
 		}
 		item := webhook

@@ -63,13 +63,26 @@ function FailureDetailDialog({
   );
 }
 
-export function WebhookFailureEvents({ webhookId }: { webhookId: string }) {
-  const [events, setEvents] = useState<WebhookFailureEvent[]>([]);
-  const [loading, setLoading] = useState(true);
+export function WebhookFailureEvents({
+  webhookId,
+  failures,
+  description = "Recent outbound deliveries that did not succeed.",
+}: {
+  webhookId: string;
+  /** Preloaded failures; when given, nothing is fetched. */
+  failures?: WebhookFailureEvent[];
+  description?: string;
+}) {
+  const [events, setEvents] = useState<WebhookFailureEvent[]>(failures ?? []);
+  const [loading, setLoading] = useState(!failures);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<WebhookFailureEvent | null>(null);
 
   const load = useCallback(async () => {
+    if (failures) {
+      setEvents(failures);
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -84,7 +97,7 @@ export function WebhookFailureEvents({ webhookId }: { webhookId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [webhookId]);
+  }, [webhookId, failures]);
 
   useEffect(() => {
     void load();
@@ -94,7 +107,7 @@ export function WebhookFailureEvents({ webhookId }: { webhookId: string }) {
     <section className="webhook-failure-events" aria-label="Delivery failures">
       <header className="webhook-failure-events-header">
         <h3>Delivery failures</h3>
-        <p>Recent outbound deliveries that did not succeed.</p>
+        <p>{description}</p>
       </header>
 
       {loading && (

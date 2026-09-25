@@ -147,6 +147,10 @@ func webhookActorCanManage(data *domain.Bootstrap, actor domain.User, item domai
 }
 
 func webhookVisibleToBootstrap(data *domain.Bootstrap, item domain.Webhook) bool {
+	// The audit log stream is managed from the audit log page only.
+	if item.AuditLog {
+		return false
+	}
 	if item.TeamRestriction == "" || item.TeamRestriction == "all" {
 		return true
 	}

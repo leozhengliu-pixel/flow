@@ -192,6 +192,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.ensureAuditStreamSecrets(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := s.ensureMetadataSearchIndex(context.Background()); err != nil {
 		db.Close()
 		return nil, err

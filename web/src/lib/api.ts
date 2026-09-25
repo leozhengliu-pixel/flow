@@ -1205,6 +1205,22 @@ export function deleteTeam(
     { method: "DELETE" },
   );
 }
+export interface AuditLogStreamStatus {
+  webhook: Webhook | null;
+  failures: WebhookFailureEvent[];
+}
+export function getAuditLogStream(): Promise<AuditLogStreamStatus> {
+  return request("/api/workspace/audit-log-stream");
+}
+export function createAuditLogStream(input: { url: string; secret: string }): Promise<Webhook & { secret: string }> {
+  return request("/api/workspace/audit-log-stream", jsonRequest("POST", input));
+}
+export function updateAuditLogStream(input: { enabled?: boolean; url?: string }): Promise<Webhook> {
+  return request("/api/workspace/audit-log-stream", jsonRequest("PATCH", input));
+}
+export function deleteAuditLogStream(): Promise<void> {
+  return request("/api/workspace/audit-log-stream", { method: "DELETE" });
+}
 export function listDeletedTeams(workspaceKey: string): Promise<DeletedTeam[]> {
   return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/deleted-teams`);
 }
