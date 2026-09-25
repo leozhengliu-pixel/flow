@@ -4109,9 +4109,11 @@ function App() {
           signingKeyMode={route.signingKeyMode}
           teamKey={route.teamKey}
           teamSection={route.teamSection}
+          teamSubPath={route.teamSubPath}
           releasePipelineMode={route.releasePipelineMode}
           apiView={route.apiView}
           workspaceView={route.workspaceView}
+          accountView={route.accountView}
           webhookId={route.webhookId}
           releasePipelineSlug={route.releasePipelineSlug}
           integrationProvider={route.integrationProvider}
@@ -4125,6 +4127,9 @@ function App() {
           }
           onOpenAsksEmailIntake={() =>
             navigateTo(newAsksEmailIntakePath(data.workspace.urlKey))
+          }
+          onOpenCodingTools={() =>
+            navigateTo(`${settingsPath(data.workspace.urlKey, 'code-and-reviews')}/coding-tools`)
           }
           onOpenWelcomeMessage={() =>
             navigateTo(`${settingsPath(data.workspace.urlKey, 'workspace')}/welcome-message`)
@@ -4147,9 +4152,9 @@ function App() {
                   : myIssuesPath(data.workspace.urlKey)),
             )
           }
-          onNavigate={(page, teamKey, teamSection) =>
+          onNavigate={(page, teamKey, teamSection, teamSubPath) =>
             navigateTo(
-              settingsPath(data.workspace.urlKey, page, teamKey, teamSection),
+              settingsPath(data.workspace.urlKey, page, teamKey, teamSection, teamSubPath),
             )
           }
           onCreateAPIKey={() =>

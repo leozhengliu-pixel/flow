@@ -223,6 +223,7 @@ const TEAM_SECTION_DESCRIPTIONS: Partial<Record<TeamSettingsSection, string>> = 
   workflow: "Manage issue automations, git workflows and other workflows",
   triage: "Define how incoming issues and requests are handled in triage",
   notifications: "Connect a Slack channel to receive notifications when issues are created or updated in this team.",
+  templates: "Any templates created here will be available when creating issues, projects, and documents within this team. To create templates that apply to all teams, do so in the workspace issue, project, or document templates sections.",
 };
 /** Page titles where they differ from the overview row label. */
 const TEAM_SECTION_TITLES: Partial<Record<TeamSettingsSection, string>> = {
@@ -251,13 +252,16 @@ export function TeamWorkflowSettings({
   onNavigate,
   onOpenTeams,
   onReload,
+  subPath,
 }: {
   data: BootstrapData;
   team: Team;
   section: TeamSettingsSection;
-  onNavigate: (section: TeamSettingsSection) => void;
+  onNavigate: (section: TeamSettingsSection, subPath?: string) => void;
   onOpenTeams?: () => void;
   onReload: () => Promise<void>;
+  /** Sub-page within the section, e.g. "issue/new" under templates. */
+  subPath?: string;
 }) {
   const { t } = useI18n();
   if (section === "statuses")
@@ -332,7 +336,15 @@ export function TeamWorkflowSettings({
       {section === "agent-connectors" && (
         <TeamAgentConnectorsSettings data={data} team={team} onReload={onReload} />
       )}
-      {Content && <Content data={data} team={team} onReload={onReload} />}
+      {Content && (
+        <Content
+          data={data}
+          team={team}
+          onReload={onReload}
+          subPath={subPath}
+          onNavigateSubPath={(next) => onNavigate(section, next)}
+        />
+      )}
     </>
   );
 }
@@ -341,6 +353,8 @@ type TeamSectionComponent = ComponentType<{
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;
+  subPath?: string;
+  onNavigateSubPath?: (subPath?: string) => void;
 }>;
 const TEAM_SECTION_COMPONENTS: Partial<
   Record<TeamSettingsSection, TeamSectionComponent>
@@ -1232,10 +1246,14 @@ function RecurringIssuesSettings({
   data,
   team,
   onReload,
+  subPath,
+  onNavigateSubPath,
 }: {
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;
+  subPath?: string;
+  onNavigateSubPath?: (subPath?: string) => void;
 }) {
   const { formatDate, t } = useI18n();
   const issues = data.issues.filter(
@@ -1243,9 +1261,14 @@ function RecurringIssuesSettings({
   );
   const sourceId = new URLSearchParams(window.location.search).get('fromIssue');
   const source = data.issues.find(issue => issue.id === sourceId && issue.team.id === team.id);
-  const [creating, setCreating] = useState(Boolean(source));
+  const [creatingLocal, setCreatingLocal] = useState(Boolean(source));
+  const creating = creatingLocal || subPath === "new";
+  const setCreating = (value: boolean) => {
+    setCreatingLocal(value);
+    if (!source) onNavigateSubPath?.(value ? "new" : undefined);
+  };
   const [title, setTitle] = useState(source?.title ?? "");
-  useEffect(() => { if (source && !creating && !title) { setCreating(true); setTitle(source.title) } }, [source, creating, title]);
+  useEffect(() => { if (source && !creating && !title) { setCreatingLocal(true); setTitle(source.title) } }, [source, creating, title]);
   const closeCreation = () => {
     setCreating(false); setTitle("");
     const url = new URL(window.location.href);
@@ -2338,151 +2361,159 @@ function ResolvedSummariesSettings({
   );
 }
 
+type TemplateKind = "issue" | "project" | "document";
+type AnyTemplate = IssueTemplate | ProjectTemplate | DocumentTemplate;
+const NO_TEMPLATE = "none";
+
 function TemplatesSettings({
   data,
   team,
   onReload,
+  subPath,
+  onNavigateSubPath,
 }: {
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;
+  subPath?: string;
+  onNavigateSubPath?: (subPath?: string) => void;
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
-  const [type, setType] = useState<"issue" | "project" | "document">("issue");
-  const [editing, setEditing] = useState<
-    IssueTemplate | ProjectTemplate | DocumentTemplate | null | undefined
-  >(undefined);
+  // The URL (templates/{kind}/new | templates/{kind}/{id}/edit) owns the
+  // open editor so it survives reloads and can be linked to.
+  const [routeKind, routeId, routeAction] = (subPath ?? "").split("/");
+  const editingKind = (["issue", "project", "document"] as const).find((kind) => kind === routeKind);
   const scopeIds = new Set([
     team.id,
     ...(teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id) ?? []).map((item) => item.id),
   ]);
-  const templates =
-    type === "issue"
-      ? data.issueTemplates.filter((item) => scopeIds.has(item.teamId ?? ""))
-      : type === "project"
-        ? data.projectTemplates.filter(
-            (item) =>
-              item.visibility === "teams" &&
-              item.teamIds.some((teamId) => scopeIds.has(teamId)),
-          )
-        : data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? ""));
+  const templatesByKind: Record<TemplateKind, AnyTemplate[]> = {
+    issue: data.issueTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
+    project: data.projectTemplates.filter(
+      (item) => item.visibility === "teams" && item.teamIds.some((teamId) => scopeIds.has(teamId)),
+    ),
+    document: data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
+  };
+  const editing: AnyTemplate | null | undefined = !editingKind
+    ? undefined
+    : routeId === "new"
+      ? null
+      : routeAction === "edit"
+        ? templatesByKind[editingKind].find((item) => item.id === routeId)
+        : undefined;
+  const openEditor = (kind: TemplateKind, template: AnyTemplate | null) =>
+    onNavigateSubPath?.(template === null ? `${kind}/new` : `${kind}/${template.id}/edit`);
+  const closeEditor = () => onNavigateSubPath?.(undefined);
+  const sourceTeamOf = (kind: TemplateKind, template: AnyTemplate) =>
+    kind === "project"
+      ? (template as ProjectTemplate).teamIds.find((teamId) => scopeIds.has(teamId) && teamId !== team.id)
+      : (template as IssueTemplate | DocumentTemplate).teamId && (template as IssueTemplate | DocumentTemplate).teamId !== team.id
+        ? (template as IssueTemplate | DocumentTemplate).teamId
+        : undefined;
+  const templateSelect = (
+    title: string,
+    value: string | undefined,
+    options: AnyTemplate[],
+    onChange: (id: string) => void,
+  ) => (
+    <SelectRow
+      title={title}
+      value={value || NO_TEMPLATE}
+      options={[NO_TEMPLATE, ...options.map((item) => item.id)]}
+      labels={{ [NO_TEMPLATE]: "No template", ...Object.fromEntries(options.map((item) => [item.id, item.name])) }}
+      entityOptions={options.map((item) => item.id)}
+      onChange={(next) => onChange(next === NO_TEMPLATE ? "" : next)}
+    />
+  );
+  const section = (kind: TemplateKind) => {
+    const templates = templatesByKind[kind];
+    return (
+      <TeamSection key={kind} title={`${titleCase(kind)} templates`}>
+        {templates.map((template) => {
+          const sourceTeamID = sourceTeamOf(kind, template);
+          const inherited = Boolean(sourceTeamID);
+          return (
+            <TeamRow
+              key={template.id}
+              className={inherited ? "team-template-row is-inherited" : "personal-row-link team-template-row"}
+              title={<span data-i18n-ignore>{template.name}</span>}
+              description={
+                inherited ? (
+                  <>
+                    {t("Inherited from")}{" "}
+                    <span data-i18n-ignore>{data.teams.find((item) => item.id === sourceTeamID)?.name ?? t("parent team")}</span>
+                  </>
+                ) : template.description ? (
+                  <span data-i18n-ignore>{template.description}</span>
+                ) : undefined
+              }
+              role={inherited ? undefined : "button"}
+              tabIndex={inherited ? undefined : 0}
+              onClick={inherited ? undefined : () => openEditor(kind, template)}
+              onKeyDown={inherited ? undefined : (event) => { if (event.key === "Enter") openEditor(kind, template); }}
+            />
+          );
+        })}
+        <TeamRow className="settings-row--action" title={templates.length ? "" : `No ${kind} templates`}>
+          <button className="settings-action" type="button" onClick={() => openEditor(kind, null)}>
+            <Plus size={13} />
+            {t("New template")}
+          </button>
+        </TeamRow>
+      </TeamSection>
+    );
+  };
+  const issueTemplates = templatesByKind.issue as IssueTemplate[];
   return (
     <>
-      <div className="settings-segmented team-template-tabs">
-        {(["issue", "project", "document"] as const).map((value) => (
-          <button
-            key={value}
-            className={type === value ? "active" : ""}
-            onClick={() => {
-              setType(value);
-              setEditing(undefined);
-            }}
-          >{t(`${titleCase(value)} templates`)}</button>
-        ))}
-      </div>
-      <TeamSection
-        title={`${titleCase(type)} templates`}
-        action={
-          <button className="settings-action" onClick={() => setEditing(null)}>
-            <Plus size={13} />
-            New template
-          </button>
-        }
-      >
-        <div className="team-setting-list">
-          {templates.map((template) => {
-            const sourceTeamID =
-              type === "project"
-                ? (template as ProjectTemplate).teamIds.find((teamId) => scopeIds.has(teamId) && teamId !== team.id)
-                : (template as IssueTemplate | DocumentTemplate).teamId && (template as IssueTemplate | DocumentTemplate).teamId !== team.id
-                  ? (template as IssueTemplate | DocumentTemplate).teamId
-                  : undefined;
-            const inherited = Boolean(sourceTeamID);
-            return <button
-              className="team-template-setting"
-              data-inherited={inherited || undefined}
-              disabled={inherited}
-              key={template.id}
-              onClick={() => !inherited && setEditing(template)}
-            >
-              <span className="template-icon">T</span>
-              <span>
-                <strong data-i18n-ignore>{template.name}</strong>
-                <small>
-                  {inherited ? (
-                    <>Inherited from <span data-i18n-ignore>{data.teams.find((item) => item.id === sourceTeamID)?.name ?? "parent team"}</span></>
-                  ) : template.description ? (
-                    <span data-i18n-ignore>{template.description}</span>
-                  ) : (
-                    `${titleCase(type)} template`
-                  )}
-                </small>
-              </span>
-            </button>
-          })}
-          {!templates.length && (
-            <TeamEmpty
-              icon={<Plus size={22} />}
-              title={`No ${type} templates`}
-              description={`Templates prefill common ${type} properties and descriptions.`}
-            />
-          )}
-        </div>
-      </TeamSection>
-      {type === "issue" && templates.length > 0 && (
+      {section("issue")}
+      {issueTemplates.length > 0 && (
         <TeamSection
           title="Default issue template"
           description="Pre-select a template when creating an issue for this team. Form templates can’t be used as a default for team members."
         >
-          <SelectRow
-            title="Issues created by team members"
-            value={settings.defaultIssueTemplateForMembersId ?? ""}
-            options={["", ...templates.filter((item) => (item as IssueTemplate).templateType !== "customForm").map((item) => item.id)]}
-            labels={{ "": "No template", ...Object.fromEntries(templates.map((item) => [item.id, item.name])) }}
-            entityOptions={templates.map((item) => item.id)}
-            onChange={(value) => void save({ defaultIssueTemplateForMembersId: value })}
-          />
-          <SelectRow
-            title="Issues created by non-team members"
-            value={settings.defaultIssueTemplateForNonMembersId ?? ""}
-            options={["", ...templates.map((item) => item.id)]}
-            labels={{ "": "No template", ...Object.fromEntries(templates.map((item) => [item.id, item.name])) }}
-            entityOptions={templates.map((item) => item.id)}
-            onChange={(value) => void save({ defaultIssueTemplateForNonMembersId: value })}
-          />
+          {templateSelect(
+            "Issues created by team members",
+            settings.defaultIssueTemplateForMembersId,
+            issueTemplates.filter((item) => item.templateType !== "customForm"),
+            (id) => void save({ defaultIssueTemplateForMembersId: id }),
+          )}
+          {templateSelect(
+            "Issues created by non-team members",
+            settings.defaultIssueTemplateForNonMembersId,
+            issueTemplates,
+            (id) => void save({ defaultIssueTemplateForNonMembersId: id }),
+          )}
         </TeamSection>
       )}
-      {type === "project" && templates.length > 0 && (
-        <TeamSection
-          title="Default project template"
-          description="Pre-select a template when creating a project for this team"
-        >
-          <SelectRow
-            title="Projects created"
-            value={settings.defaultProjectTemplateId ?? ""}
-            options={["", ...templates.map((item) => item.id)]}
-            labels={{ "": "No template", ...Object.fromEntries(templates.map((item) => [item.id, item.name])) }}
-            entityOptions={templates.map((item) => item.id)}
-            onChange={(value) => void save({ defaultProjectTemplateId: value })}
-          />
+      {section("project")}
+      {templatesByKind.project.length > 0 && (
+        <TeamSection title="Default project template" description="Pre-select a template when creating a project for this team">
+          {templateSelect(
+            "Projects created",
+            settings.defaultProjectTemplateId,
+            templatesByKind.project,
+            (id) => void save({ defaultProjectTemplateId: id }),
+          )}
         </TeamSection>
       )}
-      {editing !== undefined &&
-        (type === "document" ? (
+      {section("document")}
+      {editing !== undefined && editingKind &&
+        (editingKind === "document" ? (
           <DocumentTemplateEditor
             team={team}
             template={editing as DocumentTemplate | null}
-            onClose={() => setEditing(undefined)}
+            onClose={closeEditor}
             onSaved={onReload}
           />
         ) : (
           <TemplateEditor
             data={data}
-            type={type}
+            type={editingKind}
             teamId={team.id}
             template={editing as IssueTemplate | ProjectTemplate | null}
-            onClose={() => setEditing(undefined)}
+            onClose={closeEditor}
             onSaved={onReload}
           />
         ))}

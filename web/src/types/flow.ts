@@ -968,6 +968,10 @@ export interface UserSettings {
   gitAttachmentFormat?: string;
   gitBranchMoveStarted?: boolean;
   codingToolMoveStarted?: boolean;
+  /** Coding tools listed in an issue's "Work on issue" menu. */
+  enabledCodingTools?: string[];
+  customDeepLinkUrlTemplate?: string;
+  codingPromptTemplate?: string;
   changelogUpdates?: boolean;
   changelogNewsletter?: boolean;
   marketingUpdates?: boolean;

@@ -1,4 +1,5 @@
 import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
+import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
 import {
   Suspense,
   useCallback,
@@ -291,6 +292,7 @@ type SettingsPageProps = {
   teamSection?: TeamSettingsSection;
   releasePipelineMode?: "new" | "edit";
   workspaceView?: "welcome-message";
+  accountView?: "coding-tools";
   apiView?: "keys";
   webhookId?: string;
   releasePipelineSlug?: string;
@@ -305,6 +307,7 @@ type SettingsPageProps = {
   onOpenAsksSlack?: (integrationId: string) => void;
   onOpenAsksEmailIntake?: () => void;
   onOpenWelcomeMessage?: () => void;
+  onOpenCodingTools?: () => void;
   identityProviderId?: string;
   applicationId?: string;
   applicationMode?: "detail" | "edit";
@@ -319,7 +322,9 @@ type SettingsPageProps = {
     page: SettingsPageId,
     teamKey?: string,
     teamSection?: TeamSettingsSection,
+    teamSubPath?: string,
   ) => void;
+  teamSubPath?: string;
   onCreateAPIKey?: () => void;
   onCreateSigningKey?: () => void;
   onOpenAPIKey?: (key: APIKey) => void;
@@ -884,9 +889,18 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
+  if (page === "code-and-reviews" && props.accountView === "coding-tools")
+    return (
+      <CodingToolsSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("code-and-reviews")}
+        onReload={props.onReload}
+      />
+    );
   if (personal)
     return (
       <PersonalSettings
+        onOpenCodingTools={props.onOpenCodingTools}
         page={page}
         notificationChannel={props.notificationChannel}
         onNavigateNotification={props.onNavigateNotification}
@@ -1123,7 +1137,8 @@ function SettingsBody(
         data={props.data}
         team={team}
         section={props.teamSection ?? "overview"}
-        onNavigate={(section) => props.onNavigate("team", team.key, section)}
+        onNavigate={(section, subPath) => props.onNavigate("team", team.key, section, subPath)}
+        subPath={props.teamSubPath}
         onOpenTeams={() => props.onNavigate("teams")}
         onReload={props.onReload}
       />

@@ -423,3 +423,5 @@ html:root .settings-app .settings-main .team-access-note { margin: -16px 16px 28
 html:root .settings-app .settings-main .personal-agent-groups .settings-group + .settings-group,
 html:root .settings-app .settings-main .personal-agent-groups .settings-group + * { margin-top: 40px; }
 html:root .settings-app .settings-main .personal-agent-groups .personal-agent-guidance { border: 0; border-radius: 10px; background: transparent; }
+/* Row titles may wrap entity names in a span; keep the title styling. */
+html:root .settings-app .settings-main .settings-row strong span { color: inherit; font: inherit; }
