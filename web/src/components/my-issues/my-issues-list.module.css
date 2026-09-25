@@ -43,3 +43,14 @@
 .parentGroupHeader{height:32px;margin:6px 8px 2px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--theme-text-primary)}
 .groupHeader[data-subgroup]{margin-left:24px}
 .row[data-active]{background:var(--bg-active)}.row[data-active]::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent-primary)}
+:global(:root[data-theme="light"]) .groupHeader{background:var(--bg-sidebar)}
+:global(html:root[data-theme="light"]) .contextMenu .menuItem,:global(html:root[data-theme="light"]) .contextSubmenu .menuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--lx-item-text);font-weight:450}
+:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-highlighted],:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-state=open],:global(html:root[data-theme="light"]) .contextSubmenu .menuItem[data-highlighted]{background:var(--lx-item-hover)}
+:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-danger=true]{color:var(--lx-item-text)}
+:global(html:root[data-theme="light"]) .contextMenu .menuSeparator:after,:global(html:root[data-theme="light"]) .contextSubmenu .menuSeparator:after{left:0;right:0;background:var(--lx-popover-border)}
+:global(html:root[data-theme="light"]) .contextMenu,:global(html:root[data-theme="light"]) .contextSubmenu{border-color:var(--lx-popover-border);background:var(--lx-surface);box-shadow:var(--lx-popover-shadow)}
+.menuItem>.menuIcon{width:16px;height:16px;flex:0 0 16px;margin:0 8px 0 0;color:var(--issue-muted)}
+:global(html:root[data-theme="light"]) .menuItem>.menuIcon{color:var(--lx-item-icon)}
+.contextMenu{width:max-content;min-width:180px;max-width:calc(100vw - 20px)}
+.contextMenu .menuItem>span:not(:only-child){white-space:nowrap}
+.contextMenu .menuItem>kbd{padding-left:12px;white-space:nowrap}

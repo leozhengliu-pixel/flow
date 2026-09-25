@@ -8,6 +8,7 @@ import { usePropertyCommand } from '@/components/property/use-property-command'
 import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 import type { MyIssuesRowData } from './my-issues-list'
 import styles from './my-issues-list.module.css'
+import { ContextMenuIcon } from './context-menu-icon'
 
 /**
  * Host callbacks for the full Linear row context menu (`ContextualMenuActions`). Pages that render
@@ -76,11 +77,11 @@ export function IssueRowExtendedMenuItems({ row }: { row: MyIssuesRowData }) {
 }
 
 function Item({ label, shortcut, checked, top = false, onSelect }: { label: string; shortcut?: string; checked?: boolean; top?: boolean; onSelect: () => void }) {
-  return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}><span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
+  return <ContextMenu.Item className={top ? styles.menuItem : styles.submenuItem} onSelect={onSelect}>{top && <ContextMenuIcon label={label}/>}<span>{label}</span>{checked ? <span aria-label="Selected">✓</span> : shortcut ? <kbd>{shortcut}</kbd> : null}</ContextMenu.Item>
 }
 
 function Sub({ label, shortcut, children }: { label: string; shortcut?: string; children: ReactNode }) {
-  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
+  return <ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>{children}</ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function IssueSearch({ data, exclude, onPick }: { data: BootstrapData; exclude: string; onPick: (issue: Issue) => void }) {

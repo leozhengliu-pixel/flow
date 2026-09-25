@@ -18,6 +18,7 @@ import { TitleTooltipBridge } from './components/ui/title-tooltip-bridge'
 import './i18n/i18n.css'
 import { FlowMotionProvider } from './components/ui/motion'
 import './styles/motion.css'
+import './styles/light-parity.css'
 
 initializeTheme()
 window.__flowMermaidPreview = renderMermaidPreview
