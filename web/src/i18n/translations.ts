@@ -2211,6 +2211,7 @@ export const zhCN: Record<string, string> = {
   selected: "项已选择",
   Grouping: "分组",
   "Grouping options": "分组选项",
+  "Visible issues": "可见事项",
   "Group ordering": "分组排序",
   "Progress grouping": "进度分组",
   Layout: "布局",

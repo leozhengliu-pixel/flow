@@ -40,3 +40,16 @@
 .groupToggle[data-hidden]{color:var(--issue-muted)}
 .groupToggle:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .groupHint{margin:6px 0 0;color:var(--issue-muted);font-size:11px}
+/* Reference display options (both themes). `:not(#_)` outranks the theme-scoped rules above. */
+.popover:not(#_),.selectMenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
+.section:not(#_)+.section{border-top:.5px solid var(--pk-divider)}
+.rowLabel:not(#_),.selectField:not(#_)>span,.switchRow:not(#_){color:var(--pk-muted);font-size:12px;font-weight:500}
+.sectionLabel:not(#_){height:auto;padding:6px 0 7px;color:var(--pk-muted);font-size:12px;font-weight:500}
+.section:not(#_)>.sectionLabel:first-child{color:var(--pk-text)}
+.layoutTabs:not(#_) button{position:relative;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.layoutTabs:not(#_) button[aria-selected=true]{background:var(--pk-control-selected);box-shadow:var(--pk-control-ring-selected);color:var(--pk-text-strong)}
+.selectTrigger:not(#_){padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
+.selectTrigger:not(#_):hover:not(:disabled),.selectTrigger:not(#_)[data-state=open]{background:var(--pk-control-selected)}
+.propertyGrid:not(#_) button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.propertyGrid:not(#_) button[data-active=true]{background:var(--pk-chip-on);box-shadow:var(--pk-chip-on-ring);color:var(--pk-text-strong)}
+.footer:not(#_){background:var(--pk-surface);border-top:.5px solid var(--pk-divider)}
