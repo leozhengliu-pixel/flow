@@ -80,7 +80,8 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	srv := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true}
+	handler := newHandler(srv)
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	source := bootstrap.Teams[0]
 	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, "/api/teams/"+source.ID+"/settings", map[string]any{"timezone": "Asia/Shanghai", "progressOrder": "last"}, http.StatusOK)
@@ -120,8 +121,21 @@ func TestTeamCreationHierarchyCopyAndDelete(t *testing.T) {
 	issue := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Deleted with team", "teamId": child.ID}, http.StatusCreated)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/workspaces/test-workspace/teams/"+child.ID, nil, http.StatusNoContent)
 	afterDelete := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
-	if slices.ContainsFunc(afterDelete.Teams, func(team domain.Team) bool { return team.ID == child.ID }) || slices.ContainsFunc(afterDelete.Issues, func(item domain.Issue) bool { return item.ID == issue.ID }) || slices.ContainsFunc(afterDelete.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == child.ID }) {
-		t.Fatal("team deletion left owned resources behind")
+	if slices.ContainsFunc(afterDelete.Teams, func(team domain.Team) bool { return team.ID == child.ID }) || slices.ContainsFunc(afterDelete.Issues, func(item domain.Issue) bool { return item.ID == issue.ID }) {
+		t.Fatal("deleted team is still visible")
+	}
+	if err := srv.purgeTeam(context.Background(), "test-workspace", child.ID); err != nil {
+		t.Fatal(err)
+	}
+	afterPurge := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	if slices.ContainsFunc(afterPurge.Teams, func(team domain.Team) bool { return team.ID == child.ID }) {
+		t.Fatal("purged team is still listed")
+	}
+	if slices.ContainsFunc(afterPurge.Issues, func(item domain.Issue) bool { return item.ID == issue.ID }) {
+		t.Fatal("purged team left its issue behind")
+	}
+	if slices.ContainsFunc(afterPurge.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == child.ID }) {
+		t.Fatalf("purged team left memberships behind: %+v", afterPurge.TeamMembers)
 	}
 }
 

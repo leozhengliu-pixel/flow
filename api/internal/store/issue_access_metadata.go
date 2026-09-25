@@ -54,6 +54,9 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 	}
 	visible := make([]string, 0, len(data.Teams))
 	for _, team := range data.Teams {
+		if team.ArchivedAt != nil {
+			continue
+		}
 		allowed := isWorkspaceAdminRole(role) || roles[team.ID] != ""
 		settings := data.TeamSettings[team.ID]
 		if !allowed && role != "guest" {

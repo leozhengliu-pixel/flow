@@ -294,6 +294,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/teams", s.createTeam)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/teams/{teamId}", s.updateTeam)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/teams/{teamId}", s.deleteTeam)
+	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/deleted-teams", s.listDeletedTeams)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/deleted-teams/{teamId}/restore", s.restoreDeletedTeam)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invitations", s.createInvitation)
 	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/invite-link", s.getWorkspaceInviteLink)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invite-link", s.createOrRotateWorkspaceInviteLink)
@@ -1684,20 +1686,20 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
-	workspaceKey, teamID := r.PathValue("workspaceKey"), r.PathValue("teamId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
+// purgeTeam permanently deletes a team and everything it owns.
+func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) error {
+	err := s.store.MutateWorkspace(ctx, workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
 		err := store.ApplyTeamDeletion(data, teamID)
 		if errors.Is(err, store.ErrTeamNotFound) {
 			return errNotFound
 		}
 		return err
 	})
-	if err == nil && !s.authDisabled {
+	if err == nil {
 		data, _ := s.store.BootstrapFor(workspaceKey)
-		err = s.store.DeleteTeamMemberships(r.Context(), data.Workspace.ID, teamID)
+		err = s.store.DeleteTeamMemberships(ctx, data.Workspace.ID, teamID)
 	}
-	respondMutation(w, err, http.StatusNoContent, nil)
+	return err
 }
 
 type customerInput struct {
@@ -2581,6 +2583,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 			team = data.Teams[index]
+		}
+		if team.ArchivedAt != nil {
+			return "", errInvalid
 		}
 		if team.RetiredAt != nil {
 			return "", fmt.Errorf("%w: team is retired", errInvalid)
@@ -4768,6 +4773,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			return nil, fmt.Errorf("%w: unknown team", errInvalid)
 		}
 		nextTeam := data.Teams[teamIndex]
+		if nextTeam.ArchivedAt != nil {
+			return nil, fmt.Errorf("%w: unknown team", errInvalid)
+		}
 		if nextTeam.RetiredAt != nil {
 			return nil, fmt.Errorf("%w: team is retired", errInvalid)
 		}

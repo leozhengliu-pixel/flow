@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { MoreHorizontal, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -13,13 +13,14 @@ import {
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
-import { deleteTeam, updateTeam } from "@/lib/api";
+import { deleteTeam, listDeletedTeams, restoreDeletedTeam, updateTeam } from "@/lib/api";
 import { teamIssuesPath } from "@/lib/app-routes";
-import type { BootstrapData, Team } from "@/types/flow";
+import { DELETE_TEAM_DESCRIPTION } from "@/lib/team-deletion";
+import type { BootstrapData, DeletedTeam, Team } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 
-type Visibility = "Active" | "Retired";
-const VISIBILITIES: Visibility[] = ["Active", "Retired"];
+type Visibility = "Active" | "Retired" | "Recently deleted";
+
 
 /** Workspace teams table: filter, visibility, members, issues, created. */
 export function WorkspaceTeamsSettings({
@@ -38,6 +39,19 @@ export function WorkspaceTeamsSettings({
   const [query, setQuery] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("Active");
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
+  const visibilities: Visibility[] = admin ? ["Active", "Retired", "Recently deleted"] : ["Active", "Retired"];
+  const [deleted, setDeleted] = useState<DeletedTeam[]>();
+  const loadDeleted = useCallback(async () => {
+    try {
+      setDeleted(await listDeletedTeams(data.workspace.urlKey));
+    } catch (error) {
+      setDeleted([]);
+      toast.error(error instanceof Error ? error.message : t("Could not load deleted teams"));
+    }
+  }, [data.workspace.urlKey, t]);
+  useEffect(() => {
+    if (visibility === "Recently deleted") void loadDeleted();
+  }, [visibility, loadDeleted, data.teams]);
   const memberCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const item of data.teamMembers) counts.set(item.teamId, (counts.get(item.teamId) ?? 0) + 1);
@@ -110,11 +124,11 @@ export function WorkspaceTeamsSettings({
         <SettingsSelect
           label={t("Team visibility filter")}
           value={t(visibility)}
-          options={VISIBILITIES.map((item) => t(item))}
-          onChange={(value) => setVisibility(VISIBILITIES.find((item) => t(item) === value) ?? "Active")}
+          options={visibilities.map((item) => t(item))}
+          onChange={(value) => setVisibility(visibilities.find((item) => t(item) === value) ?? "Active")}
         />
         <span />
-        {admin && data.teams.length > 0 && (
+        {admin && visibility !== "Recently deleted" && data.teams.length > 0 && (
           <button className="settings-action" type="button" onClick={exportCsv}>
             {t("Export CSV")}
           </button>
@@ -123,6 +137,19 @@ export function WorkspaceTeamsSettings({
           {t("Create team")}
         </button>
       </div>
+      {visibility === "Recently deleted" ? (
+        <DeletedTeamsTable
+          teams={(deleted ?? []).filter((team) => !normalized || `${team.name} ${team.key}`.toLowerCase().includes(normalized))}
+          loading={deleted === undefined}
+          filtered={Boolean(normalized)}
+          onRestore={(team) =>
+            void run(async () => {
+              await restoreDeletedTeam(data.workspace.urlKey, team.id);
+              setDeleted((items) => items?.filter((item) => item.id !== team.id));
+            }, "Team restored")
+          }
+        />
+      ) : (
       <div className="settings-members-directory">
         <div className="settings-members-columns">
           <span>{t("Name")}</span>
@@ -205,7 +232,7 @@ export function WorkspaceTeamsSettings({
                             if (
                               !(await confirmAction(`${t("Delete")} ${team.name}?`, {
                                 confirmLabel: t("Delete team"),
-                                description: t("This permanently deletes the team and its owned data."),
+                                description: t(DELETE_TEAM_DESCRIPTION),
                               }))
                             )
                               return;
@@ -228,6 +255,74 @@ export function WorkspaceTeamsSettings({
           </div>
         )}
       </div>
+      )}
+    </div>
+  );
+}
+
+function DeletedTeamsTable({
+  teams,
+  loading,
+  filtered,
+  onRestore,
+}: {
+  teams: DeletedTeam[];
+  loading: boolean;
+  filtered: boolean;
+  onRestore: (team: DeletedTeam) => void;
+}) {
+  const { t, formatDate } = useI18n();
+  const date = (value: string) => formatDate(value, { dateStyle: "medium" });
+  return (
+    <div className="settings-members-directory">
+      <div className="settings-members-columns">
+        <span>{t("Name")}</span>
+        <span>{t("Deleted by")}</span>
+        <span>{t("Deleted")}</span>
+        <span />
+        <span>{t("Issues")}</span>
+        <span>{t("Deletes on")}</span>
+        <span />
+      </div>
+      {teams.length > 0 && (
+        <div className="settings-members-group">
+          <strong>{t("Recently deleted")}</strong>
+          <span>{teams.length}</span>
+        </div>
+      )}
+      {teams.map((team) => (
+        <div className="settings-member-directory-row settings-teams-row is-deleted" key={team.id}>
+          <span>
+            <span className="settings-team-icon" style={{ color: team.color }}>
+              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
+            </span>
+            <strong>{team.name}</strong>
+            <small>{team.key}</small>
+          </span>
+          <span className="settings-teams-description">{team.archivedBy?.displayName ?? "-"}</span>
+          <span>{date(team.archivedAt)}</span>
+          <span />
+          <span>{team.issueCount ? team.issueCount.toLocaleString() : "-"}</span>
+          <span>{date(team.purgeAt)}</span>
+          <span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="settings-member-more" aria-label={`${t("Open menu")} ${team.name}`}>
+                  <MoreHorizontal size={15} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="settings-member-action-menu">
+                <DropdownMenuItem onSelect={() => onRestore(team)}>{t("Restore team")}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </span>
+        </div>
+      ))}
+      {!loading && !teams.length && (
+        <div className="settings-team-members-empty">
+          {filtered ? t("No matching teams") : t("Deleted teams appear here for 30 days before being permanently removed.")}
+        </div>
+      )}
     </div>
   );
 }

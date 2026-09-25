@@ -577,6 +577,9 @@ func adminOnlyRequest(r *http.Request) bool {
 	if strings.HasPrefix(path, "/api/webhooks") {
 		return true
 	}
+	if strings.HasPrefix(path, "/api/workspaces/") && strings.Contains(path, "/deleted-teams") {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/workflows") || strings.HasPrefix(path, "/api/workflow-runs") {
 		return true
 	}

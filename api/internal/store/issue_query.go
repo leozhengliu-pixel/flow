@@ -59,6 +59,20 @@ type IssueRecordAccess struct {
 	WorkspaceID    string
 	VisibleTeamIDs []string
 	Admin          bool
+	// ArchivedTeamIDs are deleted teams in their restoration window. Their
+	// issues stay hidden from everyone, including admins.
+	ArchivedTeamIDs []string
+}
+
+// ArchivedTeamIDs lists deleted teams that are still restorable.
+func ArchivedTeamIDs(data domain.Bootstrap) []string {
+	var ids []string
+	for _, team := range data.Teams {
+		if team.ArchivedAt != nil {
+			ids = append(ids, team.ID)
+		}
+	}
+	return ids
 }
 
 func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
@@ -217,7 +231,7 @@ func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID st
 	if err := rows.Err(); err != nil {
 		return data, IssueRecordAccess{}, err
 	}
-	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: visibleIssueTeams(data, userID, role)}
+	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: visibleIssueTeams(data, userID, role), ArchivedTeamIDs: ArchivedTeamIDs(data)}
 	return data, access, nil
 }
 
@@ -460,6 +474,11 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 		}
 		teams, values := bindList("i.team_id", query.Access.VisibleTeamIDs)
 		clauses = append(clauses, "("+teams+" OR i.id IN (SELECT id FROM shared_issues))")
+		args = append(args, values...)
+	}
+	if query.Access != nil && len(query.Access.ArchivedTeamIDs) > 0 {
+		archivedTeams, values := bindList("i.team_id", query.Access.ArchivedTeamIDs)
+		clauses = append(clauses, "NOT "+archivedTeams)
 		args = append(args, values...)
 	}
 	if query.Archived != "all" {

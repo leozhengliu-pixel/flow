@@ -254,6 +254,10 @@ type Team struct {
 	Private        bool       `json:"private,omitempty"`
 	ExternalSource string     `json:"externalSource,omitempty"`
 	RetiredAt      *time.Time `json:"retiredAt,omitempty"`
+	// ArchivedAt marks a deleted team inside its restoration window. Archived
+	// teams and their issues are hidden from every viewer until restored or purged.
+	ArchivedAt   *time.Time `json:"archivedAt,omitempty"`
+	ArchivedByID string     `json:"archivedById,omitempty"`
 	CreatedAt      *time.Time `json:"createdAt,omitempty"`
 	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
 }

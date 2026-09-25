@@ -298,6 +298,7 @@ html:root .settings-app .settings-main .settings-teams-row:hover { background: v
 html:root .settings-app .settings-main .settings-teams-row > span:first-child { display: flex; align-items: center; gap: 10px; }
 html:root .settings-app .settings-main .settings-teams-row strong { color: var(--set-label); font-weight: 500; }
 html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar { grid-template-columns: 300px max-content 1fr auto auto; margin-inline: 48px; }
+html:root .settings-app .settings-main .settings-teams-page > .settings-members-toolbar > .settings-select { width: auto; min-width: 56px; }
 html:root .settings-app .settings-main .settings-teams-row small { color: var(--set-desc); font-size: 13px; }
 html:root .settings-app .settings-main .settings-teams-description { overflow: hidden; color: var(--set-desc); text-overflow: ellipsis; white-space: nowrap; }
 html:root .settings-app .settings-main .settings-teams-page .settings-members-group,

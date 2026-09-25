@@ -38,7 +38,12 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}
-	if !s.authDisabled {
+	if s.authDisabled {
+		// Development mode has no viewer, but deleted teams still stay hidden.
+		if archived := store.ArchivedTeamIDs(data); len(archived) > 0 {
+			query.Access = &store.IssueRecordAccess{Admin: true, ArchivedTeamIDs: archived}
+		}
+	} else {
 		query.Access = &access
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
 			query.AllowedTeamIDs = slices.Clone(key.TeamIDs)
