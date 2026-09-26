@@ -1089,3 +1089,23 @@ html:root body .sub-issues-add-menu__item:not(#_) {
 html:root body .sub-issues-add-menu__item:not(#_)[data-highlighted] { background: var(--pk-hover); }
 html:root body .sub-issues-add-menu__item:not(#_) > svg { color: var(--pk-text); }
 html:root body .sub-issues-add-menu__item:not(#_) > kbd { margin-left: auto; color: var(--pk-muted); font: 500 11px/normal var(--font); }
+
+/* ── Sub-issue section: header caret, label, buttons and rows ─────────── */
+html:root body .sub-issues-collapse:not(#_) { gap: 3px; color: var(--sub-caret); }
+html:root body .sub-issues-collapse:not(#_) > svg { width: 14px; height: 14px; flex: 0 0 14px; transform: rotate(90deg); }
+html:root body .sub-issues-collapse:not(#_)[aria-expanded=false] > svg { transform: none; }
+html:root body .sub-issues-collapse:not(#_) > span { color: var(--sub-label); }
+html:root body .sub-issues-progress:not(#_) { color: var(--sub-label); font-weight: 450; }
+html:root body .sub-issues-display:not(#_),
+html:root body .sub-issues-create:not(#_) { border: 0; background: var(--sub-button); box-shadow: var(--sub-button-ring); color: var(--sub-button-text); }
+html:root body .sub-issues-display:not(#_) svg,
+html:root body .sub-issues-create:not(#_) svg { width: 14px; height: 14px; }
+html:root body .detail-sub-issue-row:not(#_) { padding-right: 11px; color: var(--bright); }
+html:root body .detail-sub-issue-row:not(#_):hover,
+html:root body .detail-sub-issue-row:not(#_):focus-visible,
+html:root body .detail-sub-issue-row:not(#_)[data-selected=true] { background: var(--sub-row-hover); }
+html:root body .detail-sub-checkbox:not(#_):not([aria-checked=true]) { border-color: var(--sub-checkbox-border); }
+html:root body .detail-sub-unassigned:not(#_) { width: 18px; height: 18px; flex: 0 0 18px; color: var(--issue-dim); }
+html:root body .issue-document .sub-issue-editor:not(#_) { border: 1px solid var(--sub-editor-border); background: var(--sub-editor-bg); box-shadow: var(--pk-shadow); }
+html:root body .sub-issue-title-editor:not(#_),
+html:root body .sub-issue-title-editor:not(#_) .ProseMirror { color: var(--pk-text-strong); font-weight: 600; }

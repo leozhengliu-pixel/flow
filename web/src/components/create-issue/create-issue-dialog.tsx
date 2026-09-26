@@ -494,9 +494,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   </Dialog.Root>
 }
 
-function ExistingDraftDiscardDialog({ onCancel, onDiscard, open, saving }: { onCancel: () => void; onDiscard: () => void; open: boolean; saving: boolean }) {
+/** "Discard this draft?" confirmation shared by the issue composers. */
+export function ExistingDraftDiscardDialog({ description = 'Your draft will be deleted.', onCancel, onDiscard, open, primary = false, saving = false }: { description?: string; onCancel: () => void; onDiscard: () => void; open: boolean; primary?: boolean; saving?: boolean }) {
   const discardRef = useRef<HTMLButtonElement>(null)
-  return <DraftDialogFrame description="Your draft will be deleted." descriptionId="existing-draft-discard-description" focusRef={discardRef} onCancel={onCancel} open={open} title="Discard this draft?"><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></DraftDialogFrame>
+  return <DraftDialogFrame description={description} descriptionId="existing-draft-discard-description" focusRef={discardRef} onCancel={onCancel} open={open} title="Discard this draft?"><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={primary ? styles.confirmSave : styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></DraftDialogFrame>
 }
 
 function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
