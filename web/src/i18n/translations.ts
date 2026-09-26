@@ -2577,6 +2577,7 @@ export const zhCN: Record<string, string> = {
   Code: "代码",
   Link: "链接",
   Mention: "提及",
+  Users: "用户",
   "Selected labels": "已选标签",
   "Add to favorites": "添加到收藏",
   "Add to project": "添加到项目",

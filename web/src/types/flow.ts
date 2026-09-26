@@ -2322,6 +2322,8 @@ export interface AgentChatMessage {
 export interface AgentMessage extends AgentChatMessage {
   id: UUID;
   parts?: AgentMessagePart[];
+  /** Resources @-mentioned in a user message, in order. */
+  mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: UUID; label: string }[];
   durationMs?: number;
   createdAt: string;
 }

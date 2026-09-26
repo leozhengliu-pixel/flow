@@ -163,7 +163,7 @@ func (s *server) createAgentSessionStream(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var ok bool
-	if input.Message, ok = validAgentMessage(w, input.Message); !ok || !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) {
+	if input.Message, ok = validAgentMessage(w, input.Message); !ok || !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) || !validAgentMentionList(w, input.Mentions, input.UserIDs) {
 		return
 	}
 	if input.Location == "" {
@@ -246,7 +246,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	data.Issues = contextData.Issues
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
-	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs))
+	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs))
 	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions)
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()

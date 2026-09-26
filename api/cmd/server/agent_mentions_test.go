@@ -40,16 +40,35 @@ func TestAgentMentionsReachThePromptAndSession(t *testing.T) {
 	project := bootstrap.Projects[0]
 
 	session := requestJSON[domain.AgentSession](t, handler, http.MethodPost, "/api/agent/sessions", map[string]any{"message": "Hello", "location": "toolbar"}, http.StatusCreated)
-	session = requestJSON[domain.AgentSession](t, handler, http.MethodPost, "/api/agent/sessions/"+session.ID+"/messages", map[string]any{"message": "How is @" + project.Name + " going?", "projectIds": []string{project.ID}}, http.StatusOK)
+	viewer := bootstrap.Viewer
+	session = requestJSON[domain.AgentSession](t, handler, http.MethodPost, "/api/agent/sessions/"+session.ID+"/messages", map[string]any{
+		"message":    "How is @" + project.Name + " going for @" + viewer.DisplayName + "?",
+		"projectIds": []string{project.ID},
+		"userIds":    []string{viewer.ID},
+		"mentions":   []map[string]string{{"type": "project", "id": project.ID, "label": project.Name}, {"type": "user", "id": viewer.ID, "label": viewer.DisplayName}},
+	}, http.StatusOK)
+	if len(session.UserIDs) != 1 {
+		t.Fatalf("mentioned person not recorded: %#v", session.UserIDs)
+	}
+	var sent domain.AgentMessage
+	for _, message := range session.Messages {
+		if message.Role == "user" && strings.Contains(message.Content, "going for") {
+			sent = message
+		}
+	}
+	if len(sent.Mentions) != 2 || sent.Mentions[1].Type != "user" {
+		t.Fatalf("mentions not stored on the message: %#v", sent.Mentions)
+	}
 	if len(session.ProjectIDs) != 1 || session.ProjectIDs[0] != project.ID {
 		t.Fatalf("mentioned project not recorded: %#v", session.ProjectIDs)
 	}
 	mu.Lock()
 	prompt := lastPrompt
 	mu.Unlock()
-	if !strings.Contains(prompt, "Resources the user mentioned") || !strings.Contains(prompt, project.Name) {
+	if !strings.Contains(prompt, "Resources the user mentioned") || !strings.Contains(prompt, project.Name) || !strings.Contains(prompt, "Person "+viewer.DisplayName) {
 		t.Fatalf("mentioned project missing from the prompt: %s", prompt)
 	}
 
 	requestJSON[any](t, handler, http.MethodPost, "/api/agent/sessions/"+session.ID+"/messages", map[string]any{"message": "And this?", "projectIds": []string{"project_missing"}}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, "/api/agent/sessions/"+session.ID+"/messages", map[string]any{"message": "Bad", "mentions": []map[string]string{{"type": "team", "id": "x", "label": "x"}}}, http.StatusBadRequest)
 }

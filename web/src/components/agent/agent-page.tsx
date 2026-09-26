@@ -181,6 +181,8 @@ export function AgentPage({
         issueIds: mentions.filter((item) => item.type === "issue").map((item) => item.id),
         projectIds: mentions.filter((item) => item.type === "project").map((item) => item.id),
         documentIds: mentions.filter((item) => item.type === "document").map((item) => item.id),
+        userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
+        mentions,
       };
       if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
       else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal, mentioned);
