@@ -5,7 +5,8 @@ import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agen
 import { AgentRichText } from './agent-rich-text'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
-import type { AgentMessage, AgentMessagePart } from '@/types/flow'
+import type { AgentMessage, AgentMessagePart, BootstrapData } from '@/types/flow'
+import { AgentMentionInput, type AgentMention } from './agent-mention-input'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import {
   agentDraftStorageKey,
@@ -36,6 +37,12 @@ export type EntityAgentThreadProps = {
   composerDisabled?: boolean
   /** Empty-state greeting with suggestion pills that fill the composer. */
   welcome?: { title: string; subtitle: string; suggestions?: { label: string; icon?: ReactNode; prompt: string }[] }
+  /** Workspace data for @-mentions; when set the composer becomes a mention editor. */
+  mentionData?: BootstrapData
+  onMentionsChange?: (mentions: AgentMention[]) => void
+  /** Controls at the start of the composer footer (e.g. the Skills picker). */
+  footerStart?: ReactNode
+  onRemoveContext?: (issueId: string) => void
 }
 
 /** LS-0253 EntityAgentThread — shared conversation + draft renderer for page/sidebar panels. */
@@ -59,6 +66,10 @@ export function EntityAgentThread({
   highlightedMessageId,
   composerDisabled = false,
   welcome,
+  mentionData,
+  onMentionsChange,
+  footerStart,
+  onRemoveContext,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -155,7 +166,9 @@ export function EntityAgentThread({
                 })()}
               </>
             )}
-            {message.content && (
+            {message.content && message.role === 'user' && mentionData && /@[A-Z][A-Z0-9]*-\d+/.test(message.content) ? (
+              <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} text={message.content}/></p>
+            ) : message.content && (
               <AgentRichText
                 ariaLabel={message.role === 'user' ? t('Your message') : t('AI message')}
                 className={styles.messageDocument}
@@ -204,11 +217,24 @@ export function EntityAgentThread({
                 <StatusIcon state={issue.state} size={14} />
                 <small>{issue.identifier}</small>
                 <b>{issue.title}</b>
+                {onRemoveContext && <button type="button" className={styles.contextRemove} aria-label={t('Remove from context')} onClick={() => onRemoveContext(issue.id)}><X size={14}/></button>}
               </span>
             ))}
           </div>
         )}
       <div className={styles.composer}>
+        {mentionData ? (
+          <AgentMentionInput
+            ariaLabel={t('Send a message to Flow Agent')}
+            data={mentionData}
+            disabled={!enabled || composerDisabled || loading}
+            pageIssues={contextIssues}
+            placeholder={placeholder ?? (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))}
+            value={input}
+            onChange={(value, mentions) => { onInputChange(value); onMentionsChange?.(mentions) }}
+            onSubmit={onSubmit}
+          />
+        ) : (
         <textarea
           aria-label={t('Send a message to Flow Agent')}
           disabled={!enabled || composerDisabled || loading}
@@ -227,7 +253,9 @@ export function EntityAgentThread({
           rows={2}
           value={input}
         />
+        )}
         <footer>
+          {footerStart}
           {error ? <span role="alert">{error}</span> : <span />}
           {loading ? (
             <button aria-label={t('Stop generating')} onClick={onStop} type="button">
@@ -307,4 +335,13 @@ function ThreadMessageActivity({
 
 export function clearEntityThreadDraft(conversationDraftKey: string) {
   clearAgentDraft(agentDraftStorageKey(conversationDraftKey))
+}
+
+/** A sent message with "@TEAM-123" issue mentions shown as chips. */
+function MentionedText({ data, text }: { data: BootstrapData; text: string }) {
+  return <>{text.split(/(@[A-Z][A-Z0-9]*-\d+)/).map((part, index) => {
+    const issue = part.startsWith('@') ? data.issues.find(item => item.identifier === part.slice(1)) : undefined
+    if (!issue) return <span key={index}>{part}</span>
+    return <span key={index} className={styles.sentMention} data-i18n-ignore><StatusIcon state={issue.state} size={14}/><span>{issue.identifier}</span> {issue.title}</span>
+  })}</>
 }

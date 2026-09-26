@@ -163,7 +163,7 @@ func (s *server) createAgentSessionStream(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var ok bool
-	if input.Message, ok = validAgentMessage(w, input.Message); !ok || !validAgentIssueCount(w, input.IssueIDs) {
+	if input.Message, ok = validAgentMessage(w, input.Message); !ok || !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) {
 		return
 	}
 	if input.Location == "" {
@@ -185,12 +185,12 @@ func (s *server) createAgentSessionMessageStream(w http.ResponseWriter, r *http.
 	if !s.requireAgent(w) {
 		return
 	}
-	message, ok := decodeAgentMessage(w, r)
+	input, ok := s.decodeAgentMessageInput(w, r)
 	if !ok {
 		return
 	}
 	id := r.PathValue("id")
-	if err := s.appendAgentSessionMessage(r, id, message); err != nil {
+	if err := s.appendAgentSessionMessage(r, id, input); err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
@@ -246,7 +246,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	data.Issues = contextData.Issues
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
-	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills))
+	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs))
+	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions)
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
 	parts := []domain.AgentMessagePart{}

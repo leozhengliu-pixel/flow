@@ -187,6 +187,9 @@ type AgentSession struct {
 	Favorite  bool           `json:"favorite"`
 	Location  string         `json:"location"`
 	IssueIDs  []string       `json:"issueIds"`
+	// ProjectIDs and DocumentIDs are resources @-mentioned in the conversation.
+	ProjectIDs  []string `json:"projectIds,omitempty"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
 	SkillIDs  []string       `json:"skillIds"`
 	Messages  []AgentMessage `json:"messages"`
 	CreatedAt time.Time      `json:"createdAt"`

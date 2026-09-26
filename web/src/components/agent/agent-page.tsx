@@ -37,6 +37,7 @@ import {
 import { AgentRichText } from "./agent-rich-text";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
+import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
 import { AgentElicitation } from './agent-elicitation';
@@ -67,6 +68,7 @@ export function AgentPage({
     [error, setError] = useState<string>(),
     [historyOpen, setHistoryOpen] = useState(false),
     [skillsOpen, setSkillsOpen] = useState(false),
+    [mentions, setMentions] = useState<AgentMention[]>([]),
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
     [editingId, setEditingId] = useState<string>(),
@@ -175,9 +177,15 @@ export function AgentPage({
             void onReload();
           }
       };
+      const mentioned = {
+        issueIds: mentions.filter((item) => item.type === "issue").map((item) => item.id),
+        projectIds: mentions.filter((item) => item.type === "project").map((item) => item.id),
+        documentIds: mentions.filter((item) => item.type === "document").map((item) => item.id),
+      };
       if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
-      else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal);
-      else await streamNewAgentSession({ message: providerMessage, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal, mentioned);
+      else await streamNewAgentSession({ message: providerMessage, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      setMentions([]);
       writeInput("");
       clearAgentDraft(agentDraftKey);
       setAttachments([]);
@@ -490,23 +498,16 @@ export function AgentPage({
             </div>
           )}
           <div className={styles.editorScroll}>
-            <div
-              ref={editorRef}
-              aria-label={t("Send a message to Flow AI")}
+            <AgentMentionInput
+              editorRef={editorRef}
               className={styles.editor}
-              contentEditable={!busy}
-              data-placeholder={current ? t("Reply…") : t("Ask Flow…")}
-              role="textbox"
-              suppressContentEditableWarning
-              onInput={(event) =>
-                setInput(event.currentTarget.textContent ?? "")
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
+              ariaLabel={t("Send a message to Flow AI")}
+              data={data}
+              disabled={busy}
+              placeholder={current ? t("Reply…") : t("Ask Flow…")}
+              value={input}
+              onChange={(value, next) => { setInput(value); setMentions(next); }}
+              onSubmit={() => void send()}
             />
           </div>
           <footer>

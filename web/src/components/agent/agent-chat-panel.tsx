@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { Box, Search, Users } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Plus, Search, Users } from 'lucide-react'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
-import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '@/types/flow'
+import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
+import { PropertyMenu } from '@/components/property/property-menu'
+import { AgentChevronDownIcon, AgentSkillsIcon } from './agent-icons'
+import type { AgentMention } from './agent-mention-input'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { useI18n } from '@/i18n/i18n'
 import { AgentPanel } from './agent-panel'
@@ -10,6 +13,8 @@ import { EntityAgentThread, clearEntityThreadDraft } from './entity-agent-thread
 import { conversationDraftKeyFor } from './agent-drafts'
 
 export function AgentChatPanel({
+  data,
+  onCreateSkill,
   initialPrompt = '',
   initialSession,
   issues,
@@ -18,6 +23,9 @@ export function AgentChatPanel({
   onSessionChange,
   open,
 }: {
+  /** Workspace data enables @-mentions and the Skills picker. */
+  data?: BootstrapData
+  onCreateSkill?: () => void
   initialPrompt?: string
   initialSession?: AgentSession
   issues: MyIssuesRowData[]
@@ -38,6 +46,11 @@ export function AgentChatPanel({
   const [fullscreen, setFullscreen] = useState(false)
   const [approvalBusy, setApprovalBusy] = useState<string>()
   const abortRef = useRef<AbortController | undefined>(undefined)
+  const [mentions, setMentions] = useState<AgentMention[]>([])
+  const [skillIds, setSkillIds] = useState<string[]>([])
+  const [removedContext, setRemovedContext] = useState<string[]>([])
+  const contextIssues = useMemo(() => issues.filter(issue => !removedContext.includes(issue.id)), [issues, removedContext])
+  const idsOf = (type: AgentMention['type']) => mentions.filter(item => item.type === type).map(item => item.id)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
 
   useEffect(() => {
@@ -80,6 +93,9 @@ export function AgentChatPanel({
     setMinimized(false)
     setFullscreen(false)
     setApprovalBusy(undefined)
+    setMentions([])
+    setSkillIds([])
+    setRemovedContext([])
     clearEntityThreadDraft(draftKey)
     onClose()
   }
@@ -106,7 +122,9 @@ export function AgentChatPanel({
       ...current,
       { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
     ])
+    const mentioned = { issueIds: idsOf('issue'), projectIds: idsOf('project'), documentIds: idsOf('document') }
     setInput('')
+    setMentions([])
     setError(undefined)
     setLoading(true)
     setStreamParts([])
@@ -159,9 +177,16 @@ export function AgentChatPanel({
         }
       }
       next = session
-        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal)
+        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, mentioned)
         : await streamNewAgentSession(
-            { message, issueIds: issues.map(issue => issue.id), location: 'toolbar' },
+            {
+              message,
+              issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...mentioned.issueIds])],
+              projectIds: mentioned.projectIds,
+              documentIds: mentioned.documentIds,
+              skillIds,
+              location: 'toolbar',
+            },
             onEvent,
             controller.signal,
           )
@@ -202,7 +227,11 @@ export function AgentChatPanel({
     >
       <EntityAgentThread
         approvalBusy={approvalBusy}
-        contextIssues={issues}
+        contextIssues={contextIssues}
+        mentionData={data}
+        onMentionsChange={setMentions}
+        onRemoveContext={id => setRemovedContext(current => [...current, id])}
+        footerStart={data ? <SkillsPicker data={data} disabled={Boolean(session)} selectedIds={skillIds} onChange={setSkillIds} onCreate={onCreateSkill}/> : undefined}
         conversationDraftKey={draftKey}
         emptyLabel={t('Ask Flow about the selected issues')}
         placeholder={status && !status.enabled ? t('Flow Agent is not configured') : t('Ask Flow…')}
@@ -228,4 +257,32 @@ export function AgentChatPanel({
       />
     </AgentPanel>
   )
+}
+
+/** Skills picker in the composer footer; skills apply when a conversation starts. */
+function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { data: BootstrapData; disabled: boolean; selectedIds: string[]; onChange: (ids: string[]) => void; onCreate?: () => void }) {
+  const { t } = useI18n()
+  const skills = data.agentSkills ?? []
+  return <PropertyMenu
+    label={t('Skills')}
+    ariaLabel={t('Skills')}
+    value={t('Skills')}
+    multiple
+    hideSearch
+    side="top"
+    align="start"
+    selectedIds={selectedIds}
+    searchPlaceholder={t('Search skills…')}
+    triggerRole="button"
+    triggerClassName="agent-skills-trigger"
+    trigger={<><AgentSkillsIcon/><span>{selectedIds.length ? `${t('Skills')} · ${selectedIds.length}` : t('Skills')}</span><AgentChevronDownIcon/></>}
+    options={[
+      ...skills.map(skill => ({ id: skill.id, label: skill.name, icon: <AgentSkillsIcon/>, i18nIgnore: true, disabled })),
+      ...(onCreate ? [{ id: '__create__', label: t('Create skill'), icon: <Plus size={16}/> }] : []),
+    ]}
+    onChange={id => {
+      if (id === '__create__') { onCreate?.(); return }
+      onChange(selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : [...selectedIds, id])
+    }}
+  />
 }
