@@ -4356,4 +4356,6 @@ Object.assign(zhCN, {
   "Select a customer for this request": "请为此请求选择客户",
   "Provide a request or specify a source": "请填写请求内容或指定来源",
   "Failed to save customer request": "保存客户请求失败",
+  "Welcome to Flow": "欢迎使用 Flow",
+  "Ask anything or tell Flow what you need": "随便问，或告诉 Flow 你需要什么",
 });

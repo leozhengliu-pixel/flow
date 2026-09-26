@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Box, Search, Users } from 'lucide-react'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '@/types/flow'
@@ -204,6 +205,16 @@ export function AgentChatPanel({
         contextIssues={issues}
         conversationDraftKey={draftKey}
         emptyLabel={t('Ask Flow about the selected issues')}
+        placeholder={status && !status.enabled ? t('Flow Agent is not configured') : t('Ask Flow…')}
+        welcome={{
+          title: t('Welcome to Flow'),
+          subtitle: t('Ask anything or tell Flow what you need'),
+          suggestions: [
+            { label: t('Create a new project'), icon: <Box size={14} aria-hidden="true"/>, prompt: t('Create a new project for ') },
+            { label: t('Research a topic'), icon: <Search size={14} aria-hidden="true"/>, prompt: t('Research ') },
+            { label: t('Set up new team'), icon: <Users size={14} aria-hidden="true"/>, prompt: t('Set up a new team for ') },
+          ],
+        }}
         enabled={Boolean(status?.enabled)}
         error={error}
         input={input}

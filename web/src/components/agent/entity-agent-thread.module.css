@@ -69,3 +69,24 @@
 :global(:root[data-theme="light"]) .messageActivity>div{border-color:var(--theme-border)}
 :global(:root[data-theme="light"]) .messageActivity>div strong{color:var(--theme-text-tertiary)!important}
 :global(:root[data-theme="light"]) .messageActivity>div p{color:var(--theme-text-secondary)}
+/* Reference agent composer: greeting, a plain context row above a raised composer box. */
+.welcome{height:100%;min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;padding:0 16px 20px;text-align:center}
+.welcomePattern{width:100%;flex:1;min-height:80px;opacity:.5;background-image:radial-gradient(circle,var(--pk-divider) 1px,transparent 1.5px);background-size:24px 24px;mask-image:radial-gradient(ellipse at 50% 80%,#000 10%,transparent 70%)}
+.welcome strong{color:var(--pk-text-strong);font-size:13px;font-weight:600}
+.welcome>span{color:var(--chip-text);font-size:13px;font-weight:450}
+.suggestions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}
+.suggestions button{height:29px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:9999px;background:var(--chip-bg);box-shadow:var(--chip-ring);color:var(--pk-text-strong);font:500 13px/normal var(--font)}
+.suggestions button:hover:not(:disabled){background:var(--pk-hover)}
+.suggestions button svg{color:var(--chip-text)}
+.thread>.context{max-height:82px;margin:0 8px;padding:4px 4px 4px 8px;display:flex;flex-direction:column;gap:2px}
+.thread>.context>span{height:15px;display:flex;align-items:center;gap:5px;padding:0;background:transparent;color:var(--chip-text)}
+.thread>.context small{font-size:12px;font-weight:500;color:var(--chip-text)}
+.thread>.context b{font-size:12px;font-weight:500;color:var(--pk-text)}
+.composer:not(#_){margin:6px 8px 8px;padding:8px 10px 6px;border:0;border-radius:8px;background:var(--chip-bg);box-shadow:var(--chip-ring)}
+.composer:not(#_) textarea{min-height:21px;padding:2px 0;font:450 13px/21px var(--font)}
+.composer:not(#_) textarea::placeholder{color:var(--pk-faint)}
+.composer:not(#_) footer{height:32px}
+.composer:not(#_) footer button{width:24px;height:24px;background:var(--pk-text-strong);color:var(--pk-surface)}
+.composer:not(#_) footer button:disabled{opacity:1;background:var(--pk-hover);color:var(--pk-faint)}
+.composer:not(#_) textarea{height:21px;field-sizing:content}
+.thread>.context:not(#_)>span{height:15px;padding:0;border-radius:0;background:transparent}

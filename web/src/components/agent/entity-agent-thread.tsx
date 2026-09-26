@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronRight, LoaderCircle, Send, X } from 'lucide-react'
+import { ArrowUp, Check, ChevronRight, LoaderCircle, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
 import { AgentRichText } from './agent-rich-text'
@@ -34,6 +34,8 @@ export type EntityAgentThreadProps = {
   onToolApproval?: (call: AgentMessagePart['toolCall'] | undefined, decision: 'approve' | 'reject') => void
   highlightedMessageId?: string
   composerDisabled?: boolean
+  /** Empty-state greeting with suggestion pills that fill the composer. */
+  welcome?: { title: string; subtitle: string; suggestions?: { label: string; icon?: ReactNode; prompt: string }[] }
 }
 
 /** LS-0253 EntityAgentThread — shared conversation + draft renderer for page/sidebar panels. */
@@ -56,6 +58,7 @@ export function EntityAgentThread({
   onToolApproval,
   highlightedMessageId,
   composerDisabled = false,
+  welcome,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -101,9 +104,26 @@ export function EntityAgentThread({
         role="log"
       >
         {!messages.length && !loading && (
+          welcome ? (
+            <div className={styles.welcome} data-state="empty">
+              <div className={styles.welcomePattern} aria-hidden="true"/>
+              <strong>{welcome.title}</strong>
+              <span>{welcome.subtitle}</span>
+              {welcome.suggestions?.length ? (
+                <div className={styles.suggestions}>
+                  {welcome.suggestions.map(item => (
+                    <button key={item.label} type="button" disabled={!enabled} onClick={() => { onInputChange(item.prompt); inputRef.current?.focus() }}>
+                      {item.icon}{item.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
           <div className={styles.empty} data-state="empty">
             <span>{emptyLabel ?? t('Ask anything or propose changes')}</span>
           </div>
+          )
         )}
         {messages.map((message, index) => (
           <article
@@ -176,8 +196,7 @@ export function EntityAgentThread({
           </div>
         ))}
       </div>
-      <div className={styles.composer}>
-        {(contextIssues.length > 0 || contextChips) && (
+      {(contextIssues.length > 0 || contextChips) && (
           <div className={styles.context}>
             {contextChips}
             {contextIssues.map(issue => (
@@ -189,6 +208,7 @@ export function EntityAgentThread({
             ))}
           </div>
         )}
+      <div className={styles.composer}>
         <textarea
           aria-label={t('Send a message to Flow Agent')}
           disabled={!enabled || composerDisabled || loading}
@@ -220,7 +240,7 @@ export function EntityAgentThread({
               onClick={onSubmit}
               type="button"
             >
-              <Send />
+              <ArrowUp />
             </button>
           )}
         </footer>

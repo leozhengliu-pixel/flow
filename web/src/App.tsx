@@ -699,6 +699,7 @@ function App() {
     )
       setCreateOpen(true);
   }, [location.pathname, location.search]);
+  const [floatingAgentOpen, setFloatingAgentOpen] = useState(false);
   const selectedIssue =
     route.kind === "issue"
       ? data?.issues.find(
@@ -6383,10 +6384,17 @@ function App() {
           }}
         />
       )}
+      <AgentChatPanel
+        issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
+        open={floatingAgentOpen}
+        onClose={() => setFloatingAgentOpen(false)}
+        onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
+      />
       <div className="bottom-agent">
         <button
           aria-label="Agent"
-          onClick={() => navigateTo(agentPath(data.workspace.urlKey))}
+          aria-expanded={floatingAgentOpen}
+          onClick={() => setFloatingAgentOpen((value) => !value)}
           type="button"
         >
           <Bot />
