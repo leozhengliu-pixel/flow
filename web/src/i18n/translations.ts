@@ -4358,4 +4358,7 @@ Object.assign(zhCN, {
   "Failed to save customer request": "保存客户请求失败",
   "Welcome to Flow": "欢迎使用 Flow",
   "Ask anything or tell Flow what you need": "随便问，或告诉 Flow 你需要什么",
+  "Dismiss": "关闭",
+  "Remove from context": "从上下文中移除",
+  "This page": "此页面",
 });

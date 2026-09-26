@@ -18,7 +18,7 @@
 .userMessage>strong{text-align:right}
 .userMessage .messageDocument{background:var(--accent-soft)}
 .thinking{display:flex;align-items:center;gap:7px;color:var(--theme-text-secondary);font-size:12px}
-.thinking svg,.composer footer button:disabled svg{width:14px;height:14px;animation:agentSpin .8s linear infinite}
+.thinking svg{width:14px;height:14px;animation:agentSpin .8s linear infinite}
 .composer{margin:0 8px 8px;padding:10px 10px 8px;border:.5px solid var(--popover-border);border-radius:16px;background:var(--theme-surface-2);box-shadow:var(--shadow-dialog)}
 .context{max-height:82px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
 .context>span{height:25px;display:grid;grid-template-columns:16px auto minmax(0,1fr);align-items:center;gap:6px;padding:0 7px;border-radius:6px;background:var(--theme-surface-hover);color:var(--theme-text-secondary)}
@@ -90,3 +90,10 @@
 .composer:not(#_) footer button:disabled{opacity:1;background:var(--pk-hover);color:var(--pk-faint)}
 .composer:not(#_) textarea{height:21px;field-sizing:content}
 .thread>.context:not(#_)>span{height:15px;padding:0;border-radius:0;background:transparent}
+.thread>.context>span{position:relative}
+.contextRemove{margin-left:auto;width:20px;height:20px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:transparent;color:var(--pk-muted);opacity:0}
+.thread>.context>span:hover .contextRemove,.contextRemove:focus-visible{opacity:1}
+.contextRemove:hover{background:var(--pk-hover);color:var(--pk-text)}
+.composer:not(#_) footer>span:empty{flex:1}
+.sentMention{display:inline-flex;align-items:center;gap:4px;margin:0 1px;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--pk-border);border-radius:4px;background:var(--chip-bg);font:450 13px/16px var(--font);vertical-align:baseline}
+.sentMention>span{color:var(--chip-text)}

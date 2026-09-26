@@ -177,6 +177,7 @@ import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
 import {
   agentPath,
+  newAgentSkillPath,
   apiKeyPath,
   apiKeyEditPath,
   dashboardWidgetPath,
@@ -307,9 +308,15 @@ function App() {
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
   useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // Toolbar chats the user closed stay closed across reloads.
   const [closedAgentSessionIds, setClosedAgentSessionIds] = useState<
     Set<string>
-  >(new Set());
+  >(() => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem("flow:closed-agent-sessions") ?? "[]")); } catch { return new Set<string>(); }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("flow:closed-agent-sessions", JSON.stringify([...closedAgentSessionIds].slice(-200))); } catch { /* storage is best-effort */ }
+  }, [closedAgentSessionIds]);
   const [selected, setSelected] = useState(new Set<string>()),
     [commandOpen, setCommandOpen] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
@@ -4267,7 +4274,7 @@ function App() {
     "customer-requests",
   );
   const asksEnabled = workspaceFeatureEnabled(featureFlags, "asks");
-  const toolbarAgentSession = data.agentSessions?.find(
+  const toolbarAgentSession = floatingAgentOpen ? undefined : data.agentSessions?.find(
     (item) =>
       item.location === "toolbar" && !closedAgentSessionIds.has(item.id),
   );
@@ -6341,6 +6348,7 @@ function App() {
       {data.resourceDetailsOmitted && ['project-detail','document-detail'].includes(page) && <main className="main-panel" aria-busy="true"><div role="status">Loading…</div></main>}
       {toolbarAgentSession && (
         <AgentChatPanel
+          data={data}
           initialSession={toolbarAgentSession}
           issues={toolbarAgentIssues}
           open
@@ -6385,8 +6393,11 @@ function App() {
         />
       )}
       <AgentChatPanel
+        data={data}
+        onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
         issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
         open={floatingAgentOpen}
+        onSessionChange={(next) => setClosedAgentSessionIds((current) => new Set(current).add(next.id))}
         onClose={() => setFloatingAgentOpen(false)}
         onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
       />
