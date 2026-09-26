@@ -3,13 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
+import type { ReleasePipeline } from '@/types/flow'
 import { IssueOptionsMenu, type IssueOptionsActions } from './issue-options-menu'
 
-function setup() {
+function setup(releasePipelines: ReleasePipeline[] = []) {
   const actions: IssueOptionsActions = {addLink:vi.fn().mockResolvedValue(undefined),addCustomerRequest:vi.fn(),addDocument:vi.fn(),linkReview:vi.fn(),unlinkReview:vi.fn(),toggleRelease:vi.fn(),createRelated:vi.fn().mockResolvedValue(undefined),convert:vi.fn(),setRecurring:vi.fn(),configureRecurring:vi.fn(),toggleFavorite:vi.fn(),remind:vi.fn(),runLoop:vi.fn(),restoreDescription:vi.fn()}
   const issue = makeIssue()
   const onRelation = vi.fn()
-  const data = makeBootstrap({customers:[],reviews:[],releases:[],releasePipelines:[]})
+  const data = makeBootstrap({customers:[],reviews:[],releases:[],releasePipelines})
   render(<I18nProvider><IssueOptionsMenu issue={issue} data={data} actions={actions} onRelation={onRelation} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
   return {actions,onRelation,issue}
 }
@@ -74,7 +75,8 @@ describe('issue action menu', () => {
   })
 
   it('opens the shared release picker and its pipeline submenu on hover', async () => {
-    const user = userEvent.setup(); setup()
+    const pipeline: ReleasePipeline = { id: 'pipeline_1', slugId: 'web', name: 'Web', teamIds: [], type: 'scheduled', production: true, stages: [], stageStatuses: {}, position: 0, pathFilters: [], autoGenerateReleaseNotes: false, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }
+    const user = userEvent.setup(); setup([pipeline])
     await user.click(screen.getByRole('button',{name:'Issue options'}))
     await user.hover(screen.getByRole('option',{name:/^Release/}))
     expect(await screen.findByRole('searchbox',{name:'Add to release…'})).toBeVisible()
