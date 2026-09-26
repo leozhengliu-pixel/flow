@@ -1013,3 +1013,9 @@ html:root body .issue-customer-needs-archived:not(#_):hover {
   background: var(--pk-hover);
   color: var(--pk-text);
 }
+
+/* Bottom Agent button: neutral hover like the reference, never tinted. */
+html:root body .bottom-agent > button:not(#_):is(:hover, :focus-visible, [aria-expanded=true]) {
+  background: var(--pk-hover);
+  color: var(--pk-text);
+}

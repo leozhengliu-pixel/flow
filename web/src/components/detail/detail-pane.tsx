@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, MessageSquare, Plus, RotateCw, UserRound, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, Plus, RotateCw, UserRound, X } from 'lucide-react'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentPicker, IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
@@ -20,7 +20,7 @@ import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import type { ActivityHighlightTarget } from '@/components/activity/activity-highlight'
 import { Composer } from '@/components/editor/composer'
 import { Avatar } from '@/components/issue/issue-row'
-import { AddReactionIcon, AttachmentIcon, CalendarIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { AddReactionIcon, AttachmentIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { LinkExistingSubIssue } from './link-existing-sub-issue'
 import { SimilarIssues } from './similar-issues'
 import { TriageActions } from '@/components/triage/triage-actions'
@@ -164,19 +164,6 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         <div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider></div><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
       </article>
       <div className="issue-agent-rail">
-        <div className="issue-agent-rail__toggle">
-          <button
-            aria-expanded={agentOpen}
-            aria-label={agentOpen ? t('Close chat') : t('Open chat')}
-            className="issue-agent-toggle"
-            data-active={agentOpen || undefined}
-            onClick={() => setAgentOpen(open => !open)}
-            type="button"
-          >
-            <MessageSquare size={14}/>
-            <span>{t('Chat')}</span>
-          </button>
-        </div>
         {agentOpen ? (
           <EntityAgentPanel
             contextIssues={[issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)]}

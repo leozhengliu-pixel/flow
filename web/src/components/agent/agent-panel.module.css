@@ -201,3 +201,13 @@
 :global(:root[data-theme='light']) .loading {
   color: var(--theme-text-secondary);
 }
+/* Reference floating agent panel. */
+.panel[data-variant='floating']:not(#_) {
+  top: 107px;
+  height: 563px;
+  border: .5px solid var(--pk-divider);
+  background: var(--theme-surface-1);
+  box-shadow: var(--pk-shadow);
+}
+.panel[data-variant='floating']:not(#_) .header { height: 48px; padding-left: 13px; }
+.panel[data-variant='floating']:not(#_) .header strong { color: var(--pk-text-strong); font-size: 13px; font-weight: 500; }
