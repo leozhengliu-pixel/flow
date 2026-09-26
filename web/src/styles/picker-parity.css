@@ -892,3 +892,87 @@ html:root body .sidebar-popover [role=menuitem]:not(#_) kbd {
   font-size: 11px;
   font-weight: 500;
 }
+
+/* ── Issue sidebar due date: a property pill, shown once a date is set ─── */
+html:root body .issue-due-date-row { margin-top: 8px; }
+html:root body .issue-due-date-trigger:not(#_) {
+  width: 146px;
+  height: 28px;
+  gap: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+html:root body .issue-due-date-trigger:not(#_) svg { width: 16px; height: 16px; flex: 0 0 16px; }
+
+/* ── Release picker ────────────────────────────────────────────────────── */
+html:root body .issue-release-picker:not(#_) {
+  width: max-content;
+  min-width: 175px;
+  max-width: 320px;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+html:root body .issue-release-picker .issue-release-search:not(#_) {
+  border-bottom: .5px solid var(--pk-divider);
+}
+html:root body .issue-release-picker .issue-release-search:not(#_) input {
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
+}
+html:root body .issue-release-picker .issue-release-search:not(#_) input::placeholder { color: var(--pk-faint); }
+html:root body .issue-release-picker .issue-release-search:not(#_) kbd {
+  color: var(--pk-muted);
+  font: 500 11px/1 var(--font);
+}
+html:root body .issue-release-picker .issue-release-option:not(#_) {
+  color: var(--pk-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .issue-release-picker .issue-release-option:not(#_):is(:hover,:focus-visible,[aria-selected=true]) .issue-release-option-bg {
+  background: var(--pk-hover);
+}
+html:root body .issue-release-picker .issue-release-results > p:not(#_) {
+  margin: 0;
+  padding: 11px 20px 11px;
+  color: var(--pk-faint);
+  font-size: 13px;
+  font-weight: 450;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Empty inline label picker: icon and "Add label" on one line, like the other properties. */
+html:root body .labels-picker--inline .label-project-trigger:not(#_):has(span) {
+  width: auto;
+  height: 28px;
+  gap: 8px;
+  padding: 0 8px;
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+html:root body .labels-picker--inline .label-project-trigger:not(#_):has(span) svg {
+  width: 16px;
+  height: 16px;
+}
+html:root body .issue-release-picker:not(#_):has(.issue-release-results > p:only-child) { width: 175px; min-width: 175px; }
+html:root body .issue-release-picker .issue-release-results:not(#_):has(> p:only-child) { padding: 0; }
+html:root body .issue-release-picker .issue-release-results > p:only-child:not(#_) { padding: 12.5px 0; }
+/* Issue sidebar: every property trigger starts on the same edge. */
+html:root body .issue-properties .label-project-picker.estimate-picker:not(#_),
+html:root body .issue-properties .label-project-picker.cycle-picker:not(#_),
+html:root body .issue-properties .labels-picker--inline:not(#_) {
+  padding-left: 0;
+}
+html:root body .issue-properties .labels-picker--inline .label-project-trigger:not(#_):has(span) {
+  margin-left: -4px;
+  padding: 0 10px 0 6px;
+}
