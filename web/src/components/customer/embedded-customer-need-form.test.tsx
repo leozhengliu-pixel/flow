@@ -6,6 +6,7 @@ import {
   priorityFromImportant,
 } from './embedded-customer-need-form'
 import type { BootstrapData } from '@/types/flow'
+import { I18nProvider } from '@/i18n/i18n'
 
 const createCustomerRequest = vi.fn()
 const createCustomer = vi.fn()
@@ -29,30 +30,30 @@ describe('EmbeddedCustomerNeedForm', () => {
     createCustomerRequest.mockResolvedValue({ id: 'r1', customerId: 'c1', body: 'Need', source: 'manual' })
   })
 
-  it('submits sourceUrl and Important as priority on issue host', async () => {
+  it('creates a request from the customer pill and request text', async () => {
     const onCreated = vi.fn()
     render(
-      <EmbeddedCustomerNeedForm
-        data={data}
-        host="issuePage"
-        issueId="issue-1"
-        onCreated={onCreated}
-      />,
+      <I18nProvider>
+        <EmbeddedCustomerNeedForm
+          data={data}
+          host="issuePage"
+          issueId="issue-1"
+          onCreated={onCreated}
+        />
+      </I18nProvider>,
     )
-    fireEvent.change(screen.getByLabelText('Customer'), { target: { value: 'c1' } })
-    fireEvent.change(screen.getByLabelText('Request details'), { target: { value: 'Need SSO' } })
-    fireEvent.change(screen.getByLabelText('Source URL'), { target: { value: 'https://slack.example/msg' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Important' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Add request' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Customer' }))
+    fireEvent.click(await screen.findByRole('option', { name: /Acme/ }))
+    fireEvent.change(screen.getByLabelText('Request'), { target: { value: 'Need SSO' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(createCustomerRequest).toHaveBeenCalled())
     expect(createCustomerRequest).toHaveBeenCalledWith({
       customerId: 'c1',
       body: 'Need SSO',
       source: 'manual',
-      sourceUrl: 'https://slack.example/msg',
+      sourceUrl: undefined,
       issueId: 'issue-1',
       projectId: undefined,
-      priority: 1,
     })
     expect(onCreated).toHaveBeenCalled()
   })

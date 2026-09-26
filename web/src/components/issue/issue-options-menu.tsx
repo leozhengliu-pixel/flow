@@ -263,6 +263,9 @@ export function IssueOptionsMenu({
               {data?.workspaceSettings.featureFlags.releases !== false && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
+                // The issue page opens its inline composer; elsewhere fall back to the dialog.
+                const opened = !window.dispatchEvent(new CustomEvent('flow:add-customer-request', { detail: { issueId: issue.id }, cancelable: true }))
+                if (opened) { closeMenu(); return }
                 setCustomerId(data?.customers[0]?.id ?? '')
                 setCustomerName('')
                 setCustomerBody(issue.title)

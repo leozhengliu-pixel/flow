@@ -1,138 +1,127 @@
+/* Customer request composer: bordered box with a customer pill, request text, and a footer. */
 .embedded-customer-need-form {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: flex-start;
   margin: 8px 0 14px;
-  padding: 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 9px;
-  background: var(--theme-surface-1);
+  padding: 16px 16px 12px;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
 }
-.embedded-customer-need-form > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--theme-text-primary);
-  font-size: 13px;
-  font-weight: 500;
-}
-.embedded-customer-need-form > header > button {
-  width: 24px;
+
+.embedded-customer-need-form__customer,
+.embedded-customer-need-form__source {
   height: 24px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--theme-text-tertiary);
-  cursor: pointer;
-}
-.embedded-customer-need-form > header > button:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-primary);
-}
-.embedded-customer-need-form__row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.embedded-customer-need-form label {
-  display: flex;
-  flex-direction: column;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
   gap: 5px;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--chip-bg);
+  box-shadow: var(--chip-ring);
+  color: var(--chip-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+  cursor: default;
 }
-.embedded-customer-need-form input,
-.embedded-customer-need-form select,
-.embedded-customer-need-form textarea {
+.embedded-customer-need-form__customer > span,
+.embedded-customer-need-form__source > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.embedded-customer-need-form__customer:hover,
+.embedded-customer-need-form__customer[data-state=open],
+.embedded-customer-need-form__source:hover,
+.embedded-customer-need-form__source[data-state=open] {
+  color: var(--chip-strong);
+}
+.embedded-customer-need-form__source { font-weight: 450; }
+.embedded-customer-need-form__logo {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+.embedded-customer-need-form__body {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--theme-border);
-  border-radius: 7px;
-  background: var(--bg-panel, var(--theme-background));
-  color: var(--theme-text-primary);
-  font: 12px var(--font);
+  min-height: 72px;
+  max-height: 300px;
+  margin: 16px 0 12px;
+  padding: 0;
+  border: 0;
   outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--pk-text);
+  font: 400 15px/24px var(--font);
 }
-.embedded-customer-need-form input,
-.embedded-customer-need-form select {
-  height: 30px;
-  padding: 0 8px;
-}
-.embedded-customer-need-form textarea {
-  padding: 8px;
-  resize: vertical;
-  min-height: 64px;
-}
-.embedded-customer-need-form input:focus,
-.embedded-customer-need-form select:focus,
-.embedded-customer-need-form textarea:focus {
-  border-color: var(--accent-primary);
-}
-.embedded-customer-need-form__source > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
+.embedded-customer-need-form__body::placeholder { color: var(--pk-faint); }
+
 .embedded-customer-need-form__footer {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
-.embedded-customer-need-form__spacer {
-  flex: 1;
-}
-.embedded-customer-need-form__important {
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border);
+.embedded-customer-need-form__spacer { flex: 1; }
+.embedded-customer-need-form__cancel,
+.embedded-customer-need-form__create {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
   border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-secondary);
-  font: 500 12px var(--font);
-  cursor: pointer;
+  color: var(--chip-strong);
+  font: 500 12px/normal var(--font);
+  cursor: default;
 }
-.embedded-customer-need-form__important:hover,
-.embedded-customer-need-form__important.is-on {
-  border-color: transparent;
-  background: color-mix(in srgb, #f2c94c 22%, transparent);
-  color: #f2c94c;
+.embedded-customer-need-form__cancel:hover { background: var(--pk-hover); }
+.embedded-customer-need-form__create {
+  background: var(--chip-bg);
+  box-shadow: var(--chip-ring);
 }
-.embedded-customer-need-form__ghost,
-.embedded-customer-need-form__primary {
-  height: 28px;
-  display: inline-flex;
+.embedded-customer-need-form__create:hover:not(:disabled) { background: var(--pk-hover); }
+.embedded-customer-need-form__create:disabled { opacity: .6; }
+
+.embedded-customer-need-source-popover {
+  z-index: 800;
+  width: 300px;
+  height: 36px;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 8px 0 12px;
+  border: .5px solid var(--pk-border);
+  border-radius: 8px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+}
+.embedded-customer-need-source-popover input {
+  min-width: 0;
+  flex: 1;
   border: 0;
-  border-radius: 7px;
-  font: 500 12px var(--font);
-  cursor: pointer;
-}
-.embedded-customer-need-form__ghost {
+  outline: 0;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: var(--pk-text);
+  font: 400 13px/normal var(--font);
 }
-.embedded-customer-need-form__ghost:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-primary);
+.embedded-customer-need-source-popover input::placeholder { color: var(--pk-faint); }
+.embedded-customer-need-source-popover button {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--pk-muted);
 }
-.embedded-customer-need-form__primary {
-  background: var(--accent-primary);
-  color: var(--on-accent);
-}
-.embedded-customer-need-form__primary:hover {
-  background: var(--accent-primary-hover);
-}
-.embedded-customer-need-form__primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-@media (max-width: 560px) {
-  .embedded-customer-need-form__row {
-    grid-template-columns: 1fr;
-  }
-}
+.embedded-customer-need-source-popover button:hover { background: var(--pk-hover); color: var(--pk-text); }
