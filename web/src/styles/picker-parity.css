@@ -976,3 +976,10 @@ html:root body .issue-properties .labels-picker--inline .label-project-trigger:n
   margin-left: -4px;
   padding: 0 10px 0 6px;
 }
+html:root body .issue-properties .estimate-picker .label-project-trigger > svg:first-child:not(#_) { width: 16px; height: 16px; }
+html:root body .issue-release-picker .issue-release-option:not(#_) { background: transparent; }
+html:root body .issue-release-picker .issue-release-option:not(#_)[aria-expanded=true] .issue-release-option-bg { background: var(--pk-hover); }
+html:root body .issue-release-picker .issue-release-submenu-trigger:not(#_) > svg { color: var(--pk-text); }
+html:root body .issue-release-picker .issue-release-option:not(#_) .issue-release-menu-chevron,
+html:root body .issue-release-picker .issue-release-option:not(#_) > span:last-child:not(.issue-release-option-bg):empty { color: var(--pk-faint); }
+html:root body .issue-release-picker .issue-release-results:not(#_):not(:has(> p:only-child)) { padding: 6px 0; }
