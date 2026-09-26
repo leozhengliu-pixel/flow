@@ -251,7 +251,18 @@ function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: 
   onLocalCreated: (request: import('@/types/flow').CustomerRequest) => void
 }) {
   const [adding, setAdding] = useState(false)
+  const [open, setOpen] = useState(true)
   const [showArchived, setShowArchived] = useState(false)
+  useEffect(() => {
+    const onAdd = (event: Event) => {
+      if ((event as CustomEvent<{ issueId: string }>).detail?.issueId !== issueId) return
+      event.preventDefault()
+      setOpen(true)
+      setAdding(true)
+    }
+    window.addEventListener('flow:add-customer-request', onAdd)
+    return () => window.removeEventListener('flow:add-customer-request', onAdd)
+  }, [issueId])
   const merged = useMemo(() => {
     const seen = new Set<string>()
     const rows: import('@/types/flow').CustomerRequest[] = []
@@ -264,17 +275,22 @@ function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: 
   }, [requests])
   const archivedCount = merged.filter(item => item.archivedAt).length
   const visible = merged.filter(item => showArchived || !item.archivedAt)
+  // Like the reference, the section appears once the issue has a request or one is being added.
+  if (!merged.length && !adding) return null
   return (
-    <IssueSection title="Customer requests" count={visible.length}>
-      <div className="issue-customer-needs-toolbar">
-        <button type="button" onClick={() => setAdding(true)}><Plus size={13}/>Add request</button>
-        {archivedCount > 0 && (
-          <button aria-pressed={showArchived} type="button" onClick={() => setShowArchived(value => !value)}>
+    <section className="issue-detail-section issue-customer-needs">
+      <header>
+        <button className="issue-section-collapse" aria-label={open ? 'Collapse customers section' : 'Expand customers section'} aria-expanded={open} onClick={() => setOpen(value => !value)}><ChevronDown/><span>Customers</span></button>
+        {!open && <span>{visible.length}</span>}
+        <span/>
+        {open && archivedCount > 0 && (
+          <button className="issue-customer-needs-archived" aria-pressed={showArchived} type="button" onClick={() => setShowArchived(value => !value)}>
             {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
           </button>
         )}
-      </div>
-      {adding && (
+        {open && <button className="issue-customer-needs-add" aria-label="Add customer request" type="button" onClick={() => setAdding(true)}><Plus size={16}/></button>}
+      </header>
+      {open && adding && (
         <EmbeddedCustomerNeedForm
           data={data}
           host="issuePage"
@@ -286,7 +302,7 @@ function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: 
           }}
         />
       )}
-      {visible.map(request => {
+      {open && visible.map(request => {
         const customer = data.customers.find(item => item.id === request.customerId)
         return (
           <div className={`linked-issue issue-resource-row${request.archivedAt ? ' is-archived' : ''}`} key={request.id}>
@@ -298,6 +314,6 @@ function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: 
           </div>
         )
       })}
-    </IssueSection>
+    </section>
   )
 }

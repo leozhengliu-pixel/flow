@@ -983,3 +983,33 @@ html:root body .issue-release-picker .issue-release-submenu-trigger:not(#_) > sv
 html:root body .issue-release-picker .issue-release-option:not(#_) .issue-release-menu-chevron,
 html:root body .issue-release-picker .issue-release-option:not(#_) > span:last-child:not(.issue-release-option-bg):empty { color: var(--pk-faint); }
 html:root body .issue-release-picker .issue-release-results:not(#_):not(:has(> p:only-child)) { padding: 6px 0; }
+
+/* ── Issue customers section: collapsible header with a trailing + ─────── */
+html:root body .issue-customer-needs > header:not(#_) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+html:root body .issue-customer-needs > header:not(#_) > span:empty { flex: 1; }
+html:root body .issue-customer-needs > header:not(#_) > span:not(:empty) {
+  color: var(--pk-muted);
+  font-size: 12px;
+}
+html:root body .issue-customer-needs-add:not(#_),
+html:root body .issue-customer-needs-archived:not(#_) {
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--pk-muted);
+  font: 500 12px/normal var(--font);
+}
+html:root body .issue-customer-needs-add:not(#_) { width: 28px; padding: 0; }
+html:root body .issue-customer-needs-add:not(#_):hover,
+html:root body .issue-customer-needs-archived:not(#_):hover {
+  background: var(--pk-hover);
+  color: var(--pk-text);
+}
