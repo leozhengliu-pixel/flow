@@ -1019,3 +1019,35 @@ html:root body .bottom-agent > button:not(#_):is(:hover, :focus-visible, [aria-e
   background: var(--pk-hover);
   color: var(--pk-text);
 }
+
+/* ── Agent composer Skills button ──────────────────────────────────────── */
+html:root body .agent-skills-trigger:not(#_) {
+  width: auto;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--chip-text);
+  font: 500 12px/normal var(--font);
+}
+html:root body .agent-skills-trigger:not(#_):hover,
+html:root body .agent-skills-trigger:not(#_)[data-state=open] {
+  background: var(--pk-hover);
+  color: var(--pk-text);
+}
+html:root body .agent-skills-trigger:not(#_) svg { width: 14px; height: 14px; }
+
+/* Pickers whose search stays hidden until you type. */
+html:root body .property-command-surface .property-command-search.is-visually-hidden:not(#_) {
+  position: fixed;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  border: 0;
+}
+html:root body .agent-skills-trigger:not(#_) svg:last-child { width: 10px; height: 7px; }

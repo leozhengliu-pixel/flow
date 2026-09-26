@@ -15,16 +15,25 @@ export interface AgentStreamEvent {
 export type AgentStreamInput = {
   message: string
   issueIds?: string[]
+  projectIds?: string[]
+  documentIds?: string[]
   skillIds?: string[]
   location?: 'page' | 'toolbar'
+}
+
+/** Resources @-mentioned in a follow-up message; the server adds them to the conversation. */
+export type AgentMessageMentions = {
+  issueIds?: string[]
+  projectIds?: string[]
+  documentIds?: string[]
 }
 
 export function streamNewAgentSession(input: AgentStreamInput, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
   return streamAgentRequest('/api/agent/sessions/stream', 'POST', input, onEvent, signal)
 }
 
-export function streamAgentSessionMessage(id: string, message: string, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
-  return streamAgentRequest(`/api/agent/sessions/${encodeURIComponent(id)}/messages/stream`, 'POST', { message }, onEvent, signal)
+export function streamAgentSessionMessage(id: string, message: string, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal, mentions?: AgentMessageMentions) {
+  return streamAgentRequest(`/api/agent/sessions/${encodeURIComponent(id)}/messages/stream`, 'POST', { message, ...mentions }, onEvent, signal)
 }
 
 export function streamAgentSessionMessageEdit(id: string, messageId: string, message: string, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
