@@ -3210,6 +3210,7 @@ export const zhCN: Record<string, string> = {
   "Edit draft": "编辑草稿",
   "Draft content": "草稿内容",
   "Discard this draft?": "丢弃此草稿？",
+  "Confirm that you want to discard this draft.": "确认要丢弃此草稿。",
   "Your draft will be deleted.": "此草稿将被删除。",
   "Discard all drafts?": "丢弃所有草稿？",
   "All your drafts will be deleted.": "你的所有草稿都将被删除。",

@@ -13,6 +13,7 @@ import type { DescriptionSnapshot } from '@/components/issue/editor/editor-conte
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { ExistingDraftDiscardDialog } from '@/components/create-issue/create-issue-dialog'
 
 export interface SubIssueInput {
   title: string
@@ -47,6 +48,9 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const [labelIds, setLabelIds] = useState<string[]>([])
   const [attachments, setAttachments] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  // Like the full composer, only ask before throwing away something the user typed.
+  const cancel = () => { if (title.trim() || description?.markdown.trim() || attachments.length) setDiscardOpen(true); else onCancel() }
   const state = teamStates.find(item => item.id === stateId) ?? defaultState
   const assignee = data.users.find(user => user.id === assigneeId)
   const project = data.projects.find(item => item.id === projectId)
@@ -83,7 +87,8 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
       <SubIssueMoreMenu data={data} dueDate={dueDate} project={project} onDueDate={setDueDate} onProject={setProjectId}/>
       <button type="button" className="sub-issue-attach" aria-label="Attach images, files, or videos" title={attachments.length ? `${attachments.length} file${attachments.length === 1 ? '' : 's'} selected` : undefined} onClick={() => fileRef.current?.click()}><Paperclip/>{attachments.length > 0 && <span>{attachments.length}</span>}</button>
       <input ref={fileRef} type="file" multiple hidden onChange={event => { setAttachments(Array.from(event.target.files ?? [])); event.target.value = '' }}/>
-    </div><button type="button" className="sub-issue-cancel" aria-label="Discard sub-issue" onClick={onCancel}>Cancel</button><button type="submit" className="sub-issue-create" disabled={!title.trim() || saving}>{saving ? 'Creating…' : 'Create'}</button></div>
+    </div><button type="button" className="sub-issue-cancel" aria-label="Discard sub-issue" onClick={cancel}>Cancel</button><button type="submit" className="sub-issue-create" disabled={!title.trim() || saving}>{saving ? 'Creating…' : 'Create'}</button></div>
+    <ExistingDraftDiscardDialog primary description="Confirm that you want to discard this draft." open={discardOpen} onCancel={() => setDiscardOpen(false)} onDiscard={() => { setDiscardOpen(false); onCancel() }}/>
   </form>
 }
 
