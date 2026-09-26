@@ -6,7 +6,7 @@ import { AgentRichText } from './agent-rich-text'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
 import type { AgentMessage, AgentMessagePart, BootstrapData } from '@/types/flow'
-import { AgentMentionInput, type AgentMention } from './agent-mention-input'
+import { AgentMentionInput, mentionIcon, type AgentMention } from './agent-mention-input'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import {
   agentDraftStorageKey,
@@ -166,8 +166,8 @@ export function EntityAgentThread({
                 })()}
               </>
             )}
-            {message.content && message.role === 'user' && mentionData && /@[A-Z][A-Z0-9]*-\d+/.test(message.content) ? (
-              <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} text={message.content}/></p>
+            {message.content && message.role === 'user' && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
+              <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
             ) : message.content && (
               <AgentRichText
                 ariaLabel={message.role === 'user' ? t('Your message') : t('AI message')}
@@ -337,11 +337,24 @@ export function clearEntityThreadDraft(conversationDraftKey: string) {
   clearAgentDraft(agentDraftStorageKey(conversationDraftKey))
 }
 
-/** A sent message with "@TEAM-123" issue mentions shown as chips. */
-function MentionedText({ data, text }: { data: BootstrapData; text: string }) {
-  return <>{text.split(/(@[A-Z][A-Z0-9]*-\d+)/).map((part, index) => {
-    const issue = part.startsWith('@') ? data.issues.find(item => item.identifier === part.slice(1)) : undefined
-    if (!issue) return <span key={index}>{part}</span>
-    return <span key={index} className={styles.sentMention} data-i18n-ignore><StatusIcon state={issue.state} size={14}/><span>{issue.identifier}</span> {issue.title}</span>
+/** A sent message with its @-mentions shown as chips (stored mentions, or issue identifiers). */
+function MentionedText({ data, mentions, text }: { data: BootstrapData; mentions?: AgentMessage['mentions']; text: string }) {
+  const chips = mentions?.length
+    ? mentions.map(item => ({ token: `@${item.label}`, mention: item }))
+    : [...new Set(text.match(/@[A-Z][A-Z0-9]*-\d+/g) ?? [])].flatMap(token => {
+        const issue = data.issues.find(item => item.identifier === token.slice(1))
+        return issue ? [{ token, mention: { type: 'issue' as const, id: issue.id, label: issue.identifier } }] : []
+      })
+  if (!chips.length) return <>{text}</>
+  const pattern = new RegExp(`(${chips.map(item => item.token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).sort((a, b) => b.length - a.length).join('|')})`)
+  return <>{text.split(pattern).map((part, index) => {
+    const chip = chips.find(item => item.token === part)
+    if (!chip) return <span key={index}>{part}</span>
+    const { mention } = chip
+    const issue = mention.type === 'issue' ? data.issues.find(item => item.id === mention.id) : undefined
+    return <span key={index} className={styles.sentMention} data-i18n-ignore>
+      {mentionIcon(mention, data)}
+      {issue ? <><span>{issue.identifier}</span> {issue.title}</> : mention.label}
+    </span>
   })}</>
 }
