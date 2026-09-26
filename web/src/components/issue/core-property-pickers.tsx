@@ -40,7 +40,7 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
     searchShortcut="P"
     ariaLabel={`Change priority. ${value ? `${labels[value]} is selected` : 'No priority is selected'}`}
     triggerClassName={`core-property-trigger${value === 0 ? ' muted' : ''}`}
-    trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : 'Priority'}</span></>}
+    trigger={<><PriorityIcon priority={value}/><span>{value ? labels[value] : 'Set priority'}</span></>}
     hoverContent={<PropertyShortcutTooltip label="Change priority" shortcut="P"/>}
     onChange={id => onChange(Number(id))}
   /></div>
@@ -186,7 +186,7 @@ export function AssigneePicker({ value, users, onChange, hoverContext }: { value
   return <div className="core-property-picker"><PersonPicker
     ariaLabel={`Change assignee. ${value ? `${value.displayName} is assigned` : 'Currently no one is assigned.'}`}
     emptyOptionLabel="No assignee"
-    emptyTriggerLabel="Assignee"
+    emptyTriggerLabel="Assign"
     hoverContent={value&&hoverContext?<AssigneeHoverPreview user={value} {...hoverContext}/>:undefined}
     hoverClassName="property-rich-hover assignee-hover-surface"
     label="Assignee"
