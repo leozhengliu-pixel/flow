@@ -1051,3 +1051,41 @@ html:root body .property-command-surface .property-command-search.is-visually-hi
   border: 0;
 }
 html:root body .agent-skills-trigger:not(#_) svg:last-child { width: 10px; height: 7px; }
+
+/* ── Sub-issues header: display options and + (right-click for more) ──── */
+html:root body .flow-sub-issues > header:not(#_) { position: relative; grid-template-columns: auto auto minmax(0, 1fr) 28px 28px; }
+html:root body .sub-issues-link-anchor:not(#_) {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+html:root body .sub-issues-add-menu:not(#_) {
+  z-index: 800;
+  min-width: 250px;
+  padding: 6px 0;
+  border: .5px solid var(--pk-border);
+  border-radius: 12px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
+}
+html:root body .sub-issues-add-menu__item:not(#_) {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 6px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  outline: 0;
+  font: 450 13px/normal var(--font);
+}
+html:root body .sub-issues-add-menu__item:not(#_)[data-highlighted] { background: var(--pk-hover); }
+html:root body .sub-issues-add-menu__item:not(#_) > svg { color: var(--pk-text); }
+html:root body .sub-issues-add-menu__item:not(#_) > kbd { margin-left: auto; color: var(--pk-muted); font: 500 11px/normal var(--font); }

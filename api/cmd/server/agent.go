@@ -25,16 +25,20 @@ type agentSessionInput struct {
 	IssueIDs    []string `json:"issueIds"`
 	ProjectIDs  []string `json:"projectIds"`
 	DocumentIDs []string `json:"documentIds"`
+	UserIDs     []string `json:"userIds"`
 	SkillIDs    []string `json:"skillIds"`
 	Location    string   `json:"location"`
+	Mentions    []domain.AgentMention `json:"mentions"`
 }
 
 // agentMessageInput is a follow-up message plus anything @-mentioned in it.
 type agentMessageInput struct {
-	Message     string   `json:"message"`
-	IssueIDs    []string `json:"issueIds"`
-	ProjectIDs  []string `json:"projectIds"`
-	DocumentIDs []string `json:"documentIds"`
+	Message     string                `json:"message"`
+	IssueIDs    []string              `json:"issueIds"`
+	ProjectIDs  []string              `json:"projectIds"`
+	DocumentIDs []string              `json:"documentIds"`
+	UserIDs     []string              `json:"userIds"`
+	Mentions    []domain.AgentMention `json:"mentions"`
 }
 
 type agentSessionUpdate struct {
@@ -87,10 +91,10 @@ func (s *server) decodeAgentMessageInput(w http.ResponseWriter, r *http.Request)
 	if input.Message, ok = validAgentMessage(w, input.Message); !ok {
 		return input, false
 	}
-	if !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) {
+	if !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) || !validAgentMentionList(w, input.Mentions, input.UserIDs) {
 		return input, false
 	}
-	if err := s.checkAgentMentions(r, input.IssueIDs, input.ProjectIDs, input.DocumentIDs); err != nil {
+	if err := s.checkAgentMentions(r, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.UserIDs); err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return input, false
 	}
@@ -109,11 +113,11 @@ func validAgentMentionCounts(w http.ResponseWriter, issueIDs, projectIDs, docume
 }
 
 // checkAgentMentions confirms the viewer can read every mentioned issue, project and document.
-func (s *server) checkAgentMentions(r *http.Request, issueIDs, projectIDs, documentIDs []string) error {
+func (s *server) checkAgentMentions(r *http.Request, issueIDs, projectIDs, documentIDs, userIDs []string) error {
 	if _, err := s.agentIssueContext(r, issueIDs); err != nil {
 		return err
 	}
-	if len(projectIDs) == 0 && len(documentIDs) == 0 {
+	if len(projectIDs) == 0 && len(documentIDs) == 0 && len(userIDs) == 0 {
 		return nil
 	}
 	data := s.workspaceData(r)
@@ -123,7 +127,50 @@ func (s *server) checkAgentMentions(r *http.Request, issueIDs, projectIDs, docum
 	if len(selectedAgentDocuments(data.Documents, documentIDs)) != len(uniqueAgentIDs(documentIDs)) {
 		return fmt.Errorf("%w: one or more mentioned documents were not found", errInvalid)
 	}
+	if len(selectedAgentUsers(data.Users, userIDs)) != len(uniqueAgentIDs(userIDs)) {
+		return fmt.Errorf("%w: one or more mentioned people were not found", errInvalid)
+	}
 	return nil
+}
+
+// agentMentionListError bounds the mention list stored with a message.
+func agentMentionListError(mentions []domain.AgentMention, userIDs []string) error {
+	if len(mentions) > 50 || len(userIDs) > 25 {
+		return fmt.Errorf("%w: too many mentions", errInvalid)
+	}
+	for _, mention := range mentions {
+		switch mention.Type {
+		case "issue", "project", "document", "user":
+		default:
+			return fmt.Errorf("%w: mention type must be issue, project, document or user", errInvalid)
+		}
+		if mention.ID == "" || len(mention.Label) > 200 {
+			return fmt.Errorf("%w: mentions need an id and a short label", errInvalid)
+		}
+	}
+	return nil
+}
+
+func validAgentMentionList(w http.ResponseWriter, mentions []domain.AgentMention, userIDs []string) bool {
+	if err := agentMentionListError(mentions, userIDs); err != nil {
+		writeError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), errInvalid.Error()+": "))
+		return false
+	}
+	return true
+}
+
+func selectedAgentUsers(users []domain.User, ids []string) []domain.User {
+	wanted := map[string]bool{}
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	selected := []domain.User{}
+	for _, user := range users {
+		if wanted[user.ID] {
+			selected = append(selected, user)
+		}
+	}
+	return selected
 }
 
 func selectedAgentProjects(projects []domain.Project, ids []string) []domain.Project {
@@ -160,8 +207,8 @@ func mergeAgentIDs(current, extra []string) []string {
 }
 
 // agentMentionPrompt describes @-mentioned projects and documents for the model.
-func agentMentionPrompt(projects []domain.Project, documents []domain.Document) string {
-	if len(projects) == 0 && len(documents) == 0 {
+func agentMentionPrompt(projects []domain.Project, documents []domain.Document, users []domain.User) string {
+	if len(projects) == 0 && len(documents) == 0 && len(users) == 0 {
 		return ""
 	}
 	var prompt strings.Builder
@@ -181,6 +228,9 @@ func agentMentionPrompt(projects []domain.Project, documents []domain.Document) 
 		if description := strings.TrimSpace(project.Description); description != "" {
 			fmt.Fprintf(&prompt, "  Description: %s\n", truncateSettingsText(description, 2000))
 		}
+	}
+	for _, user := range users {
+		fmt.Fprintf(&prompt, "- Person %s (@%s, id %s)\n", user.DisplayName, user.Name, user.ID)
 	}
 	for _, document := range documents {
 		fmt.Fprintf(&prompt, "- Document %q (id %s)\n", document.Title, document.ID)
@@ -317,13 +367,16 @@ func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (domain.AgentSession, error) {
-	if err := s.checkAgentMentions(r, input.IssueIDs, input.ProjectIDs, input.DocumentIDs); err != nil {
+	if err := agentMentionListError(input.Mentions, input.UserIDs); err != nil {
+		return domain.AgentSession{}, err
+	}
+	if err := s.checkAgentMentions(r, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.UserIDs); err != nil {
 		return domain.AgentSession{}, err
 	}
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
 	title := agentSessionTitle(input.Message)
-	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now}
+	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), UserIDs: uniqueAgentIDs(input.UserIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
@@ -363,10 +416,11 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		session.IssueIDs = mergeAgentIDs(session.IssueIDs, input.IssueIDs)
 		session.ProjectIDs = mergeAgentIDs(session.ProjectIDs, input.ProjectIDs)
 		session.DocumentIDs = mergeAgentIDs(session.DocumentIDs, input.DocumentIDs)
-		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 {
+		session.UserIDs = mergeAgentIDs(session.UserIDs, input.UserIDs)
+		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 || len(session.UserIDs) > 25 {
 			return fmt.Errorf("%w: a conversation can reference at most 25 issues, projects and documents each", errInvalid)
 		}
-		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, CreatedAt: now})
+		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, CreatedAt: now})
 		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
 		session.UpdatedAt = now
 		return nil

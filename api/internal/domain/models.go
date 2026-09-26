@@ -142,8 +142,17 @@ type AgentMessage struct {
 	Role       string             `json:"role"`
 	Content    string             `json:"content"`
 	Parts      []AgentMessagePart `json:"parts,omitempty"`
+	// Mentions are the resources @-mentioned in a user message, in order.
+	Mentions   []AgentMention     `json:"mentions,omitempty"`
 	DurationMS int64              `json:"durationMs,omitempty"`
 	CreatedAt  time.Time          `json:"createdAt"`
+}
+
+// AgentMention is an @-mentioned issue, project, document or user.
+type AgentMention struct {
+	Type  string `json:"type"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 type AgentMessagePart struct {
@@ -190,6 +199,7 @@ type AgentSession struct {
 	// ProjectIDs and DocumentIDs are resources @-mentioned in the conversation.
 	ProjectIDs  []string `json:"projectIds,omitempty"`
 	DocumentIDs []string `json:"documentIds,omitempty"`
+	UserIDs     []string `json:"userIds,omitempty"`
 	SkillIDs  []string       `json:"skillIds"`
 	Messages  []AgentMessage `json:"messages"`
 	CreatedAt time.Time      `json:"createdAt"`

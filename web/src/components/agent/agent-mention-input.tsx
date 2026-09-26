@@ -3,11 +3,30 @@ import { createPortal } from 'react-dom'
 import { FileText } from 'lucide-react'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
+import { avatarColor } from '@/components/issue/core-property-pickers'
+import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
 import styles from './agent-mention-input.module.css'
 
-export type AgentMention = { type: 'issue' | 'project' | 'document'; id: string; label: string }
+export type AgentMention = { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }
+
+/** Icon for a mention chip or option: status, project, document or avatar. */
+export function mentionIcon(mention: Pick<AgentMention, 'type' | 'id'>, data: BootstrapData): ReactNode {
+  if (mention.type === 'issue') {
+    const issue = data.issues.find(item => item.id === mention.id)
+    return issue ? <StatusIcon state={issue.state} size={14}/> : null
+  }
+  if (mention.type === 'project') {
+    const project = data.projects.find(item => item.id === mention.id)
+    return <ProjectIcon size={14} style={{ color: project?.color }}/>
+  }
+  if (mention.type === 'user') {
+    const user = data.users.find(item => item.id === mention.id)
+    return <UserAvatar className={styles.avatar} avatarUrl={user?.avatarUrl} color={avatarColor(mention.id)} name={user?.displayName ?? '?'}/>
+  }
+  return <FileText size={14}/>
+}
 
 type MentionOption = AgentMention & { key: string; detail?: string; icon: ReactNode; group: string }
 
@@ -64,11 +83,12 @@ export function AgentMentionInput({
     const pageIds = new Set(pageIssues.map(issue => issue.id))
     const issue = (item: MentionIssue, group: string): MentionOption => ({ key: `issue:${item.id}`, type: 'issue', id: item.id, label: item.identifier, detail: item.title, icon: <StatusIcon state={item.state} size={14}/>, group })
     const page = pageIssues.filter(item => matches(`${item.identifier} ${item.title}`)).map(item => issue(item, 'This page'))
+    const users = data.users.filter(item => item.active && !item.app && matches(`${item.displayName} ${item.name} ${item.email}`)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `user:${item.id}`, type: 'user', id: item.id, label: item.displayName, icon: <UserAvatar className={styles.avatar} avatarUrl={item.avatarUrl} color={avatarColor(item.id)} name={item.displayName}/>, group: 'Users' }))
     const issues = candidates.filter(item => !pageIds.has(item.id) && !item.archivedAt && matches(`${item.identifier} ${item.title}`)).slice(0, GROUP_LIMIT).map(item => issue(item, 'Issues'))
     const projects = needle ? data.projects.filter(item => !item.archivedAt && matches(item.name)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `project:${item.id}`, type: 'project', id: item.id, label: item.name, icon: <ProjectIcon size={14} style={{ color: item.color }}/>, group: 'Projects' })) : []
     const documents = needle ? (data.documents ?? []).filter(item => matches(item.title)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `document:${item.id}`, type: 'document', id: item.id, label: item.title, icon: <FileText size={14}/>, group: 'Documents' })) : []
-    return [...page, ...issues, ...projects, ...documents]
-  }, [candidates, data.documents, data.projects, pageIssues, query])
+    return [...page, ...users, ...issues, ...projects, ...documents]
+  }, [candidates, data.documents, data.projects, data.users, pageIssues, query])
 
   useEffect(() => { setActiveIndex(0) }, [query])
 

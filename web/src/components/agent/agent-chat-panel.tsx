@@ -120,9 +120,9 @@ export function AgentChatPanel({
     if (!message || loading || !status?.enabled) return
     setMessages(current => [
       ...current,
-      { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
+      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions, createdAt: new Date().toISOString() },
     ])
-    const mentioned = { issueIds: idsOf('issue'), projectIds: idsOf('project'), documentIds: idsOf('document') }
+    const mentioned = { issueIds: idsOf('issue'), projectIds: idsOf('project'), documentIds: idsOf('document'), userIds: idsOf('user'), mentions }
     setInput('')
     setMentions([])
     setError(undefined)
@@ -184,6 +184,8 @@ export function AgentChatPanel({
               issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...mentioned.issueIds])],
               projectIds: mentioned.projectIds,
               documentIds: mentioned.documentIds,
+              userIds: mentioned.userIds,
+              mentions,
               skillIds,
               location: 'toolbar',
             },

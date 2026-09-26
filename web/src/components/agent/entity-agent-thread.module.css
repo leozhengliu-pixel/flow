@@ -71,7 +71,7 @@
 :global(:root[data-theme="light"]) .messageActivity>div p{color:var(--theme-text-secondary)}
 /* Reference agent composer: greeting, a plain context row above a raised composer box. */
 .welcome{height:100%;min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;padding:0 16px 20px;text-align:center}
-.welcomePattern{width:100%;flex:1;min-height:80px;opacity:.5;background-image:radial-gradient(circle,var(--pk-divider) 1px,transparent 1.5px);background-size:24px 24px;mask-image:radial-gradient(ellipse at 50% 80%,#000 10%,transparent 70%)}
+.welcomePattern{width:100%;flex:1;min-height:80px;opacity:.5;background-image:radial-gradient(circle,var(--pk-divider) 1px,transparent 1.5px);background-size:24px 24px;mask-image:radial-gradient(ellipse at 50% 80%,var(--pk-text) 10%,transparent 70%)}
 .welcome strong{color:var(--pk-text-strong);font-size:13px;font-weight:600}
 .welcome>span{color:var(--chip-text);font-size:13px;font-weight:450}
 .suggestions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-top:12px}

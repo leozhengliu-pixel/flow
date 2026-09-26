@@ -14,3 +14,5 @@
 .title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .none{height:34px;display:flex;align-items:center;gap:8px;margin:2px 6px;padding:0 8px;border-radius:8px;background:var(--pk-hover);color:var(--pk-text-strong);font:450 13px/normal var(--font)}
 .none button{padding:0;border:0;background:transparent;color:var(--pk-faint);font:inherit;cursor:pointer}
+.avatar{width:14px;height:14px;display:inline-grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--avatar,var(--pk-hover));color:var(--on-accent);font:600 7px/1 var(--font)}
+.avatar img{width:100%;height:100%;object-fit:cover}

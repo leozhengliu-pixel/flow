@@ -8,8 +8,10 @@ import { PropertyMenu } from '@/components/property/property-menu'
 import type { BootstrapData, Issue } from '@/types/flow'
 
 /** "Link existing issue as sub-issue…": pick any issue and make it a child of `parent`. */
-export function LinkExistingSubIssue({ parent, data, onIssueUpdated, label = false }: { parent: Issue; data: BootstrapData; onIssueUpdated?: (issue: Issue) => void; label?: boolean }) {
-  const [open, setOpen] = useState(false)
+export function LinkExistingSubIssue({ parent, data, onIssueUpdated, label = false, open: controlledOpen, onOpenChange, anchorOnly = false }: { parent: Issue; data: BootstrapData; onIssueUpdated?: (issue: Issue) => void; label?: boolean; open?: boolean; onOpenChange?: (open: boolean) => void; /** Render an invisible anchor instead of a visible button (opened from a menu). */ anchorOnly?: boolean }) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (next: boolean) => { setInternalOpen(next); onOpenChange?.(next) }
   const candidates = useIssueCandidates(data, open)
   const ancestors = useMemo(() => { const ids = new Set<string>([parent.id]); let cursor = parent.parentId; while (cursor && !ids.has(cursor)) { ids.add(cursor); cursor = data.issues.find(item => item.id === cursor)?.parentId } return ids }, [data.issues, parent.id, parent.parentId])
   const options = useMemo(() => candidates.filter(item => !ancestors.has(item.id) && item.parentId !== parent.id).map(item => ({
@@ -32,7 +34,7 @@ export function LinkExistingSubIssue({ parent, data, onIssueUpdated, label = fal
     ariaLabel="Link existing issue as sub-issue"
     value=""
     triggerRole="button"
-    triggerClassName={label ? 'issue-empty-sub-issue-action link-existing-sub-issue' : 'sub-issues-create'}
+    triggerClassName={anchorOnly ? 'sub-issues-link-anchor' : label ? 'issue-empty-sub-issue-action link-existing-sub-issue' : 'sub-issues-create'}
     trigger={<><Link2 size={label ? 16 : 14}/>{label ? 'Link existing issue' : null}</>}
     align="end"
     surfaceClassName="link-sub-issue-picker"

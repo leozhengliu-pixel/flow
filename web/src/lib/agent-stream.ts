@@ -17,6 +17,8 @@ export type AgentStreamInput = {
   issueIds?: string[]
   projectIds?: string[]
   documentIds?: string[]
+  userIds?: string[]
+  mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }[]
   skillIds?: string[]
   location?: 'page' | 'toolbar'
 }
@@ -26,6 +28,8 @@ export type AgentMessageMentions = {
   issueIds?: string[]
   projectIds?: string[]
   documentIds?: string[]
+  userIds?: string[]
+  mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }[]
 }
 
 export function streamNewAgentSession(input: AgentStreamInput, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {
