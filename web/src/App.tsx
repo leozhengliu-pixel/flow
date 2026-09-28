@@ -82,6 +82,8 @@ import {
   toggleIssueReaction,
   toggleProjectCommentReaction,
   toggleProjectUpdateReaction,
+  resolveProjectComment,
+  setProjectThreadSubscription,
   updateComment,
   resolveComment,
   updateAgentSession as updateAgentSessionRequest,
@@ -132,6 +134,7 @@ import type {
   IssueUpdateInput,
   Project,
   ProjectRelation,
+  ThreadSubscriptionState,
   ProjectMilestone,
   ProjectUpdate,
   SavedView,
@@ -3026,6 +3029,44 @@ function App() {
     );
     replaceProjectComment(projectId, comment);
     return comment;
+  };
+  const resolveProjectCommentThread = async (
+    projectId: string,
+    commentId: string,
+    resolved: boolean,
+  ) => {
+    const comment = await run(
+      () => resolveProjectComment(projectId, commentId, resolved),
+      resolved ? "Could not resolve thread" : "Could not re-open thread",
+    );
+    replaceProjectComment(projectId, comment);
+    return comment;
+  };
+  const changeProjectCommentThreadSubscription = async (
+    projectId: string,
+    commentId: string,
+    state: ThreadSubscriptionState | null,
+  ) => {
+    const saved = await run(
+      () => setProjectThreadSubscription(projectId, commentId, state),
+      "Could not update thread subscription",
+    );
+    // The server keys records by thread root; replies never carry the menu.
+    setData((current) => {
+      if (!current) return current;
+      const others = (current.threadSubscriptions ?? []).filter(
+        (item) =>
+          !(
+            item.projectId === projectId &&
+            item.commentId === commentId &&
+            item.userId === current.viewer.id
+          ),
+      );
+      return {
+        ...current,
+        threadSubscriptions: saved ? [...others, saved] : others,
+      };
+    });
   };
   const changeProjectDisplayDefault = async (
     display: Record<string, unknown>,
@@ -6150,6 +6191,10 @@ function App() {
               onUpdateProjectComment={editProjectComment}
               onDeleteProjectComment={removeProjectComment}
               onReactProjectComment={reactToProjectComment}
+              onResolveProjectComment={resolveProjectCommentThread}
+              onProjectCommentThreadSubscription={changeProjectCommentThreadSubscription}
+              threadSubscriptions={data.threadSubscriptions}
+              viewerRole={data.viewerRole}
               onCreateResource={addProjectResource}
               onUpdateResource={changeProjectResource}
               onDeleteResource={removeProjectResource}

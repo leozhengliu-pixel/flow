@@ -1562,11 +1562,13 @@ type Subscription struct {
 
 // ThreadSubscription is a user's explicit choice for one comment thread
 // (the root comment and its replies). Thread participants are subscribed
-// implicitly; "muted" silences a thread even for issue subscribers.
+// implicitly; "muted" silences a thread even for issue subscribers. Exactly
+// one of IssueID or ProjectID names the thread's parent resource.
 type ThreadSubscription struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"userId"`
-	IssueID   string    `json:"issueId"`
+	IssueID   string    `json:"issueId,omitempty"`
+	ProjectID string    `json:"projectId,omitempty"`
 	CommentID string    `json:"commentId"`
 	State     string    `json:"state"`
 	CreatedAt time.Time `json:"createdAt"`

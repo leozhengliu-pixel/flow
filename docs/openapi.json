@@ -10609,6 +10609,80 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/projects/{id}/comments/{commentId}/subscription": {
+      "delete": {
+        "operationId": "delete_projects_id_comments_commentId_subscription",
+        "tags": [
+          "projects"
+        ],
+        "summary": "DELETE /api/projects/{id}/comments/{commentId}/subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_projects_id_comments_commentId_subscription",
+        "tags": [
+          "projects"
+        ],
+        "summary": "PUT /api/projects/{id}/comments/{commentId}/subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/projects/{id}/history": {
       "get": {
         "operationId": "get_projects_id_history",
