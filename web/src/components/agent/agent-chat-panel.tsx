@@ -200,6 +200,11 @@ export function AgentChatPanel({
           setSession(event.session)
         }
         if (event.type === 'session.started' && event.session) setMessages(event.session.messages)
+        if (event.type === 'text.replaced') {
+          setMessages(current => current.at(-1)?.role === 'assistant'
+            ? current.map((item, index) => index === current.length - 1 ? { ...item, content: event.delta ?? '' } : item)
+            : current)
+        }
         if (event.type === 'text.delta') {
           setMessages(current =>
             current.at(-1)?.role === 'assistant'
