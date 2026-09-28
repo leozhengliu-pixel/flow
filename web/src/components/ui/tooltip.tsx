@@ -35,18 +35,29 @@ export interface FlowTooltipProps {
   shortcut?: React.ReactNode
   side?: TooltipPrimitive.TooltipContentProps['side']
   align?: TooltipPrimitive.TooltipContentProps['align']
+  /** Keeps the tooltip closed, e.g. while the control's own menu is open. */
+  disabled?: boolean
   children: React.ReactElement
 }
 
+/** Renders a shortcut; key sequences written as "P then S" get Linear's "then" separator. */
+export function TooltipShortcut({ value }: { value: React.ReactNode }) {
+  if (typeof value !== 'string' || !value.includes(' then ')) return <>{value}</>
+  const keys = value.split(' then ')
+  return <>{keys.map((key, index) => <React.Fragment key={index}>{index > 0 && <span className="flow-tooltip-then">then</span>}<span>{key}</span></React.Fragment>)}</>
+}
+
 /** Convenience wrapper for icon buttons and compact controls. */
-export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center' }: FlowTooltipProps) {
+export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false }: FlowTooltipProps) {
+  const [open, setOpen] = React.useState(false)
+  React.useEffect(() => { if (disabled) setOpen(false) }, [disabled])
   if (!label && !shortcut) return children
   return (
-    <TooltipRoot>
+    <TooltipRoot open={open && !disabled} onOpenChange={next => setOpen(next && !disabled)}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
       <TooltipContent align={align} side={side}>
         <span className="flow-tooltip-copy">{label}</span>
-        {shortcut ? <kbd className="flow-tooltip-shortcut">{shortcut}</kbd> : null}
+        {shortcut ? <kbd className="flow-tooltip-shortcut"><TooltipShortcut value={shortcut}/></kbd> : null}
       </TooltipContent>
     </TooltipRoot>
   )

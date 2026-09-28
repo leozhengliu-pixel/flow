@@ -32,7 +32,7 @@ export function DateTimeControl({
   const [draftDate, setDraftDate] = useState(initial.date)
   const [draftTime, setDraftTime] = useState(initial.time)
   const preferences = useUserPreferences()
-  const weekStart = firstWeekday(preferences.firstDay)
+  const weekStart = firstWeekday(preferences.firstDay, locale ?? (typeof document === 'undefined' ? undefined : document.documentElement.dataset.locale))
   const days = useMemo(() => calendarDays(view,weekStart), [view,weekStart])
   const choose = (date: string) => {
     setDraftDate(date)

@@ -1338,6 +1338,9 @@ func TestProjectDeletionRemovesDependencies(t *testing.T) {
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 
 	blocker := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"name": "Delete blocker", "teamIds": []string{"team_test"}}, http.StatusCreated)
+	if blocker.Color != "#5e6ad2" || blocker.Icon != "Project" {
+		t.Fatalf("new projects should default to the indigo project icon, got icon=%q color=%q", blocker.Icon, blocker.Color)
+	}
 	blocked := requestJSON[domain.Project](t, handler, http.MethodPost, "/api/projects", map[string]any{"name": "Delete blocked", "teamIds": []string{"team_test"}, "dependencyRelations": []map[string]any{{"projectId": blocker.ID, "type": "blocked_by"}}}, http.StatusCreated)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/projects/"+blocker.ID, nil, http.StatusNoContent)
 

@@ -688,6 +688,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}/milestones/{milestoneId}", s.updateProjectMilestone)
 	mux.HandleFunc("DELETE /api/projects/{id}/milestones/{milestoneId}", s.deleteProjectMilestone)
 	mux.HandleFunc("POST /api/projects/{id}/comments", s.createProjectComment)
+	mux.HandleFunc("PATCH /api/projects/{id}/comments/{commentId}", s.updateProjectComment)
+	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}", s.deleteProjectComment)
+	mux.HandleFunc("POST /api/projects/{id}/comments/{commentId}/reactions", s.toggleProjectCommentReaction)
+	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
 	mux.HandleFunc("POST /api/projects/{id}/updates", s.createProjectUpdate)
 	mux.HandleFunc("PATCH /api/projects/{id}/updates/{updateId}", s.updateProjectUpdate)
 	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}", s.deleteProjectUpdate)
@@ -2725,7 +2729,15 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if len(teamIDs) == 0 {
 			teamIDs = []string{data.Teams[0].ID}
 		}
-		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Icon: "Project", Color: "#eb5757", PriorityLabel: "No priority", Position: nextProjectPosition(data.Projects), Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
+		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Icon: "Project", Color: "#5e6ad2", PriorityLabel: "No priority", Position: nextProjectPosition(data.Projects), Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
+		creator := authUser(r)
+		if creator.ID == "" {
+			creator = data.Viewer
+		}
+		if creator.ID != "" {
+			created.CreatorID = creator.ID
+			created.Creator = &creator
+		}
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -2799,10 +2811,12 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		if input.Description != nil && *input.Description != project.Description {
 			project.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("project_description_revision_%d", time.Now().UnixNano()), ProjectID: id, Description: project.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, project.DescriptionRevisions...)
 		}
+		previous := projectTrackedProperties(*project)
 		if err := applyProjectUpdate(data, project, input); err != nil {
 			return err
 		}
 		project.UpdatedAt = time.Now().UTC()
+		appendProjectPropertyAudit(data, previous, *project)
 		updated = *project
 		return nil
 	})
@@ -3617,12 +3631,135 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
+		if input.ParentID != nil {
+			parent := slices.IndexFunc(project.Comments, func(comment domain.Comment) bool { return comment.ID == *input.ParentID })
+			if parent < 0 {
+				return errNotFound
+			}
+			// Replies are single-level like Linear: replying to a reply
+			// attaches to the thread's root comment.
+			if root := project.Comments[parent].ParentID; root != nil {
+				input.ParentID = root
+			}
+		}
+		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
 		project.Comments = append(project.Comments, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
+}
+
+// updateProjectComment edits a project comment's body. Only the comment's
+// author may edit it (matching Linear, where admins can delete but never
+// rewrite another member's words).
+func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
+	var input domain.CommentUpdateInput
+	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
+		writeError(w, http.StatusBadRequest, "comment body is required")
+		return
+	}
+	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
+	var updated, current domain.Comment
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_updated", projectID, input, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, projectID)
+		if err != nil {
+			return err
+		}
+		index := slices.IndexFunc(project.Comments, func(comment domain.Comment) bool { return comment.ID == commentID })
+		if index < 0 {
+			return errNotFound
+		}
+		comment := &project.Comments[index]
+		if comment.User.ID != data.Viewer.ID {
+			return store.ErrAuthForbidden
+		}
+		if input.ExpectedVersion != nil && comment.Version != *input.ExpectedVersion {
+			current = *comment
+			return errConflict
+		}
+		now := time.Now().UTC()
+		comment.Body = strings.TrimSpace(input.Body)
+		comment.BodyData = input.BodyData
+		comment.EditedAt = &now
+		comment.Version++
+		project.UpdatedAt = now
+		updated = *comment
+		return nil
+	})
+	if errors.Is(err, errConflict) {
+		writeVersionConflict(w, current)
+		return
+	}
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// deleteProjectComment removes a comment and its replies. The author or a
+// workspace admin may delete it.
+func (s *server) deleteProjectComment(w http.ResponseWriter, r *http.Request) {
+	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_deleted", projectID, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, projectID)
+		if err != nil {
+			return err
+		}
+		index := slices.IndexFunc(project.Comments, func(comment domain.Comment) bool { return comment.ID == commentID })
+		if index < 0 {
+			return errNotFound
+		}
+		if project.Comments[index].User.ID != data.Viewer.ID && !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+			return store.ErrAuthForbidden
+		}
+		project.Comments = slices.DeleteFunc(project.Comments, func(comment domain.Comment) bool {
+			return comment.ID == commentID || (comment.ParentID != nil && *comment.ParentID == commentID)
+		})
+		project.UpdatedAt = time.Now().UTC()
+		return nil
+	})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *server) toggleProjectCommentReaction(w http.ResponseWriter, r *http.Request) {
+	var input domain.ReactionInput
+	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Emoji) == "" {
+		writeError(w, http.StatusBadRequest, "emoji is required")
+		return
+	}
+	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
+	var updated domain.Comment
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, projectID)
+		if err != nil {
+			return err
+		}
+		index := slices.IndexFunc(project.Comments, func(comment domain.Comment) bool { return comment.ID == commentID })
+		if index < 0 {
+			return errNotFound
+		}
+		comment := &project.Comments[index]
+		if comment.Reactions == nil {
+			comment.Reactions = map[string][]string{}
+		}
+		users := comment.Reactions[input.Emoji]
+		if slices.Contains(users, data.Viewer.ID) {
+			users = removeString(users, data.Viewer.ID)
+		} else {
+			users = append(users, data.Viewer.ID)
+		}
+		if len(users) == 0 {
+			delete(comment.Reactions, input.Emoji)
+		} else {
+			comment.Reactions[input.Emoji] = users
+		}
+		comment.Version++
+		updated = *comment
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
@@ -4584,6 +4721,11 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 				if slices.ContainsFunc(update.Attachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
 					return true
 				}
+			}
+		}
+		for _, project := range data.Projects {
+			if slices.ContainsFunc(project.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {
+				return true
 			}
 		}
 		for _, updates := range data.InitiativeUpdates {

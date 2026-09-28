@@ -107,6 +107,16 @@ export function reviewsOriginView(state: unknown, workspace: string): 'created' 
   return route?.kind === 'reviews' ? route.view : 'for-you'
 }
 
+/** Linear only shows the "Projects ›" crumb when a project was opened from a
+ * projects list inside the app; deep links render just the project crumb. */
+export function projectsListOriginPath(state: unknown, workspace: string): string | undefined {
+  const path = navigationTrail(state, workspace).at(-1)
+  if (!path) return
+  const url = new URL(path, 'https://flow.invalid')
+  const kind = parseAppRoute(url.pathname, url.search).kind
+  return ['projects', 'team-projects', 'projects-saved-view', 'team-projects-saved-view'].includes(kind) ? path : undefined
+}
+
 export function sidebarOriginPath(state: unknown, currentPath: string, workspace: string): string | undefined {
   const current = parseAppRoute(currentPath)
   if (!detailIdentity(current)) return

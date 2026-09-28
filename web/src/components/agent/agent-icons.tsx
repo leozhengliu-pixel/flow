@@ -81,3 +81,25 @@ export function AgentSubmitIcon({ size = 16, ...props }: IconProps) {
     </svg>
   );
 }
+
+export function AgentWriteIcon({ size = 16, ...props }: IconProps) {
+  return (
+    <svg
+      {...props}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      role="img"
+      focusable="false"
+      aria-hidden="true"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.4"
+    >
+      <path d="M1.75 3.75h6.5M1.75 7h3.5M1.75 10.25h2.5" />
+      <path d="M7.1 6.3l7.1 2.85-3.2.95-1.45 3.05z" />
+    </svg>
+  );
+}

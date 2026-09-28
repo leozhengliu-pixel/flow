@@ -30,4 +30,14 @@ export function displayUserName(user: Pick<User,'displayName'|'name'>) {
   if (current.displayNames === 'First name') return full.split(/\s+/)[0]
   return full
 }
-export function firstWeekday(preference = current.firstDay) { return preference === 'Sunday' ? 0 : preference === 'Saturday' ? 6 : 1 }
+const FIRST_DAY_OPTIONS = ['Monday', 'Saturday', 'Sunday'] as const
+/** Linear-style default: English/US weeks start on Sunday, zh-CN weeks on Monday. */
+export function localeDefaultFirstDay(locale?: string) { return locale === 'zh-CN' ? 'Monday' : 'Sunday' }
+/** An explicit user choice always wins; an unset value falls back to the locale default. */
+export function resolveFirstDay(preference: string | undefined, locale?: string) {
+  return preference && (FIRST_DAY_OPTIONS as readonly string[]).includes(preference) ? preference : localeDefaultFirstDay(locale)
+}
+export function firstWeekday(preference = current.firstDay, locale?: string) {
+  const day = resolveFirstDay(preference, locale)
+  return day === 'Sunday' ? 0 : day === 'Saturday' ? 6 : 1
+}

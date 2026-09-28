@@ -1,13 +1,23 @@
 import { addDays, format, startOfDay } from 'date-fns'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import { buildProgressData, shouldShowProgressGraph } from './project-progress-data'
 import { ProjectDetailsSidebar } from './project-details-sidebar'
-import type { Issue } from '@/types/flow'
+import type { Initiative, Issue } from '@/types/flow'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, project } from '@/test/fixtures'
+import type { ProjectPickerRequest } from './project-detail-shortcuts'
+
+async function findTooltip(text: string) {
+  let match: HTMLElement | undefined
+  await waitFor(() => {
+    match = screen.queryAllByRole('tooltip').find(tooltip => tooltip.textContent?.includes(text))
+    expect(match).toBeDefined()
+  }, { timeout: 2000 })
+  return match!
+}
 
 function issue(createdAt: Date, state: 'started' | 'completed', index = 0, estimate?: number): Issue {
   const timestamp = createdAt.toISOString()
@@ -213,5 +223,187 @@ describe('project detail dependency relations', () => {
     await user.click(screen.getByRole('button', { name: 'Menu' }))
     await user.click(screen.getByRole('menuitem', { name: 'Remove dependency' }))
     expect(onUpdateProject).toHaveBeenCalledWith(owner.id, { dependencyRelations: [] })
+  })
+})
+
+describe('project sidebar activity', () => {
+  it('shows the creation event with a project glyph and no synthetic property changes', () => {
+    const data = makeBootstrap()
+    const current = { ...project, id: 'project-activity', priority: 2, priorityLabel: 'High', lead: data.viewer, createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z' }
+    const { container } = render(<I18nProvider><ProjectDetailsSidebar
+      initiatives={[]}
+      integrationConnections={[]}
+      labelGroups={[]}
+      labels={[]}
+      onConvertMilestone={vi.fn()}
+      onCreateMilestone={vi.fn()}
+      onDeleteMilestone={vi.fn()}
+      onMoveMilestone={vi.fn()}
+      onOpenIssueFilter={vi.fn()}
+      onOpenMilestoneIssues={vi.fn()}
+      onReorderMilestones={vi.fn()}
+      onTabChange={vi.fn()}
+      onUpdate={vi.fn().mockResolvedValue(undefined)}
+      onUpdateProject={vi.fn().mockResolvedValue(current)}
+      onUpdateMilestone={vi.fn()}
+      project={current}
+      projectIssues={[]}
+      projectRelations={[]}
+      projects={[current]}
+      projectStatuses={[current.status]}
+      projectUpdates={[]}
+      teams={data.teams}
+      users={data.users}
+      viewer={data.viewer}
+    /></I18nProvider>)
+
+    const activity = container.querySelector('.project-details-sidebar__activity')
+    expect(activity?.children).toHaveLength(1)
+    expect(activity).toHaveTextContent('created the project')
+    expect(activity).not.toHaveTextContent('changed priority')
+    expect(activity).not.toHaveTextContent('assigned themselves')
+    expect(activity?.querySelector('.project-details-sidebar__activity-glyph')).toBeInTheDocument()
+    expect(activity?.querySelector('.avatar')).not.toBeInTheDocument()
+  })
+})
+
+describe('project sidebar Linear parity', () => {
+  function renderSidebar(overrides: Partial<typeof project> = {}, options: { tab?: 'overview' | 'activity'; projectIssues?: Issue[]; initiatives?: Initiative[]; otherProjects?: (typeof project)[]; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void } = {}) {
+    const data = makeBootstrap()
+    const current = { ...project, id: 'project-parity', lead: undefined, memberIds: [], startDate: undefined, targetDate: undefined, slackChannelName: undefined, initiatives: [], milestones: [{ id: 'milestone-alpha', name: 'Alpha', sortOrder: 0 }], createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z', ...overrides } as typeof project
+    return render(<I18nProvider><ProjectDetailsSidebar
+      initiatives={options.initiatives ?? []}
+      integrationConnections={[]}
+      labelGroups={[]}
+      labels={[]}
+      onConvertMilestone={vi.fn()}
+      onCreateMilestone={vi.fn()}
+      onDeleteMilestone={vi.fn()}
+      onMoveMilestone={vi.fn()}
+      onOpenIssueFilter={vi.fn()}
+      onOpenMilestoneIssues={vi.fn()}
+      onPickerRequestHandled={options.onPickerRequestHandled}
+      pickerRequest={options.pickerRequest}
+      onReorderMilestones={vi.fn()}
+      onTabChange={vi.fn()}
+      onUpdate={vi.fn().mockResolvedValue(undefined)}
+      onUpdateProject={vi.fn().mockResolvedValue(current)}
+      onUpdateMilestone={vi.fn()}
+      project={current}
+      projectIssues={options.projectIssues ?? []}
+      projectRelations={[]}
+      projects={[current, ...(options.otherProjects ?? [])]}
+      projectStatuses={[current.status]}
+      projectUpdates={[]}
+      tab={options.tab}
+      teams={data.teams}
+      users={data.users}
+      viewer={data.viewer}
+    /></I18nProvider>)
+  }
+
+  it('dims empty property placeholders and uses Linear copy', () => {
+    const { container } = renderSidebar()
+    expect(screen.getByText('Add lead').closest('button')).toHaveClass('is-empty')
+    expect(screen.getByText('Add members').closest('button')).toHaveClass('is-empty')
+    expect(screen.getByText('Slack channel').closest('button')).toHaveClass('is-empty')
+    expect(screen.getByText('Target').closest('button')).toHaveClass('is-empty')
+    expect(container.querySelector('.project-details-sidebar__property-dates svg.lucide-arrow-right')).toBeInTheDocument()
+    expect(screen.queryByText('Initiatives')).toBeNull()
+  })
+
+  it('hides Progress without issues and omits empty milestone chrome', () => {
+    const { container } = renderSidebar()
+    expect(screen.queryByText('Progress')).toBeNull()
+    expect(screen.getByText('Activity')).toBeInTheDocument()
+    const alpha = screen.getByRole('button', { name: 'Alpha 0% of 0' })
+    expect(alpha).not.toHaveTextContent('No date')
+    expect(container.querySelector('.project-details-sidebar__milestone.is-unassigned')?.textContent).toBe('No milestone')
+  })
+
+  it('shows Progress once the project has issues', () => {
+    renderSidebar({}, { projectIssues: [issue(new Date(), 'started')] })
+    expect(screen.getByText('Progress')).toBeInTheDocument()
+  })
+
+  it('shows only Properties and Milestones on the Activity tab', () => {
+    renderSidebar({}, { tab: 'activity', projectIssues: [issue(new Date(), 'started')] })
+    expect(screen.getByText('Properties')).toBeInTheDocument()
+    expect(screen.getByText('Milestones')).toBeInTheDocument()
+    expect(screen.queryByText('Progress')).toBeNull()
+    expect(screen.queryByText('Activity')).toBeNull()
+  })
+
+  it('hides the Initiatives row when the project has none, even if the workspace has initiatives', () => {
+    const initiative = { id: 'initiative-1', name: 'Launch', status: 'active' } as Initiative
+    renderSidebar({}, { initiatives: [initiative] })
+    expect(screen.queryByText('Initiatives')).toBeNull()
+  })
+
+  it('shows the Initiatives row once the project belongs to an initiative', () => {
+    const initiative = { id: 'initiative-1', name: 'Launch', status: 'active' } as Initiative
+    renderSidebar({ initiatives: ['initiative-1'] }, { initiatives: [initiative] })
+    expect(screen.getByText('Initiatives')).toBeInTheDocument()
+    expect(screen.getByText('Launch')).toBeInTheDocument()
+  })
+
+  it('disables Add dependency when there is no other active project', async () => {
+    const archived = { ...project, id: 'project-archived', name: 'Archived', archivedAt: '2026-09-01T00:00:00.000Z' } as typeof project
+    renderSidebar({}, { otherProjects: [archived] })
+    const add = screen.getByRole('button', { name: 'Add dependency' })
+    expect(add).toHaveAttribute('aria-disabled', 'true')
+    expect(add).toHaveAttribute('data-disabled')
+    await userEvent.click(add)
+    expect(screen.queryByText('Blocked by…')).toBeNull()
+  })
+
+  it('opens the dependency menu when another project exists', async () => {
+    const other = { ...project, id: 'project-other', name: 'Other', archivedAt: undefined } as typeof project
+    renderSidebar({}, { otherProjects: [other] })
+    const add = screen.getByRole('button', { name: 'Add dependency' })
+    expect(add).not.toHaveAttribute('aria-disabled')
+    await userEvent.click(add)
+    expect(await screen.findByText('Blocked by…')).toBeInTheDocument()
+    expect(screen.getByText('Blocking…')).toBeInTheDocument()
+  })
+
+  it('marks the Milestones card so its Linear header geometry applies', () => {
+    renderSidebar()
+    expect(screen.getByText('Milestones').closest('section')).toHaveClass('project-details-sidebar__section', 'is-milestones')
+    expect(screen.getByText('Properties').closest('section')).not.toHaveClass('is-milestones')
+  })
+
+  it('shows Linear tooltips with shortcuts on the property controls', async () => {
+    const user = userEvent.setup()
+    renderSidebar()
+    await user.hover(screen.getByRole('combobox', { name: /Change Status/ }))
+    const status = await findTooltip('Change project status')
+    expect(status.textContent).toBe('Change project statusPthenS')
+    await user.keyboard('{Escape}')
+    await user.hover(screen.getByRole('button', { name: 'Change project target date' }))
+    expect((await findTooltip('Add target date')).textContent).toMatch(/D$/)
+    await user.keyboard('{Escape}')
+    await user.hover(screen.getByRole('button', { name: 'Slack channel' }))
+    expect(await findTooltip('Slack channel')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.hover(screen.getByRole('button', { name: 'Add milestone' }))
+    expect(await findTooltip('Create new project milestone')).toBeInTheDocument()
+  }, 10000)
+
+  it('explains why Add dependency is disabled', async () => {
+    const user = userEvent.setup()
+    renderSidebar()
+    await user.hover(screen.getByRole('button', { name: 'Add dependency' }))
+    expect(await findTooltip('All projects are related to this project')).toBeInTheDocument()
+  })
+
+  it('opens the requested property picker from a keyboard shortcut', async () => {
+    const onPickerRequestHandled = vi.fn()
+    const { unmount } = renderSidebar({}, { pickerRequest: { kind: 'status', id: 1 }, onPickerRequestHandled })
+    expect(await screen.findByRole('dialog', { name: 'Change Status' })).toBeInTheDocument()
+    expect(onPickerRequestHandled).toHaveBeenCalledTimes(1)
+    unmount()
+    renderSidebar({}, { pickerRequest: { kind: 'targetDate', id: 2 } })
+    expect(await screen.findByRole('button', { name: 'Change project target date' })).toHaveAttribute('aria-expanded', 'true')
   })
 })

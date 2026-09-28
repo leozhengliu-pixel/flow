@@ -1,10 +1,22 @@
 import type { ComponentProps } from 'react'
-import { render, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, project, viewer } from '@/test/fixtures'
-import { ProjectActivity } from './project-activity'
+import type { AuditLogEntry, Comment, ProjectUpdate } from '@/types/flow'
+import { ProjectActivity, projectUpdateChanges } from './project-activity'
+
+const apiMocks = vi.hoisted(() => ({
+  listProjectHistory: vi.fn(async () => ({ nodes: [] as unknown[], nextCursor: '', total: 0 })),
+  deleteDraft: vi.fn(async () => undefined),
+  uploadProjectCommentAttachment: vi.fn(async (_projectId: string, file: File) => ({ id: 'media-1', title: file.name, url: `/uploads/media-1_${file.name}`, contentType: file.type, size: file.size, createdAt: '2026-09-27T12:00:00.000Z' })),
+}))
+vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...apiMocks }))
+vi.mock('@/lib/route-pages', () => ({
+  AgentChatPanel: ({ initialPrompt, onClose, onUseResponse, useResponseLabel }: { initialPrompt?: string; onClose: () => void; onUseResponse?: (content: string) => void; useResponseLabel?: string }) => <div data-testid="agent-panel"><p>{initialPrompt}</p><button onClick={onClose} type="button">Close agent</button>{onUseResponse && <button onClick={() => { onUseResponse('Agent drafted update'); onClose() }} type="button">{useResponseLabel}</button>}</div>,
+}))
 
 function activityProps() {
   const data = makeBootstrap()
@@ -73,6 +85,7 @@ describe('ProjectActivity', () => {
     try {
       const { container } = render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
       const composer = container.querySelector<HTMLElement>('.project-activity__composer')
+      await userEvent.click(composer!.querySelector<HTMLButtonElement>('[role="tab"]:last-child')!)
       const header = composer?.querySelector(':scope > header')
       const tablist = header?.querySelector('[role="tablist"]')
       const health = header?.querySelector<HTMLButtonElement>('.project-activity__health')
@@ -82,7 +95,7 @@ describe('ProjectActivity', () => {
       expect(health).toBeTruthy()
       expect(health?.parentElement).toBe(header)
       expect(health).toHaveClass('is-onTrack')
-      expect(health?.querySelector('i')).toBeInTheDocument()
+      expect(health?.querySelector('svg.project-activity__health-icon')).toBeInTheDocument()
       await waitFor(() => expect(health).toHaveTextContent('进展正常'))
       expect(health?.textContent?.trim()).toBe('进展正常')
     } finally {
@@ -90,5 +103,245 @@ describe('ProjectActivity', () => {
       else localStorage.removeItem('flow:locale')
     }
   })
+
+  it('defaults to the comment composer and lists the project creation under it', () => {
+    const props = activityProps()
+    const { container } = render(<I18nProvider><ProjectActivity {...props} project={{ ...props.project, lead: undefined, createdAt: '2026-09-27T12:00:00.000Z' }} /></I18nProvider>)
+    const composer = container.querySelector<HTMLElement>('.project-activity__composer')
+    expect(composer).toHaveAttribute('data-mode', 'comment')
+    expect(composer?.querySelector('.project-activity__health')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Comment' })).toHaveClass('is-submit')
+    const feed = container.querySelector('.project-activity__feed')
+    expect(feed).toHaveTextContent(`${props.viewer.displayName} created the project`)
+    expect(feed?.querySelector('.project-activity__event svg')).toBeInTheDocument()
+  })
+
+  it('does not duplicate the creation entry when the API supplies one', () => {
+    const props = activityProps()
+    const created = { id: 'activity-created', type: 'project.created', createdAt: '2026-09-27T12:00:00.000Z', actor: props.viewer, metadata: {} }
+    const { container } = render(<I18nProvider><ProjectActivity {...props} activities={[created] as never} /></I18nProvider>)
+    expect(container.querySelectorAll('.project-activity__event')).toHaveLength(1)
+  })
+
+  it('names the recorded project creator instead of the lead', () => {
+    const props = activityProps()
+    const creator = { ...props.viewer, id: 'user-creator', displayName: 'Skyler Anderson', name: 'Skyler Anderson' }
+    const { container } = render(<I18nProvider><ProjectActivity {...props} project={{ ...props.project, creatorId: creator.id, creator, createdAt: '2026-09-27T12:00:00.000Z' }} /></I18nProvider>)
+    const feed = container.querySelector('.project-activity__feed')
+    expect(feed).toHaveTextContent('Skyler Anderson created the project')
+    expect(feed).not.toHaveTextContent(`${props.viewer.displayName} created the project`)
+  })
+
+  it('does not group the activity feed under month headings', () => {
+    const props = activityProps()
+    const activities = [
+      { id: 'a1', type: 'project.updated', createdAt: '2026-08-02T12:00:00.000Z', actor: props.viewer, metadata: {} },
+      { id: 'a2', type: 'project.updated', createdAt: '2026-09-02T12:00:00.000Z', actor: props.viewer, metadata: {} },
+    ]
+    const { container } = render(<I18nProvider><ProjectActivity {...props} activities={activities as never} project={{ ...props.project, createdAt: '2026-07-20T12:00:00.000Z' }} /></I18nProvider>)
+    const feed = container.querySelector('.project-activity__feed')!
+    expect(feed.querySelectorAll('h2')).toHaveLength(0)
+    expect(feed).not.toHaveTextContent('September')
+    expect(feed.querySelectorAll('.project-activity__event')).toHaveLength(3)
+  })
+
+  it('uses the framed editor with Linear placeholders in both modes and no property diff', async () => {
+    const { container } = render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
+    const composer = container.querySelector<HTMLElement>('.project-activity__composer')!
+    expect(composer.querySelector('.project-activity__editor [data-placeholder="Leave a comment…"]')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Update' }))
+    await waitFor(() => expect(composer.querySelector('.project-activity__editor [data-placeholder="Write a project update…"]')).toBeInTheDocument())
+    expect(composer.querySelector('textarea')).toBeNull()
+    expect(composer.querySelector('.project-activity__metadata')).toBeNull()
+    expect(composer).not.toHaveTextContent('No priority')
+  })
+
+  it('shows Write with Agent and keeps Post update neutral without Cancel while empty', async () => {
+    render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
+    await userEvent.click(screen.getByRole('tab', { name: 'Update' }))
+    const post = screen.getByRole('button', { name: 'Post update' })
+    expect(post).toBeDisabled()
+    expect(post).not.toHaveClass('is-primary')
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Attach images, files, or videos' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Write with Agent' }))
+    expect(await screen.findByTestId('agent-panel')).toHaveTextContent('Draft a project update for "Project one"')
+  })
+
+  it('inserts the agent reply into the update composer', async () => {
+    const { container } = render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
+    await userEvent.click(screen.getByRole('tab', { name: 'Update' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Write with Agent' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Insert into update' }))
+    expect(screen.queryByTestId('agent-panel')).toBeNull()
+    await waitFor(() => expect(container.querySelector('.project-activity__editor')).toHaveTextContent('Agent drafted update'))
+    expect(screen.getByRole('button', { name: 'Post update' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Post update' })).toHaveClass('is-primary')
+  })
+
+  it('turns the submit primary with a Cancel that clears the composer once it has content', async () => {
+    const props = activityProps()
+    const draft = { id: 'draft-update', type: 'project_update', resourceId: props.project.id, title: props.project.name, body: 'Shipped the beta', metadata: { resourceType: 'project', health: 'atRisk' }, createdAt: '2026-09-27T12:00:00.000Z', updatedAt: '2026-09-27T12:00:00.000Z' }
+    const { container } = render(<I18nProvider><ProjectActivity {...props} drafts={[draft] as never} /></I18nProvider>)
+    expect(container.querySelector('.project-activity__composer')).toHaveAttribute('data-mode', 'update')
+    const post = screen.getByRole('button', { name: 'Post update' })
+    expect(post).toBeEnabled()
+    expect(post).toHaveClass('is-primary')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Post update' })).not.toHaveClass('is-primary'))
+    expect(screen.getByRole('button', { name: 'Post update' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(apiMocks.deleteDraft).toHaveBeenCalledWith('draft-update')
+  })
+
+  it('applies the same neutral/primary + Cancel behaviour to the comment submit', () => {
+    const props = activityProps()
+    const draft = { id: 'draft-comment', type: 'comment', resourceId: props.project.id, title: props.project.name, body: 'Looks good', metadata: { resourceType: 'project' }, createdAt: '2026-09-27T12:00:00.000Z', updatedAt: '2026-09-27T12:00:00.000Z' }
+    render(<I18nProvider><ProjectActivity {...props} drafts={[draft] as never} /></I18nProvider>)
+    expect(screen.getByRole('button', { name: 'Comment' })).toHaveClass('is-submit', 'is-primary')
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+  })
+
+  it('renders property changes since the previous update from project history', async () => {
+    const props = activityProps()
+    const update = (id: string, createdAt: string): ProjectUpdate => ({ id, projectId: props.project.id, body: `Body ${id}`, health: 'onTrack', createdAt, user: props.viewer, comments: [], reactions: {}, attachments: [] })
+    const history: AuditLogEntry[] = [
+      { id: 'h1', actor: props.viewer, action: 'updated', resourceType: 'project', resourceId: props.project.id, metadata: { changes: [{ field: 'priority', from: '', to: 'Low' }] }, createdAt: '2026-09-01T00:00:00.000Z' },
+      { id: 'h2', actor: props.viewer, action: 'updated', resourceType: 'project', resourceId: props.project.id, metadata: { changes: [{ field: 'priority', from: 'Low', to: 'High' }, { field: 'targetDate', from: '', to: '2026-12-01' }] }, createdAt: '2026-09-02T00:00:00.000Z' },
+      { id: 'h3', actor: props.viewer, action: 'updated', resourceType: 'project', resourceId: props.project.id, metadata: { changes: [{ field: 'lead', from: 'Ada', to: 'Grace' }] }, createdAt: '2026-09-10T00:00:00.000Z' },
+    ]
+    apiMocks.listProjectHistory.mockResolvedValueOnce({ nodes: history, nextCursor: '', total: history.length })
+    const updates = [update('u2', '2026-09-12T00:00:00.000Z'), update('u1', '2026-09-05T00:00:00.000Z')]
+    const { container } = render(<I18nProvider><ProjectActivity {...props} project={{ ...props.project, createdAt: '2026-08-01T00:00:00.000Z' }} projectUpdates={updates} /></I18nProvider>)
+    await waitFor(() => expect(container.querySelectorAll('.project-activity__changes')).toHaveLength(2))
+    const [latest, first] = Array.from(container.querySelectorAll('.project-activity__update'))
+    expect(first.querySelector('.project-activity__changes')).toHaveTextContent('PriorityNo priority→High')
+    expect(first.querySelector('.project-activity__changes')).toHaveTextContent('Target dateNone→Dec 1')
+    expect(latest.querySelector('.project-activity__changes')).toHaveTextContent('LeadAda→Grace')
+    expect(latest.querySelector('.project-activity__changes')).not.toHaveTextContent('Priority')
+    expect(apiMocks.listProjectHistory).toHaveBeenCalledWith(props.project.id)
+  })
+
+  it('shows the attach button in Comment mode and inserts picked files inline via the project upload', async () => {
+    URL.createObjectURL = vi.fn(() => 'blob:project-comment-media')
+    URL.revokeObjectURL = vi.fn()
+    const props = activityProps()
+    const { container } = render(<I18nProvider><ProjectActivity {...props} /></I18nProvider>)
+    const composer = container.querySelector<HTMLElement>('.project-activity__composer')!
+    expect(composer).toHaveAttribute('data-mode', 'comment')
+    const attach = screen.getByRole('button', { name: 'Attach images, files, or videos' })
+    expect(attach).toHaveClass('project-activity__attach')
+    // Same slot as Update mode: right side of the footer, directly before the submit.
+    expect(attach.parentElement).toBe(screen.getByRole('button', { name: 'Comment' }).parentElement)
+    await waitFor(() => expect(composer.querySelector('.project-activity__editor .ProseMirror')).toBeInTheDocument())
+    const image = new File([new Uint8Array([137, 80, 78, 71])], 'diagram.png', { type: 'image/png' })
+    await userEvent.upload(composer.querySelector<HTMLInputElement>('input[type="file"]')!, image)
+    await waitFor(() => expect(apiMocks.uploadProjectCommentAttachment).toHaveBeenCalledWith(props.project.id, image))
+    await waitFor(() => expect(screen.getByRole('img', { name: 'diagram.png' })).toHaveAttribute('src', '/uploads/media-1_diagram.png'))
+    // Comment-mode files are embedded in the body, not queued as update attachments.
+    expect(composer.querySelector('.project-activity__files')).toBeNull()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Comment' })).toBeEnabled())
+  })
+
+  it('keeps queuing Update-mode files as update attachments', async () => {
+    apiMocks.uploadProjectCommentAttachment.mockClear()
+    const { container } = render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
+    await userEvent.click(screen.getByRole('tab', { name: 'Update' }))
+    const composer = container.querySelector<HTMLElement>('.project-activity__composer')!
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' })
+    await userEvent.upload(composer.querySelector<HTMLInputElement>('input[type="file"]')!, file)
+    expect(composer.querySelector('.project-activity__files')).toHaveTextContent('notes.txt')
+    expect(apiMocks.uploadProjectCommentAttachment).not.toHaveBeenCalled()
+  })
+
+  it('drops changes that revert within the same update window', () => {
+    const entry = (id: string, from: string, to: string, createdAt: string): AuditLogEntry => ({ id, actor: viewer, action: 'updated', resourceType: 'project', resourceId: 'p', metadata: { changes: [{ field: 'status', from, to }] }, createdAt })
+    const changes = projectUpdateChanges([{ id: 'u', createdAt: '2026-09-05T00:00:00.000Z' } as ProjectUpdate], [entry('a', 'Backlog', 'Started', '2026-09-02T00:00:00.000Z'), entry('b', 'Started', 'Backlog', '2026-09-03T00:00:00.000Z')], '2026-09-01T00:00:00.000Z')
+    expect(changes.get('u')).toEqual([])
+  })
 })
 
+describe('ProjectActivity comment cards', () => {
+  const at = (msAgo: number) => new Date(Date.now() - msAgo).toISOString()
+  const other = { ...viewer, id: 'user-2', name: 'other', displayName: 'Other person' }
+  function commentProps(comments: Comment[], overrides: Record<string, unknown> = {}) {
+    const props = activityProps()
+    return { ...props, project: { ...props.project, createdAt: '2026-01-01T00:00:00.000Z', comments }, onCommentProject: vi.fn(async () => ({}) as never), onUpdateProjectComment: vi.fn(async () => ({}) as never), onDeleteProjectComment: vi.fn(async () => undefined), onReactProjectComment: vi.fn(async () => ({}) as never), ...overrides } as ComponentProps<typeof ProjectActivity>
+  }
+  const root = { id: 'c-root', version: 1, body: 'Root comment', user: viewer, createdAt: at(8 * 60_000 + 5_000), reactions: { '👍': [viewer.id] } } as Comment
+
+  it('renders a posted comment as a Linear card above the timeline events with compact time and header actions', () => {
+    const props = commentProps([root, { ...root, id: 'c-new', body: 'Fresh', createdAt: at(5_000), reactions: {} }])
+    const { container } = render(<I18nProvider><ProjectActivity {...props} /></I18nProvider>)
+    const cards = container.querySelectorAll<HTMLElement>('.project-activity__comment-card')
+    expect(cards).toHaveLength(2)
+    expect(cards[0].querySelector('header time')).toHaveTextContent(/^just now$/)
+    expect(cards[1].querySelector('header time')).toHaveTextContent(/^8min ago$/)
+    const card = cards[1]
+    expect(card).toHaveAttribute('id', 'comment-c-root')
+    expect(card.querySelector('header .avatar')).toBeInTheDocument()
+    expect(card.querySelector('header strong')).toHaveTextContent(viewer.displayName)
+    expect(within(card).getByRole('button', { name: 'Add reaction' })).toHaveClass('project-activity__comment-action')
+    expect(within(card).getByRole('button', { name: 'Comment options' })).toHaveClass('project-activity__comment-action')
+    expect(within(card).getByRole('button', { name: 'Open comments' })).toHaveAttribute('aria-expanded', 'false')
+    expect(card.querySelector('.project-activity__comment-body')).toBeInTheDocument()
+    // The timeline events keep their own style after the last card.
+    expect(cards[1].nextElementSibling).toHaveClass('project-activity__event')
+  })
+
+  it('nests replies in the thread and posts new replies with the root parentId', async () => {
+    const user = userEvent.setup()
+    const replies = [{ ...root, id: 'c-reply-1', parentId: root.id, body: 'First reply', reactions: {} }, { ...root, id: 'c-reply-2', parentId: root.id, body: 'Second reply', user: other, reactions: {} }] as Comment[]
+    const props = commentProps([root, ...replies])
+    const { container } = render(<I18nProvider><ProjectActivity {...props} /></I18nProvider>)
+    expect(container.querySelectorAll('.project-activity__comment-card')).toHaveLength(1)
+    const toggle = screen.getByRole('button', { name: 'Open 2 comments' })
+    expect(toggle).toHaveTextContent('2')
+    expect(container.querySelector('.project-activity__thread')).toBeNull()
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    const thread = container.querySelector<HTMLElement>('.project-activity__thread')!
+    expect(thread.querySelectorAll('.project-activity__reply')).toHaveLength(2)
+    expect(await within(thread).findByText('Second reply')).toBeInTheDocument()
+    const editor = within(thread).getByRole('textbox', { name: 'Leave a reply…' }) as HTMLElement & { editor?: { commands: { setContent: (value: string) => void } } }
+    await waitFor(() => expect(editor.editor).toBeTruthy())
+    editor.editor!.commands.setContent('<p>Thanks!</p>')
+    await user.click(within(thread).getByRole('button', { name: 'Submit comment' }))
+    await waitFor(() => expect(props.onCommentProject).toHaveBeenCalledWith(props.project.id, 'Thanks!', expect.objectContaining({ type: 'doc' }), root.id))
+  })
+
+  it('offers edit and delete only on own comments and routes them to the project handlers', async () => {
+    const user = userEvent.setup()
+    const props = commentProps([root, { ...root, id: 'c-other', body: 'Not mine', user: other, reactions: {} }])
+    const { container } = render(<I18nProvider><ProjectActivity {...props} /></I18nProvider>)
+    const [ownCard, otherCard] = [container.querySelector<HTMLElement>('#comment-c-root')!, container.querySelector<HTMLElement>('#comment-c-other')!]
+
+    await user.click(within(otherCard).getByRole('button', { name: 'Comment options' }))
+    expect(screen.getByRole('menuitem', { name: 'Copy link to comment' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Copy content as Markdown' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit comment' })).toBeNull()
+    await user.keyboard('{Escape}')
+
+    await user.click(within(ownCard).getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Edit comment' }))
+    expect(ownCard.querySelector('.project-activity__comment-body')).toBeNull()
+    await user.click(within(ownCard).getByRole('button', { name: 'Submit comment' }))
+    await waitFor(() => expect(props.onUpdateProjectComment).toHaveBeenCalledWith(props.project.id, root.id, 'Root comment', expect.anything()))
+    await waitFor(() => expect(ownCard.querySelector('.project-activity__comment-body')).toBeInTheDocument())
+
+    await user.click(within(ownCard).getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete comment' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete comment' }))
+    await waitFor(() => expect(props.onDeleteProjectComment).toHaveBeenCalledWith(props.project.id, root.id))
+  })
+
+  it('toggles reactions through the reaction pills', async () => {
+    const user = userEvent.setup()
+    const props = commentProps([root])
+    render(<I18nProvider><ProjectActivity {...props} /></I18nProvider>)
+    const pill = screen.getByRole('button', { name: /👍/ })
+    expect(pill).toHaveAttribute('aria-pressed', 'true')
+    await user.click(pill)
+    expect(props.onReactProjectComment).toHaveBeenCalledWith(props.project.id, root.id, '👍')
+  })
+})

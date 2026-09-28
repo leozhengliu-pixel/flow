@@ -7,6 +7,8 @@ import { makeBootstrap, makeIssue, project } from '@/test/fixtures'
 import { createIssueDisplayOptions } from '@/components/my-issues/my-issues-display-defaults'
 import { ProjectIssueFilterMenu, ProjectIssues } from './project-issues'
 
+vi.mock('@/components/issue-explorer/paged-issue-list', () => ({ PagedIssueList: () => <div data-testid="paged-issue-list"/> }))
+
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
 
@@ -52,4 +54,51 @@ it('reuses the issue explorer filter fields and swaps project fields for milesto
   fireEvent.mouseMove(screen.getByRole('option', { name: 'Creator' }))
   await user.click(await screen.findByRole('option', { name: /^Viewer/ }))
   expect(onChange).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ field: 'creator', value: 'user-1' })]))
+})
+
+function emptyStateProps(overrides: Partial<ComponentProps<typeof ProjectIssues>> = {}) {
+  const data = makeBootstrap({ issues: [] })
+  return {
+    ...data, project, projectIssues: [], workflowStates: [], cycles: [],
+    display: createIssueDisplayOptions({ layout: 'list', grouping: 'status' }),
+    filters: [], onUpdateIssue: vi.fn(), onOpenIssue: vi.fn(), onFiltersChange: vi.fn(), onCreateIssue: vi.fn(),
+    ...overrides,
+  } as unknown as ComponentProps<typeof ProjectIssues>
+}
+
+it('shows the project intro empty state with a primary create button when the project has no issues', async () => {
+  const user = userEvent.setup()
+  const props = emptyStateProps()
+  render(<I18nProvider><ProjectIssues {...props}/></I18nProvider>)
+  expect(screen.getByText('Add issues to the project')).toBeInTheDocument()
+  expect(screen.getByText('Start building your project by creating an issue.')).toBeInTheDocument()
+  expect(screen.getByText('You can also add teams, team members, and project dates in the project sidebar.')).toBeInTheDocument()
+  expect(screen.queryByText('No matching issues')).not.toBeInTheDocument()
+  const button = screen.getByRole('button', { name: /Create new issue/ })
+  expect(button.querySelector('kbd')).toHaveTextContent('C')
+  await user.click(button)
+  expect(props.onCreateIssue).toHaveBeenCalledWith(project.id)
+})
+
+it('keeps the filter empty state when filters hide existing project issues', () => {
+  const issue = makeIssue({ state: { ...makeIssue().state, type: 'completed' } })
+  const props = emptyStateProps({
+    projectIssues: [issue],
+    display: createIssueDisplayOptions({ layout: 'list', grouping: 'status', completedWindow: 'none' }),
+  } as Partial<ComponentProps<typeof ProjectIssues>>)
+  render(<I18nProvider><ProjectIssues {...props}/></I18nProvider>)
+  expect(screen.getByText('No matching issues')).toBeInTheDocument()
+  expect(screen.queryByText('Add issues to the project')).not.toBeInTheDocument()
+})
+
+it('shows the project intro in paged mode only when the project summary reports zero issues', () => {
+  const paged = makeBootstrap({ issues: [], issueCollectionPaged: true })
+  const { rerender } = render(<I18nProvider><ProjectIssues {...emptyStateProps({ issueData: paged, issueSummary: { total: 0 } } as unknown as Partial<ComponentProps<typeof ProjectIssues>>)}/></I18nProvider>)
+  expect(screen.getByText('Add issues to the project')).toBeInTheDocument()
+  expect(screen.queryByTestId('paged-issue-list')).not.toBeInTheDocument()
+  rerender(<I18nProvider><ProjectIssues {...emptyStateProps({ issueData: paged, issueSummary: { total: 3 } } as unknown as Partial<ComponentProps<typeof ProjectIssues>>)}/></I18nProvider>)
+  expect(screen.queryByText('Add issues to the project')).not.toBeInTheDocument()
+  expect(screen.getByTestId('paged-issue-list')).toBeInTheDocument()
+  rerender(<I18nProvider><ProjectIssues {...emptyStateProps({ issueData: paged } as Partial<ComponentProps<typeof ProjectIssues>>)}/></I18nProvider>)
+  expect(screen.queryByText('Add issues to the project')).not.toBeInTheDocument()
 })

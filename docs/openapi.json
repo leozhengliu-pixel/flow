@@ -9787,6 +9787,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/projects/{id}/comment-attachments": {
+      "post": {
+        "operationId": "post_projects_id_comment_attachments",
+        "tags": [
+          "projects"
+        ],
+        "summary": "POST /api/projects/{id}/comment-attachments",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/projects/{id}/comments": {
       "post": {
         "operationId": "post_projects_id_comments",
@@ -9797,6 +9827,118 @@
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/projects/{id}/comments/{commentId}": {
+      "delete": {
+        "operationId": "delete_projects_id_comments_commentId",
+        "tags": [
+          "projects"
+        ],
+        "summary": "DELETE /api/projects/{id}/comments/{commentId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_projects_id_comments_commentId",
+        "tags": [
+          "projects"
+        ],
+        "summary": "PATCH /api/projects/{id}/comments/{commentId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/projects/{id}/comments/{commentId}/reactions": {
+      "post": {
+        "operationId": "post_projects_id_comments_commentId_reactions",
+        "tags": [
+          "projects"
+        ],
+        "summary": "POST /api/projects/{id}/comments/{commentId}/reactions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
             "in": "path",
             "required": true,
             "schema": {

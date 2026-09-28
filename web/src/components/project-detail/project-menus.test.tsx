@@ -28,12 +28,31 @@ beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver',class { 
 afterEach(() => vi.unstubAllGlobals())
 
 describe('project properties menus', () => {
-  it('shows missing properties and opens the shared members picker on hover', async () => {
+  it('matches Linear\'s item order and shortcut hints', async () => {
+    const user = userEvent.setup(); properties()
+    await user.click(screen.getByRole('button',{name:'More project properties'}))
+    const menu = screen.getByRole('menu')
+    expect(menu).toHaveClass('project-action-menu--properties')
+    expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['MembersP then M▶','LabelsP then L▶','InitiativesP then N▶','Connect existing Slack channel…'])
+    expect(screen.queryByRole('menuitem',{name:'Start date…'})).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem',{name:'Dependencies'})).not.toBeInTheDocument()
+  })
+
+  it('only offers initiatives when the workspace has one', async () => {
+    const user = userEvent.setup(); const data = makeBootstrap()
+    render(<I18nProvider><ProjectPropertiesMenu project={project} projects={[project]} projectRelations={[]} initiatives={[]} users={data.users} viewer={viewer} labels={[]} labelGroups={[]} save={vi.fn()} onUpdateProject={vi.fn()} onAddCustomer={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'More project properties'}))
+    const items = within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent)
+    expect(items.some(item => item?.startsWith('Initiatives'))).toBe(false)
+    expect(items.at(-1)).toBe('Customer request…')
+  })
+
+  it('opens the shared members picker on hover', async () => {
     const user = userEvent.setup(); const {save} = properties()
     await user.click(screen.getByRole('button',{name:'More project properties'}))
-    expect(screen.getByRole('menuitem',{name:'Start date…'})).toBeVisible()
     await user.hover(screen.getByRole('menuitem',{name:/Members/}))
     const input = await screen.findByRole('textbox',{name:'Change members…'})
+    expect(screen.queryByText('Users from the project team')).toBeNull()
     await user.type(input,teammate.displayName)
     await user.click(screen.getByRole('option',{name:new RegExp(teammate.displayName)}))
     expect(save).toHaveBeenCalledWith({memberIds:[viewer.id,teammate.id]})
@@ -41,11 +60,10 @@ describe('project properties menus', () => {
   })
 
   it('does not offer adding properties which are already present', async () => {
-    const user = userEvent.setup(); properties({memberIds:[viewer.id,teammate.id],startDate:'2026-09-01'})
+    const user = userEvent.setup(); properties({memberIds:[viewer.id,teammate.id]})
     await user.click(screen.getByRole('button',{name:'More project properties'}))
     expect(screen.queryByRole('menuitem',{name:/Members/})).not.toBeInTheDocument()
-    expect(screen.queryByRole('menuitem',{name:'Start date…'})).not.toBeInTheDocument()
-    expect(screen.getByRole('menuitem',{name:'Dependencies'})).toBeVisible()
+    expect(screen.getByRole('menuitem',{name:/Labels/})).toBeVisible()
   })
 
   it('clears the lead when removing that person from project members', async () => {
@@ -67,28 +85,7 @@ describe('project properties menus', () => {
     expect(save).toHaveBeenCalledWith({initiatives:[initiative.id]})
     await user.keyboard('{ArrowLeft}')
     await waitFor(() => expect(screen.queryByRole('textbox',{name:'Change initiatives…'})).not.toBeInTheDocument())
-    expect(screen.getByRole('menuitem',{name:'Dependencies'})).toBeVisible()
-  })
-
-  it.each([['Blocked by','blocked_by','blocked'],['Blocking','blocks','blocking']] as const)('creates the correct dependency direction through %s', async (direction,type,glyph) => {
-    const user = userEvent.setup(); const {save,next} = properties()
-    await user.click(screen.getByRole('button',{name:'More project properties'}))
-    await user.hover(screen.getByRole('menuitem',{name:'Dependencies'}))
-    const row = await screen.findByRole('menuitem',{name:direction})
-    expect(row.querySelector(`[data-action-glyph="${glyph}"]`)).toBeTruthy()
-    await user.hover(row)
-    expect(await screen.findByRole('textbox',{name:direction === 'Blocked by' ? 'Mark as blocked by…' : 'Mark as blocking…'})).toBeVisible()
-    await user.click(await screen.findByRole('menuitemcheckbox',{name:next.name}))
-    expect(save).toHaveBeenCalledWith({dependencyRelations:[{projectId:next.id,type}]})
-    expect(screen.queryByRole('menuitemcheckbox',{name:project.name})).not.toBeInTheDocument()
-  })
-
-  it('opens the existing date picker from the missing start-date action', async () => {
-    const user = userEvent.setup(); properties()
-    await user.click(screen.getByRole('button',{name:'More project properties'}))
-    await user.click(screen.getByRole('menuitem',{name:'Start date…'}))
-    expect(await screen.findByRole('tablist',{name:'Date precision'})).toBeVisible()
-    expect(screen.queryByRole('menuitem',{name:'Dependencies'})).not.toBeInTheDocument()
+    expect(screen.getByRole('menuitem',{name:/Labels/})).toBeVisible()
   })
 })
 
@@ -138,5 +135,13 @@ describe('project header menu', () => {
     await user.click(screen.getByRole('option',{name:'Monday'}))
     await user.click(screen.getByRole('button',{name:'Save'}))
     expect(onUpdateSchedule).toHaveBeenCalledWith(expect.objectContaining({mode:'custom',frequencyDays:21,weekday:1,hour:14}))
+  })
+
+  it('matches Linear project actions without an insights item', async () => {
+    const user = userEvent.setup(); actions()
+    await user.click(screen.getByRole('button',{name:'Project actions'}))
+    const labels = screen.getAllByRole('menuitem').map(item => item.querySelector('.project-menu-label')?.textContent ?? item.textContent)
+    expect(labels).toEqual(['Copy','Favorite','Subscribe','Remind me','Change update schedule…','Show description history','Show updates and activity','Delete'])
+    expect(screen.queryByRole('menuitem',{name:/project insights/})).not.toBeInTheDocument()
   })
 })

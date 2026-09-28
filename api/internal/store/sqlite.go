@@ -1130,8 +1130,10 @@ func slugUnicode(value string) string {
 	return strings.Trim(builder.String(), "-")
 }
 
+// FirstDay stays empty until the user picks one so clients can apply the
+// locale default (Sunday for English, Monday for zh-CN).
 func defaultUserSettings(userID string) domain.UserSettings {
-	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "Monday", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, PulseSchedule: "default", UpdatedAt: time.Now().UTC()}
+	return domain.UserSettings{UserID: userID, Language: "en-US", HomeView: "Flow Agent (default)", DisplayNames: "Full name", FirstDay: "", Emoticons: true, SendComments: "Enter", FontSize: "Default", InterfaceTheme: "System preference", LightTheme: "Light", DarkTheme: "Dark", ReviewAutoAssign: true, BranchFormat: "{identifier}-{title}", PersonalSettingsVersion: 1, CodeReviewsEnabled: true, MergeStrategy: "Squash and merge", CodeTheme: "Flow Light", CodeFont: "12px, Regular, Default", ReviewCommentsFilter: "Exclude Bots", ReviewRequests: true, GithubTeamReviewRequests: true, ChecksMergeQueue: true, GitAttachmentFormat: "Title", GitBranchMoveStarted: true, CodingToolMoveStarted: true, ChangelogUpdates: true, InviteAcceptedUpdates: true, PrivacyUpdates: true, AgentEnabled: true, PulseSchedule: "default", UpdatedAt: time.Now().UTC()}
 }
 
 func defaultWorkspaceSettings() domain.WorkspaceSettings {

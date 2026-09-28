@@ -1,8 +1,9 @@
 import * as Popover from '@radix-ui/react-popover'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type RefObject } from 'react'
 import { useI18n, type AppLocale } from '@/i18n/i18n'
 import styles from './project-row-menus.module.css'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { firstWeekday, useUserPreferences, useWorkspacePreferences, fiscalMonth, fiscalYear, fiscalMonthOffset } from '@/lib/runtime-preferences'
 
 export type DateMode = 'day' | 'month' | 'quarter' | 'half-year' | 'year'
@@ -25,7 +26,7 @@ export function ProjectTargetDatePicker({ ariaLabel, buttonClassName = '', child
   return <ProjectDatePicker ariaLabel={ariaLabel} buttonClassName={buttonClassName} compactPeriods={compactPeriods} defaultMode={defaultMode} displayValue={displayValue} label="Target date" onChange={onChange} resolution={resolution} triggerRole={triggerRole} value={value}>{children}</ProjectDatePicker>
 }
 
-export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, compactCalendar = false, compactPeriods = false, contentClassName = '', defaultMode = 'day', displayValue: _displayValue, label, max, min, onChange, onOpenChange, portalled = true, resolution, side, align = 'center', triggerRef, triggerRole = 'button', value, open: controlledOpen, externalAnchor }: {
+export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, compactCalendar = false, compactPeriods = false, contentClassName = '', defaultMode = 'day', displayValue: _displayValue, label, max, min, onChange, onOpenChange, portalled = true, resolution, side, align = 'center', triggerRef, triggerRole = 'button', value, open: controlledOpen, externalAnchor, tooltip, tooltipShortcut }: {
   ariaLabel?: string
   buttonClassName?: string
   children: ReactNode
@@ -48,6 +49,9 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   value?: string
   open?: boolean
   externalAnchor?: RefObject<HTMLElement | null>
+  /** Hover tooltip for the trigger; needs a TooltipProvider ancestor. */
+  tooltip?: string
+  tooltipShortcut?: string
 }) {
   const { locale, t } = useI18n()
   const [internalOpen, setOpen] = useState(false)
@@ -60,26 +64,35 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   const maxDate = parseDate(max)
   useEffect(() => {
     if (!open) return
-    const date = parseDate(value) ?? startOfDay(new Date())
+    const today = startOfDay(new Date())
+    const floor = parseDate(min)
+    const date = parseDate(value) ?? (floor && floor > today ? floor : today)
     const nextMode = resolution ? resolutionToMode(resolution) : defaultMode
     setCursor(date)
     setMode(nextMode)
-    setQuery(value ? formatForMode(date, nextMode) : '')
-  }, [defaultMode, open, resolution, value])
+    // Like Linear, an empty picker opens with its suggested date typed in and selected.
+    setQuery(formatForMode(date, nextMode, locale))
+  }, [defaultMode, locale, min, open, resolution, value])
 
   const choose = (date: Date, nextResolution?: DateResolution) => {
     onChange(isoDate(date), nextResolution)
     setOpen(false)
     onOpenChange?.(false)
   }
+  const clear = () => {
+    setQuery('')
+    onChange('')
+    setOpen(false)
+    onOpenChange?.(false)
+  }
   const submit = async () => {
-    if (!query.trim()) { onChange(''); setOpen(false); onOpenChange?.(false); return }
+    if (!query.trim()) { clear(); return }
     const parsed = await parseNaturalTarget(query, mode, label)
     if (parsed && !isDateDisabled(parsed, minDate, maxDate)) choose(parsed, modeToResolution(mode))
   }
   const selectMode = (nextMode: DateMode) => {
     setMode(nextMode)
-    setQuery(formatForMode(cursor, nextMode))
+    setQuery(formatForMode(cursor, nextMode, locale))
   }
   const onModeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
@@ -91,28 +104,30 @@ export function ProjectDatePicker({ ariaLabel, buttonClassName = '', children, c
   }
 
   const content = <Popover.Content data-flow-motion="floating" align={align} className={`${styles.datePicker}${compactPeriods && mode !== 'day' ? ` ${styles.compactPeriods}` : ''}${compactCalendar ? ` ${styles.compactCalendar}` : ''}${contentClassName ? ` ${contentClassName}` : ''}`} collisionPadding={8} onClick={event => event.stopPropagation()} onCloseAutoFocus={event => event.preventDefault()} side={side ?? (portalled ? 'bottom' : 'right')} sideOffset={4}>
-    {!compactCalendar && <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 2027/05/20')} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 2027/05/20')} value={query}/></label>}
+    {!compactCalendar && <label className={styles.dateLabel}>{t(label)}<input autoFocus aria-label={t('Try: May 2027, Q4, 05/20/2027')} onFocus={event => event.currentTarget.select()} onChange={event => setQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} placeholder={t('Try: May 2027, Q4, 05/20/2027')} value={query}/>{value && <button aria-label={t('Clear date')} className={styles.dateClear} onClick={clear} type="button"><X size={14}/></button>}</label>}
     {!compactCalendar && <div aria-label={t('Date precision')} className={styles.dateModes} onKeyDown={onModeKeyDown} role="tablist">{MODES.map(item => <button aria-selected={mode === item.id} key={item.id} onClick={() => selectMode(item.id)} role="tab" tabIndex={mode === item.id ? 0 : -1} type="button">{t(item.label)}</button>)}</div>}
     {compactCalendar || mode === 'day' ? <DayPanel cursor={cursor} locale={locale} max={maxDate} min={minDate} onChangeCursor={setCursor} onChoose={date => choose(date)} selected={selected}/> : <PeriodPanel cursor={cursor} label={label} locale={locale} max={maxDate} min={minDate} mode={mode} onChoose={(date, nextResolution) => choose(date, nextResolution)} selected={selected}/>}
   </Popover.Content>
 
   return <Popover.Root open={open} onOpenChange={next => { setOpen(next); onOpenChange?.(next) }}>
-    {externalAnchor ? <Popover.Anchor virtualRef={externalAnchor}/> : <Popover.Trigger asChild><button aria-expanded={open} aria-label={t(ariaLabel ?? `Change project ${label.toLowerCase()}`)} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} role={triggerRole === 'combobox' ? 'combobox' : undefined} type="button">{children}</button></Popover.Trigger>}
+    {externalAnchor ? <Popover.Anchor virtualRef={externalAnchor}/> : <FlowTooltip disabled={open} label={tooltip ? t(tooltip) : undefined} shortcut={tooltipShortcut}><Popover.Trigger asChild><button aria-expanded={open} aria-label={t(ariaLabel ?? `Change project ${label.toLowerCase()}`)} className={`lp-project-property-trigger ${buttonClassName}`} ref={triggerRef} role={triggerRole === 'combobox' ? 'combobox' : undefined} type="button">{children}</button></Popover.Trigger></FlowTooltip>}
     {portalled ? <Popover.Portal>{content}</Popover.Portal> : content}
   </Popover.Root>
 }
 
 function DayPanel({ cursor, locale, max, min, onChangeCursor, onChoose, selected }: { cursor: Date; locale: AppLocale; max?: Date; min?: Date; onChangeCursor: (date: Date) => void; onChoose: (date: Date) => void; selected?: Date }) {
   const preferences = useUserPreferences()
-  const weekStart = firstWeekday(preferences.firstDay)
+  const weekStart = firstWeekday(preferences.firstDay, locale)
   const days = useMemo(() => calendarDays(cursor,weekStart), [cursor,weekStart])
   const monthLabel = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(cursor)
   const labels = locale === 'zh-CN' ? ['日','一','二','三','四','五','六'] : ['Su','Mo','Tu','We','Th','Fr','Sa']
   const weekdays = Array.from({length:7},(_,index)=>labels[(index+weekStart)%7])
+  const weekendColumns = Array.from({length:7},(_,index)=>index).filter(index => isWeekend((index+weekStart)%7))
+  const today = startOfDay(new Date())
   return <div className={styles.dayPanel}>
     <header><strong>{monthLabel}</strong><span><button aria-label={locale === 'zh-CN' ? '上个月' : 'Previous month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))} type="button"><ChevronLeft size={14}/></button><button aria-label={locale === 'zh-CN' ? '下个月' : 'Next month'} onClick={() => onChangeCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))} type="button"><ChevronRight size={14}/></button></span></header>
-    <div className={styles.weekdays}>{weekdays.map(day => <span key={day}>{day}</span>)}</div>
-    <div aria-label={monthLabel} className={styles.days} role="grid">{days.map(day => <button aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(day)} aria-selected={sameDay(day, selected)} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} disabled={isDateDisabled(day, min, max)} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
+    <div className={styles.weekdays}>{weekdays.map((day,index) => <span data-weekend={isWeekend((index+weekStart)%7) || undefined} key={day}>{day}</span>)}</div>
+    <div aria-label={monthLabel} className={styles.days} role="grid">{weekendColumns.map(column => <span aria-hidden="true" className={styles.weekendColumn} key={`weekend-${column}`} style={{gridColumn:column+1}}/>)}{days.map(day => <button aria-label={new Intl.DateTimeFormat(locale, { dateStyle: 'full' }).format(day)} aria-selected={sameDay(day, selected)} className={sameDay(day, selected) ? styles.selectedDate : ''} data-outside={day.getMonth() !== cursor.getMonth()} data-today={sameDay(day, today) || undefined} data-weekend={isWeekend(day.getDay()) || undefined} disabled={isDateDisabled(day, min, max)} key={isoDate(day)} onClick={() => onChoose(day)} role="gridcell" type="button">{day.getDate()}</button>)}</div>
   </div>
 }
 
@@ -164,6 +179,8 @@ async function parseNaturalTarget(input: string, mode: DateMode, label: 'Start d
   if (!value) return undefined
   const slash = value.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/)
   if (slash) return new Date(Number(slash[1]), Number(slash[2]) - 1, Number(slash[3]))
+  const us = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (us) return new Date(Number(us[3]), Number(us[1]) - 1, Number(us[2]))
   const quarter = value.match(/^Q([1-4])(?:\s+(\d{4}))?$/i)
   if (quarter) return dateForPeriod(Number(quarter[2] ?? new Date().getFullYear()), 'quarter', Number(quarter[1]) - 1, label)
   const half = value.match(/^H([12])(?:\s+(\d{4}))?$/i)
@@ -179,8 +196,10 @@ async function parseNaturalTarget(input: string, mode: DateMode, label: 'Start d
   if (mode !== 'day') return dateForPeriod(mode === 'month' ? natural.getFullYear() : fiscalYear(natural), mode, mode === 'month' ? natural.getMonth() : mode === 'quarter' ? Math.floor(fiscalMonthOffset(natural) / 3) : mode === 'half-year' ? Math.floor(fiscalMonthOffset(natural) / 6) : 0, label)
   return startOfDay(natural)
 }
-function formatForMode(date: Date, mode: DateMode) {
-  if (mode === 'day') return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`
+function formatForMode(date: Date, mode: DateMode, locale?: AppLocale) {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  if (mode === 'day') return locale === 'zh-CN' ? `${date.getFullYear()}/${month}/${day}` : `${month}/${day}/${date.getFullYear()}`
   if (mode === 'month') return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`
   if (mode === 'quarter') return `Q${Math.floor(fiscalMonthOffset(date) / 3) + 1} ${fiscalYear(date)}`
   if (mode === 'half-year') return `H${Math.floor(fiscalMonthOffset(date) / 6) + 1} ${fiscalYear(date)}`
@@ -192,4 +211,5 @@ function modeToResolution(mode: DateMode): DateResolution | undefined { return m
 function resolutionToMode(resolution?: DateResolution): DateMode { return resolution === 'halfYear' ? 'half-year' : resolution ?? 'day' }
 function isoDate(date: Date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` }
 function startOfDay(date: Date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()) }
+function isWeekend(weekday: number) { return weekday === 0 || weekday === 6 }
 function sameDay(left?: Date, right?: Date) { return Boolean(left && right && isoDate(left) === isoDate(right)) }

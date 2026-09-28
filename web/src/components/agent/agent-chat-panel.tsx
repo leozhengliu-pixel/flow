@@ -29,6 +29,8 @@ export function AgentChatPanel({
   onClose,
   onOpenFullPage,
   onSessionChange,
+  onUseResponse,
+  useResponseLabel = 'Use response',
   open,
 }: {
   initialPrompt?: string;
@@ -37,6 +39,9 @@ export function AgentChatPanel({
   onClose: () => void;
   onOpenFullPage?: (session?: AgentSession) => void;
   onSessionChange?: (session: AgentSession) => void;
+  /** When set, finished assistant replies offer a button that hands their text back to the caller. */
+  onUseResponse?: (content: string) => void;
+  useResponseLabel?: string;
   open: boolean;
 }) {
   const { t } = useI18n();
@@ -230,6 +235,11 @@ export function AgentChatPanel({
                 </strong>
                 {message.role === "assistant" && <><PanelMessageActivity parts={message.parts ?? []} onToolApproval={decideToolApproval} approvalBusy={approvalBusy}/>{message.parts?.filter(part=>part.type==='elicitation').map(part=><AgentElicitation key={part.id} part={part}/>)}</>}
                 {message.content && <AgentRichText ariaLabel={message.role === "user" ? t("Your message") : t("AI message")} className={styles.messageDocument} content={message.content}/>}
+                {onUseResponse && message.role === "assistant" && message.content.trim() && !(loading && index === messages.length - 1) && (
+                  <button className={styles.useResponse} onClick={() => { onUseResponse(message.content.trim()); close(); }} type="button">
+                    {t(useResponseLabel)}
+                  </button>
+                )}
               </article>
             ))}
             {loading && (

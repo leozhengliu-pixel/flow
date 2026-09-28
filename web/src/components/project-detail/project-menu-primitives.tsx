@@ -31,9 +31,9 @@ export function ProjectMenuShortcut({ value }: { value: string }) {
   return <span className="project-menu-shortcut" aria-hidden="true">{value.includes('then') ? value.replace('then', t('then')) : value.split(' ').map((key,index) => <kbd key={index}>{key}</kbd>)}</span>
 }
 
-export function ProjectMenuSearch({ query, onChange, label }: { query:string; onChange:(value:string)=>void; label:string }) {
+export function ProjectMenuSearch({ query, onChange, label, visible = false }: { query:string; onChange:(value:string)=>void; label:string; visible?:boolean }) {
   const {t} = useI18n()
-  return <div className={`project-action-menu__search${query ? '' : ' is-hidden'}`}><input autoFocus value={query} aria-label={t(label)} placeholder={t('Filter…')} onChange={event => onChange(event.target.value)} onKeyDown={event => {
+  return <div className={`project-action-menu__search${query || visible ? '' : ' is-hidden'}`}><input autoFocus value={query} aria-label={t(label)} placeholder={t('Filter…')} onChange={event => onChange(event.target.value)} onKeyDown={event => {
     if (event.key === 'Escape') return
     event.stopPropagation()
     if (event.key !== 'ArrowDown' && event.key !== 'Enter') return
