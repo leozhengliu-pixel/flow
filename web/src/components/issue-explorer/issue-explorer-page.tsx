@@ -265,9 +265,15 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     : scope.kind === 'team'
       ? { type: 'teamView' as const, teamKey: scope.team.key, viewKind: view }
       : { type: 'issueView' as const, teamKey: data.teams[0]?.key }
+  // AI filter applies several filters in one go; chain them on the latest list instead of the render-time snapshot.
+  const latestFilters = useRef(filters)
+  latestFilters.current = filters
   const addFilter = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     const label = ISSUE_FILTER_LABELS[field]
-    if (label) persistFilters(toggleFilterOption(filters, field, label, option))
+    if (!label) return
+    const next = toggleFilterOption(latestFilters.current, field, label, option)
+    latestFilters.current = next
+    persistFilters(next)
   }
 
   const updateOne = async (row: MyIssuesRowData, input: IssueUpdateInput) => {

@@ -334,7 +334,7 @@ func TestMCPIssueIndexedPaginationAndProjection(t *testing.T) {
 				t.Fatal("duplicate cursor result")
 			}
 			seen[id] = true
-			if len(row) != 3 || row["description"] != "needle only in description" {
+			if len(row) != 4 || row["identifier"] == "" || row["description"] != "needle only in description" {
 				t.Fatalf("field projection ignored: %v", row)
 			}
 		}
