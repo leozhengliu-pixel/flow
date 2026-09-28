@@ -77,6 +77,32 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.saveMCPDraft(ctx, data, args)
 	case "create_reminder":
 		return s.createMCPReminder(ctx, data, args)
+	case "delete_issue":
+		return s.deleteMCPIssue(ctx, actor, data, args)
+	case "triage_issue":
+		return s.triageMCPIssue(ctx, actor, data, args)
+	case "save_team":
+		return s.saveMCPTeam(ctx, actor, data, args)
+	case "save_label":
+		return s.saveMCPLabel(ctx, actor, data, args)
+	case "delete_label":
+		return s.deleteMCPLabel(ctx, actor, data, args)
+	case "save_view":
+		return s.saveMCPView(ctx, actor, data, args)
+	case "save_reaction":
+		return s.saveMCPReaction(ctx, actor, data, args)
+	case "save_subscription":
+		return s.saveMCPSubscription(ctx, actor, data, args)
+	case "save_document":
+		return s.saveMCPDocument(ctx, actor, data, args)
+	case "save_template":
+		return s.saveMCPTemplate(ctx, actor, data, args)
+	case "update_notification":
+		return s.updateMCPNotification(ctx, actor, args)
+	case "save_agent_skill":
+		return s.saveMCPAgentSkill(ctx, actor, data, args)
+	case "save_loop":
+		return s.saveMCPLoop(ctx, actor, data, args)
 	default:
 		return nil, fmt.Errorf("tool %q is not implemented", name)
 	}
@@ -256,6 +282,9 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			return nil, err
 		}
 	}
+	if id == "" && hasBoolArg(args, "archived") {
+		return nil, fmt.Errorf("archived can only be set on an existing issue")
+	}
 	var result any
 	if id == "" {
 		title := stringArg(args, "title")
@@ -321,6 +350,10 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		}
 		if recurrencePresent {
 			input.Recurrence = &recurrence
+		}
+		if hasBoolArg(args, "archived") {
+			archived := boolArg(args, "archived")
+			input.Archived = &archived
 		}
 		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, input, s.updateIssueRecord)
 	}
@@ -423,6 +456,7 @@ func mcpIssueWriteReceipt(issue domain.Issue, workspace string, args map[string]
 	put(hasAnyArg(args, "estimate"), "estimate", issue.Estimate)
 	put(hasAnyArg(args, "recurrence"), "recurrence", issue.Recurrence)
 	put(hasAnyArg(args, "links"), "attachments", issue.Attachments)
+	put(hasAnyArg(args, "archived"), "archivedAt", issue.ArchivedAt)
 	put(hasAnyArg(args, "blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf"), "relations", issue.Relations)
 	return receipt
 }
@@ -1412,22 +1446,7 @@ func invokeJSONHandler(ctx context.Context, method string, pathValues map[string
 	}
 	response := httptest.NewRecorder()
 	handler(response, request)
-	if response.Code >= 400 {
-		var object map[string]any
-		_ = json.Unmarshal(response.Body.Bytes(), &object)
-		if message, ok := object["error"].(string); ok {
-			return nil, fmt.Errorf("%s", message)
-		}
-		return nil, fmt.Errorf("Flow API returned HTTP %d", response.Code)
-	}
-	if response.Body.Len() == 0 {
-		return map[string]any{"ok": true}, nil
-	}
-	var result any
-	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return mcpHandlerResult(response)
 }
 
 func applyTextPatches(value string, patches []any) (string, error) {

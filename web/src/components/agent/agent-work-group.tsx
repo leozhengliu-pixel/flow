@@ -46,13 +46,14 @@ function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullab
   const detail = readableToolDetail(call.arguments, call.result);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
   return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined}>{toolStatusLabel(call.name, running)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined}>{toolStatusLabel(call.name, running, call.arguments)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
     {call.error && <p className={styles.toolCallErrorText} role="alert">{call.error}</p>}
   </div>;
 }
 
-function toolStatusLabel(name: string, running: boolean) {
+function toolStatusLabel(name: string, running: boolean, args?: Record<string, unknown>) {
+  const updating = typeof args?.id === "string" && args.id !== "";
   const labels: Record<string, [string, string]> = {
     list_issues: ["Looking at issues…", "Looked at issues"], list_projects: ["Looking at projects…", "Looked at projects"],
     list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
@@ -64,6 +65,13 @@ function toolStatusLabel(name: string, running: boolean) {
     list_users: ["Looking at users…", "Looked at users"], list_views: ["Looking at views…", "Looked at views"],
     list_templates: ["Looking at templates…", "Looked at templates"], list_customers: ["Looking at customers…", "Looked at customers"],
     save_status_update: ["Creating project update…", "Created project update"], save_draft: ["Creating draft…", "Created draft"],
+    save_team: updating ? ["Updating team…", "Updated team"] : ["Creating team…", "Created team"],
+    save_label: ["Saving label…", "Saved label"], delete_label: ["Deleting label…", "Deleted label"],
+    save_view: ["Saving view…", "Saved view"], delete_issue: ["Deleting issue…", "Deleted issue"],
+    triage_issue: ["Triaging issue…", "Triaged issue"], save_reaction: ["Reacting…", "Reacted"],
+    save_subscription: ["Updating subscription…", "Updated subscription"], save_document: ["Saving document…", "Saved document"],
+    save_template: ["Saving template…", "Saved template"], update_notification: ["Updating inbox…", "Updated inbox"],
+    save_agent_skill: ["Saving skill…", "Saved skill"], save_loop: ["Saving loop…", "Saved loop"],
   };
   if (labels[name]) return labels[name][running ? 0 : 1];
   const [verb, ...words] = name.split("_");
@@ -94,7 +102,7 @@ function readableToolDetail(value: Record<string, unknown> | undefined, result?:
     const queries = value.queries.filter((item): item is string => typeof item === "string" && item.trim() !== "");
     if (queries.length) return queries.map(item => `"${item}"`).join(", ");
   }
-  for (const key of ["query", "name", "id", "issueId", "projectId", "project", "issue", "team"]) {
+  for (const key of ["query", "name", "title", "id", "issueId", "projectId", "project", "issue", "team", "emoji"]) {
     const item = value[key];
     if (typeof item === "string" && item && !internalId.test(item)) return item;
   }
