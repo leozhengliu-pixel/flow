@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Check,
   Copy,
-  LoaderCircle,
   MoreHorizontal,
   PanelTop,
   Plus,
@@ -180,6 +179,8 @@ export function AgentPage({
           if (event.type === "session.completed") {
             onNavigate(agentPath(data.workspace.urlKey, next.slugId));
             void onReload();
+            // The generated chat title can land after the reply; pick it up without a manual refresh.
+            if (next.messages.length <= 2) for (const delay of [8000, 25000]) window.setTimeout(() => void onReload(), delay);
           }
       };
       const mentioned = {
@@ -189,15 +190,17 @@ export function AgentPage({
         userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
         mentions,
       };
+      // Linear clears the composer as soon as the message is sent; restore it below if sending fails.
+      setMentions([]);
+      writeInput("");
+      setAttachments([]);
       if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
       else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal, mentioned);
       else await streamNewAgentSession({ message: providerMessage, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
-      setMentions([]);
-      writeInput("");
       clearAgentDraft(agentDraftKey);
-      setAttachments([]);
       setEditingId(undefined);
     } catch (reason) {
+      writeInput(message);
       if (reason instanceof DOMException && reason.name === "AbortError") {
         setSessions(list => list.map(markAgentSessionStopped));
         void onReload();
@@ -711,7 +714,7 @@ function Conversation({
             >
               <div className={styles.messageContent}>
                 {waiting
-                  ? <div aria-live="polite" className={styles.thinkingPlaceholder}><LoaderCircle className={styles.spin}/><span>{t("Thinking…")}</span></div>
+                  ? <div aria-live="polite" className={styles.thinkingPlaceholder}><span className={styles.workShimmer}>{t("Thinking…")}</span></div>
                   : message.parts?.length
                     ? <AgentMessageParts {...answer} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
                     : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
