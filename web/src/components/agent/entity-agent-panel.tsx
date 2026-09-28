@@ -172,14 +172,15 @@ export function EntityAgentPanel({
     setDraftEpoch(value => value + 1)
   }
 
-  const submit = async () => {
-    const message = input.trim()
+  /** Sends the composer text, or `followUp` (a suggestion chip) without touching the composer. */
+  const submit = async (followUp?: string) => {
+    const message = (followUp ?? input).trim()
     if (!message || loading || !status?.enabled) return
     setMessages(current => [
       ...current,
       { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
     ])
-    setInput('')
+    if (followUp === undefined) setInput('')
     setError(undefined)
     setLoading(true)
     setStreamParts([])
@@ -250,7 +251,7 @@ export function EntityAgentPanel({
       setSession(next)
       onSessionChange?.(next)
       setMessages(next.messages)
-      clearEntityThreadDraft(conversationDraftKey)
+      if (followUp === undefined) clearEntityThreadDraft(conversationDraftKey)
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') {
         setStreamParts(current =>
@@ -306,6 +307,7 @@ export function EntityAgentPanel({
           onInputChange={setInput}
           onStop={() => abortRef.current?.abort()}
           onSubmit={() => void submit()}
+          onSendSuggestion={message => void submit(message)}
           onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
           placeholder={
             status?.enabled

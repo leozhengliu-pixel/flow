@@ -535,7 +535,7 @@
   {
     "name": "mcp__flow.save_issue",
     "access": "write",
-    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\".",
+    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`).",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -545,7 +545,8 @@
         "blockedBy": { "type": "array", "items": { "type": "string" } },
         "blocks": { "type": "array", "items": { "type": "string" } },
         "cycle": { "type": ["string", "null"] },
-        "delegate": { "type": ["string", "null"] },
+        "delegate": { "type": ["string", "null"], "description": "Agent (app user) ID or name to delegate the issue to; null removes the delegate. The human assignee stays responsible." },
+        "delegateInstructions": { "type": "string", "description": "Instructions for the agent in `delegate`. Only valid when `delegate` names a new agent; they become the agent's task prompt." },
         "description": { "type": "string", "description": "Markdown body. Images written as ![alt](url) render inline. Prefer attaching files with prepare_attachment_upload so Flow inserts them into this description automatically." },
         "dueDate": { "type": ["string", "null"] },
         "duplicateOf": { "type": ["string", "null"] },
@@ -558,6 +559,7 @@
         "patch": { "type": "array", "items": { "description": "One of replace, insert_before, insert_after, prepend, append, replace_range patch objects, same shape as save_initiative.patch." } },
         "priority": { "type": "integer", "minimum": 0, "maximum": 4 },
         "project": { "type": ["string", "null"] },
+        "recurrence": { "type": ["string", "null"], "enum": ["daily", "weekly", "monthly", null], "description": "Repeat the issue on this schedule; null stops it recurring" },
         "relatedTo": { "type": "array", "items": { "type": "string" } },
         "removeBlockedBy": { "type": "array", "items": { "type": "string" } },
         "removeBlocks": { "type": "array", "items": { "type": "string" } },
@@ -792,5 +794,179 @@
     "access": "write",
     "description": "Delete an attachment by ID",
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Attachment ID" } } }
+  },
+  {
+    "name": "mcp__flow.get_issue",
+    "access": "read",
+    "description": "Retrieve a Flow issue by ID or identifier (e.g., ENG-123) with full detail: identifier, url, status, priority and priorityLabel, assignee, delegate, creator, team, project, milestone, cycle, labels, parent, sub-issues, relations (blocks, blockedBy, relatedTo, duplicateOf), due date, estimate, attachments, and description.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_issue_history",
+    "access": "read",
+    "description": "List an issue's activity history, newest first: creation, status, priority, assignee, delegate, project, cycle, label and due date changes, description edits, relations, attachments, comments posted, and archive/restore. Each event has an actor, timestamp, raw `changes`, and a readable `summary`. Use list_comments for comment bodies.",
+    "input_schema": {
+      "type": "object",
+      "required": ["issueId"],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "issueId": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123)" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50, "description": "Max events (default 50, max 100)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_project_activity",
+    "access": "read",
+    "description": "List a project's activity, newest first: creation, property changes (name, status, priority, lead, dates), description edits, status updates posted, relations, and reminders, each with actor and timestamp. Property changes are recorded in the workspace history, which only workspace admins can read.",
+    "input_schema": {
+      "type": "object",
+      "required": ["project"],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "project": { "type": "string", "description": "Project name, ID, or slug" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.search_issues",
+    "access": "read",
+    "description": "Search issues by meaning across titles, descriptions, identifiers, labels, and status. Pass several phrasings at once (e.g., [\"import data\", \"data migration\"]); results are merged, ranked by relevance, and list which queries matched.",
+    "input_schema": {
+      "type": "object",
+      "required": ["queries"],
+      "properties": {
+        "includeArchived": { "type": "boolean", "description": "Include archived issues" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20, "description": "Max results (default 20, max 50)" },
+        "project": { "type": "string", "description": "Project name, ID, or slug" },
+        "queries": { "type": "array", "minItems": 1, "maxItems": 5, "items": { "type": "string", "minLength": 1, "maxLength": 256 }, "description": "1-5 search queries" },
+        "team": { "type": "string", "description": "Team name, key, or ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_notifications",
+    "access": "read",
+    "description": "List the current user's inbox notifications, newest first, with type, the issue or project they concern, the actor, read state, and createdAt.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "includeArchived": { "type": "boolean", "description": "Include archived notifications" },
+        "includeSnoozed": { "type": "boolean", "description": "Include notifications snoozed until later (including pending reminders)" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50, "description": "Max results (default 50, max 100)" },
+        "unreadOnly": { "type": "boolean", "description": "Only unread notifications" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_views",
+    "access": "read",
+    "description": "List saved views the current user can see (workspace, team, and their own personal views) with their resource, scope, and filters.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "query": { "type": "string", "description": "Filter by view name or description" },
+        "resource": { "type": "string", "description": "Resource the view lists, e.g. issues or projects" },
+        "team": { "type": "string", "description": "Team name, key, or ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_templates",
+    "access": "read",
+    "description": "List issue, project, and document templates the current user can use.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "query": { "type": "string", "description": "Filter by template name" },
+        "team": { "type": "string", "description": "Team name, key, or ID" },
+        "type": { "type": "string", "enum": ["issue", "project", "document"], "description": "Only templates of this kind" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_customers",
+    "access": "read",
+    "description": "List customers with status, tier, owner, domains, revenue and size, and the number of customer requests (needs). Pass `includeRequests` to include each customer's requests with the linked issue or project.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "cursor": { "type": "string", "description": "Next page cursor" },
+        "includeRequests": { "type": "boolean", "description": "Include each customer's requests (customer needs)" },
+        "limit": { "type": "integer", "minimum": 1, "description": "Max results (default 50, max 250)", "default": 50, "maximum": 250 },
+        "query": { "type": "string", "description": "Filter by customer name or domain" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_status_update",
+    "access": "write",
+    "description": "Create or update a project or initiative status update. If `id` is provided, updates that update (only its author or an admin may); otherwise posts a new update, which also sets the project's or initiative's health.",
+    "input_schema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "body": { "type": "string", "description": "Update content as Markdown (required when creating)" },
+        "health": { "type": "string", "enum": ["onTrack", "atRisk", "offTrack"], "description": "Health reported by the update" },
+        "id": { "type": "string", "description": "Status update ID to update" },
+        "initiative": { "type": "string", "description": "Initiative name, ID, or slug (type initiative)" },
+        "project": { "type": "string", "description": "Project name, ID, or slug (type project)" },
+        "type": { "type": "string", "enum": ["project", "initiative"], "description": "Type of status update" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_draft",
+    "access": "write",
+    "description": "Create or update one of the current user's drafts: an issue draft (opens in the new-issue composer) or a project update draft (prefills the project's update composer). If `id` is provided, updates that draft. Drafts are private to the user until they submit them.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "assignee": { "type": "string", "description": "User ID, name, email, or \"me\" (issue drafts)" },
+        "body": { "type": "string", "description": "Markdown body: the issue description or the update text" },
+        "dueDate": { "type": "string", "description": "Due date YYYY-MM-DD (issue drafts)" },
+        "health": { "type": "string", "enum": ["onTrack", "atRisk", "offTrack"], "description": "Health (project update drafts)" },
+        "id": { "type": "string", "description": "Draft ID to update" },
+        "labels": { "type": "array", "items": { "type": "string" }, "description": "Label names or IDs (issue drafts)" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 4, "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low (issue drafts)" },
+        "project": { "type": "string", "description": "Project name, ID, or slug (issue drafts: the issue's project; update drafts: required)" },
+        "state": { "type": "string", "description": "Status name or ID (issue drafts)" },
+        "team": { "type": "string", "description": "Team name, key, or ID (issue drafts)" },
+        "title": { "type": "string", "description": "Issue title (issue drafts)" },
+        "type": { "type": "string", "enum": ["issue", "projectUpdate"], "description": "Draft kind (default issue; ignored when updating)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.create_reminder",
+    "access": "write",
+    "description": "Remind the current user about an issue, project, or initiative at a future time. The reminder arrives in their inbox.",
+    "input_schema": {
+      "type": "object",
+      "required": ["remindAt"],
+      "properties": {
+        "initiative": { "type": "string", "description": "Initiative name, ID, or slug (provide exactly one target)" },
+        "issue": { "type": "string", "description": "Issue ID or identifier (provide exactly one target)" },
+        "project": { "type": "string", "description": "Project name, ID, or slug (provide exactly one target)" },
+        "remindAt": { "type": "string", "description": "When to remind: future ISO-8601 timestamp (e.g., 2026-10-01T09:00:00Z) or duration from now (e.g., P1D, PT3H)" }
+      }
+    }
   }
 ]

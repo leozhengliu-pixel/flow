@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Box, FileText, Plus, Search, Users } from 'lucide-react'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
+import { splitAgentSuggestions } from './agent-answer-content'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
@@ -164,14 +165,17 @@ export function AgentChatPanel({
     }
   }
 
-  const submit = async () => {
-    const message = input.trim()
+  /** Sends the composer text, or `followUp` (a suggestion chip) without touching the composer. */
+  const submit = async (followUp?: string) => {
+    const message = (followUp ?? input).trim()
     if (!message || loading || !status?.enabled) return
+    const sentMentions = followUp === undefined ? mentions : []
+    const sentIdsOf = (type: AgentMention['type']) => followUp === undefined ? idsOf(type) : []
     setMessages(current => [
       ...current,
-      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions, createdAt: new Date().toISOString() },
+      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, createdAt: new Date().toISOString() },
     ])
-    const mentioned = { issueIds: idsOf('issue'), projectIds: idsOf('project'), documentIds: idsOf('document'), userIds: idsOf('user'), mentions }
+    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), userIds: sentIdsOf('user'), mentions: sentMentions }
     const pageIdsOf = (type: AgentPageContext['type']) => activePageContext?.type === type ? [activePageContext.id] : []
     if (!session) {
       setAttachedContext([
@@ -179,8 +183,10 @@ export function AgentChatPanel({
         ...contextIssues.map(issue => ({ key: issue.id, icon: <StatusIcon state={issue.state} size={14}/>, label: `${issue.identifier} ${issue.title}` })),
       ])
     }
-    setInput('')
-    setMentions([])
+    if (followUp === undefined) {
+      setInput('')
+      setMentions([])
+    }
     setError(undefined)
     setLoading(true)
     setStreamParts([])
@@ -244,7 +250,7 @@ export function AgentChatPanel({
               projectIds: [...new Set([...pageIdsOf('project'), ...mentioned.projectIds])],
               documentIds: [...new Set([...pageIdsOf('document'), ...mentioned.documentIds])],
               userIds: mentioned.userIds,
-              mentions,
+              mentions: sentMentions,
               skillIds,
               location: 'toolbar',
             },
@@ -255,7 +261,7 @@ export function AgentChatPanel({
       setSession(next)
       onSessionChange?.(next)
       setMessages(next.messages)
-      clearEntityThreadDraft(draftKey)
+      if (followUp === undefined) clearEntityThreadDraft(draftKey)
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') {
         setStreamParts(current =>
@@ -304,7 +310,7 @@ export function AgentChatPanel({
           return <AgentDraftCard context={card.context} draft={draft} icon={'icon' in card ? card.icon : undefined} onRestore={onDraft ? () => onDraft(draft) : undefined} outdated={outdated} title={card.title} />
         }}
         renderMessageActions={onUseResponse ? (message, index) => message.role === 'assistant' && message.content.trim() && !(loading && index === messages.length - 1) ? (
-          <button className={styles.useResponse} onClick={() => { onUseResponse(message.content.trim()); close() }} type="button">
+          <button className={styles.useResponse} onClick={() => { onUseResponse(splitAgentSuggestions(message.content).prose.trim()); close() }} type="button">
             {t(useResponseLabel)}
           </button>
         ) : null : undefined}
@@ -336,6 +342,7 @@ export function AgentChatPanel({
         onInputChange={setInput}
         onStop={() => abortRef.current?.abort()}
         onSubmit={() => void submit()}
+        onSendSuggestion={message => void submit(message)}
         onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
         streamParts={streamParts}
       />
