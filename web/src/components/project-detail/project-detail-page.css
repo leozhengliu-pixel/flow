@@ -373,25 +373,25 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-details-sidebar__property-dates button:focus-visible { outline: 0; box-shadow: inset 0 0 0 1px lch(53% 52.26 286.91); }
 .project-details-sidebar__property-dates button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-details-sidebar__date-menu { box-sizing: border-box; width: 304px; height: 427px; padding: 16px 16px 0; overflow: hidden; }
-.project-details-sidebar__property-menu.is-standard { width: 247px; }
+.project-details-sidebar__property-menu.is-standard { width: 252px; }
 .project-details-sidebar__property-menu.is-labels { width: 252px; }
-.project-details-sidebar__property-menu.is-members { width: max-content; min-width: 177px; max-width: min(320px, calc(100vw - 20px)); }
-.project-details-sidebar__property-menu.is-lead { width: max-content; min-width: 172px; max-width: min(320px, calc(100vw - 20px)); }
+.project-details-sidebar__property-menu.is-members { width: max-content; min-width: 181px; max-width: min(320px, calc(100vw - 20px)); }
+.project-details-sidebar__property-menu.is-lead { width: max-content; min-width: 175px; max-width: min(320px, calc(100vw - 20px)); }
 .project-details-sidebar__property-menu.is-initiatives { width: 175px; }
 .project-details-sidebar__property-menu { --project-menu-option-hover: var(--theme-surface-active); --project-menu-separator: var(--theme-border); color: var(--theme-text-primary); font-weight: 400; }
 .project-details-sidebar__property-menu[data-side=left] { transform-origin: 100% 18px; }
 .project-details-sidebar__date-menu[data-side=left] { transform-origin: 100% 18px; }
-.project-details-sidebar__property-menu .property-command-search { height: 35.5px; padding: 0 12px 0 14px; border-bottom: .5px solid var(--project-menu-separator); }
+.project-details-sidebar__property-menu .property-command-search { height: 37px; padding: 0 12px 0 14px; border-bottom: .5px solid var(--project-menu-separator); }
 .project-details-sidebar__property-menu .property-command-search.is-visually-hidden { position: fixed; left: -100000px; width: 1px; height: 1px; padding: 0; border: 0; overflow: hidden; }
-.project-details-sidebar__property-menu .property-command-search input { height: 35px; padding: 10px 0 9px; }
+.project-details-sidebar__property-menu .property-command-search input { height: 36px; padding: 10px 0 9px; }
 .project-details-sidebar__property-menu .property-command-group { height: 24px; padding: 4px 14px; }
 .project-details-sidebar__property-menu.is-lead .property-command-group,
-.project-details-sidebar__property-menu.is-members .property-command-group { box-sizing: border-box; height: 29px; display: block; padding: 0 14px; line-height: 29px; contain: inline-size; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.project-details-sidebar__property-menu.is-members .property-command-group { box-sizing: border-box; height: 30px; display: block; padding: 0 14px; line-height: 30px; contain: inline-size; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .project-details-sidebar__property-menu.is-lead .property-command-options [role=option],
 .project-details-sidebar__property-menu.is-lead .property-command-options button { display: flex; align-items: center; gap: 8px; }
 .project-details-sidebar__property-menu.is-lead .property-command-label { min-width: 0; flex: 1; }
 .project-details-sidebar__property-menu .property-command-options { padding: 6px 0; }
-.project-details-sidebar__property-menu .property-command-options [role=option] { height: 31px; grid-template-columns: 16px minmax(0,1fr) 16px auto; gap: 8px; padding: 0 18px 0 14px; border-radius: 0; }
+.project-details-sidebar__property-menu .property-command-options [role=option] { height: 32px; grid-template-columns: 16px minmax(0,1fr) 16px auto; gap: 8px; padding: 0 18px 0 14px; border-radius: 0; }
 .project-details-sidebar__property-menu.is-members .property-command-options [role=option],
 .project-details-sidebar__property-menu.is-members .property-command-options button { display: flex; align-items: center; gap: 8px; }
 .project-details-sidebar__property-menu.is-members .property-command-checkbox { margin-right: -1px; }
@@ -461,7 +461,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-details-sidebar__milestone-actions:hover { background: var(--project-property-hover); color: var(--pd-text); }
 .project-details-sidebar__milestone-actions[data-state=open] { background: var(--project-property-hover); color: var(--pd-text); }
 .project-details-sidebar__milestone-actions svg { width: 14px; height: 14px; fill: currentColor; }
-.project-milestone-menu { z-index: 1450; box-sizing: border-box; width: 213px; min-width: 213px; height: auto; overflow: visible; padding: 6px 0; border: 1px solid var(--theme-border-strong); border-radius: 12px; outline: 0; background: var(--theme-control); box-shadow: 0 6px 18px rgb(0 0 0 / 14%),0 3px 9px rgb(0 0 0 / 18%),0 1px 1px rgb(0 0 0 / 24%); color: var(--theme-text-primary); font-size: 13px; line-height: 16px; }
+.project-milestone-menu { z-index: 1450; box-sizing: border-box; width: 197px; min-width: 197px; height: auto; overflow: visible; padding: 6px 0; border: 1px solid var(--theme-border-strong); border-radius: 12px; outline: 0; background: var(--theme-control); box-shadow: 0 6px 18px rgb(0 0 0 / 14%),0 3px 9px rgb(0 0 0 / 18%),0 1px 1px rgb(0 0 0 / 24%); color: var(--theme-text-primary); font-size: 13px; line-height: 16px; }
 .project-milestone-menu [role=menuitem] { position: relative; box-sizing: border-box; width: 100%; height: 32px; min-height: 32px; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 18px 0 14px; border-radius: 0; outline: 0; color: inherit; font-weight: 400; }
 .project-milestone-menu [role=menuitem] > *:not(.project-milestone-menu__item-background) { position: relative; z-index: 1; }
 .project-milestone-menu__item-background { position: absolute!important; z-index: 0!important; inset: 0 6px; border-radius: 8px; background: transparent; pointer-events: none; }
@@ -1170,3 +1170,11 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-details-sidebar__property-dates button:not(.is-empty) { color: var(--bright); }
 .project-overview__properties .project-overview__date svg,
 .project-details-sidebar__property-dates button:not(.is-empty) svg { color: var(--bright); }
+
+/* Project picker widths measured on Linear's project page (offset sizes, not
+   transform-scaled). Matches styles/picker-parity.css specificity so the
+   project variants win over the issue-picker defaults. */
+html:root body .property-command-surface.project-details-sidebar__property-menu.is-standard:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { width: 252px; min-width: 252px; }
+html:root body .property-command-surface.project-details-sidebar__property-menu.is-lead:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 175px; }
+html:root body .property-command-surface.project-details-sidebar__property-menu.is-members:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 181px; }
+html:root body .property-command-surface.project-details-sidebar__property-menu.is-initiatives:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 175px; }

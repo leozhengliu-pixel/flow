@@ -13,9 +13,11 @@ import { clearComposerDraft, readComposerDraft, writeComposerDraft, type Compose
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, PriorityIcon, ProjectIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
-import { CommentMenu, DeleteCommentDialog } from '@/components/activity/activity-timeline'
+import { DeleteCommentDialog } from '@/components/activity/activity-timeline'
+import { ResolvedComment } from '@/components/activity/resolved-comment'
+import { ProjectCommentMenu } from './project-comment-menu'
 import { Composer } from '@/components/editor/composer'
-import type { AuditLogEntry, Comment, Project, ProjectUpdate } from '@/types/flow'
+import type { AuditLogEntry, Comment, Project, ProjectUpdate, ThreadSubscription, ThreadSubscriptionState } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PROJECT_HEALTHS } from './project-detail-types'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
@@ -25,7 +27,7 @@ import { insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import { ActivityPage } from '@/components/activity/activity-page'
 import { getMostRecent, reconcileSelection, selectionFromRoute } from '@/components/activity/entity-activity-update-helper'
 
-export function ProjectActivity({ activities, drafts = [], project, projectUpdates, viewer, users, onCommentProject, onUpdateProjectComment, onDeleteProjectComment, onReactProjectComment, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
+export function ProjectActivity({ activities, drafts = [], project, projectUpdates, viewer, viewerRole, users, threadSubscriptions, onCommentProject, onUpdateProjectComment, onDeleteProjectComment, onReactProjectComment, onResolveProjectComment, onProjectCommentThreadSubscription, onCreateIssue, onCommentProjectUpdate, onCreateUpdate, onDeleteUpdate, onReactProjectUpdate, onUpdateProjectUpdate, onUploadProjectUpdateAttachment, onDeleteProjectUpdateAttachment }: ProjectDetailProps) {
   const parentDrafts = useMemo(() => ({
     comment: drafts.find(item => item.type === 'comment' && item.resourceId === project.id && (item.metadata?.resourceType ?? 'issue') === 'project') ?? readComposerDraft('comment', project.id),
     project_update: drafts.find(item => item.type === 'project_update' && item.resourceId === project.id) ?? readComposerDraft('project_update', project.id),
@@ -180,7 +182,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
     {agentOpen && <Suspense fallback={null}><AgentChatPanel initialPrompt={projectUpdateAgentPrompt(project, health, t)} issues={[]} open onClose={() => setAgentOpen(false)} useResponseLabel="Insert into update" onUseResponse={content => { setComposerMode('update'); setBody(content); setCommentData(undefined); setEditorKey(key => key + 1) }}/></Suspense>}
 
     <div className="project-activity__feed">
-      {feed.map(item => item.type === 'update' ? <UpdateEntry key={item.update.id} onComment={body => onCommentProjectUpdate(project.id, item.update.id, body)} onDelete={() => setDeleteTarget(item.update)} onDeleteAttachment={attachmentId=>onDeleteProjectUpdateAttachment(project.id,item.update.id,attachmentId)} onEdit={() => setEditing(item.update)} onReact={emoji => onReactProjectUpdate(project.id, item.update.id, emoji)} update={item.update} changes={updateChanges.get(item.update.id) ?? []} viewerId={viewer.id}/> : <ProjectCommentCard comment={item.comment} key={item.comment.id} replies={commentThreads.replies.get(item.comment.id) ?? []} users={users} viewerId={viewer.id} onDelete={commentId => onDeleteProjectComment(project.id, commentId)} onEdit={(commentId, body, bodyData) => onUpdateProjectComment(project.id, commentId, body, bodyData)} onReact={(commentId, emoji) => onReactProjectComment(project.id, commentId, emoji)} onReply={(body, bodyData) => onCommentProject(project.id, body, bodyData, item.comment.id)} onUpload={uploadInlineMedia}/>)}
+      {feed.map(item => item.type === 'update' ? <UpdateEntry key={item.update.id} onComment={body => onCommentProjectUpdate(project.id, item.update.id, body)} onDelete={() => setDeleteTarget(item.update)} onDeleteAttachment={attachmentId=>onDeleteProjectUpdateAttachment(project.id,item.update.id,attachmentId)} onEdit={() => setEditing(item.update)} onReact={emoji => onReactProjectUpdate(project.id, item.update.id, emoji)} update={item.update} changes={updateChanges.get(item.update.id) ?? []} viewerId={viewer.id}/> : <ProjectCommentCard canModerate={viewerRole === 'admin' || viewerRole === 'owner'} comment={item.comment} key={item.comment.id} replies={commentThreads.replies.get(item.comment.id) ?? []} threadState={threadSubscriptions?.find(entry => entry.projectId === project.id && entry.commentId === item.comment.id && entry.userId === viewer.id)?.state ?? null} users={users} viewerId={viewer.id} onNewIssue={comment => onCreateIssue(project.id, undefined, { description: comment.body })} onResolve={(commentId, resolved) => onResolveProjectComment(project.id, commentId, resolved)} onThreadSubscription={(commentId, state) => onProjectCommentThreadSubscription(project.id, commentId, state)} onDelete={commentId => onDeleteProjectComment(project.id, commentId)} onEdit={(commentId, body, bodyData) => onUpdateProjectComment(project.id, commentId, body, bodyData)} onReact={(commentId, emoji) => onReactProjectComment(project.id, commentId, emoji)} onReply={(body, bodyData) => onCommentProject(project.id, body, bodyData, item.comment.id)} onUpload={uploadInlineMedia}/>)}
       <ActivityPropertyTimeline events={propertyEvents}/>
     </div>
 
@@ -221,6 +223,13 @@ type ProjectCommentCardProps = {
   replies: Comment[]
   users: ProjectDetailProps['users']
   viewerId: string
+  /** Workspace admins may delete any comment (matches the API). */
+  canModerate: boolean
+  /** The viewer's explicit choice for this thread; participants follow implicitly. */
+  threadState: ThreadSubscription['state'] | null
+  onThreadSubscription: (commentId: string, state: ThreadSubscriptionState | null) => Promise<unknown>
+  onResolve: (commentId: string, resolved: boolean) => Promise<unknown>
+  onNewIssue: (comment: Comment) => void
   onReply: (body: string, bodyData?: Record<string, unknown>) => Promise<unknown>
   onEdit: (commentId: string, body: string, bodyData?: Record<string, unknown>) => Promise<unknown>
   onDelete: (commentId: string) => Promise<void>
@@ -229,12 +238,26 @@ type ProjectCommentCardProps = {
 }
 
 /** A posted project comment rendered as Linear's framed comment card with its reply thread. */
-function ProjectCommentCard({ comment, replies, users, viewerId, onReply, onEdit, onDelete, onReact, onUpload }: ProjectCommentCardProps) {
+function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, threadState, onThreadSubscription, onResolve, onNewIssue, onReply, onEdit, onDelete, onReact, onUpload }: ProjectCommentCardProps) {
   const [threadOpen, setThreadOpen] = useState(false)
   const [editing, setEditing] = useState<string>()
   const [deleting, setDeleting] = useState<Comment>()
   const [busy, setBusy] = useState(false)
-  const { locale } = useI18n()
+  const [resolving, setResolving] = useState(false)
+  const { locale, t } = useI18n()
+  // Linear: the author and repliers follow a thread implicitly; "muted" opts
+  // a participant out and "subscribed" opts anyone else in.
+  const participating = comment.user.id === viewerId || replies.some(reply => reply.user.id === viewerId)
+  const following = threadState === 'subscribed' || (participating && threadState !== 'muted')
+  const toggleThread = () => {
+    const next: ThreadSubscriptionState | null = following ? (participating ? 'muted' : null) : (participating ? null : 'subscribed')
+    void onThreadSubscription(comment.id, next).then(() => toast.success(t(following ? 'Unsubscribed from thread' : 'Subscribed to thread')), () => undefined)
+  }
+  const resolve = async (resolved: boolean) => {
+    setResolving(true)
+    try { await onResolve(comment.id, resolved) } catch { /* the caller reports the failure */ } finally { setResolving(false) }
+  }
+  const menu = (item: Comment, iconSize?: number) => <ProjectCommentMenu body={item.body} canDelete={item.user.id === viewerId || canModerate} canEdit={item.user.id === viewerId} commentId={item.id} iconSize={iconSize} resolved={Boolean(comment.resolved)} thread={item.id === comment.id ? { following, onToggle: toggleThread } : undefined} triggerClassName="project-activity__comment-action" onDelete={() => setDeleting(item)} onEdit={() => setEditing(item.id)} onNewIssue={() => onNewIssue(item)} onResolve={item.id === comment.id ? () => void resolve(!comment.resolved) : undefined}/>
   const react = (commentId: string, emoji: string) => onReact(commentId, emoji).then(() => undefined, () => undefined)
   const threadLabel = replies.length ? `Open ${replies.length} ${replies.length === 1 ? 'comment' : 'comments'}` : 'Open comments'
   const confirmDelete = async () => {
@@ -245,7 +268,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, onReply, onEdit
   const body = (item: Comment, className: string) => editing === item.id
     ? <Composer compact initialData={item.bodyData} initialValue={item.body} placeholder="Edit comment…" users={users} onCancel={() => setEditing(undefined)} onSubmit={async (next, data) => { await onEdit(item.id, next, data); setEditing(undefined) }} onUpload={onUpload}/>
     : <div className={className}><RichComment body={item.body} data={item.bodyData} version={item.version}/></div>
-  return <article className="project-activity__comment-card" data-activity-anchor={`comment-${comment.id}`} id={`comment-${comment.id}`}>
+  const card = <article className="project-activity__comment-card" data-activity-anchor={`comment-${comment.id}`} data-resolved={comment.resolved || undefined} id={`comment-${comment.id}`}>
     <header>
       <Avatar name={comment.user.displayName}/>
       <strong data-i18n-ignore>{comment.user.displayName}</strong>
@@ -253,7 +276,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, onReply, onEdit
       {comment.editedAt && <span className="project-activity__comment-edited">edited</span>}
       <div className="project-activity__comment-actions">
         <EmojiPicker align="end" onSelect={emoji => react(comment.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={16}/></button></EmojiPicker>
-        <CommentMenu body={comment.body} iconSize={16} id={comment.id} own={comment.user.id === viewerId} triggerClassName="project-activity__comment-action" onDelete={() => setDeleting(comment)} onEdit={() => setEditing(comment.id)}/>
+        {menu(comment, 16)}
       </div>
     </header>
     {body(comment, 'project-activity__comment-body')}
@@ -263,14 +286,18 @@ function ProjectCommentCard({ comment, replies, users, viewerId, onReply, onEdit
     </footer>
     {threadOpen && <div className="project-activity__thread">
       {replies.map(reply => <div className="project-activity__reply" data-activity-anchor={`comment-${reply.id}`} id={`comment-${reply.id}`} key={reply.id}>
-        <header><Avatar name={reply.user.displayName}/><strong data-i18n-ignore>{reply.user.displayName}</strong><time data-i18n-ignore dateTime={reply.createdAt} title={format(new Date(reply.createdAt), 'PPpp')}>{commentTimeLabel(reply.createdAt, locale)}</time>{reply.editedAt && <span className="project-activity__comment-edited">edited</span>}<div className="project-activity__comment-actions"><EmojiPicker align="end" onSelect={emoji => react(reply.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={14}/></button></EmojiPicker><CommentMenu body={reply.body} id={reply.id} own={reply.user.id === viewerId} triggerClassName="project-activity__comment-action" onDelete={() => setDeleting(reply)} onEdit={() => setEditing(reply.id)}/></div></header>
+        <header><Avatar name={reply.user.displayName}/><strong data-i18n-ignore>{reply.user.displayName}</strong><time data-i18n-ignore dateTime={reply.createdAt} title={format(new Date(reply.createdAt), 'PPpp')}>{commentTimeLabel(reply.createdAt, locale)}</time>{reply.editedAt && <span className="project-activity__comment-edited">edited</span>}<div className="project-activity__comment-actions"><EmojiPicker align="end" onSelect={emoji => react(reply.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={14}/></button></EmojiPicker>{menu(reply, 14)}</div></header>
         {body(reply, 'project-activity__reply-body')}
         <ReactionPills reactions={reply.reactions} viewerId={viewerId} onToggle={emoji => react(reply.id, emoji)}/>
       </div>)}
       <Composer compact placeholder="Leave a reply…" users={users} onSubmit={async (next, data) => { await onReply(next, data) }} onUpload={onUpload}/>
     </div>}
-    <DeleteCommentDialog busy={busy} open={Boolean(deleting)} onConfirm={() => void confirmDelete()} onOpenChange={open => { if (!open) setDeleting(undefined) }}/>
   </article>
+  const dialog = <DeleteCommentDialog busy={busy} open={Boolean(deleting)} onConfirm={() => void confirmDelete()} onOpenChange={open => { if (!open) setDeleting(undefined) }}/>
+  // Resolved threads collapse behind the shared resolved-thread bar, like issue comments.
+  return comment.resolved
+    ? <ResolvedComment busy={resolving} comment={comment} onResolve={resolved => resolve(resolved)}>{card}{dialog}</ResolvedComment>
+    : <>{card}{dialog}</>
 }
 
 function CommentEntry({ comment }: { comment: Comment }) { return <article className="project-activity__comment"><Avatar name={comment.user.displayName}/><div><header><strong>{comment.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(comment.createdAt), { addSuffix: true })}</time></header><div className="project-activity__rich"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div></div></article> }

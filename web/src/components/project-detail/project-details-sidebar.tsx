@@ -281,7 +281,8 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
     <div className="project-details-sidebar__milestone-summary"><MilestoneProgressIcon className="project-details-sidebar__milestone-icon" overdue={isMilestoneDateOverdue(milestone.targetDate)} progress={stats.progress}/><strong data-i18n-ignore>{milestone.name}</strong><span className="project-details-sidebar__milestone-stats"><span>{stats.progress}% of</span><button aria-label={`View ${stats.count} issues in ${milestone.name}`} onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">{stats.count}</button></span><button className="project-details-sidebar__milestone-see-issues" onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">See issues</button></div>
     {milestone.targetDate && <ProjectDatePicker buttonClassName="project-details-sidebar__milestone-date" contentClassName="project-details-sidebar__date-menu" label="Target date" onChange={targetDate => void onUpdateDate(targetDate)} side="left" value={milestone.targetDate}><span>{format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d')}</span></ProjectDatePicker>}
     <DropdownMenu.Root onOpenChange={open => { if (!open) setMenuQuery('') }}><DropdownMenu.Trigger asChild><button aria-label={`${milestone.name} actions`} className="project-details-sidebar__milestone-actions" onClick={event => event.stopPropagation()} type="button"><MilestoneMenuIcon name="more-horizontal"/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" alignOffset={-25} className="project-milestone-menu" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
-      <ProjectMenuSearch label="Filter milestone actions" query={menuQuery} onChange={setMenuQuery} visible/>
+      <ProjectMenuSearch label="Filter milestone actions" query={menuQuery} onChange={setMenuQuery}/>
+      {shows('Open milestone issues') && <MilestoneMenuItem icon="issues" label="Open milestone issues" onSelect={onOpenIssues}/>}
       {shows('Edit…') && <MilestoneMenuItem icon="edit" label="Edit…" onSelect={onEdit}/>}
       {shows('Set target date…') && <MilestoneMenuItem icon="calendar" label="Set target date…" onSelect={() => setDateDialogOpen(true)}/>}
       {shows('Copy') && <DropdownMenu.Sub><MilestoneSubTrigger icon="copy" label="Copy"/><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-copy-menu" collisionPadding={8} sideOffset={-2}>
@@ -296,8 +297,8 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
       </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
       {shows('Convert to project') && <MilestoneMenuItem icon="project" label="Convert to project" onSelect={() => void onConvert()}/>}
       {!menuQuery && <DropdownMenu.Separator/>}
-      {shows('Delete') && <MilestoneMenuItem className="is-danger" end="⌘ ⌫" icon="trash" label="Delete" onSelect={() => { void confirmAction(`Delete “${milestone.name}”?`,{confirmLabel:'Delete milestone'}).then(confirmed=>{if(confirmed)return onDelete()}) }}/>}
-      {menuQuery && !['Edit…','Set target date…','Copy','Move milestone to','Convert to project','Delete'].some(shows) && <div className="project-action-menu__empty">No results</div>}
+      {shows('Delete') && <MilestoneMenuItem end="⌘ ⌫" icon="trash" label="Delete" onSelect={() => { void confirmAction(`Delete “${milestone.name}”?`,{confirmLabel:'Delete milestone'}).then(confirmed=>{if(confirmed)return onDelete()}) }}/>}
+      {menuQuery && !['Open milestone issues','Edit…','Set target date…','Copy','Move milestone to','Convert to project','Delete'].some(shows) && <div className="project-action-menu__empty">No results</div>}
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
     <MilestoneDateDialog milestone={milestone} onOpenChange={setDateDialogOpen} onSubmit={onUpdateDate} open={dateDialogOpen}/>
   </div>

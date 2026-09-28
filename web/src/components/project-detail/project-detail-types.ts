@@ -23,8 +23,11 @@ import type {
   SavedViewMutationInput,
   Subscription,
   Team,
+  ThreadSubscription,
+  ThreadSubscriptionState,
   User,
   WorkflowState,
+  WorkspaceRole,
 } from "@/types/flow";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import type { ProjectMutationInput } from "@/components/projects-page/projects-page";
@@ -53,6 +56,8 @@ export type ProjectDetailProps = {
   labelGroups: LabelGroup[];
   onCreateLabel?: (name: string, groupId?: string) => Promise<IssueLabel>;
   viewer: User;
+  /** Workspace role of the viewer; admins and owners may moderate comments. */
+  viewerRole?: WorkspaceRole;
   activities: ActivityEvent[];
   favorite?: Favorite;
   subscription?: Subscription;
@@ -98,6 +103,12 @@ export type ProjectDetailProps = {
   onUpdateProjectComment: (projectId: string, commentId: string, body: string, bodyData?: Record<string, unknown>) => Promise<Comment>;
   onDeleteProjectComment: (projectId: string, commentId: string) => Promise<void>;
   onReactProjectComment: (projectId: string, commentId: string, emoji: string) => Promise<Comment>;
+  /** Resolve or re-open a comment thread (Linear "Resolve thread"). */
+  onResolveProjectComment: (projectId: string, commentId: string, resolved: boolean) => Promise<Comment>;
+  /** Subscribe to, mute, or (null) clear the viewer's explicit choice for a comment thread. */
+  onProjectCommentThreadSubscription: (projectId: string, commentId: string, state: ThreadSubscriptionState | null) => Promise<void>;
+  /** The viewer's explicit comment-thread choices; thread participants follow implicitly. */
+  threadSubscriptions?: ThreadSubscription[];
   onCreateResource: (
     projectId: string,
     input: { type?: "link" | "document"; title?: string; url?: string },

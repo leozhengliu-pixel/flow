@@ -21,15 +21,17 @@ function renderSidebar() {
   /></I18nProvider>)
 }
 
-it('matches Linear milestone actions with a filter input', async () => {
+it('matches Linear milestone actions with a type-to-filter search', async () => {
   const user = userEvent.setup()
   renderSidebar()
   await user.click(screen.getByRole('button', { name: 'Alpha actions' }))
   const menu = await screen.findByRole('menu')
   const filter = within(menu).getByRole('textbox', { name: 'Filter milestone actions' })
-  expect(filter.closest('.project-action-menu__search')).not.toHaveClass('is-hidden')
+  // Linear keeps the filter input visually hidden until you type.
+  expect(filter.closest('.project-action-menu__search')).toHaveClass('is-hidden')
   const labels = within(menu).getAllByRole('menuitem').map(item => item.textContent?.replace(/⌘ ⌫$/, ''))
-  expect(labels).toEqual(['Edit…', 'Set target date…', 'Copy', 'Move milestone to', 'Convert to project', 'Delete'])
+  expect(labels).toEqual(['Open milestone issues', 'Edit…', 'Set target date…', 'Copy', 'Move milestone to', 'Convert to project', 'Delete'])
+  expect(within(menu).getByRole('menuitem', { name: /Delete/ })).not.toHaveClass('is-danger')
   expect(menu).not.toHaveTextContent('No date')
   expect(menu).not.toHaveTextContent('Edit target date')
 

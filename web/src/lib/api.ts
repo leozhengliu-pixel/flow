@@ -3181,6 +3181,32 @@ export function toggleProjectCommentReaction(
     body: JSON.stringify({ emoji }),
   });
 }
+/** Resolve or re-open a project comment thread (resolving a reply resolves its root). */
+export function resolveProjectComment(
+  projectId: string,
+  commentId: string,
+  resolved: boolean,
+): Promise<Comment> {
+  return request(`/api/projects/${projectId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved }),
+  });
+}
+/** Subscribe to or mute one project comment thread; `null` clears the explicit choice. */
+export function setProjectThreadSubscription(
+  projectId: string,
+  commentId: string,
+  state: ThreadSubscriptionState | null,
+): Promise<ThreadSubscription | void> {
+  const path = `/api/projects/${projectId}/comments/${commentId}/subscription`;
+  if (!state) return request(path, { method: "DELETE" });
+  return request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
+  });
+}
 export function createProjectUpdate(
   projectId: string,
   input: {

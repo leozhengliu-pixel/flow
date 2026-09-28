@@ -390,7 +390,7 @@
 .description-heading-actions[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .description-heading-actions:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: 1px; }
 .description-heading-actions svg { width: 16px; height: 16px; }
-.menu-content.description-heading-menu { box-sizing: border-box; width: 165px; min-width: 165px; padding: 4px 0; border: .5px solid var(--theme-border-strong); border-radius: 10px; background: var(--theme-surface-2); }
+.menu-content.description-heading-menu { box-sizing: border-box; width: 168px; min-width: 168px; padding: 4px 0; border: .5px solid var(--theme-border-strong); border-radius: 10px; background: var(--theme-surface-2); }
 .description-heading-menu .menu-item { height: 32px; gap: 8px; margin: 0; padding: 0 14px; border-radius: 0; white-space: nowrap; }
 .description-heading-menu .menu-item svg { flex: none; color: var(--action-menu-muted); }
 .issue-description .inline-comment-mark,

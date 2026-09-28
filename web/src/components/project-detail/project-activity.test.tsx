@@ -319,20 +319,120 @@ describe('ProjectActivity comment cards', () => {
     await user.click(within(otherCard).getByRole('button', { name: 'Comment options' }))
     expect(screen.getByRole('menuitem', { name: 'Copy link to comment' })).toBeInTheDocument()
     expect(screen.getByRole('menuitem', { name: 'Copy content as Markdown' })).toBeInTheDocument()
-    expect(screen.queryByRole('menuitem', { name: 'Edit comment' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull()
     await user.keyboard('{Escape}')
 
     await user.click(within(ownCard).getByRole('button', { name: 'Comment options' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Edit comment' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Edit' }))
     expect(ownCard.querySelector('.project-activity__comment-body')).toBeNull()
     await user.click(within(ownCard).getByRole('button', { name: 'Submit comment' }))
     await waitFor(() => expect(props.onUpdateProjectComment).toHaveBeenCalledWith(props.project.id, root.id, 'Root comment', expect.anything()))
     await waitFor(() => expect(ownCard.querySelector('.project-activity__comment-body')).toBeInTheDocument())
 
     await user.click(within(ownCard).getByRole('button', { name: 'Comment options' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Delete comment' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Delete' }))
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete comment' }))
     await waitFor(() => expect(props.onDeleteProjectComment).toHaveBeenCalledWith(props.project.id, root.id))
+  })
+
+  const menuRows = (menu: HTMLElement) => Array.from(menu.querySelectorAll('[role=menuitem],[role=separator]')).map(node => node.getAttribute('role') === 'separator' ? '---' : node.textContent)
+
+  it('lists Linear\'s comment options in order for the viewer\'s own comment', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><ProjectActivity {...commentProps([root])} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    const menu = screen.getByRole('menu')
+    expect(menu).toHaveClass('project-action-menu', 'project-comment-menu')
+    expect(menuRows(menu)).toEqual(['Edit', 'Unsubscribe from thread', '---', 'Resolve thread', '---', 'Copy link to comment', 'Copy content as Markdown', '---', 'New issue from comment…', '---', 'Delete'])
+    const remove = screen.getByRole('menuitem', { name: 'Delete' })
+    expect(remove).not.toHaveClass('is-danger')
+    expect(remove).not.toHaveClass('danger')
+    for (const item of screen.getAllByRole('menuitem')) expect(item.querySelector('.project-menu-icon svg')).toBeInTheDocument()
+  })
+
+  it('hides Edit and Delete on others\' comments and offers Subscribe to thread', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><ProjectActivity {...commentProps([{ ...root, user: other }])} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    expect(menuRows(screen.getByRole('menu'))).toEqual(['Subscribe to thread', '---', 'Resolve thread', '---', 'Copy link to comment', 'Copy content as Markdown', '---', 'New issue from comment…'])
+  })
+
+  it('lets workspace admins delete others\' comments', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><ProjectActivity {...commentProps([{ ...root, user: other }], { viewerRole: 'admin' })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    expect(screen.getByRole('menuitem', { name: 'Delete' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
+  })
+
+  it('toggles the viewer\'s thread subscription', async () => {
+    const user = userEvent.setup()
+    const onProjectCommentThreadSubscription = vi.fn(async () => undefined)
+    // Authors follow their own thread implicitly, so unsubscribing mutes it.
+    const { unmount } = render(<I18nProvider><ProjectActivity {...commentProps([root], { onProjectCommentThreadSubscription })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unsubscribe from thread' }))
+    expect(onProjectCommentThreadSubscription).toHaveBeenLastCalledWith(project.id, root.id, 'muted')
+    unmount()
+
+    // A muted author re-subscribes by clearing the explicit choice.
+    const muted = [{ id: 'sub-1', userId: viewer.id, projectId: project.id, commentId: root.id, state: 'muted', createdAt: root.createdAt, updatedAt: root.createdAt }]
+    const second = render(<I18nProvider><ProjectActivity {...commentProps([root], { onProjectCommentThreadSubscription, threadSubscriptions: muted })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Subscribe to thread' }))
+    expect(onProjectCommentThreadSubscription).toHaveBeenLastCalledWith(project.id, root.id, null)
+    second.unmount()
+
+    // Non-participants subscribe explicitly and unsubscribe by clearing it.
+    const theirs = { ...root, user: other }
+    const third = render(<I18nProvider><ProjectActivity {...commentProps([theirs], { onProjectCommentThreadSubscription })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Subscribe to thread' }))
+    expect(onProjectCommentThreadSubscription).toHaveBeenLastCalledWith(project.id, root.id, 'subscribed')
+    third.unmount()
+    render(<I18nProvider><ProjectActivity {...commentProps([theirs], { onProjectCommentThreadSubscription, threadSubscriptions: [{ ...muted[0], state: 'subscribed' }] })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unsubscribe from thread' }))
+    expect(onProjectCommentThreadSubscription).toHaveBeenLastCalledWith(project.id, root.id, null)
+  })
+
+  it('resolves a thread, collapses it, and offers Unresolve thread', async () => {
+    const user = userEvent.setup()
+    const onResolveProjectComment = vi.fn(async () => ({}) as never)
+    const { unmount } = render(<I18nProvider><ProjectActivity {...commentProps([root], { onResolveProjectComment })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Resolve thread' }))
+    expect(onResolveProjectComment).toHaveBeenCalledWith(project.id, root.id, true)
+    unmount()
+
+    const { container } = render(<I18nProvider><ProjectActivity {...commentProps([{ ...root, resolved: true }], { onResolveProjectComment })} /></I18nProvider>)
+    const resolved = container.querySelector<HTMLElement>('.resolved-comment--resolved')!
+    expect(resolved).toBeInTheDocument()
+    expect(resolved.querySelector('.resolved-comment__thread')).toHaveAttribute('data-expanded', 'false')
+    await user.click(within(resolved).getByRole('button', { name: 'Show thread' }))
+    await user.click(within(resolved).getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Unresolve thread' }))
+    expect(onResolveProjectComment).toHaveBeenLastCalledWith(project.id, root.id, false)
+  })
+
+  it('opens the create-issue flow prefilled with the comment and this project', async () => {
+    const user = userEvent.setup()
+    const onCreateIssue = vi.fn()
+    render(<I18nProvider><ProjectActivity {...commentProps([root], { onCreateIssue })} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Comment options' }))
+    await user.click(screen.getByRole('menuitem', { name: 'New issue from comment…' }))
+    expect(onCreateIssue).toHaveBeenCalledWith(project.id, undefined, { description: 'Root comment' })
+  })
+
+  it('uses the reply menu without thread-level actions', async () => {
+    const user = userEvent.setup()
+    const reply = { ...root, id: 'c-reply', parentId: root.id, body: 'A reply', reactions: {} } as Comment
+    render(<I18nProvider><ProjectActivity {...commentProps([root, reply])} /></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Open 1 comment' }))
+    const replyNode = document.getElementById('comment-c-reply')!
+    await user.click(within(replyNode).getByRole('button', { name: 'Comment options' }))
+    expect(menuRows(screen.getByRole('menu'))).toEqual(['Edit', '---', 'Copy link to comment', 'Copy content as Markdown', '---', 'New issue from comment…', '---', 'Delete'])
   })
 
   it('toggles reactions through the reaction pills', async () => {

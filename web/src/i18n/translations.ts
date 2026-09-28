@@ -4365,6 +4365,7 @@ Object.assign(zhCN, {
   "Could not load document access": "无法加载文档访问权限",
   "Could not update document access": "无法更新文档访问权限",
   "View Overview": "查看概览",
+  "Open milestone issues": "打开里程碑事项",
   "View Issues": "查看事项",
   "Copy project URL": "复制项目链接",
   "Project URL copied": "项目链接已复制",
@@ -4405,4 +4406,14 @@ Object.assign(zhCN, {
   "Dismiss": "关闭",
   "Remove from context": "从上下文中移除",
   "This page": "此页面",
+});
+
+// Project comment "Comment options" menu (Linear parity).
+Object.assign(zhCN, {
+  "Resolve thread": "解决讨论串",
+  "Unresolve thread": "取消解决讨论串",
+  "New issue from comment…": "从评论新建事项…",
+  "Unsubscribed from thread": "已取消订阅讨论串",
+  "Copied to clipboard": "已复制到剪贴板",
+  "Could not copy to clipboard": "无法复制到剪贴板",
 });

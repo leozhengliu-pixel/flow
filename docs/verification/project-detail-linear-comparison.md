@@ -265,3 +265,38 @@ Viewport 1470x706 for these measurements.
   Ordering, Order completed by recency, Completed issues, Show sub-issues,
   List options (Nested sub-issues, Show empty groups), and Display
   properties chips.
+
+## Correction: Popover Sizes (2026-09-28)
+
+Earlier popover sizes in this document were taken with
+`getBoundingClientRect()` while the Linear tab was in the background. Hidden
+tabs pause animations, so Linear menus were frozen at their opening frame,
+`scale(0.98)`, and the widths and heights came out about 2% small. Use
+`offsetWidth`/`offsetHeight`, which ignore transforms. Corrected values:
+
+| Menu | Size | Rows |
+| --- | --- | --- |
+| Project actions | 250 wide | 32px items |
+| Status / priority | 252x210 | 32px items, 37px search row |
+| Lead | 175x169 | 32px items, 30px group headers |
+| Members | 181x107 | — |
+| Labels | 261x82 | — |
+| Milestone actions | 197x261 | Search is visually hidden. Starts with "Open milestone issues". Delete is not red. |
+| More properties | 262x109 | — |
+| Heading actions | 168x74 | — |
+| Resources | 205x77 | — |
+| Health | 175x109 | — |
+| Date picker | 304x373, clamped | — |
+| Comment options | 227x285, padding 6px 0 | 32px items |
+
+Comment options groups, separated by 0.5px lines with 6px margins:
+
+1. Edit, Unsubscribe from thread
+2. Resolve thread
+3. Copy link to comment, Copy content as Markdown
+4. New issue from comment…
+5. Delete (not red)
+
+Row heights are 32px throughout, not 31px. `styles/picker-parity.css` sets a
+206px minimum width for issue pickers; the project pickers override it at
+matching specificity.

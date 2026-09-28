@@ -727,6 +727,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/projects/{id}/comments/{commentId}", s.updateProjectComment)
 	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}", s.deleteProjectComment)
 	mux.HandleFunc("POST /api/projects/{id}/comments/{commentId}/reactions", s.toggleProjectCommentReaction)
+	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", s.setProjectThreadSubscription)
+	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", s.clearProjectThreadSubscription)
 	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
 	mux.HandleFunc("POST /api/projects/{id}/updates", s.createProjectUpdate)
 	mux.HandleFunc("PATCH /api/projects/{id}/updates/{updateId}", s.updateProjectUpdate)
@@ -3684,18 +3686,39 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 
 // updateProjectComment edits a project comment's body. Only the comment's
 // author may edit it (matching Linear, where admins can delete but never
-// rewrite another member's words).
+// rewrite another member's words). A body-less {"resolved": bool} patch
+// resolves or re-opens the comment's thread, which any member may do.
 func (s *server) updateProjectComment(w http.ResponseWriter, r *http.Request) {
 	var input domain.CommentUpdateInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	resolveOnly := commentUpdateIsResolveOnly(input)
+	if !resolveOnly && strings.TrimSpace(input.Body) == "" {
 		writeError(w, http.StatusBadRequest, "comment body is required")
 		return
 	}
 	projectID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated, current domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.comment_updated", projectID, input, func(data *domain.Bootstrap) error {
+	eventType := "project.comment_updated"
+	if resolveOnly {
+		eventType = "project.comment_resolved"
+		if !*input.Resolved {
+			eventType = "project.comment_unresolved"
+		}
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
+			return err
+		}
+		if resolveOnly {
+			comment, err := resolveProjectComment(data, project, commentID, input)
+			if errors.Is(err, errConflict) {
+				current = comment
+			} else {
+				updated = comment
+			}
 			return err
 		}
 		index := slices.IndexFunc(project.Comments, func(comment domain.Comment) bool { return comment.ID == commentID })
@@ -3745,6 +3768,7 @@ func (s *server) deleteProjectComment(w http.ResponseWriter, r *http.Request) {
 		project.Comments = slices.DeleteFunc(project.Comments, func(comment domain.Comment) bool {
 			return comment.ID == commentID || (comment.ParentID != nil && *comment.ParentID == commentID)
 		})
+		removeProjectThreadSubscriptions(data, projectID, commentID)
 		project.UpdatedAt = time.Now().UTC()
 		return nil
 	})

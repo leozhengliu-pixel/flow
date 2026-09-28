@@ -1,0 +1,13 @@
+/* Linear's project comment "Comment options" menu: 227px wide, 32px rows,
+   hairline group separators, no wrapping. Builds on .project-action-menu. */
+.project-action-menu.project-comment-menu{box-sizing:border-box;width:227px;min-width:227px;padding:6px 0;border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-surface-2);box-shadow:var(--shadow-control);color:var(--action-menu-text);font:450 13px/normal var(--font)}
+.project-action-menu.project-comment-menu [role=menuitem]{width:100%;height:32px;min-height:32px;padding:0 18px 0 14px;gap:8px;white-space:nowrap}
+.project-action-menu.project-comment-menu .project-menu-icon{color:var(--action-menu-muted)}
+.project-action-menu.project-comment-menu [role=menuitem][data-highlighted] .project-menu-icon{color:var(--action-menu-active-text)}
+.project-action-menu.project-comment-menu .project-menu-label{white-space:nowrap}
+.project-action-menu.project-comment-menu [role=separator]{position:relative;height:12px;margin:0;background:transparent}
+.project-action-menu.project-comment-menu [role=separator]::after{content:"";position:absolute;top:5.75px;left:0;right:0;border-top:.5px solid var(--theme-border-strong)}
+:root[data-theme="light"] .project-action-menu.project-comment-menu{border-color:var(--popover-border)}
+/* A resolved project comment thread collapses behind the shared resolved bar. */
+.project-activity__feed>.resolved-comment{margin:0 0 24px}
+.project-activity__feed>.resolved-comment .project-activity__comment-card{margin-bottom:0}

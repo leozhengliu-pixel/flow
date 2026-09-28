@@ -23,8 +23,8 @@
 .project-action-menu__search.is-hidden{position:absolute;left:-99999px;width:1px;height:1px;overflow:hidden;border:0}
 .project-action-menu__search input{box-sizing:border-box;width:100%;height:36px;padding:0 14px;border:0;outline:0;background:transparent;color:inherit;font:400 13px/normal var(--font)}
 .project-action-menu__empty{padding:12px 14px;color:var(--action-menu-muted);font-size:13px}
-.project-action-menu--header{width:245px;min-width:245px;font-weight:400}
-.project-action-menu--header>:is([role=menuitem],[role=menuitemcheckbox]){min-height:31px}
+.project-action-menu--header{width:250px;min-width:250px;font-weight:400}
+.project-action-menu--header>:is([role=menuitem],[role=menuitemcheckbox]){min-height:32px}
 .project-action-menu[data-menu=Copy]{min-width:280px}
 .project-action-menu[data-menu=Subscribe]{min-width:340px}
 .project-action-menu[data-menu="Remind me"]{min-width:286px;padding:0}
@@ -33,14 +33,14 @@
 .project-action-menu[data-menu="Remind me"] .issue-options-item[data-selected=true]{color:var(--action-menu-active-text)}
 .project-menu-checkbox{display:grid;place-items:center;width:14px;height:14px;flex:0 0 14px;border:1px solid var(--theme-text-tertiary);border-radius:3px;background:transparent;color:var(--action-menu-muted)}
 .project-menu-checkbox svg{width:12px;height:12px}
-.project-action-menu--properties{width:261px;min-width:261px;font-weight:400}
+.project-action-menu--properties{width:262px;min-width:262px;font-weight:400}
 .project-action-menu.project-property-submenu{min-width:240px;padding:0}
 .project-action-menu.project-property-submenu.is-initiatives{width:max-content;min-width:175px}
-.project-action-menu.project-property-submenu.is-members{width:max-content;min-width:177px}
+.project-action-menu.project-property-submenu.is-members{width:max-content;min-width:181px}
 .project-action-menu.project-property-submenu .property-command-search.is-visually-hidden{position:absolute;left:-99999px;width:1px;height:1px;overflow:hidden;padding:0;border:0}
-.project-action-menu.project-property-submenu .property-command-search{height:35.5px;padding:0 14px;border-bottom:.5px solid var(--theme-border-strong)}
+.project-action-menu.project-property-submenu .property-command-search{height:37px;padding:0 14px;border-bottom:.5px solid var(--theme-border-strong)}
 .project-action-menu.project-property-submenu .property-command-options{padding:6px 0;max-height:min(400px,calc(100dvh - 96px));overflow:auto}
-.project-action-menu.project-property-submenu .property-command-options [role=option]{height:31px;padding:0 18px 0 14px;gap:8px;grid-template-columns:14px 16px minmax(0,1fr) auto;color:var(--action-menu-text)}
+.project-action-menu.project-property-submenu .property-command-options [role=option]{height:32px;padding:0 18px 0 14px;gap:8px;grid-template-columns:14px 16px minmax(0,1fr) auto;color:var(--action-menu-text)}
 .project-action-menu.project-property-submenu .property-command-option-background{inset:0 6px;border-radius:8px}
 .project-action-menu.project-property-submenu [role=option][aria-selected=true] .property-command-option-background{background:var(--action-menu-active-bg)}
 .project-action-menu.project-property-submenu .property-command-group{height:24px;padding:4px 14px;color:var(--action-menu-muted);font-size:12px}
