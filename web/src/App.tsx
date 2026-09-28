@@ -6523,6 +6523,14 @@ function App() {
         data={data}
         onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
         issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
+        pageContext={
+          // Issues ride along through `issues`; projects and documents attach as the page entity.
+          page === "project-detail" && selectedProject
+            ? { type: "project", id: selectedProject.id, label: selectedProject.name }
+            : page === "document-detail" && selectedDocument
+              ? { type: "document", id: selectedDocument.id, label: selectedDocument.title || "Untitled" }
+              : undefined
+        }
         open={floatingAgentOpen}
         onSessionChange={(next) => setClosedAgentSessionIds((current) => new Set(current).add(next.id))}
         onClose={() => setFloatingAgentOpen(false)}

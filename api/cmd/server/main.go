@@ -39,7 +39,9 @@ var (
 )
 
 type server struct {
-	store                          *store.SQLiteStore
+	store *store.SQLiteStore
+	// agentAutoTitle names new Agent chats with a small extra model call (off in test fixtures).
+	agentAutoTitle                 bool
 	uploadPath                     string
 	objectStore                    objectstore.Store
 	staticPath                     string
@@ -106,6 +108,7 @@ func main() {
 	}
 	defer shutdownTelemetry(context.Background())
 	s := &server{
+		agentAutoTitle:                 true,
 		store:                          repository,
 		uploadPath:                     applicationConfig.Storage.LocalPath,
 		objectStore:                    objects,

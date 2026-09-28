@@ -33,4 +33,9 @@ describe('project agent draft parsing', () => {
       dependencies: ['Core', 'API'],
     })
   })
+
+  it('maps a numeric priority from the model to its label', () => {
+    expect(parseProjectAgentDraft('```json\n{"name":"Slack alerts","priority":2}\n```')?.priority).toBe('High')
+    expect(parseProjectAgentDraft('{"name":"Later","priority":0}')?.priority).toBe('No priority')
+  })
 })

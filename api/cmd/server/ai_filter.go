@@ -87,7 +87,12 @@ func (s *server) aiIssueFilter(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(&vocabulary, "%s: %s\n", field, strings.Join(parts, "; "))
 	}
 	prompt := fmt.Sprintf("Current user: %s\nToday: %s\nVocabulary (field: \"id\"=label):\n%s\nRequest: %s", firstNonEmpty(input.ViewerName, "unknown"), firstNonEmpty(input.Today, time.Now().UTC().Format("2006-01-02")), vocabulary.String(), input.Query)
-	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	// Slower reasoning models routinely need more than 20s; follow the configured Agent timeout up to 60s.
+	timeout := 20 * time.Second
+	if s.agent.Timeout > timeout {
+		timeout = min(s.agent.Timeout, 60*time.Second)
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 	turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{{Role: "system", Content: aiFilterSystemPrompt}, {Role: "user", Content: prompt}})
 	if err != nil {

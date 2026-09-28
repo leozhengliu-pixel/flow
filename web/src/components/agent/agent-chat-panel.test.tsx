@@ -11,7 +11,7 @@ const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentS
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
 
-import { AgentChatPanel } from './agent-chat-panel'
+import { AgentChatPanel, splitAgentDraft } from './agent-chat-panel'
 
 const session: AgentSession = {
   id: 'session-1', slugId: 'chat', userId: 'user-1', title: 'Chat', favorite: false, location: 'toolbar', issueIds: ['issue-1'], skillIds: [],
@@ -88,4 +88,76 @@ describe('Agent chat panel streaming', () => {
     await user.click(screen.getByText('Work completed'))
     expect(screen.getByText('Inspected the workspace')).toBeVisible()
   })
+
+  it('attaches the current page entity to the first message and shows it as added to context', async () => {
+    streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
+      onEvent({ type: 'session.started', session: { ...session, messages: session.messages.slice(0, 1) }, messageId: 'assistant-message' })
+      onEvent({ type: 'session.completed', session })
+      return session
+    })
+    const user = userEvent.setup()
+    const { rerender } = render(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open pageContext={{ type: 'project', id: 'project-1', label: 'Compare Test' }}/></I18nProvider>)
+    expect(screen.getByText('Compare Test')).toBeVisible()
+    // Navigating before the conversation starts swaps the attached entity.
+    rerender(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open pageContext={{ type: 'document', id: 'document-1', label: 'Launch plan' }}/></I18nProvider>)
+    expect(screen.queryByText('Compare Test')).not.toBeInTheDocument()
+    expect(screen.getByText('Launch plan')).toBeVisible()
+    rerender(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open pageContext={{ type: 'project', id: 'project-1', label: 'Compare Test' }}/></I18nProvider>)
+    const input = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, 'Summarize')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(streams.streamNewAgentSession).toHaveBeenCalled())
+    expect(streams.streamNewAgentSession).toHaveBeenCalledWith(expect.objectContaining({ projectIds: ['project-1'], documentIds: [] }), expect.any(Function), expect.any(AbortSignal))
+    expect(await screen.findByText('added to context')).toBeVisible()
+    expect(screen.getByText('Compare Test')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Remove from context' })).not.toBeInTheDocument()
+    expect(input).toHaveAttribute('placeholder', 'Reply…')
+    expect(screen.queryByText('You')).not.toBeInTheDocument()
+    expect(screen.queryByText('Flow Agent')).not.toBeInTheDocument()
+  })
+
+  it('does not send the page entity once its chip is removed', async () => {
+    streams.streamNewAgentSession.mockResolvedValue(session)
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open pageContext={{ type: 'project', id: 'project-1', label: 'Compare Test' }}/></I18nProvider>)
+    await user.click(screen.getByRole('button', { name: 'Remove from context' }))
+    expect(screen.queryByText('Compare Test')).not.toBeInTheDocument()
+    const input = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, 'Summarize')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(streams.streamNewAgentSession).toHaveBeenCalled())
+    expect(streams.streamNewAgentSession).toHaveBeenCalledWith(expect.objectContaining({ projectIds: [] }), expect.any(Function), expect.any(AbortSignal))
+    expect(screen.queryByText('added to context')).not.toBeInTheDocument()
+  })
+
+  it('offers feedback and copy actions on finished replies', async () => {
+    const user = userEvent.setup()
+    // user-event installs its own clipboard stub, so replace it afterwards.
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    render(<I18nProvider><AgentChatPanel initialSession={session} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
+    const good = await screen.findByRole('button', { name: 'Good response' })
+    expect(good).toHaveAttribute('aria-pressed', 'false')
+    await user.click(good)
+    expect(good).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Copy message' }))
+    expect(writeText).toHaveBeenCalledWith('Summary')
+    expect(await screen.findByRole('button', { name: 'Copied to clipboard' })).toBeVisible()
+  })
 })
+
+describe('splitAgentDraft', () => {
+  it('moves a finished update block out of the chat text', () => {
+    const reply = 'I drafted an update from the project goals.\n\n```update\nWe matched layout.\n\n- Next: typography\n```'
+    expect(splitAgentDraft(reply, 'update')).toEqual({ prose: 'I drafted an update from the project goals.', draft: 'We matched layout.\n\n- Next: typography' })
+  })
+
+  it('hides an unfinished block while streaming and ignores other fences', () => {
+    expect(splitAgentDraft('Drafting…\n```update\nWe matched', 'update')).toEqual({ prose: 'Drafting…', draft: undefined })
+    expect(splitAgentDraft('```ts\nconst a = 1\n```', 'update').prose).toContain('const a = 1')
+    expect(splitAgentDraft('plain', undefined)).toEqual({ prose: 'plain' })
+  })
+})
+
