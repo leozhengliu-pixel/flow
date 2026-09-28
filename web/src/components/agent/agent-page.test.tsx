@@ -111,7 +111,7 @@ describe('agent page composer', () => {
     render(<I18nProvider><AgentPage chatSlug="parts" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
     await userEvent.click(screen.getByText('Work completed'))
     expect(screen.getByText('Looked at issues')).toBeVisible()
-    expect(screen.getByText('Reasoning')).toBeVisible()
+    expect(screen.getByText('Checked workspace state')).toBeVisible()
     expect(screen.getByText('Finished')).toBeVisible()
     expect(screen.getByRole('alert')).toHaveTextContent('Partial warning')
   })

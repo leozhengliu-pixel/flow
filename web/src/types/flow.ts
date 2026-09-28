@@ -2366,6 +2366,8 @@ export interface AgentSession {
   favorite: boolean;
   location: "page" | "toolbar";
   issueIds: UUID[];
+  /** Projects attached as context (sent by the server; used to label draft cards). */
+  projectIds?: UUID[];
   skillIds: UUID[];
   messages: AgentMessage[];
   createdAt: string;

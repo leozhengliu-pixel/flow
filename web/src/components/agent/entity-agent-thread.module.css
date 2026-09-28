@@ -11,7 +11,7 @@
 .agentMessage{display:flex;flex-direction:column;align-items:flex-start}
 .agentMessage>.messageDocument{align-self:stretch}
 .work{margin:0 0 8px}
-.conversation .work>summary{margin-left:-4px;color:var(--theme-text-secondary);font-weight:500}
+.conversation .work>summary{color:var(--theme-text-secondary);font-weight:500}
 .addedContext{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-top:6px}
 .addedContext>span{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;font-size:12px;font-weight:450;line-height:16px}
 .addedContext svg{width:14px;height:14px;flex:0 0 auto;color:var(--theme-text-secondary)}
