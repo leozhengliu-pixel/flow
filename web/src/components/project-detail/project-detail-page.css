@@ -1178,3 +1178,4 @@ html:root body .property-command-surface.project-details-sidebar__property-menu.
 html:root body .property-command-surface.project-details-sidebar__property-menu.is-lead:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 175px; }
 html:root body .property-command-surface.project-details-sidebar__property-menu.is-members:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 181px; }
 html:root body .property-command-surface.project-details-sidebar__property-menu.is-initiatives:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 175px; }
+.project-activity__draft-health { display: inline-flex; }

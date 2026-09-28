@@ -120,7 +120,7 @@ export function EntityAgentThread({
 
   const decide = onToolApproval ?? (() => undefined)
   const firstUserIndex = messages.findIndex(message => message.role === 'user')
-  const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'toolCall')
+  const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
   const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'toolCall')
   const composerPlaceholder = messages.length && enabled
     ? t('Reply…')
@@ -160,7 +160,7 @@ export function EntityAgentThread({
         {messages.map((message, index) => {
           const isUser = message.role === 'user'
           const time = shouldShowAgentTime(messages, index) ? formatAgentTime(message.createdAt, t('Today')) : ''
-          const work = isUser ? [] : (message.parts ?? []).filter(part => part.type === 'reasoning' || part.type === 'toolCall')
+          const work = isUser ? [] : (message.parts ?? []).filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
           const streaming = loading && index === messages.length - 1
           const extraActions = renderMessageActions?.(message, index)
           const showFeedback = !isUser && Boolean(message.content.trim()) && !streaming

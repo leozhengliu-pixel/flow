@@ -159,6 +159,7 @@ type AgentMessagePart struct {
 	Elicitation *AgentElicitation `json:"elicitation,omitempty"`
 	ID          string            `json:"id"`
 	Type        string            `json:"type"`
+	Title       string            `json:"title,omitempty"`
 	Text        string            `json:"text,omitempty"`
 	Status      string            `json:"status,omitempty"`
 	ToolCall    *AgentToolCall    `json:"toolCall,omitempty"`
