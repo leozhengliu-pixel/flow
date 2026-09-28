@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AlertCircle, Check, ChevronRight, CircleCheck, LoaderCircle } from "lucide-react";
 import type { AgentMessage, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import styles from "./agent-page.module.css";
@@ -23,10 +22,11 @@ export function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy, r
         ? `${t("Used")} ${toolCount} ${t("tools")}`
         : t("Work completed");
   return <details className={`${styles.workGroup}${failed ? ` ${styles.workFailed}` : ""}${className ? ` ${className}` : ""}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{running ? <LoaderCircle className={styles.spin}/> : failed ? <AlertCircle/> : <CircleCheck/>}<span>{label}</span><ChevronRight/></summary>
+    {/* Linear: label plus a small disclosure triangle; steps are flat 12px rows, narration is a quote with a 2px bar. */}
+    <summary><span className={running ? styles.workShimmer : undefined}>{label}</span><WorkDisclosureIcon/></summary>
     <div className={styles.workItems}>
       {parts.map(part => part.type === "reasoning"
-        ? <div className={styles.reasoningRow} key={part.id}><span>{part.status === "running" ? t("Thinking…") : t("Reasoning")}</span>{part.text && <p>{part.text}</p>}</div>
+        ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <p>{part.text}</p>}</div>
         : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
   </details>;
@@ -38,10 +38,11 @@ function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullab
   const running = call.status === "running" || call.status === "pending";
   const detail = readableToolDetail(call.arguments, call.result);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
-  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={approvalPending || call.status === "error" || undefined}>
-    <summary>{running ? <LoaderCircle className={styles.spin}/> : call.status === "error" ? <AlertCircle/> : <Check/>}<span>{toolStatusLabel(call.name, running)}</span>{detail && <small>{detail}</small>}<ChevronRight/></summary>
-    <div>{approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}{call.error && <p role="alert">{call.error}</p>}<code>{JSON.stringify(call.result ?? call.arguments ?? {}, null, 2)}</code></div>
-  </details>;
+  return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined}>{toolStatusLabel(call.name, running)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+    {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
+    {call.error && <p className={styles.toolCallErrorText} role="alert">{call.error}</p>}
+  </div>;
 }
 
 function toolStatusLabel(name: string, running: boolean) {
@@ -81,3 +82,9 @@ function readableToolDetail(value: Record<string, unknown> | undefined, result?:
   }
   return "";
 }
+
+/** Linear's 16px disclosure triangle (points right when collapsed, down when open via CSS). */
+function WorkDisclosureIcon() {
+  return <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="M6.5 5.2v5.6a.4.4 0 0 0 .65.3l3.5-2.8a.4.4 0 0 0 0-.6l-3.5-2.8a.4.4 0 0 0-.65.3Z" fill="currentColor"/></svg>;
+}
+

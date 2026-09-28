@@ -11,7 +11,8 @@ const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentS
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
 
-import { AgentChatPanel, splitAgentDraft } from './agent-chat-panel'
+import { AgentChatPanel } from './agent-chat-panel'
+import { splitAgentDraft } from './agent-draft'
 
 const session: AgentSession = {
   id: 'session-1', slugId: 'chat', userId: 'user-1', title: 'Chat', favorite: false, location: 'toolbar', issueIds: ['issue-1'], skillIds: [],

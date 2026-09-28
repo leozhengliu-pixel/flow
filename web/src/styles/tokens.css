@@ -612,3 +612,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root[data-theme="light"]{--agent-user-bubble-bg:lch(94.4% .5 282)}
 /* Linear hides the Work on issue search until you type (type-to-filter stays available). */
 .work-menu-search:has(input:placeholder-shown){position:absolute;width:1px;height:1px;overflow:hidden;padding:0;border:0;clip-path:inset(50%)}
+:root{--agent-work-quote-bar:lch(30.833% 1.93 272)}
+:root[data-theme="light"]{--agent-work-quote-bar:lch(86.5% 0 282)}

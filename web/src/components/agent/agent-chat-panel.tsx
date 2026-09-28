@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, ChevronRight, FileText, Plus, RotateCcw, Search, Users } from 'lucide-react'
+import { Box, FileText, Plus, Search, Users } from 'lucide-react'
+import { AgentDraftCard } from './agent-draft-card'
+import { splitAgentDraft } from './agent-draft'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
@@ -299,25 +301,7 @@ export function AgentChatPanel({
           const opening = draft.replace(/[#*_>`-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24)
           const current = (card.current ?? '').replace(/<[^>]+>/g, ' ').replace(/[#*_>`-]/g, '').replace(/\s+/g, ' ')
           const outdated = Boolean(onDraft) && card.current !== undefined && !current.includes(opening)
-          return (
-            <div className={styles.draftUpdate}>
-              <span className={styles.draftUpdateLabel}>{t('Created draft')}</span>
-              <div className={styles.draftCard}>
-                <div className={styles.draftCardTitle}>
-                  <span data-i18n-ignore>{card.context}</span>
-                  <ChevronRight aria-hidden="true" size={12} />
-                  <b>{t(card.title)}</b>
-                </div>
-                <p data-i18n-ignore>{draft}</p>
-                {outdated && (
-                  <div className={styles.draftCardFooter}>
-                    <span>{t('Outdated')}</span>
-                    <button onClick={() => onDraft?.(draft)} type="button"><RotateCcw aria-hidden="true" size={12} />{t('Restore')}</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )
+          return <AgentDraftCard context={card.context} draft={draft} onRestore={onDraft ? () => onDraft(draft) : undefined} outdated={outdated} title={card.title} />
         }}
         renderMessageActions={onUseResponse ? (message, index) => message.role === 'assistant' && message.content.trim() && !(loading && index === messages.length - 1) ? (
           <button className={styles.useResponse} onClick={() => { onUseResponse(message.content.trim()); close() }} type="button">
@@ -390,14 +374,4 @@ function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { dat
 function pageContextIcon(context: AgentPageContext, data?: BootstrapData) {
   if (data) return mentionIcon(context, data)
   return context.type === 'project' ? <ProjectIcon size={14}/> : context.type === 'document' ? <FileText size={14}/> : null
-}
-
-/** Split a reply into chat prose and the fenced draft block (```update … ```); an unfinished block is hidden too. */
-export function splitAgentDraft(content: string, fence?: string): { prose: string; draft?: string } {
-  if (!fence) return { prose: content }
-  const pattern = new RegExp('```' + fence + '[^\\S\\n]*\\n?([\\s\\S]*?)(```|$)')
-  const match = content.match(pattern)
-  if (!match) return { prose: content }
-  const prose = content.replace(match[0], '').replace(/\n{3,}/g, '\n\n').trim()
-  return { prose, draft: match[2] === '```' ? match[1].trim() || undefined : undefined }
 }

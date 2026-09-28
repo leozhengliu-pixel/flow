@@ -354,90 +354,83 @@
 }
 .thinkingPlaceholder svg { width: 14px; height: 14px; }
 .workGroup {
-  color: var(--theme-text-tertiary);
-  font-size: 12px;
-}
-.workGroup > summary,
-.toolCall {
-  list-style: none;
+  color: var(--theme-text-secondary);
+  font: 500 12px/15px var(--font);
 }
 .workGroup > summary {
   width: max-content;
-  min-height: 24px;
+  height: 15px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  list-style: none;
+  cursor: pointer;
+}
+.workGroup > summary:hover { color: var(--text); }
+.workFailed > summary { color: var(--semantic-danger-text); }
+.workGroup summary::-webkit-details-marker { display: none; }
+.workGroup > summary > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: -0.5px 0;
+  transition: transform 120ms ease;
+}
+.workGroup[open] > summary > svg { transform: rotate(90deg); }
+/* Linear: rows start 13px below the toggle, indent 10px, 15px tall on a 28px pitch; no icons or connector. */
+.workItems {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  margin: 13px 0 0;
+  padding-left: 10px;
+}
+.toolCallRow {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 4px;
-  border-radius: 5px;
-  cursor: pointer;
-}
-.workGroup > summary:hover {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-secondary);
-}
-.workFailed > summary { color: var(--semantic-danger-text); }
-.workGroup summary::-webkit-details-marker,
-.toolCall summary::-webkit-details-marker { display: none; }
-.workGroup summary svg,
-.toolCall summary svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-.workGroup > summary > svg:last-child,
-.toolCall summary > svg:last-child {
-  width: 12px;
-  height: 12px;
-  margin-left: 2px;
-  transition: transform 120ms ease;
-}
-.workGroup[open] > summary > svg:last-child,
-.toolCall[open] summary > svg:last-child {
-  transform: rotate(90deg);
-}
-.workItems {
-  display: grid;
-  gap: 2px;
-  margin: 4px 0 0 7px;
-  padding: 3px 0 3px 15px;
-  border-left: 0.5px solid var(--theme-border);
-}
-.reasoningRow {
-  min-height: 28px;
-  padding: 4px 8px;
-  border-radius: 6px;
-}
-.reasoningRow p {
-  margin: 3px 0 0;
-  color: var(--theme-text-tertiary);
-  white-space: pre-wrap;
-}
-.toolCall > summary {
-  min-height: 28px;
-  display: grid;
-  grid-template-columns: 14px auto minmax(0, 1fr) 12px;
-  align-items: center;
-  gap: 7px;
-  padding: 2px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.toolCall > summary:hover {
-  background: var(--theme-surface-hover);
-}
-.toolCall summary small {
-  overflow: hidden;
-  color: var(--theme-text-tertiary);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.toolCall > div {
-  margin: 2px 8px 6px 29px;
-  padding: 8px 10px;
-  border: 0.5px solid var(--theme-border);
-  border-radius: 6px;
-  background: var(--theme-surface-1);
+.toolCallRow > span:last-child:not(:first-child) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.toolCallError .toolCallRow { color: var(--semantic-danger-text); }
+.toolCallErrorText {
+  margin: 6px 0 0;
+  color: var(--theme-text-secondary);
+  font-weight: 450;
+}
+/* Narration: 12px/19.2px text 14px right of a 2px rounded bar (bar inset 2px top and bottom). */
+.reasoningRow { position: relative; }
+.reasoningRow p {
+  position: relative;
+  margin: 0;
+  padding-left: 14px;
+  font: 450 12px/19.2px var(--font);
+  white-space: pre-wrap;
+}
+.reasoningRow p::before {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--agent-work-quote-bar);
+  content: "";
+}
+.workShimmer {
+  background: linear-gradient(90deg, var(--theme-text-secondary) 0%, var(--text) 50%, var(--theme-text-secondary) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: agent-work-shimmer 1.4s linear infinite;
+}
+@keyframes agent-work-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .workShimmer { animation: none; color: var(--theme-text-secondary); background: none; } }
 .approvalPrompt {
   display: flex;
   align-items: center;

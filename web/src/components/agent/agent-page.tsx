@@ -33,6 +33,8 @@ import {
   AgentSubmitIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
+import { AgentDraftCard } from "./agent-draft-card";
+import { splitAgentDraft } from "./agent-draft";
 import { AgentWorkGroup } from "./agent-work-group";
 import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
@@ -454,6 +456,7 @@ export function AgentPage({
         {current ? (
           <Conversation
             busy={busy}
+            draftContext={data.projects.find((project) => current.projectIds?.includes(project.id))?.name ?? current.title}
             session={current}
             editingId={editingId}
             onRetry={(message) => void send(message)}
@@ -641,6 +644,7 @@ export function AgentPage({
 
 function Conversation({
   busy,
+  draftContext,
   editingId,
   onEdit,
   onRetry,
@@ -649,6 +653,7 @@ function Conversation({
   session,
 }: {
   busy: boolean;
+  draftContext: string;
   editingId?: string;
   onEdit: (message: AgentSession["messages"][number]) => void;
   onRetry: (message: string) => void;
@@ -691,8 +696,8 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><LoaderCircle className={styles.spin}/><span>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
-                    : <AgentRichText className={styles.messageDocument} content={message.content}/>}
+                    ? <AgentMessageParts draftContext={draftContext} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
+                    : <AgentMessageText content={message.content} draftContext={draftContext}/>}
               </div>
               <div className={styles.messageActions}>
                 <button
@@ -720,7 +725,7 @@ function Conversation({
   );
 }
 
-function AgentMessageParts({ message, onRetry, onToolApproval, approvalBusy }: { message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+function AgentMessageParts({ draftContext, message, onRetry, onToolApproval, approvalBusy }: { draftContext: string; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n();
   const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
   const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "toolCall") ?? [];
@@ -733,8 +738,17 @@ function AgentMessageParts({ message, onRetry, onToolApproval, approvalBusy }: {
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
-    {text && <AgentRichText className={styles.messageDocument} content={text}/>}
+    {text && <AgentMessageText content={text} draftContext={draftContext}/>}
   </div>;
+}
+
+/** Assistant text with any ```update block shown as Linear's "Created draft" card instead of raw code. */
+function AgentMessageText({ content, draftContext }: { content: string; draftContext: string }) {
+  const { prose, draft } = splitAgentDraft(content, "update");
+  return <>
+    {prose && <AgentRichText className={styles.messageDocument} content={prose}/>}
+    {draft && <AgentDraftCard context={draftContext} draft={draft} title="Update draft"/>}
+  </>;
 }
 
 function lastUserMessage(messages: AgentMessage[], before: number) {
