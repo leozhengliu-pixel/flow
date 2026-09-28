@@ -36,6 +36,8 @@ import { AgentRichText } from "./agent-rich-text";
 import { AgentDraftCard } from "./agent-draft-card";
 import { HealthGlyph, healthColor } from "@/components/project-detail/health-glyph";
 import { splitAgentDraft } from "./agent-draft";
+import { AgentAnswerText, AgentReferencedIssues, AgentSuggestionChips } from "./agent-answer";
+import { parseAgentAnswer, splitAgentSuggestions } from "./agent-answer-content";
 import { AgentWorkGroup } from "./agent-work-group";
 import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
@@ -457,6 +459,8 @@ export function AgentPage({
         {current ? (
           <Conversation
             busy={busy}
+            data={data}
+            onSuggestion={status?.enabled ? (message) => void send(message) : undefined}
             draftProject={data.projects.find((project) => current.projectIds?.includes(project.id))}
             draftContext={data.projects.find((project) => current.projectIds?.includes(project.id))?.name ?? current.title}
             session={current}
@@ -646,6 +650,8 @@ export function AgentPage({
 
 function Conversation({
   busy,
+  data,
+  onSuggestion,
   draftContext,
   draftProject,
   editingId,
@@ -656,6 +662,9 @@ function Conversation({
   session,
 }: {
   busy: boolean;
+  data: BootstrapData;
+  /** Sends a follow-up suggestion chip as the next message. */
+  onSuggestion?: (message: string) => void;
   draftContext: string;
   draftProject?: Project;
   editingId?: string;
@@ -675,6 +684,7 @@ function Conversation({
       else viewport.scrollTop = viewport.scrollHeight;
     });
   }, [session.messages.length, session.updatedAt]);
+  const latestAssistantIndex = session.messages.findLastIndex((message) => message.role === "assistant");
   return (
     <div
       ref={scrollRef}
@@ -685,6 +695,9 @@ function Conversation({
       <div className={styles.conversationInner}>
         {session.messages.map((message, index) => {
           const waiting = busy && index === session.messages.length - 1 && message.role === "assistant" && !message.content && !message.parts?.length;
+          const answer: AnswerProps = message.role === "assistant"
+            ? { data, onSuggestion: index === latestAssistantIndex && !busy ? onSuggestion : undefined, streaming: busy && index === session.messages.length - 1 }
+            : {};
           return (
           <Fragment key={message.id}>
             {shouldShowAgentTime(session.messages, index) && (
@@ -700,13 +713,13 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><LoaderCircle className={styles.spin}/><span>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts draftContext={draftContext} draftProject={draftProject} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
-                    : <AgentMessageText content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
+                    ? <AgentMessageParts {...answer} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
+                    : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
               </div>
               <div className={styles.messageActions}>
                 <button
                   aria-label={t("Copy message")}
-                  onClick={() => void navigator.clipboard.writeText(message.content)}
+                  onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? splitAgentSuggestions(message.content).prose : message.content)}
                   type="button"
                 >
                   <Copy />
@@ -729,7 +742,10 @@ function Conversation({
   );
 }
 
-function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy }: { draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+/** Answer chrome for an assistant reply: entity chips need `data`; suggestion chips show only when `onSuggestion` is set. */
+type AnswerProps = { data?: BootstrapData; onSuggestion?: (message: string) => void; streaming?: boolean };
+
+function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy, ...answer }: AnswerProps & { draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n();
   const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
   const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "step" || part.type === "toolCall") ?? [];
@@ -742,16 +758,27 @@ function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToo
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
-    {text && <AgentMessageText content={text} draftContext={draftContext} draftProject={draftProject}/>}
+    {text && <AgentMessageText {...answer} content={text} draftContext={draftContext} draftProject={draftProject}/>}
   </div>;
 }
 
-/** Assistant text with any ```update block shown as Linear's "Created draft" card instead of raw code. */
-function AgentMessageText({ content, draftContext, draftProject }: { content: string; draftContext: string; draftProject?: Project }) {
+/**
+ * Message text with any ```update block shown as Linear's "Created draft" card instead of raw code. Assistant replies
+ * (`data` set) also get Linear's answer chrome: inline entity chips, referenced issues and follow-up suggestions.
+ */
+function AgentMessageText({ content, data, draftContext, draftProject, onSuggestion, streaming = false }: AnswerProps & { content: string; draftContext: string; draftProject?: Project }) {
   const { prose, draft } = splitAgentDraft(content, "update");
-  return <>
+  const answer = useMemo(() => data ? parseAgentAnswer(prose, data) : undefined, [data, prose]);
+  const draftCard = draft && <AgentDraftCard context={draftContext} draft={draft} icon={draftProject ? <span style={{ color: healthColor(draftProject.health), display: "inline-flex" }}><HealthGlyph health={draftProject.health}/></span> : undefined} title="Update draft"/>;
+  if (!answer) return <>
     {prose && <AgentRichText className={styles.messageDocument} content={prose}/>}
-    {draft && <AgentDraftCard context={draftContext} draft={draft} icon={draftProject ? <span style={{ color: healthColor(draftProject.health), display: "inline-flex" }}><HealthGlyph health={draftProject.health}/></span> : undefined} title="Update draft"/>}
+    {draftCard}
+  </>;
+  return <>
+    {answer.markdown && <AgentAnswerText className={styles.messageDocument} data={data} markdown={answer.markdown}/>}
+    {!streaming && <AgentReferencedIssues data={data} issues={answer.referencedIssues}/>}
+    {draftCard}
+    {onSuggestion && <AgentSuggestionChips onSelect={onSuggestion} suggestions={answer.suggestions}/>}
   </>;
 }
 
@@ -790,7 +817,7 @@ function markdown(session: AgentSession) {
   return session.messages
     .map(
       (message) =>
-        `**${message.role === "user" ? "You" : "Flow Agent"}**\n\n${message.content}`,
+        `**${message.role === "user" ? "You" : "Flow Agent"}**\n\n${message.role === "user" ? message.content : splitAgentSuggestions(message.content).prose}`,
     )
     .join("\n\n");
 }

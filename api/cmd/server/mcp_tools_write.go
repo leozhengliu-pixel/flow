@@ -71,6 +71,12 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.resolveMCPDiffThread(ctx, actor, data, args)
 	case "delete_diff_comment":
 		return s.deleteMCPDiffComment(ctx, actor, data, args)
+	case "save_status_update":
+		return s.saveMCPStatusUpdate(ctx, actor, data, args)
+	case "save_draft":
+		return s.saveMCPDraft(ctx, data, args)
+	case "create_reminder":
+		return s.createMCPReminder(ctx, data, args)
 	default:
 		return nil, fmt.Errorf("tool %q is not implemented", name)
 	}
@@ -216,6 +222,17 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 	if err != nil {
 		return nil, err
 	}
+	if instructions := stringArg(args, "delegateInstructions"); instructions != "" {
+		// Instructions travel with a new delegation; an unchanged delegate has no task to receive them.
+		if delegateID == nil || *delegateID == "" || current.Delegate != nil && current.Delegate.ID == *delegateID {
+			return nil, fmt.Errorf("delegateInstructions requires delegating the issue to a new agent with `delegate`")
+		}
+		if len(instructions) > 16<<10 {
+			return nil, fmt.Errorf("delegateInstructions is too long")
+		}
+		ctx = store.WithDelegationInstructions(ctx, instructions)
+	}
+	recurrence, recurrencePresent := nullableStringArg(args, "recurrence")
 	projectID, err := resolveNullableProjectID(data, args, "project")
 	if err != nil {
 		return nil, err
@@ -267,6 +284,9 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			input.SLAType = &value
 		}
 		input.LabelIDs = labelIDs
+		if recurrencePresent && recurrence != "" {
+			input.Recurrence = &recurrence
+		}
 		result, err = invokeJSONHandler(ctx, http.MethodPost, nil, input, s.createIssueRecord)
 	} else {
 		input := domain.IssueUpdateInput{}
@@ -298,6 +318,9 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		}
 		if milestoneID != "" {
 			input.ProjectMilestoneID = &milestoneID
+		}
+		if recurrencePresent {
+			input.Recurrence = &recurrence
 		}
 		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, input, s.updateIssueRecord)
 	}
@@ -398,6 +421,7 @@ func mcpIssueWriteReceipt(issue domain.Issue, workspace string, args map[string]
 	put(hasAnyArg(args, "slaBreachesAt"), "slaBreachesAt", issue.SLABreachesAt)
 	put(hasAnyArg(args, "slaType"), "slaType", issue.SLAType)
 	put(hasAnyArg(args, "estimate"), "estimate", issue.Estimate)
+	put(hasAnyArg(args, "recurrence"), "recurrence", issue.Recurrence)
 	put(hasAnyArg(args, "links"), "attachments", issue.Attachments)
 	put(hasAnyArg(args, "blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf"), "relations", issue.Relations)
 	return receipt

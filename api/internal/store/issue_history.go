@@ -106,3 +106,27 @@ func (s *SQLiteStore) IssueHistoryPage(ctx context.Context, workspace, issue, co
 	}
 	return result, nil
 }
+
+// ResourceActivitiesPage reads one page of a resource's activity events
+// (newest page first, oldest-to-newest within the page) with actors resolved.
+// The caller authorizes the resource before requesting its activity page.
+func (s *SQLiteStore) ResourceActivitiesPage(ctx context.Context, workspace, resource, cursor string, limit int) ([]domain.ActivityEvent, string, error) {
+	items, next, err := readContentPage[domain.ActivityEvent](ctx, s, workspace, resource, "activity", cursor, limit)
+	if err != nil || len(items) == 0 {
+		return items, next, err
+	}
+	ids := make([]string, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.Actor.ID)
+	}
+	refs, err := s.readIssueReferences(ctx, workspace, ids)
+	if err != nil {
+		return items, next, err
+	}
+	for i, item := range items {
+		if user, ok := refs.users[item.Actor.ID]; ok {
+			items[i].Actor = user
+		}
+	}
+	return items, next, nil
+}

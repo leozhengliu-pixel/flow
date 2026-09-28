@@ -1,0 +1,15 @@
+/* Linear agent answer chrome: inline entity chips, referenced issue rows and follow-up suggestion pills. */
+.entityWrap{display:inline}
+a.entityChip{display:inline-flex;align-items:center;gap:4px;max-width:100%;margin:0 1px;padding:0 3px;border-radius:4px;color:var(--text);text-decoration:none;vertical-align:bottom;white-space:nowrap;cursor:pointer}
+a.entityChip:hover,a.entityChip:focus-visible{background:var(--theme-surface-hover);outline:0}
+.entityChip svg{flex:0 0 auto;width:14px;height:14px}
+.entityIdentifier{flex:0 0 auto;color:var(--theme-text-secondary)}
+.entityTitle{min-width:0;overflow:hidden;color:var(--text);text-overflow:ellipsis}
+.references{align-self:stretch;display:flex;flex-direction:column;gap:1px;margin:8px 0 0;padding:0;list-style:none}
+a.referenceRow{height:30px;display:grid;grid-template-columns:14px auto minmax(0,1fr);align-items:center;gap:8px;padding:0 8px;border:.5px solid var(--theme-border);border-radius:6px;color:var(--text);font-size:13px;font-weight:450;text-decoration:none;white-space:nowrap}
+.references li+li a.referenceRow{margin-top:4px}
+a.referenceRow:hover,a.referenceRow:focus-visible{background:var(--theme-surface-hover);outline:0}
+.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.suggestion{height:28px;display:inline-flex;align-items:center;max-width:100%;padding:0 10px;border:.5px solid var(--theme-border);border-radius:9999px;background:transparent;color:var(--text);font:500 12px/16px var(--font);text-align:left;cursor:pointer}
+.suggestion:hover:not(:disabled),.suggestion:focus-visible{background:var(--theme-surface-hover);outline:0}
+.suggestion:disabled{opacity:.5;cursor:default}

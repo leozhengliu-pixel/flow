@@ -3,6 +3,9 @@ import { ArrowUp, Check, Copy, LoaderCircle, ThumbsDown, ThumbsUp, X } from 'luc
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
 import { AgentRichText } from './agent-rich-text'
+import { AgentAnswerText, AgentReferencedIssues, AgentSuggestionChips } from './agent-answer'
+import { parseAgentAnswer } from './agent-answer-content'
+import { useAgentEntityData } from './agent-entity-data'
 import { AgentWorkGroup } from './agent-work-group'
 import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
@@ -26,6 +29,8 @@ export type EntityAgentThreadProps = {
   input: string
   onInputChange: (value: string) => void
   onSubmit: () => void
+  /** Sends a follow-up suggestion chip as the next user message; without it the chip fills the composer. */
+  onSendSuggestion?: (message: string) => void
   onStop?: () => void
   enabled?: boolean
   emptyLabel?: string
@@ -66,6 +71,7 @@ export function EntityAgentThread({
   input,
   onInputChange,
   onSubmit,
+  onSendSuggestion,
   onStop,
   enabled = true,
   emptyLabel,
@@ -120,6 +126,12 @@ export function EntityAgentThread({
 
   const decide = onToolApproval ?? (() => undefined)
   const firstUserIndex = messages.findIndex(message => message.role === 'user')
+  const latestAssistantIndex = messages.findLastIndex(message => message.role === 'assistant')
+  const entityData = useAgentEntityData(mentionData)
+  const sendSuggestion = (suggestion: string) => {
+    if (onSendSuggestion) onSendSuggestion(suggestion)
+    else { onInputChange(suggestion); inputRef.current?.focus() }
+  }
   const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
   const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'toolCall')
   const composerPlaceholder = messages.length && enabled
@@ -163,7 +175,9 @@ export function EntityAgentThread({
           const work = isUser ? [] : (message.parts ?? []).filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
           const streaming = loading && index === messages.length - 1
           const extraActions = renderMessageActions?.(message, index)
-          const showFeedback = !isUser && Boolean(message.content.trim()) && !streaming
+          const answer = isUser ? undefined : parseAgentAnswer(message.content, entityData)
+          const showFeedback = !isUser && Boolean(answer?.prose.trim()) && !streaming
+          const suggestions = answer && index === latestAssistantIndex && !loading ? answer.suggestions : []
           return (
             <Fragment key={message.id || `${message.role}-${index}`}>
               {time && <time className={styles.messageTime} dateTime={message.createdAt}>{time}</time>}
@@ -200,14 +214,23 @@ export function EntityAgentThread({
                 )}
                 {message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
                   <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
+                ) : answer ? answer.markdown && (
+                  <AgentAnswerText
+                    ariaLabel={t('AI message')}
+                    className={styles.messageDocument}
+                    data={entityData}
+                    markdown={answer.markdown}
+                  />
                 ) : message.content && (
                   <AgentRichText
-                    ariaLabel={isUser ? t('Your message') : t('AI message')}
+                    ariaLabel={t('Your message')}
                     className={styles.messageDocument}
                     content={message.content}
                   />
                 )}
+                {answer && !streaming && <AgentReferencedIssues data={entityData} issues={answer.referencedIssues} />}
                 {!isUser && !streaming && renderMessageAttachment?.(message, index)}
+                <AgentSuggestionChips disabled={!enabled || composerDisabled} onSelect={sendSuggestion} suggestions={suggestions} />
                 {isUser && index === firstUserIndex && addedContext.length > 0 && (
                   <div className={styles.addedContext}>
                     {addedContext.map(item => (
@@ -221,7 +244,7 @@ export function EntityAgentThread({
                 )}
                 {(showFeedback || extraActions) && (
                   <div className={styles.messageActions}>
-                    {showFeedback && <MessageFeedback content={message.content} />}
+                    {showFeedback && <MessageFeedback content={answer?.prose ?? message.content} />}
                     {extraActions}
                   </div>
                 )}

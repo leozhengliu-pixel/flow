@@ -112,6 +112,9 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		{"list_diffs", nil}, {"get_diff", map[string]any{"urlOrId": review}}, {"get_diff_threads", map[string]any{"urlOrId": review}},
 		{"extract_images", map[string]any{"markdown": "![image](https://example.test/image.png)"}},
 		{"list_agent_skills", nil}, {"get_agent_skill", map[string]any{"id": "flow-workspace-guidance"}}, {"search_documentation", map[string]any{"query": "issues"}},
+		{"get_issue", map[string]any{"id": f.data.Issues[0].Identifier}}, {"list_issue_history", map[string]any{"issueId": issue}},
+		{"list_project_activity", map[string]any{"project": project}}, {"search_issues", map[string]any{"queries": []string{"test", "data migration"}}},
+		{"list_notifications", map[string]any{"unreadOnly": true}}, {"list_views", nil}, {"list_templates", nil}, {"list_customers", map[string]any{"includeRequests": true}},
 	} {
 		call(scenario.name, scenario.args)
 	}
@@ -123,6 +126,9 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	initiative := object("save_initiative", map[string]any{"name": "SDK initiative", "leadTeam": team})
 	call("get_initiative", map[string]any{"query": initiative["id"]})
 	call("save_milestone", map[string]any{"project": project, "name": "SDK milestone"})
+	call("save_status_update", map[string]any{"type": "project", "project": project, "body": "SDK update", "health": "atRisk"})
+	call("save_draft", map[string]any{"title": "SDK draft", "body": "Draft body", "team": team})
+	call("create_reminder", map[string]any{"issue": issue, "remindAt": "P1D"})
 	call("save_release", map[string]any{"name": "SDK release", "pipeline": "contract-pipeline"})
 	comment := object("save_comment", map[string]any{"issueId": issue, "body": "SDK comment"})
 	call("save_comment", map[string]any{"id": comment["id"], "body": "Edited comment"})

@@ -12,6 +12,15 @@ import (
 	"flow/api/internal/domain"
 )
 
+type delegationInstructionsKey struct{}
+
+// WithDelegationInstructions attaches instructions for an agent that the
+// mutation in ctx delegates an issue to. They become part of the task prompt
+// created in the same commit as the delegation.
+func WithDelegationInstructions(ctx context.Context, instructions string) context.Context {
+	return context.WithValue(ctx, delegationInstructionsKey{}, strings.TrimSpace(instructions))
+}
+
 // The task and issue update share a commit: an accepted delegation cannot lose
 // its execution request when a process exits before sending a webhook.
 func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue domain.Issue, previous []byte) error {
@@ -45,6 +54,9 @@ func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue
 		actor = issue.Creator
 	}
 	task := domain.AgentTask{ID: issue.AgentSessionID, WorkspaceKey: workspace, IssueID: issue.ID, TeamID: issue.Team.ID, AppUserID: issue.Delegate.ID, CreatorID: actor.ID, Status: "pending", Trigger: "delegation", Prompt: issue.Title, Version: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	if instructions, _ := ctx.Value(delegationInstructionsKey{}).(string); instructions != "" {
+		task.Prompt = issue.Title + "\n\n" + instructions
+	}
 	raw, err := json.Marshal(task)
 	if err != nil {
 		return err

@@ -21,7 +21,7 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 	if err != nil {
 		return nil, err
 	}
-	if name != "list_issues" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release") {
+	if name != "list_issues" && name != "search_issues" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release" || name == "create_reminder") {
 		if err := s.hydrateMCPIssueArguments(ctx, actor, &data, args); err != nil {
 			return nil, err
 		}
@@ -258,6 +258,22 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 		return nil, fmt.Errorf("agent skill not found")
 	case "search_documentation":
 		return searchFlowDocumentation(stringArg(args, "query"), intArg(args, "page", 1)), nil
+	case "get_issue":
+		return s.getMCPIssue(ctx, actor, data, args)
+	case "list_issue_history":
+		return s.listMCPIssueHistory(ctx, data, args)
+	case "list_project_activity":
+		return s.listMCPProjectActivity(ctx, data, args)
+	case "search_issues":
+		return s.searchMCPIssues(ctx, actor, data, args)
+	case "list_notifications":
+		return s.listMCPNotifications(ctx, actor, data, args)
+	case "list_views":
+		return listMCPViews(data, args)
+	case "list_templates":
+		return listMCPTemplates(data, args)
+	case "list_customers":
+		return s.listMCPCustomers(ctx, actor, data, args)
 	default:
 		return s.callFlowWriteTool(ctx, actor, data, name, args)
 	}

@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap } from '@/test/fixtures'
+import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
@@ -158,5 +158,26 @@ describe('agent page composer', () => {
     expect(screen.getByRole('list')).toBeVisible()
     expect(screen.getByText('Build').tagName).toBe('STRONG')
     expect(screen.getByText('Verify').tagName).toBe('CODE')
+  })
+  it('renders Linear answer chrome and sends a suggestion chip as the next message', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    streams.streamAgentSessionMessage.mockResolvedValue(undefined)
+    const session: AgentSession = {
+      id: 'session-chrome', slugId: 'chrome', userId: 'user-1', title: 'Chrome', favorite: false, location: 'page', issueIds: [], skillIds: [],
+      messages: [
+        { id: 'user', role: 'user', content: 'TST-1?', createdAt: '2026-08-31T00:00:00Z' },
+        { id: 'assistant', role: 'assistant', content: 'Look at TST-1 and TST-2.\n\n```suggestions\nCompare TST-1 and TST-2\n```', createdAt: '2026-08-31T00:00:01Z' },
+      ],
+      createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:01Z',
+    }
+    const data = makeBootstrap({ agentSessions: [session], agentSkills: [], issues: [makeIssue(), makeIssue({ id: 'issue-2', identifier: 'TST-2', number: 2, title: 'Second issue' })] })
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentPage chatSlug="chrome" data={data} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    await waitFor(() => expect(document.querySelectorAll('a[data-agent-entity="issue"]')).toHaveLength(2))
+    expect(screen.getByText('TST-1?')).toBeVisible()
+    expect(within(screen.getByRole('list', { name: 'Referenced issues' })).getAllByRole('link')).toHaveLength(2)
+    const chip = await screen.findByRole('button', { name: 'Compare TST-1 and TST-2' })
+    await user.click(chip)
+    expect(streams.streamAgentSessionMessage).toHaveBeenCalledWith('session-chrome', 'Compare TST-1 and TST-2', expect.any(Function), expect.any(AbortSignal), expect.anything())
   })
 })

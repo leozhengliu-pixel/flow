@@ -55,6 +55,12 @@ function toolStatusLabel(name: string, running: boolean) {
     list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
     search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: ["Updating issue…", "Updated issue"],
     save_project: ["Updating project…", "Updated project"], save_initiative: ["Updating initiative…", "Updated initiative"],
+    get_issue: ["Looking at issue…", "Looked at issue"], list_issue_history: ["Looking at issue activity…", "Looked at issue activity"],
+    list_project_activity: ["Looking at project activity…", "Looked at project activity"], get_status_updates: ["Looking at project updates…", "Looked at project updates"],
+    search_issues: ["Searching issues…", "Searched issues"], list_notifications: ["Reviewing inbox…", "Reviewed inbox"],
+    list_users: ["Looking at users…", "Looked at users"], list_views: ["Looking at views…", "Looked at views"],
+    list_templates: ["Looking at templates…", "Looked at templates"], list_customers: ["Looking at customers…", "Looked at customers"],
+    save_status_update: ["Creating project update…", "Created project update"], save_draft: ["Creating draft…", "Created draft"],
   };
   if (labels[name]) return labels[name][running ? 0 : 1];
   const [verb, ...words] = name.split("_");
@@ -80,7 +86,12 @@ function readableToolDetail(value: Record<string, unknown> | undefined, result?:
     }
   }
   if (!value) return "";
-  for (const key of ["query", "name", "id", "issueId", "projectId"]) {
+  // Linear lists every phrasing of a multi-query search: "import data", "data migration".
+  if (Array.isArray(value.queries)) {
+    const queries = value.queries.filter((item): item is string => typeof item === "string" && item.trim() !== "");
+    if (queries.length) return queries.map(item => `"${item}"`).join(", ");
+  }
+  for (const key of ["query", "name", "id", "issueId", "projectId", "project", "issue", "team"]) {
     const item = value[key];
     if (typeof item === "string" && item && !internalId.test(item)) return item;
   }
