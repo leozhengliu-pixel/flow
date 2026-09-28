@@ -11,12 +11,16 @@ const dedicated = new Set([
   // Mentions are an inline editor interaction with caret-relative positioning,
   // so they cannot share the property picker trigger semantics.
   'issue/editor/mention-menu.tsx',
+  // The agent composer's @-mention menu is the same inline, caret-driven interaction.
+  'agent/agent-mention-input.tsx',
   // Account security's team scope combobox owns filtering and multi-select
   // semantics rather than using an issue property picker.
   'settings/personal-settings.tsx',
   // Project labels render selected groups as actions, not selected leaf rows.
   // This is the shared hierarchical content used inside PropertyMenu and context menus.
   'property/project-label-menu-content.tsx',
+  // Universal advanced filter panel owns its own catalog listbox contract.
+  'filter/universal-custom-filter-panel.tsx',
 ])
 
 const files = await collect(root)

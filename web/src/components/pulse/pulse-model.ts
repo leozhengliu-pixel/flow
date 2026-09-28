@@ -1,7 +1,7 @@
 import type { BootstrapData, InitiativeUpdate, ProjectUpdate, SavedView } from '@/types/flow'
 import type { PulseRouteView } from '@/lib/app-routes'
 
-export type PulseFilterField = 'author'|'team'|'createdDate'|'updateType'|'health'|'initiative'|'project'|'projectMember'|'projectStatus'|'projectLabel'
+export type PulseFilterField = 'author'|'team'|'createdDate'|'updateType'|'health'|'initiative'|'project'|'projectMember'|'projectStatus'|'projectStatusType'|'projectLabel'
 export type PulseFilterOperator = 'is'|'isNot'
 export type PulseFilter = { id: string; field: PulseFilterField; operator: PulseFilterOperator; values: string[] }
 export type PulseFilterMatch = 'all'|'any'
@@ -11,7 +11,7 @@ export type PulseUpdateItem =
   | { id: string; kind: 'initiative'; initiative: BootstrapData['initiatives'][number]; update: InitiativeUpdate; createdAt: string; score: number }
 
 export const pulseFilterLabels: Record<PulseFilterField,string> = {
-  author:'Author', team:'Team', createdDate:'Created date', updateType:'Update type', health:'Update health', initiative:'Initiative', project:'Project', projectMember:'Project members', projectStatus:'Project status', projectLabel:'Project labels',
+  author:'Author', team:'Team', createdDate:'Created date', updateType:'Update type', health:'Update health', initiative:'Initiative', project:'Project', projectMember:'Project members', projectStatus:'Project status', projectStatusType:'Project status type', projectLabel:'Project labels',
 }
 
 export function buildPulseFeed(data: BootstrapData, view: PulseRouteView, config: PulseViewConfig = { filters: [], match: 'all' }) {
@@ -50,13 +50,36 @@ export function filterValues(data: BootstrapData, field: PulseFilterField) {
     case 'author': return data.users.map(user => ({ id:user.id, label:user.displayName || user.name }))
     case 'team': return data.teams.map(team => ({ id:team.id, label:team.name }))
     case 'createdDate': return [{id:'past-day',label:'Past 24 hours'},{id:'past-week',label:'Past week'},{id:'past-month',label:'Past month'},{id:'past-quarter',label:'Past 3 months'}]
-    case 'updateType': return [{id:'project',label:'Project update'},{id:'initiative',label:'Initiative update'}]
+    case 'updateType': {
+      const values = [{id:'project',label:'Project update'},{id:'initiative',label:'Initiative update'}]
+      if (feedPostUpdateEnabled(data)) values.push({id:'team',label:'Team update'})
+      return values
+    }
     case 'health': return [{id:'onTrack',label:'On track'},{id:'atRisk',label:'At risk'},{id:'offTrack',label:'Off track'},{id:'noUpdate',label:'No update'}]
     case 'initiative': return data.initiatives.map(item => ({ id:item.id, label:item.name }))
     case 'project': return data.projects.map(item => ({ id:item.id, label:item.name }))
     case 'projectMember': return data.users.map(user => ({ id:user.id, label:user.displayName || user.name }))
     case 'projectStatus': return data.projectStatuses.map(item => ({ id:item.id, label:item.name }))
+    case 'projectStatusType': return unique(data.projectStatuses.map(item => item.type)).map(type => ({ id:type, label:statusTypeLabel(type) }))
     case 'projectLabel': return data.labels.filter(label => label.resourceType === 'project').map(label => ({ id:label.id, label:label.name }))
+  }
+}
+
+/** LS-0266 — team update type option is feature-flag gated (`feedPostUpdate`). */
+export function feedPostUpdateEnabled(data: BootstrapData) {
+  const flags = data.workspaceSettings?.featureFlags ?? {}
+  return flags.feedPostUpdate === true || flags['feed-post-update'] === true
+}
+
+function statusTypeLabel(type: string) {
+  switch (type) {
+    case 'backlog': return 'Backlog'
+    case 'planned': return 'Planned'
+    case 'started': return 'Started'
+    case 'paused': return 'Paused'
+    case 'completed': return 'Completed'
+    case 'canceled': return 'Canceled'
+    default: return type[0]?.toUpperCase() + type.slice(1)
   }
 }
 
@@ -82,6 +105,7 @@ function itemValues(data: BootstrapData, item: PulseUpdateItem, field: PulseFilt
     case 'project': return item.kind === 'project' ? [item.project.id] : item.initiative.projectIds
     case 'projectMember': return item.kind === 'project' ? unique([item.project.lead?.id ?? '', ...item.project.memberIds]) : unique(item.initiative.projectIds.flatMap(id => { const project=data.projects.find(item=>item.id===id);return project?[project.lead?.id??'',...project.memberIds]:[] }))
     case 'projectStatus': return item.kind === 'project' ? [item.project.status.id] : unique(item.initiative.projectIds.map(id => data.projects.find(project => project.id === id)?.status.id ?? ''))
+    case 'projectStatusType': return item.kind === 'project' ? [item.project.status.type] : unique(item.initiative.projectIds.map(id => data.projects.find(project => project.id === id)?.status.type ?? ''))
     case 'projectLabel': return item.kind === 'project' ? item.project.labelIds : unique(item.initiative.projectIds.flatMap(id => data.projects.find(project => project.id === id)?.labelIds ?? []))
   }
 }

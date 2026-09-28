@@ -8,14 +8,14 @@ import type {
 } from "@/types/flow";
 
 export type MyIssuesRouteView =
-  "assigned" | "created" | "subscribed" | "activity";
+  "assigned" | "created" | "subscribed" | "activity" | "shared";
 export type ProjectRouteTab = "overview" | "activity" | "issues" | "new";
 export type TeamIssuesRouteView = "active" | "backlog" | "all";
 export type ViewsResource = "issues" | "projects";
 export type InitiativesRouteView = "active" | "planned" | "all";
 export type InitiativeRouteTab =
   "overview" | "activity" | "projects" | "new" | "view";
-export type ReleasePipelineTab = "releases" | "changelog" | "archive";
+export type ReleasePipelineTab = "releases" | "changelog" | "archive" | "deleted";
 export type ReleaseRouteTab = "issues" | "release-notes";
 export type PulseRouteView = "following" | "popular" | "all";
 export type ReviewRouteTab = "overview" | "review" | "changes";
@@ -23,6 +23,7 @@ export type InboxRouteTab = "priority" | "other";
 export type WorkspaceSecondaryRouteKind =
   | "diary"
   | "meeting"
+  | "meetings"
   | "automations"
   | "automation-new"
   | "automation-detail"
@@ -42,9 +43,13 @@ export type TeamArchiveTab =
   | "recently-deleted"
   | "recently-deleted-projects"
   | "recently-deleted-initiatives"
-  | "recently-deleted-documents";
+  | "recently-deleted-documents"
+  | "recently-deleted-releases";
+/** Sub-pages of account notification settings. */
+export type NotificationSettingsView = "desktop" | "mobile" | "email" | "slack" | "priority-filter";
 export type SettingsPageId =
   | "preferences"
+  | "shortcuts"
   | "profile"
   | "notifications"
   | "code-and-reviews"
@@ -59,6 +64,9 @@ export type SettingsPageId =
   | "project-statuses"
   | "project-updates"
   | "ai"
+  | "loops"
+  | "coding-sessions"
+  | "coding-environments"
   | "initiatives"
   | "initiative-labels"
   | "documents"
@@ -72,6 +80,7 @@ export type SettingsPageId =
   | "teams"
   | "members"
   | "security"
+  | "authentication"
   | "audit-log"
   | "api"
   | "applications"
@@ -85,13 +94,16 @@ export type TeamSettingsSection =
   | "members"
   | "notifications"
   | "issue-labels"
+  | "project-labels"
   | "templates"
   | "recurring-issues"
   | "statuses"
+  | "project-statuses"
   | "workflow"
   | "triage"
   | "cycles"
   | "agents"
+  | "agent-connectors"
   | "agent-skills"
   | "default-favorites"
   | "ai-updates"
@@ -104,6 +116,8 @@ export type AppRoute =
   | { kind: "inbox"; workspaceSlug: string; tab?: InboxRouteTab }
   | { kind: "search"; workspaceSlug: string }
   | { kind: "diary"; workspaceSlug: string }
+  | { kind: "welcome"; workspaceSlug: string }
+  | { kind: "meetings"; workspaceSlug: string }
   | { kind: "meeting"; workspaceSlug: string; meetingId: string }
   | { kind: "automations"; workspaceSlug: string }
   | { kind: "automation-new"; workspaceSlug: string }
@@ -250,7 +264,7 @@ export type AppRoute =
       kind: "settings";
       workspaceSlug: string;
       page: SettingsPageId;
-      notificationChannel?: 'desktop' | 'mobile' | 'email' | 'slack';
+      notificationChannel?: NotificationSettingsView;
       /** Nested personal-security flows (for example API-key creation/detail). */
       apiKeyMode?: "new" | "detail" | "edit";
       /** Dedicated commit-signing-key upload flow. */
@@ -267,6 +281,29 @@ export type AppRoute =
       releasePipelineMode?: "new" | "edit";
       releasePipelineSlug?: string;
       integrationProvider?: IntegrationProvider;
+      /** Catalog slug or "enabled" for /settings/integrations/:slug (LS-0338 / LS-0248). */
+      integrationSlug?: string;
+      /** Jira sync wizard (`/settings/integrations/jira/sync/new|:id/edit`). */
+      jiraSyncMode?: "new" | "edit";
+      jiraProjectId?: string;
+      /** Asks Slack deep settings (`/settings/asks/:integrationId`). */
+      asksIntegrationId?: string;
+      /** Asks email intake wizard (`/settings/asks/email-intake/new`). */
+      asksEmailIntakeMode?: "new";
+      asksEmailIntakeId?: string;
+      identityProviderId?: string;
+      applicationId?: string;
+      applicationMode?: "detail" | "edit";
+      /** Team sub-page, e.g. `templates/issue/new`. */
+      teamSubPath?: string;
+      /** `/settings/workspace/welcome-message`. */
+      workspaceView?: "welcome-message";
+      /** Nested personal settings view, e.g. coding tools under Code & reviews. */
+      accountView?: "coding-tools";
+      /** `/settings/api/keys`: every API key issued in the workspace. */
+      apiView?: "keys";
+      /** `/settings/api/webhooks/:id` ("new" for a new webhook). */
+      webhookId?: string;
     }
   | {
       kind: "team-views";
@@ -331,6 +368,7 @@ const MY_ISSUES_VIEWS = new Set<MyIssuesRouteView>([
   "created",
   "subscribed",
   "activity",
+  "shared",
 ]);
 const PROJECT_TABS = new Set<ProjectRouteTab>([
   "overview",
@@ -356,7 +394,24 @@ const TEAM_ARCHIVE_TABS = new Set<TeamArchiveTab>([
   "recently-deleted-projects",
   "recently-deleted-initiatives",
   "recently-deleted-documents",
+  "recently-deleted-releases",
 ]);
+
+/**
+ * Settings URLs that the reference app uses for pages Flow keeps elsewhere.
+ * Returns the canonical settings segments, or undefined when no alias applies.
+ */
+function settingsAlias(rest: string[]): string[] | undefined {
+  const [first, second, third] = rest;
+  if (first === "ai" && second === "coding-sessions")
+    return third === "environments" ? ["coding-environments"] : rest.length === 2 ? ["coding-sessions"] : undefined;
+  if (first === "skill" && second && second !== "new" && third === "edit" && rest.length === 3)
+    return ["skill", second];
+  if (first === "labels" && rest.length === 1) return ["issue-labels"];
+  if (first === "teams" && second && third === "labels" && rest.length === 3)
+    return ["teams", second, "issue-labels"];
+  return undefined;
+}
 
 export function parseAppRoute(pathname: string, search = ""): AppRoute {
   const segments = pathname
@@ -370,6 +425,28 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "workspace-onboarding" };
   const [workspaceSlug, section, third, fourth, fifth, sixth] = segments;
   if (!section) return { kind: "workspace-root", workspaceSlug };
+  if (section === "settings") {
+    const alias = settingsAlias(segments.slice(2));
+    if (alias)
+      return parseAppRoute(
+        `/${[workspaceSlug, "settings", ...alias].map(encode).join("/")}`,
+        search,
+      );
+  }
+  if (section === "settings" && third === "account" && fourth === "code-and-reviews" && fifth === "coding-tools" && segments.length === 5)
+    return { kind: "settings", workspaceSlug, page: "code-and-reviews", accountView: "coding-tools" };
+  if (section === "settings" && third === "workspace" && fourth === "welcome-message" && segments.length === 4)
+    return { kind: "settings", workspaceSlug, page: "workspace", workspaceView: "welcome-message" };
+  if (section === "settings" && third === "api" && fourth === "keys" && segments.length === 4)
+    return { kind: "settings", workspaceSlug, page: "api", apiView: "keys" };
+  if (
+    section === "settings" &&
+    third === "api" &&
+    fourth === "webhooks" &&
+    fifth &&
+    (segments.length === 5 || (segments.length === 6 && sixth === "edit" && fifth !== "new"))
+  )
+    return { kind: "settings", workspaceSlug, page: "api", webhookId: fifth };
   if (section === "inbox" && segments.length === 2)
     return { kind: "inbox", workspaceSlug };
   if (section === "inbox" && (third === "priority" || third === "other") && segments.length === 3)
@@ -378,6 +455,10 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     return { kind: "search", workspaceSlug };
   if (section === "diary" && segments.length === 2)
     return { kind: "diary", workspaceSlug };
+  if (section === "welcome" && segments.length === 2)
+    return { kind: "welcome", workspaceSlug };
+  if (section === "meetings" && segments.length === 2)
+    return { kind: "meetings", workspaceSlug };
   if (section === "meeting" && third && segments.length === 3)
     return { kind: "meeting", workspaceSlug, meetingId: third };
   if (section === "automations" && segments.length === 2)
@@ -554,6 +635,19 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "pipeline" &&
     third &&
+    fourth === "releases" &&
+    fifth === "deleted" &&
+    segments.length === 5
+  )
+    return {
+      kind: "release-pipeline",
+      workspaceSlug,
+      pipelineSlug: third,
+      tab: "deleted",
+    };
+  if (
+    section === "pipeline" &&
+    third &&
     fourth === "release" &&
     fifth &&
     (sixth === "issues" || sixth === "release-notes") &&
@@ -648,8 +742,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 4
   )
     return { kind: "settings", workspaceSlug, page: "account-security" };
-  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack'].includes(fifth) && segments.length === 5)
-    return {kind:'settings',workspaceSlug,page:'notifications',notificationChannel:fifth as 'desktop'|'mobile'|'email'|'slack'};
+  if (section === 'settings' && third === 'account' && fourth === 'notifications' && ['desktop','mobile','email','slack','priority-filter'].includes(fifth) && segments.length === 5)
+    return {kind:'settings',workspaceSlug,page:'notifications',notificationChannel:fifth as NotificationSettingsView};
   if (
     section === "settings" &&
     third === "account" &&
@@ -785,15 +879,67 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
   if (
     section === "settings" &&
     third === "integrations" &&
-    INTEGRATION_PROVIDERS.includes(fourth as IntegrationProvider) &&
+    fourth === "jira" &&
+    fifth === "sync" &&
+    sixth === "new" &&
+    segments.length === 6
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "integrations",
+      integrationProvider: "jira",
+      integrationSlug: "jira",
+      jiraSyncMode: "new",
+    };
+  if (
+    section === "settings" &&
+    third === "integrations" &&
+    fourth === "jira" &&
+    fifth === "sync" &&
+    sixth &&
+    segments[6] === "edit" &&
+    segments.length === 7
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "integrations",
+      integrationProvider: "jira",
+      integrationSlug: "jira",
+      jiraSyncMode: "edit",
+      jiraProjectId: decodeURIComponent(sixth),
+    };
+  if (
+    section === "settings" &&
+    third === "integrations" &&
+    fourth === "enabled" &&
     segments.length === 4
   )
     return {
       kind: "settings",
       workspaceSlug,
       page: "integrations",
-      integrationProvider: fourth as IntegrationProvider,
+      integrationSlug: "enabled",
     };
+  if (
+    section === "settings" &&
+    third === "integrations" &&
+    fourth &&
+    segments.length === 4
+  ) {
+    const slug = fourth;
+    const provider = INTEGRATION_PROVIDERS.includes(slug as IntegrationProvider)
+      ? (slug as IntegrationProvider)
+      : undefined;
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "integrations",
+      integrationSlug: slug,
+      integrationProvider: provider,
+    };
+  }
   if (
     section === "settings" &&
     third === "teams" &&
@@ -809,6 +955,26 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       teamKey: fourth,
       teamSection: `ai-${sixth}` as TeamSettingsSection,
     };
+  if (section === "settings" && third === "teams" && fourth && ["retire", "set-parent", "change-parent", "remove-parent"].includes(fifth) && segments.length === 5)
+    return { kind: "settings", workspaceSlug, page: "team", teamKey: fourth, teamSection: "overview", teamSubPath: fifth };
+  if (section === "settings" && third === "teams" && fourth && fifth === "triage" && sixth === "memories" && segments.length === 6)
+    return { kind: "settings", workspaceSlug, page: "team", teamKey: fourth, teamSection: "triage" };
+  if (
+    section === "settings" &&
+    third === "teams" &&
+    fourth &&
+    (fifth === "templates" || fifth === "recurring-issues") &&
+    segments.length > 5 &&
+    segments.length <= 8
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "team",
+      teamKey: fourth,
+      teamSection: fifth,
+      teamSubPath: segments.slice(5).join("/"),
+    };
   if (
     section === "settings" &&
     third === "teams" &&
@@ -822,6 +988,76 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       page: "team",
       teamKey: fourth,
       teamSection: (fifth as TeamSettingsSection) || "overview",
+    };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth === "email-intake" &&
+    fifth === "new" &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksEmailIntakeMode: "new",
+    };
+  if (section === "settings" && third === "asks" && fourth === "email-intake" && fifth && fifth !== "new" && (segments.length === 5 || (segments.length === 6 && segments[5] === "edit")))
+    return { kind: "settings", workspaceSlug, page: "asks", asksEmailIntakeId: decodeURIComponent(fifth) };
+  // Web forms are not supported; their links land on the Asks page.
+  if (section === "settings" && third === "asks" && fourth === "web-forms")
+    return { kind: "settings", workspaceSlug, page: "asks" };
+  if (
+    section === "settings" &&
+    third === "asks" &&
+    fourth &&
+    fourth !== "email-intake" &&
+    segments.length === 4
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "asks",
+      asksIntegrationId: decodeURIComponent(fourth),
+    };
+  if (
+    section === "settings" &&
+    third === "identity-providers" &&
+    fourth &&
+    segments.length === 4
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "security",
+      identityProviderId: fourth,
+    };
+  if (
+    section === "settings" &&
+    third === "applications" &&
+    fourth &&
+    fifth === "edit" &&
+    segments.length === 5
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "applications",
+      applicationId: fourth,
+      applicationMode: "edit",
+    };
+  if (
+    section === "settings" &&
+    third === "applications" &&
+    fourth &&
+    segments.length === 4
+  )
+    return {
+      kind: "settings",
+      workspaceSlug,
+      page: "applications",
+      applicationId: fourth,
+      applicationMode: "detail",
     };
   if (
     section === "settings" &&
@@ -1307,6 +1543,12 @@ export function searchPath(workspaceSlug: string) {
 export function diaryPath(workspaceSlug: string) {
   return `${workspaceRootPath(workspaceSlug)}/diary`;
 }
+export function welcomePath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/welcome`;
+}
+export function meetingsPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/meetings`;
+}
 export function meetingPath(workspaceSlug: string, meetingId: string) {
   return `${workspaceRootPath(workspaceSlug)}/meeting/${encode(meetingId)}`;
 }
@@ -1472,7 +1714,13 @@ export function releasePipelinePath(
   pipelineSlug: string,
   tab: ReleasePipelineTab = "releases",
 ) {
-  return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(pipelineSlug)}/${tab === "archive" ? "releases/archived" : tab}`;
+  const leaf =
+    tab === "archive"
+      ? "releases/archived"
+      : tab === "deleted"
+        ? "releases/deleted"
+        : tab;
+  return `${workspaceRootPath(workspaceSlug)}/pipeline/${encode(pipelineSlug)}/${leaf}`;
 }
 export function releasePath(
   workspaceSlug: string,
@@ -1515,6 +1763,7 @@ export function newTeamPath(workspaceSlug: string) {
 }
 const ACCOUNT_SETTINGS = new Set<SettingsPageId>([
   "preferences",
+  "shortcuts",
   "profile",
   "notifications",
   "code-and-reviews",
@@ -1531,6 +1780,9 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "project-statuses",
   "project-updates",
   "ai",
+  "loops",
+  "coding-sessions",
+  "coding-environments",
   "initiatives",
   "initiative-labels",
   "documents",
@@ -1544,6 +1796,7 @@ const SETTINGS_PAGES = new Set<SettingsPageId>([
   "teams",
   "members",
   "security",
+  "authentication",
   "audit-log",
   "api",
   "applications",
@@ -1557,31 +1810,45 @@ const TEAM_SETTINGS_SECTIONS = new Set<TeamSettingsSection>([
   "members",
   "notifications",
   "issue-labels",
+  "project-labels",
   "templates",
   "recurring-issues",
   "statuses",
+  "project-statuses",
   "workflow",
   "triage",
   "cycles",
   "agents",
+  "agent-connectors",
   "agent-skills",
   "default-favorites",
 ]);
+export function apiKeysSettingsPath(workspaceSlug: string) {
+  return `${settingsPath(workspaceSlug, "api")}/keys`;
+}
+export function webhookSettingsPath(workspaceSlug: string, webhookId: string) {
+  return `${settingsPath(workspaceSlug, "api")}/webhooks/${encode(webhookId)}`;
+}
 export function settingsPath(
   workspaceSlug: string,
   page: SettingsPageId,
   teamKey?: string,
   teamSection?: TeamSettingsSection,
+  /** Sub-page within a team section, e.g. "issue/new" under templates. */
+  teamSubPath?: string,
 ) {
   const root = `${workspaceRootPath(workspaceSlug)}/settings`;
+  if (page === "coding-sessions") return `${root}/ai/coding-sessions`;
+  if (page === "coding-environments") return `${root}/ai/coding-sessions/environments`;
   if (page === "team" && teamKey) {
     if (!teamSection || teamSection === "overview")
-      return `${root}/teams/${encode(teamKey)}`;
+      return `${root}/teams/${encode(teamKey)}${teamSubPath ? `/${encode(teamSubPath)}` : ""}`;
     if (teamSection === "ai-updates")
       return `${root}/teams/${encode(teamKey)}/ai/updates`;
     if (teamSection === "ai-summaries")
       return `${root}/teams/${encode(teamKey)}/ai/summaries`;
-    return `${root}/teams/${encode(teamKey)}/${teamSection}`;
+    const sub = teamSubPath ? `/${teamSubPath.split("/").map(encode).join("/")}` : "";
+    return `${root}/teams/${encode(teamKey)}/${teamSection}${sub}`;
   }
   if (page === "account-security") return `${root}/account/security`;
   return ACCOUNT_SETTINGS.has(page)
@@ -1620,11 +1887,51 @@ export function projectTemplateEditPath(
 ) {
   return `${workspaceRootPath(workspaceSlug)}/settings/templates/project/${encode(templateId)}/edit`;
 }
+
+export function identityProviderSettingsPath(
+  workspaceSlug: string,
+  providerId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/identity-providers/${encode(providerId)}`;
+}
+
+export function applicationSettingsPath(
+  workspaceSlug: string,
+  applicationId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/applications/${encode(applicationId)}`;
+}
+
+export function applicationEditPath(
+  workspaceSlug: string,
+  applicationId: string,
+) {
+  return `${applicationSettingsPath(workspaceSlug, applicationId)}/edit`;
+}
+
 export function integrationSettingsPath(
   workspaceSlug: string,
-  provider: IntegrationProvider,
+  providerOrSlug: IntegrationProvider | string,
 ) {
-  return `${workspaceRootPath(workspaceSlug)}/settings/integrations/${provider}`;
+  return `${workspaceRootPath(workspaceSlug)}/settings/integrations/${providerOrSlug}`;
+}
+export function enabledIntegrationsSettingsPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/integrations/enabled`;
+}
+export function jiraSyncNewPath(workspaceSlug: string) {
+  return `${integrationSettingsPath(workspaceSlug, "jira")}/sync/new`;
+}
+export function jiraSyncEditPath(workspaceSlug: string, jiraProjectId: string) {
+  return `${integrationSettingsPath(workspaceSlug, "jira")}/sync/${encode(jiraProjectId)}/edit`;
+}
+export function asksSlackSettingsPath(
+  workspaceSlug: string,
+  integrationId: string,
+) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/asks/${encode(integrationId)}`;
+}
+export function newAsksEmailIntakePath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/asks/email-intake/new`;
 }
 export function workspaceSavedViewPath(workspaceSlug: string, viewId: string) {
   return `${workspaceRootPath(workspaceSlug)}/view/${encode(viewId)}`;
@@ -1831,5 +2138,5 @@ function slug(value: string) {
       .slice(0, 80) || "issue"
   );
 }
-export type IntegrationProvider = 'github'|'gitlab';
-const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab'];
+export type IntegrationProvider = 'github'|'gitlab'|'jira';
+const INTEGRATION_PROVIDERS:IntegrationProvider[]=['github','gitlab','jira'];

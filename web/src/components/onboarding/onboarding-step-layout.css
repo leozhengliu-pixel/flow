@@ -1,0 +1,205 @@
+.onboarding-step-layout {
+  box-sizing: border-box;
+  width: min(420px, calc(100% - 48px));
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.onboarding-step-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.onboarding-step-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #ffffff12;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.onboarding-step-title {
+  margin: 0;
+  color: #fff;
+  font-size: 21px;
+  line-height: 28px;
+  font-weight: 550;
+}
+
+.onboarding-step-description {
+  margin: 0;
+  color: #ffffff78;
+  font-size: 15px;
+  line-height: 22px;
+  max-width: 36ch;
+}
+
+.onboarding-step-dots {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding-step-dots li {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff2a;
+}
+
+.onboarding-step-dots li.is-done {
+  background: #ffffff66;
+}
+
+.onboarding-step-dots li.is-active {
+  background: #fff;
+}
+
+.onboarding-step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.onboarding-step-content label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: #ffffff6b;
+  font-size: 12px;
+  text-align: left;
+}
+
+.onboarding-step-content input,
+.onboarding-step-content textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0.5px solid #ffffff12;
+  border-radius: 12px;
+  background: #ffffff0b;
+  color: var(--theme-text-primary, #fff);
+  font: 14px/1.4 var(--font);
+  outline: 0;
+}
+
+.onboarding-step-content textarea {
+  min-height: 96px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.onboarding-step-content input:focus,
+.onboarding-step-content textarea:focus {
+  border-color: #7567e8;
+  box-shadow: 0 0 0 1px #7567e8;
+}
+
+.onboarding-step-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.onboarding-step-skip {
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: #ffffff6b;
+  font: 500 13px var(--font);
+  cursor: pointer;
+}
+
+.onboarding-step-skip:hover {
+  color: #ffffffbd;
+}
+
+.onboarding-step-continue {
+  height: 36px;
+  min-width: 108px;
+  padding: 0 18px;
+  border: 0.5px solid #ffffff0c;
+  border-radius: 18px;
+  background: #fff;
+  color: #111;
+  font: 500 13px var(--font);
+  cursor: pointer;
+}
+
+.onboarding-step-continue:hover:not(:disabled) {
+  background: #f3f3f3;
+}
+
+.onboarding-step-continue:disabled {
+  background: #ffffff0c;
+  color: #ffffff55;
+  cursor: not-allowed;
+}
+
+.onboarding-step-error {
+  color: #f17178;
+  font-size: 12px;
+  text-align: left;
+}
+
+:root[data-theme="light"] .onboarding-step-icon {
+  background: var(--theme-control);
+  color: var(--text);
+}
+
+:root[data-theme="light"] .onboarding-step-title {
+  color: var(--text);
+}
+
+:root[data-theme="light"] .onboarding-step-description,
+:root[data-theme="light"] .onboarding-step-skip {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .onboarding-step-skip:hover {
+  color: var(--text);
+}
+
+:root[data-theme="light"] .onboarding-step-dots li {
+  background: var(--border-strong);
+}
+
+:root[data-theme="light"] .onboarding-step-dots li.is-done,
+:root[data-theme="light"] .onboarding-step-dots li.is-active {
+  background: var(--text);
+}
+
+:root[data-theme="light"] .onboarding-step-content label {
+  color: var(--muted);
+}
+
+:root[data-theme="light"] .onboarding-step-content input,
+:root[data-theme="light"] .onboarding-step-content textarea {
+  border-color: var(--border-strong);
+  background: var(--theme-surface-2);
+  color: var(--text);
+}
+
+:root[data-theme="light"] .onboarding-step-continue {
+  background: var(--text);
+  color: var(--theme-on-primary, #fff);
+  border-color: transparent;
+}
+
+:root[data-theme="light"] .onboarding-step-continue:disabled {
+  background: var(--theme-control-hover);
+  color: var(--faint);
+}

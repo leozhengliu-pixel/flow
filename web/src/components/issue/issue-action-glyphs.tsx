@@ -313,7 +313,7 @@ const aliases: Record<string,string> = {
 export function IssueActionGlyph({ label, fallback }: { label: string; fallback: ReactNode }) {
   if (label === 'Add document...') return <ViewGlyph icon="Page" color="currentColor"/>
   if (label === 'Remind me') return <ViewGlyph icon="Alarm" color="currentColor"/>
-  if (label === 'Add to favorites' || label === 'Remove from favorites') return <ViewGlyph icon="Favorite" color="currentColor"/>
+  if (label === 'Add to favorites' || label === 'Remove from favorites' || label === 'Favorite' || label === 'Unfavorite') return <ViewGlyph icon="Favorite" color="currentColor"/>
   if (label === 'Project...') return <ViewGlyph icon="Project" color="currentColor"/>
   const key = aliases[label.replaceAll('...', '…')]
   const values = paths[key]

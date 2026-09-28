@@ -1,28 +1,21 @@
-import { useEffect, useRef, useState } from "react";
-import { AgentElicitation } from './agent-elicitation';
-import {
-  Check,
-  ChevronRight,
-  LoaderCircle,
-  Maximize2,
-  Minimize2,
-  Minus,
-  Send,
-  X,
-} from "lucide-react";
-import {
-  fetchAgentStatus,
-  resolveAgentApproval,
-} from "@/lib/api";
-import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
-import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from "@/types/flow";
-import type { MyIssuesRowData } from "@/components/my-issues/my-issues-list";
-import { StatusIcon } from "@/components/issue/issue-icons";
-import { useI18n } from "@/i18n/i18n";
-import { AgentRichText } from "./agent-rich-text";
-import styles from "./agent-chat-panel.module.css";
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Plus, Search, Users } from 'lucide-react'
+import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
+import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
+import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
+import { PropertyMenu } from '@/components/property/property-menu'
+import { AgentChevronDownIcon, AgentSkillsIcon } from './agent-icons'
+import type { AgentMention } from './agent-mention-input'
+import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
+import { useI18n } from '@/i18n/i18n'
+import { AgentPanel } from './agent-panel'
+import { EntityAgentThread, clearEntityThreadDraft } from './entity-agent-thread'
+import styles from './agent-chat-panel.module.css'
+import { conversationDraftKeyFor } from './agent-drafts'
 
 export function AgentChatPanel({
+  data,
+  onCreateSkill,
   initialPrompt = '',
   initialSession,
   issues,
@@ -33,275 +26,276 @@ export function AgentChatPanel({
   useResponseLabel = 'Use response',
   open,
 }: {
-  initialPrompt?: string;
-  initialSession?: AgentSession;
-  issues: MyIssuesRowData[];
-  onClose: () => void;
-  onOpenFullPage?: (session?: AgentSession) => void;
-  onSessionChange?: (session: AgentSession) => void;
+  /** Workspace data enables @-mentions and the Skills picker. */
+  data?: BootstrapData
+  onCreateSkill?: () => void
+  initialPrompt?: string
+  initialSession?: AgentSession
+  issues: MyIssuesRowData[]
+  onClose: () => void
+  onOpenFullPage?: (session?: AgentSession) => void
+  onSessionChange?: (session: AgentSession) => void
   /** When set, finished assistant replies offer a button that hands their text back to the caller. */
-  onUseResponse?: (content: string) => void;
-  useResponseLabel?: string;
-  open: boolean;
+  onUseResponse?: (content: string) => void
+  useResponseLabel?: string
+  open: boolean
 }) {
-  const { t } = useI18n();
-  const [messages, setMessages] = useState<AgentMessage[]>([]);
-  const [session, setSession] = useState<AgentSession>();
-  const [input, setInput] = useState(initialPrompt);
-  const [status, setStatus] = useState<AgentStatus>();
-  const [loading, setLoading] = useState(false);
-  const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([]);
-  const [error, setError] = useState<string>();
-  const [minimized, setMinimized] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [approvalBusy, setApprovalBusy] = useState<string>();
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const abortRef = useRef<AbortController | undefined>(undefined);
+  const { t } = useI18n()
+  const [messages, setMessages] = useState<AgentMessage[]>([])
+  const [session, setSession] = useState<AgentSession>()
+  const [input, setInput] = useState(initialPrompt)
+  const [status, setStatus] = useState<AgentStatus>()
+  const [loading, setLoading] = useState(false)
+  const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([])
+  const [error, setError] = useState<string>()
+  const [minimized, setMinimized] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [approvalBusy, setApprovalBusy] = useState<string>()
+  const abortRef = useRef<AbortController | undefined>(undefined)
+  const [mentions, setMentions] = useState<AgentMention[]>([])
+  const [skillIds, setSkillIds] = useState<string[]>([])
+  const [removedContext, setRemovedContext] = useState<string[]>([])
+  const contextIssues = useMemo(() => issues.filter(issue => !removedContext.includes(issue.id)), [issues, removedContext])
+  const idsOf = (type: AgentMention['type']) => mentions.filter(item => item.type === type).map(item => item.id)
+  const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
+
   useEffect(() => {
-    if (!open) return;
-    let active = true;
-    setError(undefined);
+    if (!open) return
+    let active = true
+    setError(undefined)
     fetchAgentStatus()
-      .then((next) => {
+      .then(next => {
         if (active) {
-          setStatus(next);
-          if (!next.enabled) setError(t("Flow Agent is not configured"));
+          setStatus(next)
+          if (!next.enabled) setError(t('Flow Agent is not configured'))
         }
       })
-      .catch((reason) => {
-        if (active)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : t("Flow Agent is unavailable"),
-          );
-      });
-    requestAnimationFrame(() => inputRef.current?.focus());
+      .catch(reason => {
+        if (active) setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
+      })
     return () => {
-      active = false;
-    };
-  }, [open, t]);
-  useEffect(() => {
-    if (!open || !initialSession) return;
-    setSession(initialSession);
-    setMessages(initialSession.messages);
-  }, [initialSession, open]);
-  if (!open) return null;
-  const close = () => {
-    setMessages([]);
-    setSession(undefined);
-    setInput("");
-    setStatus(undefined);
-    setError(undefined);
-    setLoading(false);
-    setStreamParts([]);
-    setMinimized(false);
-    setFullscreen(false);
-    setApprovalBusy(undefined);
-    onClose();
-  };
-  const decideToolApproval = async (call: AgentMessagePart["toolCall"] | undefined, decision: "approve" | "reject") => {
-    if (!session || !call?.approvalId || approvalBusy) return;
-    setApprovalBusy(call.approvalId);
-    try {
-      await resolveAgentApproval(session.id, call.approvalId, decision);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("Flow Agent is unavailable"));
-    } finally {
-      setApprovalBusy(undefined);
+      active = false
     }
-  };
-  const submit = async () => {
-    const message = input.trim();
-    if (!message || loading || !status?.enabled) return;
-    setMessages((current) => [...current, { id: `pending-${Date.now()}`, role: "user", content: message, createdAt: new Date().toISOString() }]);
-    setInput("");
-    setError(undefined);
-    setLoading(true);
-    setStreamParts([]);
+  }, [open, t])
+
+  useEffect(() => {
+    if (!open || !initialSession) return
+    setSession(initialSession)
+    setMessages(initialSession.messages)
+  }, [initialSession, open])
+
+  useEffect(() => {
+    if (initialPrompt) setInput(initialPrompt)
+  }, [initialPrompt])
+
+  const close = () => {
+    setMessages([])
+    setSession(undefined)
+    setInput('')
+    setStatus(undefined)
+    setError(undefined)
+    setLoading(false)
+    setStreamParts([])
+    setMinimized(false)
+    setFullscreen(false)
+    setApprovalBusy(undefined)
+    setMentions([])
+    setSkillIds([])
+    setRemovedContext([])
+    clearEntityThreadDraft(draftKey)
+    onClose()
+  }
+
+  const decideToolApproval = async (
+    call: AgentMessagePart['toolCall'] | undefined,
+    decision: 'approve' | 'reject',
+  ) => {
+    if (!session || !call?.approvalId || approvalBusy) return
+    setApprovalBusy(call.approvalId)
     try {
-      const controller = new AbortController();
-      abortRef.current = controller;
-      let next = session;
+      await resolveAgentApproval(session.id, call.approvalId, decision)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
+    } finally {
+      setApprovalBusy(undefined)
+    }
+  }
+
+  const submit = async () => {
+    const message = input.trim()
+    if (!message || loading || !status?.enabled) return
+    setMessages(current => [
+      ...current,
+      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions, createdAt: new Date().toISOString() },
+    ])
+    const mentioned = { issueIds: idsOf('issue'), projectIds: idsOf('project'), documentIds: idsOf('document'), userIds: idsOf('user'), mentions }
+    setInput('')
+    setMentions([])
+    setError(undefined)
+    setLoading(true)
+    setStreamParts([])
+    try {
+      const controller = new AbortController()
+      abortRef.current = controller
+      let next = session
       const onEvent = (event: AgentStreamEvent) => {
         if (event.session) {
-          next = event.session;
-          setSession(event.session);
+          next = event.session
+          setSession(event.session)
         }
-        if (event.type === "session.started" && event.session) {
-          setMessages(event.session.messages);
+        if (event.type === 'session.started' && event.session) setMessages(event.session.messages)
+        if (event.type === 'text.delta') {
+          setMessages(current =>
+            current.at(-1)?.role === 'assistant'
+              ? current.map((item, index) =>
+                  index === current.length - 1
+                    ? { ...item, content: item.content + (event.delta ?? '') }
+                    : item,
+                )
+              : [
+                  ...current,
+                  {
+                    id: event.messageId ?? `stream-${Date.now()}`,
+                    role: 'assistant',
+                    content: event.delta ?? '',
+                    createdAt: new Date().toISOString(),
+                  },
+                ],
+          )
         }
-        if (event.type === "text.delta") {
-          setMessages(current => current.at(-1)?.role === "assistant"
-            ? current.map((item, index) => index === current.length - 1 ? { ...item, content: item.content + (event.delta ?? "") } : item)
-            : [...current, { id: event.messageId ?? `stream-${Date.now()}`, role: "assistant", content: event.delta ?? "", createdAt: new Date().toISOString() }]);
-        }
-        if ((event.type.startsWith("tool.") || event.type.startsWith("elicitation.") || event.type === "reasoning.delta") && event.part) {
-          const nextPart = event.part;
+        if (
+          (event.type.startsWith('tool.') ||
+            event.type.startsWith('elicitation.') ||
+            event.type === 'reasoning.delta') &&
+          event.part
+        ) {
+          const nextPart = event.part
           setStreamParts(current => {
-            const index = current.findIndex(part => part.id === nextPart.id);
-            return index >= 0 ? current.map((part, itemIndex) => itemIndex === index ? nextPart : part) : [...current, nextPart];
-          });
+            const index = current.findIndex(part => part.id === nextPart.id)
+            return index >= 0
+              ? current.map((part, itemIndex) => (itemIndex === index ? nextPart : part))
+              : [...current, nextPart]
+          })
         }
-        if (event.type === "session.completed" && event.session) {
-          setMessages(event.session.messages);
-          setStreamParts([]);
+        if (event.type === 'session.completed' && event.session) {
+          setMessages(event.session.messages)
+          setStreamParts([])
         }
-      };
-      next = session
-        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal)
-        : await streamNewAgentSession({ message, issueIds: issues.map(issue => issue.id), location: "toolbar" }, onEvent, controller.signal);
-      if (!next) return;
-      setSession(next);
-      onSessionChange?.(next);
-      setMessages(next.messages);
-    } catch (reason) {
-      if (reason instanceof DOMException && reason.name === "AbortError") {
-        setStreamParts(current => current.map(part => part.status === "running" ? { ...part, status: "error" } : part));
-        return;
       }
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : t("Flow Agent is unavailable"),
-      );
+      next = session
+        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, mentioned)
+        : await streamNewAgentSession(
+            {
+              message,
+              issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...mentioned.issueIds])],
+              projectIds: mentioned.projectIds,
+              documentIds: mentioned.documentIds,
+              userIds: mentioned.userIds,
+              mentions,
+              skillIds,
+              location: 'toolbar',
+            },
+            onEvent,
+            controller.signal,
+          )
+      if (!next) return
+      setSession(next)
+      onSessionChange?.(next)
+      setMessages(next.messages)
+      clearEntityThreadDraft(draftKey)
+    } catch (reason) {
+      if (reason instanceof DOMException && reason.name === 'AbortError') {
+        setStreamParts(current =>
+          current.map(part => (part.status === 'running' ? { ...part, status: 'error' } : part)),
+        )
+        return
+      }
+      setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
     } finally {
-	  abortRef.current = undefined;
-      setLoading(false);
-      requestAnimationFrame(() => inputRef.current?.focus());
+      abortRef.current = undefined
+      setLoading(false)
     }
-  };
+  }
+
   return (
-    <section
-      aria-label={t("Flow Agent chat")}
-      aria-modal="false"
-      className={`${styles.panel}${minimized ? " " + styles.minimized : ""}${fullscreen ? " " + styles.fullscreen : ""}`}
-      role="dialog"
+    <AgentPanel
+      fullscreen={fullscreen}
+      minimized={minimized}
+      onFullscreenChange={setFullscreen}
+      onMinimizedChange={setMinimized}
+      onOpenFullPage={
+        onOpenFullPage
+          ? () => onOpenFullPage(session)
+          : undefined
+      }
+      onRequestClose={close}
+      open={open}
+      title={session?.title ?? t('New chat')}
+      variant="floating"
     >
-      <header>
-        <strong data-i18n-ignore={Boolean(session) || undefined}>
-          {session?.title ?? t("New chat")}
-        </strong>
-        <span />
-        <button
-          aria-label={t(minimized ? "Restore chat" : "Minimize chat")}
-          onClick={() => setMinimized((value) => !value)}
-          type="button"
-        >
-          {minimized ? <Minimize2 /> : <Minus />}
-        </button>
-        <button
-          aria-label={t(fullscreen ? "Exit full page" : "Open full page")}
-          onClick={() => {
-            if (onOpenFullPage) {
-              onOpenFullPage(session);
-              return;
-            }
-            setFullscreen((value) => !value);
-            setMinimized(false);
-          }}
-          type="button"
-        >
-          {fullscreen ? <Minimize2 /> : <Maximize2 />}
-        </button>
-        <button aria-label={t("Close chat")} onClick={close} type="button">
-          <X />
-        </button>
-      </header>
-      {!minimized && (
-        <>
-          <div
-            aria-label={t("Agent conversation")}
-            className={styles.conversation}
-            role="log"
-            aria-live="polite"
-          >
-            {!messages.length && (
-              <div className={styles.empty}>
-                <span>{t("Ask Flow about the selected issues")}</span>
-              </div>
-            )}
-            {messages.map((message, index) => (
-              <article
-                className={
-                  message.role === "user"
-                    ? styles.userMessage
-                    : styles.agentMessage
-                }
-                key={message.id || `${message.role}-${index}`}
-              >
-                <strong>
-                  {message.role === "user" ? t("You") : t("Flow Agent")}
-                </strong>
-                {message.role === "assistant" && <><PanelMessageActivity parts={message.parts ?? []} onToolApproval={decideToolApproval} approvalBusy={approvalBusy}/>{message.parts?.filter(part=>part.type==='elicitation').map(part=><AgentElicitation key={part.id} part={part}/>)}</>}
-                {message.content && <AgentRichText ariaLabel={message.role === "user" ? t("Your message") : t("AI message")} className={styles.messageDocument} content={message.content}/>}
-                {onUseResponse && message.role === "assistant" && message.content.trim() && !(loading && index === messages.length - 1) && (
-                  <button className={styles.useResponse} onClick={() => { onUseResponse(message.content.trim()); close(); }} type="button">
-                    {t(useResponseLabel)}
-                  </button>
-                )}
-              </article>
-            ))}
-            {loading && (
-              <div className={styles.thinking}>
-                <LoaderCircle />
-                {t("Thinking…")}
-              </div>
-            )}
-            {streamParts.map(part => <div className={styles.streamPart} key={part.id}>{part.type === "elicitation" ? <AgentElicitation part={part}/> : part.type === "toolCall" ? <><span>{`${part.status === "completed" ? "✓" : part.status === "pending" ? "!" : "…"} ${part.toolCall?.name.replaceAll("_", " ")}`}</span>{part.status === "pending" && part.toolCall?.approvalId && <span className={styles.approvalActions}><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decideToolApproval(part.toolCall, "approve")} type="button">{t("Approve tool")}</button></span>}</> : part.type === "reasoning" ? `Thinking: ${part.text ?? ""}` : part.text}</div>)}
-          </div>
-          <div className={styles.composer}>
-            <div className={styles.context}>
-              {issues.map((issue) => (
-                <span data-i18n-ignore key={issue.id}>
-                  <StatusIcon state={issue.state} size={14} />
-                  <small>{issue.identifier}</small>
-                  <b>{issue.title}</b>
-                </span>
-              ))}
-            </div>
-            <textarea
-              ref={inputRef}
-              aria-label={t("Send a message to Flow Agent")}
-              disabled={!status?.enabled || loading}
-              placeholder={
-                status?.enabled
-                  ? t("Ask a question…")
-                  : t("Flow Agent is not configured")
-              }
-              rows={2}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void submit();
-                }
-              }}
-            />
-            <footer>
-              {error ? <span role="alert">{error}</span> : <span />}
-              {loading ? <button aria-label={t("Stop generating")} onClick={() => abortRef.current?.abort()} type="button"><X /></button> : <button
-                aria-label={t("Send message")}
-                disabled={!input.trim() || !status?.enabled}
-                onClick={() => void submit()}
-                type="button"
-              ><Send /></button>}
-            </footer>
-          </div>
-        </>
-      )}
-    </section>
-  );
+      <EntityAgentThread
+        renderMessageActions={onUseResponse ? (message, index) => message.role === 'assistant' && message.content.trim() && !(loading && index === messages.length - 1) ? (
+          <button className={styles.useResponse} onClick={() => { onUseResponse(message.content.trim()); close() }} type="button">
+            {t(useResponseLabel)}
+          </button>
+        ) : null : undefined}
+        approvalBusy={approvalBusy}
+        contextIssues={contextIssues}
+        mentionData={data}
+        onMentionsChange={setMentions}
+        onRemoveContext={id => setRemovedContext(current => [...current, id])}
+        footerStart={data ? <SkillsPicker data={data} disabled={Boolean(session)} selectedIds={skillIds} onChange={setSkillIds} onCreate={onCreateSkill}/> : undefined}
+        conversationDraftKey={draftKey}
+        emptyLabel={t('Ask Flow about the selected issues')}
+        placeholder={status && !status.enabled ? t('Flow Agent is not configured') : t('Ask Flow…')}
+        welcome={{
+          title: t('Welcome to Flow'),
+          subtitle: t('Ask anything or tell Flow what you need'),
+          suggestions: [
+            { label: t('Create a new project'), icon: <Box size={14} aria-hidden="true"/>, prompt: t('Create a new project for ') },
+            { label: t('Research a topic'), icon: <Search size={14} aria-hidden="true"/>, prompt: t('Research ') },
+            { label: t('Set up new team'), icon: <Users size={14} aria-hidden="true"/>, prompt: t('Set up a new team for ') },
+          ],
+        }}
+        enabled={Boolean(status?.enabled)}
+        error={error}
+        input={input}
+        loading={loading}
+        messages={messages}
+        onInputChange={setInput}
+        onStop={() => abortRef.current?.abort()}
+        onSubmit={() => void submit()}
+        onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
+        streamParts={streamParts}
+      />
+    </AgentPanel>
+  )
 }
 
-function PanelMessageActivity({ parts, onToolApproval, approvalBusy }: { parts: AgentMessagePart[]; onToolApproval: (call: AgentMessagePart["toolCall"] | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+/** Skills picker in the composer footer; skills apply when a conversation starts. */
+function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { data: BootstrapData; disabled: boolean; selectedIds: string[]; onChange: (ids: string[]) => void; onCreate?: () => void }) {
   const { t } = useI18n()
-  const work = parts.filter(part => part.type === 'reasoning' || part.type === 'toolCall')
-  if (!work.length) return null
-  const running = work.some(part => part.status === 'running' || part.status === 'pending' || part.toolCall?.status === 'running' || part.toolCall?.status === 'pending')
-  return <details className={styles.messageActivity} open={running || undefined}>
-    <summary>{running ? <LoaderCircle/> : <Check/>}<span>{running ? t('Thinking…') : t('Work completed')}</span><ChevronRight/></summary>
-    <div>{work.map(part => <div key={part.id}>{part.type === 'reasoning' ? <><strong>{t('Reasoning')}</strong><p>{part.text}</p></> : <><span>{part.toolCall?.name.replaceAll('_', ' ')}</span>{part.status === "pending" && part.toolCall?.approvalId && <span className={styles.approvalActions}><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void onToolApproval(part.toolCall, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void onToolApproval(part.toolCall, "approve")} type="button">{t("Approve tool")}</button></span>}</>}</div>)}</div>
-  </details>
+  const skills = data.agentSkills ?? []
+  return <PropertyMenu
+    label={t('Skills')}
+    ariaLabel={t('Skills')}
+    value={t('Skills')}
+    multiple
+    hideSearch
+    side="top"
+    align="start"
+    selectedIds={selectedIds}
+    searchPlaceholder={t('Search skills…')}
+    triggerRole="button"
+    triggerClassName="agent-skills-trigger"
+    trigger={<><AgentSkillsIcon/><span>{selectedIds.length ? `${t('Skills')} · ${selectedIds.length}` : t('Skills')}</span><AgentChevronDownIcon/></>}
+    options={[
+      ...skills.map(skill => ({ id: skill.id, label: skill.name, icon: <AgentSkillsIcon/>, i18nIgnore: true, disabled })),
+      ...(onCreate ? [{ id: '__create__', label: t('Create skill'), icon: <Plus size={16}/> }] : []),
+    ]}
+    onChange={id => {
+      if (id === '__create__') { onCreate?.(); return }
+      onChange(selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : [...selectedIds, id])
+    }}
+  />
 }

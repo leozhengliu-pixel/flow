@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { completed, makeBootstrap, makeIssue } from '@/test/fixtures'
 import type { Release, ReleasePipeline } from '@/types/flow'
 
-import { releaseIssueQuery, releaseProgress, releaseStatusForStage } from './release-view-model'
+import { pickChangelogTargetRelease, releaseIssueQuery, releaseProgress, releaseStatusForStage, releasesInInclusiveRange } from './release-view-model'
 
 const pipeline = {
   stages: ['Planning', 'In progress', 'Released', 'Canceled'],
@@ -53,5 +53,27 @@ describe('releaseProgress', () => {
   it('keeps the bootstrap fallback for older cached responses', () => {
     const issue = makeIssue({ state: completed })
     expect(releaseProgress(makeBootstrap({ issues: [issue] }), { ...release, issueIds: [issue.id] } as Release)).toBe(100)
+  })
+})
+
+describe('pickChangelogTargetRelease', () => {
+  it('prefers the latest releasedAt among completed releases', () => {
+    const releases = [
+      { id: 'a', status: 'released', releasedAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', status: 'released', releasedAt: '2026-03-01T00:00:00Z' },
+      { id: 'c', status: 'planned' },
+    ] as Release[]
+    expect(pickChangelogTargetRelease(releases)?.id).toBe('b')
+  })
+})
+
+describe('releasesInInclusiveRange', () => {
+  it('returns the inclusive released range ordered by date', () => {
+    const releases = [
+      { id: 'a', status: 'released', releasedAt: '2026-01-01T00:00:00Z', createdAt: '2026-01-01T00:00:00Z' },
+      { id: 'b', status: 'released', releasedAt: '2026-02-01T00:00:00Z', createdAt: '2026-02-01T00:00:00Z' },
+      { id: 'c', status: 'released', releasedAt: '2026-03-01T00:00:00Z', createdAt: '2026-03-01T00:00:00Z' },
+    ] as Release[]
+    expect(releasesInInclusiveRange(releases, 'a', 'c').map(item => item.id)).toEqual(['a', 'b', 'c'])
   })
 })

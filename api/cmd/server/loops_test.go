@@ -22,8 +22,11 @@ func TestLoopLifecycle(t *testing.T) {
 	if created.ID == "" || created.Name != "Daily issue triage" || created.Icon != "Automation" || created.Color != "#d9b84b" || created.TriggerType != "issue" || !created.Enabled {
 		t.Fatalf("loop create failed: %#v", created)
 	}
-	updated := requestJSON[domain.Loop](t, handler, http.MethodPatch, "/api/loops/"+created.ID, map[string]any{"enabled": false, "instructions": "Updated instructions."}, http.StatusOK)
-	if updated.Enabled || updated.Instructions != "Updated instructions." {
+	if created.OwnerID == "" {
+		t.Fatalf("loop create missing owner: %#v", created)
+	}
+	updated := requestJSON[domain.Loop](t, handler, http.MethodPatch, "/api/loops/"+created.ID, map[string]any{"enabled": false, "instructions": "Updated instructions.", "ownerId": created.OwnerID, "trustedSourceKeys": []string{"issueSource:email-trusted"}}, http.StatusOK)
+	if updated.Enabled || updated.Instructions != "Updated instructions." || updated.OwnerID != created.OwnerID || len(updated.TrustedSourceKeys) != 1 {
 		t.Fatalf("loop update failed: %#v", updated)
 	}
 	listed := requestJSON[[]domain.Loop](t, handler, http.MethodGet, "/api/loops", nil, http.StatusOK)

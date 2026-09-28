@@ -47,7 +47,7 @@ export function makeBootstrap(overrides: Partial<BootstrapData> = {}): Bootstrap
   const issue = makeIssue()
   return {
     workspace: { id: 'workspace-1', name: 'Workspace', urlKey: 'workspace', color: '#5e6ad2', region: 'us' },
-    viewer, users: [viewer, teammate], teams: [issue.team], states: [backlog, started, completed],
+    viewer, viewerRole: 'member', users: [viewer, teammate], teams: [issue.team], states: [backlog, started, completed],
     labels: [label], labelGroups: [{ id: 'group-1', name: 'Type', color: '#5e6ad2', resourceType: 'issue' }],
     issues: [issue], projects: [project], projectStatuses: [project.status], projectUpdates: {}, initiatives: [],
     initiativeUpdates: {}, cycles: [], issueTemplates: [], releases: [], releasePipelines: [], subscriptions: [], activities: {},

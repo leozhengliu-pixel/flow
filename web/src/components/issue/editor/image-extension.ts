@@ -2,6 +2,7 @@ import { Node, mergeAttributes, type Editor } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import { insertEmbedFiles } from './file-extension'
+import { openLightbox } from '@/components/editor/lightbox-bridge'
 
 export type DescriptionImageUpload = (file: File) => Promise<string>
 export type DescriptionImageComment = (selection: { text: string; from: number; to: number; src: string }) => void
@@ -212,7 +213,15 @@ function imageActions(editor: Editor, getPos: () => number | undefined, img: HTM
     return { from: pos, to: pos + (node?.nodeSize ?? 1) }
   }
   return {
-    view: () => openDescriptionLightbox(img.src, img.alt),
+    view: () => {
+      const siblings: { src: string; alt?: string }[] = []
+      editor.state.doc.descendants(node => {
+        if (node.type.name === 'image' && node.attrs.src) {
+          siblings.push({ src: String(node.attrs.src), alt: String(node.attrs.alt ?? '') })
+        }
+      })
+      openDescriptionLightbox(img.src, img.alt, siblings.length ? siblings : undefined)
+    },
     download: () => downloadImage(img.src, img.alt || 'image'),
     copyImage: () => copyImage(img.src),
     copyLink: () => navigator.clipboard.writeText(imageHref(img.src)),
@@ -363,7 +372,11 @@ async function downloadImage(src: string, name: string) {
   URL.revokeObjectURL(href)
 }
 
-export function openDescriptionLightbox(src: string, alt = '') {
+export function openDescriptionLightbox(src: string, alt = '', siblings?: { src: string; alt?: string }[]) {
+  // Prefer React LightboxEditorProvider portal when mounted (LS-0382).
+  const items = siblings?.length ? siblings : [{ src, alt }]
+  const index = Math.max(0, items.findIndex(item => item.src === src))
+  if (openLightbox(items, index === -1 ? 0 : index)) return
   document.querySelector('.description-image-lightbox')?.remove()
   const overlay = document.createElement('div')
   overlay.className = 'description-image-lightbox'

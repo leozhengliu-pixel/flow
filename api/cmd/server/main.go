@@ -178,7 +178,7 @@ func newHandler(s *server) http.Handler {
 		s.realtime = newRealtimeHub()
 	}
 	s.store.SetRealtimeSink(s.publishRealtime)
-	s.store.SetWebhookSink(s.dispatchWebhookEvent)
+	s.store.SetWebhookSink(s.dispatchDomainEvent)
 	s.startCoordination()
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
@@ -220,6 +220,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/auth/session", s.authSession)
 	mux.Handle("POST /api/auth/forgot-password", s.requireEmailAuth(s.limitAuth("forgot-password", 5, 15*time.Minute, http.HandlerFunc(s.forgotPassword))))
 	mux.Handle("POST /api/auth/reset-password", s.requireEmailAuth(s.limitAuth("reset-password", 8, 15*time.Minute, http.HandlerFunc(s.resetPassword))))
+	mux.Handle("POST /api/auth/token-login", s.requireEmailAuth(s.limitAuth("token-login", 8, 15*time.Minute, http.HandlerFunc(s.tokenLogin))))
+	mux.Handle("POST /api/auth/magic-link", s.requireEmailAuth(s.limitAuth("magic-link", 5, 15*time.Minute, http.HandlerFunc(s.magicLink))))
 	mux.HandleFunc("GET /api/auth/providers", s.authProviders)
 	mux.HandleFunc("GET /api/auth/discovery", s.discoverWorkspaceSSO)
 	mux.HandleFunc("GET /api/auth/enterprise/{id}/start", s.startEnterpriseOIDC)
@@ -234,6 +236,8 @@ func newHandler(s *server) http.Handler {
 	}
 	mux.HandleFunc("POST /api/invitations/accept", s.acceptInvitation)
 	mux.HandleFunc("GET /api/invitations/preview/{token}", s.invitationPreview)
+	mux.HandleFunc("GET /api/invite-links/preview/{token}", s.inviteLinkPreview)
+	mux.HandleFunc("POST /api/invite-links/join", s.joinOrganization)
 	mux.HandleFunc("GET /api/account/bootstrap", s.accountBootstrap)
 	mux.HandleFunc("PUT /api/account/last-workspace", s.setLastWorkspace)
 	mux.HandleFunc("GET /api/account/settings", s.getUserSettings)
@@ -285,10 +289,21 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/logo", s.uploadWorkspaceLogo)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/logo", s.deleteWorkspaceLogo)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}", s.deleteWorkspace)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/cancel-deletion", s.cancelWorkspaceDeletion)
+	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/access-status", s.workspaceAccessStatus)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/teams", s.createTeam)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/teams/{teamId}", s.updateTeam)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/teams/{teamId}", s.deleteTeam)
+	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/deleted-teams", s.listDeletedTeams)
+	mux.HandleFunc("GET /api/workspace/audit-log-stream", s.getAuditStream)
+	mux.HandleFunc("POST /api/workspace/audit-log-stream", s.createAuditStream)
+	mux.HandleFunc("PATCH /api/workspace/audit-log-stream", s.updateAuditStream)
+	mux.HandleFunc("DELETE /api/workspace/audit-log-stream", s.deleteAuditStream)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/deleted-teams/{teamId}/restore", s.restoreDeletedTeam)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invitations", s.createInvitation)
+	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/invite-link", s.getWorkspaceInviteLink)
+	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invite-link", s.createOrRotateWorkspaceInviteLink)
+	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/invite-link", s.disableWorkspaceInviteLink)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/invitations/{invitationId}", s.revokeInvitation)
 	mux.HandleFunc("POST /api/workspaces/{workspaceKey}/invitations/{invitationId}/resend", s.resendInvitation)
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/members/{userId}", s.updateMemberRole)
@@ -345,6 +360,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/loops/{id}", s.getLoop)
 	mux.HandleFunc("PATCH /api/loops/{id}", s.updateLoop)
 	mux.HandleFunc("DELETE /api/loops/{id}", s.deleteLoop)
+	mux.HandleFunc("GET /api/loops/{id}/runs", s.listLoopRuns)
+	mux.HandleFunc("POST /api/loops/{id}/runs", s.runLoopNow)
 	mux.HandleFunc("GET /api/project-templates", s.listProjectTemplates)
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
@@ -371,6 +388,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/workspace/preferences", s.getWorkspacePreferences)
 	mux.HandleFunc("PATCH /api/workspace/preferences", s.updateWorkspacePreferences)
 	mux.HandleFunc("PATCH /api/workspace/agent-guidance", s.updateWorkspaceAgentGuidance)
+	mux.HandleFunc("POST /api/workspace/welcome-message/test", s.testWelcomeMessage)
 	mux.HandleFunc("GET /api/api-keys", s.listAPIKeys)
 	mux.HandleFunc("POST /api/api-keys", s.createAPIKey)
 	mux.HandleFunc("PATCH /api/api-keys/{id}", s.updateAPIKey)
@@ -380,10 +398,14 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/oauth-applications", s.createOAuthApplication)
 	mux.HandleFunc("PATCH /api/oauth-applications/{id}", s.updateOAuthApplication)
 	mux.HandleFunc("DELETE /api/oauth-applications/{id}", s.deleteOAuthApplication)
+	mux.HandleFunc("GET /api/oauth-applications/{id}/failures", s.listOAuthAppFailures)
+	mux.HandleFunc("GET /api/oauth-applications/{id}/sync-groups", s.listOAuthSyncGroupRequests)
+	mux.HandleFunc("POST /api/oauth-applications/{id}/sync-groups/{requestId}", s.decideOAuthSyncGroupRequest)
 	mux.HandleFunc("GET /api/webhooks", s.listWebhooks)
 	mux.HandleFunc("POST /api/webhooks", s.createWebhook)
 	mux.HandleFunc("PATCH /api/webhooks/{id}", s.updateWebhook)
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
+	mux.HandleFunc("GET /api/webhooks/{id}/failures", s.listWebhookFailures)
 	mux.HandleFunc("POST /api/webhooks/{id}/rotate-secret", s.rotateWebhookSecret)
 	mux.HandleFunc("POST /api/webhooks/{id}/revoke-secret", s.revokeWebhookSecret)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
@@ -396,6 +418,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/scim/tokens", s.listSCIMTokens)
 	mux.HandleFunc("POST /api/scim/tokens", s.createSCIMToken)
 	mux.HandleFunc("DELETE /api/scim/tokens/{id}", s.revokeSCIMToken)
+	mux.HandleFunc("POST /api/scim/tokens/{id}/rotate", s.rotateSCIMToken)
 	mux.HandleFunc("GET /scim/v2/{workspace}/ServiceProviderConfig", s.scimServiceProviderConfig)
 	mux.HandleFunc("GET /scim/v2/{workspace}/Users", s.scimUsers)
 	mux.HandleFunc("POST /scim/v2/{workspace}/Users", s.scimUsers)
@@ -410,6 +433,12 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("DELETE /scim/v2/{workspace}/Groups/{id}", s.scimGroup)
 	mux.HandleFunc("PUT /api/integrations/{provider}", supportedIntegrationHandler(s.connectIntegration))
+	mux.HandleFunc("GET /api/jira/links", s.listJiraLinks)
+	mux.HandleFunc("POST /api/jira/links", s.createJiraLink)
+	mux.HandleFunc("PATCH /api/jira/links/{id}", s.updateJiraLink)
+	mux.HandleFunc("DELETE /api/jira/links/{id}", s.deleteJiraLink)
+	mux.HandleFunc("GET /api/jira/remote/projects", s.listJiraRemoteProjects)
+	mux.HandleFunc("GET /api/jira/remote/projects/{projectId}/statuses", s.listJiraRemoteStatuses)
 	mux.HandleFunc("GET /api/application-policies", s.listApplicationPolicies)
 	mux.HandleFunc("GET /api/application-policies/{id}/authorization", s.connectorAuthStatus)
 	mux.HandleFunc("POST /api/application-policies/{id}/oauth/start", s.startConnectorOAuth)
@@ -421,6 +450,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/application-policies/{id}", s.deleteApplicationPolicy)
 	mux.HandleFunc("POST /api/integrations/{provider}/oauth/start", supportedIntegrationHandler(s.startIntegrationOAuth))
 	mux.HandleFunc("GET /api/integrations/{provider}/oauth/callback", supportedIntegrationHandler(s.finishIntegrationOAuth))
+	mux.HandleFunc("POST /api/integrations/{provider}/oauth/finish", supportedIntegrationHandler(s.finishIntegrationOAuthJSON))
 	mux.HandleFunc("POST /api/integrations/{provider}/{id}/oauth/refresh", supportedIntegrationHandler(s.refreshIntegrationOAuth))
 	mux.HandleFunc("DELETE /api/integrations/{provider}/{id}/oauth/token", supportedIntegrationHandler(s.revokeIntegrationOAuth))
 	mux.HandleFunc("DELETE /api/integrations/{provider}", supportedIntegrationHandler(s.disconnectIntegration))
@@ -441,6 +471,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/reviews", s.listReviews)
 	mux.HandleFunc("GET /api/reviews/{id}", s.getReview)
 	mux.HandleFunc("PATCH /api/reviews/{id}", s.updateReview)
+	mux.HandleFunc("PUT /api/reviews/{id}/previews", s.putReviewPreview)
 	mux.HandleFunc("POST /api/reviews/{id}/submit", s.submitReview)
 	mux.HandleFunc("POST /api/reviews/{id}/comments", s.commentOnReview)
 	mux.HandleFunc("POST /api/sla-rules", s.createSLARule)
@@ -508,6 +539,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/meetings/{id}", s.updateMeeting)
 	mux.HandleFunc("DELETE /api/meetings/{id}", s.deleteMeeting)
 	mux.HandleFunc("GET /api/search/semantic", s.semanticSearch)
+	mux.HandleFunc("POST /api/ai/issue-filter", s.aiIssueFilter)
 	mux.HandleFunc("GET /api/search/filter-suggestions", s.filterSuggestions)
 	mux.HandleFunc("GET /api/projects/{id}/relations", s.listProjectRelations)
 	mux.HandleFunc("POST /api/projects/{id}/relations", s.createProjectRelation)
@@ -602,6 +634,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/issue-records/{id}/context", s.getIssueRecordContext)
 	mux.HandleFunc("GET /api/issue-records/{id}/history", s.getIssueRecordHistory)
 	mux.HandleFunc("GET /api/issue-records/{id}/related", s.getIssueRecordRelated)
+	mux.HandleFunc("GET /api/issue-records/{id}/similar", s.getIssueRecordSimilar)
 	mux.HandleFunc("POST /api/issue-records/visibility", s.issueRecordVisibility)
 	mux.HandleFunc("PATCH /api/issue-records/{id}", s.updateIssueRecord)
 	mux.HandleFunc("DELETE /api/issue-records/{id}", s.issueRecordAlias(s.deleteIssue))
@@ -613,6 +646,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/issue-records/{id}/permissions/{permissionId}", s.issueRecordAlias(s.deleteIssuePermission))
 	mux.HandleFunc("POST /api/issue-records/{id}/reactions", s.issueRecordAlias(s.toggleIssueReaction))
 	mux.HandleFunc("POST /api/issue-records/{id}/comments", s.issueRecordAlias(s.createComment))
+	mux.HandleFunc("PUT /api/issue-records/{id}/comments/{commentId}/subscription", s.issueRecordAlias(s.setThreadSubscription))
+	mux.HandleFunc("DELETE /api/issue-records/{id}/comments/{commentId}/subscription", s.issueRecordAlias(s.clearThreadSubscription))
 	mux.HandleFunc("PATCH /api/issue-records/{id}/comments/{commentId}", s.issueRecordAlias(s.updateComment))
 	mux.HandleFunc("DELETE /api/issue-records/{id}/comments/{commentId}", s.issueRecordAlias(s.deleteComment))
 	mux.HandleFunc("POST /api/issue-records/{id}/comments/{commentId}/reactions", s.issueRecordAlias(s.toggleCommentReaction))
@@ -638,6 +673,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/issues/{id}/permissions/{permissionId}", s.updateIssuePermission)
 	mux.HandleFunc("DELETE /api/issues/{id}/permissions/{permissionId}", s.deleteIssuePermission)
 	mux.HandleFunc("PATCH /api/teams/{id}/cycle-settings", s.updateCycleSettings)
+	mux.HandleFunc("DELETE /api/teams/{id}/cycles", s.deleteTeamCycles)
 	mux.HandleFunc("GET /api/teams/{id}/states", s.listWorkflowStates)
 	mux.HandleFunc("POST /api/teams/{id}/states", s.createWorkflowState)
 	mux.HandleFunc("PATCH /api/teams/{id}/states/{stateId}", s.updateWorkflowState)
@@ -723,12 +759,15 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/reactions", s.toggleIssueReaction)
 	mux.HandleFunc("POST /api/issues/batch", s.batchUpdate)
 	mux.HandleFunc("POST /api/issues/{id}/comments", s.createComment)
+	mux.HandleFunc("PUT /api/issues/{id}/comments/{commentId}/subscription", s.setThreadSubscription)
+	mux.HandleFunc("DELETE /api/issues/{id}/comments/{commentId}/subscription", s.clearThreadSubscription)
 	mux.HandleFunc("PATCH /api/issues/{id}/comments/{commentId}", s.updateComment)
 	mux.HandleFunc("DELETE /api/issues/{id}/comments/{commentId}", s.deleteComment)
 	mux.HandleFunc("POST /api/issues/{id}/comments/{commentId}/reactions", s.toggleCommentReaction)
 	mux.HandleFunc("POST /api/issues/{id}/relations", s.createRelation)
 	mux.HandleFunc("DELETE /api/issues/{id}/relations/{relationId}", s.deleteRelation)
 	mux.HandleFunc("POST /api/issues/{id}/attachments", s.createAttachment)
+	mux.HandleFunc("POST /api/issues/{id}/attachments/from-url", s.createAttachmentFromURL)
 	mux.HandleFunc("POST /api/issues/{id}/links", s.createIssueLink)
 	mux.HandleFunc("POST /api/issues/{id}/reminders", s.createIssueReminder)
 	mux.HandleFunc("POST /api/issues/{id}/loop-runs", s.createIssueLoopRun)
@@ -870,6 +909,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	// through their paginated endpoints. Keeping them in the persisted settings
 	// envelope avoids a second transaction, but they must never leak through the
 	// workspace bootstrap response.
+	// Loop run history is served by /api/loops/{id}/runs.
+	data.LoopRuns = nil
 	delete(data.Settings, dashboardsSettingsKey)
 	delete(data.Settings, postsSettingsKey)
 	delete(data.Settings, feedSettingsKey)
@@ -915,6 +956,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 			})
 		}
 	}
+	// The audit log stream has its own endpoint and page.
+	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool { return item.AuditLog })
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
 		if data.APIKeys[index].Scopes != nil {
@@ -932,6 +975,8 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	for index := range data.IntegrationConnections {
 		data.IntegrationConnections[index] = redactIntegrationConnection(data.IntegrationConnections[index])
 	}
+	// Failure events are listed via GET /api/webhooks/{id}/failures to keep bootstrap lean.
+	data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	if !workspaceAdminRole(data.ViewerRole) {
 		data.IdentityProviders = []domain.IdentityProvider{}
 		data.IntegrationDeliveries = []domain.IntegrationDelivery{}
@@ -955,6 +1000,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 		}
 	}
 	data.PushSubscriptions = slices.DeleteFunc(data.PushSubscriptions, func(item domain.PushSubscription) bool { return item.UserID != data.Viewer.ID })
+	data.ThreadSubscriptions = slices.DeleteFunc(data.ThreadSubscriptions, func(item domain.ThreadSubscription) bool { return item.UserID != data.Viewer.ID })
 	for index := range data.PushSubscriptions {
 		data.PushSubscriptions[index].P256DH = ""
 		data.PushSubscriptions[index].Auth = ""
@@ -973,6 +1019,7 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	for index := range data.Passkeys {
 		data.Passkeys[index].CredentialJSON = ""
 	}
+	data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	if !apiKeyHasScope(key, "admin") {
 		data.OAuthApplications = []domain.OAuthApplication{}
 		data.Webhooks = []domain.Webhook{}
@@ -1410,11 +1457,6 @@ func (s *server) deleteWorkspaceLogo(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func (s *server) deleteWorkspace(w http.ResponseWriter, r *http.Request) {
-	err := s.store.DeleteWorkspace(r.Context(), r.PathValue("workspaceKey"))
-	respondMutation(w, err, http.StatusNoContent, nil)
-}
-
 func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	workspaceKey := r.PathValue("workspaceKey")
 	var input struct {
@@ -1658,63 +1700,20 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func (s *server) deleteTeam(w http.ResponseWriter, r *http.Request) {
-	workspaceKey, teamID := r.PathValue("workspaceKey"), r.PathValue("teamId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
-		if len(data.Teams) <= 1 {
-			return fmt.Errorf("a workspace needs at least one team")
-		}
-		index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID })
-		if index < 0 {
+// purgeTeam permanently deletes a team and everything it owns.
+func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) error {
+	err := s.store.MutateWorkspace(ctx, workspaceKey, "team.deleted", teamID, nil, func(data *domain.Bootstrap) error {
+		err := store.ApplyTeamDeletion(data, teamID)
+		if errors.Is(err, store.ErrTeamNotFound) {
 			return errNotFound
 		}
-		data.Teams = slices.Delete(data.Teams, index, index+1)
-		removeResourcePreferences(data, "team", teamID)
-		issueIDs := map[string]bool{}
-		for _, issue := range data.Issues {
-			if issue.Team.ID == teamID {
-				issueIDs[issue.ID] = true
-			}
-		}
-		data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool { return issue.Team.ID == teamID })
-		for issueID := range issueIDs {
-			delete(data.Comments, issueID)
-			delete(data.Activities, issueID)
-			removeResourcePreferences(data, "issue", issueID)
-		}
-		for _, cycle := range data.Cycles {
-			if cycle.TeamID == teamID {
-				removeResourcePreferences(data, "cycle", cycle.ID)
-			}
-		}
-		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool { return cycle.TeamID == teamID })
-		data.Labels = slices.DeleteFunc(data.Labels, func(label domain.IssueLabel) bool { return label.Scope == teamID })
-		for projectIndex := range data.Projects {
-			data.Projects[projectIndex].TeamIDs = removeString(data.Projects[projectIndex].TeamIDs, teamID)
-		}
-		for pipelineIndex := range data.ReleasePipelines {
-			data.ReleasePipelines[pipelineIndex].TeamIDs = removeString(data.ReleasePipelines[pipelineIndex].TeamIDs, teamID)
-		}
-		data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.TeamID == teamID })
-		data.TeamResourceSections = slices.DeleteFunc(data.TeamResourceSections, func(section domain.TeamResourceSection) bool { return section.TeamID == teamID })
-		data.TeamPinnedResources = slices.DeleteFunc(data.TeamPinnedResources, func(resource domain.TeamPinnedResource) bool { return resource.TeamID == teamID })
-		delete(data.TeamSettings, teamID)
-		delete(data.CycleSettings, teamID)
-		data.States = slices.DeleteFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID })
-		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool { return template.TeamID == teamID })
-		for childID, settings := range data.TeamSettings {
-			if settings.ParentTeamID == teamID {
-				settings.ParentTeamID = ""
-				data.TeamSettings[childID] = settings
-			}
-		}
-		return nil
+		return err
 	})
-	if err == nil && !s.authDisabled {
+	if err == nil {
 		data, _ := s.store.BootstrapFor(workspaceKey)
-		err = s.store.DeleteTeamMemberships(r.Context(), data.Workspace.ID, teamID)
+		err = s.store.DeleteTeamMemberships(ctx, data.Workspace.ID, teamID)
 	}
-	respondMutation(w, err, http.StatusNoContent, nil)
+	return err
 }
 
 type customerInput struct {
@@ -2136,6 +2135,36 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeError(w, http.StatusNotFound, "shared view not found")
+}
+
+// deleteTeamCycles permanently removes a team's historical cycles. Cycles must
+// be disabled first so no active schedule is left pointing at deleted data.
+func (s *server) deleteTeamCycles(w http.ResponseWriter, r *http.Request) {
+	teamID := r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.team_cycles_deleted", teamID, nil, func(data *domain.Bootstrap) error {
+		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+			return errNotFound
+		}
+		if settings, exists := data.CycleSettings[teamID]; exists && settings.Enabled {
+			return fmt.Errorf("%w: disable cycles before deleting cycle data", errInvalid)
+		}
+		removed := map[string]bool{}
+		data.Cycles = slices.DeleteFunc(data.Cycles, func(cycle domain.Cycle) bool {
+			if cycle.TeamID != teamID {
+				return false
+			}
+			removed[cycle.ID] = true
+			return true
+		})
+		for index := range data.Issues {
+			if data.Issues[index].CycleID != nil && removed[*data.Issues[index].CycleID] {
+				data.Issues[index].CycleID = nil
+			}
+		}
+		appendAudit(data, "deleted", "team_cycles", teamID, map[string]any{"cycles": len(removed)})
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, map[string]bool{"deleted": err == nil})
 }
 
 func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
@@ -2568,6 +2597,9 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 			team = data.Teams[index]
+		}
+		if team.ArchivedAt != nil {
+			return "", errInvalid
 		}
 		if team.RetiredAt != nil {
 			return "", fmt.Errorf("%w: team is retired", errInvalid)
@@ -4238,13 +4270,24 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 	var input domain.CommentUpdateInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
-		writeError(w, http.StatusBadRequest, "body is required")
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if !commentUpdateHasBody(input) && input.Resolved == nil && input.ThreadSummary == nil {
+		writeError(w, http.StatusBadRequest, "body or resolved is required")
 		return
 	}
 	issueID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated, current domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.updated", issueID, input, func(data *domain.Bootstrap) error {
+	eventType := "comment.updated"
+	if input.Resolved != nil && !commentUpdateHasBody(input) {
+		if *input.Resolved {
+			eventType = "comment.resolved"
+		} else {
+			eventType = "comment.unresolved"
+		}
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, issueID, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound
@@ -4253,17 +4296,13 @@ func (s *server) updateComment(w http.ResponseWriter, r *http.Request) {
 			current = data.Comments[issueID][index]
 			return errConflict
 		}
-		now := time.Now().UTC()
-		data.Comments[issueID][index].Body = strings.TrimSpace(input.Body)
-		data.Comments[issueID][index].BodyData = input.BodyData
-		data.Comments[issueID][index].EditedAt = &now
-		data.Comments[issueID][index].Version++
-		updated = data.Comments[issueID][index]
 		issue, issueErr := issueByID(data, issueID)
 		if issueErr != nil {
 			return issueErr
 		}
-		activity := appendActivity(data, issueID, "comment.updated", data.Viewer, map[string]string{"commentId": commentID})
+		applyCommentPatch(&data.Comments[issueID][index], input, data.Comments[issueID], teamResolvedThreadSummaries(data, issue.Team.ID))
+		updated = data.Comments[issueID][index]
+		activity := appendActivity(data, issueID, eventType, data.Viewer, map[string]string{"commentId": commentID})
 		appendIssueNotifications(data, *issue, activity, &updated)
 		return nil
 	})
@@ -4287,6 +4326,9 @@ func (s *server) deleteComment(w http.ResponseWriter, r *http.Request) {
 		if len(data.Comments[issueID]) == before {
 			return errNotFound
 		}
+		data.ThreadSubscriptions = slices.DeleteFunc(data.ThreadSubscriptions, func(item domain.ThreadSubscription) bool {
+			return item.IssueID == issueID && item.CommentID == commentID
+		})
 		appendActivity(data, issueID, "comment.deleted", data.Viewer, map[string]string{"commentId": commentID})
 		return nil
 	})
@@ -4877,6 +4919,33 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		return nil, fmt.Errorf("%w: team is retired", errInvalid)
 	}
 	changes := map[string]string{}
+	if input.TeamID != nil && *input.TeamID != issue.Team.ID {
+		teamIndex := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == *input.TeamID })
+		if teamIndex < 0 {
+			return nil, fmt.Errorf("%w: unknown team", errInvalid)
+		}
+		nextTeam := data.Teams[teamIndex]
+		if nextTeam.ArchivedAt != nil {
+			return nil, fmt.Errorf("%w: unknown team", errInvalid)
+		}
+		if nextTeam.RetiredAt != nil {
+			return nil, fmt.Errorf("%w: team is retired", errInvalid)
+		}
+		changes["teamBefore"] = issue.Team.ID
+		changes["team"] = nextTeam.ID
+		issue.Team = nextTeam
+		if mapped := stateForTeamByType(data, nextTeam.ID, issue.State.Type); mapped != nil && mapped.ID != issue.State.ID {
+			changes["stateBefore"] = issue.State.Name
+			changes["stateBeforeId"] = issue.State.ID
+			changes["state"] = mapped.Name
+			changes["stateId"] = mapped.ID
+			issue.State = *mapped
+		}
+		if issue.CycleID != nil {
+			issue.CycleID = nil
+			changes["cycle"] = ""
+		}
+	}
 	if input.Title != nil && strings.TrimSpace(*input.Title) != issue.Title {
 		changes["title"] = *input.Title
 		issue.Title = strings.TrimSpace(*input.Title)
@@ -4972,7 +5041,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		changes["priority"] = issue.PriorityLabel
 	}
 	if input.Estimate != nil {
-		if *input.Estimate < 0 {
+		// -1 clears the estimate. 0 is a real estimate only for teams that allow
+		// zero estimates; otherwise it also clears, as it always has.
+		if *input.Estimate < 0 && *input.Estimate != -1 {
 			return nil, fmt.Errorf("%w: invalid estimate", errInvalid)
 		}
 		if issue.Estimate != nil {
@@ -4980,7 +5051,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		} else {
 			changes["estimateBefore"] = "0"
 		}
-		if *input.Estimate == 0 {
+		if *input.Estimate < 0 || (*input.Estimate == 0 && !teamSettings(data, issue.Team.ID).EstimateAllowZero) {
 			issue.Estimate = nil
 		} else {
 			estimate := *input.Estimate
@@ -5135,6 +5206,19 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 			issue.NextOccurrenceAt = &parsed
 		}
 		changes["nextOccurrenceAt"] = *input.NextOccurrenceAt
+	}
+	if input.SnoozedUntil != nil {
+		if strings.TrimSpace(*input.SnoozedUntil) == "" {
+			issue.SnoozedUntil = nil
+		} else {
+			parsed, err := time.Parse(time.RFC3339, *input.SnoozedUntil)
+			if err != nil {
+				return nil, fmt.Errorf("%w: invalid snooze time", errInvalid)
+			}
+			parsed = parsed.UTC()
+			issue.SnoozedUntil = &parsed
+		}
+		changes["snoozedUntil"] = *input.SnoozedUntil
 	}
 	if input.LabelIDs != nil {
 		issue.Labels = labelsByIDForResource(data, *input.LabelIDs, "issue")

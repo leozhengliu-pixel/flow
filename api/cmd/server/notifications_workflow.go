@@ -563,10 +563,50 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			settings.Timezone = strings.TrimSpace(*input.Timezone)
 		}
 		if input.EstimateType != nil {
-			if !slices.Contains([]string{"notUsed", "exponential", "fibonacci", "flow"}, *input.EstimateType) {
+			if !slices.Contains([]string{"notUsed", "exponential", "fibonacci", "flow", "tShirt"}, *input.EstimateType) {
 				return errInvalid
 			}
 			settings.EstimateType = *input.EstimateType
+		}
+		for _, pick := range []struct {
+			value   *string
+			target  *string
+			project bool
+			members bool
+		}{
+			{input.DefaultIssueTemplateForMembersID, &settings.DefaultIssueTemplateForMembersID, false, true},
+			{input.DefaultIssueTemplateForNonMembersID, &settings.DefaultIssueTemplateForNonMembersID, false, false},
+			{input.DefaultProjectTemplateID, &settings.DefaultProjectTemplateID, true, false},
+		} {
+			if pick.value == nil {
+				continue
+			}
+			id := strings.TrimSpace(*pick.value)
+			if id != "" {
+				if pick.project {
+					if !slices.ContainsFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool { return item.ID == id }) {
+						return errInvalid
+					}
+				} else {
+					index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == id })
+					// Form templates collect input from requesters, so they
+					// cannot be the default for the team's own members.
+					if index < 0 || (pick.members && data.IssueTemplates[index].TemplateType == "customForm") {
+						return errInvalid
+					}
+				}
+			}
+			*pick.target = id
+		}
+		if input.EstimateAllowZero != nil {
+			settings.EstimateAllowZero = *input.EstimateAllowZero
+		}
+		if input.EstimateExtended != nil {
+			settings.EstimateExtended = *input.EstimateExtended
+		}
+		if input.EstimateCountUnestimated != nil {
+			value := *input.EstimateCountUnestimated
+			settings.EstimateCountUnestimated = &value
 		}
 		if input.DefaultStateID != nil {
 			requestedID := *input.DefaultStateID
@@ -623,12 +663,61 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			input.AgentSkillPermission: &settings.AgentSkillPermission,
 			input.LoopPermission:       &settings.LoopPermission,
 			input.MemberPermission:     &settings.MemberPermission,
+			input.PinnedViewPermission: &settings.PinnedViewPermission,
 		} {
 			if value != nil {
 				if !slices.Contains(permissionValues, *value) {
 					return errInvalid
 				}
 				*target = *value
+			}
+		}
+		if input.IssueSharingEnabled != nil {
+			settings.IssueSharingEnabled = *input.IssueSharingEnabled
+		}
+		if input.IssueSharingPermission != nil {
+			if !slices.Contains(permissionValues, *input.IssueSharingPermission) {
+				return errInvalid
+			}
+			settings.IssueSharingPermission = *input.IssueSharingPermission
+		}
+		if input.ApplyToSubTeams != nil && *input.ApplyToSubTeams {
+			for _, descendantID := range teamDescendantIDsIncludingRetired(data, teamID) {
+				if descendantID == teamID {
+					continue
+				}
+				child := teamSettings(data, descendantID)
+				if input.MembershipRestriction != nil {
+					child.MembershipRestriction = settings.MembershipRestriction
+				}
+				if input.SettingsPermission != nil {
+					child.SettingsPermission = settings.SettingsPermission
+				}
+				if input.LabelPermission != nil {
+					child.LabelPermission = settings.LabelPermission
+				}
+				if input.TemplatePermission != nil {
+					child.TemplatePermission = settings.TemplatePermission
+				}
+				if input.AgentSkillPermission != nil {
+					child.AgentSkillPermission = settings.AgentSkillPermission
+				}
+				if input.LoopPermission != nil {
+					child.LoopPermission = settings.LoopPermission
+				}
+				if input.MemberPermission != nil {
+					child.MemberPermission = settings.MemberPermission
+				}
+				if input.PinnedViewPermission != nil {
+					child.PinnedViewPermission = settings.PinnedViewPermission
+				}
+				if input.IssueSharingEnabled != nil {
+					child.IssueSharingEnabled = settings.IssueSharingEnabled
+				}
+				if input.IssueSharingPermission != nil {
+					child.IssueSharingPermission = settings.IssueSharingPermission
+				}
+				data.TeamSettings[descendantID] = child
 			}
 		}
 		if input.SlackChannelID != nil {
@@ -693,6 +782,29 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			}
 			settings.ReleaseAutomations = slices.Clone(*input.ReleaseAutomations)
 		}
+		if input.IssueViewDefaults != nil {
+			// Team default display per issue view; a JSON null value removes that view's default.
+			if len(input.IssueViewDefaults) > 8 {
+				return errInvalid
+			}
+			if settings.IssueViewDefaults == nil {
+				settings.IssueViewDefaults = map[string]json.RawMessage{}
+			}
+			for view, value := range input.IssueViewDefaults {
+				if !slices.Contains([]string{"all", "active", "backlog", "board"}, view) || len(value) > 16<<10 {
+					return errInvalid
+				}
+				if string(value) == "null" {
+					delete(settings.IssueViewDefaults, view)
+					continue
+				}
+				var object map[string]any
+				if json.Unmarshal(value, &object) != nil {
+					return errInvalid
+				}
+				settings.IssueViewDefaults[view] = slices.Clone(value)
+			}
+		}
 		if input.TriageEnabled != nil {
 			settings.TriageEnabled = *input.TriageEnabled
 		}
@@ -707,6 +819,9 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		}
 		if input.AgentSkills != nil {
 			settings.AgentSkills = slices.Clone(*input.AgentSkills)
+		}
+		if input.AgentConnectors != nil {
+			settings.AgentConnectors = slices.Clone(*input.AgentConnectors)
 		}
 		if input.ProjectUpdatePrompt != nil {
 			settings.ProjectUpdatePrompt = strings.TrimSpace(*input.ProjectUpdatePrompt)
@@ -937,6 +1052,24 @@ func (s *server) createTeamLabel(w http.ResponseWriter, r *http.Request) {
 			return "", errNotFound
 		}
 		created = domain.IssueLabel{ID: fmt.Sprintf("label_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5E6AD2", Scope: teamID, ResourceType: "issue", CreatedAt: time.Now().UTC()}
+		if input.ResourceType != nil && *input.ResourceType != "" {
+			resource := strings.TrimSpace(*input.ResourceType)
+			if resource != "issue" && resource != "project" {
+				return "", errInvalid
+			}
+			created.ResourceType = resource
+		}
+		if input.GroupID != nil && *input.GroupID != "" {
+			groupIndex := slices.IndexFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == *input.GroupID })
+			if groupIndex < 0 {
+				return "", errNotFound
+			}
+			group := data.LabelGroups[groupIndex]
+			if group.ArchivedAt != nil || group.ResourceType != created.ResourceType || (group.Scope != teamID && group.Scope != "Workspace" && group.Scope != "") {
+				return "", errInvalid
+			}
+			created.GroupID = group.ID
+		}
 		if input.Color != nil {
 			created.Color = *input.Color
 		}
@@ -1159,7 +1292,7 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 			MemberPermission: "allMembers", SlackNotifications: map[string]bool{}, PRAutomations: map[string]string{},
 			StaleMonths: 6, AutoArchiveMonths: 6, ProgressOrder: "first", TriageAction: "none",
 			ReleaseAutomations: []domain.TeamAutomationRule{}, TriageRules: []domain.TeamAutomationRule{},
-			AgentSkills: []domain.TeamAgentSkill{}, ResolvedSummaries: true, ShowInitiatives: true,
+			AgentSkills: []domain.TeamAgentSkill{}, AgentConnectors: []domain.TeamAgentConnector{}, ResolvedSummaries: true, ShowInitiatives: true,
 		}
 		states := statesForTeam(data, teamID)
 		if len(states) > 0 {
@@ -1195,6 +1328,9 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	if settings.MemberPermission == "" {
 		settings.MemberPermission = "allMembers"
 	}
+	if settings.PinnedViewPermission == "" {
+		settings.PinnedViewPermission = "allMembers"
+	}
 	if settings.SlackNotifications == nil {
 		settings.SlackNotifications = map[string]bool{}
 	}
@@ -1221,6 +1357,9 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	}
 	if settings.AgentSkills == nil {
 		settings.AgentSkills = []domain.TeamAgentSkill{}
+	}
+	if settings.AgentConnectors == nil {
+		settings.AgentConnectors = []domain.TeamAgentConnector{}
 	}
 	if settings.InheritIssueEstimation && settings.ParentTeamID != "" {
 		parent := teamSettings(data, settings.ParentTeamID)
@@ -1492,6 +1631,21 @@ func statesForTeamSeen(data *domain.Bootstrap, teamID string, seen map[string]bo
 	})
 	return result
 }
+func stateForTeamByType(data *domain.Bootstrap, teamID, stateType string) *domain.WorkflowState {
+	states := statesForTeam(data, teamID)
+	for index := range states {
+		if states[index].Type == stateType && !states[index].Reserved {
+			return &states[index]
+		}
+	}
+	for index := range states {
+		if states[index].Type == stateType {
+			return &states[index]
+		}
+	}
+	return nil
+}
+
 func stateForTeam(data *domain.Bootstrap, teamID, stateID string) *domain.WorkflowState {
 	settings := data.TeamSettings[teamID]
 	if settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {
@@ -1699,9 +1853,25 @@ func appendIssueNotifications(data *domain.Bootstrap, issue domain.Issue, activi
 	} else if activity.Metadata["state"] != "" {
 		baseCategory = "statusChanges"
 	}
+	// Comments in a thread reach its watchers (participants and explicit
+	// subscribers); a muted thread stays silent for issue subscribers too.
+	threadMuted := map[string]bool{}
+	if comment != nil && activity.Type != "comment.updated" {
+		if rootID, ok := threadRootID(data.Comments[issue.ID], comment.ID); ok {
+			var watchers []string
+			watchers, threadMuted = threadAudience(data, issue.ID, rootID)
+			if rootID != comment.ID {
+				for _, watcherID := range watchers {
+					if _, assigned := recipients[watcherID]; !assigned {
+						recipients[watcherID] = baseCategory
+					}
+				}
+			}
+		}
+	}
 	if activity.Type != "comment.updated" {
 		for _, subscriberID := range issue.SubscriberIDs {
-			if _, assigned := recipients[subscriberID]; !assigned {
+			if _, assigned := recipients[subscriberID]; !assigned && !threadMuted[subscriberID] {
 				recipients[subscriberID] = baseCategory
 			}
 		}

@@ -145,20 +145,30 @@ func RebuildTeamDirectory(data *Bootstrap) {
 }
 
 func NoteTeamAppended(data *Bootstrap, team Team) {
-	if data.TeamByID == nil {
+	NoteTeamsAppended(data, len(data.Teams)-1)
+}
+
+func NoteTeamsAppended(data *Bootstrap, from int) {
+	if data.TeamByID == nil || data.TeamByKey == nil || data.TeamChildren == nil {
 		RebuildTeamDirectory(data)
 		return
 	}
-	data.TeamByID[team.ID] = len(data.Teams) - 1
-	if team.Key != "" {
-		data.TeamByKey[strings.ToLower(team.Key)] = team.ID
+	if from < 0 {
+		from = 0
 	}
-	parent := ""
-	if data.TeamSettings != nil {
-		parent = data.TeamSettings[team.ID].ParentTeamID
-	}
-	if team.RetiredAt == nil {
-		data.TeamChildren[parent] = append(data.TeamChildren[parent], team.ID)
+	for i := from; i < len(data.Teams); i++ {
+		team := data.Teams[i]
+		data.TeamByID[team.ID] = i
+		if team.Key != "" {
+			data.TeamByKey[strings.ToLower(team.Key)] = team.ID
+		}
+		parent := ""
+		if data.TeamSettings != nil {
+			parent = data.TeamSettings[team.ID].ParentTeamID
+		}
+		if team.RetiredAt == nil {
+			data.TeamChildren[parent] = append(data.TeamChildren[parent], team.ID)
+		}
 	}
 }
 
@@ -168,6 +178,42 @@ func NoteTeamParentChanged(data *Bootstrap, teamID, oldParent, newParent string)
 	}
 	data.TeamChildren[oldParent] = removeString(data.TeamChildren[oldParent], teamID)
 	data.TeamChildren[newParent] = append(data.TeamChildren[newParent], teamID)
+}
+
+// NoteTeamRemoved drops one team from the in-memory directory without rebuilding it.
+// The team must still occupy index. It is swapped with the last team so later indexes stay valid.
+func NoteTeamRemoved(data *Bootstrap, index int) {
+	if data == nil || data.TeamByID == nil || index < 0 || index >= len(data.Teams) {
+		RebuildTeamDirectory(data)
+		return
+	}
+	team := data.Teams[index]
+	parent := ""
+	if data.TeamSettings != nil {
+		parent = data.TeamSettings[team.ID].ParentTeamID
+	}
+	var children []string
+	if data.TeamChildren != nil {
+		children = append([]string(nil), data.TeamChildren[team.ID]...)
+	}
+	last := len(data.Teams) - 1
+	if index != last {
+		moved := data.Teams[last]
+		data.Teams[index] = moved
+		data.TeamByID[moved.ID] = index
+	}
+	data.Teams = data.Teams[:last]
+	delete(data.TeamByID, team.ID)
+	if data.TeamByKey != nil && team.Key != "" {
+		delete(data.TeamByKey, strings.ToLower(team.Key))
+	}
+	if data.TeamChildren != nil {
+		data.TeamChildren[parent] = removeString(data.TeamChildren[parent], team.ID)
+		delete(data.TeamChildren, team.ID)
+		if len(children) > 0 {
+			data.TeamChildren[""] = append(data.TeamChildren[""], children...)
+		}
+	}
 }
 
 func NoteTeamKeyChanged(data *Bootstrap, teamID, oldKey, newKey string) {

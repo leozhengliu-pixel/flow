@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Copy, Edit3, HeartPulse, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Star, Tags, Trash2, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Copy, Edit3, HeartPulse, ListFilter, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Sparkles, Star, Tags, Trash2, UserRound, Users, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
@@ -18,10 +18,13 @@ import { DisplayIcon, FilterIcon as Filter, PlusIcon, SidebarIcon } from '@/comp
 import { SelectControl } from '@/components/ui/select-control'
 import { titleCase } from './initiative-model'
 import './initiatives.css'
+import { FilterGlyph } from '@/components/issue/filter-glyph'
 import './initiatives-list-parity.css'
 import './initiative-controls.css'
 import './initiative-hierarchy.css'
 import { initiativeGraph, initiativeTreeRows, initiativesForTeam } from './initiative-hierarchy'
+import { InitiativesEmptyStateIcon } from './initiatives-empty-state-icon'
+import { InitiativeListTitle } from './initiative-list-title'
 import { teamInitiativesPath } from '@/lib/app-routes'
 import { labelsForResource } from '@/lib/labels'
 import type { TeamSettings } from '@/types/flow'
@@ -173,7 +176,7 @@ export function InitiativesPage(props: Props) {
   return <main className="main-panel li-page">
     <header className="li-page-header">
       <button aria-label="Open sidebar" className="li-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button">☰</button>
-      <h2>{props.teamContext && <><ViewGlyph color={props.teamContext.color} icon={props.teamContext.icon || 'Team'}/><span data-i18n-ignore>{props.teamContext.name}</span> / </>}{t('Initiatives')}</h2>
+      <InitiativeListTitle team={props.teamContext} title={t('Initiatives')} />
       <button aria-label={t('New initiative')} className="li-new-initiative" onClick={() => setCreating(true)} type="button"><PlusIcon/><span>{t('New initiative')}</span></button>
     </header>
     <div className="li-toolbar">
@@ -309,8 +312,8 @@ export function InitiativeCreateRow({ initialLeadTeamId, labels, users, teams, v
 
 function InitiativesEmpty({ filtered, onCreate, view }: { filtered: boolean; onCreate: () => void; view: InitiativesRouteView }) {
   if (filtered) return <div className="li-empty li-empty--filtered"><strong>No initiatives match these filters</strong><p>Try removing or changing a filter.</p></div>
-  if (view === 'planned') return <div className="li-empty li-empty--planned"><span className="li-empty-initiatives" aria-hidden="true"><i/><i/><i/></span><strong>Upcoming initiatives</strong><p>Initiatives are larger, strategic product efforts that set the direction of your company. They are comprised of all projects that align with the goals of the initiative and allow you to monitor their progress at scale.</p><p>Once you create an upcoming initiative that hasn’t started yet, it will show up here.</p><div><button onClick={onCreate} type="button">Create new initiative <kbd>N</kbd><span>then</span><kbd>I</kbd></button><a href="https://flow.app/docs/initiatives" rel="noreferrer" target="_blank">Documentation</a></div></div>
-  return <div className="li-empty li-empty--planned"><span className="li-empty-initiatives" aria-hidden="true"><i/><i/><i/></span><strong>{view === 'active' ? 'Active initiatives' : 'Create your first initiative'}</strong><p>{view === 'active' ? 'Initiatives in progress will appear here.' : 'Coordinate strategic work and monitor project progress at scale.'}</p><div><button onClick={onCreate} type="button">Create new initiative</button></div></div>
+  if (view === 'planned') return <div className="li-empty li-empty--planned"><InitiativesEmptyStateIcon /><strong>Upcoming initiatives</strong><p>Initiatives are larger, strategic product efforts that set the direction of your company. They are comprised of all projects that align with the goals of the initiative and allow you to monitor their progress at scale.</p><p>Once you create an upcoming initiative that hasn’t started yet, it will show up here.</p><div><button onClick={onCreate} type="button">Create new initiative <kbd>N</kbd><span>then</span><kbd>I</kbd></button><a href="https://flow.app/docs/initiatives" rel="noreferrer" target="_blank">Documentation</a></div></div>
+  return <div className="li-empty li-empty--planned"><InitiativesEmptyStateIcon /><strong>{view === 'active' ? 'Active initiatives' : 'Create your first initiative'}</strong><p>{view === 'active' ? 'Initiatives in progress will appear here.' : 'Coordinate strategic work and monitor project progress at scale.'}</p><div><button onClick={onCreate} type="button">Create new initiative</button></div></div>
 }
 
 function ColumnHeader({ gridColumn, property, onSort }: { gridColumn: number; property: Property; onSort: (sort: Sort) => void }) {
@@ -337,9 +340,9 @@ export function InitiativeFilterMenu({ filters, initiatives, users, teams, label
     { id: 'leadTeamId', label: 'Lead team' }, { id: 'teamId', label: 'Contributing teams' }, { id: 'labelId', label: 'Labels' }, { id: 'health', label: 'Health' }, { id: 'date', label: 'Dates' },
   ].filter(item => item.label.toLowerCase().includes(query.toLowerCase()))
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button ui-pill" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="li-menu li-filter-menu" sideOffset={4} collisionPadding={8}>
-    <div className="li-menu-search"><Search size={13}/><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
-    {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><span className="li-ai-filter">✦</span>AI filter</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}>Advanced filter</DropdownMenu.Item><DropdownMenu.Separator/></>}
-    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger><InitiativeFilterIcon field={entry.id}/><span>{entry.label}</span><ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
+    <div className="li-menu-search"><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
+    {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><Sparkles size={14} aria-hidden/><span>AI filter</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}><ListFilter size={14} aria-hidden/><span>Advanced filter</span></DropdownMenu.Item><DropdownMenu.Separator/></>}
+    {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger><FilterGlyph label={entry.label} fallback={<InitiativeFilterIcon field={entry.id}/>}/><span>{entry.label}</span><span className="li-menu-end li-filter-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 

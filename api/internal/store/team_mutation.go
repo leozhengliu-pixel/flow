@@ -31,7 +31,8 @@ type teamMutationSnapshot struct {
 	hintID string
 
 	teamsLen, statesLen, labelsLen, cyclesLen int
-	usersLen, membersLen, teamMembersLen      int
+	usersLen, projectsLen, membersLen         int
+	teamMembersLen                            int
 
 	actorIndex    int
 	actorAppended bool
@@ -49,18 +50,34 @@ type teamMutationSnapshot struct {
 
 	cycleIDs         []string
 	oldCycleSettings map[string]domain.CycleSettings
+
+	oldTeams          []domain.Team
+	oldUsers          []domain.User
+	oldProjects       []domain.Project
+	oldImportSettings map[string]domain.TeamSettings
+
+	deletion *teamDeletionSnapshot
 }
 
 // These events cannot share the generic clone: that path copies every team and
 // rewrites every metadata row, so a single write would be O(teams).
-func metadataTeamMutation(event string, payload any) bool {
+func catalogImportMutation(event string) bool {
 	switch event {
-	case "team.created":
+	case "alm.org_teams_imported", "alm.users_imported", "alm.projects_imported":
+		return true
+	}
+	return false
+}
+
+func metadataTeamMutation(event string, payload any) bool {
+	if catalogImportMutation(event) {
+		return true
+	}
+	switch event {
+	case "team.created", "team.settings_updated", "team.deleted":
 		return true
 	case "team.updated":
 		return metadataFieldsOnly(payload, "name", "color", "icon")
-	case "team.settings_updated":
-		return metadataFieldsOnly(payload, "parentTeamId")
 	}
 	return false
 }
@@ -73,6 +90,8 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	}
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
+	var deletedIssues bool
+	var deletedProjectRefs bool
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	apply := func() error {
 		s.mu.Lock()
@@ -115,29 +134,59 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		}
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
+			if snap.deletion != nil {
+				s.workspaces[workspaceKey] = next
+			}
 			return err
 		}
 		previousValues := json.RawMessage(nil)
 		if webhookEnabled {
 			previousValues = teamMutationPreviousValues(eventType, aggregateID, &snap, next)
 		}
-		payloadRaw, err := json.Marshal(payload)
-		if err != nil {
-			rollbackTeamMutation(&next, &snap, aggregateID)
-			return err
-		}
-		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
-		realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
 		upserts, err := collectDirtyTeamRecords(eventType, aggregateID, &snap, next)
 		if err != nil {
 			rollbackTeamMutation(&next, &snap, aggregateID)
+			if snap.deletion != nil {
+				s.workspaces[workspaceKey] = next
+			}
 			return err
 		}
-		if err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, len(next.Members) != snap.membersLen, len(next.TeamMembers) != snap.teamMembersLen); err != nil {
-			rollbackTeamMutation(&next, &snap, aggregateID)
-			return err
+		if snap.deletion != nil {
+			upserts = append(upserts, collectTeamDeletionRecords(snap.deletion, next)...)
+		}
+		membersChanged := len(next.Members) != snap.membersLen
+		teamMembersChanged := len(next.TeamMembers) != snap.teamMembersLen
+		if eventType == "team.deleted" {
+			// Membership rows live in team_memberships. Rewriting the root
+			// teamMembers array would marshal every member in the workspace.
+			membersChanged = false
+			teamMembersChanged = false
+		}
+		if len(upserts) > 0 || membersChanged || teamMembersChanged {
+			payloadRaw, err := json.Marshal(payload)
+			if err != nil {
+				rollbackTeamMutation(&next, &snap, aggregateID)
+				return err
+			}
+			event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: eventType, AggregateID: aggregateID, Payload: payloadRaw, PreviousValues: previousValues, CreatedAt: time.Now().UTC()}
+			realtimePayload = enrichRealtimePayload(payloadRaw, teamMutationEntity(&next, aggregateID, snap.teamsLen), eventType)
+			removedIssues, err := s.persistTeamMetadata(ctx, workspaceKey, next, &event, upserts, membersChanged, teamMembersChanged)
+			if snap.deletion != nil {
+				snap.deletion.removedIssues = removedIssues
+			}
+			if err != nil {
+				rollbackTeamMutation(&next, &snap, aggregateID)
+				if snap.deletion != nil {
+					s.workspaces[workspaceKey] = next
+				}
+				return err
+			}
 		}
 		noteTeamMutationIndexes(eventType, aggregateID, &snap, &next)
+		if snap.deletion != nil {
+			deletedIssues = snap.deletion.removedIssues > 0
+			deletedProjectRefs = snap.deletion.projectsTouched
+		}
 		next = collectionMetadata(next)
 		s.workspaces[workspaceKey] = next
 		s.lastWorkspaceKey = workspaceKey
@@ -155,7 +204,14 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		}
 		return err
 	}
-	s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
+	if event.ID == "" {
+		return nil
+	}
+	if eventType == "team.deleted" {
+		s.invalidateDeletedTeamCache(ctx, workspaceKey, deletedIssues, deletedProjectRefs)
+	} else {
+		s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
+	}
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, event)
 	}
@@ -177,10 +233,19 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 		labelsLen:      len(data.Labels),
 		cyclesLen:      len(data.Cycles),
 		usersLen:       len(data.Users),
+		projectsLen:    len(data.Projects),
 		membersLen:     len(data.Members),
 		teamMembersLen: len(data.TeamMembers),
 		actorIndex:     -1,
 		teamIndex:      -1,
+	}
+	if catalogImportMutation(eventType) {
+		snapshotImportCatalog(&snap, eventType, data)
+		return snap
+	}
+	if eventType == "team.deleted" {
+		snap.deletion = snapshotTeamDeletion(hintID, data)
+		return snap
 	}
 	if hintID == "" {
 		return snap
@@ -215,6 +280,23 @@ func snapshotTeamMutation(eventType, hintID string, data *domain.Bootstrap) team
 	return snap
 }
 
+func snapshotImportCatalog(snap *teamMutationSnapshot, eventType string, data *domain.Bootstrap) {
+	switch eventType {
+	case "alm.org_teams_imported":
+		snap.oldTeams = slices.Clone(data.Teams)
+		if len(data.TeamSettings) > 0 {
+			snap.oldImportSettings = make(map[string]domain.TeamSettings, len(data.TeamSettings))
+			for id, settings := range data.TeamSettings {
+				snap.oldImportSettings[id] = settings
+			}
+		}
+	case "alm.users_imported":
+		snap.oldUsers = slices.Clone(data.Users)
+	case "alm.projects_imported":
+		snap.oldProjects = slices.Clone(data.Projects)
+	}
+}
+
 func snapshotScopedLabels(data *domain.Bootstrap, scopes []string) map[int]domain.IssueLabel {
 	if data.LabelIndex == nil || len(data.Labels) == 0 {
 		return nil
@@ -231,6 +313,17 @@ func snapshotScopedLabels(data *domain.Bootstrap, scopes []string) map[int]domai
 }
 
 func rollbackTeamMutation(next *domain.Bootstrap, snap *teamMutationSnapshot, aggregateID string) {
+	if restoreTeamDeletion(next, snap.deletion) {
+		return
+	}
+	restoreCatalogByID(next.Teams, snap.oldTeams, func(item domain.Team) string { return item.ID })
+	restoreCatalogByID(next.Users, snap.oldUsers, func(item domain.User) string { return item.ID })
+	restoreCatalogByID(next.Projects, snap.oldProjects, func(item domain.Project) string { return item.ID })
+	if next.TeamSettings != nil {
+		for id, settings := range snap.oldImportSettings {
+			next.TeamSettings[id] = settings
+		}
+	}
 	if snap.teamIndex >= 0 && snap.teamIndex < len(next.Teams) {
 		next.Teams[snap.teamIndex] = snap.oldTeam
 	}
@@ -281,6 +374,23 @@ func rollbackTeamMutation(next *domain.Bootstrap, snap *teamMutationSnapshot, ag
 	}
 }
 
+func restoreCatalogByID[T any](items []T, previous []T, idOf func(T) string) {
+	if len(previous) == 0 || len(items) == 0 {
+		return
+	}
+	index := make(map[string]int, len(items))
+	for i, item := range items {
+		if id := idOf(item); id != "" {
+			index[id] = i
+		}
+	}
+	for _, old := range previous {
+		if i, ok := index[idOf(old)]; ok {
+			items[i] = old
+		}
+	}
+}
+
 func cycleIDKnown(ids []string, target string) bool {
 	for _, id := range ids {
 		if id == target {
@@ -292,10 +402,13 @@ func cycleIDKnown(ids []string, target string) bool {
 
 func noteTeamMutationIndexes(eventType, aggregateID string, snap *teamMutationSnapshot, next *domain.Bootstrap) {
 	switch eventType {
-	case "team.created":
-		if len(next.Teams) > snap.teamsLen {
-			domain.NoteTeamAppended(next, next.Teams[len(next.Teams)-1])
+	case "team.deleted":
+		if next.TeamByID != nil && len(next.TeamByID) != len(next.Teams) {
+			domain.RebuildTeamDirectory(next)
 		}
+		return
+	case "team.created", "alm.org_teams_imported":
+		domain.NoteTeamsAppended(next, snap.teamsLen)
 	case "team.updated":
 		if snap.teamIndex >= 0 && snap.teamIndex < len(next.Teams) {
 			if key := next.Teams[snap.teamIndex].Key; key != snap.oldTeamKey {
@@ -391,20 +504,29 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		return nil
 	}
 	switch eventType {
-	case "team.created":
-		if team, ok := teamInAppendedRange(next.Teams, snap.teamsLen, aggregateID); ok {
+	case "team.created", "alm.org_teams_imported":
+		if eventType == "alm.org_teams_imported" {
+			if err := collectExistingTeamImportUpdates(snap, next, appendRecord); err != nil {
+				return nil, err
+			}
+		}
+		for i := snap.teamsLen; i < len(next.Teams); i++ {
+			team := next.Teams[i]
+			if eventType == "team.created" && aggregateID != "" && team.ID != aggregateID {
+				continue
+			}
 			if err := appendRecord("teams", team.ID, true, team); err != nil {
 				return nil, err
 			}
-		}
-		if settings, ok := next.TeamSettings[aggregateID]; ok {
-			if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
-				return nil, err
+			if settings, ok := next.TeamSettings[team.ID]; ok {
+				if err := appendRecord("teamSettings", team.ID, false, settings); err != nil {
+					return nil, err
+				}
 			}
-		}
-		if settings, ok := next.CycleSettings[aggregateID]; ok {
-			if err := appendRecord("cycleSettings", aggregateID, false, settings); err != nil {
-				return nil, err
+			if settings, ok := next.CycleSettings[team.ID]; ok {
+				if err := appendRecord("cycleSettings", team.ID, false, settings); err != nil {
+					return nil, err
+				}
 			}
 		}
 		if err := appendRange("states", snap.statesLen, func(i int) string { return next.States[i].ID }, func(i int) any { return next.States[i] }); err != nil {
@@ -414,6 +536,20 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 			return nil, err
 		}
 		if err := appendRange("cycles", snap.cyclesLen, func(i int) string { return next.Cycles[i].ID }, func(i int) any { return next.Cycles[i] }); err != nil {
+			return nil, err
+		}
+	case "alm.users_imported":
+		if err := collectExistingUserImportUpdates(snap, next, appendRecord); err != nil {
+			return nil, err
+		}
+		if err := appendRange("users", snap.usersLen, func(i int) string { return next.Users[i].ID }, func(i int) any { return next.Users[i] }); err != nil {
+			return nil, err
+		}
+	case "alm.projects_imported":
+		if err := collectExistingProjectImportUpdates(snap, next, appendRecord); err != nil {
+			return nil, err
+		}
+		if err := appendRange("projects", snap.projectsLen, func(i int) string { return next.Projects[i].ID }, func(i int) any { return next.Projects[i] }); err != nil {
 			return nil, err
 		}
 	case "team.updated":
@@ -436,9 +572,14 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 		}
 	default:
 		if settings, ok := next.TeamSettings[aggregateID]; ok {
-			if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
-				return nil, err
+			if !snap.hadSettings || !metadataTeamSettingsEqual(snap.oldSettings, settings) {
+				if err := appendRecord("teamSettings", aggregateID, false, settings); err != nil {
+					return nil, err
+				}
 			}
+		}
+		if err := appendRange("states", snap.statesLen, func(i int) string { return next.States[i].ID }, func(i int) any { return next.States[i] }); err != nil {
+			return nil, err
 		}
 		index := snap.teamIndex
 		if index >= 0 && index < len(next.Teams) && !metadataTeamEqual(snap.oldTeam, next.Teams[index]) {
@@ -483,6 +624,90 @@ func collectDirtyTeamRecords(eventType, aggregateID string, snap *teamMutationSn
 	return upserts, nil
 }
 
+func collectExistingTeamImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+	if len(snap.oldTeams) == 0 {
+		return nil
+	}
+	previous := make(map[string]domain.Team, len(snap.oldTeams))
+	for _, team := range snap.oldTeams {
+		previous[team.ID] = team
+	}
+	limit := snap.teamsLen
+	if limit > len(next.Teams) {
+		limit = len(next.Teams)
+	}
+	for i := 0; i < limit; i++ {
+		team := next.Teams[i]
+		old, ok := previous[team.ID]
+		if !ok {
+			continue
+		}
+		if !metadataTeamEqual(old, team) {
+			if err := appendRecord("teams", team.ID, false, team); err != nil {
+				return err
+			}
+		}
+		settings, hasSettings := next.TeamSettings[team.ID]
+		oldSettings, hadSettings := snap.oldImportSettings[team.ID]
+		if hasSettings && (!hadSettings || !metadataTeamSettingsEqual(oldSettings, settings)) {
+			if err := appendRecord("teamSettings", team.ID, false, settings); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func collectExistingUserImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+	if len(snap.oldUsers) == 0 {
+		return nil
+	}
+	previous := make(map[string]domain.User, len(snap.oldUsers))
+	for _, user := range snap.oldUsers {
+		previous[user.ID] = user
+	}
+	limit := snap.usersLen
+	if limit > len(next.Users) {
+		limit = len(next.Users)
+	}
+	for i := 0; i < limit; i++ {
+		user := next.Users[i]
+		old, ok := previous[user.ID]
+		if !ok || metadataUserEqual(old, user) {
+			continue
+		}
+		if err := appendRecord("users", user.ID, false, user); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func collectExistingProjectImportUpdates(snap *teamMutationSnapshot, next domain.Bootstrap, appendRecord func(string, string, bool, any) error) error {
+	if len(snap.oldProjects) == 0 {
+		return nil
+	}
+	previous := make(map[string]domain.Project, len(snap.oldProjects))
+	for _, project := range snap.oldProjects {
+		previous[project.ID] = project
+	}
+	limit := snap.projectsLen
+	if limit > len(next.Projects) {
+		limit = len(next.Projects)
+	}
+	for i := 0; i < limit; i++ {
+		project := next.Projects[i]
+		old, ok := previous[project.ID]
+		if !ok || metadataProjectEqual(old, project) {
+			continue
+		}
+		if err := appendRecord("projects", project.ID, false, project); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func lenForField(next domain.Bootstrap, field string) int {
 	switch field {
 	case "states":
@@ -491,64 +716,65 @@ func lenForField(next domain.Bootstrap, field string) int {
 		return len(next.Labels)
 	case "cycles":
 		return len(next.Cycles)
+	case "users":
+		return len(next.Users)
+	case "projects":
+		return len(next.Projects)
 	default:
 		return 0
 	}
 }
 
-func teamInAppendedRange(teams []domain.Team, start int, id string) (domain.Team, bool) {
-	if id == "" {
-		if len(teams) > start {
-			return teams[len(teams)-1], true
-		}
-		return domain.Team{}, false
-	}
-	for i := start; i < len(teams); i++ {
-		if teams[i].ID == id {
-			return teams[i], true
-		}
-	}
-	return domain.Team{}, false
-}
-
-func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) error {
+func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey string, next domain.Bootstrap, event *domain.DomainEvent, upserts []metadataRecordChange, membersChanged, teamMembersChanged bool) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer tx.Rollback()
 	if event != nil && event.Type == "team.settings_updated" {
 		var change map[string]json.RawMessage
 		if json.Unmarshal(event.Payload, &change) == nil && change["parentTeamId"] != nil {
 			if err := syncTeamAncestorMembers(ctx, tx, next, event.AggregateID); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
-	if err := writeMetadataRecordUpserts(ctx, tx, workspaceKey, upserts); err != nil {
-		return err
+	if err := writeMetadataRecordChanges(ctx, tx, workspaceKey, upserts); err != nil {
+		return 0, err
+	}
+	var removedIssues int64
+	if event != nil && event.Type == "team.deleted" {
+		removedIssues, err = deleteTeamOwnedIssueRecords(ctx, tx, workspaceKey, event.AggregateID)
+		if err != nil {
+			return 0, err
+		}
+		if next.Workspace.ID != "" {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=?`, next.Workspace.ID, event.AggregateID); err != nil {
+				return 0, err
+			}
+		}
 	}
 	if membersChanged {
 		raw, err := json.Marshal(next.Members)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if err := writeRootCollectionArray(ctx, tx, workspaceKey, "members", raw); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	if teamMembersChanged {
 		raw, err := json.Marshal(next.TeamMembers)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if err := writeRootCollectionArray(ctx, tx, workspaceKey, "teamMembers", raw); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	if event != nil {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(event.PreviousValues), event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
-			return err
+			return 0, err
 		}
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)
@@ -556,21 +782,39 @@ func (s *SQLiteStore) persistTeamMetadata(ctx context.Context, workspaceKey stri
 		viewerRaw, _ = json.Marshal(next.Viewer)
 	}
 	if err := writeAccountMetadata(ctx, tx, workspaceKey, viewerRaw); err != nil {
-		return err
+		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
-		return err
+		return 0, err
 	}
 	s.cacheMetadataUpserts(ctx, workspaceKey, upserts)
-	return nil
+	return removedIssues, nil
 }
 
 type metadataRecordChange struct {
 	field  string
 	key    string
 	insert bool
+	drop   bool
 	order  int
 	raw    json.RawMessage
+}
+
+func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string, changes []metadataRecordChange) error {
+	upserts := make([]metadataRecordChange, 0, len(changes))
+	for _, change := range changes {
+		if !change.drop {
+			upserts = append(upserts, change)
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key); err != nil {
+			return err
+		}
+		if err := syncMetadataSearchDocument(ctx, tx, workspace, change.field, change.key, nil); err != nil {
+			return err
+		}
+	}
+	return writeMetadataRecordUpserts(ctx, tx, workspace, upserts)
 }
 
 func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string, upserts []metadataRecordChange) error {
@@ -647,8 +891,31 @@ func equalTimePointer(a, b *time.Time) bool {
 
 func metadataTeamEqual(a, b domain.Team) bool {
 	return a.ID == b.ID && a.Name == b.Name && a.Key == b.Key && a.Color == b.Color && a.Icon == b.Icon &&
-		a.Private == b.Private && equalTimePointer(a.RetiredAt, b.RetiredAt) &&
+		a.Private == b.Private && a.ExternalSource == b.ExternalSource && equalTimePointer(a.RetiredAt, b.RetiredAt) &&
 		equalTimePointer(a.CreatedAt, b.CreatedAt) && equalTimePointer(a.UpdatedAt, b.UpdatedAt)
+}
+
+func metadataUserEqual(a, b domain.User) bool {
+	return a.ID == b.ID && a.UserID == b.UserID && a.Name == b.Name && a.DisplayName == b.DisplayName &&
+		a.JobTitle == b.JobTitle && a.Email == b.Email && a.AvatarURL == b.AvatarURL && a.Active == b.Active &&
+		a.EmailVerified == b.EmailVerified && a.App == b.App && a.BuiltinAgent == b.BuiltinAgent &&
+		a.OAuthClientID == b.OAuthClientID && slices.Equal(a.AppScopes, b.AppScopes) && slices.Equal(a.AppTeamIDs, b.AppTeamIDs) &&
+		equalTimePointer(a.OutOfOfficeUntil, b.OutOfOfficeUntil)
+}
+
+func metadataProjectEqual(a, b domain.Project) bool {
+	return a.ID == b.ID && a.Name == b.Name && a.SlugID == b.SlugID && a.Summary == b.Summary &&
+		a.Description == b.Description && a.Icon == b.Icon && a.Color == b.Color && a.Priority == b.Priority &&
+		a.Health == b.Health && a.Status.ID == b.Status.ID && a.Status.Name == b.Status.Name &&
+		a.Status.Type == b.Status.Type && slices.Equal(a.TeamIDs, b.TeamIDs) && slices.Equal(a.MemberIDs, b.MemberIDs) &&
+		equalStringPointer(a.StartDate, b.StartDate) && equalStringPointer(a.TargetDate, b.TargetDate)
+}
+
+func equalStringPointer(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }
 
 func metadataLabelEqual(a, b domain.IssueLabel) bool {
@@ -660,13 +927,16 @@ func metadataLabelEqual(a, b domain.IssueLabel) bool {
 
 func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 	return a.TeamID == b.TeamID && a.Description == b.Description && a.Timezone == b.Timezone &&
-		a.EstimateType == b.EstimateType && a.DefaultStateID == b.DefaultStateID &&
+		a.EstimateType == b.EstimateType && a.EstimateAllowZero == b.EstimateAllowZero && a.EstimateExtended == b.EstimateExtended &&
+		boolPointerEqual(a.EstimateCountUnestimated, b.EstimateCountUnestimated) && a.DefaultStateID == b.DefaultStateID &&
+		a.DefaultIssueTemplateForMembersID == b.DefaultIssueTemplateForMembersID && a.DefaultIssueTemplateForNonMembersID == b.DefaultIssueTemplateForNonMembersID &&
+		a.DefaultProjectTemplateID == b.DefaultProjectTemplateID &&
 		a.DefaultPriority == b.DefaultPriority && a.IssueEmailEnabled == b.IssueEmailEnabled &&
 		a.DetailedHistory == b.DetailedHistory && a.Access == b.Access &&
 		a.MembershipRestriction == b.MembershipRestriction && a.SettingsPermission == b.SettingsPermission &&
 		a.LabelPermission == b.LabelPermission && a.TemplatePermission == b.TemplatePermission &&
 		a.AgentSkillPermission == b.AgentSkillPermission && a.LoopPermission == b.LoopPermission &&
-		a.MemberPermission == b.MemberPermission && a.SlackChannelID == b.SlackChannelID &&
+		a.MemberPermission == b.MemberPermission && a.PinnedViewPermission == b.PinnedViewPermission && a.IssueSharingEnabled == b.IssueSharingEnabled && a.IssueSharingPermission == b.IssueSharingPermission && a.SlackChannelID == b.SlackChannelID &&
 		a.SlackChannelName == b.SlackChannelName && maps.Equal(a.SlackNotifications, b.SlackNotifications) &&
 		maps.Equal(a.PRAutomations, b.PRAutomations) && a.AutoCloseParents == b.AutoCloseParents &&
 		a.AutoCloseSubIssues == b.AutoCloseSubIssues && a.AutoCloseStale == b.AutoCloseStale &&
@@ -679,4 +949,11 @@ func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 		a.ShowInitiatives == b.ShowInitiatives && a.InheritIssueEstimation == b.InheritIssueEstimation &&
 		a.InheritWorkflowStatuses == b.InheritWorkflowStatuses && a.InheritProjectStatuses == b.InheritProjectStatuses &&
 		a.InheritCycles == b.InheritCycles && a.ParentTeamID == b.ParentTeamID
+}
+
+func boolPointerEqual(a, b *bool) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }

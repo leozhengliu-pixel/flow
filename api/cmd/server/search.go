@@ -161,7 +161,7 @@ func (s *server) recordRecentResource(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Non-issue recents validate their resource directory; the issue query
 		// projection intentionally contains only policy and team hierarchy.
-		data, _, err = s.pagedRealtimeMetadata(r)
+		data, err = s.preferenceMetadata(r)
 		if err != nil {
 			issueRecordsError(w, err)
 			return

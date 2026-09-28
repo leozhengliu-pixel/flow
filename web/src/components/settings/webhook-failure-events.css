@@ -1,0 +1,141 @@
+.webhook-failure-events {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.webhook-failure-events-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.webhook-failure-events-header p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.webhook-failure-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--muted);
+  font-size: 13px;
+}
+.webhook-failure-empty h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.webhook-failure-empty p {
+  margin: 0;
+  font-size: 12px;
+}
+.webhook-failure-error {
+  color: var(--danger);
+}
+.webhook-failure-error button,
+.webhook-failure-view {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: 12px inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.webhook-failure-error button:hover,
+.webhook-failure-view:hover {
+  background: var(--bg-hover, color-mix(in srgb, var(--text) 6%, transparent));
+}
+.webhook-failure-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+.webhook-failure-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.webhook-failure-table th,
+.webhook-failure-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.webhook-failure-table th {
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.webhook-failure-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.webhook-failure-table tbody tr:hover td {
+  background: var(--bg-hover, color-mix(in srgb, var(--text) 4%, transparent));
+}
+.webhook-failure-response-cell {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.webhook-failure-muted {
+  color: var(--muted);
+  font-size: 11px;
+}
+.webhook-failure-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+.webhook-failure-detail-dialog {
+  max-width: 520px;
+}
+.webhook-failure-detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.webhook-failure-detail-list > div {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.webhook-failure-detail-list dt {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.webhook-failure-detail-list dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.webhook-failure-response {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  max-height: 240px;
+  overflow: auto;
+}

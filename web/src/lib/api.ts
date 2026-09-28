@@ -1,5 +1,7 @@
 import type {
   AccountBootstrap,
+  ThreadSubscription,
+  ThreadSubscriptionState,
   AccountSessionInfo,
   APIKey,
   Ask,
@@ -26,8 +28,14 @@ import type {
   InitiativeResource,
   InitiativeUpdate,
   IntegrationConnection,
+  JiraLink,
   Invitation,
   InvitationPreview,
+  SCIMToken,
+  WebhookFailureEvent,
+  OAuthSyncGroupRequest,
+  WorkspaceInviteLink,
+  InviteLinkPreview,
   Issue,
   IssueQueryPage,
   IssueLabel,
@@ -41,6 +49,7 @@ import type {
   FlowDocument,
   LabelGroup,
   Loop,
+  LoopRun,
   MigrationEntityMapping,
   MigrationJob,
   Notification,
@@ -67,6 +76,7 @@ import type {
   SLARule,
   Subscription,
   Team,
+  DeletedTeam,
   TeamDefaultFavorite,
   TeamRole,
   TeamSettings,
@@ -74,7 +84,9 @@ import type {
   User,
   UserSettings,
   Webhook,
+  WebhookSecretPayload,
   WorkflowState,
+  Workspace,
   WorkspaceMember,
   WorkspaceMembership,
   WorkspaceMutationInput,
@@ -169,8 +181,10 @@ export function loginAccount(
 ): Promise<AuthSession> {
   return request("/api/auth/login", jsonRequest("POST", { email, password }));
 }
-export function logoutAccount(): Promise<void> {
-  return request("/api/auth/logout", { method: "POST" });
+export async function logoutAccount(): Promise<void> {
+  await request("/api/auth/logout", { method: "POST" });
+  const { ClientStorage } = await import("@/lib/client-storage");
+  ClientStorage.clearAllNonAuthData();
 }
 export function forgotPassword(
   email: string,
@@ -186,6 +200,20 @@ export function resetPassword(
     jsonRequest("POST", { token, password }),
   );
 }
+
+export function tokenAuthLogin(input: {
+  email: string
+  authToken: string
+  service?: string
+  inviteLink?: string
+  forceReauth?: boolean
+}): Promise<AuthSession> {
+  return request('/api/auth/token-login', jsonRequest('POST', input))
+}
+
+export function requestMagicLink(email: string): Promise<{ sent: boolean; loginToken?: string }> {
+  return request('/api/auth/magic-link', jsonRequest('POST', { email }))
+}
 export function fetchInvitationPreview(
   token: string,
 ): Promise<InvitationPreview> {
@@ -195,6 +223,76 @@ export function acceptInvitation(
   token: string,
 ): Promise<import("@/types/flow").WorkspaceMembership> {
   return request("/api/invitations/accept", jsonRequest("POST", { token }));
+}
+
+export function fetchInviteLinkPreview(token: string): Promise<InviteLinkPreview> {
+  return request(`/api/invite-links/preview/${encodeURIComponent(token)}`);
+}
+
+export function joinOrganization(token: string): Promise<WorkspaceMembership> {
+  return request("/api/invite-links/join", jsonRequest("POST", { token }));
+}
+
+export function fetchWorkspaceInviteLink(
+  workspaceKey: string,
+): Promise<WorkspaceInviteLink | { enabled: false }> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/invite-link`);
+}
+
+export function rotateWorkspaceInviteLink(
+  workspaceKey: string,
+): Promise<WorkspaceInviteLink> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/invite-link`,
+    jsonRequest("POST", {}),
+  );
+}
+
+export function disableWorkspaceInviteLink(workspaceKey: string): Promise<void> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/invite-link`, {
+    method: "DELETE",
+  });
+}
+
+export function listSCIMTokens(): Promise<SCIMToken[]> {
+  return request("/api/scim/tokens");
+}
+
+export function createSCIMToken(input: { name: string }): Promise<SCIMToken> {
+  return request("/api/scim/tokens", jsonRequest("POST", input));
+}
+
+export function revokeSCIMToken(id: string): Promise<void> {
+  return request(`/api/scim/tokens/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function rotateSCIMToken(id: string): Promise<SCIMToken> {
+  return request(`/api/scim/tokens/${encodeURIComponent(id)}/rotate`, {
+    method: "POST",
+  });
+}
+
+export function fetchOAuthApplicationFailures(
+  id: string,
+): Promise<WebhookFailureEvent[]> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/failures`);
+}
+
+export function fetchOAuthSyncGroupRequests(
+  id: string,
+): Promise<OAuthSyncGroupRequest[]> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/sync-groups`);
+}
+
+export function decideOAuthSyncGroupRequest(
+  applicationId: string,
+  requestId: string,
+  input: { status: "approved" | "denied"; teamId?: string },
+): Promise<OAuthSyncGroupRequest> {
+  return request(
+    `/api/oauth-applications/${encodeURIComponent(applicationId)}/sync-groups/${encodeURIComponent(requestId)}`,
+    jsonRequest("POST", input),
+  );
 }
 export function inviteMembers(
   workspaceKey: string,
@@ -363,6 +461,11 @@ export function fetchIssueHistory(id: string, signal?: AbortSignal, cursors?: { 
 export function fetchIssueRelated(id: string, signal?: AbortSignal): Promise<Issue[]> {
   return request(`/api/issue-records/${encodeURIComponent(id)}/related`,{signal})
 }
+export type SimilarIssueMatch = { issue: Issue; score: number; possibleDuplicate: boolean; matchedTerms: string[] }
+/** Server-ranked similar issues (TF-IDF over title and description, synonym-aware, workspace-wide). */
+export function fetchSimilarIssues(id: string, signal?: AbortSignal, workspaceKey?: string): Promise<{ results: SimilarIssueMatch[] }> {
+  return request(`/api/issue-records/${encodeURIComponent(id)}/similar?limit=5`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
+}
 export function fetchVisibleIssueIds(workspaceKey: string, ids: string[]): Promise<{ids:string[]}> {
   return request('/api/issue-records/visibility', {...jsonRequest('POST',{ids}),headers:{'Content-Type':'application/json','X-Workspace-Key':workspaceKey}})
 }
@@ -434,10 +537,32 @@ export function deleteWorkspaceLogo(
     method: "DELETE",
   });
 }
-export function deleteWorkspace(workspaceKey: string): Promise<void> {
+export function deleteWorkspace(workspaceKey: string): Promise<Workspace> {
   return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}`, {
     method: "DELETE",
   });
+}
+export function cancelWorkspaceDeletion(workspaceKey: string): Promise<Workspace> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/cancel-deletion`,
+    { method: "POST" },
+  );
+}
+export type WorkspaceAccessStatus = {
+  exists: boolean;
+  hasMembership: boolean;
+  authRestricted?: boolean;
+  reason: "ok" | "not_found" | "no_access" | "auth_restricted";
+  allowedAuthServices: string[];
+  allowedAuthLabels: string[];
+  workspace?: { name: string; urlKey: string; deletionRequestedAt?: string };
+};
+export function fetchWorkspaceAccessStatus(
+  workspaceKey: string,
+): Promise<WorkspaceAccessStatus> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/access-status`,
+  );
 }
 export function updateWorkspaceSettings(
   settings: Record<string, unknown>,
@@ -525,6 +650,10 @@ export async function updateWorkspacePreferences(
 export function fetchWorkspacePreferences(workspaceKey: string): Promise<WorkspaceSettings> {
   return request('/api/workspace/preferences', { headers: { 'X-Workspace-Key': workspaceKey } });
 }
+/** Sends the workspace welcome message to the current user's inbox. */
+export function testWelcomeMessage(): Promise<{ sent: boolean }> {
+  return request("/api/workspace/welcome-message/test", { method: "POST" });
+}
 export function updateWorkspaceAgentGuidance(instructions:string):Promise<{instructions:string}> {return request('/api/workspace/agent-guidance',jsonRequest('PATCH',{instructions}));}
 export function createWorkspaceLabel(input: {
   name: string;
@@ -554,6 +683,8 @@ export function createLabelGroup(input: {
   color?: string;
   description?: string;
   resourceType: "issue" | "project" | "initiative";
+  /** Team ID for a team-owned group; omit for a workspace group. */
+  scope?: string;
 }): Promise<LabelGroup> {
   return request("/api/label-groups", jsonRequest("POST", input));
 }
@@ -715,6 +846,7 @@ export function fetchOAuthApplications(): Promise<OAuthApplication[]> {
 export function createOAuthApplication(input: {
   name: string;
   description?: string;
+  logoUrl?: string;
   redirectUris: string[];
   scopes: string[];
 }): Promise<OAuthApplication> {
@@ -723,7 +855,7 @@ export function createOAuthApplication(input: {
 export function updateOAuthApplication(
   id: string,
   input: Partial<
-    Pick<OAuthApplication, "name" | "description" | "redirectUris" | "scopes">
+    Pick<OAuthApplication, "name" | "description" | "logoUrl" | "redirectUris" | "scopes">
   >,
 ): Promise<OAuthApplication> {
   return request(`/api/oauth-applications/${id}`, jsonRequest("PATCH", input));
@@ -877,6 +1009,47 @@ export async function authorizeIntegration(provider: string, input: { name?: str
 export function disconnectIntegration(provider: string): Promise<void> {
   return request(`/api/integrations/${provider}`, { method: "DELETE" });
 }
+
+export type JiraRemoteProject = { id: string; key: string; name: string };
+export type JiraRemoteStatus = { id: string; name: string; category?: string };
+
+export function fetchJiraLinks(): Promise<JiraLink[]> {
+  return request("/api/jira/links");
+}
+export function createJiraLink(input: {
+  jiraProjectId: string;
+  jiraProjectKey?: string;
+  jiraProjectName?: string;
+  teamId: string;
+  syncDirection?: string;
+  statusMap?: Record<string, string>;
+}): Promise<JiraLink> {
+  return request("/api/jira/links", jsonRequest("POST", input));
+}
+export function updateJiraLink(
+  id: string,
+  input: { syncDirection?: string; statusMap?: Record<string, string> },
+): Promise<JiraLink> {
+  return request(`/api/jira/links/${id}`, jsonRequest("PATCH", input));
+}
+export function deleteJiraLink(id: string): Promise<void> {
+  return request(`/api/jira/links/${id}`, { method: "DELETE" });
+}
+export function fetchJiraRemoteProjects(): Promise<{
+  projects: JiraRemoteProject[];
+  error?: string;
+  status?: string;
+}> {
+  return request("/api/jira/remote/projects");
+}
+export function fetchJiraRemoteStatuses(projectId: string): Promise<{
+  statuses: JiraRemoteStatus[];
+  error?: string;
+  status?: string;
+  projectId?: string;
+}> {
+  return request(`/api/jira/remote/projects/${encodeURIComponent(projectId)}/statuses`);
+}
 export function updateIntegrationConnection(
   provider: string,
   id: string,
@@ -956,20 +1129,37 @@ export function createWebhook(
   input: Pick<
     Webhook,
     "name" | "url" | "resourceTypes" | "teamIds" | "enabled"
-  >,
-): Promise<Webhook> {
+  > & { applicationId?: string },
+): Promise<Webhook & { secret?: string }> {
   return request("/api/webhooks", jsonRequest("POST", input));
 }
 export function updateWebhook(
   id: string,
   input: Partial<
-    Pick<Webhook, "name" | "url" | "resourceTypes" | "teamIds" | "enabled">
+    Pick<Webhook, "name" | "url" | "resourceTypes" | "teamIds" | "enabled" | "applicationId">
   >,
 ): Promise<Webhook> {
   return request(`/api/webhooks/${id}`, jsonRequest("PATCH", input));
 }
 export function deleteWebhook(id: string): Promise<void> {
   return request(`/api/webhooks/${id}`, { method: "DELETE" });
+}
+export function fetchWebhookFailures(
+  id: string,
+): Promise<WebhookFailureEvent[]> {
+  return request(`/api/webhooks/${id}/failures`);
+}
+
+/** LS-0711 — rotate signing secret; raw secret returned once. */
+export function rotateWebhookSecret(
+  id: string,
+): Promise<Webhook & { secret: string }> {
+  return request(`/api/webhooks/${id}/rotate-secret`, { method: "POST" });
+}
+
+/** LS-0711 — revoke signing secret. */
+export function revokeWebhookSecret(id: string): Promise<void> {
+  return request(`/api/webhooks/${id}/revoke-secret`, { method: "POST" });
 }
 export function createTeam(
   workspaceKey: string,
@@ -1016,6 +1206,31 @@ export function deleteTeam(
     { method: "DELETE" },
   );
 }
+export interface AuditLogStreamStatus {
+  webhook: Webhook | null;
+  failures: WebhookFailureEvent[];
+}
+export function getAuditLogStream(): Promise<AuditLogStreamStatus> {
+  return request("/api/workspace/audit-log-stream");
+}
+export function createAuditLogStream(input: { url: string; secret: string }): Promise<Webhook & { secret: string }> {
+  return request("/api/workspace/audit-log-stream", jsonRequest("POST", input));
+}
+export function updateAuditLogStream(input: { enabled?: boolean; url?: string }): Promise<Webhook> {
+  return request("/api/workspace/audit-log-stream", jsonRequest("PATCH", input));
+}
+export function deleteAuditLogStream(): Promise<void> {
+  return request("/api/workspace/audit-log-stream", { method: "DELETE" });
+}
+export function listDeletedTeams(workspaceKey: string): Promise<DeletedTeam[]> {
+  return request(`/api/workspaces/${encodeURIComponent(workspaceKey)}/deleted-teams`);
+}
+export function restoreDeletedTeam(workspaceKey: string, teamId: string): Promise<Team> {
+  return request(
+    `/api/workspaces/${encodeURIComponent(workspaceKey)}/deleted-teams/${encodeURIComponent(teamId)}/restore`,
+    { method: "POST" },
+  );
+}
 export function createCustomer(
   input: CustomerMutationInput & { name: string },
 ): Promise<Customer> {
@@ -1045,6 +1260,7 @@ export function createCustomerRequest(input: {
   sourceUrl?: string;
   issueId?: string;
   projectId?: string;
+  priority?: number;
 }): Promise<CustomerRequest> {
   return request("/api/customer-requests", jsonRequest("POST", input));
 }
@@ -1053,7 +1269,7 @@ export function updateCustomerRequest(
   input: Partial<
     Pick<
       CustomerRequest,
-      "body" | "source" | "sourceUrl" | "issueId" | "projectId"
+      "body" | "source" | "sourceUrl" | "issueId" | "projectId" | "priority"
     >
   >,
 ): Promise<CustomerRequest> {
@@ -1465,8 +1681,10 @@ export function deleteSLARule(id: string): Promise<void> {
   return request(`/api/sla-rules/${id}`, { method: "DELETE" });
 }
 export function updateSLASettings(input: {
-  enabled: boolean;
-}): Promise<{ enabled: boolean }> {
+  enabled?: boolean;
+  /** Business week used by business-hour SLAs. */
+  workWeek?: "monFri" | "sunThu";
+}): Promise<{ enabled: boolean; workWeek: "monFri" | "sunThu" }> {
   return request("/api/sla-settings", jsonRequest("PUT", input));
 }
 export function updateProjectUpdateSettings(
@@ -2159,6 +2377,10 @@ export function deleteCycleResource(
 export function getCycleCalendarFeed(id: string): Promise<{ url: string }> {
   return request(`/api/cycles/${id}/calendar-token`, { method: "POST" });
 }
+/** Permanently deletes a team's cycle history; cycles must be disabled. */
+export function deleteTeamCycles(teamId: string): Promise<{ deleted: boolean }> {
+  return request(`/api/teams/${teamId}/cycles`, { method: "DELETE" });
+}
 export function updateCycleSettings(
   teamId: string,
   input: CycleSettingsMutationInput,
@@ -2225,6 +2447,8 @@ export type LoopMutation = Partial<
     | "allowChangesOutsideTrigger"
     | "allowExternalSync"
     | "enabled"
+    | "ownerId"
+    | "trustedSourceKeys"
   >
 >;
 export function listLoops(): Promise<Loop[]> {
@@ -2240,6 +2464,12 @@ export function updateLoop(id: string, input: LoopMutation): Promise<Loop> {
     `/api/loops/${encodeURIComponent(id)}`,
     jsonRequest("PATCH", input),
   );
+}
+export function listLoopRuns(id: string): Promise<LoopRun[]> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs`);
+}
+export function runLoopNow(id: string): Promise<LoopRun> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs`, { method: "POST" });
 }
 export function deleteLoop(id: string): Promise<void> {
   return request(`/api/loops/${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -2282,12 +2512,52 @@ export function updateComment(
     body: JSON.stringify({ body, bodyData, expectedVersion }),
   });
 }
+export function resolveComment(
+  issueId: string,
+  commentId: string,
+  resolved: boolean,
+  expectedVersion?: number,
+  threadSummary?: { content: string; evalLogId?: string },
+): Promise<Comment> {
+  return request(`/api/issues/${issueId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved, expectedVersion, threadSummary }),
+  });
+}
+export function resolveDocumentComment(
+  documentId: string,
+  commentId: string,
+  resolved: boolean,
+  expectedVersion?: number,
+  threadSummary?: { content: string; evalLogId?: string },
+): Promise<Comment> {
+  return request(`/api/documents/${documentId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ resolved, expectedVersion, threadSummary }),
+  });
+}
 export function deleteComment(
   issueId: string,
   commentId: string,
 ): Promise<void> {
   return request(`/api/issues/${issueId}/comments/${commentId}`, {
     method: "DELETE",
+  });
+}
+/** Subscribe to or mute one comment thread; `null` clears the explicit choice. */
+export function setThreadSubscription(
+  issueId: string,
+  commentId: string,
+  state: ThreadSubscriptionState | null,
+): Promise<ThreadSubscription | void> {
+  const path = `/api/issues/${issueId}/comments/${commentId}/subscription`;
+  if (!state) return request(path, { method: "DELETE" });
+  return request(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ state }),
   });
 }
 export function toggleCommentReaction(
@@ -2337,6 +2607,20 @@ export function uploadAttachment(
     method: "POST",
     body,
   });
+}
+export function uploadAttachmentFromURL(
+  issueId: string,
+  url: string,
+  options?: { title?: string; embed?: boolean },
+): Promise<Attachment> {
+  return request(
+    `/api/issues/${issueId}/attachments/from-url`,
+    jsonRequest("POST", {
+      url,
+      title: options?.title,
+      embed: options?.embed,
+    }),
+  );
 }
 
 export function deleteAttachment(
@@ -2579,6 +2863,8 @@ export type WorkflowDefinitionInput = {
   actions: WorkflowAction[];
   enabled?: boolean;
   maxAttempts?: number;
+  ownerId?: string;
+  trustedSourceKeys?: string[];
 };
 export function listWorkflowDefinitions(): Promise<WorkflowDefinition[]> {
   return request("/api/workflows");
@@ -2714,7 +3000,11 @@ export function fetchTeamLabels(teamId: string): Promise<IssueLabel[]> {
 }
 export function createTeamLabel(
   teamId: string,
-  input: Pick<IssueLabel, "name" | "color"> & { description?: string },
+  input: Pick<IssueLabel, "name" | "color"> & {
+    description?: string;
+    resourceType?: "issue" | "project";
+    groupId?: string;
+  },
 ): Promise<IssueLabel> {
   return request(`/api/teams/${teamId}/labels`, jsonRequest("POST", input));
 }
@@ -3356,6 +3646,11 @@ export function updateMeeting(
 }
 export function deleteMeeting(id: string): Promise<void> {
   return request(`/api/meetings/${id}`, { method: "DELETE" });
+}
+export type AIFilterVocabulary = Record<string, { id: string; label: string }[]>
+/** LLM filter parsing via the Flow Agent; 503 when no Agent is configured. */
+export function aiIssueFilter(query: string, fields: AIFilterVocabulary, signal?: AbortSignal): Promise<{ filters: { field: string; option: { id: string; label: string } }[] }> {
+  return request("/api/ai/issue-filter", { ...jsonRequest("POST", { query, fields, today: new Date().toISOString().slice(0, 10) }), signal });
 }
 export function semanticSearch(
   query: string,

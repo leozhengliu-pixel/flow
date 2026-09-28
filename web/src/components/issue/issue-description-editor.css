@@ -393,3 +393,16 @@
 .menu-content.description-heading-menu { box-sizing: border-box; width: 165px; min-width: 165px; padding: 4px 0; border: .5px solid var(--theme-border-strong); border-radius: 10px; background: var(--theme-surface-2); }
 .description-heading-menu .menu-item { height: 32px; gap: 8px; margin: 0; padding: 0 14px; border-radius: 0; white-space: nowrap; }
 .description-heading-menu .menu-item svg { flex: none; color: var(--action-menu-muted); }
+.issue-description .inline-comment-mark,
+.ProseMirror .inline-comment-mark {
+  background: color-mix(in lch, var(--activity-highlight-color) 22%, transparent);
+  border-bottom: 1.5px solid var(--activity-highlight-color);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.issue-description .inline-comment-mark[data-resolved="true"],
+.ProseMirror .inline-comment-mark[data-resolved="true"] {
+  background: transparent;
+  border-bottom-style: dashed;
+  opacity: 0.7;
+}

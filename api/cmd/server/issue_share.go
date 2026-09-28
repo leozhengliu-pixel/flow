@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -20,6 +21,10 @@ func (s *server) shareIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		if issueRole(s, *data, *item) != "owner" {
 			return errNotFound
+		}
+		settings := teamSettings(data, item.Team.ID)
+		if !settings.IssueSharingEnabled {
+			return fmt.Errorf("%w: issue sharing is disabled for this team", errInvalid)
 		}
 		if item.ShareToken == "" {
 			token, tokenErr := randomSecret("issue_share_")

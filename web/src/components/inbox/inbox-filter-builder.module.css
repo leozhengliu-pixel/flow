@@ -77,3 +77,10 @@
 .propertyMenu,.valueMenu,.operatorMenu,.conditionValueMenu,.commandMenu{border-color:var(--popover-border);border-radius:var(--filter-popover-radius);box-shadow:var(--shadow-control)}
 
 @media(max-width:800px){.appliedBar{padding-inline:8px}}
+/* Reference surface and icons (both themes). */
+.propertyMenu:not(#_),.valueMenu:not(#_),.operatorMenu:not(#_),.conditionValueMenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);color:var(--pk-text)}
+.propertyMenu:not(#_){box-shadow:var(--pk-shadow)}
+.valueMenu:not(#_),.conditionValueMenu:not(#_){box-shadow:var(--pk-card-shadow)}
+.propertyItem:not(#_)>svg:first-child{width:14px;height:14px;margin:0 1px;color:var(--pk-text)}
+.propertyItem:not(#_)>span:not(.propertyArrow){color:var(--pk-text)}
+.propertyArrow:not(#_){color:var(--pk-faint)}

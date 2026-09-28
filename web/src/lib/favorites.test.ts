@@ -16,9 +16,9 @@ vi.mock('./api', async importOriginal => ({
 
 import {
   applyFavoriteDelta,
+  optimisticFavorite,
   FAVORITES_CHANGED,
   nextFavoritePosition,
-  optimisticFavorite,
   overlayPendingFavoriteIntents,
   resetFavoriteIntents,
   toggleFavorite,
@@ -173,5 +173,25 @@ describe('favorites', () => {
     expect(overlayPendingFavoriteIntents(data).favorites).toEqual([])
     expect(overlayPendingFavoriteIntents({ ...data, favorites: [] }).favorites).toEqual([])
     expect(overlayPendingFavoriteIntents(data).favorites).toEqual([existing])
+  })
+})
+
+describe('applyFavoriteDelta label', () => {
+  it('marks label favorite on applyFavoriteDelta', () => {
+    const data = {
+      viewer: { id: 'u1' },
+      favorites: [],
+      labels: [{ id: 'lab', name: 'Bug', color: '#f00' }],
+      documents: [],
+      cycles: [],
+      initiatives: [],
+      savedViews: [],
+      reviews: [],
+      workspace: { urlKey: 'acme' },
+    } as any
+    const created = optimisticFavorite('u1', 'label', 'lab')
+    const updated = applyFavoriteDelta(data, { resourceType: 'label', resourceId: 'lab', favorite: created })
+    expect(updated.labels.find((item: any) => item.id === 'lab')?.favorite).toBe(true)
+    expect(applyFavoriteDelta(updated, { resourceType: 'label', resourceId: 'lab', favorite: null }).labels.find((item: any) => item.id === 'lab')?.favorite).toBe(false)
   })
 })

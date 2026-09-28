@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -61,6 +62,10 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 		for _, tool := range connectors {
 			tools = append(tools, tool.Definition)
 		}
+	}
+	// Loop runs narrow the tool list to what the loop is permitted to use.
+	if allow, ok := ctx.Value(agentToolFilterKey{}).(func(agentProviderTool) bool); ok {
+		tools = slices.DeleteFunc(tools, func(tool agentProviderTool) bool { return !allow(tool) })
 	}
 	protocol := s.agent.Protocol
 	if protocol == "" {

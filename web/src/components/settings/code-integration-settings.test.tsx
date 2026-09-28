@@ -65,3 +65,39 @@ it("tests a GitLab token against the configured host before connecting", async (
     },
   );
 });
+
+it("renders GitHubSettingsMetadata pull-request and Enterprise Cloud sections (LS-0282)", () => {
+  const connection = {
+    id: "connection",
+    provider: "github",
+    name: "Example",
+    status: "connected",
+    config: { organization: "example", reviewGuides: "true", autoLink: "false" },
+    connectedBy: "user",
+    createdAt: "2026-09-10T00:00:00Z",
+    updatedAt: "2026-09-10T00:00:00Z",
+    scopes: [],
+    channels: [],
+    linkbackEnabled: false,
+    deliveryAttempts: 0,
+  } as IntegrationConnection;
+  render(
+    <I18nProvider>
+      <CodeIntegrationSettings
+        provider="github"
+        data={makeBootstrap({
+          integrationConnections: [connection],
+          integrationDeliveries: [],
+        })}
+        onBack={vi.fn()}
+        onReload={vi.fn()}
+      />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("heading", { name: "Pull requests" })).toBeInTheDocument();
+  expect(screen.getByText("Generate Pull Request guides")).toBeInTheDocument();
+  expect(screen.getByText("Automatically link Flow issues")).toBeInTheDocument();
+  expect(
+    screen.getByRole("heading", { name: "GitHub Enterprise Cloud" }),
+  ).toBeInTheDocument();
+});

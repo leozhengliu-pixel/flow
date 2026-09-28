@@ -107,6 +107,30 @@ type Invitation struct {
 	Token       string     `json:"token,omitempty"`
 }
 
+// WorkspaceInviteLink is the shareable workspace join link (distinct from
+// per-email Invitation tokens accepted at /invite/:token).
+type WorkspaceInviteLink struct {
+	Token     string    `json:"token"`
+	Enabled   bool      `json:"enabled"`
+	CreatedBy string    `json:"createdBy,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// OAuthSyncGroupRequest is an app-user request to sync IdP/directory groups
+// into workspace teams. Approve/deny is available when this model is present.
+type OAuthSyncGroupRequest struct {
+	ID            string     `json:"id"`
+	ApplicationID string     `json:"applicationId"`
+	GroupName     string     `json:"groupName"`
+	TeamID        string     `json:"teamId,omitempty"`
+	Status        string     `json:"status"` // pending | approved | denied
+	RequestedBy   string     `json:"requestedBy,omitempty"`
+	ReviewedBy    string     `json:"reviewedBy,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	ReviewedAt    *time.Time `json:"reviewedAt,omitempty"`
+}
+
 type AuthSession struct {
 	User        User                  `json:"user"`
 	Memberships []WorkspaceMembership `json:"memberships"`
@@ -118,8 +142,17 @@ type AgentMessage struct {
 	Role       string             `json:"role"`
 	Content    string             `json:"content"`
 	Parts      []AgentMessagePart `json:"parts,omitempty"`
+	// Mentions are the resources @-mentioned in a user message, in order.
+	Mentions   []AgentMention     `json:"mentions,omitempty"`
 	DurationMS int64              `json:"durationMs,omitempty"`
 	CreatedAt  time.Time          `json:"createdAt"`
+}
+
+// AgentMention is an @-mentioned issue, project, document or user.
+type AgentMention struct {
+	Type  string `json:"type"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
 }
 
 type AgentMessagePart struct {
@@ -163,6 +196,10 @@ type AgentSession struct {
 	Favorite  bool           `json:"favorite"`
 	Location  string         `json:"location"`
 	IssueIDs  []string       `json:"issueIds"`
+	// ProjectIDs and DocumentIDs are resources @-mentioned in the conversation.
+	ProjectIDs  []string `json:"projectIds,omitempty"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
+	UserIDs     []string `json:"userIds,omitempty"`
 	SkillIDs  []string       `json:"skillIds"`
 	Messages  []AgentMessage `json:"messages"`
 	CreatedAt time.Time      `json:"createdAt"`
@@ -195,14 +232,15 @@ type AccountSession struct {
 }
 
 type Workspace struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	URLKey    string    `json:"urlKey"`
-	Icon      string    `json:"icon,omitempty"`
-	LogoURL   string    `json:"logoUrl,omitempty"`
-	Color     string    `json:"color,omitempty"`
-	Region    string    `json:"region,omitempty"`
-	CreatedAt time.Time `json:"createdAt,omitempty"`
+	ID                  string     `json:"id"`
+	Name                string     `json:"name"`
+	URLKey              string     `json:"urlKey"`
+	Icon                string     `json:"icon,omitempty"`
+	LogoURL             string     `json:"logoUrl,omitempty"`
+	Color               string     `json:"color,omitempty"`
+	Region              string     `json:"region,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt,omitempty"`
+	DeletionRequestedAt *time.Time `json:"deletionRequestedAt,omitempty"`
 }
 
 type WorkspaceMembership struct {
@@ -229,8 +267,12 @@ type Team struct {
 	Private        bool       `json:"private,omitempty"`
 	ExternalSource string     `json:"externalSource,omitempty"`
 	RetiredAt      *time.Time `json:"retiredAt,omitempty"`
-	CreatedAt      *time.Time `json:"createdAt,omitempty"`
-	UpdatedAt      *time.Time `json:"updatedAt,omitempty"`
+	// ArchivedAt marks a deleted team inside its restoration window. Archived
+	// teams and their issues are hidden from every viewer until restored or purged.
+	ArchivedAt   *time.Time `json:"archivedAt,omitempty"`
+	ArchivedByID string     `json:"archivedById,omitempty"`
+	CreatedAt    *time.Time `json:"createdAt,omitempty"`
+	UpdatedAt    *time.Time `json:"updatedAt,omitempty"`
 }
 
 type Customer struct {
@@ -409,6 +451,7 @@ type Issue struct {
 	ParentID               *string             `json:"parentId,omitempty"`
 	Recurrence             string              `json:"recurrence,omitempty"`
 	NextOccurrenceAt       *time.Time          `json:"nextOccurrenceAt,omitempty"`
+	SnoozedUntil           *time.Time          `json:"snoozedUntil,omitempty"`
 	SubscriberIDs          []string            `json:"subscriberIds"`
 	Reactions              map[string][]string `json:"reactions"`
 	SubIssueIDs            []string            `json:"subIssueIds"`
@@ -462,47 +505,64 @@ type CycleSettings struct {
 }
 
 type TeamSettings struct {
-	TeamID                  string               `json:"teamId"`
-	Description             string               `json:"description,omitempty"`
-	Timezone                string               `json:"timezone"`
-	EstimateType            string               `json:"estimateType"`
-	DefaultStateID          string               `json:"defaultStateId"`
-	DefaultPriority         int                  `json:"defaultPriority"`
-	IssueEmailEnabled       bool                 `json:"issueEmailEnabled"`
-	DetailedHistory         bool                 `json:"detailedHistory"`
-	Access                  string               `json:"access"`
-	MembershipRestriction   string               `json:"membershipRestriction"`
-	SettingsPermission      string               `json:"settingsPermission"`
-	LabelPermission         string               `json:"labelPermission"`
-	TemplatePermission      string               `json:"templatePermission"`
-	AgentSkillPermission    string               `json:"agentSkillPermission"`
-	LoopPermission          string               `json:"loopPermission"`
-	MemberPermission        string               `json:"memberPermission"`
-	SlackChannelID          string               `json:"slackChannelId,omitempty"`
-	SlackChannelName        string               `json:"slackChannelName,omitempty"`
-	SlackNotifications      map[string]bool      `json:"slackNotifications"`
-	PRAutomations           map[string]string    `json:"prAutomations"`
-	AutoCloseParents        bool                 `json:"autoCloseParents"`
-	AutoCloseSubIssues      bool                 `json:"autoCloseSubIssues"`
-	AutoCloseStale          bool                 `json:"autoCloseStale"`
-	StaleMonths             int                  `json:"staleMonths"`
-	StaleStatusID           string               `json:"staleStatusId,omitempty"`
-	AutoArchiveMonths       int                  `json:"autoArchiveMonths"`
-	ProgressOrder           string               `json:"progressOrder"`
-	ReleaseAutomations      []TeamAutomationRule `json:"releaseAutomations"`
-	TriageEnabled           bool                 `json:"triageEnabled"`
-	TriageRequirePriority   bool                 `json:"triageRequirePriority"`
-	TriageAction            string               `json:"triageAction"`
-	TriageRules             []TeamAutomationRule `json:"triageRules"`
-	AgentSkills             []TeamAgentSkill     `json:"agentSkills"`
-	ProjectUpdatePrompt     string               `json:"projectUpdatePrompt"`
-	ResolvedSummaries       bool                 `json:"resolvedThreadSummaries"`
-	ShowInitiatives         bool                 `json:"showInitiatives"`
-	InheritIssueEstimation  bool                 `json:"inheritIssueEstimation"`
-	InheritWorkflowStatuses bool                 `json:"inheritWorkflowStatuses"`
-	InheritProjectStatuses  bool                 `json:"inheritProjectStatuses"`
-	InheritCycles           bool                 `json:"inheritCycles"`
-	ParentTeamID            string               `json:"parentTeamId,omitempty"`
+	TeamID                string `json:"teamId"`
+	Description           string `json:"description,omitempty"`
+	Timezone              string `json:"timezone"`
+	EstimateType          string `json:"estimateType"`
+	DefaultStateID        string `json:"defaultStateId"`
+	DefaultPriority       int    `json:"defaultPriority"`
+	IssueEmailEnabled     bool   `json:"issueEmailEnabled"`
+	DetailedHistory       bool   `json:"detailedHistory"`
+	Access                string `json:"access"`
+	MembershipRestriction string `json:"membershipRestriction"`
+	SettingsPermission    string `json:"settingsPermission"`
+	LabelPermission       string `json:"labelPermission"`
+	TemplatePermission    string `json:"templatePermission"`
+	AgentSkillPermission  string `json:"agentSkillPermission"`
+	LoopPermission        string `json:"loopPermission"`
+	MemberPermission      string `json:"memberPermission"`
+	PinnedViewPermission  string `json:"pinnedViewPermission"`
+	// Templates preselected when creating issues/projects for this team.
+	DefaultIssueTemplateForMembersID    string `json:"defaultIssueTemplateForMembersId,omitempty"`
+	DefaultIssueTemplateForNonMembersID string `json:"defaultIssueTemplateForNonMembersId,omitempty"`
+	DefaultProjectTemplateID            string `json:"defaultProjectTemplateId,omitempty"`
+	// Estimate scale options (see the web estimates module).
+	EstimateAllowZero bool `json:"estimateAllowZero"`
+	EstimateExtended  bool `json:"estimateExtended"`
+	// EstimateCountUnestimated is nil for teams created before the option,
+	// which keeps the historical behavior of counting them as 1 point.
+	EstimateCountUnestimated *bool                `json:"estimateCountUnestimated,omitempty"`
+	IssueSharingEnabled      bool                 `json:"issueSharingEnabled"`
+	IssueSharingPermission   string               `json:"issueSharingPermission,omitempty"`
+	SlackChannelID           string               `json:"slackChannelId,omitempty"`
+	SlackChannelName         string               `json:"slackChannelName,omitempty"`
+	SlackNotifications       map[string]bool      `json:"slackNotifications"`
+	PRAutomations            map[string]string    `json:"prAutomations"`
+	AutoCloseParents         bool                 `json:"autoCloseParents"`
+	AutoCloseSubIssues       bool                 `json:"autoCloseSubIssues"`
+	AutoCloseStale           bool                 `json:"autoCloseStale"`
+	StaleMonths              int                  `json:"staleMonths"`
+	StaleStatusID            string               `json:"staleStatusId,omitempty"`
+	AutoArchiveMonths        int                  `json:"autoArchiveMonths"`
+	ProgressOrder            string               `json:"progressOrder"`
+	ReleaseAutomations       []TeamAutomationRule `json:"releaseAutomations"`
+	TriageEnabled            bool                 `json:"triageEnabled"`
+	TriageRequirePriority    bool                 `json:"triageRequirePriority"`
+	TriageAction             string               `json:"triageAction"`
+	TriageRules              []TeamAutomationRule `json:"triageRules"`
+	AgentSkills              []TeamAgentSkill     `json:"agentSkills"`
+	AgentConnectors          []TeamAgentConnector `json:"agentConnectors,omitempty"`
+	ProjectUpdatePrompt      string               `json:"projectUpdatePrompt"`
+	ResolvedSummaries        bool                 `json:"resolvedThreadSummaries"`
+	ShowInitiatives          bool                 `json:"showInitiatives"`
+	InheritIssueEstimation   bool                 `json:"inheritIssueEstimation"`
+	InheritWorkflowStatuses  bool                 `json:"inheritWorkflowStatuses"`
+	InheritProjectStatuses   bool                 `json:"inheritProjectStatuses"`
+	InheritCycles            bool                 `json:"inheritCycles"`
+	ParentTeamID             string               `json:"parentTeamId,omitempty"`
+	// IssueViewDefaults holds team default display options per issue view
+	// ("all", "active", "backlog", "board"); opaque to the server.
+	IssueViewDefaults map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
 }
 
 type TeamAutomationRule struct {
@@ -798,11 +858,37 @@ type Loop struct {
 	AllowChangesOutsideTrigger bool           `json:"allowChangesOutsideTrigger"`
 	AllowExternalSync          bool           `json:"allowExternalSync"`
 	Enabled                    bool           `json:"enabled"`
+	OwnerID                    string         `json:"ownerId,omitempty"`
+	TrustedSourceKeys          []string       `json:"trustedSourceKeys,omitempty"`
 	Creator                    User           `json:"creator"`
 	LastRunAt                  *time.Time     `json:"lastRunAt,omitempty"`
 	NextRunAt                  *time.Time     `json:"nextRunAt,omitempty"`
 	CreatedAt                  time.Time      `json:"createdAt"`
 	UpdatedAt                  time.Time      `json:"updatedAt"`
+}
+
+// LoopRun records one execution of a loop by the agent runtime.
+type LoopRun struct {
+	ID               string            `json:"id"`
+	LoopID           string            `json:"loopId"`
+	Status           string            `json:"status"`  // running | completed | failed
+	Trigger          string            `json:"trigger"` // manual | schedule | event
+	EventType        string            `json:"eventType,omitempty"`
+	EntityType       string            `json:"entityType,omitempty"`
+	EntityID         string            `json:"entityId,omitempty"`
+	EntityIdentifier string            `json:"entityIdentifier,omitempty"`
+	ActorID          string            `json:"actorId,omitempty"`
+	Output           string            `json:"output,omitempty"`
+	ToolCalls        []LoopRunToolCall `json:"toolCalls,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	StartedAt        time.Time         `json:"startedAt"`
+	FinishedAt       *time.Time        `json:"finishedAt,omitempty"`
+}
+
+type LoopRunToolCall struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // completed | error | blocked
+	Error  string `json:"error,omitempty"`
 }
 
 type ProjectTemplate struct {
@@ -875,18 +961,24 @@ type UserSettings struct {
 	GitAttachmentFormat   string            `json:"gitAttachmentFormat"`
 	GitBranchMoveStarted  bool              `json:"gitBranchMoveStarted"`
 	CodingToolMoveStarted bool              `json:"codingToolMoveStarted"`
-	ChangelogUpdates      bool              `json:"changelogUpdates"`
-	ChangelogNewsletter   bool              `json:"changelogNewsletter"`
-	MarketingUpdates      bool              `json:"marketingUpdates"`
-	InviteAcceptedUpdates bool              `json:"inviteAcceptedUpdates"`
-	PrivacyUpdates        bool              `json:"privacyUpdates"`
-	DPAUpdates            bool              `json:"dpaUpdates"`
-	AgentEnabled          bool              `json:"agentEnabled"`
-	AgentInstructions     string            `json:"agentInstructions"`
-	PulseSchedule         string            `json:"pulseSchedule"`
-	JobTitle              string            `json:"jobTitle,omitempty"`
-	Username              string            `json:"username,omitempty"`
-	UpdatedAt             time.Time         `json:"updatedAt"`
+	// Coding tools offered in an issue's "Work on issue" menu.
+	EnabledCodingTools        []string  `json:"enabledCodingTools,omitempty"`
+	CustomDeepLinkURLTemplate string    `json:"customDeepLinkUrlTemplate,omitempty"`
+	CodingPromptTemplate      string    `json:"codingPromptTemplate,omitempty"`
+	ChangelogUpdates          bool      `json:"changelogUpdates"`
+	ChangelogNewsletter       bool      `json:"changelogNewsletter"`
+	MarketingUpdates          bool      `json:"marketingUpdates"`
+	InviteAcceptedUpdates     bool      `json:"inviteAcceptedUpdates"`
+	PrivacyUpdates            bool      `json:"privacyUpdates"`
+	DPAUpdates                bool      `json:"dpaUpdates"`
+	AgentEnabled              bool      `json:"agentEnabled"`
+	AgentInstructions         string    `json:"agentInstructions"`
+	PulseSchedule             string    `json:"pulseSchedule"`
+	PulseWelcomeDismissed     bool      `json:"pulseWelcomeDismissed,omitempty"`
+	FeedLastSeenTime          string    `json:"feedLastSeenTime,omitempty"`
+	JobTitle                  string    `json:"jobTitle,omitempty"`
+	Username                  string    `json:"username,omitempty"`
+	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
 // CommitSigningKey describes the key used by coding sessions to sign commits.
@@ -899,27 +991,61 @@ type CommitSigningKey struct {
 	AddedAt     time.Time `json:"addedAt"`
 }
 
+// CodingAgentSettings holds workspace-wide coding-agent policy (LS-0125).
+// CodingAgentEnvironment is a reusable coding-session environment (LS-0117).
+type CodingAgentEnvironment struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Repository   string `json:"repository"`
+	SetupCommand string `json:"setupCommand,omitempty"`
+	Archived     bool   `json:"archived,omitempty"`
+}
+
+// TeamAgentConnector is a team-scoped MCP connector entry (LS-0572).
+type TeamAgentConnector struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Enabled bool   `json:"enabled"`
+}
+
+type CodingAgentSettings struct {
+	CommitSigningEnabled bool                     `json:"commitSigningEnabled"`
+	Harness              string                   `json:"harness,omitempty"`
+	Model                string                   `json:"model,omitempty"`
+	Environments         []CodingAgentEnvironment `json:"environments,omitempty"`
+}
+
 type WorkspaceSettings struct {
-	FiscalMonth                  string            `json:"fiscalMonth"`
-	WelcomeMessage               string            `json:"welcomeMessage,omitempty"`
-	DefaultHomeView              string            `json:"defaultHomeView,omitempty"`
-	GuestsAllowed                bool              `json:"guestsAllowed"`
-	RequireTwoFactor             bool              `json:"requireTwoFactor"`
-	SessionDurationDays          int               `json:"sessionDurationDays"`
-	AllowedDomains               []string          `json:"allowedDomains"`
-	InvitePermission             string            `json:"invitePermission"`
-	TeamCreatePermission         string            `json:"teamCreatePermission"`
-	LabelPermission              string            `json:"labelPermission"`
-	TemplatePermission           string            `json:"templatePermission"`
-	APIKeyPermission             string            `json:"apiKeyPermission"`
-	FeatureFlags                 map[string]bool   `json:"featureFlags"`
-	FeatureSettings              FeatureSettings   `json:"featureSettings"`
-	InviteLinksEnabled           bool              `json:"inviteLinksEnabled"`
-	GoogleAuthEnabled            bool              `json:"googleAuthEnabled"`
-	EmailAuthEnabled             bool              `json:"emailAuthEnabled"`
+	FiscalMonth              string              `json:"fiscalMonth"`
+	WelcomeMessage           string              `json:"welcomeMessage,omitempty"`
+	WelcomeMessageEnabled    bool                `json:"welcomeMessageEnabled"`
+	WelcomeMessageTitle      string              `json:"welcomeMessageTitle,omitempty"`
+	WelcomeMessageEditedByID string              `json:"welcomeMessageEditedById,omitempty"`
+	WelcomeMessageEditedAt   *time.Time          `json:"welcomeMessageEditedAt,omitempty"`
+	DefaultHomeView          string              `json:"defaultHomeView,omitempty"`
+	GuestsAllowed            bool                `json:"guestsAllowed"`
+	RequireTwoFactor         bool                `json:"requireTwoFactor"`
+	SessionDurationDays      int                 `json:"sessionDurationDays"`
+	AllowedDomains           []string            `json:"allowedDomains"`
+	InvitePermission         string              `json:"invitePermission"`
+	TeamCreatePermission     string              `json:"teamCreatePermission"`
+	LabelPermission          string              `json:"labelPermission"`
+	TemplatePermission       string              `json:"templatePermission"`
+	APIKeyPermission         string              `json:"apiKeyPermission"`
+	FeatureFlags             map[string]bool     `json:"featureFlags"`
+	FeatureSettings          FeatureSettings     `json:"featureSettings"`
+	CodingAgentSettings      CodingAgentSettings `json:"codingAgentSettings"`
+	InviteLinksEnabled       bool                `json:"inviteLinksEnabled"`
+	GoogleAuthEnabled        bool                `json:"googleAuthEnabled"`
+	EmailAuthEnabled         bool                `json:"emailAuthEnabled"`
+	// AllowedAuthServices lists login methods for other domains (google, email, passkey, saml, appUser).
+	AllowedAuthServices          []string          `json:"allowedAuthServices,omitempty"`
 	DisableAdminBypass           bool              `json:"disableAdminBypass"`
 	InitiativePermission         string            `json:"initiativePermission,omitempty"`
 	LoopPermission               string            `json:"loopPermission,omitempty"`
+	ImportPermission             string            `json:"importPermission,omitempty"`
+	PinnedViewPermission         string            `json:"pinnedViewPermission,omitempty"`
 	AgentGuidancePermission      string            `json:"agentGuidancePermission,omitempty"`
 	AgentInstructions            string            `json:"agentInstructions,omitempty"`
 	PreventGuestAgents           bool              `json:"preventGuestAgents"`
@@ -944,7 +1070,10 @@ type WorkspaceSettings struct {
 	// matching SCIM group owns membership for that team.
 	SCIMTeamGroupMapping map[string]string `json:"scimTeamGroupMapping,omitempty"`
 	SCIMDefaultRole      string            `json:"scimDefaultRole,omitempty"`
-	UpdatedAt            time.Time         `json:"updatedAt"`
+	// TrustedSourcesMode: "none" | "allowlist" (Wave 10 / LS-0094 foundations).
+	TrustedSourcesMode      string    `json:"trustedSourcesMode,omitempty"`
+	TrustedSourcesAllowlist []string  `json:"trustedSourcesAllowlist,omitempty"`
+	UpdatedAt               time.Time `json:"updatedAt"`
 }
 
 type FeatureOption struct {
@@ -968,7 +1097,25 @@ type FeatureSettings struct {
 	CustomerGenericDomains         []string                   `json:"customerGenericDomains"`
 	PulseWorkspaceSchedule         string                     `json:"pulseWorkspaceSchedule"`
 	AsksEmailAddresses             []string                   `json:"asksEmailAddresses"`
+	AsksSlackChannels              []AsksSlackChannelMapping  `json:"asksSlackChannels,omitempty"`
 	TriageIntelligence             TriageIntelligenceSettings `json:"triageIntelligence"`
+	RepositoryAccess               *RepositoryAccessSettings  `json:"repositoryAccess,omitempty"`
+}
+
+// RepositoryAccessSettings gates which connected repos Code Intelligence may use (LS-0110).
+type RepositoryAccessSettings struct {
+	ExtendAccessToAllMembers bool     `json:"extendAccessToAllMembers"`
+	AllowAutomationAccess    bool     `json:"allowAutomationAccess"`
+	Scope                    string   `json:"scope"`
+	AllowedRepositories      []string `json:"allowedRepositories"`
+}
+
+// AsksSlackChannelMapping maps a Slack channel to a Flow team (and optional template) for Asks.
+type AsksSlackChannelMapping struct {
+	Channel    string `json:"channel"`
+	TeamID     string `json:"teamId"`
+	TemplateID string `json:"templateId,omitempty"`
+	Enabled    bool   `json:"enabled"`
 }
 
 // TriageIntelligenceSettings controls how each inferred field is handled.
@@ -1111,6 +1258,7 @@ type OAuthApplication struct {
 	ID           string    `json:"id"`
 	Name         string    `json:"name"`
 	Description  string    `json:"description,omitempty"`
+	LogoURL      string    `json:"logoUrl,omitempty"`
 	ClientID     string    `json:"clientId"`
 	ClientSecret string    `json:"clientSecret,omitempty"`
 	RedirectURIs []string  `json:"redirectUris"`
@@ -1124,6 +1272,7 @@ type Webhook struct {
 	ID              string     `json:"id"`
 	Name            string     `json:"name"`
 	URL             string     `json:"url"`
+	ApplicationID   string     `json:"applicationId,omitempty"`
 	ResourceTypes   []string   `json:"resourceTypes"`
 	TeamIDs         []string   `json:"teamIds"`
 	TeamRestriction string     `json:"teamRestriction,omitempty"`
@@ -1132,8 +1281,42 @@ type Webhook struct {
 	SecretHash      string     `json:"-"`
 	SecretPrefix    string     `json:"secretPrefix,omitempty"`
 	SecretRevokedAt *time.Time `json:"secretRevokedAt,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
+	// AuditLog marks the workspace's audit log stream. It receives audit
+	// entries only, signed with a secret kept outside the workspace document.
+	AuditLog bool `json:"auditLog,omitempty"`
+	// Stream progress: the last delivered audit entry and retry state.
+	AuditCursorAt    *time.Time `json:"auditCursorAt,omitempty"`
+	AuditCursorID    string     `json:"auditCursorId,omitempty"`
+	DeliveryAttempts int        `json:"deliveryAttempts,omitempty"`
+	NextAttemptAt    *time.Time `json:"nextAttemptAt,omitempty"`
+	FailingSince     *time.Time `json:"failingSince,omitempty"`
+	DisabledReason   string     `json:"disabledReason,omitempty"`
+	CreatedAt        time.Time  `json:"createdAt"`
+	UpdatedAt        time.Time  `json:"updatedAt"`
+}
+
+// WebhookFailureEvent is a persisted outbound delivery failure for a workspace webhook.
+type WebhookFailureEvent struct {
+	ID              string    `json:"id"`
+	WebhookID       string    `json:"webhookId"`
+	ApplicationID   string    `json:"applicationId,omitempty"`
+	ExecutionID     string    `json:"executionId"`
+	URL             string    `json:"url"`
+	HTTPStatus      *int      `json:"httpStatus,omitempty"`
+	ResponseOrError string    `json:"responseOrError"`
+	CreatedAt       time.Time `json:"createdAt"`
+}
+
+type JiraLink struct {
+	ID              string            `json:"id"`
+	JiraProjectID   string            `json:"jiraProjectId"`
+	JiraProjectKey  string            `json:"jiraProjectKey,omitempty"`
+	JiraProjectName string            `json:"jiraProjectName,omitempty"`
+	TeamID          string            `json:"teamId"`
+	SyncDirection   string            `json:"syncDirection"`       // bidirectional | unidirectional | legacyUnidirectional
+	StatusMap       map[string]string `json:"statusMap,omitempty"` // jira status name -> flow workflow state id
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
 }
 
 type IntegrationConnection struct {
@@ -1233,37 +1416,61 @@ type ReviewEvent struct {
 }
 
 type CodeReview struct {
-	ID              string        `json:"id"`
-	SlugID          string        `json:"slugId"`
-	Provider        string        `json:"provider"`
-	ExternalID      string        `json:"externalId"`
-	Number          int           `json:"number"`
-	Title           string        `json:"title"`
-	Description     string        `json:"description"`
-	Status          string        `json:"status"`
-	RepositoryOwner string        `json:"repositoryOwner"`
-	RepositoryName  string        `json:"repositoryName"`
-	URL             string        `json:"url"`
-	Author          User          `json:"author"`
-	ReviewerIDs     []string      `json:"reviewerIds"`
-	TeamReviewers   []string      `json:"teamReviewers"`
-	IssueIDs        []string      `json:"issueIds"`
-	BaseBranch      string        `json:"baseBranch"`
-	HeadBranch      string        `json:"headBranch"`
-	BranchState     string        `json:"branchState"`
-	Additions       int           `json:"additions"`
-	Deletions       int           `json:"deletions"`
-	CommitCount     int           `json:"commitCount"`
-	Checks          []ReviewCheck `json:"checks"`
-	Files           []ReviewFile  `json:"files"`
-	Events          []ReviewEvent `json:"events"`
-	Favorite        bool          `json:"favorite"`
-	Draft           bool          `json:"draft"`
-	QuickToReview   bool          `json:"quickToReview"`
-	CreatedAt       time.Time     `json:"createdAt"`
-	UpdatedAt       time.Time     `json:"updatedAt"`
-	MergedAt        *time.Time    `json:"mergedAt,omitempty"`
-	ClosedAt        *time.Time    `json:"closedAt,omitempty"`
+	ID              string          `json:"id"`
+	SlugID          string          `json:"slugId"`
+	Provider        string          `json:"provider"`
+	ExternalID      string          `json:"externalId"`
+	Number          int             `json:"number"`
+	Title           string          `json:"title"`
+	Description     string          `json:"description"`
+	Status          string          `json:"status"`
+	RepositoryOwner string          `json:"repositoryOwner"`
+	RepositoryName  string          `json:"repositoryName"`
+	URL             string          `json:"url"`
+	Author          User            `json:"author"`
+	ReviewerIDs     []string        `json:"reviewerIds"`
+	TeamReviewers   []string        `json:"teamReviewers"`
+	IssueIDs        []string        `json:"issueIds"`
+	BaseBranch      string          `json:"baseBranch"`
+	HeadBranch      string          `json:"headBranch"`
+	BranchState     string          `json:"branchState"`
+	Additions       int             `json:"additions"`
+	Deletions       int             `json:"deletions"`
+	CommitCount     int             `json:"commitCount"`
+	Checks          []ReviewCheck   `json:"checks"`
+	Files           []ReviewFile    `json:"files"`
+	Events          []ReviewEvent   `json:"events"`
+	Previews        []DeployPreview `json:"previews,omitempty"`
+	Favorite        bool            `json:"favorite"`
+	Draft           bool            `json:"draft"`
+	QuickToReview   bool            `json:"quickToReview"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	UpdatedAt       time.Time       `json:"updatedAt"`
+	MergedAt        *time.Time      `json:"mergedAt,omitempty"`
+	ClosedAt        *time.Time      `json:"closedAt,omitempty"`
+}
+
+// DeployPreview is one environment deployment for a pull request's head
+// branch (Vercel / Netlify / GitHub deployments), shown on linked issues.
+type DeployPreview struct {
+	ID          string    `json:"id"`
+	Provider    string    `json:"provider"`
+	Environment string    `json:"environment"`
+	URL         string    `json:"url"`
+	LogURL      string    `json:"logUrl,omitempty"`
+	State       string    `json:"state"`
+	CommitSHA   string    `json:"commitSha,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type DeployPreviewInput struct {
+	Environment string `json:"environment"`
+	URL         string `json:"url"`
+	LogURL      string `json:"logUrl"`
+	State       string `json:"state"`
+	CommitSHA   string `json:"commitSha"`
+	Provider    string `json:"provider"`
 }
 
 type SLARule struct {
@@ -1351,6 +1558,23 @@ type Subscription struct {
 	ResourceID   string    `json:"resourceId"`
 	Events       []string  `json:"events,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// ThreadSubscription is a user's explicit choice for one comment thread
+// (the root comment and its replies). Thread participants are subscribed
+// implicitly; "muted" silences a thread even for issue subscribers.
+type ThreadSubscription struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"userId"`
+	IssueID   string    `json:"issueId"`
+	CommentID string    `json:"commentId"`
+	State     string    `json:"state"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type ThreadSubscriptionInput struct {
+	State string `json:"state"`
 }
 
 type SubscriptionMutationInput struct {
@@ -1558,16 +1782,23 @@ type InitiativeUpdate struct {
 	Attachments  []Attachment        `json:"attachments"`
 }
 
+type CommentThreadSummary struct {
+	Content   string `json:"content"`
+	EvalLogID string `json:"evalLogId,omitempty"`
+}
+
 type Comment struct {
-	ID        string              `json:"id"`
-	Version   int64               `json:"version"`
-	Body      string              `json:"body"`
-	BodyData  map[string]any      `json:"bodyData,omitempty"`
-	ParentID  *string             `json:"parentId,omitempty"`
-	Reactions map[string][]string `json:"reactions"`
-	CreatedAt time.Time           `json:"createdAt"`
-	EditedAt  *time.Time          `json:"editedAt,omitempty"`
-	User      User                `json:"user"`
+	ID            string                `json:"id"`
+	Version       int64                 `json:"version"`
+	Body          string                `json:"body"`
+	BodyData      map[string]any        `json:"bodyData,omitempty"`
+	ParentID      *string               `json:"parentId,omitempty"`
+	Resolved      bool                  `json:"resolved,omitempty"`
+	ThreadSummary *CommentThreadSummary `json:"threadSummary,omitempty"`
+	Reactions     map[string][]string   `json:"reactions"`
+	CreatedAt     time.Time             `json:"createdAt"`
+	EditedAt      *time.Time            `json:"editedAt,omitempty"`
+	User          User                  `json:"user"`
 }
 
 type ActivityEvent struct {
@@ -1679,6 +1910,7 @@ type Bootstrap struct {
 	CustomEmojis                  []CustomEmoji                      `json:"customEmojis"`
 	Asks                          []Ask                              `json:"asks"`
 	Loops                         []Loop                             `json:"loops"`
+	LoopRuns                      []LoopRun                          `json:"loopRuns,omitempty"`
 	SLARules                      []SLARule                          `json:"slaRules"`
 	IssueSLAs                     []IssueSLA                         `json:"issueSlas"`
 	SLAEvents                     []SLAEvent                         `json:"slaEvents"`
@@ -1686,6 +1918,7 @@ type Bootstrap struct {
 	Favorites                     []Favorite                         `json:"favorites"`
 	FavoriteFolders               []FavoriteFolder                   `json:"favoriteFolders"`
 	Subscriptions                 []Subscription                     `json:"subscriptions"`
+	ThreadSubscriptions           []ThreadSubscription               `json:"threadSubscriptions"`
 	AuditLog                      []AuditLogEntry                    `json:"auditLog"`
 	Trash                         []TrashEntry                       `json:"trash"`
 	ImportJobs                    []ImportJob                        `json:"importJobs"`
@@ -1734,7 +1967,9 @@ type Bootstrap struct {
 	OAuthApplications             []OAuthApplication                 `json:"oauthApplications"`
 	OAuthAuthorizations           []OAuthAuthorization               `json:"oauthAuthorizations"`
 	Webhooks                      []Webhook                          `json:"webhooks"`
+	WebhookFailureEvents          []WebhookFailureEvent              `json:"webhookFailureEvents"`
 	IntegrationConnections        []IntegrationConnection            `json:"integrationConnections"`
+	JiraLinks                     []JiraLink                         `json:"jiraLinks,omitempty"`
 	IdentityProviders             []IdentityProvider                 `json:"identityProviders"`
 	IntegrationDeliveries         []IntegrationDelivery              `json:"integrationDeliveries"`
 	GitAutomationStates           []GitAutomationState               `json:"gitAutomationStates"`
@@ -1746,6 +1981,8 @@ type Bootstrap struct {
 	Members                       []WorkspaceMember                  `json:"members"`
 	TeamMembers                   []TeamMember                       `json:"teamMembers"`
 	Invitations                   []Invitation                       `json:"invitations"`
+	WorkspaceInviteLink           *WorkspaceInviteLink               `json:"workspaceInviteLink,omitempty"`
+	OAuthSyncGroupRequests        []OAuthSyncGroupRequest            `json:"oauthSyncGroupRequests,omitempty"`
 	ViewerRole                    string                             `json:"viewerRole"`
 }
 
@@ -1929,9 +2166,11 @@ type CommentCreateInput struct {
 }
 
 type CommentUpdateInput struct {
-	Body            string         `json:"body"`
-	BodyData        map[string]any `json:"bodyData,omitempty"`
-	ExpectedVersion *int64         `json:"expectedVersion,omitempty"`
+	Body            string                `json:"body"`
+	BodyData        map[string]any        `json:"bodyData,omitempty"`
+	ExpectedVersion *int64                `json:"expectedVersion,omitempty"`
+	Resolved        *bool                 `json:"resolved,omitempty"`
+	ThreadSummary   *CommentThreadSummary `json:"threadSummary,omitempty"`
 }
 type ReactionInput struct {
 	Emoji string `json:"emoji"`
@@ -1946,6 +2185,7 @@ type IssueUpdateInput struct {
 	ContentState            *string        `json:"contentState,omitempty"`
 	ExpectedDocumentVersion *int64         `json:"expectedDocumentVersion,omitempty"`
 	DocumentUpdateIDs       []string       `json:"documentUpdateIds,omitempty"`
+	TeamID                  *string        `json:"teamId,omitempty"`
 	StateID                 *string        `json:"stateId,omitempty"`
 	Priority                *int           `json:"priority,omitempty"`
 	Estimate                *float64       `json:"estimate,omitempty"`
@@ -1964,6 +2204,8 @@ type IssueUpdateInput struct {
 	SortOrder               *float64       `json:"sortOrder,omitempty"`
 	Recurrence              *string        `json:"recurrence,omitempty"`
 	NextOccurrenceAt        *string        `json:"nextOccurrenceAt,omitempty"`
+	// SnoozedUntil hides a triage issue until the time passes; "" clears it.
+	SnoozedUntil *string `json:"snoozedUntil,omitempty"`
 }
 
 type IssueLinkInput struct {
@@ -2028,47 +2270,59 @@ type WorkflowStateReorderInput struct {
 }
 
 type TeamSettingsMutationInput struct {
-	Description             *string               `json:"description,omitempty"`
-	Timezone                *string               `json:"timezone,omitempty"`
-	EstimateType            *string               `json:"estimateType,omitempty"`
-	DefaultStateID          *string               `json:"defaultStateId,omitempty"`
-	DefaultPriority         *int                  `json:"defaultPriority,omitempty"`
-	IssueEmailEnabled       *bool                 `json:"issueEmailEnabled,omitempty"`
-	DetailedHistory         *bool                 `json:"detailedHistory,omitempty"`
-	Identifier              *string               `json:"identifier,omitempty"`
-	Access                  *string               `json:"access,omitempty"`
-	MembershipRestriction   *string               `json:"membershipRestriction,omitempty"`
-	SettingsPermission      *string               `json:"settingsPermission,omitempty"`
-	LabelPermission         *string               `json:"labelPermission,omitempty"`
-	TemplatePermission      *string               `json:"templatePermission,omitempty"`
-	AgentSkillPermission    *string               `json:"agentSkillPermission,omitempty"`
-	LoopPermission          *string               `json:"loopPermission,omitempty"`
-	MemberPermission        *string               `json:"memberPermission,omitempty"`
-	SlackChannelID          *string               `json:"slackChannelId,omitempty"`
-	SlackChannelName        *string               `json:"slackChannelName,omitempty"`
-	SlackNotifications      *map[string]bool      `json:"slackNotifications,omitempty"`
-	PRAutomations           *map[string]string    `json:"prAutomations,omitempty"`
-	AutoCloseParents        *bool                 `json:"autoCloseParents,omitempty"`
-	AutoCloseSubIssues      *bool                 `json:"autoCloseSubIssues,omitempty"`
-	AutoCloseStale          *bool                 `json:"autoCloseStale,omitempty"`
-	StaleMonths             *int                  `json:"staleMonths,omitempty"`
-	StaleStatusID           *string               `json:"staleStatusId,omitempty"`
-	AutoArchiveMonths       *int                  `json:"autoArchiveMonths,omitempty"`
-	ProgressOrder           *string               `json:"progressOrder,omitempty"`
-	ReleaseAutomations      *[]TeamAutomationRule `json:"releaseAutomations,omitempty"`
-	TriageEnabled           *bool                 `json:"triageEnabled,omitempty"`
-	TriageRequirePriority   *bool                 `json:"triageRequirePriority,omitempty"`
-	TriageAction            *string               `json:"triageAction,omitempty"`
-	TriageRules             *[]TeamAutomationRule `json:"triageRules,omitempty"`
-	AgentSkills             *[]TeamAgentSkill     `json:"agentSkills,omitempty"`
-	ProjectUpdatePrompt     *string               `json:"projectUpdatePrompt,omitempty"`
-	ResolvedSummaries       *bool                 `json:"resolvedThreadSummaries,omitempty"`
-	ShowInitiatives         *bool                 `json:"showInitiatives,omitempty"`
-	InheritIssueEstimation  *bool                 `json:"inheritIssueEstimation,omitempty"`
-	InheritWorkflowStatuses *bool                 `json:"inheritWorkflowStatuses,omitempty"`
-	InheritProjectStatuses  *bool                 `json:"inheritProjectStatuses,omitempty"`
-	InheritCycles           *bool                 `json:"inheritCycles,omitempty"`
-	ParentTeamID            *string               `json:"parentTeamId,omitempty"`
+	Description                         *string                    `json:"description,omitempty"`
+	Timezone                            *string                    `json:"timezone,omitempty"`
+	EstimateType                        *string                    `json:"estimateType,omitempty"`
+	DefaultStateID                      *string                    `json:"defaultStateId,omitempty"`
+	DefaultPriority                     *int                       `json:"defaultPriority,omitempty"`
+	IssueEmailEnabled                   *bool                      `json:"issueEmailEnabled,omitempty"`
+	DetailedHistory                     *bool                      `json:"detailedHistory,omitempty"`
+	Identifier                          *string                    `json:"identifier,omitempty"`
+	Access                              *string                    `json:"access,omitempty"`
+	MembershipRestriction               *string                    `json:"membershipRestriction,omitempty"`
+	SettingsPermission                  *string                    `json:"settingsPermission,omitempty"`
+	LabelPermission                     *string                    `json:"labelPermission,omitempty"`
+	TemplatePermission                  *string                    `json:"templatePermission,omitempty"`
+	AgentSkillPermission                *string                    `json:"agentSkillPermission,omitempty"`
+	LoopPermission                      *string                    `json:"loopPermission,omitempty"`
+	MemberPermission                    *string                    `json:"memberPermission,omitempty"`
+	PinnedViewPermission                *string                    `json:"pinnedViewPermission,omitempty"`
+	DefaultIssueTemplateForMembersID    *string                    `json:"defaultIssueTemplateForMembersId,omitempty"`
+	DefaultIssueTemplateForNonMembersID *string                    `json:"defaultIssueTemplateForNonMembersId,omitempty"`
+	DefaultProjectTemplateID            *string                    `json:"defaultProjectTemplateId,omitempty"`
+	EstimateAllowZero                   *bool                      `json:"estimateAllowZero,omitempty"`
+	EstimateExtended                    *bool                      `json:"estimateExtended,omitempty"`
+	EstimateCountUnestimated            *bool                      `json:"estimateCountUnestimated,omitempty"`
+	IssueSharingEnabled                 *bool                      `json:"issueSharingEnabled,omitempty"`
+	IssueSharingPermission              *string                    `json:"issueSharingPermission,omitempty"`
+	ApplyToSubTeams                     *bool                      `json:"applyToSubTeams,omitempty"`
+	SlackChannelID                      *string                    `json:"slackChannelId,omitempty"`
+	SlackChannelName                    *string                    `json:"slackChannelName,omitempty"`
+	SlackNotifications                  *map[string]bool           `json:"slackNotifications,omitempty"`
+	PRAutomations                       *map[string]string         `json:"prAutomations,omitempty"`
+	AutoCloseParents                    *bool                      `json:"autoCloseParents,omitempty"`
+	AutoCloseSubIssues                  *bool                      `json:"autoCloseSubIssues,omitempty"`
+	AutoCloseStale                      *bool                      `json:"autoCloseStale,omitempty"`
+	StaleMonths                         *int                       `json:"staleMonths,omitempty"`
+	StaleStatusID                       *string                    `json:"staleStatusId,omitempty"`
+	AutoArchiveMonths                   *int                       `json:"autoArchiveMonths,omitempty"`
+	ProgressOrder                       *string                    `json:"progressOrder,omitempty"`
+	ReleaseAutomations                  *[]TeamAutomationRule      `json:"releaseAutomations,omitempty"`
+	TriageEnabled                       *bool                      `json:"triageEnabled,omitempty"`
+	TriageRequirePriority               *bool                      `json:"triageRequirePriority,omitempty"`
+	TriageAction                        *string                    `json:"triageAction,omitempty"`
+	TriageRules                         *[]TeamAutomationRule      `json:"triageRules,omitempty"`
+	AgentSkills                         *[]TeamAgentSkill          `json:"agentSkills,omitempty"`
+	AgentConnectors                     *[]TeamAgentConnector      `json:"agentConnectors,omitempty"`
+	ProjectUpdatePrompt                 *string                    `json:"projectUpdatePrompt,omitempty"`
+	ResolvedSummaries                   *bool                      `json:"resolvedThreadSummaries,omitempty"`
+	ShowInitiatives                     *bool                      `json:"showInitiatives,omitempty"`
+	InheritIssueEstimation              *bool                      `json:"inheritIssueEstimation,omitempty"`
+	InheritWorkflowStatuses             *bool                      `json:"inheritWorkflowStatuses,omitempty"`
+	InheritProjectStatuses              *bool                      `json:"inheritProjectStatuses,omitempty"`
+	InheritCycles                       *bool                      `json:"inheritCycles,omitempty"`
+	IssueViewDefaults                   map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
+	ParentTeamID                        *string                    `json:"parentTeamId,omitempty"`
 }
 
 type IssueTemplateMutationInput struct {
@@ -2095,6 +2349,9 @@ type IssueLabelMutationInput struct {
 	Description *string `json:"description,omitempty"`
 	Color       *string `json:"color,omitempty"`
 	ArchivedAt  *string `json:"archivedAt,omitempty"`
+	// ResourceType and GroupID are honored when a team label is created.
+	ResourceType *string `json:"resourceType,omitempty"`
+	GroupID      *string `json:"groupId,omitempty"`
 }
 
 type BatchIssueUpdateInput struct {

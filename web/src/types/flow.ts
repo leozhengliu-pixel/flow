@@ -26,6 +26,7 @@ export interface Workspace {
   color?: string;
   region?: "us" | "eu" | string;
   createdAt?: string;
+  deletionRequestedAt?: string;
 }
 export type WorkspaceRole = "owner" | "admin" | "member" | "guest" | "app";
 export type TeamRole = "owner" | "member";
@@ -75,6 +76,53 @@ export interface Invitation {
   acceptedAt?: string;
   token?: string;
 }
+
+export interface WorkspaceInviteLink {
+  token: string;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InviteLinkPreview {
+  token: string;
+  workspace: Workspace;
+  allowedAuthServices: string[];
+  alreadyMember: boolean;
+}
+
+export interface OAuthSyncGroupRequest {
+  id: string;
+  applicationId: string;
+  groupName: string;
+  teamId?: string;
+  status: 'pending' | 'approved' | 'denied' | string;
+  requestedBy?: string;
+  reviewedBy?: string;
+  createdAt: string;
+  reviewedAt?: string;
+}
+
+export interface SCIMToken {
+  id: string;
+  workspaceId: string;
+  name: string;
+  secret?: string;
+  createdAt: string;
+}
+
+export interface WebhookFailureEvent {
+  id: string;
+  webhookId: string;
+  applicationId?: string;
+  executionId: string;
+  url: string;
+  httpStatus?: number;
+  responseOrError: string;
+  createdAt: string;
+}
+
 export interface InvitationPreview {
   id: UUID;
   email: string;
@@ -99,9 +147,20 @@ export interface Team {
   icon?: string;
   private?: boolean;
   externalSource?: string;
+  sourceMetadata?: IssueSourceMetadata;
   retiredAt?: string;
+  /** Set while a deleted team is inside its restoration window. */
+  archivedAt?: string;
+  archivedById?: UUID;
   createdAt?: string;
   updatedAt?: string;
+}
+/** A deleted team that can still be restored until purgeAt. */
+export interface DeletedTeam extends Team {
+  archivedAt: string;
+  archivedBy?: User;
+  purgeAt: string;
+  issueCount: number;
 }
 export interface Customer {
   id: UUID;
@@ -153,6 +212,7 @@ export interface IssueLabel {
   createdAt?: string;
   lastAppliedAt?: string;
   archivedAt?: string;
+  favorite?: boolean;
 }
 export interface LabelGroup {
   id: UUID;
@@ -243,6 +303,13 @@ export interface DocumentContentDraft {
   createdAt: string;
   updatedAt: string;
 }
+export interface IssueSourceMetadata {
+  type?: string;
+  subType?: string;
+  displayName?: string;
+  id?: string;
+  emailIntakeMetadata?: { trusted?: boolean };
+}
 export interface Issue {
   isSummary?: boolean;
   // A complete cached document remains visible while a newer list version is fetched.
@@ -292,6 +359,10 @@ export interface Issue {
   parentId?: UUID;
   recurrence?: "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
+  /** Triage snooze: hidden from the triage queue until this time. */
+  snoozedUntil?: string;
+  /** Explicit shares (user / team / workspace grants) for private-team issues. */
+  permissions?: { subjectType: string; subjectId: string; role?: string }[];
   subscriberIds: UUID[];
   reactions: Record<string, UUID[]>;
   subIssueIds: UUID[];
@@ -379,12 +450,18 @@ export interface Attachment {
   linkbackUrl?: string;
   syncStatus?: string;
 }
+export interface CommentThreadSummary {
+  content: string;
+  evalLogId?: string;
+}
 export interface Comment {
   id: UUID;
   version: number;
   body: string;
   bodyData?: Record<string, unknown>;
   parentId?: UUID;
+  resolved?: boolean;
+  threadSummary?: CommentThreadSummary;
   reactions: Record<string, UUID[]>;
   createdAt: string;
   editedAt?: string;
@@ -534,6 +611,8 @@ export interface WorkflowDefinition {
   lastRunStatus?: string;
   consecutiveErrors: number;
   creatorId: UUID;
+  ownerId?: UUID;
+  trustedSourceKeys?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -801,11 +880,29 @@ export interface Loop {
   allowChangesOutsideTrigger: boolean;
   allowExternalSync: boolean;
   enabled: boolean;
+  ownerId?: UUID;
+  trustedSourceKeys?: string[];
   creator: User;
   lastRunAt?: string;
   nextRunAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+/** One execution of a loop by the agent runtime. */
+export interface LoopRun {
+  id: UUID;
+  loopId: UUID;
+  status: "running" | "completed" | "failed";
+  trigger: "manual" | "schedule" | "event";
+  eventType?: string;
+  entityType?: "issue" | "project" | "initiative" | "cycle";
+  entityId?: UUID;
+  entityIdentifier?: string;
+  output?: string;
+  toolCalls?: { name: string; status: "completed" | "error" | "blocked"; error?: string }[];
+  error?: string;
+  startedAt: string;
+  finishedAt?: string;
 }
 export interface TemplateMilestone {
   id: UUID;
@@ -900,6 +997,10 @@ export interface UserSettings {
   gitAttachmentFormat?: string;
   gitBranchMoveStarted?: boolean;
   codingToolMoveStarted?: boolean;
+  /** Coding tools listed in an issue's "Work on issue" menu. */
+  enabledCodingTools?: string[];
+  customDeepLinkUrlTemplate?: string;
+  codingPromptTemplate?: string;
   changelogUpdates?: boolean;
   changelogNewsletter?: boolean;
   marketingUpdates?: boolean;
@@ -909,6 +1010,10 @@ export interface UserSettings {
   agentEnabled: boolean;
   agentInstructions: string;
   pulseSchedule?: "default" | "daily" | "weekly" | "never";
+  /** LS-0767 — first-run Pulse welcome banner dismissed. */
+  pulseWelcomeDismissed?: boolean;
+  /** LS-0270 / LS-0731 — persisted Pulse feed last-seen cursor (ISO). */
+  feedLastSeenTime?: string;
   jobTitle?: string;
   username?: string;
   updatedAt: string;
@@ -933,7 +1038,23 @@ export interface FeatureSettings {
   customerGenericDomains: string[];
   pulseWorkspaceSchedule: string;
   asksEmailAddresses: string[];
+  /** Slack channel → team/template mappings for Asks (LS-0070). */
+  asksSlackChannels: AsksSlackChannelMapping[];
   triageIntelligence: TriageIntelligenceSettings;
+  /** LS-0110 repository access policy for Code Intelligence. */
+  repositoryAccess?: {
+    extendAccessToAllMembers: boolean;
+    allowAutomationAccess: boolean;
+    scope: "all" | "selected";
+    allowedRepositories: string[];
+  };
+}
+
+export interface AsksSlackChannelMapping {
+  channel: string;
+  teamId: UUID;
+  templateId?: UUID;
+  enabled: boolean;
 }
 
 export type TriageIntelligenceAction = "suggest" | "auto" | "hide";
@@ -946,9 +1067,39 @@ export interface TriageIntelligenceSettings {
   relatedAction: TriageIntelligenceAction;
   workspaceGuidance?: string;
 }
+export interface CodingAgentEnvironment {
+  id: string;
+  name: string;
+  repository: string;
+  setupCommand?: string;
+  archived?: boolean;
+}
+
+export interface CodingAgentSettings {
+  commitSigningEnabled?: boolean;
+  /** Default coding harness: auto | claude | codex */
+  harness?: "auto" | "claude" | "codex";
+  /** Preferred model id for coding sessions */
+  model?: string;
+  environments?: CodingAgentEnvironment[];
+}
+
+export interface TeamAgentConnector {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
+export type AuthServiceId = "google" | "email" | "passkey" | "saml" | "appUser";
+
 export interface WorkspaceSettings {
   fiscalMonth: string;
   welcomeMessage?: string;
+  welcomeMessageEnabled?: boolean;
+  welcomeMessageTitle?: string;
+  welcomeMessageEditedById?: string;
+  welcomeMessageEditedAt?: string;
   defaultHomeView?: string;
   guestsAllowed: boolean;
   requireTwoFactor: boolean;
@@ -961,13 +1112,17 @@ export interface WorkspaceSettings {
   apiKeyPermission: string;
   featureFlags: Record<string, boolean>;
   featureSettings: FeatureSettings;
+  codingAgentSettings?: CodingAgentSettings;
   updatedAt: string;
   inviteLinksEnabled?: boolean;
   googleAuthEnabled?: boolean;
   emailAuthEnabled?: boolean;
+  allowedAuthServices?: AuthServiceId[];
   disableAdminBypass?: boolean;
   initiativePermission?: string;
   loopPermission?: string;
+  importPermission?: string;
+  pinnedViewPermission?: string;
   agentGuidancePermission?: string;
   agentInstructions?: string;
   preventGuestAgents?: boolean;
@@ -986,6 +1141,9 @@ export interface WorkspaceSettings {
   scimRoleGroups?: Record<string, string>;
   scimTeamGroupMapping?: Record<string, string>;
   scimDefaultRole?: string;
+  /** Wave 10 LS-0094 — none | allowlist */
+  trustedSourcesMode?: "none" | "allowlist";
+  trustedSourcesAllowlist?: string[];
 }
 export interface ReleasePipeline {
   id: UUID;
@@ -1055,6 +1213,7 @@ export interface OAuthApplication {
   id: UUID;
   name: string;
   description?: string;
+  logoUrl?: string;
   clientId: string;
   clientSecret?: string;
   redirectUris: string[];
@@ -1093,6 +1252,17 @@ export interface IntegrationConnection {
   lastError?: string;
   oauthStartedAt?: string;
   oauthCompletedAt?: string;
+}
+export interface JiraLink {
+  id: UUID;
+  jiraProjectId: string;
+  jiraProjectKey?: string;
+  jiraProjectName?: string;
+  teamId: UUID;
+  syncDirection: "bidirectional" | "unidirectional" | "legacyUnidirectional" | string;
+  statusMap?: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface IdentityProvider {
   id: UUID;
@@ -1181,6 +1351,18 @@ export interface ReviewEvent {
   actor: User;
   createdAt: string;
 }
+/** A preview environment deployed from a pull request's head branch. */
+export interface DeployPreview {
+  id: UUID;
+  provider: string;
+  environment: string;
+  url: string;
+  logUrl?: string;
+  state: "pending" | "building" | "ready" | "failed" | "inactive";
+  commitSha?: string;
+  createdAt: string;
+  updatedAt: string;
+}
 export interface CodeReview {
   id: UUID;
   slugId: string;
@@ -1206,6 +1388,7 @@ export interface CodeReview {
   checks: ReviewCheck[];
   files: ReviewFile[];
   events: ReviewEvent[];
+  previews?: DeployPreview[];
   favorite: boolean;
   draft: boolean;
   quickToReview: boolean;
@@ -1218,13 +1401,25 @@ export interface Webhook {
   id: UUID;
   name: string;
   url: string;
+  applicationId?: string;
   resourceTypes: string[];
   teamIds: UUID[];
   enabled: boolean;
   creatorId: UUID;
+  /** Public prefix of the signing secret (never the full secret). */
+  secretPrefix?: string;
+  secretRevokedAt?: string;
+  /** The workspace audit log stream; managed from the audit log page. */
+  auditLog?: boolean;
+  failingSince?: string;
+  disabledReason?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+/** Create/rotate responses may include the raw secret once (LS-0711). */
+export type WebhookSecretPayload = Webhook & { secret?: string };
+
 export interface AccountSessionInfo {
   id: string;
   current: boolean;
@@ -1317,6 +1512,17 @@ export interface Subscription {
   events?: string[];
   createdAt: string;
 }
+/** A user's explicit choice for one comment thread (root comment and replies). Participants follow threads implicitly. */
+export interface ThreadSubscription {
+  id: UUID;
+  userId: UUID;
+  issueId: UUID;
+  commentId: UUID;
+  state: ThreadSubscriptionState;
+  createdAt: string;
+  updatedAt: string;
+}
+export type ThreadSubscriptionState = "subscribed" | "muted";
 export interface AuditLogEntry {
   id: UUID;
   actor: User;
@@ -1331,6 +1537,8 @@ export interface TrashEntry {
   resourceType: string;
   resourceId: UUID;
   title: string;
+  /** Soft-deleted resource snapshot (e.g. release.pipelineId for deleted-releases lists). */
+  payload?: unknown;
   teamIds?: UUID[];
   deletedBy: User;
   deletedAt: string;
@@ -1663,6 +1871,7 @@ export interface BootstrapData {
   favorites: Favorite[];
   favoriteFolders: FavoriteFolder[];
   subscriptions: Subscription[];
+  threadSubscriptions?: ThreadSubscription[];
   auditLog: AuditLogEntry[];
   trash: TrashEntry[];
   importJobs: ImportJob[];
@@ -1707,6 +1916,7 @@ export interface BootstrapData {
   oauthAuthorizations: OAuthAuthorization[];
   webhooks: Webhook[];
   integrationConnections: IntegrationConnection[];
+  jiraLinks?: JiraLink[];
   identityProviders: IdentityProvider[];
   integrationDeliveries: IntegrationDelivery[];
   gitAutomationStates: GitAutomationState[];
@@ -1717,6 +1927,9 @@ export interface BootstrapData {
   members: WorkspaceMember[];
   teamMembers: TeamMember[];
   invitations: Invitation[];
+  workspaceInviteLink?: WorkspaceInviteLink | null;
+  oauthSyncGroupRequests?: OAuthSyncGroupRequest[];
+  webhookFailureEvents?: WebhookFailureEvent[];
   viewerRole: WorkspaceRole;
 }
 export interface TeamAutomationRule {
@@ -1736,7 +1949,13 @@ export interface TeamSettings {
   teamId: UUID;
   description?: string;
   timezone: string;
-  estimateType: "notUsed" | "exponential" | "fibonacci" | "flow";
+  estimateType: "notUsed" | "exponential" | "fibonacci" | "flow" | "tShirt";
+  /** Allow 0 as an estimate value. */
+  estimateAllowZero?: boolean;
+  /** Add the two larger values to the scale. */
+  estimateExtended?: boolean;
+  /** Count unestimated issues as 1 point instead of 0. */
+  estimateCountUnestimated?: boolean;
   defaultStateId: UUID;
   defaultPriority: number;
   issueEmailEnabled: boolean;
@@ -1749,6 +1968,15 @@ export interface TeamSettings {
   agentSkillPermission: "allMembers" | "teamMembers" | "owners";
   loopPermission: "allMembers" | "teamMembers" | "owners";
   memberPermission: "allMembers" | "teamMembers" | "owners";
+  pinnedViewPermission?: "allMembers" | "teamMembers" | "owners";
+  /** Template preselected when team members create issues for this team. */
+  defaultIssueTemplateForMembersId?: string;
+  /** Template preselected when people outside the team create issues for it. */
+  defaultIssueTemplateForNonMembersId?: string;
+  /** Template preselected when creating projects for this team. */
+  defaultProjectTemplateId?: string;
+  issueSharingEnabled?: boolean;
+  issueSharingPermission?: "allMembers" | "teamMembers" | "owners";
   slackChannelId?: string;
   slackChannelName?: string;
   slackNotifications: Record<string, boolean>;
@@ -1762,10 +1990,13 @@ export interface TeamSettings {
   progressOrder: "first" | "last" | "noAction";
   releaseAutomations: TeamAutomationRule[];
   triageEnabled: boolean;
+  /** Team default display options per issue view (all / active / backlog / board). */
+  issueViewDefaults?: Record<string, Record<string, unknown>>;
   triageRequirePriority: boolean;
   triageAction: string;
   triageRules: TeamAutomationRule[];
   agentSkills: TeamAgentSkill[];
+  agentConnectors?: TeamAgentConnector[];
   projectUpdatePrompt: string;
   resolvedThreadSummaries: boolean;
   showInitiatives: boolean;
@@ -1776,9 +2007,12 @@ export interface TeamSettings {
   parentTeamId?: UUID;
 }
 export interface TeamSettingsMutationInput extends Partial<
-  Omit<TeamSettings, "teamId">
+  Omit<TeamSettings, "teamId" | "issueViewDefaults">
 > {
+  /** null clears a view's team default. */
+  issueViewDefaults?: Record<string, Record<string, unknown> | null>;
   identifier?: string;
+  applyToSubTeams?: boolean;
 }
 export interface IssueTemplate {
   id: UUID;
@@ -2027,6 +2261,7 @@ export interface IssueUpdateInput {
   descriptionState?: string;
   descriptionData?: Record<string, unknown>;
   contentState?: string;
+  teamId?: string;
   stateId?: string;
   priority?: number;
   estimate?: number;
@@ -2042,6 +2277,8 @@ export interface IssueUpdateInput {
   archived?: boolean;
   recurrence?: "" | "daily" | "weekly" | "monthly";
   nextOccurrenceAt?: string;
+  /** RFC3339 time, or "" to clear. */
+  snoozedUntil?: string;
   parentId?: string;
   sortOrder?: number;
 }
@@ -2088,6 +2325,8 @@ export interface AgentChatMessage {
 export interface AgentMessage extends AgentChatMessage {
   id: UUID;
   parts?: AgentMessagePart[];
+  /** Resources @-mentioned in a user message, in order. */
+  mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: UUID; label: string }[];
   durationMs?: number;
   createdAt: string;
 }

@@ -17,24 +17,85 @@ func WithIssueDiscussionMutation(ctx context.Context, issueID, commentID string)
 	return context.WithValue(WithIssueRecordMutations(ctx, issueID), discussionMutationKey{}, discussionMutation{commentID})
 }
 
+// loadDiscussionComment loads the thread around commentID: its ancestors up
+// to the root and every reply below that root, so thread fan-out and thread
+// subscriptions see all participants. Unchanged comments are not rewritten.
 func loadDiscussionComment(ctx context.Context, tx *sqlTx, workspace, issue, commentID string) (map[string][]domain.Comment, error) {
 	result := map[string][]domain.Comment{}
 	if commentID == "" {
 		return result, nil
 	}
-	var raw []byte
-	err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='comment' AND resource_id=? AND id=?`, workspace, issue, commentID).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return result, nil
+	load := func(id string) (*domain.Comment, error) {
+		var raw []byte
+		err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='comment' AND resource_id=? AND id=?`, workspace, issue, id).Scan(&raw)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		var comment domain.Comment
+		if err := json.Unmarshal(raw, &comment); err != nil {
+			return nil, err
+		}
+		return &comment, nil
 	}
-	if err != nil {
+	target, err := load(commentID)
+	if err != nil || target == nil {
 		return result, err
 	}
-	var comment domain.Comment
-	if err := json.Unmarshal(raw, &comment); err != nil {
-		return result, err
+	root := *target
+	seen := map[string]bool{root.ID: true}
+	ancestors := []domain.Comment{}
+	for depth := 0; root.ParentID != nil && *root.ParentID != "" && depth < 16; depth++ {
+		parent, err := load(*root.ParentID)
+		if err != nil {
+			return result, err
+		}
+		if parent == nil || seen[parent.ID] {
+			break
+		}
+		ancestors = append(ancestors, root)
+		seen[parent.ID] = true
+		root = *parent
 	}
-	result[issue] = []domain.Comment{comment}
+	comments := append([]domain.Comment{root}, ancestors...)
+	frontier := []string{root.ID}
+	for len(frontier) > 0 && len(comments) < 1000 {
+		parentID := frontier[0]
+		frontier = frontier[1:]
+		rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='comment' AND resource_id=? AND parent_id=? ORDER BY created_at,id LIMIT 1000`, workspace, issue, parentID)
+		if err != nil {
+			return result, err
+		}
+		for rows.Next() {
+			var raw []byte
+			var comment domain.Comment
+			if err := rows.Scan(&raw); err != nil {
+				rows.Close()
+				return result, err
+			}
+			if err := json.Unmarshal(raw, &comment); err != nil {
+				rows.Close()
+				return result, err
+			}
+			if !seen[comment.ID] {
+				seen[comment.ID] = true
+				comments = append(comments, comment)
+				frontier = append(frontier, comment.ID)
+			} else if comment.ID != root.ID {
+				frontier = append(frontier, comment.ID)
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return result, err
+		}
+	}
+	if !seen[target.ID] {
+		comments = append(comments, *target)
+	}
+	result[issue] = comments
 	return result, nil
 }
 

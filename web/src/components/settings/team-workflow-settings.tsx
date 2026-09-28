@@ -9,9 +9,7 @@ import {
 } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import {
-  ArrowLeft,
   Bot,
-  Check,
   ChevronRight,
   Circle,
   Copy,
@@ -27,6 +25,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
+import { RetireTeamForm } from '@/components/team/retire-team-form';
+import { DELETE_TEAM_DESCRIPTION } from '@/lib/team-deletion';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 
 import {
@@ -39,7 +39,6 @@ import {
   createDocumentTemplate,
   createEmailIntakeAddress,
   createIssue,
-  createTeamLabel,
   createTriageResponsibility,
   createTriageRule,
   createWorkflowState,
@@ -48,7 +47,7 @@ import {
   deleteGitAutomation,
   deleteTargetBranch,
   deleteTeam,
-  deleteTeamLabel,
+  deleteTeamCycles,
   deleteTriageResponsibility,
   deleteTriageRule,
   fetchWorkflowStates,
@@ -61,7 +60,6 @@ import {
   updateIssue,
   updateStructuredTeamSettings,
   updateTeam,
-  updateTeamLabel,
   updateWorkflowState,
   upsertGitAutomation,
   upsertTargetBranch,
@@ -70,7 +68,6 @@ import type {
   BootstrapData,
   CycleSettings,
   DocumentTemplate,
-  IssueLabel,
   IssueTemplate,
   ProjectTemplate,
   Team,
@@ -78,19 +75,34 @@ import type {
   WorkflowState,
   WorkflowStateType,
 } from "@/types/flow";
-import { loopsPath, type TeamSettingsSection } from "@/lib/app-routes";
+import { loopsPath, settingsPath, type TeamSettingsSection } from "@/lib/app-routes";
+import { useNavigate } from "react-router-dom";
+import {
+  confirmAllowSubTeamsMembership,
+  confirmApplyPermissionToSubTeams,
+  getIssueSharingAudience,
+  isLessRestrictiveMembership,
+  isLessRestrictivePermission,
+  type TeamPermissionKey,
+} from "@/lib/team-security-confirms";
+
 import { TemplateEditor } from "./advanced-settings";
 import {
+  SettingsCrumb,
   SettingsRow,
   SettingsSection,
   SettingsSelect as BaseSettingsSelect,
   SettingsToggle,
+  TeamSettingsCrumb,
   type SettingsSelectOption,
 } from "./settings-primitives";
-import { CheckboxMark } from "@/components/ui/checkbox-mark";
+import { DomainLabelsSettings } from "./domain-settings";
+import { ESTIMATE_TYPE_NAMES, estimateScaleDetails } from "@/lib/estimates";
+import { TeamMembersSettings } from "./team-members-settings";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { StatusIcon } from "@/components/issue/issue-icons";
 import { DefaultFavoritesSettings } from './team-default-favorites-settings';
+import { TeamProjectStatusesSettingsPage } from './team-project-statuses-settings';
 import { PropertyMenu } from '@/components/property/property-menu';
 import { WorkflowStateDeleteDialog } from './workflow-state-delete-dialog';
 import {
@@ -134,6 +146,11 @@ const SECTIONS: {
     description: "Labels available to this team’s issues",
   },
   {
+    id: "project-labels",
+    label: "Project labels",
+    description: "Labels available to this team’s projects",
+  },
+  {
     id: "default-favorites",
     label: "Default favorites",
     description: "Resources that appear in Favorites for every team member",
@@ -152,6 +169,11 @@ const SECTIONS: {
     id: "statuses",
     label: "Issue statuses",
     description: "Customize the statuses issues go through",
+  },
+  {
+    id: "project-statuses",
+    label: "Project statuses",
+    description: "Customize the statuses projects go through, or inherit from parent/workspace",
   },
   {
     id: "workflow",
@@ -174,6 +196,11 @@ const SECTIONS: {
     description: "Add guidance for how agents should operate within this team",
   },
   {
+    id: "agent-connectors",
+    label: "Agent connectors",
+    description: "Add MCP connectors that team members can use with Flow Agent",
+  },
+  {
     id: "agent-skills",
     label: "Agent skills",
     description: "Agent skills shared with this team",
@@ -190,6 +217,22 @@ const SECTIONS: {
     description: "Automatically generate summaries for resolved threads",
   },
 ];
+/** Page descriptions shown under the title. */
+const TEAM_SECTION_DESCRIPTIONS: Partial<Record<TeamSettingsSection, string>> = {
+  cycles:
+    "Cycles create rhythm and focus with short, time-boxed planning windows. Automations can create future cycles, carry over unfinished work, and move issues in or out based on status.",
+  workflow: "Manage issue automations, git workflows and other workflows",
+  triage: "Define how incoming issues and requests are handled in triage",
+  notifications: "Connect a Slack channel to receive notifications when issues are created or updated in this team.",
+  templates: "Any templates created here will be available when creating issues, projects, and documents within this team. To create templates that apply to all teams, do so in the workspace issue, project, or document templates sections.",
+};
+/** Page titles where they differ from the overview row label. */
+const TEAM_SECTION_TITLES: Partial<Record<TeamSettingsSection, string>> = {
+  members: "Team members",
+  "issue-labels": "Team issue labels",
+  "project-labels": "Team project labels",
+  templates: "Team templates",
+};
 const STATUS_GROUPS: {
   type: WorkflowStateType;
   label: string;
@@ -208,13 +251,18 @@ export function TeamWorkflowSettings({
   team,
   section,
   onNavigate,
+  onOpenTeams,
   onReload,
+  subPath,
 }: {
   data: BootstrapData;
   team: Team;
   section: TeamSettingsSection;
-  onNavigate: (section: TeamSettingsSection) => void;
+  onNavigate: (section: TeamSettingsSection, subPath?: string) => void;
+  onOpenTeams?: () => void;
   onReload: () => Promise<void>;
+  /** Sub-page within the section, e.g. "issue/new" under templates. */
+  subPath?: string;
 }) {
   const { t } = useI18n();
   if (section === "statuses")
@@ -227,27 +275,54 @@ export function TeamWorkflowSettings({
         onReload={onReload}
       />
     );
+  if (section === "members")
+    return (
+      <>
+        <TeamSettingsCrumb team={team} onClick={() => onNavigate("overview")} />
+        <TeamMembersSettings key={team.id} data={data} team={team} onReload={onReload} />
+      </>
+    );
+  if (section === "issue-labels" || section === "project-labels")
+    return (
+      <>
+        <TeamSettingsCrumb team={team} onClick={() => onNavigate("overview")} />
+        <DomainLabelsSettings
+          key={`${team.id}:${section}`}
+          data={data}
+          team={team}
+          resourceType={section === "issue-labels" ? "issue" : "project"}
+          onReload={onReload}
+        />
+      </>
+    );
+  if (section === "project-statuses")
+    return (
+      <TeamProjectStatusesSettingsPage
+        key={team.id}
+        data={data}
+        team={team}
+        onBack={() => onNavigate("overview")}
+        onReload={onReload}
+      />
+    );
   const Content = TEAM_SECTION_COMPONENTS[section];
   return (
     <>
+      {section === "overview" ? (
+        onOpenTeams && <SettingsCrumb onClick={onOpenTeams}>{t("Teams")}</SettingsCrumb>
+      ) : (
+        <TeamSettingsCrumb team={team} onClick={() => onNavigate("overview")} />
+      )}
       <header className="settings-page-header team-settings-header">
         <div>
-          {section !== "overview" && (
-            <button
-              className="settings-icon-action team-settings-back"
-              aria-label={t("Back to team settings")}
-              onClick={() => onNavigate("overview")}
-            >
-              <ArrowLeft size={15} />
-            </button>
-          )}
           <h1>
             {section === "overview" ? (
               <span data-i18n-ignore>{team.name}</span>
             ) : (
-              t(SECTIONS.find((item) => item.id === section)?.label ?? "")
+              t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
+          {TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
       </header>
       {section === "overview" && (
@@ -256,10 +331,24 @@ export function TeamWorkflowSettings({
           team={team}
           onNavigate={onNavigate}
           onReload={onReload}
+          action={subPath}
+          onActionHandled={() => onNavigate("overview")}
+          onOpenTeams={onOpenTeams}
         />
       )}
   {section === "agents" && <TeamAgentsSettings data={data} />}
-      {Content && <Content data={data} team={team} onReload={onReload} />}
+      {section === "agent-connectors" && (
+        <TeamAgentConnectorsSettings data={data} team={team} onReload={onReload} />
+      )}
+      {Content && (
+        <Content
+          data={data}
+          team={team}
+          onReload={onReload}
+          subPath={subPath}
+          onNavigateSubPath={(next) => onNavigate(section, next)}
+        />
+      )}
     </>
   );
 }
@@ -268,15 +357,15 @@ type TeamSectionComponent = ComponentType<{
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;
+  subPath?: string;
+  onNavigateSubPath?: (subPath?: string) => void;
 }>;
 const TEAM_SECTION_COMPONENTS: Partial<
   Record<TeamSettingsSection, TeamSectionComponent>
 > = {
   general: GeneralSettings,
   security: AccessSettings,
-  members: MembersSettings,
   notifications: SlackSettings,
-  "issue-labels": LabelsSettings,
   templates: TemplatesSettings,
   "recurring-issues": RecurringIssuesSettings,
   workflow: WorkflowSettings,
@@ -334,43 +423,69 @@ function TeamOverview({
   team,
   onNavigate,
   onReload,
+  action,
+  onActionHandled,
+  onOpenTeams,
 }: {
   data: BootstrapData;
   team: Team;
   onNavigate: (section: TeamSettingsSection) => void;
   onReload: () => Promise<void>;
+  /** Deep-linked action: "retire", "set-parent", "change-parent" or "remove-parent". */
+  action?: string;
+  onActionHandled: () => void;
+  onOpenTeams?: () => void;
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
+  const [retireOpen, setRetireOpen] = useState(false);
+  useEffect(() => {
+    if (action === "retire" && !team.retiredAt) setRetireOpen(true);
+  }, [action, team.retiredAt]);
+  const parentAction = action === "set-parent" || action === "change-parent" ? "pick" : action === "remove-parent" ? "remove" : undefined;
   const descendantCount = Math.max(0, teamHierarchy(data.teams, data.teamSettings).subtree(team.id).size - 1);
   const retire = async () => {
-    const action = team.retiredAt ? "Restore" : "Retire";
+    if (!team.retiredAt) {
+      setRetireOpen(true);
+      return;
+    }
     if (
-      !(await confirmAction(`${t(action)} ${team.name}?`, {
-        confirmLabel: t(team.retiredAt ? "Restore team" : "Retire team"),
-        danger: !team.retiredAt,
-        description: !team.retiredAt && descendantCount > 0
-          ? `This team and ${descendantCount} nested sub-team${descendantCount === 1 ? '' : 's'} will be retired together.`
-          : undefined,
+      !(await confirmAction(`${t("Restore")} ${team.name}?`, {
+        confirmLabel: t("Restore team"),
+        danger: false,
+        description:
+          descendantCount > 0
+            ? `This team and ${descendantCount} nested sub-team${descendantCount === 1 ? "" : "s"} will be restored together.`
+            : undefined,
       }))
     )
       return;
-    await updateTeam(data.workspace.urlKey, team.id, {
-      retired: !team.retiredAt,
-      subTeamAction: "retire",
-    });
-    await onReload();
+    try {
+      await updateTeam(data.workspace.urlKey, team.id, {
+        retired: false,
+        subTeamAction: "retire",
+      });
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
   };
   const remove = async () => {
     if (
       !(await confirmAction(`Delete ${team.name}?`, {
-        description: t("This permanently deletes the team and its owned data."),
+        description: t(DELETE_TEAM_DESCRIPTION),
         confirmLabel: t("Delete team"),
       }))
     )
       return;
-    await deleteTeam(data.workspace.urlKey, team.id);
-    await onReload();
+    try {
+      await deleteTeam(data.workspace.urlKey, team.id);
+      toast.success(t("Team deleted"));
+      onOpenTeams?.();
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
   };
   const leave = async () => {
     if (
@@ -379,14 +494,18 @@ function TeamOverview({
       }))
     )
       return;
-    await setTeamMembership(
-      data.workspace.urlKey,
-      team.id,
-      data.viewer.id,
-      false,
-      "member",
-    );
-    await onReload();
+    try {
+      await setTeamMembership(
+        data.workspace.urlKey,
+        team.id,
+        data.viewer.id,
+        false,
+        "member",
+      );
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
   };
   const group = (title: string | undefined, ids: TeamSettingsSection[]) => (
     <TeamSection title={title}>
@@ -417,7 +536,7 @@ function TeamOverview({
       {group(t("Workflow"), ["statuses", "workflow", "triage", "cycles"])}
       <TeamSection title={t("AI & Agents")}>
         <div className="team-overview-list">
-          {["agents", "agent-skills"].map((id) => {
+          {["agents", "agent-connectors", "agent-skills"].map((id) => {
             const item = SECTIONS.find((value) => value.id === id)!;
             return <button key={item.id} onClick={() => onNavigate(item.id)}><span><strong>{t(item.label)}</strong><small>{t(item.description)}</small></span><ChevronRight size={15}/></button>;
           })}
@@ -435,18 +554,7 @@ function TeamOverview({
         title="Team hierarchy"
         description="Organize teams into a hierarchy of up to five levels."
       >
-        <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} onChange={value => { void save({parentTeamId: value}) }}/>
-      </TeamSection>
-      <TeamSection
-        title="Team initiatives"
-        description="Control whether initiatives are shown in this team's sidebar."
-      >
-        <ToggleRow
-          title="Show initiatives in the sidebar"
-          description="Display this team's initiatives in the sidebar"
-          checked={settings.showInitiatives}
-          onChange={(value) => save({ showInitiatives: value })}
-        />
+        <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} action={parentAction} onActionHandled={onActionHandled} onChange={value => { void save({parentTeamId: value}) }}/>
       </TeamSection>
       <TeamSection title="Danger zone">
         <TeamRow
@@ -454,6 +562,7 @@ function TeamOverview({
           description="Remove yourself as a member of this team"
         >
           <button
+            type="button"
             className="settings-action"
             disabled={
               !data.teamMembers.some(
@@ -471,6 +580,7 @@ function TeamOverview({
           description="Prevent creating and updating issues while preserving historical data"
         >
           <button
+            type="button"
             className="settings-action"
             onClick={() => void retire()}
           >
@@ -479,9 +589,10 @@ function TeamOverview({
         </TeamRow>
         <TeamRow
           title="Delete team"
-          description="Permanently delete this team and all of its owned data"
+          description="Permanently delete this team and all its data, with a 30-day restoration window"
         >
           <button
+            type="button"
             className="settings-action"
             disabled={data.teams.filter((item) => !item.retiredAt).length <= 1}
             onClick={() => void remove()}
@@ -490,6 +601,16 @@ function TeamOverview({
           </button>
         </TeamRow>
       </TeamSection>
+      <RetireTeamForm
+        open={retireOpen}
+        onOpenChange={(open) => {
+          setRetireOpen(open);
+          if (!open && action === "retire") onActionHandled();
+        }}
+        data={data}
+        team={team}
+        onReload={onReload}
+      />
     </>
   );
 }
@@ -572,8 +693,8 @@ function GeneralSettings({
   };
   return (
     <>
-      <TeamSection title="Icon & Name">
-        <TeamRow title="Icon & Name">
+      <TeamSection>
+        <TeamRow title="Name">
           <div className="team-icon-name-control">
             <ViewIconPicker
               color={color}
@@ -584,7 +705,7 @@ function GeneralSettings({
             />
             <input
               className="settings-input"
-              aria-label="Icon & Name"
+              aria-label="Name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               onBlur={() => {
@@ -598,7 +719,7 @@ function GeneralSettings({
         </TeamRow>
         <InputRow
           title="Identifier"
-          description="Used as the prefix for new issue identifiers. Existing issue identifiers won't change."
+          description="Used in issue IDs"
           value={identifier}
           onChange={(value) =>
             setIdentifier(
@@ -625,6 +746,67 @@ function GeneralSettings({
         />
       </TeamSection>
       <TeamSection
+        title="Team initiatives"
+        description="Choose whether initiatives led by this team appear in the team sidebar"
+      >
+        <ToggleRow
+          title="Hide initiatives in the team sidebar"
+          checked={settings.showInitiatives === false}
+          onChange={(value) => save({ showInitiatives: !value })}
+        />
+      </TeamSection>
+      <TeamSection title="Estimates" description="Used to estimate issue complexity and plan cycle capacity.">
+        {settings.parentTeamId && <ToggleRow
+          title="Inherit estimate settings from parent team"
+          description="Keep these settings in sync with parent team"
+          checked={settings.inheritIssueEstimation}
+          onChange={(value) => save({ inheritIssueEstimation: value })}
+        />}
+        {settings.inheritIssueEstimation && settings.parentTeamId ? <TeamRow title="Issue estimation" description="This team is inheriting estimate settings from its parent team."><span className="team-inherited-value">{data.teams.find((item) => item.id === settings.parentTeamId)?.name}</span></TeamRow> : <SelectRow
+          title="Issue estimation"
+          value={settings.estimateType}
+          options={["notUsed", "exponential", "fibonacci", "flow", "tShirt"]}
+          labels={Object.fromEntries(
+            (["notUsed", "exponential", "fibonacci", "flow", "tShirt"] as const).map((type) => [
+              type,
+              `${ESTIMATE_TYPE_NAMES[type]} ${estimateScaleDetails(type, settings.estimateAllowZero, settings.estimateExtended)}`.trim(),
+            ]),
+          )}
+          onChange={(value) =>
+            save({ estimateType: value as TeamSettings["estimateType"] })
+          }
+        />}
+        {settings.estimateType !== "notUsed" && !(settings.inheritIssueEstimation && settings.parentTeamId) && (
+          <>
+            <ToggleRow
+              title="Allow zero estimates"
+              description="When enabled, issues can be estimated with zero points. This is useful if, for example, you don’t want to count parent issues towards the total estimate."
+              checked={Boolean(settings.estimateAllowZero)}
+              onChange={(value) => save({ estimateAllowZero: value })}
+            />
+            <ToggleRow
+              title="Extended estimate scale"
+              description="When enabled, the estimate scale is extended. This is normally not recommended, as large estimates usually mean that an issue should be broken up into smaller issues."
+              checked={Boolean(settings.estimateExtended)}
+              onChange={(value) => save({ estimateExtended: value })}
+            />
+            <ToggleRow
+              title="Count unestimated issues"
+              description="When enabled, issues that have not been estimated will count as 1 estimate point. When disabled, unestimated issues count as 0 estimate points."
+              checked={settings.estimateCountUnestimated !== false}
+              onChange={(value) => save({ estimateCountUnestimated: value })}
+            />
+          </>
+        )}
+      </TeamSection>
+      <EmailIntakeSettings
+        data={data}
+        team={team}
+        settings={settings}
+        save={save}
+        onReload={onReload}
+      />
+      <TeamSection
         title="Timezone"
         description="Used for team schedules, dates, and cycle start times"
       >
@@ -640,36 +822,6 @@ function GeneralSettings({
           onChange={(value) => save({ timezone: value })}
         />
       </TeamSection>
-      <TeamSection title="Estimates">
-        {settings.parentTeamId && <ToggleRow
-          title="Inherit estimate settings from parent team"
-          description="Keep this team's estimates in sync with its parent team."
-          checked={settings.inheritIssueEstimation}
-          onChange={(value) => save({ inheritIssueEstimation: value })}
-        />}
-        {settings.inheritIssueEstimation && settings.parentTeamId ? <TeamRow title="Issue estimation" description="This team is inheriting estimate settings from its parent team."><span className="team-inherited-value">{data.teams.find((item) => item.id === settings.parentTeamId)?.name}</span></TeamRow> : <SelectRow
-          title="Issue estimation"
-          description="Used to estimate issue complexity and plan cycle capacity."
-          value={settings.estimateType}
-          options={["notUsed", "exponential", "fibonacci", "flow"]}
-          labels={{
-            notUsed: "Not in use",
-            exponential: "Exponential",
-            fibonacci: "Fibonacci",
-            flow: "Flow",
-          }}
-          onChange={(value) =>
-            save({ estimateType: value as TeamSettings["estimateType"] })
-          }
-        />}
-      </TeamSection>
-      <EmailIntakeSettings
-        data={data}
-        team={team}
-        settings={settings}
-        save={save}
-        onReload={onReload}
-      />
       <TeamSection title="Other">
         <ToggleRow
           title="Enable detailed issue history"
@@ -843,65 +995,184 @@ function AccessSettings({
   onReload: () => Promise<void>;
 }) {
   const { settings, save } = useTeamSettings(data, team, onReload);
-  const restrictedParent = useMemo(() => teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id)?.some(parent => parent.private || data.teamSettings?.[parent.id]?.access === 'private' || data.teamSettings?.[parent.id]?.access === 'restricted'), [data.teams, data.teamSettings, team.id]);
+  const restrictedParent = useMemo(
+    () =>
+      teamHierarchy(data.teams, data.teamSettings)
+        .ancestors.get(team.id)
+        ?.some(
+          (parent) =>
+            parent.private ||
+            data.teamSettings?.[parent.id]?.access === "private" ||
+            data.teamSettings?.[parent.id]?.access === "restricted",
+        ),
+    [data.teams, data.teamSettings, team.id],
+  );
+  const hasActiveSubTeams = useMemo(() => {
+    const subtree = teamHierarchy(data.teams, data.teamSettings).subtree(
+      team.id,
+    );
+    return [...subtree].some((id) => {
+      if (id === team.id) return false;
+      const item = data.teams.find((candidate) => candidate.id === id);
+      return Boolean(item && !item.retiredAt);
+    });
+  }, [data.teams, data.teamSettings, team.id]);
   const permissionLabels = {
     allMembers: "All team members",
-    teamMembers: "Team members",
-    owners: "Team owners",
+    teamMembers: "All team members",
+    owners: "Only team owners",
   };
-  const permissionOptions = Object.keys(permissionLabels);
+  // "teamMembers" is a legacy alias of "allMembers"; it is shown but not offered.
+  const permissionOptions = ["allMembers", "owners"];
+  const audience = getIssueSharingAudience();
+
+  const persist = async (
+    patch: Partial<TeamSettings> & { applyToSubTeams?: boolean },
+  ) => {
+    try {
+      await updateStructuredTeamSettings(team.id, patch);
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
+  };
+
+  const savePermissionFinal = async (key: TeamPermissionKey, value: string) => {
+    const previous = settings[key] ?? "allMembers";
+    if (hasActiveSubTeams && isLessRestrictivePermission(previous, value)) {
+      const choice = await confirmApplyPermissionToSubTeams();
+      if (!choice) return;
+      await persist({
+        [key]: value,
+        ...(choice === "applyToSubTeams" ? { applyToSubTeams: true } : {}),
+      } as Partial<TeamSettings> & { applyToSubTeams?: boolean });
+      return;
+    }
+    await save({ [key]: value } as Partial<TeamSettings>);
+  };
+
+  const saveMembershipFinal = async (
+    value: TeamSettings["membershipRestriction"],
+  ) => {
+    const previous = settings.membershipRestriction;
+    if (hasActiveSubTeams && isLessRestrictiveMembership(previous, value)) {
+      if (value === "open") {
+        const choice = await confirmAllowSubTeamsMembership();
+        if (!choice) return;
+        await persist({
+          membershipRestriction: value,
+          ...(choice === "allowSubTeams" ? { applyToSubTeams: true } : {}),
+        });
+        return;
+      }
+      const choice = await confirmApplyPermissionToSubTeams();
+      if (!choice) return;
+      await persist({
+        membershipRestriction: value,
+        ...(choice === "applyToSubTeams" ? { applyToSubTeams: true } : {}),
+      });
+      return;
+    }
+    await save({ membershipRestriction: value });
+  };
+
   return (
     <>
+      <p className="settings-section-note team-access-note">
+        {data.viewerRole === "owner"
+          ? "All workspace owners and admins are automatically considered team owners"
+          : "All workspace admins are automatically considered team owners"}
+      </p>
       <TeamSection title="Team access">
         <SelectRow
-          title="Team visibility"
-          description="Private teams are visible only to members."
+          title="Team access"
+          description="Control who can access the team and its content"
           value={settings.access}
-          options={settings.access === 'restricted' ? ["public", "private", "restricted"] : ["public", "private"]}
-          labels={{ public: restrictedParent ? "Restricted to parent team" : "Public", private: "Private", restricted: "Restricted to parent team" }}
+          options={
+            settings.access === "restricted"
+              ? ["public", "private", "restricted"]
+              : ["public", "private"]
+          }
+          labels={{
+            public: restrictedParent
+              ? "Restricted to parent team"
+              : "Public to workspace",
+            private: "Private",
+            restricted: "Restricted to parent team",
+          }}
           onChange={(value) =>
             save({ access: value as TeamSettings["access"] })
           }
         />
         <SelectRow
-          title="Who can join"
+          title="Restrict membership"
+          description={
+            settings.access === "private"
+              ? "Invites are always required to join private teams"
+              : "Choose how members can be added to this team"
+          }
           value={settings.membershipRestriction}
           options={["open", "members", "owners"]}
           labels={{
-            open: "Anyone in the workspace",
-            members: "By invitation",
-            owners: "Team owners only",
+            open: "Allow anyone with access to join",
+            members: "Require invite to join",
+            owners: "Only team owners",
           }}
           onChange={(value) =>
-            save({
-              membershipRestriction:
-                value as TeamSettings["membershipRestriction"],
-            })
+            void saveMembershipFinal(
+              value as TeamSettings["membershipRestriction"],
+            )
           }
         />
       </TeamSection>
-      <TeamSection title="Management permissions">
+      <TeamSection title="Team permissions" description="Choose who can perform various actions within this team">
         {(
           [
-            ["settingsPermission", "Change team settings"],
-            ["labelPermission", "Manage labels"],
-            ["templatePermission", "Manage templates"],
-            ["agentSkillPermission", "Manage agent skills"],
-            ["loopPermission", "Create Loops"],
-            ["memberPermission", "Manage members"],
+            ["settingsPermission", "Settings management", "Who can manage the team’s settings and workflows"],
+            ["labelPermission", "Label management", "Who can create, update, and delete team labels"],
+            ["templatePermission", "Template management", "Who can manage team templates and recurring issues"],
+            ["pinnedViewPermission", "Pinned view management", "Who can pin views to team pages and edit, reorder, or remove them"],
+            ["agentSkillPermission", "Agent skills management", "Who can create, update, and delete shared skills for Flow Agent"],
+            ["loopPermission", "Loop management", "Who can create, update, and delete team loops"],
+            ["memberPermission", "Member management", "Who can add or remove team members — excludes guests"],
           ] as const
-        ).map(([key, label]) => (
+        ).map(([key, label, description]) => (
           <SelectRow
             key={key}
             title={label}
-            value={settings[key]}
+            description={description}
+            value={settings[key] ?? "allMembers"}
+            options={permissionOptions}
+            labels={permissionLabels}
+            onChange={(value) => void savePermissionFinal(key, value)}
+          />
+        ))}
+      </TeamSection>
+      <TeamSection
+        title="Issue sharing"
+        description={`Control whether issues from this team can be shared with ${audience}`}
+      >
+        <ToggleRow
+          title="Issue sharing"
+          description={`Allow issues from this team to be shared with ${audience}`}
+          checked={Boolean(settings.issueSharingEnabled)}
+          onChange={(value) => save({ issueSharingEnabled: value })}
+        />
+        {settings.issueSharingEnabled && (
+          <SelectRow
+            title="Who can share issues"
+            description={`Control who can share issues with ${audience}`}
+            value={settings.issueSharingPermission ?? "allMembers"}
             options={permissionOptions}
             labels={permissionLabels}
             onChange={(value) =>
-              save({ [key]: value } as Partial<TeamSettings>)
+              save({
+                issueSharingPermission:
+                  value as TeamSettings["issueSharingPermission"],
+              })
             }
           />
-        ))}
+        )}
       </TeamSection>
     </>
   );
@@ -917,43 +1188,47 @@ function SlackSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const { settings, setSettings, save } = useTeamSettings(data, team, onReload);
   const slack = data.integrationConnections.find(
     (item) =>
       item.provider.toLowerCase() === "slack" && item.status === "connected",
   );
   const choices = [
-    ["issueCreated", "Issue created"],
-    ["issueCompleted", "Issue completed"],
-    ["issueCanceled", "Issue canceled"],
-    ["commentCreated", "New comments"],
-    ["projectUpdates", "Project updates"],
-    ["cycleUpdates", "Cycle updates"],
+    ["projectUpdates", "New project update is posted"],
+    ["issueCreated", "An issue is added to the team"],
+    ["issueCompleted", "An issue is marked completed or canceled"],
+    ["issueStatusChanged", "An issue changes status"],
+    ["commentCreated", "Comments to issues"],
+    ["issueTriage", "An issue is added to the triage queue"],
   ] as const;
   return (
     <>
-      <TeamSection title="Slack connection">
-        <TeamRow
-          title="Workspace connection"
-          description={
-            slack
-              ? t(`Connected as ${slack.name}`)
-              : "Connect Slack from workspace Integrations before choosing a channel."
-          }
-        >
-          <span className="settings-static">
-            {slack ? "Connected" : "Not connected"}
-          </span>
-        </TeamRow>
-        <InputRow
-          title="Channel"
-          description="Slack channel name, for example #engineering"
-          value={settings.slackChannelName ?? ""}
-          onChange={(value) =>
-            setSettings((current) => ({ ...current, slackChannelName: value }))
-          }
-          onCommit={(value) => save({ slackChannelName: value })}
-        />
+      <TeamSection>
+        {slack ? (
+          <InputRow
+            title="Connect a Slack channel"
+            description="Connect a channel to broadcast notifications from this team, for example #engineering"
+            value={settings.slackChannelName ?? ""}
+            onChange={(value) =>
+              setSettings((current) => ({ ...current, slackChannelName: value }))
+            }
+            onCommit={(value) => save({ slackChannelName: value })}
+          />
+        ) : (
+          <TeamRow
+            title="Connect a Slack channel"
+            description="Connect Slack to your workspace to broadcast notifications from this team"
+          >
+            <button
+              type="button"
+              className="settings-action"
+              onClick={() => navigate(settingsPath(data.workspace.urlKey, "integrations") + "/slack")}
+            >
+              {t("Connect")}
+            </button>
+          </TeamRow>
+        )}
       </TeamSection>
       <div
         className={
@@ -965,12 +1240,17 @@ function SlackSettings({
             <ToggleRow
               key={key}
               title={label}
-              checked={settings.slackNotifications[key] ?? false}
+              checked={
+                key === "issueCompleted"
+                  ? Boolean(settings.slackNotifications.issueCompleted || settings.slackNotifications.issueCanceled)
+                  : settings.slackNotifications[key] ?? false
+              }
               onChange={(value) =>
                 save({
                   slackNotifications: {
                     ...settings.slackNotifications,
                     [key]: value,
+                    ...(key === "issueCompleted" ? { issueCanceled: value } : {}),
                   },
                 })
               }
@@ -986,10 +1266,14 @@ function RecurringIssuesSettings({
   data,
   team,
   onReload,
+  subPath,
+  onNavigateSubPath,
 }: {
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;
+  subPath?: string;
+  onNavigateSubPath?: (subPath?: string) => void;
 }) {
   const { formatDate, t } = useI18n();
   const issues = data.issues.filter(
@@ -997,9 +1281,14 @@ function RecurringIssuesSettings({
   );
   const sourceId = new URLSearchParams(window.location.search).get('fromIssue');
   const source = data.issues.find(issue => issue.id === sourceId && issue.team.id === team.id);
-  const [creating, setCreating] = useState(Boolean(source));
+  const [creatingLocal, setCreatingLocal] = useState(Boolean(source));
+  const creating = creatingLocal || subPath === "new";
+  const setCreating = (value: boolean) => {
+    setCreatingLocal(value);
+    if (!source) onNavigateSubPath?.(value ? "new" : undefined);
+  };
   const [title, setTitle] = useState(source?.title ?? "");
-  useEffect(() => { if (source && !creating && !title) { setCreating(true); setTitle(source.title) } }, [source, creating, title]);
+  useEffect(() => { if (source && !creating && !title) { setCreatingLocal(true); setTitle(source.title) } }, [source, creating, title]);
   const closeCreation = () => {
     setCreating(false); setTitle("");
     const url = new URL(window.location.href);
@@ -1128,6 +1417,10 @@ function WorkflowSettings({
   onReload: () => Promise<void>;
 }) {
   const { settings, save } = useTeamSettings(data, team, onReload);
+  const navigate = useNavigate();
+  const gitConnected = data.integrationConnections.some(
+    (item) => (item.provider === "github" || item.provider === "gitlab") && item.status === "connected",
+  );
   const states = statesForTeam(data, team.id);
   const stateOptions = ["", ...states.map((item) => item.id)];
   const stateLabels: Record<string, string> = {
@@ -1212,6 +1505,8 @@ function WorkflowSettings({
   };
   return (
     <>
+      {gitConnected ? (
+        <>
       <TeamSection title="Pull request automations">
         {prRows.map(([key, label]) => (
           <SelectRow
@@ -1306,6 +1601,25 @@ function WorkflowSettings({
           </form>
         )}
       </TeamSection>
+        </>
+      ) : (
+        <TeamSection
+          title="Pull request automations"
+          description="With Git integrations, you can automate issue workflows when opening pull requests"
+        >
+          {(["github", "gitlab"] as const).map((provider) => (
+            <TeamRow key={provider} title={provider === "github" ? "GitHub" : "GitLab"}>
+              <button
+                type="button"
+                className="settings-action"
+                onClick={() => navigate(`${settingsPath(data.workspace.urlKey, "integrations")}/${provider}`)}
+              >
+                Connect
+              </button>
+            </TeamRow>
+          ))}
+        </TeamSection>
+      )}
       <TeamSection
         title="Release automations"
         action={
@@ -1756,6 +2070,135 @@ function TeamAgentsSettings({ data }: { data: BootstrapData }) {
   );
 }
 
+
+
+function TeamAgentConnectorsSettings({
+  data,
+  team,
+  onReload,
+}: {
+  data: BootstrapData;
+  team: Team;
+  onReload: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const { settings, save } = useTeamSettings(data, team, onReload);
+  const connectors = settings.agentConnectors ?? [];
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
+  const add = async () => {
+    if (!name.trim() || !url.trim()) return;
+    await save({
+      agentConnectors: [
+        ...connectors,
+        {
+          id: `connector_${Date.now()}`,
+          name: name.trim(),
+          url: url.trim(),
+          enabled: true,
+        },
+      ],
+    });
+    setName("");
+    setUrl("");
+    setCreating(false);
+  };
+  return (
+    <TeamSection
+      title={t("Agent connectors")}
+      action={
+        <button className="settings-action" onClick={() => setCreating(true)}>
+          <Plus size={13} />
+          {t("Add connector")}
+        </button>
+      }
+    >
+      <div className="team-setting-list">
+        {creating && (
+          <form
+            className="agent-skill-editor"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void add();
+            }}
+          >
+            <input
+              autoFocus
+              className="settings-input"
+              placeholder={t("Connector name")}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <input
+              className="settings-input"
+              placeholder="https://mcp.example.com"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+            <footer>
+              <button
+                type="button"
+                className="settings-action"
+                onClick={() => setCreating(false)}
+              >
+                {t("Cancel")}
+              </button>
+              <button
+                className="settings-action primary"
+                disabled={!name.trim() || !url.trim()}
+              >
+                {t("Add")}
+              </button>
+            </footer>
+          </form>
+        )}
+        {connectors.map((connector) => (
+          <div className="agent-skill-row" key={connector.id}>
+            <div>
+              <strong data-i18n-ignore>{connector.name}</strong>
+              <small data-i18n-ignore>{connector.url}</small>
+            </div>
+            <SettingsToggle
+              checked={connector.enabled}
+              label={connector.name}
+              onChange={(value) => {
+                void save({
+                  agentConnectors: connectors.map((item) =>
+                    item.id === connector.id ? { ...item, enabled: value } : item,
+                  ),
+                });
+              }}
+            />
+            <button
+              className="settings-action"
+              aria-label={t("Remove connector")}
+              onClick={() => {
+                void save({
+                  agentConnectors: connectors.filter(
+                    (item) => item.id !== connector.id,
+                  ),
+                });
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
+        ))}
+        {!connectors.length && !creating && (
+          <TeamEmpty
+            icon={<Bot size={24} />}
+            title={t("No team agent connectors")}
+            description={t(
+              "Add MCP connectors that team members can use with Flow Agent.",
+            )}
+          />
+        )}
+      </div>
+    </TeamSection>
+  );
+}
+
 function AgentSkillsSettings({
   data,
   team,
@@ -1938,275 +2381,159 @@ function ResolvedSummariesSettings({
   );
 }
 
-function MembersSettings({
-  data,
-  team,
-  onReload,
-}: {
-  data: BootstrapData;
-  team: Team;
-  onReload: () => Promise<void>;
-}) {
-  const memberships = new Map(
-    data.teamMembers
-      .filter((item) => item.teamId === team.id)
-      .map((item) => [item.userId, item]),
-  );
-  const change = async (userId: string, member: boolean) => {
-    try {
-      await setTeamMembership(
-        data.workspace.urlKey,
-        team.id,
-        userId,
-        member,
-        memberships.get(userId)?.role ?? "member",
-      );
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    }
-  };
-  return (
-    <TeamSection title="Team members">
-      <div className="team-setting-list">
-        {data.members
-          .filter((item) => item.status === "active")
-          .map((member) => (
-            <div className="team-member-setting" key={member.user.id}>
-              <span className="settings-member-avatar">
-                <span data-i18n-ignore>
-                  {initials(member.user.displayName)}
-                </span>
-              </span>
-              <span data-i18n-ignore>
-                <strong>{member.user.displayName}</strong>
-                <small>{member.user.email}</small>
-              </span>
-              {memberships.get(member.user.id)?.role === "owner" && (
-                <em>Owner</em>
-              )}
-              <button
-                role="checkbox"
-                aria-checked={memberships.has(member.user.id)}
-                onClick={() =>
-                  void change(member.user.id, !memberships.has(member.user.id))
-                }
-              >
-                {memberships.has(member.user.id) && <CheckboxMark />}
-              </button>
-            </div>
-          ))}
-      </div>
-    </TeamSection>
-  );
-}
-
-function LabelsSettings({
-  data,
-  team,
-  onReload,
-}: {
-  data: BootstrapData;
-  team: Team;
-  onReload: () => Promise<void>;
-}) {
-  const labels = data.labels.filter(
-    (label) => label.scope === team.id && !label.archivedAt,
-  );
-  const [creating, setCreating] = useState(false);
-  const add = async (name: string, color: string) => {
-    try {
-      await createTeamLabel(team.id, { name, color });
-      setCreating(false);
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    }
-  };
-  return (
-    <TeamSection
-      title="Issue labels"
-      action={
-        <button className="settings-action" onClick={() => setCreating(true)}>
-          <Plus size={13} />
-          New label
-        </button>
-      }
-    >
-      <div className="team-setting-list">
-        {creating && (
-          <InlineCreate
-            placeholder="Label name"
-            onCancel={() => setCreating(false)}
-            onCreate={add}
-          />
-        )}{" "}
-        {labels.map((label) => (
-          <TeamLabelRow
-            key={label.id}
-            team={team}
-            label={label}
-            onReload={onReload}
-          />
-        ))}{" "}
-        {!labels.length && !creating && (
-          <TeamEmpty
-            icon={<Circle size={22} />}
-            title="No team labels"
-            description="Team labels are available only on issues in this team."
-          />
-        )}
-      </div>
-    </TeamSection>
-  );
-}
-function TeamLabelRow({
-  team,
-  label,
-  onReload,
-}: {
-  team: Team;
-  label: IssueLabel;
-  onReload: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [name, setName] = useState(label.name);
-  return (
-    <div className="team-label-setting">
-      <input
-        type="color"
-        value={label.color}
-        aria-label={t("Label color")}
-        onChange={(event) =>
-          void updateTeamLabel(team.id, label.id, {
-            color: event.target.value,
-          }).then(onReload)
-        }
-      />
-      <input
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-        onBlur={() =>
-          name !== label.name &&
-          void updateTeamLabel(team.id, label.id, { name }).then(onReload)
-        }
-      />
-      <span data-i18n-ignore={Boolean(label.description) || undefined}>
-        {label.description || "No description"}
-      </span>
-      <Menu
-        onDelete={() => void deleteTeamLabel(team.id, label.id).then(onReload)}
-      />
-    </div>
-  );
-}
+type TemplateKind = "issue" | "project" | "document";
+type AnyTemplate = IssueTemplate | ProjectTemplate | DocumentTemplate;
+const NO_TEMPLATE = "none";
 
 function TemplatesSettings({
   data,
   team,
   onReload,
+  subPath,
+  onNavigateSubPath,
 }: {
   data: BootstrapData;
   team: Team;
   onReload: () => Promise<void>;
+  subPath?: string;
+  onNavigateSubPath?: (subPath?: string) => void;
 }) {
   const { t } = useI18n();
-  const [type, setType] = useState<"issue" | "project" | "document">("issue");
-  const [editing, setEditing] = useState<
-    IssueTemplate | ProjectTemplate | DocumentTemplate | null | undefined
-  >(undefined);
+  const { settings, save } = useTeamSettings(data, team, onReload);
+  // The URL (templates/{kind}/new | templates/{kind}/{id}/edit) owns the
+  // open editor so it survives reloads and can be linked to.
+  const [routeKind, routeId, routeAction] = (subPath ?? "").split("/");
+  const editingKind = (["issue", "project", "document"] as const).find((kind) => kind === routeKind);
   const scopeIds = new Set([
     team.id,
     ...(teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id) ?? []).map((item) => item.id),
   ]);
-  const templates =
-    type === "issue"
-      ? data.issueTemplates.filter((item) => scopeIds.has(item.teamId ?? ""))
-      : type === "project"
-        ? data.projectTemplates.filter(
-            (item) =>
-              item.visibility === "teams" &&
-              item.teamIds.some((teamId) => scopeIds.has(teamId)),
-          )
-        : data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? ""));
+  const templatesByKind: Record<TemplateKind, AnyTemplate[]> = {
+    issue: data.issueTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
+    project: data.projectTemplates.filter(
+      (item) => item.visibility === "teams" && item.teamIds.some((teamId) => scopeIds.has(teamId)),
+    ),
+    document: data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
+  };
+  const editing: AnyTemplate | null | undefined = !editingKind
+    ? undefined
+    : routeId === "new"
+      ? null
+      : routeAction === "edit"
+        ? templatesByKind[editingKind].find((item) => item.id === routeId)
+        : undefined;
+  const openEditor = (kind: TemplateKind, template: AnyTemplate | null) =>
+    onNavigateSubPath?.(template === null ? `${kind}/new` : `${kind}/${template.id}/edit`);
+  const closeEditor = () => onNavigateSubPath?.(undefined);
+  const sourceTeamOf = (kind: TemplateKind, template: AnyTemplate) =>
+    kind === "project"
+      ? (template as ProjectTemplate).teamIds.find((teamId) => scopeIds.has(teamId) && teamId !== team.id)
+      : (template as IssueTemplate | DocumentTemplate).teamId && (template as IssueTemplate | DocumentTemplate).teamId !== team.id
+        ? (template as IssueTemplate | DocumentTemplate).teamId
+        : undefined;
+  const templateSelect = (
+    title: string,
+    value: string | undefined,
+    options: AnyTemplate[],
+    onChange: (id: string) => void,
+  ) => (
+    <SelectRow
+      title={title}
+      value={value || NO_TEMPLATE}
+      options={[NO_TEMPLATE, ...options.map((item) => item.id)]}
+      labels={{ [NO_TEMPLATE]: "No template", ...Object.fromEntries(options.map((item) => [item.id, item.name])) }}
+      entityOptions={options.map((item) => item.id)}
+      onChange={(next) => onChange(next === NO_TEMPLATE ? "" : next)}
+    />
+  );
+  const section = (kind: TemplateKind) => {
+    const templates = templatesByKind[kind];
+    return (
+      <TeamSection key={kind} title={`${titleCase(kind)} templates`}>
+        {templates.map((template) => {
+          const sourceTeamID = sourceTeamOf(kind, template);
+          const inherited = Boolean(sourceTeamID);
+          return (
+            <TeamRow
+              key={template.id}
+              className={inherited ? "team-template-row is-inherited" : "personal-row-link team-template-row"}
+              title={<span data-i18n-ignore>{template.name}</span>}
+              description={
+                inherited ? (
+                  <>
+                    {t("Inherited from")}{" "}
+                    <span data-i18n-ignore>{data.teams.find((item) => item.id === sourceTeamID)?.name ?? t("parent team")}</span>
+                  </>
+                ) : template.description ? (
+                  <span data-i18n-ignore>{template.description}</span>
+                ) : undefined
+              }
+              role={inherited ? undefined : "button"}
+              tabIndex={inherited ? undefined : 0}
+              onClick={inherited ? undefined : () => openEditor(kind, template)}
+              onKeyDown={inherited ? undefined : (event) => { if (event.key === "Enter") openEditor(kind, template); }}
+            />
+          );
+        })}
+        <TeamRow className="settings-row--action" title={templates.length ? "" : `No ${kind} templates`}>
+          <button className="settings-action" type="button" onClick={() => openEditor(kind, null)}>
+            <Plus size={13} />
+            {t("New template")}
+          </button>
+        </TeamRow>
+      </TeamSection>
+    );
+  };
+  const issueTemplates = templatesByKind.issue as IssueTemplate[];
   return (
     <>
-      <div className="settings-segmented team-template-tabs">
-        {(["issue", "project", "document"] as const).map((value) => (
-          <button
-            key={value}
-            className={type === value ? "active" : ""}
-            onClick={() => {
-              setType(value);
-              setEditing(undefined);
-            }}
-          >{t(`${titleCase(value)} templates`)}</button>
-        ))}
-      </div>
-      <TeamSection
-        title={`${titleCase(type)} templates`}
-        action={
-          <button className="settings-action" onClick={() => setEditing(null)}>
-            <Plus size={13} />
-            New template
-          </button>
-        }
-      >
-        <div className="team-setting-list">
-          {templates.map((template) => {
-            const sourceTeamID =
-              type === "project"
-                ? (template as ProjectTemplate).teamIds.find((teamId) => scopeIds.has(teamId) && teamId !== team.id)
-                : (template as IssueTemplate | DocumentTemplate).teamId && (template as IssueTemplate | DocumentTemplate).teamId !== team.id
-                  ? (template as IssueTemplate | DocumentTemplate).teamId
-                  : undefined;
-            const inherited = Boolean(sourceTeamID);
-            return <button
-              className="team-template-setting"
-              data-inherited={inherited || undefined}
-              disabled={inherited}
-              key={template.id}
-              onClick={() => !inherited && setEditing(template)}
-            >
-              <span className="template-icon">T</span>
-              <span>
-                <strong data-i18n-ignore>{template.name}</strong>
-                <small>
-                  {inherited ? (
-                    <>Inherited from <span data-i18n-ignore>{data.teams.find((item) => item.id === sourceTeamID)?.name ?? "parent team"}</span></>
-                  ) : template.description ? (
-                    <span data-i18n-ignore>{template.description}</span>
-                  ) : (
-                    `${titleCase(type)} template`
-                  )}
-                </small>
-              </span>
-            </button>
-          })}
-          {!templates.length && (
-            <TeamEmpty
-              icon={<Plus size={22} />}
-              title={`No ${type} templates`}
-              description={`Templates prefill common ${type} properties and descriptions.`}
-            />
+      {section("issue")}
+      {issueTemplates.length > 0 && (
+        <TeamSection
+          title="Default issue template"
+          description="Pre-select a template when creating an issue for this team. Form templates can’t be used as a default for team members."
+        >
+          {templateSelect(
+            "Issues created by team members",
+            settings.defaultIssueTemplateForMembersId,
+            issueTemplates.filter((item) => item.templateType !== "customForm"),
+            (id) => void save({ defaultIssueTemplateForMembersId: id }),
           )}
-        </div>
-      </TeamSection>
-      {editing !== undefined &&
-        (type === "document" ? (
+          {templateSelect(
+            "Issues created by non-team members",
+            settings.defaultIssueTemplateForNonMembersId,
+            issueTemplates,
+            (id) => void save({ defaultIssueTemplateForNonMembersId: id }),
+          )}
+        </TeamSection>
+      )}
+      {section("project")}
+      {templatesByKind.project.length > 0 && (
+        <TeamSection title="Default project template" description="Pre-select a template when creating a project for this team">
+          {templateSelect(
+            "Projects created",
+            settings.defaultProjectTemplateId,
+            templatesByKind.project,
+            (id) => void save({ defaultProjectTemplateId: id }),
+          )}
+        </TeamSection>
+      )}
+      {section("document")}
+      {editing !== undefined && editingKind &&
+        (editingKind === "document" ? (
           <DocumentTemplateEditor
             team={team}
             template={editing as DocumentTemplate | null}
-            onClose={() => setEditing(undefined)}
+            onClose={closeEditor}
             onSaved={onReload}
           />
         ) : (
           <TemplateEditor
             data={data}
-            type={type}
+            type={editingKind}
             teamId={team.id}
             template={editing as IssueTemplate | ProjectTemplate | null}
-            onClose={() => setEditing(undefined)}
+            onClose={closeEditor}
             onSaved={onReload}
           />
         ))}
@@ -2430,11 +2757,8 @@ function StatusesSettings({
       className="ip-settings-page ip-project-statuses-page team-statuses-page"
       data-i18n-ignore
     >
+      <TeamSettingsCrumb team={team} onClick={onBack} />
       <header className="settings-page-header ip-page-header team-statuses-header">
-        <button aria-label={t("Back to team settings")} onClick={onBack}>
-          <ArrowLeft size={14} />
-          <span data-i18n-ignore>{team.name}</span>
-        </button>
         <div>
           <h1>{t("Issue statuses")}</h1>
           <p>
@@ -2866,84 +3190,137 @@ function CyclesSettings({
       <TeamSection>
         <ToggleRow
           title="Enable cycles"
-          description="Organize work into time-boxed periods."
           checked={settings.enabled}
           onChange={(value) => save({ enabled: value })}
         />
+        {settings.enabled && (
+          <>
+            <SelectRow
+              title="Cycle duration"
+              value={String(settings.durationWeeks)}
+              options={["1", "2", "3", "4", "6", "8"]}
+              labels={Object.fromEntries(
+                ["1", "2", "3", "4", "6", "8"].map((value) => [
+                  value,
+                  `${value} week${value === "1" ? "" : "s"}`,
+                ]),
+              )}
+              onChange={(value) => save({ durationWeeks: Number(value) })}
+            />
+            <SelectRow
+              title="Cooldown duration"
+              value={String(settings.cooldownWeeks)}
+              options={["0", "1", "2", "3", "4"]}
+              labels={Object.fromEntries(
+                ["0", "1", "2", "3", "4"].map((value) => [
+                  value,
+                  value === "0"
+                    ? "No cooldown"
+                    : `${value} week${value === "1" ? "" : "s"}`,
+                ]),
+              )}
+              onChange={(value) => save({ cooldownWeeks: Number(value) })}
+            />
+            <SelectRow
+              title="Cycle start"
+              description="Future cycles begin on the same day of the week"
+              value={String(settings.startsOn)}
+              options={["1", "2", "3", "4", "5", "6", "0"]}
+              labels={{ "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" }}
+              onChange={(value) => save({ startsOn: Number(value) })}
+            />
+            <SelectRow
+              title="Auto-create cycles"
+              description="Number of upcoming cycles created in advance"
+              value={settings.autoCreate ? String(settings.upcomingCount) : "0"}
+              options={["0", "1", "2", "3", "4", "6"]}
+              labels={Object.fromEntries(
+                ["0", "1", "2", "3", "4", "6"].map((value) => [
+                  value,
+                  value === "0" ? "Off" : `${value} upcoming cycle${value === "1" ? "" : "s"}`,
+                ]),
+              )}
+              onChange={(value) =>
+                save(
+                  value === "0"
+                    ? { autoCreate: false }
+                    : { autoCreate: true, upcomingCount: Number(value) },
+                )
+              }
+            />
+            <NumberRow
+              title="Capacity"
+              description="Planning capacity shown on each generated cycle."
+              value={settings.capacity}
+              onCommit={(value) => save({ capacity: value })}
+            />
+          </>
+        )}
       </TeamSection>
-      <div className={!settings.enabled ? "settings-disabled-area" : ""}>
-        <TeamSection title="Schedule">
-          <SelectRow
-            title="Cycle duration"
-            value={String(settings.durationWeeks)}
-            options={["1", "2", "3", "4", "6", "8"]}
-            labels={Object.fromEntries(
-              ["1", "2", "3", "4", "6", "8"].map((value) => [
-                value,
-                `${value} week${value === "1" ? "" : "s"}`,
-              ]),
-            )}
-            onChange={(value) => save({ durationWeeks: Number(value) })}
-          />
-          <SelectRow
-            title="Cooldown"
-            value={String(settings.cooldownWeeks)}
-            options={["0", "1", "2", "3", "4"]}
-            labels={Object.fromEntries(
-              ["0", "1", "2", "3", "4"].map((value) => [
-                value,
-                value === "0"
-                  ? "No cooldown"
-                  : `${value} week${value === "1" ? "" : "s"}`,
-              ]),
-            )}
-            onChange={(value) => save({ cooldownWeeks: Number(value) })}
-          />
-          <NumberRow
-            title="Capacity"
-            description="Planning capacity shown on each generated cycle."
-            value={settings.capacity}
-            onCommit={(value) => save({ capacity: value })}
-          />
-          <NumberRow
-            title="Upcoming cycles"
-            value={settings.upcomingCount}
-            onCommit={(value) => save({ upcomingCount: value })}
-          />
-        </TeamSection>
-        <TeamSection title="Automations">
+      <TeamSection
+        title="Cycle automation"
+        description="Capture all work in cycles by auto-adding issues to cycles based on their status type"
+      >
+        <ToggleRow
+          title="Active issues & due date"
+          description="Auto-add started, unstarted, and issues with due dates that match the current cycle, or the next if in cooldown"
+          checked={settings.autoAddActive && settings.autoAddDueDate}
+          onChange={(value) => save({ autoAddActive: value, autoAddDueDate: value })}
+        />
+        {!(settings.autoAddActive && settings.autoAddDueDate) && (
           <ToggleRow
-            title="Automatically create upcoming cycles"
-            checked={settings.autoCreate}
-            onChange={(value) => save({ autoCreate: value })}
-          />
-          <ToggleRow
-            title="Add active issues"
-            checked={settings.autoAddActive}
-            onChange={(value) => save({ autoAddActive: value })}
-          />
-          <ToggleRow
-            title="Add issues with due dates in the cycle"
-            checked={settings.autoAddDueDate}
-            onChange={(value) => save({ autoAddDueDate: value })}
-          />
-          <ToggleRow
-            title="Add started issues"
+            title="Started issues"
+            description="Auto-add started issues to the current cycle, or the next if in cooldown"
             checked={settings.autoAddStarted}
             onChange={(value) => save({ autoAddStarted: value })}
           />
-          <ToggleRow
-            title="Add completed issues"
-            checked={settings.autoAddCompleted}
-            onChange={(value) => save({ autoAddCompleted: value })}
-          />
-          <ToggleRow
-            title="Move unfinished issues to the next cycle"
-            checked={settings.autoMigrate}
-            onChange={(value) => save({ autoMigrate: value })}
-          />
+        )}
+        <ToggleRow
+          title="Completed issues"
+          description="Auto-add completed issues to the current cycle, or the next if in cooldown"
+          checked={settings.autoAddCompleted}
+          onChange={(value) => save({ autoAddCompleted: value })}
+        />
+        <ToggleRow
+          title="Unfinished issues"
+          description="Move unfinished issues to the next cycle when a cycle ends"
+          checked={settings.autoMigrate}
+          onChange={(value) => save({ autoMigrate: value })}
+        />
+      </TeamSection>
+      {!settings.enabled && data.cycles.some((cycle) => cycle.teamId === team.id) && (
+        <TeamSection title="Danger zone">
+          <TeamRow
+            danger
+            title="Delete historical cycle data"
+            description="Permanently delete this team’s past cycles. Issues keep their other data."
+          >
+            <button
+              type="button"
+              className="settings-action danger"
+              onClick={() =>
+                void (async () => {
+                  if (
+                    !(await confirmAction("Permanently delete cycles data?", {
+                      confirmLabel: "Delete",
+                      description: "All of this team’s cycles will be deleted. This cannot be undone.",
+                    }))
+                  )
+                    return;
+                  try {
+                    await deleteTeamCycles(team.id);
+                    await onReload();
+                  } catch (error) {
+                    toast.error(message(error));
+                  }
+                })()
+              }
+            >
+              Delete…
+            </button>
+          </TeamRow>
         </TeamSection>
-      </div>
+      )}
       </>}
     </>
   );
@@ -3138,46 +3515,6 @@ function NumberRow({
     </TeamRow>
   );
 }
-function InlineCreate({
-  placeholder,
-  onCancel,
-  onCreate,
-}: {
-  placeholder: string;
-  onCancel: () => void;
-  onCreate: (name: string, color: string) => void | Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [name, setName] = useState("");
-  const [color, setColor] = useState("#5E6AD2");
-  return (
-    <form
-      className="workflow-inline-create"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (name.trim()) void onCreate(name.trim(), color);
-      }}
-    >
-      <input
-        type="color"
-        value={color}
-        onChange={(event) => setColor(event.target.value)}
-      />
-      <input
-        autoFocus
-        placeholder={t(placeholder)}
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-      />
-      <button type="button" aria-label={t("Cancel")} onClick={onCancel}>
-        <X size={14} />
-      </button>
-      <button className="create" disabled={!name.trim()}>
-        <Check size={14} />
-      </button>
-    </form>
-  );
-}
 function Menu({ onDelete }: { onDelete: () => void }) {
   const { t } = useI18n();
   return (
@@ -3247,6 +3584,8 @@ function defaultTeamSettings(
     agentSkillPermission: "allMembers",
     loopPermission: "allMembers",
     memberPermission: "allMembers",
+    issueSharingEnabled: false,
+    issueSharingPermission: "allMembers",
     slackNotifications: {},
     prAutomations: {},
     autoCloseParents: false,
@@ -3286,14 +3625,6 @@ function defaultCycles(): CycleSettings {
     autoMigrate: true,
     favoriteView: false,
   };
-}
-function initials(value: string) {
-  return value
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 }
 function message(error: unknown) {
   return error instanceof Error
