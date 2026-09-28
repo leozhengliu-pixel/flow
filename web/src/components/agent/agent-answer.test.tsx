@@ -105,3 +105,13 @@ describe('Agent answer chrome in the floating panel', () => {
     expect(streams.streamAgentSessionMessage).toHaveBeenCalledWith('session-1', 'Review migration steps', expect.any(Function), expect.any(AbortSignal), expect.objectContaining({ issueIds: [] }))
   })
 })
+
+describe('stripLeakedProgress', () => {
+  it('hides printed report_progress payloads, even mid-stream', async () => {
+    const { stripLeakedProgress } = await import('./agent-answer-content')
+    expect(stripLeakedProgress('{"title":"Gathering activity","message":"I\'ll look."}{"title":"Checking history"}## Summary')).toBe('## Summary')
+    expect(stripLeakedProgress('{"title":"Gathering act')).toBe('')
+    expect(stripLeakedProgress('Plain answer {"title":"x"}')).toBe('Plain answer {"title":"x"}')
+  })
+})
+
