@@ -1516,7 +1516,10 @@ export interface Subscription {
 export interface ThreadSubscription {
   id: UUID;
   userId: UUID;
-  issueId: UUID;
+  /** Set for issue comment threads. */
+  issueId?: UUID;
+  /** Set for project comment threads. */
+  projectId?: UUID;
   commentId: UUID;
   state: ThreadSubscriptionState;
   createdAt: string;
