@@ -117,7 +117,18 @@ func (s *server) agentToolDefinitions() ([]agentProviderTool, error) {
 		name := strings.TrimPrefix(item.Name, "mcp__flow.")
 		tools = append(tools, agentProviderTool{Name: name, Description: item.Description, Parameters: item.InputSchema, Access: item.Access})
 	}
-	return tools, nil
+	return append(tools, agentProgressToolDefinition), nil
+}
+
+// agentProgressTool lets the model narrate its plan the way Linear's agent does ("Reviewing project activity").
+// It never touches data: chat sessions render it as a step title, other runners simply acknowledge it.
+const agentProgressTool = "report_progress"
+
+var agentProgressToolDefinition = agentProviderTool{
+	Name:        agentProgressTool,
+	Description: "Show the user what you are doing. Call it in the same turn as the lookups it describes, before each distinct phase of work. title: 2-5 words starting with a present participle, e.g. \"Reviewing project activity\" or \"Gathering project updates\". message: optional, only on the first call — one or two sentences on your plan, in the user's language.",
+	Parameters:  json.RawMessage(`{"type":"object","required":["title"],"properties":{"title":{"type":"string","description":"2-5 word present-participle title"},"message":{"type":"string","description":"Optional one or two sentence plan"}},"additionalProperties":false}`),
+	Access:      "read",
 }
 
 func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {

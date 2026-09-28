@@ -23,7 +23,7 @@ import {
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { agentPath, newAgentSkillPath } from "@/lib/app-routes";
-import type { AgentMessage, AgentSession, AgentStatus, AgentToolCall, BootstrapData } from "@/types/flow";
+import type { AgentMessage, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
@@ -34,6 +34,7 @@ import {
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
 import { AgentDraftCard } from "./agent-draft-card";
+import { HealthGlyph, healthColor } from "@/components/project-detail/health-glyph";
 import { splitAgentDraft } from "./agent-draft";
 import { AgentWorkGroup } from "./agent-work-group";
 import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
@@ -456,6 +457,7 @@ export function AgentPage({
         {current ? (
           <Conversation
             busy={busy}
+            draftProject={data.projects.find((project) => current.projectIds?.includes(project.id))}
             draftContext={data.projects.find((project) => current.projectIds?.includes(project.id))?.name ?? current.title}
             session={current}
             editingId={editingId}
@@ -645,6 +647,7 @@ export function AgentPage({
 function Conversation({
   busy,
   draftContext,
+  draftProject,
   editingId,
   onEdit,
   onRetry,
@@ -654,6 +657,7 @@ function Conversation({
 }: {
   busy: boolean;
   draftContext: string;
+  draftProject?: Project;
   editingId?: string;
   onEdit: (message: AgentSession["messages"][number]) => void;
   onRetry: (message: string) => void;
@@ -696,8 +700,8 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><LoaderCircle className={styles.spin}/><span>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts draftContext={draftContext} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
-                    : <AgentMessageText content={message.content} draftContext={draftContext}/>}
+                    ? <AgentMessageParts draftContext={draftContext} draftProject={draftProject} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
+                    : <AgentMessageText content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
               </div>
               <div className={styles.messageActions}>
                 <button
@@ -725,11 +729,11 @@ function Conversation({
   );
 }
 
-function AgentMessageParts({ draftContext, message, onRetry, onToolApproval, approvalBusy }: { draftContext: string; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy }: { draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
   const { t } = useI18n();
   const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
-  const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "toolCall") ?? [];
-  const other = message.parts?.filter(part => !["text", "reasoning", "toolCall"].includes(part.type)) ?? [];
+  const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "step" || part.type === "toolCall") ?? [];
+  const other = message.parts?.filter(part => !["text", "reasoning", "step", "toolCall"].includes(part.type)) ?? [];
   const queue = summarizeElicitationQueue(other);
   const submitting = other.some(part => part.type === "elicitation" && part.status === "running");
   return <div className={styles.messageParts}>
@@ -738,16 +742,16 @@ function AgentMessageParts({ draftContext, message, onRetry, onToolApproval, app
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
-    {text && <AgentMessageText content={text} draftContext={draftContext}/>}
+    {text && <AgentMessageText content={text} draftContext={draftContext} draftProject={draftProject}/>}
   </div>;
 }
 
 /** Assistant text with any ```update block shown as Linear's "Created draft" card instead of raw code. */
-function AgentMessageText({ content, draftContext }: { content: string; draftContext: string }) {
+function AgentMessageText({ content, draftContext, draftProject }: { content: string; draftContext: string; draftProject?: Project }) {
   const { prose, draft } = splitAgentDraft(content, "update");
   return <>
     {prose && <AgentRichText className={styles.messageDocument} content={prose}/>}
-    {draft && <AgentDraftCard context={draftContext} draft={draft} title="Update draft"/>}
+    {draft && <AgentDraftCard context={draftContext} draft={draft} icon={draftProject ? <span style={{ color: healthColor(draftProject.health), display: "inline-flex" }}><HealthGlyph health={draftProject.health}/></span> : undefined} title="Update draft"/>}
   </>;
 }
 

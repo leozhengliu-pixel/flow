@@ -23,3 +23,27 @@ saved in Linear — drafts created by Linear's agent were discarded.
 - Initiatives/documents: the Linear workspace has none, and creating them would modify it.
 - Agent actions that write (loops, delegation, approvals) need `FLOW_AGENT_WRITE_TOOLS=true`.
 - Response latency is dominated by the model/gateway (Flow 25–50 s vs Linear ~10 s).
+
+## Linear agent capability probe (2026-09-28)
+
+Linear declines to list its tools, so capabilities were inferred from read-only prompts and the step rows it renders.
+
+**Tool rows observed** (label · detail): Looked at users · team; Looked at assigned issues; Looked at issues · Team › View;
+Looked at issue; Looked at issue activity; Searched issues · several quoted queries; Searched documentation; Searched the web
+(answers cite links); Looked at project updates · project; Looked at project; Looked at project activity; Reviewing inbox;
+Couldn't read Slack channel · No connected channel; Created draft.
+
+**Step titles** (model-written phase summaries, 12px/500 rows, first one followed by a narration quote): Gathering project
+updates, Evaluating drafting and delegation, Looking into search retrieval, Clarifying attachment needs, Inventorying saved
+views / labels and cycles / templates / initiatives and documents, Checking customers and integrations, Considering tool
+capabilities. While running, the group label is the current title with "…" ("Reviewing inbox…").
+
+**Answer chrome**: inline entity chips (⁠FLO-3 Import your data), a list of referenced issue cards under the answer,
+follow-up suggestion chips ("Compare FLO-2 and FLO-3", "Review migration steps"), 👍 👎 copy.
+
+**Write capabilities it claims**: create/assign/re-status/re-prioritise issues and comment; update projects, milestones and
+project updates; create or edit issue and project drafts; delegate an issue to an AI agent with instructions; schedule via
+cycles, due dates, reminders and recurring issues.
+
+Flow now has `report_progress` (step titles) and the health glyph on draft cards; missing tools and answer chrome are tracked
+in the follow-up work.

@@ -403,6 +403,12 @@
   color: var(--theme-text-secondary);
   font-weight: 450;
 }
+/* Step title row with its optional narration 12px below (Linear: title +28, quote +55). */
+.stepRow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 /* Narration: 12px/19.2px text 14px right of a 2px rounded bar (bar inset 2px top and bottom). */
 .reasoningRow { position: relative; }
 .reasoningRow p {

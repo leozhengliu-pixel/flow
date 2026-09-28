@@ -2344,7 +2344,10 @@ export interface AgentMessagePart {
     | "event"
     | "widget"
     | "elicitation"
-    | "context";
+    | "context"
+    | "step";
+  /** Step title from report_progress ("Reviewing project activity"). */
+  title?: string;
   text?: string;
   status?: "pending" | "running" | "completed" | "error";
   toolCall?: AgentToolCall;

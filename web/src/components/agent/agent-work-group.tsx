@@ -14,8 +14,10 @@ export function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy, r
   }, [failed, running]);
   const toolCount = parts.filter(part => part.type === "toolCall").length;
   const duration = Math.max(1, Math.round((message.durationMs ?? 0) / 1000));
+  // Linear shows the current phase ("Reviewing inbox…") while working.
+  const currentStep = [...parts].reverse().find(part => part.type === "step" && part.title)?.title;
   const label = running
-    ? t("Working…")
+    ? currentStep ? `${currentStep}…` : t("Working…")
     : message.durationMs
       ? `${t("Worked for")} ${duration} ${t(duration === 1 ? "second" : "seconds")}`
       : toolCount > 2
@@ -25,7 +27,9 @@ export function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy, r
     {/* Linear: label plus a small disclosure triangle; steps are flat 12px rows, narration is a quote with a 2px bar. */}
     <summary><span className={running ? styles.workShimmer : undefined}>{label}</span><WorkDisclosureIcon/></summary>
     <div className={styles.workItems}>
-      {parts.map(part => part.type === "reasoning"
+      {parts.map(part => part.type === "step"
+        ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{part.title}</span>{part.text && <div className={styles.reasoningRow}><p data-i18n-ignore>{part.text}</p></div>}</div>
+        : part.type === "reasoning"
         ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <p>{part.text}</p>}</div>
         : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
