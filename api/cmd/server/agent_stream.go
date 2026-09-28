@@ -337,6 +337,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 
 	finalText := ""
 	for turnIndex := 0; turnIndex < maxAgentToolTurns; turnIndex++ {
+		turnStart := len(parts)
 		turn, err := s.requestAgentTurn(r.Context(), messages, emit)
 		if err != nil {
 			failureRequest := r
@@ -344,6 +345,26 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				failureRequest = r.Clone(context.WithoutCancel(r.Context()))
 			}
 			return s.persistAgentFailure(failureRequest, *session, messageID, finalText, parts, started, err)
+		}
+		// Some gateways let the model print report_progress as JSON text instead of a call; turn it back into steps.
+		if leaked, rest := leakedProgressSteps(turn.Text); len(leaked) > 0 {
+			turn.Text = rest
+			steps := make([]domain.AgentMessagePart, 0, len(leaked))
+			for index, step := range leaked {
+				steps = append(steps, domain.AgentMessagePart{ID: fmt.Sprintf("%s_step_%d_%d", messageID, turnIndex, index), Type: "step", Title: step.Title, Text: step.Message, Status: "completed"})
+			}
+			parts = append(parts[:turnStart], append(steps, parts[turnStart:]...)...)
+			for key, index := range partIndex {
+				if index >= turnStart {
+					partIndex[key] = index + len(steps)
+				}
+			}
+			if textIndex, ok := partIndex["text"]; ok {
+				cleaned := &strings.Builder{}
+				cleaned.WriteString(finalText + rest)
+				partText["text"] = cleaned
+				parts[textIndex].Text = cleaned.String()
+			}
 		}
 		finalText += turn.Text
 		if len(turn.ToolCalls) == 0 {
@@ -490,7 +511,7 @@ func (s *server) startAgentSessionTitle(r *http.Request, session domain.AgentSes
 	}
 	go func() {
 		defer close(done)
-		ctx, cancel := contextWithTimeout(r, 20*time.Second)
+		ctx, cancel := contextWithTimeout(r, 60*time.Second)
 		defer cancel()
 		turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{{Role: "system", Content: agentTitleSystemPrompt}, {Role: "user", Content: request}})
 		if err != nil {
@@ -681,4 +702,37 @@ func (s *server) persistAgentFailure(r *http.Request, session domain.AgentSessio
 		_, _ = s.persistAgentCompletion(r, session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(text), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
 	}
 	return domain.AgentSession{}, cause
+}
+
+type leakedProgressStep struct {
+	Title   string `json:"title"`
+	Message string `json:"message"`
+}
+
+// leakedProgressSteps peels report_progress payloads ({"title":…,"message":…}) off the start of a turn's text.
+func leakedProgressSteps(text string) ([]leakedProgressStep, string) {
+	rest := strings.TrimLeft(text, " \n\t")
+	var steps []leakedProgressStep
+	for strings.HasPrefix(rest, "{") {
+		decoder := json.NewDecoder(strings.NewReader(rest))
+		var raw map[string]json.RawMessage
+		if err := decoder.Decode(&raw); err != nil {
+			break
+		}
+		var step leakedProgressStep
+		if _, ok := raw["title"]; !ok || len(raw) > 2 {
+			break
+		}
+		if data, err := json.Marshal(raw); err != nil || json.Unmarshal(data, &step) != nil || strings.TrimSpace(step.Title) == "" {
+			break
+		}
+		step.Title = strings.TrimRight(strings.TrimSpace(step.Title), ".…")
+		step.Message = strings.TrimSpace(step.Message)
+		steps = append(steps, step)
+		rest = strings.TrimLeft(rest[decoder.InputOffset():], " \n\t")
+	}
+	if len(steps) == 0 {
+		return nil, text
+	}
+	return steps, rest
 }

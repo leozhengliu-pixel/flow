@@ -127,7 +127,20 @@ function shortcodeValue(value: string) {
 
 /** Everything the answer chrome needs from one assistant reply. */
 export function parseAgentAnswer(content: string, data?: BootstrapData) {
-  const { prose, suggestions } = splitAgentSuggestions(content)
+  const { prose, suggestions } = splitAgentSuggestions(stripLeakedProgress(content))
   const { markdown, issues } = linkAgentEntities(prose, data)
   return { prose, suggestions, markdown, referencedIssues: issues }
 }
+
+/**
+ * Some gateways let the model print report_progress payloads ({"title":…,"message":…}) as text; the server turns them
+ * into step rows once the turn ends, so hide them while the reply is still streaming (including a partial one).
+ */
+export function stripLeakedProgress(content: string) {
+  let rest = content.trimStart()
+  const pattern = /^\{"title":"(?:[^"\\]|\\.)*"(?:,"message":"(?:[^"\\]|\\.)*")?\}\s*/
+  for (let match = rest.match(pattern); match; match = rest.match(pattern)) rest = rest.slice(match[0].length)
+  if (/^\{"title":/.test(rest) && !rest.includes('}')) return ''
+  return rest.length === content.trimStart().length ? content : rest
+}
+
