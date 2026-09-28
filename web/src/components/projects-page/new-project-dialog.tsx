@@ -393,7 +393,7 @@ function projectLabelInTeams(label: NewProjectChoice, teamIds: string[]) {
 }
 
 function emptyDraft(status: string, teamId?: string): NewProjectDraft {
-  return { name: '', icon: 'Project', color: '#eb5757', summary: '', description: '', status, priority: 'No priority', memberIds: [], teamIds: teamId ? [teamId] : [], initiativeIds: [], labelIds: [], dependencyIds: [], dependencyRelations: [], milestones: [] }
+  return { name: '', icon: 'Project', color: '#5e6ad2', summary: '', description: '', status, priority: 'No priority', memberIds: [], teamIds: teamId ? [teamId] : [], initiativeIds: [], labelIds: [], dependencyIds: [], dependencyRelations: [], milestones: [] }
 }
 
 function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|undefined,templates:NewProjectTemplateChoice[],labels:NewProjectChoice[]):NewProjectDraft{

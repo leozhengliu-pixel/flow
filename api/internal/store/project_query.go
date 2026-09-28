@@ -72,6 +72,7 @@ func ProjectListProjection(project domain.Project) domain.Project {
 	project.Description = ""
 	project.Resources = nil
 	project.Comments = nil
+	project.CommentAttachments = nil
 	project.DescriptionRevisions = nil
 	project.IssueCountHistory = nil
 	project.ScopeHistory = nil

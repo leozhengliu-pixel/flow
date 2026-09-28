@@ -150,6 +150,7 @@ export function translateToChinese(source: string): string {
     [/^Create (issue|project) view in (.+)$/, (resource, name) => `在 ${name} 中创建${resource === 'issue' ? '事项' : '项目'}视图`],
     [/^Save to (.+)$/, name => `保存到 ${name}`],
     [/^Add to (.+)$/, resource => `添加到${translateNoun(resource)}`],
+    [/^Open (\d+) comments?$/, count => `打开 ${count} 条评论`],
     [/^Open (.+) menu$/, name => `打开 ${name} 菜单`],
     [/^Open (.+) issues$/, name => `打开 ${name} 的事项`],
     [/^No updates\. Click to open updates\.$/, () => '没有更新。点击打开更新。'],

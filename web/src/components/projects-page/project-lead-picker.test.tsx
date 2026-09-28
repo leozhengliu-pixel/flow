@@ -18,6 +18,7 @@ it('uses the shared personnel picker with project-team suggestions, search, and 
   fireEvent.click(screen.getByRole('combobox',{name:/Change Lead/}))
   const menu=screen.getByRole('dialog')
   expect(menu).toHaveClass('property-command-surface')
+  expect(menu).toHaveClass('project-details-sidebar__property-menu','is-lead')
   expect(within(menu).queryByRole('option',{name:'Teammate'})).not.toBeInTheDocument()
   fireEvent.change(within(menu).getByRole('textbox'),{target:{value:teammate.email}})
   fireEvent.keyDown(within(menu).getByRole('textbox'),{key:'Enter'})

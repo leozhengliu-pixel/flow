@@ -83,9 +83,10 @@ export function PersonHoverPreview({ person, projectName, workspaceName }: { per
   </div>
 }
 
-export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, emptyOptionShortcut, emptyOptionEnd, emptyTriggerLabel, hoverClassName, hoverContent, icon, label, multiple = false, onChange, optionHoverClassName, optionHoverContent, people, searchPlaceholder, searchShortcut, selectedId, selectedIds = [], showUnselectedGroupWhenEmpty = false, surfaceClassName, trigger, triggerClassName, unselectedGroupLabel, value, embedded = false, side, alignOffset, extraOptions = [] }: {
+export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, emptyOptionShortcut, emptyOptionEnd, emptyTriggerLabel, hoverClassName, hoverContent, icon, label, multiple = false, onChange, optionHoverClassName, optionHoverContent, people, searchPlaceholder, searchShortcut, selectedId, selectedIds = [], showUnselectedGroupWhenEmpty = false, surfaceClassName, trigger, triggerClassName, unselectedGroupLabel, value, embedded = false, side, alignOffset, extraOptions = [], hideSearch = false, open, onOpenChange, tooltip, tooltipShortcut }: {
   ariaLabel: string
   closeOnSelect?: boolean
+  hideSearch?: boolean
   emptyOptionLabel?: string
   emptyOptionShortcut?: string
   emptyOptionEnd?: string
@@ -113,6 +114,10 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
   side?: 'top'|'right'|'bottom'|'left'
   alignOffset?: number
   extraOptions?: PropertyOption[]
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  tooltip?: string
+  tooltipShortcut?: string
 }) {
   const { t } = useI18n()
   useUserPreferences()
@@ -148,9 +153,14 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
     ...extraOptions,
   ]
   return <PropertyMenu
+    open={open}
+    onOpenChange={onOpenChange}
+    tooltip={tooltip}
+    tooltipShortcut={tooltipShortcut}
     embedded={embedded}
     side={side}
     alignOffset={alignOffset}
+    hideSearch={hideSearch}
     ariaLabel={t(ariaLabel)}
     closeOnSelect={closeOnSelect}
     compact

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Layers2, Link2, Pencil, Star, Trash2 } from "lucide-react";
@@ -41,10 +41,24 @@ import {
 } from "@/components/ui/action-dialog-service";
 import "./project-detail-page.css";
 import { ProjectSlackDialog } from './project-slack-dialog';
+import { FlowTooltip } from "@/components/ui/tooltip";
+import { useI18n } from "@/i18n/i18n";
+import {
+  PROJECT_PICKER_SEQUENCES,
+  PROJECT_SEQUENCE_TIMEOUT,
+  hasOpenProjectOverlay,
+  isCopyProjectUrlShortcut,
+  isEditableShortcutTarget,
+  projectDateShortcut,
+  projectShortcutLabels,
+  type ProjectPickerKind,
+  type ProjectPickerRequest,
+} from "./project-detail-shortcuts";
 
 export type { ProjectDetailTab } from "./project-detail-types";
 
 export function ProjectDetailPage(props: ProjectDetailProps) {
+  const { t } = useI18n();
   const [slackOpen,setSlackOpen] = useState(false);
   const {
     project,
@@ -180,22 +194,119 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     }, 0);
   };
 
+  const shortcutLabels = projectShortcutLabels();
+  const [pickerRequest, setPickerRequest] = useState<
+    ProjectPickerRequest & { target: "overview" | "sidebar" }
+  >();
+  const pickerRequestCount = useRef(0);
+  const pickerSequenceAt = useRef(0);
+  const clearPickerRequest = useCallback(() => setPickerRequest(undefined), []);
+  const overviewMemberCount = users.filter((user) =>
+    (project.memberIds ?? []).includes(user.id),
+  ).length;
+  const overviewLabelCount = labelSelection.selectedIds.filter((id) =>
+    projectLabels.some((label) => label.id === id),
+  ).length;
+  // The overview Properties row only renders Members, Start date and Labels chips once they have a value.
+  const overviewHasPicker = (kind: ProjectPickerKind) =>
+    kind === "members"
+      ? overviewMemberCount > 0
+      : kind === "startDate"
+        ? Boolean(project.startDate)
+        : kind === "labels"
+          ? overviewLabelCount > 0
+          : true;
+  const requestPicker = (kind: ProjectPickerKind) => {
+    const target =
+      !detailsOpen && tab === "overview" && overviewHasPicker(kind)
+        ? "overview"
+        : "sidebar";
+    if (target === "sidebar" && !detailsOpen) {
+      setInsightsOpen(false);
+      setDetailsOpen(true);
+    }
+    pickerRequestCount.current += 1;
+    setPickerRequest({ kind, target, id: pickerRequestCount.current });
+  };
+  const copyProjectUrl = () =>
+    void navigator.clipboard
+      .writeText(location.href)
+      .then(() => toast.success("Project URL copied"));
+
   useEffect(() => {
     const toggle = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      const target = event.target instanceof Element ? event.target : null;
+      if (isEditableShortcutTarget(target)) return;
+      const key = event.key.toLowerCase();
       if (
-        (event.target as HTMLElement | null)?.closest(
-          'input,textarea,[contenteditable="true"],[role="textbox"]',
-        )
-      )
-        return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "i") {
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey &&
+        key === "i"
+      ) {
+        if (hasOpenProjectOverlay()) return;
         event.preventDefault();
         setInsightsOpen(false);
         setDetailsOpen((value) => !value);
+        return;
       }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "u") {
+      if ((event.metaKey || event.ctrlKey) && key === "u") {
         event.preventDefault();
         onTabChange("activity");
+        return;
+      }
+      if (isCopyProjectUrlShortcut(event)) {
+        if (hasOpenProjectOverlay()) return;
+        event.preventDefault();
+        copyProjectUrl();
+        return;
+      }
+      const dateKind = projectDateShortcut(event);
+      if (dateKind) {
+        if (hasOpenProjectOverlay()) return;
+        event.preventDefault();
+        requestPicker(dateKind);
+        return;
+      }
+      if (
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        !hasOpenProjectOverlay()
+      ) {
+        const armed =
+          Date.now() - pickerSequenceAt.current < PROJECT_SEQUENCE_TIMEOUT;
+        pickerSequenceAt.current = 0;
+        const kind = armed ? PROJECT_PICKER_SEQUENCES[key] : undefined;
+        if (kind) {
+          event.preventDefault();
+          requestPicker(kind);
+          return;
+        }
+        // Don't claim "P": the app-wide "N then P" sequence still needs it.
+        if (!armed && key === "p") {
+          pickerSequenceAt.current = Date.now();
+          return;
+        }
+      }
+      if (
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.repeat &&
+        !target?.closest(
+          'select,[contenteditable]:not([contenteditable="false"]),[role=menu],[role=listbox],[role=dialog]',
+        ) &&
+        !document.querySelector('[role="dialog"],[role="menu"]') &&
+        PROJECT_TAB_SHORTCUTS[event.key]
+      ) {
+        event.preventDefault();
+        onTabChange(PROJECT_TAB_SHORTCUTS[event.key]);
+        return;
       }
       if (event.altKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
@@ -208,7 +319,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     };
     window.addEventListener("keydown", toggle);
     return () => window.removeEventListener("keydown", toggle);
-  }, [favorited, onTabChange, onToggleFavorite, project.id, setDetailsOpen]);
+  });
 
   useEffect(() => {
     if (!savedView || savedView.projectId !== project.id) return;
@@ -260,6 +371,24 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           <span />
           <span />
         </button>
+        {props.projectsOriginPath && (
+          <>
+            <a
+              className="project-detail-page__all-projects"
+              href={props.projectsOriginPath}
+              onClick={(event) => {
+                if (!props.onOpenProjects || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                event.preventDefault();
+                props.onOpenProjects();
+              }}
+            >
+              Projects
+            </a>
+            <span aria-hidden="true" className="project-detail-page__crumb-separator">
+              ›
+            </span>
+          </>
+        )}
         <a
           className="project-detail-page__crumb"
           href={`/${location.pathname.split("/")[1]}/project/${project.slugId}/overview`}
@@ -302,18 +431,17 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           subscription={props.subscription}
         />
         <div className="project-detail-page__header-spacer" />
-        <button
-          aria-label="Copy page URL"
-          className="project-detail-page__header-action"
-          onClick={() =>
-            void navigator.clipboard
-              .writeText(location.href)
-              .then(() => toast.success("Project URL copied"))
-          }
-          type="button"
-        >
-          <Link2 size={14} />
-        </button>
+        <FlowTooltip label={t("Copy project URL")} shortcut={shortcutLabels.copyUrl}>
+          <button
+            aria-keyshortcuts={shortcutLabels.copyUrl.startsWith("⌘") ? "Meta+Shift+C" : "Control+Shift+C"}
+            aria-label="Copy page URL"
+            className="project-detail-page__header-action"
+            onClick={copyProjectUrl}
+            type="button"
+          >
+            <Link2 size={14} />
+          </button>
+        </FlowTooltip>
         <ProjectNotificationMenu
           onShowSlack={() => { setNotificationOpen(false); setSlackOpen(true) }}
           onOpenChange={setNotificationOpen}
@@ -332,6 +460,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             active={tab === "overview"}
             id="overview"
             onChange={onTabChange}
+            shortcut="1"
+            tooltip="View Overview"
           >
             Overview
           </ProjectTab>
@@ -339,6 +469,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             active={tab === "activity"}
             id="activity"
             onChange={onTabChange}
+            shortcut="2"
+            tooltip="View updates and activity"
           >
             Activity
           </ProjectTab>
@@ -346,6 +478,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             active={tab === "issues"}
             id="issues"
             onChange={onTabChange}
+            shortcut="3"
+            tooltip="View Issues"
           >
             Issues
           </ProjectTab>
@@ -425,14 +559,16 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               <Pencil size={10} />
             </button>
           ) : (
-            <button
-              aria-label="Add new view"
-              className="project-detail-page__add-view"
-              onClick={() => onTabChange("new")}
-              type="button"
-            >
-              <AddViewIcon />
-            </button>
+            <FlowTooltip label={t("Create new view")}>
+              <button
+                aria-label="Add new view"
+                className="project-detail-page__add-view"
+                onClick={() => onTabChange("new")}
+                type="button"
+              >
+                <AddViewIcon />
+              </button>
+            </FlowTooltip>
           )}
         </nav>
         <div className="project-detail-page__toolbar-actions">
@@ -450,35 +586,39 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               />
             </>
           )}
-          <button
-            aria-label={
-              insightsOpen ? "Close project insights" : "Open project insights"
-            }
-            aria-pressed={insightsOpen}
-            className="project-detail-page__toolbar-button ui-pill"
-            onClick={() => {
-              setInsightsOpen((value) => !value);
-              setDetailsOpen(false);
-            }}
-            type="button"
+          <FlowTooltip label={t(insightsOpen ? "Close project insights" : "Open project insights")}>
+            <button
+              aria-label={t(insightsOpen ? "Close project insights" : "Open project insights")}
+              aria-pressed={insightsOpen}
+              className="project-detail-page__toolbar-button ui-pill"
+              onClick={() => {
+                setInsightsOpen((value) => !value);
+                setDetailsOpen(false);
+              }}
+              type="button"
+            >
+              <InsightsIcon height={14} width={14} />
+            </button>
+          </FlowTooltip>
+          <FlowTooltip
+            label={t(detailsOpen ? "Close project details" : "Open project details")}
+            shortcut={shortcutLabels.toggleDetails}
           >
-            <InsightsIcon />
-          </button>
-          <button
-            aria-label={
-              detailsOpen ? "Close project details" : "Open project details"
-            }
-            aria-pressed={detailsOpen}
-            className="project-detail-page__toolbar-button ui-pill"
-            onClick={() => {
-              setDetailsOpen((value) => !value);
-              setInsightsOpen(false);
-            }}
-            title={`${detailsOpen ? "Close" : "Open"} project details (⌘I)`}
-            type="button"
-          >
-            <SidebarIcon />
-          </button>
+            <button
+              aria-label={
+                detailsOpen ? "Close project details" : "Open project details"
+              }
+              aria-pressed={detailsOpen}
+              className="project-detail-page__toolbar-button ui-pill"
+              onClick={() => {
+                setDetailsOpen((value) => !value);
+                setInsightsOpen(false);
+              }}
+              type="button"
+            >
+              <SidebarIcon />
+            </button>
+          </FlowTooltip>
         </div>
       </div>
 
@@ -493,6 +633,10 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               project={displayedProject}
               labels={projectLabels}
               onOpenMilestoneIssues={openMilestoneIssues}
+              onPickerRequestHandled={clearPickerRequest}
+              pickerRequest={
+                pickerRequest?.target === "overview" ? pickerRequest : undefined
+              }
               projectIssues={projectIssues}
               save={save}
             />
@@ -514,6 +658,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             ) : (
               <ProjectIssues
                 {...props}
+                issueSummary={issueSummary}
                 labels={issueLabels}
                 display={issueDisplay}
                 filters={issueFilters}
@@ -551,6 +696,10 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             onMoveMilestone={props.onMoveMilestone}
             onOpenIssueFilter={openIssueFilter}
             onOpenMilestoneIssues={openMilestoneIssues}
+            onPickerRequestHandled={clearPickerRequest}
+            pickerRequest={
+              pickerRequest?.target === "sidebar" ? pickerRequest : undefined
+            }
             onReorderMilestones={props.onReorderMilestones}
             onTabChange={onTabChange}
             onUpdate={save}
@@ -562,6 +711,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
             projects={projects}
             projectStatuses={props.projectStatuses}
             projectUpdates={projectUpdates}
+            tab={tab}
             teams={props.teams}
             users={users}
             viewer={viewer}
@@ -622,19 +772,26 @@ function ProjectTab({
   children,
   id,
   onChange,
+  shortcut,
+  tooltip,
 }: {
   active: boolean;
   children: string;
   id: ProjectDetailTab;
   onChange: (tab: ProjectDetailTab) => void;
+  shortcut?: string;
+  tooltip?: string;
 }) {
+  const { t } = useI18n();
   const projectBase = location.pathname.replace(
     /\/(overview|activity|issues|view\/new|view\/[^/]+(?:\/edit)?)$/,
     "",
   );
   return (
+    <FlowTooltip label={tooltip ? t(tooltip) : undefined} shortcut={shortcut}>
     <a
       aria-current={active ? "page" : undefined}
+      aria-keyshortcuts={shortcut}
       className="project-detail-page__tab"
       data-active={active}
       href={`${projectBase}/${id === "new" ? "view/new" : id}`}
@@ -646,8 +803,15 @@ function ProjectTab({
     >
       {children}
     </a>
+    </FlowTooltip>
   );
 }
+
+const PROJECT_TAB_SHORTCUTS: Record<string, ProjectDetailTab> = {
+  "1": "overview",
+  "2": "activity",
+  "3": "issues",
+};
 
 function useStoredBoolean(key: string, fallback: boolean) {
   const [value, setValue] = useState(() =>

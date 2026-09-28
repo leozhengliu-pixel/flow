@@ -10,7 +10,7 @@
 .rootMenu,.valueMenu{border-color:var(--popover-border)}
 :global(:root[data-theme="light"]) .rootSearch kbd{background:var(--theme-surface-0)}
 :global(:root[data-theme="light"]) .rootItem[data-selected=true],:global(:root[data-theme="light"]) .rootItem[aria-selected=true],:global(:root[data-theme="light"]) .valueItem[aria-selected=true],:global(:root[data-theme="light"]) .valueItem:hover{background:var(--theme-surface-hover)}
-.rootMenu{height:auto;max-height:calc(100dvh - 20px)}
+.rootMenu{height:auto;max-height:min(calc(100dvh - 20px),var(--radix-popover-content-available-height,100dvh))}
 .rootCommand{min-height:0;max-height:inherit}
 .rootList{padding:0}
 .rootGroup+.rootGroup{margin-top:0;padding-top:0;border-top:0}

@@ -2,7 +2,7 @@
 .command{width:252px;border-radius:10px;overflow:hidden}
 .optionIcon,.statusIcon{width:15px;height:15px;flex:0 0 15px;color:var(--theme-text-secondary)}
 .avatar{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;border-radius:50%;object-fit:cover;color:white;font-size:8px;line-height:16px}
-.datePicker{box-sizing:border-box;z-index:1000;width:304px;height:427px;display:flex;flex-direction:column;padding:16px 16px 0;border-radius:8px;overflow:hidden;background:var(--theme-surface-2);box-shadow:0 3px 8px lch(0 0 0/.125),0 2px 5px lch(0 0 0/.125),0 1px 1px lch(0 0 0/.125)}
+.datePicker{box-sizing:border-box;z-index:1000;width:304px;height:427px;max-height:calc(var(--radix-popover-content-available-height,427px) - 8px);display:flex;flex-direction:column;padding:16px 16px 0;border-radius:8px;overflow-x:hidden;overflow-y:auto;background:var(--theme-surface-2);box-shadow:0 3px 8px lch(0 0 0/.125),0 2px 5px lch(0 0 0/.125),0 1px 1px lch(0 0 0/.125)}
 .datePicker.compactPeriods{height:330px;background:var(--theme-control-hover)}
 .datePicker.compactCalendar{width:263px;height:300.5px;padding:8px;background:var(--theme-surface-2)}
 .compactCalendar .dayPanel{width:246px;height:283.5px;flex:0 0 283.5px;margin:0;padding:0;border:0}
@@ -11,7 +11,7 @@
 .compactPeriods .dateLabel input,.compactPeriods .dateModes{background:var(--theme-control-hover)}
 .dateLabel{box-sizing:border-box;width:271px;height:55px;flex:0 0 55px;display:flex;flex-direction:column;gap:4px;padding:0;color:var(--theme-text-secondary);font-size:12px;line-height:18px}
 .dateLabel input{box-sizing:border-box;width:271px;height:32px;padding:6px 12px;border:.5px solid var(--theme-border-strong);border-radius:8px;outline:0;background:var(--theme-surface-2);color:var(--theme-text-primary);font-size:13px;letter-spacing:0}
-.dateLabel input:focus{border-color:lch(34.32 1.93 272)}
+.dateLabel input:focus{border-color:lch(34.32 1.93 272);outline:1px solid var(--accent-primary);outline-offset:-1px}
 .dateModes{box-sizing:border-box;width:271px;height:32px;flex:0 0 32px;display:flex;align-items:center;gap:2px;margin-top:14px;padding:0;border:0;border-radius:5px;background:var(--theme-surface-2)}
 .dateModes button{box-sizing:border-box;height:28px;display:flex;align-items:center;justify-content:center;gap:6px;margin:2px;padding:4px;border:.5px solid transparent;border-radius:9999px;background:var(--theme-control-hover);color:var(--theme-text-secondary);font-size:12px;font-weight:500;white-space:nowrap}
 .dateModes button[aria-selected=true]{background:var(--theme-control-active);color:var(--theme-text-primary)}
@@ -29,6 +29,14 @@
 .days button[data-outside=true]{color:var(--theme-text-tertiary)}
 .days button:disabled{color:var(--theme-text-tertiary);opacity:.55}
 .days button.selectedDate,.periodGrid button.selectedDate{background:var(--accent-primary);color:white}
+.dateLabel{position:relative}
+.dateLabel:has(.dateClear) input{padding-right:36px}
+.dateClear{position:absolute;right:4px;bottom:4px;width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:transparent;color:var(--theme-text-tertiary)}
+.dateClear:hover{background:var(--theme-control-hover);color:var(--theme-text-primary)}
+.days{position:relative}
+.days button{position:relative;z-index:1}
+.weekendColumn{position:absolute;z-index:0;grid-row:1/span 6;inset:-4px 0;border-radius:6px;background:var(--theme-surface-hover);pointer-events:none}
+.days button[data-today=true]:not(.selectedDate){box-shadow:inset 0 0 0 1px var(--theme-text-tertiary)}
 .periodScroller{width:301px;min-height:0;flex:1;overflow:auto;margin:15px -15px 0;padding:8px 15px 12px;border-top:.5px solid var(--theme-border);scrollbar-width:none}
 .periodScroller::-webkit-scrollbar{display:none}
 .periodScroller section{padding:6px 0}

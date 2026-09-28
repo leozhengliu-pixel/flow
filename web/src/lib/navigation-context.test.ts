@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundedIssueSequence, navigationReturnPath, navigationTrail, nextNavigationState, reviewsOriginView, sidebarOriginPath, workspacePath } from './navigation-context'
+import { boundedIssueSequence, navigationReturnPath, navigationTrail, nextNavigationState, projectsListOriginPath, reviewsOriginView, sidebarOriginPath, workspacePath } from './navigation-context'
 import { parseAppRoute } from './app-routes'
 import { sidebarRoutePath } from './sidebar-route'
 
@@ -22,6 +22,18 @@ describe('navigation contexts across modules', () => {
     expect(navigationReturnPath(changed, 'acme', '')).toBe(source)
     const returned = nextNavigationState(location(tab, changed), source)
     expect(navigationTrail(returned, 'acme')).toEqual([])
+  })
+
+  it('reports a projects-list origin only when the project was opened from a projects list', () => {
+    const list = '/acme/projects/all'
+    const opened = nextNavigationState(location(list), '/acme/project/p/overview')
+    expect(projectsListOriginPath(opened, 'acme')).toBe(list)
+    const tabbed = nextNavigationState(location('/acme/project/p/overview', opened), '/acme/project/p/issues')
+    expect(projectsListOriginPath(tabbed, 'acme')).toBe(list)
+    expect(projectsListOriginPath(nextNavigationState(location('/acme/team/ENG/projects/all'), '/acme/project/p/overview'), 'acme')).toBe('/acme/team/ENG/projects/all')
+    expect(projectsListOriginPath(null, 'acme')).toBeUndefined()
+    expect(projectsListOriginPath(nextNavigationState(location('/acme/my-issues/assigned'), '/acme/project/p/overview'), 'acme')).toBeUndefined()
+    expect(projectsListOriginPath(nextNavigationState(location('/acme/issue/ENG-1/test'), '/acme/project/p/overview'), 'acme')).toBeUndefined()
   })
 
   it('pops nested project, issue and document contexts one level at a time', () => {

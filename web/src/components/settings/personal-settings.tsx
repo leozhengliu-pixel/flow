@@ -71,6 +71,7 @@ import type {
   Passkey,
 } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
+import { resolveFirstDay } from "@/lib/runtime-preferences";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import {
   SettingsPageTitle,
@@ -732,7 +733,7 @@ function Preferences({
         >
           <PersonalSelect
             label={p("First day of the week")}
-            value={String(values.firstDay)}
+            value={resolveFirstDay(values.firstDay ? String(values.firstDay) : undefined, locale)}
             options={localizedOptions(p, ["Monday", "Saturday", "Sunday"])}
             onChange={(v) => setValue("firstDay", v)}
           />

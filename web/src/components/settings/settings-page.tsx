@@ -330,7 +330,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
 const DEFAULT_VALUES: StoredSettings["values"] = {
   homeView: "Flow Agent (default)",
   displayNames: "Full name",
-  firstDay: "Monday",
+  firstDay: "",
   emoticons: true,
   sendComments: "Enter",
   fontSize: "Default",
