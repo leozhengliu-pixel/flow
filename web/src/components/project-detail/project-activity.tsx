@@ -169,7 +169,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
   )
   const initialUpdateId = selectionState.selection?.id ?? getMostRecent(updateRefs)?.id
 
-  return <ActivityPage entityId={project.id} entityType="project" initialUpdateId={initialUpdateId}>
+  return <ActivityPage entityId={project.id} entityType="project" hideHeader initialUpdateId={initialUpdateId}>
     <div className="project-activity">
     <section className="project-activity__composer" data-mode={composerMode}>
       <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><HealthGlyph health={health}/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-activity__health-menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item aria-checked={health === option.id} key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-glyph is-${option.id}`}><HealthGlyph health={option.id}/></span><span>{option.label}</span></DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>

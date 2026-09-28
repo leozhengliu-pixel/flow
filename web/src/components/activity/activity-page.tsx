@@ -28,6 +28,8 @@ type ActivityPageProps = {
   composer?: ReactNode
   children: ReactNode
   className?: string
+  /** Omit the title/preferences header (the project Activity tab follows Linear, which has none). */
+  hideHeader?: boolean
 }
 
 const PREFS_PREFIX = 'flow:activity-page-prefs:'
@@ -66,6 +68,7 @@ export function ActivityPage({
   composer,
   children,
   className,
+  hideHeader = false,
 }: ActivityPageProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const restoreKey = `activity-sidebar-${entityId}`
@@ -162,10 +165,12 @@ export function ActivityPage({
 
   return (
     <div className={['activity-page', className].filter(Boolean).join(' ')} data-entity-type={entityType}>
-      <header className="activity-page__header">
-        <h2>{title}</h2>
-        {preferenceControls}
-      </header>
+      {!hideHeader && (
+        <header className="activity-page__header">
+          <h2>{title}</h2>
+          {preferenceControls}
+        </header>
+      )}
       {composer}
       <div
         className="activity-page__scroll"
