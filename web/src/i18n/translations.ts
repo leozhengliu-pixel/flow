@@ -1813,6 +1813,8 @@ export const zhCN: Record<string, string> = {
   "Agent attachments are not configured": "智能助手附件尚未配置",
   "Remove attachment": "移除附件",
   "Copy message": "复制消息",
+  "Suggested follow-ups": "建议的后续问题",
+  "Referenced issues": "引用的事项",
   "Edit message": "编辑消息",
   "Worked for": "处理耗时",
   second: "秒",
