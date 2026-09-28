@@ -366,6 +366,36 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				parts[textIndex].Text = cleaned.String()
 			}
 		}
+		if len(turn.ToolCalls) > 0 && strings.TrimSpace(turn.Text) != "" {
+			// Linear keeps mid-task narration inside the work group; only the last turn's text is the answer.
+			narration := strings.TrimSpace(turn.Text)
+			turn.Text = ""
+			if textIndex, ok := partIndex["text"]; ok {
+				cleaned := &strings.Builder{}
+				cleaned.WriteString(finalText)
+				partText["text"] = cleaned
+				parts[textIndex].Text = cleaned.String()
+				if strings.TrimSpace(finalText) == "" {
+					parts = removeAgentPart(parts, partIndex, textIndex)
+					delete(partText, "text")
+				}
+			}
+			if !agentTurnHasProgressMessage(turn.ToolCalls) {
+				insertAt := min(turnStart, len(parts))
+				narrationPart := domain.AgentMessagePart{ID: fmt.Sprintf("%s_narration_%d", messageID, turnIndex), Type: "reasoning", Text: narration, Status: "completed"}
+				parts = append(parts[:insertAt], append([]domain.AgentMessagePart{narrationPart}, parts[insertAt:]...)...)
+				for key, index := range partIndex {
+					if index >= insertAt {
+						partIndex[key] = index + 1
+					}
+				}
+			}
+			if writer != nil {
+				if err := writer.send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: finalText}); err != nil {
+					return domain.AgentSession{}, err
+				}
+			}
+		}
 		finalText += turn.Text
 		if len(turn.ToolCalls) == 0 {
 			break
@@ -379,15 +409,28 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					Message string `json:"message"`
 				}
 				_ = json.Unmarshal(call.Arguments, &progress)
+				placeholder, hasPlaceholder := partIndex["tool:"+call.ID]
 				if title := strings.TrimSpace(progress.Title); title != "" {
+					step := domain.AgentMessagePart{ID: fmt.Sprintf("%s_step_%d", messageID, len(parts)), Type: "step", Title: strings.TrimRight(title, ".…"), Text: strings.TrimSpace(progress.Message), Status: "completed"}
 					index := len(parts)
-					parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_step_%d", messageID, index), Type: "step", Title: strings.TrimRight(title, ".…"), Text: strings.TrimSpace(progress.Message), Status: "completed"})
+					if hasPlaceholder {
+						// Reuse the streamed tool row's slot so the step keeps its position and no empty tool row remains.
+						index = placeholder
+						step.ID = parts[index].ID
+						parts[index] = step
+						delete(partIndex, "tool:"+call.ID)
+					} else {
+						parts = append(parts, step)
+					}
 					if writer != nil {
 						part := parts[index]
 						if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
 							return domain.AgentSession{}, err
 						}
 					}
+				}
+				if hasPlaceholder && parts[placeholder].Type == "toolCall" {
+					parts = removeAgentPart(parts, partIndex, placeholder)
 				}
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: `{"ok":true}`}})
 				continue
@@ -735,4 +778,34 @@ func leakedProgressSteps(text string) ([]leakedProgressStep, string) {
 		return nil, text
 	}
 	return steps, rest
+}
+
+// removeAgentPart drops parts[index] and keeps partIndex pointing at the right slots.
+func removeAgentPart(parts []domain.AgentMessagePart, partIndex map[string]int, index int) []domain.AgentMessagePart {
+	parts = append(parts[:index], parts[index+1:]...)
+	for key, value := range partIndex {
+		switch {
+		case value == index:
+			delete(partIndex, key)
+		case value > index:
+			partIndex[key] = value - 1
+		}
+	}
+	return parts
+}
+
+// agentTurnHasProgressMessage reports whether the turn already narrated its plan through report_progress.
+func agentTurnHasProgressMessage(calls []domain.AgentToolCall) bool {
+	for _, call := range calls {
+		if call.Name != agentProgressTool {
+			continue
+		}
+		var progress struct {
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(call.Arguments, &progress) == nil && strings.TrimSpace(progress.Message) != "" {
+			return true
+		}
+	}
+	return false
 }

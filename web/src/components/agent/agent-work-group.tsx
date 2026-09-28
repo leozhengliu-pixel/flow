@@ -4,8 +4,11 @@ import { useI18n } from "@/i18n/i18n";
 import styles from "./agent-page.module.css";
 
 /** Shared "Worked for N seconds" group used by the Agent page and embedded agent threads. */
-export function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy, running: forceRunning = false, className }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string }) {
+export function AgentWorkGroup({ message, parts: allParts, onToolApproval, approvalBusy, running: forceRunning = false, className }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string }) {
   const { t } = useI18n();
+  // Older chats stored an unnamed placeholder for report_progress next to its step; it is not a real tool row.
+  const settled = Boolean(message.durationMs) && !forceRunning;
+  const parts = allParts.filter(part => part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled);
   const running = forceRunning || parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
   const [open, setOpen] = useState(running || failed);
