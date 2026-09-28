@@ -352,6 +352,25 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
+			if call.Name == agentProgressTool {
+				var progress struct {
+					Title   string `json:"title"`
+					Message string `json:"message"`
+				}
+				_ = json.Unmarshal(call.Arguments, &progress)
+				if title := strings.TrimSpace(progress.Title); title != "" {
+					index := len(parts)
+					parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_step_%d", messageID, index), Type: "step", Title: strings.TrimRight(title, ".…"), Text: strings.TrimSpace(progress.Message), Status: "completed"})
+					if writer != nil {
+						part := parts[index]
+						if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+							return domain.AgentSession{}, err
+						}
+					}
+				}
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: `{"ok":true}`}})
+				continue
+			}
 			if s.agentToolRequiresApproval(call.Name) || strings.HasPrefix(call.Name, "external_") {
 				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
 				call.ApprovalID = approvalID
@@ -526,6 +545,9 @@ func (s *server) agentToolRequiresApproval(name string) bool {
 }
 
 func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call domain.AgentToolCall) ([]byte, error) {
+	if call.Name == agentProgressTool {
+		return []byte(`{"ok":true}`), nil
+	}
 	if s.store != nil {
 		fresh, ok := s.store.WorkspaceMetadata(workspaceKey(r))
 		if !ok {
