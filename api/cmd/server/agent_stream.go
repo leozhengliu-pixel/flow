@@ -247,7 +247,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs))
-	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions)
+	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions+s.agentWriteAccessNote())
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
@@ -808,4 +808,13 @@ func agentTurnHasProgressMessage(calls []domain.AgentToolCall) bool {
 		}
 	}
 	return false
+}
+
+// agentWriteAccessNote tells the model why it cannot change data when the server runs without write tools,
+// so it gives the user the real reason instead of a vague "not available here".
+func (s *server) agentWriteAccessNote() string {
+	if s.agent.WriteTools && s.agent.ToolsEnabled {
+		return ""
+	}
+	return "\nWrite access: this Flow server has Agent write actions turned off, so you can only read. When asked to create, change, or delete anything, say that write actions are disabled for Flow Agent on this server (an admin enables them with FLOW_AGENT_WRITE_TOOLS=true), then offer the exact values you would use.\n"
 }

@@ -535,12 +535,13 @@
   {
     "name": "mcp__flow.save_issue",
     "access": "write",
-    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`).",
+    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`). Pass `archived` to archive or restore an existing issue.",
     "input_schema": {
       "type": "object",
       "required": [],
       "properties": {
         "addReleases": { "type": "array", "items": { "type": "string" } },
+        "archived": { "type": "boolean", "description": "Archive (true) or unarchive (false) an existing issue" },
         "assignee": { "type": ["string", "null"] },
         "blockedBy": { "type": "array", "items": { "type": "string" } },
         "blocks": { "type": "array", "items": { "type": "string" } },
@@ -966,6 +967,267 @@
         "issue": { "type": "string", "description": "Issue ID or identifier (provide exactly one target)" },
         "project": { "type": "string", "description": "Project name, ID, or slug (provide exactly one target)" },
         "remindAt": { "type": "string", "description": "When to remind: future ISO-8601 timestamp (e.g., 2026-10-01T09:00:00Z) or duration from now (e.g., P1D, PT3H)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_team",
+    "access": "write",
+    "description": "Create or update a Flow team. Without `id`, creates a team exactly like Settings → Create a team (the viewer becomes its owner; default workflow states and settings are applied, or copied from `copySettingsFrom`/`parentTeam`); `name` and `key` are required. With `id`, updates the team. Team settings (`description`, `timezone`, `triageEnabled`, cycles) and membership changes use the same permissions as the team settings pages. `states` and `labels` add new team workflow states and team labels.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "Team to update: ID, key, or name. Omit to create a team."},
+        "name": {"type": "string", "description": "Team name"},
+        "key": {"type": "string", "description": "Team identifier used in issue IDs, e.g. ENG (uppercase letters/digits)"},
+        "description": {"type": "string", "description": "Team description"},
+        "icon": {"type": "string", "description": "Team icon name"},
+        "color": {"type": "string", "description": "Team color as #RRGGBB"},
+        "private": {"type": "boolean", "description": "Private teams are visible only to their members"},
+        "timezone": {"type": "string", "description": "IANA timezone, e.g. America/New_York"},
+        "parentTeam": {"type": "string", "description": "Create as a sub-team of this team (ID, key, or name). Create only."},
+        "copySettingsFrom": {"type": "string", "description": "Copy settings and workflow states from this team (ID, key, or name). Create only."},
+        "triageEnabled": {"type": "boolean", "description": "Turn the team's triage inbox on or off"},
+        "cyclesEnabled": {"type": "boolean", "description": "Turn cycles on or off"},
+        "cycleDurationWeeks": {"type": "integer", "minimum": 1, "maximum": 8, "description": "Cycle length in weeks"},
+        "members": {"type": "array", "items": {"type": "string"}, "description": "Users to add as team members (name, email, ID, or \"me\")"},
+        "removeMembers": {"type": "array", "items": {"type": "string"}, "description": "Users to remove from the team (update only)"},
+        "states": {"type": "array", "items": {"type": "object", "required": ["name", "type"], "properties": {"name": {"type": "string"}, "type": {"type": "string", "enum": ["backlog", "unstarted", "started", "completed", "canceled"]}, "color": {"type": "string"}, "description": {"type": "string"}}}, "description": "Workflow states to add to the team"},
+        "labels": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "color": {"type": "string"}, "description": {"type": "string"}}}, "description": "Team issue labels to create"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_label",
+    "access": "write",
+    "description": "Create or edit a Flow label. With `id` (label ID or unique name), edits its name, description, color, or archived state. Without `id`, creates a label: `type` chooses issue (default), project, or initiative labels; `team` makes it a team label (issue/project only); `parent` places it in an existing label group. Follows the workspace/team label permissions.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "Label ID or unique name to edit. Omit to create."},
+        "name": {"type": "string", "description": "Label name"},
+        "description": {"type": "string", "description": "Label description"},
+        "color": {"type": "string", "description": "Label color as #RRGGBB"},
+        "type": {"type": "string", "description": "Label kind when creating", "enum": ["issue", "project", "initiative"]},
+        "team": {"type": "string", "description": "Team ID, key, or name for a team-scoped label (create only)"},
+        "parent": {"type": "string", "description": "Label group name or ID (create only)"},
+        "archived": {"type": "boolean", "description": "Archive (true) or restore (false) the label"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_label",
+    "access": "write",
+    "description": "Delete a Flow label (workspace or team) and remove it from every issue, project, or initiative that uses it. Prefer `save_label` with `archived: true` to keep history.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "Label ID or unique name"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_view",
+    "access": "write",
+    "description": "Create or update a saved Flow issue view (a custom view with filters). Without `id`, `name` is required. `filters` uses the issue filter bar's model: each filter has a `field`, an `operator` (is | isNot) and `values`; names are resolved for you (status names or types, users/\"me\"/\"none\", priority 0-4 or Urgent/High/Medium/Low/No priority, label names, project names/\"none\", cycle names/numbers). Setting `filters` replaces all filters. `scope` personal | team | workspace; giving `team` implies a team view. `shared: true` creates a public share link, `false` revokes it.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "View ID, slug, or name to update. Omit to create."},
+        "name": {"type": "string", "description": "View name"},
+        "description": {"type": "string", "description": "View description"},
+        "icon": {"type": "string", "description": "Icon name"},
+        "color": {"type": "string", "description": "Color as #RRGGBB"},
+        "scope": {"type": "string", "description": "Who sees the view", "enum": ["personal", "team", "workspace"]},
+        "team": {"type": ["string", "null"], "description": "Team ID, key, or name for a team view; null to make it a workspace view"},
+        "project": {"type": ["string", "null"], "description": "Limit the view to issues in this project; null to clear"},
+        "layout": {"type": "string", "description": "Issue set shown", "enum": ["all", "active", "backlog"]},
+        "filters": {"type": "array", "items": {"type": "object", "required": ["field", "values"], "properties": {"field": {"type": "string", "enum": ["addedToCycle", "agent", "agentSession", "assignee", "autoClosed", "content", "creator", "customers", "cycle", "dates", "externalSource", "initiative", "labels", "links", "priority", "project", "projectMilestone", "projectProperties", "relations", "releases", "status", "subscribers", "suggestedLabel", "template"]}, "operator": {"type": "string", "enum": ["is", "isNot"]}, "values": {"type": "array", "items": {"type": "string"}}}}, "description": "Filters, combined with AND"},
+        "shared": {"type": "boolean", "description": "Create (true) or revoke (false) the view's public share link"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_issue",
+    "access": "write",
+    "description": "Delete a Flow issue. The issue moves to the workspace trash, where an admin can restore it; comments, activity, and notifications about it are removed with it. Use `save_issue` with `archived: true` instead when the issue should stay searchable.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "Issue ID or identifier (e.g., LIN-123)"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_reaction",
+    "access": "write",
+    "description": "Add or remove the viewer's emoji reaction on an issue, an issue or document comment, a project or initiative comment, or a project/initiative status update. Provide exactly one of `issueId`, `commentId`, or `statusUpdateId`. Adding an existing reaction or removing a missing one is a no-op.",
+    "input_schema": {
+      "type": "object",
+      "required": ["emoji"],
+      "properties": {
+        "emoji": {"type": "string", "description": "Emoji, e.g. 👍"},
+        "issueId": {"type": "string", "description": "Issue ID or identifier"},
+        "commentId": {"type": "string", "description": "Comment ID (from list_comments)"},
+        "statusUpdateId": {"type": "string", "description": "Status update ID (from get_status_updates)"},
+        "statusUpdateType": {"type": "string", "description": "Status update kind, when known", "enum": ["project", "initiative"]},
+        "remove": {"type": "boolean", "description": "Remove the reaction instead of adding it"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_subscription",
+    "access": "write",
+    "description": "Subscribe to or unsubscribe from notifications about a Flow issue, project, initiative, document, saved view, or team. Provide exactly one target. Issue subscriptions can also be set for another workspace user with `user`; other resources always subscribe the viewer.",
+    "input_schema": {
+      "type": "object",
+      "required": ["subscribed"],
+      "properties": {
+        "subscribed": {"type": "boolean", "description": "true to subscribe, false to unsubscribe"},
+        "issueId": {"type": "string", "description": "Issue ID or identifier"},
+        "projectId": {"type": "string", "description": "Project name, ID, or slug"},
+        "initiativeId": {"type": "string", "description": "Initiative name, ID, or slug"},
+        "documentId": {"type": "string", "description": "Document ID, slug, or title"},
+        "viewId": {"type": "string", "description": "Saved view ID, slug, or name"},
+        "teamId": {"type": "string", "description": "Team ID, key, or name"},
+        "user": {"type": "string", "description": "User to (un)subscribe on an issue (name, email, ID, or \"me\"); defaults to the viewer"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_document",
+    "access": "write",
+    "description": "Create or edit a Flow document. Without `id`, `title` is required. `content` is Markdown and replaces the body; to change part of it pass `patch` instead. Documents can belong to a project, a team, and/or an issue (Flow documents do not attach to initiatives). `template` starts a new document from a document template.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "Document ID, slug, or title to edit. Omit to create."},
+        "title": {"type": "string", "description": "Document title"},
+        "content": {"type": "string", "description": "Document body as Markdown"},
+        "patch": {"type": "array", "items": {"oneOf": [{"type": "object", "required": ["new_string", "old_string", "op"], "properties": {"new_string": {"type": "string"}, "old_string": {"type": "string"}, "op": {"type": "string", "enum": ["replace"]}, "replace_all": {"type": "boolean"}}}, {"type": "object", "required": ["anchor", "op", "text"], "properties": {"anchor": {"type": "string"}, "op": {"type": "string", "enum": ["insert_before"]}, "text": {"type": "string"}}}, {"type": "object", "required": ["anchor", "op", "text"], "properties": {"anchor": {"type": "string"}, "op": {"type": "string", "enum": ["insert_after"]}, "text": {"type": "string"}}}, {"type": "object", "required": ["op", "text"], "properties": {"op": {"type": "string", "enum": ["prepend"]}, "text": {"type": "string"}}}, {"type": "object", "required": ["op", "text"], "properties": {"op": {"type": "string", "enum": ["append"]}, "text": {"type": "string"}}}, {"type": "object", "required": ["from", "new_string", "op", "to"], "properties": {"from": {"type": "string"}, "new_string": {"type": "string"}, "op": {"type": "string", "enum": ["replace_range"]}, "to": {"type": "string"}}}]}},
+        "icon": {"type": "string", "description": "Icon name or emoji"},
+        "color": {"type": "string", "description": "Icon color as #RRGGBB"},
+        "project": {"type": ["string", "null"], "description": "Project name, ID, or slug; null to detach from projects"},
+        "team": {"type": ["string", "null"], "description": "Team ID, key, or name; null to make it workspace-wide"},
+        "issue": {"type": ["string", "null"], "description": "Issue ID or identifier to attach the document to; null to detach"},
+        "template": {"type": "string", "description": "Document template ID or name (create only)"},
+        "archived": {"type": "boolean", "description": "Archive (true) or restore (false) an existing document"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_template",
+    "access": "write",
+    "description": "Create or update a Flow template. `type` is issue, project, or document. Issue templates prefill new issues (`title`, `body` Markdown, `state`, `priority`, `assignee`, `project`, `labels`); without `team` they are workspace templates. Project templates prefill projects (`projectName`, `summary`, `description`, `teams`, `labels`, `lead`, `priority`). Document templates need a `team` and take Markdown `content`. Without `id`, `name` is required. Uses the same template permissions as settings.",
+    "input_schema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"type": "string", "description": "Template kind", "enum": ["issue", "project", "document"]},
+        "id": {"type": "string", "description": "Template ID or name to update. Omit to create."},
+        "name": {"type": "string", "description": "Template name"},
+        "description": {"type": "string", "description": "Issue/document template: description shown in the template picker. Project template: the project description."},
+        "templateDescription": {"type": "string", "description": "Project template: description shown in the template picker"},
+        "team": {"type": "string", "description": "Team ID, key, or name (issue templates: team template; document templates: required when creating)"},
+        "title": {"type": "string", "description": "Default issue or document title"},
+        "body": {"type": "string", "description": "Issue template: default issue description (Markdown)"},
+        "content": {"type": "string", "description": "Document template: body as Markdown"},
+        "state": {"type": "string", "description": "Issue template: status name, type, or ID (requires a team)"},
+        "priority": {"type": "integer", "minimum": 0, "maximum": 4, "description": "0 none, 1 urgent, 2 high, 3 medium, 4 low"},
+        "assignee": {"type": ["string", "null"], "description": "Issue template: default assignee; null to clear"},
+        "project": {"type": ["string", "null"], "description": "Issue template: default project; null to clear"},
+        "labels": {"type": "array", "items": {"type": "string"}, "description": "Label names or IDs (issue labels for issue templates, project labels for project templates)"},
+        "projectName": {"type": "string", "description": "Project template: default project name"},
+        "summary": {"type": "string", "description": "Project template: default summary"},
+        "teams": {"type": "array", "items": {"type": "string"}, "description": "Project template: teams (ID, key, or name)"},
+        "lead": {"type": ["string", "null"], "description": "Project template: default lead; null to clear"},
+        "icon": {"type": "string", "description": "Icon name"},
+        "color": {"type": "string", "description": "Color as #RRGGBB (issue/project templates)"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.triage_issue",
+    "access": "write",
+    "description": "Act on an issue in a team's Triage inbox, like the Triage page: `accept` moves it into the team's workflow (optionally into `state` and with a `priority`; teams that require a priority reject accepting without one), `decline` moves it to the canceled state, `duplicate` links it to `duplicateOf` and closes it as a duplicate, `snooze` hides it until `snoozedUntil`. An optional `comment` is posted on the issue.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id", "action"],
+      "properties": {
+        "id": {"type": "string", "description": "Issue ID or identifier in triage"},
+        "action": {"type": "string", "description": "Triage action", "enum": ["accept", "decline", "duplicate", "snooze"]},
+        "state": {"type": "string", "description": "accept: target status name, type, or ID (defaults to the team's default non-triage status)"},
+        "priority": {"type": "integer", "minimum": 0, "maximum": 4, "description": "accept: priority to set"},
+        "duplicateOf": {"type": "string", "description": "duplicate: the canonical issue ID or identifier"},
+        "snoozedUntil": {"type": "string", "description": "snooze: ISO date/time or ISO-8601 duration such as P1D or P1W"},
+        "comment": {"type": "string", "description": "Optional comment to post with the decision"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.update_notification",
+    "access": "write",
+    "description": "Update the viewer's inbox. Pass a notification `id` (from list_notifications) with `read`, `archived`, and/or `snoozedUntil`, or `markAllRead: true` to mark the whole inbox read.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "Notification ID"},
+        "read": {"type": "boolean", "description": "Mark read (true) or unread (false)"},
+        "archived": {"type": "boolean", "description": "Archive (true) or unarchive (false)"},
+        "snoozedUntil": {"type": ["string", "null"], "description": "Snooze until an ISO date/time or ISO-8601 duration (PT3H, P1D); null to unsnooze"},
+        "markAllRead": {"type": "boolean", "description": "Mark every notification in the inbox as read"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_agent_skill",
+    "access": "write",
+    "description": "Create or update a Flow Agent skill: reusable instructions the agent can follow. Without `team`, saves one of the viewer's personal skills; with `team`, saves a team skill in that team's settings (team settings permission applies) and `enabled` turns it on or off. Without `id`, `name` and `instructions` are required.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "Skill ID or name to update. Omit to create."},
+        "name": {"type": "string", "description": "Skill name (max 80 characters)"},
+        "instructions": {"type": "string", "description": "Skill instructions (max 12000 characters)"},
+        "team": {"type": "string", "description": "Team ID, key, or name for a team skill"},
+        "enabled": {"type": "boolean", "description": "Team skills only: whether the skill is active"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_loop",
+    "access": "write",
+    "description": "Create or update a Flow loop (an automation the agent runs on a schedule or when issues, projects, initiatives, or cycles change). Without `id`, `name` is required; new loops default to a daily 10:00 schedule and are enabled. `trigger: \"schedule\"` uses `interval`/`unit`/`time`/`starting`/`timezone`; event triggers use `action` and `teams`. `instructions` is the prompt the agent follows on every run.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": {"type": "string", "description": "Loop ID or name to update. Omit to create."},
+        "name": {"type": "string", "description": "Loop name"},
+        "instructions": {"type": "string", "description": "What the agent should do on each run"},
+        "trigger": {"type": "string", "description": "When the loop runs", "enum": ["schedule", "issue", "project", "initiative", "cycle"]},
+        "interval": {"type": "integer", "minimum": 1, "maximum": 30, "description": "schedule: every N units"},
+        "unit": {"type": "string", "description": "schedule: interval unit", "enum": ["day", "week", "month"]},
+        "time": {"type": "string", "description": "schedule: time of day HH:MM"},
+        "starting": {"type": "string", "description": "schedule: first run date YYYY-MM-DD"},
+        "timezone": {"type": "string", "description": "schedule: IANA timezone (defaults to UTC)"},
+        "action": {"type": "string", "description": "event triggers: which changes start a run", "enum": ["created", "created or updated"]},
+        "teams": {"type": "array", "items": {"type": "string"}, "description": "event triggers: only react to these teams (ID, key, or name); empty for all"},
+        "level": {"type": "string", "description": "Loop level", "enum": ["workspace", "team"]},
+        "teamAccess": {"type": "string", "description": "Teams the loop may touch", "enum": ["allPublic", "selected"]},
+        "allowChangesOutsideTrigger": {"type": "boolean", "description": "Allow the loop to change resources other than the one that triggered it"},
+        "owner": {"type": "string", "description": "User the loop runs as (name, email, ID, or \"me\")"},
+        "icon": {"type": "string", "description": "Icon name"},
+        "color": {"type": "string", "description": "Color as #RRGGBB"},
+        "enabled": {"type": "boolean", "description": "Whether the loop runs"}
       }
     }
   }
