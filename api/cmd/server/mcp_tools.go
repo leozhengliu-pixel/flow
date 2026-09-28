@@ -864,6 +864,17 @@ func (s *server) listAgentSkills(data domain.Bootstrap, args map[string]any) map
 	if strings.TrimSpace(settings.AgentInstructions) != "" {
 		items = append(items, map[string]any{"id": "flow-workspace-guidance", "name": "Flow workspace guidance", "instructions": settings.AgentInstructions, "createdAt": settings.UpdatedAt, "updatedAt": settings.UpdatedAt})
 	}
+	// Personal and team skills too, so skills saved with save_agent_skill are visible to the agent that saved them.
+	for _, skill := range data.AgentSkills {
+		if skill.UserID == data.Viewer.ID {
+			items = append(items, map[string]any{"id": skill.ID, "name": skill.Name, "instructions": skill.Instructions, "scope": "personal", "createdAt": skill.CreatedAt, "updatedAt": skill.UpdatedAt})
+		}
+	}
+	for _, team := range data.Teams {
+		for _, skill := range data.TeamSettings[team.ID].AgentSkills {
+			items = append(items, map[string]any{"id": skill.ID, "name": skill.Name, "instructions": skill.Instructions, "scope": "team", "teamId": team.ID, "team": team.Name, "enabled": skill.Enabled})
+		}
+	}
 	return paginate(items, args)
 }
 

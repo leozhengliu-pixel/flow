@@ -61,6 +61,7 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		settings.AgentInstructions = "Use the workspace conventions."
 		d.UserSettings[d.Viewer.ID] = settings
 		d.Reviews[0].Events = append(d.Reviews[0].Events, domain.ReviewEvent{ID: "contract-thread", Type: "commented", Body: "Check this line", Actor: d.Viewer})
+		d.Notifications = append(d.Notifications, domain.Notification{ID: "contract-notification", RecipientID: d.Viewer.ID, Type: "issueComment", SourceType: "issue", SourceID: d.Issues[0].ID, IssueID: d.Issues[0].ID, Actor: d.Viewer, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()})
 		d.IntegrationConnections = append(d.IntegrationConnections, domain.IntegrationConnection{ID: "contract-github", Provider: "github", Status: "connected", OAuthAccessToken: "local-test-token", Config: map[string]string{"apiUrl": upstream.URL, "organization": d.Reviews[0].RepositoryOwner}})
 		return nil
 	}); err != nil {
@@ -165,6 +166,22 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 	if merged.Load() != 1 {
 		t.Fatal("merge did not reach fake provider")
 	}
+	sdkTeam := object("save_team", map[string]any{"name": "SDK team", "key": "SDK", "description": "Created over MCP"})
+	call("save_team", map[string]any{"id": team, "triageEnabled": true})
+	sdkLabel := object("save_label", map[string]any{"name": "SDK project label", "type": "project"})
+	call("save_label", map[string]any{"id": sdkLabel["id"], "color": "#123456"})
+	call("delete_label", map[string]any{"id": sdkLabel["id"]})
+	call("save_view", map[string]any{"name": "SDK view", "team": sdkTeam["id"], "filters": []map[string]any{{"field": "priority", "values": []string{"High"}}}})
+	call("save_reaction", map[string]any{"issueId": issue, "emoji": "👍"})
+	call("save_subscription", map[string]any{"projectId": project, "subscribed": true})
+	call("save_document", map[string]any{"title": "SDK document", "content": "# Hello"})
+	call("save_template", map[string]any{"type": "issue", "name": "SDK template", "team": team, "body": "Steps"})
+	triage := object("save_issue", map[string]any{"team": team, "title": "SDK triage", "state": "Backlog"})
+	call("triage_issue", map[string]any{"id": triage["id"], "action": "accept"})
+	call("update_notification", map[string]any{"id": "contract-notification", "read": true})
+	call("save_agent_skill", map[string]any{"name": "SDK skill", "instructions": "Be brief."})
+	call("save_loop", map[string]any{"name": "SDK loop", "instructions": "Summarize the week."})
+	call("delete_issue", map[string]any{"id": triage["id"]})
 	listed, err := session.ListTools(t.Context(), nil)
 	if err != nil {
 		t.Fatal(err)
