@@ -90,8 +90,26 @@ func (s *server) checkPreferenceIssue(r *http.Request) error {
 	return nil
 }
 
+func (s *server) preferenceMetadata(r *http.Request) (domain.Bootstrap, error) {
+	key := workspaceKey(r)
+	if s.authDisabled {
+		data, ok := s.store.WorkspaceMetadata(key)
+		if !ok {
+			return data, store.ErrAuthForbidden
+		}
+		data.ViewerRole = "admin"
+		return data, s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID)
+	}
+	data, err := s.store.PagedWorkspaceMetadata(r.Context(), key, authUser(r).ID)
+	if err != nil {
+		return data, err
+	}
+	filterBootstrapForAPIKey(&data, r)
+	return data, nil
+}
+
 func (s *server) resourcePreferences(w http.ResponseWriter, r *http.Request) {
-	data, _, err := s.pagedRealtimeMetadata(r)
+	data, err := s.preferenceMetadata(r)
 	if err != nil {
 		issueRecordsError(w, err)
 		return

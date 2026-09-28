@@ -56,3 +56,23 @@
 .rootMenu,.valueMenu{border-color:var(--popover-border);box-shadow:var(--shadow-control)}
 .valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 @media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}}
+/* Reference filter menus (both themes). `:not(#_)` outranks the theme-scoped rules above. */
+.rootMenu:not(#_),.valueMenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);color:var(--pk-text)}
+.rootMenu:not(#_){box-shadow:var(--pk-shadow)}
+.valueMenu:not(#_){min-width:175px;box-shadow:var(--pk-card-shadow)}
+.rootSearch:not(#_),.valueSearch:not(#_){height:36.5px;flex:0 0 36.5px;padding:0 12px 0 14px;border-bottom:.5px solid var(--pk-divider)}
+.rootSearch:not(#_) input,.valueSearch:not(#_) input{color:var(--pk-text);font:400 13px/normal var(--font)}
+.rootSearch:not(#_) input::placeholder{color:var(--pk-muted)}
+.valueSearch:not(#_) input::placeholder{color:var(--pk-faint)}
+.rootSearch:not(#_) kbd{box-sizing:border-box;justify-self:end;width:auto;min-width:18px;height:17px;padding:2px 4px;border:.5px solid var(--pk-divider);background:transparent;color:var(--pk-muted);font:400 11px/12px var(--font)}
+.rootSeparator:not(#_):after{background:var(--pk-divider)}
+.rootItem:not(#_){margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
+.rootItem:not(#_)[data-selected=true],.rootItem:not(#_)[aria-selected=true]{background:var(--pk-hover)}
+.rootItem:not(#_)>.rootIcon{width:14px;height:14px;flex:0 0 14px;margin-left:1px;margin-right:1px;color:var(--pk-text)}
+.rootItem:not(#_)>.rootIcon svg{width:14px;height:14px}
+.rootChevron{margin-left:auto;margin-right:10px;color:var(--pk-faint);font-size:6px;line-height:1}
+.valueList:not(#_){padding:6px 0}
+.valueItem:not(#_){width:calc(100% - 12px);margin:0 6px;grid-template-columns:16px 14px minmax(0,1fr) auto;gap:8px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
+.valueItem:not(#_)[aria-selected=true],.valueItem:not(#_):hover{background:var(--pk-hover)}
+.valueItem:not(#_):not([aria-checked=true]):not(:hover):not([aria-selected=true]) .checkbox{opacity:0}
+.valueItem:not(#_) .count{color:var(--pk-faint);font-size:12px;font-weight:450}

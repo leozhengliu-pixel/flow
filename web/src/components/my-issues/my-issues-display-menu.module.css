@@ -25,3 +25,31 @@
 .popover{width:var(--filter-display-width);height:auto;max-height:min(531px,calc(100dvh - 103px));overflow:auto}
 .popover,.selectMenu{border-color:var(--popover-border);box-shadow:var(--shadow-control)}
 .selectTrigger{min-width:116px;height:var(--filter-control-height)}
+/* Linear view-options footer: Reset (ghost) + Save as default (primary text). */
+.footer{position:sticky;bottom:0;display:flex;justify-content:flex-end;gap:6px;padding:8px 16px;background:var(--theme-surface-2);border-top:.5px solid var(--theme-border)}
+.footerButton{height:24px;padding:0 8px;white-space:nowrap;flex:0 0 auto;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--theme-text-secondary);font:500 12px/18px inherit;cursor:pointer}
+.footerButton:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.footerPrimary{color:var(--theme-text-primary)}
+.footerButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.orderButton:disabled{opacity:.45;cursor:not-allowed}
+.groupList{display:flex;flex-direction:column;gap:1px;max-height:180px;overflow:auto}
+.groupToggle{height:28px;display:flex;align-items:center;gap:8px;padding:0 6px;border:0;border-radius:8px;background:transparent;color:var(--theme-text-primary);font:500 12px/18px inherit;text-align:left;cursor:pointer}
+.groupToggle span{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.groupToggle small{color:var(--issue-muted);font-size:11px}
+.groupToggle:hover{background:var(--theme-surface-hover)}
+.groupToggle[data-hidden]{color:var(--issue-muted)}
+.groupToggle:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.groupHint{margin:6px 0 0;color:var(--issue-muted);font-size:11px}
+/* Reference display options (both themes). `:not(#_)` outranks the theme-scoped rules above. */
+.popover:not(#_),.selectMenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
+.section:not(#_)+.section{border-top:.5px solid var(--pk-divider)}
+.rowLabel:not(#_),.selectField:not(#_)>span,.switchRow:not(#_){color:var(--pk-muted);font-size:12px;font-weight:500}
+.sectionLabel:not(#_){height:auto;padding:6px 0 7px;color:var(--pk-muted);font-size:12px;font-weight:500}
+.section:not(#_)>.sectionLabel:first-child{color:var(--pk-text)}
+.layoutTabs:not(#_) button{position:relative;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.layoutTabs:not(#_) button[aria-selected=true]{background:var(--pk-control-selected);box-shadow:var(--pk-control-ring-selected);color:var(--pk-text-strong)}
+.selectTrigger:not(#_){padding:1px 18px 1px 8px;background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-text);font-size:12px;font-weight:400}
+.selectTrigger:not(#_):hover:not(:disabled),.selectTrigger:not(#_)[data-state=open]{background:var(--pk-control-selected)}
+.propertyGrid:not(#_) button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
+.propertyGrid:not(#_) button[data-active=true]{background:var(--pk-chip-on);box-shadow:var(--pk-chip-on-ring);color:var(--pk-text-strong)}
+.footer:not(#_){background:var(--pk-surface);border-top:.5px solid var(--pk-divider)}

@@ -50,7 +50,7 @@
 .fullPreview :global(.issue-mobile-properties>.core-property-picker),.fullPreview :global(.issue-mobile-properties>.label-project-picker){flex:0 0 auto;min-height:30px;padding:0}
 .fullPreview :global(.issue-mobile-properties .core-property-trigger),.fullPreview :global(.issue-mobile-properties .label-project-trigger){height:28px;margin:1px 0;padding:0 9px;border:.5px solid var(--border);background:var(--theme-soft-overlay)}
 .fullPreview :global(.issue-mobile-properties .issue-label-chips){display:none}
-.fullPreview :global(.issue-command-strip){right:10px}
+
 .summary{
   min-height:calc(100% - 8px);
   margin-right:8px;

@@ -70,7 +70,7 @@ export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoos
   return <div onKeyDown={onKeyDown}>
     <div className={`project-label-search${groupId && !query ? ' is-hidden' : ''}`}>
       <input ref={inputRef} aria-label={placeholder} aria-controls={listId} aria-activedescendant={active ? `${listId}-${active.id}` : undefined} value={query} placeholder={placeholder} onChange={event => { setQuery(event.target.value); setActiveId(undefined); setSubmenuId(undefined) }} autoComplete="off" spellCheck={false}/>
-      {!groupId && <kbd>P, then L</kbd>}
+      {!groupId && <span className="property-command-search-shortcut"><kbd>P</kbd><span data-i18n-ignore>then</span><kbd>L</kbd></span>}
     </div>
     <div className="project-label-options" id={listId} ref={listRef} role="listbox" aria-label={placeholder} aria-multiselectable={!groupId}>
       {entries.map((entry, index) => <div key={entry.id}>
@@ -79,7 +79,9 @@ export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoos
       </div>)}
       {canCreate && <ProjectLabelCreateOption name={query.trim()} groupName={groupId ? placeholder : undefined} disabled={creating} onCreate={() => void create()}/>}
       {createError && <div className="core-property-empty" role="alert">{createError}</div>}
-      {!entries.length && !canCreate && <div className="core-property-empty">{t(!query && onCreate ? 'Start typing to create a new label' : 'No results')}</div>}
+      {!entries.length && !canCreate && (!query && onCreate
+        ? <div aria-disabled="true" className="property-command-create-hint" role="option"><Plus size={16}/><span>{t('Start typing to create a new label')}</span></div>
+        : <div className="core-property-empty">{t('No results')}</div>)}
     </div>
   </div>
 }

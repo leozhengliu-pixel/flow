@@ -4,7 +4,44 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+func TestAccountForUserDoesNotCloneWorkspaceCatalog(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "auth-account.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := t.Context()
+	catalogSize := 1500
+	if raceDetector {
+		catalogSize = 80
+	}
+	key := seedBulkTeams(t, repository, catalogSize)
+	data := repository.Bootstrap()
+	start := time.Now()
+	account, err := repository.AccountForUser(ctx, data.Viewer.ID)
+	elapsed := time.Since(start)
+	if err != nil || len(account.Workspaces) == 0 || account.Workspaces[0].Workspace.URLKey != key {
+		t.Fatalf("account=%#v err=%v", account, err)
+	}
+	if !raceDetector && elapsed > 500*time.Millisecond {
+		t.Fatalf("account lookup cloned workspace catalog: %s", elapsed)
+	}
+}
+
+func TestUpdateMemberRoleNoopSkipsWrite(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "auth-role.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	data := repository.Bootstrap()
+	if err := repository.UpdateMemberRole(t.Context(), data.Workspace.ID, data.Viewer.ID, "owner"); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestAccountAuthenticationAndSessionLifecycle(t *testing.T) {
 	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "auth.db"))

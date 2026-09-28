@@ -1,26 +1,57 @@
-import { useMemo, useState } from 'react'
+import { useMemo, type ReactNode } from 'react'
 
-import { MyIssuesList, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import { explorerPropertyOptions, explorerUpdateForProperty, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { IssueExplorerPage } from '@/components/issue-explorer/issue-explorer-page'
+import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
 import { UserAvatar } from '@/components/ui/user-avatar'
-import { PagedIssueList } from '@/components/issue-explorer/paged-issue-list'
+import { memberProfilePath } from '@/lib/app-routes'
 import type { BootstrapData, Issue, IssueUpdateInput, User } from '@/types/flow'
 
 import './workspace-directory.css'
 
-export function MemberProfilePage({data,user,view,onNavigate,onOpenIssue,onUpdateIssue}:{data:BootstrapData;user:User;view:'assigned'|'created';onNavigate:(view:'assigned'|'created')=>void;onOpenIssue:(issue:Issue)=>void;onUpdateIssue:(id:string,input:IssueUpdateInput)=>Promise<Issue>}){
-  const [selected,setSelected]=useState<Set<string>>(new Set())
-  const issues=useMemo(()=>data.issues.filter(issue=>view==='assigned'?(user.app?issue.delegate?.id===user.id:issue.assignee?.id===user.id):issue.creator.id===user.id),[data.issues,user.id,user.app,view])
-  const rows=useMemo(()=>issues.map(issue=>issueToExplorerRow(issue,data.workspace.urlKey,data.issues,data)),[data,issues])
-  const groups=useMemo(()=>groupByStatus(rows),[rows])
-  const options=useMemo(()=>explorerPropertyOptions(data,issues),[data,issues])
-  const query=useMemo(()=>({groupBy:'status',filter:{field:view==='created'?'creator':user.app?'delegateId':'assignee',values:[user.id]}}),[user.id,user.app,view])
-  const change=async(row:MyIssuesRowData,property:MyIssuesEditableProperty,value:string|string[])=>{const input=explorerUpdateForProperty(property,value);if(input)await onUpdateIssue(row.id,input)}
-  return <main className="main-panel member-profile-page">
-    <header className="member-profile-header"><UserAvatar avatarUrl={user.avatarUrl} color="#5e6ad2" name={user.displayName}/><h1 data-i18n-ignore>{user.displayName}</h1>{user.app&&<span>{user.appScopes?.some(scope=>scope==='app:mentionable'||scope==='app:assignable')?'Agent':'Application'}</span>}</header>
-    <nav className="member-profile-tabs"><button aria-current={view==='assigned'} onClick={()=>onNavigate('assigned')}>Assigned</button><button aria-current={view==='created'} onClick={()=>onNavigate('created')}>Created</button></nav>
-    <section className="member-profile-list">{data.issueCollectionPaged?<PagedIssueList data={data} query={query} propertyOptions={options} onOpenIssueRecord={onOpenIssue} onPropertyChange={change}/>:<MyIssuesList groups={groups} propertyOptions={options} selectedIds={selected} onOpenIssue={row=>{const issue=data.issues.find(item=>item.id===row.id);if(issue)onOpenIssue(issue)}} onPropertyChange={change} onSelectIssue={(id,checked)=>setSelected(current=>{const next=new Set(current);if(checked)next.add(id);else next.delete(id);return next})}/>}</section>
-  </main>
+/**
+ * Linear `userProfile` / `userProfileCreatedByUser`: the shared issue view scoped to one member,
+ * with Assigned / Created tabs. Filters, display options, bulk actions and paging come from the explorer.
+ */
+export function MemberProfilePage({ data, user, view, onNavigate, onOpenIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, onCreateIssue, renderIssuePreview, onOpenSidebar }: {
+  data: BootstrapData
+  user: User
+  view: 'assigned' | 'created'
+  onNavigate: (view: 'assigned' | 'created') => void
+  onOpenIssue: (issue: Issue, sequence?: string[]) => void
+  onUpdateIssue: (id: string, input: IssueUpdateInput) => Promise<Issue>
+  onUpdateIssues?: (ids: string[], input: IssueUpdateInput) => Promise<Issue[]>
+  onDeleteIssues?: (ids: string[]) => Promise<void>
+  onCreateIssue?: (context?: MyIssuesCreateContext) => void
+  renderIssuePreview?: (issue: Issue, onClose: () => void) => ReactNode
+  onOpenSidebar?: () => void
+}) {
+  const scopeFilter = useMemo(() => view === 'created'
+    ? (issue: Issue) => issue.creator.id === user.id
+    : (issue: Issue) => user.app ? issue.delegate?.id === user.id : issue.assignee?.id === user.id, [user.app, user.id, view])
+  const scopeConditions = useMemo(() => [{ field: view === 'created' ? 'creator' : user.app ? 'delegateId' : 'assignee', values: [user.id] }], [user.app, user.id, view])
+  const kind = user.app ? (user.appScopes?.some(scope => scope === 'app:mentionable' || scope === 'app:assignable') ? 'Agent' : 'Application') : undefined
+  return <IssueExplorerPage
+    key={`${user.id}-${view}`}
+    data={data}
+    scope={{ kind: 'workspace' }}
+    view="all"
+    preferenceScope={`member:${user.id}:${view}`}
+    defaultDisplayOverrides={{ showTriageIssues: true, grouping: 'none' }}
+    scopeFilter={scopeFilter}
+    scopeConditions={scopeConditions}
+    resourceHeader={{
+      icon: <UserAvatar avatarUrl={user.avatarUrl} color="#5e6ad2" name={user.displayName} />,
+      title: <span data-i18n-ignore>{user.displayName}{kind ? <small className="member-profile-kind">{kind}</small> : null}</span>,
+      tabs: (['assigned', 'created'] as const).map(id => ({ id, label: id === 'assigned' ? 'Assigned' : 'Created', href: memberProfilePath(data.workspace.urlKey, user.name, id), active: view === id, onSelect: () => onNavigate(id) })),
+    }}
+    viewHref={() => memberProfilePath(data.workspace.urlKey, user.name, view)}
+    onNavigateView={() => onNavigate(view)}
+    onOpenIssue={onOpenIssue}
+    renderIssuePreview={renderIssuePreview}
+    onOpenSidebar={onOpenSidebar}
+    onCreateIssue={context => onCreateIssue?.(view === 'assigned' && !user.app ? { ...context, assigneeId: user.id } : context)}
+    onUpdateIssue={onUpdateIssue}
+    onUpdateIssues={onUpdateIssues ?? (async (ids, input) => Promise.all(ids.map(id => onUpdateIssue(id, input))))}
+    onDeleteIssues={onDeleteIssues ?? (async () => undefined)}
+  />
 }
-
-function groupByStatus(rows:MyIssuesRowData[]):MyIssuesGroupData[]{const groups=new Map<string,MyIssuesGroupData>();for(const row of rows){const group=groups.get(row.state.id)??{id:row.state.id,label:row.state.name,stateType:row.state.type,state:row.state,issues:[]};group.issues.push(row);groups.set(row.state.id,group)}return [...groups.values()]}

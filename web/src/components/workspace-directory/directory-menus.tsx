@@ -5,7 +5,6 @@ import {
   ArrowUpNarrowWide,
   Check,
   ChevronDown,
-  ChevronRight,
   Search,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -198,7 +197,7 @@ function FilterGroup({
           <DropdownMenu.SubTrigger className="workspace-directory-filter-menu__item">
             {group.icon}
             <span>{group.label}</span>
-            <ChevronRight />
+            <span className="workspace-directory-filter-menu__chevron" aria-hidden="true">▶</span>
           </DropdownMenu.SubTrigger>
           <DropdownMenu.Portal>
             <DropdownMenu.SubContent data-flow-motion="floating"

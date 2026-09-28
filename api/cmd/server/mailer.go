@@ -39,6 +39,10 @@ func (m *smtpMailer) sendPasswordReset(email, token string) error {
 	return m.send(email, "Reset your password", "Use this link to choose a new password. It expires in one hour.", m.appURL+"/reset-password?token="+url.QueryEscape(token))
 }
 
+func (m *smtpMailer) sendMagicLink(email, token string) error {
+	return m.send(email, "Sign in to Flow", "Use this link to sign in. It expires in one hour.", m.appURL+"/auth/token?email="+url.QueryEscape(email)+"&token="+url.QueryEscape(token))
+}
+
 func (m *smtpMailer) sendInvitation(email, workspace, token string) error {
 	return m.send(email, "Join "+workspace, "You have been invited to join "+workspace+".", m.appURL+"/invite/"+url.PathEscape(token))
 }

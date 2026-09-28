@@ -26,13 +26,26 @@ describe('agent page composer', () => {
   it('accepts draft input even when the Agent backend is not configured', async () => {
     const user = userEvent.setup()
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
-    await waitFor(() => expect(screen.getByText('Flow Agent is not configured')).toBeVisible())
-    const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+    const editor = await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })
     expect(editor).toHaveAttribute('contenteditable', 'true')
+    expect(screen.queryByText('Flow Agent is not configured')).not.toBeInTheDocument()
+    expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
     await user.click(editor)
     await user.type(editor, 'Draft a project plan')
     expect(editor).toHaveTextContent('Draft a project plan')
-    expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled())
+  })
+
+  it('keeps Agent empty state minimal without watermark or example cards', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    expect(await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveAttribute('data-placeholder', 'Ask Flow…')
+    expect(screen.getByRole('button', { name: 'Skills' })).toBeVisible()
+    expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
+    expect(screen.queryByText('Create a new project')).not.toBeInTheDocument()
+    expect(screen.queryByText('Research a topic')).not.toBeInTheDocument()
+    expect(screen.queryByText('Set up new team')).not.toBeInTheDocument()
+    expect(document.querySelector('svg.emptyGraphic, [class*="emptyGraphic"]')).toBeNull()
   })
 
   it('renders text, reasoning, and tool deltas while a session streams', async () => {

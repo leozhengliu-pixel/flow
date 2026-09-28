@@ -49,7 +49,7 @@ export interface PropertyOption {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -64,6 +64,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   compact?: boolean
   emptyLabel?: string
   hideSearch?: boolean
+  /** Standard pickers: label for a "create" row offered when the query matches no option. */
+  createOptionLabel?: (name: string) => string
   searchPlaceholder?: string
   searchShortcut?: string
   showGroupHeadings?: boolean
@@ -130,6 +132,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const otherProjects = projects.filter(option => !command.isSelected(option.id))
   const createName = command.query.trim()
   const canCreateLabel = kind === 'labels' && Boolean(onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
+  const canCreateStandard = kind === 'standard' && Boolean(createOptionLabel && onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
+  const createStandard = () => { if (!canCreateStandard || !onCreate) return; setOpen(false); void onCreate(createName) }
   const canCreateMilestone = kind === 'milestone' && Boolean(onCreate && createName && !options.some(option => option.label.toLocaleLowerCase() === createName.toLocaleLowerCase()))
   const showLabelCreateHint = kind === 'labels' && Boolean(emptyLabel && !createName && !command.filteredOptions.length)
   const createLabelText = kind === 'labels' ? 'Create new workspace label' : t('Create new label')
@@ -142,6 +146,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
     }
     if (event.key === 'Enter' && canCreateLabel && !command.filteredOptions.length) { event.preventDefault(); createLabel(); return }
     if (event.key === 'Enter' && canCreateMilestone && !command.filteredOptions.length) { event.preventDefault(); createMilestone(); return }
+    if (event.key === 'Enter' && canCreateStandard && !command.filteredOptions.length) { event.preventDefault(); createStandard(); return }
     command.onKeyDown(event)
   }
   const placeholder = searchPlaceholder ?? (kind === 'labels' ? 'Change or add labels…' : kind === 'project' ? 'Add to project…' : `Change ${label.toLowerCase()}…`)
@@ -164,7 +169,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
             {kind === 'project' && <>{noProject.map(option => <CommandOption key="none" option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{selectedProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{otherProjects.length > 0 && <div className="property-command-group">{teamName ? t('Projects in {team} team').replace('{team}', teamName) : t('Projects')}</div>}{otherProjects.map(option => <CommandOption key={option.id} option={option} active={option.id === command.activeId} checked={false} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>) }{onCreate&&<><div className="property-command-group">{t('New project')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new project…')} onClick={()=>{setOpen(false);void onCreate('')}}><Plus size={15}/><span>{t('Create new project…')}</span></button></>}</>}
             {kind === 'milestone' && <>{command.filteredOptions.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}{canCreateMilestone&&<><div className="property-command-group">{t('New project milestone')}</div><button type="button" className="property-command-create" role="option" aria-label={t('Create new milestone…')} onClick={createMilestone}><Plus size={15}/><span>{t('Create new milestone…')}</span></button></>}</>}
             {kind === 'standard' && standardSections.map(section => <div className="property-command-section" key={section.id}>{section.label && <div className="property-command-group">{t(section.label)}</div>}{section.options.map(option => <CommandOption key={option.id || 'none'} option={option} active={option.id === command.activeId} checked={command.isSelected(option.id)} listboxId={listboxId} icon={iconFor(label)} multi={multiple} onChoose={() => command.choose(option)} onActive={() => command.setActiveId(option.id)}/>)}</div>) }
-            {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
+            {canCreateStandard && createOptionLabel && <button type="button" className="property-command-create" role="option" aria-label={createOptionLabel(createName)} onClick={createStandard}><Plus size={16}/><span data-i18n-ignore>{createOptionLabel(createName)}</span></button>}
+            {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && !canCreateStandard && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
           </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>{content}</Tooltip.Provider>
@@ -330,6 +336,10 @@ function iconFor(label: string) {
 
 function SearchShortcut({ value }: { value: string }) {
   const sequence = value.match(/^(.+?)(?:,)?\s+then\s+(.+)$/i)
-  if (!sequence) return <kbd>{value}</kbd>
+  if (!sequence) {
+    // Modifier combos ("⇧ E", "Shift P") render one keycap per key.
+    const keys = value.split(/\s+/).map(key => key === 'Shift' ? '⇧' : key)
+    return keys.length > 1 ? <span className="property-command-search-shortcut">{keys.map((key, index) => <kbd key={index}>{key}</kbd>)}</span> : <kbd>{value}</kbd>
+  }
   return <span className="property-command-search-shortcut"><kbd>{sequence[1]}</kbd><span data-i18n-ignore>then</span><kbd>{sequence[2]}</kbd></span>
 }

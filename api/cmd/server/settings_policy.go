@@ -49,6 +49,8 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 		return settings.AgentSkillPermission
 	case strings.Contains(path, "/loops"):
 		return settings.LoopPermission
+	case strings.Contains(path, "/resources"), strings.Contains(path, "/resource-sections"):
+		return settings.PinnedViewPermission
 	case strings.HasSuffix(path, "/default-favorites"):
 		return "owners"
 	case strings.HasSuffix(path, "/settings"):
@@ -58,7 +60,7 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 		}
 		for key := range patch {
 			switch key {
-			case "access", "membershipRestriction", "settingsPermission", "labelPermission", "templatePermission", "agentSkillPermission", "loopPermission", "memberPermission", "parentTeamId":
+			case "access", "membershipRestriction", "settingsPermission", "labelPermission", "templatePermission", "agentSkillPermission", "loopPermission", "memberPermission", "pinnedViewPermission", "parentTeamId":
 				return "owners"
 			}
 		}

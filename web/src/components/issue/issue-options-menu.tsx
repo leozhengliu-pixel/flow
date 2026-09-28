@@ -263,6 +263,9 @@ export function IssueOptionsMenu({
               {data?.workspaceSettings.featureFlags.releases !== false && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
               {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
+                // The issue page opens its inline composer; elsewhere fall back to the dialog.
+                const opened = !window.dispatchEvent(new CustomEvent('flow:add-customer-request', { detail: { issueId: issue.id }, cancelable: true }))
+                if (opened) { closeMenu(); return }
                 setCustomerId(data?.customers[0]?.id ?? '')
                 setCustomerName('')
                 setCustomerBody(issue.title)
@@ -278,7 +281,7 @@ export function IssueOptionsMenu({
               <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
               {actions && <Option icon={<Copy/>} label="Make a copy…" onSelect={() => actions.makeCopy ? void perform(actions.makeCopy) : beginRelated('copy')}/>}
               <Separator/>
-              <Option icon={<Star fill={favorited ? 'currentColor' : 'none'}/>} label={favorited ? 'Remove from favorites' : 'Add to favorites'} shortcut="Option F" onSelect={() => {
+              <Option icon={<Star fill={favorited ? 'currentColor' : 'none'}/>} label={favorited ? 'Unfavorite' : 'Favorite'} shortcut="Option F" onSelect={() => {
                 if (actions) void perform(actions.toggleFavorite)
                 else {
                   closeMenu()
@@ -286,7 +289,7 @@ export function IssueOptionsMenu({
                 }
               }}/>
               <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested="remind" anchor={anchors.remind} expanded={submenu === 'remind'} onHover={() => { if (actions) openNested('remind') }} onSelect={() => actions ? openNested('remind', true) : (closeMenu(), onRemind?.())}/>
-              {data?.viewer.id && issue.creator.id !== data.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
+              {data?.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
               <Separator/>
               {data?.workspaceSettings.featureFlags.loops !== false && <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
                 setLoopPrompt(issue.description)

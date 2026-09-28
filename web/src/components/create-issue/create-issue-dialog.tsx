@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react'
+import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimates'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
@@ -12,7 +13,7 @@ import { IssueDescriptionEditor } from '@/components/issue/issue-description-edi
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import styles from './create-issue-dialog.module.css'
-import { createDraft, deleteDraft, fetchIssueSuggestionPreview, updateDraft } from '@/lib/api'
+import { createDraft, createRelation, deleteDraft, fetchIssueSuggestionPreview, updateDraft, updateIssue } from '@/lib/api'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
@@ -37,6 +38,7 @@ export interface CreateIssueInput {
   templateId?: string
   recurrence?: '' | 'daily' | 'weekly' | 'monthly'
   teamId?: string
+  parentId?: string
   createMore?: boolean
 }
 
@@ -106,7 +108,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const [description, setDescription] = useState<DescriptionSnapshot | null>(null)
   const [stateId, setStateId] = useState(requestedStateId ?? defaultState.id)
   const [priority, setPriority] = useState<number>(initialContext?.priority ?? 0)
-  const [estimate, setEstimate] = useState(0)
+  const [estimate, setEstimate] = useState(NO_ESTIMATE)
   const [assigneeId, setAssigneeId] = useState(initialContext?.assigneeId ?? data.viewer.id)
   const [projectId, setProjectId] = useState(initialContext?.projectId ?? '')
   const [projectMilestoneId, setProjectMilestoneId] = useState(initialContext?.projectMilestoneId ?? '')
@@ -167,7 +169,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setDescription(restored.description ?? null)
       setStateId(restored.stateId || requestedStateId || defaultState.id)
       setPriority(restored.priority ?? initialContext?.priority ?? 0)
-      setEstimate(restored.estimate ?? 0)
+      setEstimate(restored.estimate ?? NO_ESTIMATE)
       setAssigneeId(restored.assigneeId ?? initialContext?.assigneeId ?? data.viewer.id)
       setProjectId(restored.projectId ?? initialContext?.projectId ?? '')
       setProjectMilestoneId(restored.projectMilestoneId ?? initialContext?.projectMilestoneId ?? '')
@@ -179,7 +181,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
       setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
-      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(0); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
+      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
       if (requestedStateId && availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
@@ -235,7 +237,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const cycles = data.cycles.filter(item => item.teamId === teamId && item.status !== 'completed')
   const nextUpcomingCycleId = [...cycles].filter(item => item.status === 'upcoming').sort((left,right)=>left.startsAt.localeCompare(right.startsAt))[0]?.id
   const estimateType = resolvedTeamSettings(data.teamSettings, teamId)?.estimateType ?? 'notUsed'
-  const estimateValues = estimateType === 'fibonacci' ? [0,1,2,3,5,8,13,21] : estimateType === 'exponential' ? [0,1,2,4,8,16] : [0,1,2,3,5,8]
+  const estimateOptions = estimatePickerOptions(resolvedTeamSettings(data.teamSettings, teamId))
   const issueLabels = useMemo(() => labelsForResource(data.labels, 'issue', data.labelGroups), [data.labelGroups, data.labels])
   const availableLabels = useMemo(() => {
     const scopes = new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
@@ -246,6 +248,29 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     return data.issueTemplates.filter(item => scopes.has(item.teamId ?? ''))
   }, [data.issueTemplates, data.teamSettings, data.teams, teamId])
   const availableLabelIds = useMemo(() => new Set(availableLabels.map(label => label.id)), [availableLabels])
+  const applyTemplate = (id: string) => {
+    setTemplateId(id)
+    const template = templateOptions.find(item => item.id === id)
+    if (!template) return
+    setTitle(current => current || template.name)
+    setStateId(template.stateId || defaultState.id)
+    setPriority(template.priority)
+    setAssigneeId(template.assigneeId ?? data.viewer.id)
+    setProjectId(template.projectId ?? '')
+    setLabelIds(template.labelIds)
+    if (template.body) descriptionEditorRef.current?.commands.setContent(template.body, { contentType: 'markdown' })
+  }
+  // A team's default template is preselected for new, untouched issues; team
+  // members and people outside the team can have different defaults.
+  const teamDefaults = resolvedTeamSettings(data.teamSettings, teamId)
+  const isTeamMember = data.teamMembers.some(member => member.teamId === teamId && member.userId === data.viewer.id)
+  const defaultTemplateId = (isTeamMember ? teamDefaults?.defaultIssueTemplateForMembersId : teamDefaults?.defaultIssueTemplateForNonMembersId) ?? ''
+  useEffect(() => {
+    if (!open || initialTemplateId || templateId || title.trim() || description?.markdown?.trim()) return
+    if (defaultTemplateId && templateOptions.some(item => item.id === defaultTemplateId)) applyTemplate(defaultTemplateId)
+    // Only re-evaluate when the dialog opens or the team changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, teamId, defaultTemplateId])
   const selectedLabels = availableLabels.filter(label => labelIds.includes(label.id))
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
   const labelGroupColors = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.color])), [data.labelGroups])
@@ -350,8 +375,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
         labelIds: labelIds.filter(id => availableLabelIds.has(id)),
         templateId,
         recurrence,
+        parentId: initialContext?.parentId,
         createMore,
       })
+      if (initialContext?.related) await relateCreatedIssue(issue, initialContext.related)
       const uploads = onUpload ? await Promise.allSettled(files.map(file => onUpload(issue.id, file))) : []
       const failedUploads = uploads.filter(result => result.status === 'rejected').length
       removeStoredDraft(draftKey)
@@ -367,7 +394,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -407,10 +434,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           </div>
 
           <div className={styles.properties}>
-            {templateOptions.length>0 && <MiniProperty label="Template" value={templateOptions.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...templateOptions.map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>{setTemplateId(id);const template=templateOptions.find(item=>item.id===id);if(!template)return;setTitle(current=>current||template.name);setStateId(template.stateId||defaultState.id);setPriority(template.priority);setAssigneeId(template.assigneeId??data.viewer.id);setProjectId(template.projectId??'');setLabelIds(template.labelIds);if(template.body)descriptionEditorRef.current?.commands.setContent(template.body,{contentType:'markdown'})}}/>}
+            {templateOptions.length>0 && <MiniProperty label="Template" value={templateOptions.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...templateOptions.map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>applyTemplate(id)}/>}
             <MiniProperty label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
-            {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate ? `${estimate} point${estimate===1?'':'s'}` : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={estimate}/>} options={estimateValues.map(value=>({id:String(value),label:value?`${value} point${value===1?'':'s'}`:'No estimate',icon:<EstimateGlyph value={value}/>}))} onChange={value=>setEstimate(Number(value))}/>}
+            {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={[{id:'',label:'No assignee',icon:<NoAssigneeIcon/>},...data.users.filter(user => user.active).map(user => ({id:user.id,label:user.displayName,keywords:user.email,icon:<Avatar name={user.displayName}/>}))]} onChange={setAssigneeId}/>
             <MiniProperty label="Project" value={project?.name ?? 'Project'} valueIsEntityName={Boolean(project)} selectedId={projectId} icon={<ProjectIcon/>} options={[{id:'',label:'No project',icon:<NoProjectIcon/>},...data.projects.map(item => ({id:item.id,label:item.name,color:item.color,icon:<ProjectIcon style={{ color: item.color }}/>,i18nIgnore:true }))]} onChange={value => { setProjectId(value); setProjectMilestoneId('') }}/>
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
@@ -467,9 +494,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   </Dialog.Root>
 }
 
-function ExistingDraftDiscardDialog({ onCancel, onDiscard, open, saving }: { onCancel: () => void; onDiscard: () => void; open: boolean; saving: boolean }) {
+/** "Discard this draft?" confirmation shared by the issue composers. */
+export function ExistingDraftDiscardDialog({ description = 'Your draft will be deleted.', onCancel, onDiscard, open, primary = false, saving = false }: { description?: string; onCancel: () => void; onDiscard: () => void; open: boolean; primary?: boolean; saving?: boolean }) {
   const discardRef = useRef<HTMLButtonElement>(null)
-  return <DraftDialogFrame description="Your draft will be deleted." descriptionId="existing-draft-discard-description" focusRef={discardRef} onCancel={onCancel} open={open} title="Discard this draft?"><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></DraftDialogFrame>
+  return <DraftDialogFrame description={description} descriptionId="existing-draft-discard-description" focusRef={discardRef} onCancel={onCancel} open={open} title="Discard this draft?"><div className={styles.confirmActions}><span/><span/><button type="button" disabled={saving} onClick={onCancel}>Cancel</button><button ref={discardRef} type="button" className={primary ? styles.confirmSave : styles.confirmDiscard} disabled={saving} onClick={onDiscard}>Discard</button></div></DraftDialogFrame>
 }
 
 function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return <PropertyMenu compact {...props}/> }
@@ -562,3 +590,11 @@ function removeStoredDraft(key: string) {
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!) }
 function escapeAttribute(value: string) { return escapeHtml(value) }
 import { useCreateMotion } from '@/components/ui/motion';
+
+/** Links a newly created issue to the issue it was created from ("Create related"). */
+async function relateCreatedIssue(created: Issue, related: NonNullable<MyIssuesCreateContext['related']>) {
+  if (related.kind === 'parent') await updateIssue(related.issueId, { parentId: created.id })
+  else if (related.kind === 'blocked') await createRelation(related.issueId, 'blocks', created.id)
+  else if (related.kind === 'blocking') await createRelation(related.issueId, 'blocked_by', created.id)
+  else await createRelation(related.issueId, 'related', created.id)
+}

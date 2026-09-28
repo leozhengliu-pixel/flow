@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { Bot, History } from "lucide-react";
 import { AppStartup } from '@/components/layout/app-startup';
@@ -82,6 +83,7 @@ import {
   toggleProjectCommentReaction,
   toggleProjectUpdateReaction,
   updateComment,
+  resolveComment,
   updateAgentSession as updateAgentSessionRequest,
   updateCustomer,
   updateCycle as updateCycleRequest,
@@ -161,6 +163,7 @@ import type {
   RelatedIssueCreationKind,
 } from "@/components/issue/issue-options-menu";
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
+import { OrganizationNotFound } from "@/components/workspace/organization-not-found";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { toast } from "sonner";
 import type {
@@ -168,14 +171,17 @@ import type {
   ProjectMutationInput,
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
-import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, OAuthAuthorizePage, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { LabelActions } from "@/components/workspace/label-page-toolbar";
+import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { createIssueShortcutContext } from "@/lib/create-issue-shortcut";
 import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
+import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
 import {
   agentPath,
+  newAgentSkillPath,
   apiKeyPath,
   apiKeyEditPath,
   dashboardWidgetPath,
@@ -194,6 +200,10 @@ import {
   issuePath,
   issueTemplateEditPath,
   integrationSettingsPath,
+  jiraSyncNewPath,
+  jiraSyncEditPath,
+  asksSlackSettingsPath,
+  newAsksEmailIntakePath,
   membersPath,
   memberProfilePath,
   myIssuesPath,
@@ -239,6 +249,7 @@ import {
   upcomingCyclePath,
   workspaceIssuesPath,
   workspaceOnboardingPath,
+  welcomePath,
   workspaceSavedViewPath,
   workspaceSavedViewEditPath,
   workspaceViewsNewPath,
@@ -258,10 +269,15 @@ import { applyFavoriteDelta, FAVORITES_CHANGED, overlayPendingFavoriteIntents, t
 import { fetchResourcePreferences, mergeResourcePreferences, RESOURCE_PREFERENCES_UPDATED, type ResourcePreferences } from '@/lib/resource-preferences';
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
-import { applyTheme } from "@/lib/theme";
+import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
+import { persistUserSettings } from "@/lib/settings-persistence";
 import { useExitPresence } from '@/components/ui/motion';
 
 import { PeopleProvider } from '@/components/property/people-provider'
+import { WorkspaceStoreProvider } from '@/store/application-store-context'
+import { applyRealtimePatch, canApplyRealtimePatch } from '@/store/apply-realtime-patch'
+import { ActiveTeamProvider } from '@/lib/active-team'
+import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 
@@ -296,9 +312,15 @@ function App() {
   const [authenticationPolicy,setAuthenticationPolicy] = useState<string>();
   useEffect(()=>{const listener=(event:Event)=>{const detail=(event as CustomEvent<{code:string;workspaceKey:string}>).detail;if(detail.workspaceKey===decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0]??''))setAuthenticationPolicy(detail.code)};window.addEventListener('flow:authentication-policy',listener);return()=>window.removeEventListener('flow:authentication-policy',listener)},[]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  // Toolbar chats the user closed stay closed across reloads.
   const [closedAgentSessionIds, setClosedAgentSessionIds] = useState<
     Set<string>
-  >(new Set());
+  >(() => {
+    try { return new Set<string>(JSON.parse(localStorage.getItem("flow:closed-agent-sessions") ?? "[]")); } catch { return new Set<string>(); }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("flow:closed-agent-sessions", JSON.stringify([...closedAgentSessionIds].slice(-200))); } catch { /* storage is best-effort */ }
+  }, [closedAgentSessionIds]);
   const [selected, setSelected] = useState(new Set<string>()),
     [commandOpen, setCommandOpen] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
@@ -347,6 +369,10 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  useEffect(() => {
+    const info = routeInfo(route, data);
+    applyDocumentTitle(info, data?.workspace.name);
+  }, [route, data]);
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
     const warmDetails = () => {
@@ -400,13 +426,34 @@ function App() {
       })
       .finally(() => setAuthReady(true));
   }, []);
+  const themeSyncRef = useRef<string>("");
   useEffect(() => {
     if (!data) return;
-    const settings = data.userSettings[data.viewer.id] ?? {};
+    const settings = data.userSettings[data.viewer.id];
+    if (!settings) return;
     setRuntimePreferences(settings);
     setWorkspaceRuntimePreferences(data.workspaceSettings);
     const root = document.documentElement;
-    applyTheme(settings);
+    // Reconcile account settings with the first-paint cache so default
+    // "System preference" does not wipe an explicit Light/Dark choice.
+    const applied = applyAccountTheme({
+      interfaceTheme: settings.interfaceTheme,
+      lightTheme: settings.lightTheme,
+      darkTheme: settings.darkTheme,
+    });
+    if (
+      themeNeedsAccountSync(settings, applied) &&
+      themeSyncRef.current !== `${data.workspace.urlKey}:${data.viewer.id}:${applied.interfaceTheme}`
+    ) {
+      themeSyncRef.current = `${data.workspace.urlKey}:${data.viewer.id}:${applied.interfaceTheme}`;
+      void persistUserSettings(data.workspace.urlKey, data.viewer.id, {
+        interfaceTheme: applied.interfaceTheme,
+        lightTheme: applied.lightTheme,
+        darkTheme: applied.darkTheme,
+      } as Partial<UserSettings>).catch(() => {
+        themeSyncRef.current = "";
+      });
+    }
     root.style.fontSize =
       settings.fontSize === "Small"
         ? "14px"
@@ -425,8 +472,29 @@ function App() {
       "settings-reduce-animated-media",
       Boolean(settings.disableAnimatedImages),
     );
-  }, [data]);
+  }, [
+    data?.workspace.urlKey,
+    data?.viewer.id,
+    data?.userSettings,
+    data?.workspaceSettings,
+  ]);
   const oauthPath = location.pathname === "/oauth/authorize";
+  const connectPath =
+    location.pathname === "/connect/oauth/complete" ||
+    location.pathname === "/connect/figma/callback" ||
+    location.pathname === "/connect/figma/desktop-redirect" ||
+    location.pathname === "/connect/sentry" ||
+    location.pathname === "/connect/sentry/callback";
+  const authTokenPath =
+    location.pathname === "/auth/token" ||
+    location.pathname === "/auth/email" ||
+    location.pathname.startsWith("/auth/saml") ||
+    location.pathname.startsWith("/auth/web-saml");
+  const authErrorPath = location.pathname === "/auth/error";
+  const authGoogleCallbackPath =
+    location.pathname === "/auth/google/callback" ||
+    location.pathname === "/auth/oidc/callback";
+  const mobileAuthPath = location.pathname === "/mobile-auth";
   const authPath =
     [
       "/login",
@@ -435,9 +503,14 @@ function App() {
       "/forgot-password",
       "/reset-password",
     ].some((path) => location.pathname === path) ||
-    location.pathname.startsWith("/invite/");
+    location.pathname.startsWith("/invite/") ||
+    location.pathname.startsWith("/join/") ||
+    authTokenPath ||
+    authErrorPath ||
+    authGoogleCallbackPath ||
+    mobileAuthPath;
   useEffect(() => {
-    if (authReady && !session && oauthPath) {
+    if (authReady && !session && (oauthPath || connectPath)) {
       const returnTo = `${location.pathname}${location.search}`;
       navigateTo(`/login?returnTo=${encodeURIComponent(returnTo)}`, {
         replace: true,
@@ -445,6 +518,7 @@ function App() {
     }
   }, [
     authReady,
+    connectPath,
     location.pathname,
     location.search,
     navigateTo,
@@ -456,14 +530,19 @@ function App() {
       authReady &&
       session &&
       authPath &&
-      !location.pathname.startsWith("/invite/")
+      !location.pathname.startsWith("/invite/") &&
+      !location.pathname.startsWith("/join/") &&
+      !authTokenPath &&
+      !authErrorPath &&
+      !authGoogleCallbackPath &&
+      !mobileAuthPath
     ) {
       navigateTo("/", { replace: true });
     }
-  }, [authPath, authReady, location.pathname, navigateTo, session]);
+  }, [authPath, authReady, authTokenPath, authErrorPath, authGoogleCallbackPath, mobileAuthPath, location.pathname, navigateTo, session]);
   useEffect(() => {
     if (!account) return;
-    if (oauthPath) return;
+    if (oauthPath || connectPath) return;
     if (
       account.workspaces.length === 0 &&
       route.kind !== "workspace-onboarding"
@@ -540,7 +619,7 @@ function App() {
       })
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
-  }, [account, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
+  }, [account, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -598,6 +677,12 @@ function App() {
         navigateTo(reviewsPath(data.workspace.urlKey));
         return;
       }
+      if (inSequence && sequence.key === "g" && pressed === "s" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"));
+        return;
+      }
       if (pressed === "n" || pressed === "g") {
         shortcutSequence.current = { key: pressed, at: now };
         return;
@@ -625,6 +710,7 @@ function App() {
     )
       setCreateOpen(true);
   }, [location.pathname, location.search]);
+  const [floatingAgentOpen, setFloatingAgentOpen] = useState(false);
   const selectedIssue =
     route.kind === "issue"
       ? data?.issues.find(
@@ -873,14 +959,13 @@ function App() {
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? overlayPendingFavoriteIntents(mergeResourcePreferences(current, preferences)) : current);
         return;
       }
-      if (event.type.startsWith('notification.') && entity && typeof entity === 'object' && 'recipientId' in entity) {
-        const notification = entity as BootstrapData['notifications'][number];
-        if (notification.recipientId !== data.viewer.id) return;
-        setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? {
-          ...current, notifications: current.notifications.some(item => item.id === notification.id)
-            ? current.notifications.map(item => item.id === notification.id ? notification : item)
-            : [...current.notifications, notification],
-        } : current);
+      // LS-0718: entity Map / SSE patch path — merge when payload is self-contained.
+      if (canApplyRealtimePatch(event)) {
+        setData((current) => {
+          if (current?.workspace.urlKey !== workspace || current.viewer.id !== viewerId) return current;
+          const result = applyRealtimePatch(current, event);
+          return result.handled ? result.data : current;
+        });
         return;
       }
       const issue = event.payload?.issue ?? (
@@ -891,32 +976,6 @@ function App() {
       if (event.type.startsWith('comment.') && issue) {
         issueContextKey.current = '';
         window.dispatchEvent(new CustomEvent('flow-issue-history-changed', { detail: issue.id }));
-        return;
-      }
-      if ((event.type === "issue.updated" || event.type === "issue.created") && issue) {
-        setData((current) =>
-          current?.workspace.urlKey === workspace && current.viewer.id === viewerId
-            ? deriveResourceCounts({
-                ...current,
-                issues: current.issueCollectionPaged
-                  ? mergeIssueRecords(current.issues,[issue])
-                  : current.issues.some((item) => item.id === issue.id)
-                  ? current.issues.map((item) => item.id === issue.id ? issue : item)
-                  : [issue, ...current.issues],
-              })
-            : current,
-        );
-        return;
-      }
-      if (event.type === "issue.deleted" && event.aggregateId) {
-        setData((current) =>
-          current?.workspace.urlKey === workspace && current.viewer.id === viewerId
-            ? deriveResourceCounts({
-                ...current,
-                issues: current.issues.filter((item) => item.id !== event.aggregateId),
-              })
-            : current,
-        );
         return;
       }
       const checkedIds=data.issues.map(issue=>issue.id);
@@ -1072,7 +1131,59 @@ function App() {
       throw error;
     }
   };
-  const deleteCommentOptimistically = async (issue: Issue, id: string) => {
+  const resolveCommentOptimistically = async (
+    issue: Issue,
+    id: string,
+    resolved: boolean,
+  ) => {
+    const current = data?.comments[issue.id]?.find(
+      (comment) => comment.id === id,
+    );
+    if (!current) throw new Error("Comment not found");
+    updateIssueComments(issue.id, (comments) =>
+      comments.map((comment) =>
+        comment.id === id
+          ? {
+              ...comment,
+              resolved,
+              threadSummary: resolved ? comment.threadSummary : undefined,
+            }
+          : comment,
+      ),
+    );
+    try {
+      const saved = await resolveComment(
+        issue.id,
+        id,
+        resolved,
+        current.version,
+      );
+      updateIssueComments(issue.id, (comments) =>
+        comments.map((comment) => (comment.id === id ? saved : comment)),
+      );
+      return saved;
+    } catch (error) {
+      const conflict =
+        error instanceof ApiError && error.code === "VERSION_CONFLICT"
+          ? (error.current as Comment | undefined)
+          : undefined;
+      updateIssueComments(issue.id, (comments) =>
+        comments.map((comment) =>
+          comment.id === id ? (conflict ?? current) : comment,
+        ),
+      );
+      toast.error(
+        conflict
+          ? "Comment changed in another session"
+          : resolved
+            ? "Could not resolve comment"
+            : "Could not re-open comment",
+        { description: error instanceof Error ? error.message : undefined },
+      );
+      throw error;
+    }
+  };
+    const deleteCommentOptimistically = async (issue: Issue, id: string) => {
     const comments = data?.comments[issue.id] ?? [];
     const index = comments.findIndex((comment) => comment.id === id);
     const removed = comments[index];
@@ -1200,6 +1311,10 @@ function App() {
   const reactComment = async (id: string, emoji: string) => {
     if (!selectedIssue) return;
     await reactToCommentOptimistically(selectedIssue, id, emoji);
+  };
+  const resolveSelectedComment = async (id: string, resolved: boolean) => {
+    if (!selectedIssue) return;
+    await resolveCommentOptimistically(selectedIssue, id, resolved);
   };
   const reactIssue = async (emoji: string) => {
     if (!selectedIssue) return;
@@ -3391,6 +3506,9 @@ function App() {
         onReactComment={async (id, emoji) => {
           await reactToCommentOptimistically(issue, id, emoji);
         }}
+        onResolveComment={async (id, resolved) => {
+          await resolveCommentOptimistically(issue, id, resolved);
+        }}
         onRelation={async (type, relatedIssueId) => {
           await run(
             () => createRelation(issue.id, type, relatedIssueId),
@@ -3435,8 +3553,9 @@ function App() {
     const nextAccount = await fetchAccountBootstrap();
     setAccount(nextAccount);
     setData(created);
-    navigateTo(`/${encodeURIComponent(created.workspace.urlKey)}`, {
+    navigateTo(welcomePath(created.workspace.urlKey), {
       replace: true,
+      state: { onboardingStep: "profile" },
     });
     return created;
   };
@@ -3463,29 +3582,16 @@ function App() {
       });
   };
   const removeWorkspace = async () => {
-    if (
-      !data ||
-      !(await confirmAction(`Delete ${data.workspace.name}?`, {
-        description: "This permanently deletes all workspace data.",
-        confirmLabel: "Delete workspace",
-      }))
-    )
-      return;
-    await run(
+    if (!data) return;
+    const updated = await run(
       () => deleteWorkspace(data.workspace.urlKey),
-      "Could not delete workspace",
+      "Could not schedule workspace deletion",
     );
-    const next = await fetchAccountBootstrap();
-    setAccount(next);
-    setData(null);
-    const workspace =
-      next.workspaces.find(
-        (item) => item.workspace.urlKey === next.lastWorkspaceKey,
-      )?.workspace ?? next.workspaces[0]?.workspace;
-    navigateTo(
-      workspace ? myIssuesPath(workspace.urlKey) : workspaceOnboardingPath(),
-      { replace: true },
-    );
+    if (!updated) return;
+    toast.success("Workspace scheduled for deletion", {
+      description: "You can cancel from Settings → Workspace → Danger zone.",
+    });
+    acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
   };
   const addTeam = async (input: {
     name: string;
@@ -3907,19 +4013,45 @@ function App() {
     selectedSavedView,
     selectedReview,
   ]);
-  if (authenticationPolicy && !authPath) return <AuthenticationPolicyPage code={authenticationPolicy}/>;
-  if (!authReady) return <AppStartup />;
+  const withStore = (node: ReactNode) => (
+    <WorkspaceStoreProvider data={data} session={session} account={account}>
+      {node}
+    </WorkspaceStoreProvider>
+  );
+  if (authenticationPolicy && !authPath) return withStore(<AuthenticationPolicyPage code={authenticationPolicy}/>);
+  if (!authReady) return withStore(<AppStartup />);
+  const handleAuthenticated = async (authenticated: AuthSession, returnTo?: string) => {
+    setSession(authenticated);
+    const nextAccount = await fetchAccountBootstrap();
+    setAccount(nextAccount);
+    setError(false);
+    navigateTo(returnTo || "/", { replace: true });
+  };
+  if (authErrorPath) return withStore(<AuthErrorPage />);
+  if (mobileAuthPath) return withStore(<MobileAuthPage />);
+  if (authGoogleCallbackPath)
+    return withStore(<AuthGoogleCallbackPage onAuthenticated={handleAuthenticated} />);
+  if (authTokenPath)
+    return withStore(<AuthTokenPage onAuthenticated={handleAuthenticated} />);
+  if (location.pathname.startsWith("/join/"))
+    return withStore(
+      <Suspense fallback={<AppStartup />}>
+        <InviteLinkAccept
+          session={session}
+          onJoined={async (workspaceKey) => {
+            setAccount(await fetchAccountBootstrap());
+            setData(null);
+            clearNavigationCache();
+            navigateTo(myIssuesPath(workspaceKey), { replace: true });
+          }}
+        />
+      </Suspense>
+    );
   if (!session || authPath)
-    return (
+    return withStore(
       <AuthPage
         session={session}
-        onAuthenticated={async (authenticated, returnTo) => {
-          setSession(authenticated);
-          const nextAccount = await fetchAccountBootstrap();
-          setAccount(nextAccount);
-          setError(false);
-          navigateTo(returnTo || "/", { replace: true });
-        }}
+        onAuthenticated={handleAuthenticated}
         onInvitationAccepted={async (workspaceKey) => {
           setAccount(await fetchAccountBootstrap());
           setData(null);
@@ -3927,16 +4059,24 @@ function App() {
         }}
       />
     );
-  if (!account && !error) return <AppStartup />;
+  if (!account && !error) return withStore(<AppStartup />);
   if (!account)
-    return (
+    return withStore(
       <WorkspaceBootShell sidebarLabel="Loading account navigation">
         {error ? <ErrorState retry={loadAccount} /> : <SkeletonRows count={9} />}
       </WorkspaceBootShell>
     );
-  if (oauthPath) return <OAuthAuthorizePage account={account} />;
+  if (oauthPath) return withStore(<OAuthAuthorizePage account={account} />);
+  if (connectPath) {
+    if (location.pathname === "/connect/figma/callback") return withStore(<CompleteFigmaAuthView />);
+    if (location.pathname === "/connect/figma/desktop-redirect") return withStore(<AuthDesktopRedirectFigma />);
+    if (location.pathname === "/connect/sentry" || location.pathname === "/connect/sentry/callback") {
+      return withStore(<CompleteSentryAuthView />);
+    }
+    return withStore(<CompleteOAuthView />);
+  }
   if (route.kind === "workspace-onboarding" || account.workspaces.length === 0)
-    return (
+    return withStore(
       <Suspense
         fallback={
           <main className="main-panel">
@@ -3967,15 +4107,70 @@ function App() {
         />
       </Suspense>
     );
-  if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return <AppStartup />;
+  if (route.kind === "welcome") {
+    const workspace =
+      data?.workspace ||
+      account.workspaces.find(
+        (item) => item.workspace.urlKey === route.workspaceSlug,
+      )?.workspace;
+    const viewer = data?.viewer || account.viewer;
+    if (!workspace) {
+      return withStore(
+        <WorkspaceBootShell sidebarLabel="Loading welcome">
+          {error ? <ErrorState retry={loadAccount} /> : <SkeletonRows count={7} />}
+        </WorkspaceBootShell>
+      );
+    }
+    return withStore(
+      <Suspense
+        fallback={
+          <main className="main-panel">
+            <SkeletonRows count={7} />
+          </main>
+        }
+      >
+        <WelcomeOnboarding
+          account={account}
+          workspace={workspace}
+          viewer={viewer}
+          onNavigateState={(step) =>
+            navigateTo(welcomePath(workspace.urlKey), {
+              replace: false,
+              state: { onboardingStep: step },
+            })
+          }
+          onComplete={() =>
+            navigateTo(myIssuesPath(workspace.urlKey), { replace: true })
+          }
+        />
+      </Suspense>
+    );
+  }
+  if (!data && !error && route.kind !== "issue" && (!previewIssue || previewIssue.isSummary)) return withStore(<AppStartup />);
   if (!data)
-    return (
+    return withStore(
       <WorkspaceBootShell>
-        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? <ErrorState retry={load} /> : <SkeletonRows count={9} />}
+        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? (
+          requestedWorkspaceKey ? (
+            <OrganizationNotFound
+              orgKey={requestedWorkspaceKey}
+              onLogout={async () => {
+                await logoutAccount();
+                setSession(null);
+                setAccount(null);
+                setData(null);
+                clearNavigationCache();
+                navigateTo("/login", { replace: true });
+              }}
+            />
+          ) : (
+            <ErrorState retry={load} />
+          )
+        ) : <SkeletonRows count={9} />}
       </WorkspaceBootShell>
     );
   if (route.kind === "settings")
-    return (
+    return withStore(
       <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}>
       <Suspense
         fallback={
@@ -3994,9 +4189,35 @@ function App() {
           signingKeyMode={route.signingKeyMode}
           teamKey={route.teamKey}
           teamSection={route.teamSection}
+          teamSubPath={route.teamSubPath}
           releasePipelineMode={route.releasePipelineMode}
+          apiView={route.apiView}
+          workspaceView={route.workspaceView}
+          accountView={route.accountView}
+          webhookId={route.webhookId}
           releasePipelineSlug={route.releasePipelineSlug}
           integrationProvider={route.integrationProvider}
+          integrationSlug={route.integrationSlug}
+          jiraSyncMode={route.jiraSyncMode}
+          jiraProjectId={route.jiraProjectId}
+          asksIntegrationId={route.asksIntegrationId}
+          asksEmailIntakeMode={route.asksEmailIntakeMode}
+          asksEmailIntakeId={route.asksEmailIntakeId}
+          onOpenAsksSlack={(integrationId) =>
+            navigateTo(asksSlackSettingsPath(data.workspace.urlKey, integrationId))
+          }
+          onOpenAsksEmailIntake={(addressId) =>
+            navigateTo(addressId ? `${settingsPath(data.workspace.urlKey, 'asks')}/email-intake/${encodeURIComponent(addressId)}` : newAsksEmailIntakePath(data.workspace.urlKey))
+          }
+          onOpenCodingTools={() =>
+            navigateTo(`${settingsPath(data.workspace.urlKey, 'code-and-reviews')}/coding-tools`)
+          }
+          onOpenWelcomeMessage={() =>
+            navigateTo(`${settingsPath(data.workspace.urlKey, 'workspace')}/welcome-message`)
+          }
+          identityProviderId={route.identityProviderId}
+          applicationId={route.applicationId}
+          applicationMode={route.applicationMode}
           issueTemplateMode={route.issueTemplateMode}
           issueTemplateId={route.issueTemplateId}
           projectTemplateMode={route.projectTemplateMode}
@@ -4012,9 +4233,9 @@ function App() {
                   : myIssuesPath(data.workspace.urlKey)),
             )
           }
-          onNavigate={(page, teamKey, teamSection) =>
+          onNavigate={(page, teamKey, teamSection, teamSubPath) =>
             navigateTo(
-              settingsPath(data.workspace.urlKey, page, teamKey, teamSection),
+              settingsPath(data.workspace.urlKey, page, teamKey, teamSection, teamSubPath),
             )
           }
           onCreateAPIKey={() =>
@@ -4055,6 +4276,12 @@ function App() {
           onOpenIntegration={(provider) =>
             navigateTo(integrationSettingsPath(data.workspace.urlKey, provider))
           }
+          onOpenJiraSyncNew={() =>
+            navigateTo(jiraSyncNewPath(data.workspace.urlKey))
+          }
+          onOpenJiraSyncEdit={(jiraProjectId) =>
+            navigateTo(jiraSyncEditPath(data.workspace.urlKey, jiraProjectId))
+          }
           onCreateIssueTemplate={(form) =>
             navigateTo(newIssueTemplatePath(data.workspace.urlKey, form))
           }
@@ -4093,6 +4320,10 @@ function App() {
     );
   const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
   const routeTeamKey = "teamKey" in route ? route.teamKey : undefined;
+  const teamPagesTeamKey =
+    "teamKey" in route && isTeamPagesRoute(route.kind)
+      ? route.teamKey
+      : undefined;
   const teamValid =
     !routeTeamKey ||
     data.teams.some(
@@ -4115,7 +4346,7 @@ function App() {
     "customer-requests",
   );
   const asksEnabled = workspaceFeatureEnabled(featureFlags, "asks");
-  const toolbarAgentSession = data.agentSessions?.find(
+  const toolbarAgentSession = floatingAgentOpen ? undefined : data.agentSessions?.find(
     (item) =>
       item.location === "toolbar" && !closedAgentSessionIds.has(item.id),
   );
@@ -4268,8 +4499,8 @@ function App() {
           view.scope === "team" && view.teamId === selectedSavedViewTeam.id,
       )
     : issueSavedViews.filter((view) => view.scope !== "team");
-  return (
-    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><div className="app">
+  return withStore(
+    <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><ActiveTeamProvider><div className="app">
       <Sidebar
         onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))}
         account={account}
@@ -4311,6 +4542,11 @@ function App() {
           </main>
         }
       >
+        <TeamPagesLayout
+          data={data}
+          teamKey={teamPagesTeamKey}
+          onNavigate={navigateTo}
+        >
         {page === "search" && route.kind === "search" && (
           <WorkspaceSearchPage
             onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -4366,18 +4602,18 @@ function App() {
         {(
           route.kind === "diary" ||
           route.kind === "meeting" ||
+          route.kind === "meetings" ||
           route.kind === "automations" ||
           route.kind === "automation-new" ||
           route.kind === "automation-detail" ||
           route.kind === "automation-runs" ||
-          route.kind === "team-board" ||
           route.kind === "team-triage" ||
           route.kind === "team-updates" ||
           route.kind === "team-update" ||
           route.kind === "team-resources" ||
           route.kind === "team-links" ||
           route.kind === "release-note" ||
-          route.kind === "label"
+          (route.kind === "label" && route.resourceType !== "issue")
         ) && (
           <WorkspaceSecondaryPage
             data={data}
@@ -4388,6 +4624,7 @@ function App() {
                   ? "automation-runs"
                   : route.kind
             }
+            meetingId={route.kind === "meeting" ? route.meetingId : undefined}
             team={
               "teamKey" in route
                 ? data.teams.find(
@@ -4419,6 +4656,7 @@ function App() {
             onReload={async () => {
               acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
             }}
+            onCreateIssue={() => openCreateIssue()}
           />
         )}
         {page === "analytics" && route.kind === "analytics" && (
@@ -4663,9 +4901,16 @@ function App() {
           />
         )}
         {!workspaceValid && (
-          <RouteNotFound
-            title="Workspace not found"
-            description={`This app is connected to ${data.workspace.name}.`}
+          <OrganizationNotFound
+            orgKey={requestedWorkspaceKey || data.workspace.urlKey}
+            onLogout={async () => {
+              await logoutAccount();
+              setSession(null);
+              setAccount(null);
+              setData(null);
+              clearNavigationCache();
+              navigateTo("/login", { replace: true });
+            }}
           />
         )}
         {workspaceValid && !teamValid && (
@@ -4757,6 +5002,11 @@ function App() {
                 }
                 onOpenIssue={openIssue}
                 onUpdateIssue={updateIssueFromPage}
+                onUpdateIssues={updateIssuesFromPage}
+                onDeleteIssues={deleteIssuesFromPage}
+                onCreateIssue={(context) => openCreateIssue(context)}
+                renderIssuePreview={renderIssuePreview}
+                onOpenSidebar={() => setMobileSidebarOpen(true)}
               />
             ) : (
               <RouteNotFound
@@ -4857,7 +5107,7 @@ function App() {
               onUpdateIssue={updateIssueById}
               renderIssuePreview={renderIssuePreview}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onCreateIssue={() => openCreateIssue({ teamId: cycleTeam.id, cycleId: selectedCycle.id })}
+              onCreateIssue={(context) => openCreateIssue({ ...context, teamId: cycleTeam.id, cycleId: selectedCycle.id })}
               onReload={refreshActivity}
               onNavigate={navigateTo}
             />
@@ -5026,6 +5276,9 @@ function App() {
             onOpenSettings={() => navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"))}
             onOpenIssue={openIssue}
             onOpenProject={openProject}
+            onOpenInitiative={openInitiative}
+            onCreateProjectUpdate={addProjectUpdate}
+            onCreateInitiativeUpdate={addInitiativeUpdate}
             onOpenReview={(review) =>
               navigateTo(reviewPath(data.workspace.urlKey, review))
             }
@@ -5057,6 +5310,7 @@ function App() {
         )}
         {page === "my-issues" && route.kind === "my-issues" && (
           <MyIssuesPage
+            renderIssuePreview={renderIssuePreview}
             key={route.view}
             data={data}
             initialView={route.view}
@@ -5069,6 +5323,38 @@ function App() {
             onDeleteIssues={deleteIssuesFromPage}
           />
         )}
+        {page === "workspace-issues" && route.kind === "label" && route.resourceType === "issue" && (() => {
+          // Linear `label` view: the full issue view scoped to one label.
+          const label = data.labels.find((item) => item.name === route.resourceName && (item.resourceType ?? "issue") === "issue");
+          if (!label) return <main className="main-panel"><p className="secondary-empty">Label not found</p></main>;
+          return (
+            <IssueExplorerPage
+              key={`label-${label.id}`}
+              data={data}
+              scope={{ kind: "workspace" }}
+              view="all"
+              preferenceScope={`label:${label.id}`}
+              resourceHeader={{
+                icon: <span aria-hidden="true" className="label-page-toolbar__icon" style={{ background: label.color }} />,
+                title: <span data-i18n-ignore>{label.name}</span>,
+                actions: <LabelActions data={data} label={label} onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))} />,
+              }}
+              scopeFilter={(issue) => issue.labels.some((item) => item.id === label.id)}
+              scopeConditions={[{ field: "labels", values: [label.id] }]}
+              viewHref={(view) => workspaceIssuesPath(data.workspace.urlKey, view)}
+              onNavigateView={(view) => navigateTo(workspaceIssuesPath(data.workspace.urlKey, view))}
+              onCreateSavedView={addSavedView}
+              onNavigateSavedView={(view) => navigateTo(workspaceSavedViewPath(data.workspace.urlKey, savedViewPathId(view)))}
+              onOpenSidebar={() => setMobileSidebarOpen(true)}
+              onOpenIssue={openIssue}
+              renderIssuePreview={renderIssuePreview}
+              onCreateIssue={(context) => openCreateIssue({ ...context, labelIds: [...new Set([...(context?.labelIds ?? []), label.id])] })}
+              onUpdateIssue={updateIssueFromPage}
+              onUpdateIssues={updateIssuesFromPage}
+              onDeleteIssues={deleteIssuesFromPage}
+            />
+          );
+        })()}
         {page === "workspace-issues" && route.kind === "workspace-issues" && (
           <IssueExplorerPage
             key={`workspace-${route.view}-${location.search}`}
@@ -5080,6 +5366,7 @@ function App() {
             initialStatusId={
               new URLSearchParams(location.search).get("status") ?? undefined
             }
+            {...issueIdentifierScope(new URLSearchParams(location.search).get("ids"))}
             scope={{ kind: "workspace" }}
             view={route.view}
             viewHref={(view) =>
@@ -5117,9 +5404,10 @@ function App() {
             onDeleteIssues={deleteIssuesFromPage}
           />
         )}
-        {page === "team-issues" && route.kind === "team-issues" && (
+        {page === "team-issues" && (route.kind === "team-issues" || route.kind === "team-board") && (
           <IssueExplorerPage
-            key={`${route.teamKey}-${route.view}`}
+            key={`${route.teamKey}-${route.kind === "team-board" ? "board" : route.view}`}
+            boardRoute={route.kind === "team-board"}
             data={data}
             initialStatusId={
               new URLSearchParams(location.search).get("status") ?? undefined
@@ -5131,7 +5419,7 @@ function App() {
                   team.key.toLowerCase() === route.teamKey.toLowerCase(),
               )!,
             }}
-            view={route.view}
+            view={route.kind === "team-board" ? "all" : route.view}
             viewHref={(view) =>
               teamIssuesPath(data.workspace.urlKey, route.teamKey, view)
             }
@@ -5944,6 +6232,7 @@ function App() {
               onEditComment={editComment}
               onDeleteComment={removeComment}
               onReactComment={reactComment}
+              onResolveComment={resolveSelectedComment}
               onRelation={addRelation}
               onDeleteRelation={removeRelation}
               onUpload={addAttachment}
@@ -6005,6 +6294,7 @@ function App() {
               description="This project view does not exist or is no longer available."
             />
           )}
+      </TeamPagesLayout>
       </Suspense>
       )}
       <Suspense fallback={null}>
@@ -6137,6 +6427,7 @@ function App() {
       {data.resourceDetailsOmitted && ['project-detail','document-detail'].includes(page) && <main className="main-panel" aria-busy="true"><div role="status">Loading…</div></main>}
       {toolbarAgentSession && (
         <AgentChatPanel
+          data={data}
           initialSession={toolbarAgentSession}
           issues={toolbarAgentIssues}
           open
@@ -6180,10 +6471,20 @@ function App() {
           }}
         />
       )}
+      <AgentChatPanel
+        data={data}
+        onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
+        issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
+        open={floatingAgentOpen}
+        onSessionChange={(next) => setClosedAgentSessionIds((current) => new Set(current).add(next.id))}
+        onClose={() => setFloatingAgentOpen(false)}
+        onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
+      />
       <div className="bottom-agent">
         <button
           aria-label="Agent"
-          onClick={() => navigateTo(agentPath(data.workspace.urlKey))}
+          aria-expanded={floatingAgentOpen}
+          onClick={() => setFloatingAgentOpen((value) => !value)}
           type="button"
         >
           <Bot />
@@ -6199,7 +6500,7 @@ function App() {
           <History />
         </button>
       </div>
-    </div></PeopleProvider>
+    </div></ActiveTeamProvider></PeopleProvider>
   );
 }
 
@@ -6222,6 +6523,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (
     route.kind === "diary" ||
     route.kind === "meeting" ||
+    route.kind === "meetings" ||
     route.kind === "automations" ||
     route.kind === "automation-new" ||
     route.kind === "automation-detail" ||
@@ -6232,13 +6534,13 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "pulse") return "pulse";
   if (route.kind === "my-issues") return "my-issues";
   if (route.kind === "reviews" || route.kind === "review") return "reviews";
-  if (route.kind === "team-issues") return "team-issues";
+  // The team board is the team issue view with the board layout (Linear `/team/:key/board`).
+  if (route.kind === "team-issues" || route.kind === "team-board") return "team-issues";
   if (
     route.kind === "team-overview" ||
     route.kind === "team-documents" ||
     route.kind === "team-loops" ||
     route.kind === "team-members" ||
-    route.kind === "team-board" ||
     route.kind === "team-triage" ||
     route.kind === "team-updates" ||
     route.kind === "team-update" ||
@@ -6434,3 +6736,17 @@ function nextOccurrence(recurrence: "daily" | "weekly" | "monthly") {
 }
 
 export default App;
+
+/** Linear `issueIdentifiers` view: `?ids=ENG-1,ENG-2` narrows the workspace issue view to those issues. */
+function issueIdentifierScope(raw: string | null) {
+  const identifiers = [...new Set((raw ?? "").split(/[\s,]+/).map((value) => value.trim().toUpperCase()).filter(Boolean))].slice(0, 500);
+  if (!identifiers.length) return {};
+  const wanted = new Set(identifiers);
+  return {
+    preferenceScope: "identifiers",
+    defaultDisplayOverrides: { showTriageIssues: true },
+    resourceHeader: { title: `${identifiers.length} ${identifiers.length === 1 ? "issue" : "issues"}` },
+    scopeFilter: (issue: Issue) => wanted.has(issue.identifier.toUpperCase()),
+    scopeConditions: [{ field: "identifier", operator: "in", values: identifiers }],
+  };
+}

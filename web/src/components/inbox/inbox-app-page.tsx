@@ -1,10 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, User } from '@/types/flow'
+import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Initiative, InitiativeUpdate, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, ProjectUpdate, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
 import { NoProjectIcon, PriorityIcon, ProjectIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { batchNotifications, updateInboxNotification } from '@/lib/api'
+import {
+  InitiativeOverviewInboxView,
+  InitiativeUpdatesInboxView,
+  ProjectOverviewInboxView,
+  ProjectUpdatesInboxView,
+  classifyInboxHost,
+  notificationTypeMatchesPriorityRules,
+  readPriorityInboxRuleState,
+} from './hosts'
 
 import { type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
 import { INBOX_NOTIFICATION_TYPE_OPTIONS, INBOX_REVIEW_STATUS_OPTIONS, normalizeInboxFilters } from './inbox-filter-types'
@@ -12,6 +21,7 @@ import { inboxActorOptions, inboxNotificationCategory, matchesInboxFilter as not
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
+import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 
 const initialDisplayOptions: InboxDisplayOptions = {
   ordering: 'newest',
@@ -30,11 +40,14 @@ interface InboxProjection extends InboxNotificationRowData {
   actorId: string
   snoozedUntil?: string
   projectId?: string
+  initiativeId?: string
   initiativeIds: string[]
   issuePriority: number
   issueStatusType: string
   reviewId?: string
   reviewStatus?: string
+  updateId?: string
+  hostKind?: ReturnType<typeof classifyInboxHost>
 }
 
 export interface InboxAppPageProps {
@@ -43,8 +56,11 @@ export interface InboxAppPageProps {
   onReload: () => Promise<void> | void
   onOpenIssue: (issue: Issue) => void
   onOpenProject?: (project: Project) => void
+  onOpenInitiative?: (initiative: Initiative) => void
   onOpenReview?: (review: CodeReview) => void
   onOpenSettings?: () => void
+  onCreateProjectUpdate?: (projectId: string, input: { body: string; health?: Project['health'] }) => Promise<ProjectUpdate | void>
+  onCreateInitiativeUpdate?: (initiativeId: string, input: { body: string; health?: Project['health'] }) => Promise<InitiativeUpdate | void>
   onSubscriberChange?: (issue: Issue, subscribed: boolean) => Promise<void> | void
   onUpdateIssue?: (issue: Issue, input: IssueUpdateInput) => Promise<void>
   onDeleteIssue?: (issue: Issue) => Promise<void>
@@ -64,7 +80,7 @@ export interface InboxAppPageProps {
   onTabChange?: (tab: InboxTab) => void
 }
 
-export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenReview, onOpenSettings, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange }: InboxAppPageProps) {
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange }: InboxAppPageProps) {
   const source = useMemo(() => projectInbox(data), [data])
   const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
@@ -235,9 +251,93 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       const projection = notifications.find(item => item.id === notification.id)
       const issue = projection ? issueById.get(projection.issueId) : undefined
       const project = projection?.projectId ? data.projects.find(item => item.id === projection.projectId) : undefined
+      const initiative = projection?.initiativeId
+        ? data.initiatives.find(item => item.id === projection.initiativeId)
+        : data.initiatives.find(item => item.id === projection?.sourceId)
       const review = projection?.reviewId ? data.reviews.find(item => item.id === projection.reviewId) : undefined
-      if (projection?.identifier==='pulseSummary') return {content:<div className="flow-inbox-project-reminder"><h2>Pulse summary</h2><p>{projection.body}</p><a href={`/${data.workspace.urlKey}/pulse`}>Open Pulse</a></div>}
-      if (projection && review && !issue) return { content: <InboxReviewDetail review={review} onOpen={() => onOpenReview?.(review)} /> }
+      const hostKind = projection?.hostKind
+        ?? (projection
+          ? classifyInboxHost({
+              type: projection.notificationType === 'reminder' ? (data.notifications.find(item => item.id === projection.id)?.type ?? projection.notificationType) : (data.notifications.find(item => item.id === projection.id)?.type ?? projection.notificationType),
+              projectId: projection.projectId,
+              issueId: projection.issueId || undefined,
+              sourceType: projection.sourceType,
+              sourceId: projection.sourceId,
+              identifier: projection.identifier,
+            })
+          : 'other')
+
+      if (projection?.identifier === 'pulseSummary') {
+        return { content: <div className="flow-inbox-project-reminder"><h2>Pulse summary</h2><p>{projection.body}</p><a href={`/${data.workspace.urlKey}/pulse`}>Open Pulse</a></div> }
+      }
+
+      if (hostKind === 'project-updates' && project) {
+        const updates = data.projectUpdates?.[project.id] ?? []
+        const rawType = data.notifications.find(item => item.id === projection!.id)?.type ?? ''
+        return {
+          content: (
+            <ProjectUpdatesInboxView
+              project={project}
+              updates={updates}
+              viewer={data.viewer}
+              initialUpdateId={projection!.updateId ?? (projection!.sourceId && updates.some(item => item.id === projection!.sourceId) ? projection!.sourceId : undefined)}
+              promptMode={/prompt|due|reminder/i.test(rawType) || project.health === 'noUpdate'}
+              onOpenProject={() => onOpenProject?.(project)}
+              onCreateUpdate={onCreateProjectUpdate ? input => onCreateProjectUpdate(project.id, input) : undefined}
+            />
+          ),
+        }
+      }
+
+      if (hostKind === 'initiative-updates' && initiative) {
+        const updates = data.initiativeUpdates?.[initiative.id] ?? []
+        const rawType = data.notifications.find(item => item.id === projection!.id)?.type ?? ''
+        return {
+          content: (
+            <InitiativeUpdatesInboxView
+              initiative={initiative}
+              updates={updates}
+              viewer={data.viewer}
+              initialUpdateId={projection!.updateId ?? (projection!.sourceId && updates.some(item => item.id === projection!.sourceId) ? projection!.sourceId : undefined)}
+              promptMode={/prompt|due|reminder/i.test(rawType) || initiative.health === 'noUpdate'}
+              onOpenInitiative={() => onOpenInitiative?.(initiative)}
+              onCreateUpdate={onCreateInitiativeUpdate ? input => onCreateInitiativeUpdate(initiative.id, input) : undefined}
+            />
+          ),
+        }
+      }
+
+      if (hostKind === 'project-overview' && project) {
+        const updates = data.projectUpdates?.[project.id] ?? []
+        return {
+          content: (
+            <ProjectOverviewInboxView
+              project={project}
+              teams={data.teams}
+              latestUpdate={updates[0]}
+              onOpenProject={() => onOpenProject?.(project)}
+            />
+          ),
+        }
+      }
+
+      if (hostKind === 'initiative-overview' && initiative) {
+        const updates = data.initiativeUpdates?.[initiative.id] ?? []
+        return {
+          content: (
+            <InitiativeOverviewInboxView
+              initiative={initiative}
+              teams={data.teams}
+              projects={data.projects}
+              latestUpdate={updates[0]}
+              onOpenInitiative={() => onOpenInitiative?.(initiative)}
+            />
+          ),
+        }
+      }
+
+      if (projection && review && !issue) return { content: <PullRequestInboxView data={data} review={review} onOpen={() => onOpenReview?.(review)} onReload={onReload} onAccessAction={() => onOpenSettings?.()} /> }
+      // Reminder fallback still uses the compact reminder card when host classification did not claim the row.
       if (projection && project && !issue) return { content: <ProjectReminderDetail overdue={project.health==='noUpdate'} project={project} onOpen={() => onOpenProject?.(project)}/> }
       if (!projection || !issue) return { content: <InboxMissingIssue /> }
       return {
@@ -327,45 +427,9 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     // Billing/usage alerts are intentionally excluded from Flow's product
     // surface; they belong to the removed commercial account area.
     if (notification.type === 'usageAlert') return []
-    if (notification.reviewId) {
-      const review = data.reviews.find(item => item.id === notification.reviewId)
-      if (!review || notification.deletedAt || notification.archivedAt) return []
-      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, snoozedUntil: notification.snoozedUntil, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
-    }
-    const issue = notification.issueId ? issues.get(notification.issueId) : undefined
-    const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
-    if (!issue && reminderProject && /project/i.test(notification.type) && !notification.deletedAt && !notification.archivedAt) {
-      return [{
-        id: notification.id,
-        issueId: '',
-        sourceType: 'activity' as const,
-        sourceId: notification.sourceId,
-        notificationType: 'reminder',
-        actorId: notification.actor.id,
-        actor: notification.actor.displayName,
-        actorAvatarUrl: notification.actor.avatarUrl,
-        kind: 'project' as const,
-        identifier: notification.type === 'projectReminder' ? 'Reminder' : 'Project update',
-        title: reminderProject.name,
-        body: notification.type === 'projectReminder' ? `${notification.actor.displayName} set a reminder` : notification.type === 'projectUpdateDueReminder' ? 'A project update is due soon' : 'A project update is overdue',
-        timeLabel: relativeTime(notification.updatedAt),
-        timestamp: notification.updatedAt,
-        read: Boolean(notification.readAt),
-        favorite: notification.favorite,
-        snoozedUntil: notification.snoozedUntil,
-        projectId: reminderProject.id,
-        initiativeIds: data.initiatives.filter(initiative => initiative.projectIds.includes(reminderProject.id)).map(initiative => initiative.id),
-        issuePriority: 0,
-        issueStatusType: 'started' as const,
-      }]
-    }
-    // Notifications can target resources that are not represented in the
-    // issue bootstrap (documents, loops, customer requests, integrations,
-    // and product announcements). Keep them visible instead of silently
-    // dropping them from the inbox; the detail surface can still be opened by
-    // a future resource-specific handler.
-    if (!issue && !reminderProject && !notification.deletedAt && !notification.archivedAt) {
-      const initiative = data.initiatives.find(item => item.id === notification.sourceId)
+    if (notification.type === 'welcomeMessage') {
+      if (notification.deletedAt || notification.archivedAt) return []
+      const content = (data.workspaceSettings.welcomeMessage ?? '').trim()
       return [{
         id: notification.id,
         issueId: '',
@@ -376,9 +440,9 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: 'generic' as const,
-        identifier: notification.type === 'initiativeReminder' ? 'Reminder' : genericNotificationTitle(notification),
-        title: initiative?.name || genericNotificationTitle(notification),
-        body: notification.type==='pulseSummary'?`${notification.occurrenceCount} project and initiative updates`:notification.type==='initiativeReminder'?`${notification.actor.displayName} set a reminder`:withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        identifier: 'Welcome',
+        title: data.workspaceSettings.welcomeMessageTitle?.trim() || `Welcome to ${data.workspace.name}`,
+        body: content.split('\n').find(line => line.trim()) ?? '',
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),
@@ -387,6 +451,102 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         initiativeIds: [],
         issuePriority: 0,
         issueStatusType: 'started' as const,
+      }]
+    }
+    if (notification.reviewId) {
+      const review = data.reviews.find(item => item.id === notification.reviewId)
+      if (!review || notification.deletedAt || notification.archivedAt) return []
+      return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, snoozedUntil: notification.snoozedUntil, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
+    }
+    const issue = notification.issueId ? issues.get(notification.issueId) : undefined
+    const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
+    if (!issue && reminderProject && /project/i.test(notification.type) && !notification.deletedAt && !notification.archivedAt) {
+      const hostKind = classifyInboxHost({
+        type: notification.type,
+        projectId: reminderProject.id,
+        sourceType: notification.sourceType,
+        sourceId: notification.sourceId,
+      })
+      const isUpdateHost = hostKind === 'project-updates' || /update/i.test(notification.type)
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: 'activity' as const,
+        sourceId: notification.sourceId,
+        notificationType: isUpdateHost || notification.type.includes('Update') ? 'project' : 'reminder',
+        actorId: notification.actor.id,
+        actor: notification.actor.displayName,
+        actorAvatarUrl: notification.actor.avatarUrl,
+        kind: 'project' as const,
+        identifier: notification.type === 'projectReminder' ? 'Reminder' : 'Project update',
+        title: reminderProject.name,
+        body: notification.type === 'projectReminder'
+          ? `${notification.actor.displayName} set a reminder`
+          : notification.type === 'projectUpdateDueReminder'
+            ? 'A project update is due soon'
+            : /created|comment|mention|prompt/i.test(notification.type)
+              ? `${notification.actor.displayName} shared a project update`
+              : 'A project update is overdue',
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        projectId: reminderProject.id,
+        initiativeIds: data.initiatives.filter(initiative => initiative.projectIds.includes(reminderProject.id)).map(initiative => initiative.id),
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+        updateId: notification.sourceType === 'projectUpdate' ? notification.sourceId : undefined,
+        hostKind: isUpdateHost ? 'project-updates' : hostKind === 'project-overview' ? 'project-overview' : 'project-updates',
+      }]
+    }
+    // Notifications can target resources that are not represented in the
+    // issue bootstrap (documents, loops, customer requests, integrations,
+    // and product announcements). Keep them visible instead of silently
+    // dropping them from the inbox; the detail surface can still be opened by
+    // a future resource-specific handler.
+    if (!issue && !reminderProject && !notification.deletedAt && !notification.archivedAt) {
+      const initiative = data.initiatives.find(item => item.id === notification.sourceId)
+        ?? (notification.sourceType === 'initiative' ? data.initiatives.find(item => item.id === notification.sourceId) : undefined)
+      const hostKind = classifyInboxHost({
+        type: notification.type,
+        sourceType: notification.sourceType,
+        sourceId: notification.sourceId,
+        identifier: notification.type === 'pulseSummary' ? 'pulseSummary' : undefined,
+      })
+      const isInitiative = Boolean(initiative) || /initiative/i.test(notification.type) || notification.sourceType === 'initiative'
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: 'activity' as const,
+        sourceId: notification.sourceId,
+        notificationType: inboxNotificationCategory(notification),
+        actorId: notification.actor.id,
+        actor: notification.actor.displayName,
+        actorAvatarUrl: notification.actor.avatarUrl,
+        kind: isInitiative ? 'project' as const : 'generic' as const,
+        identifier: notification.type === 'initiativeReminder' ? 'Reminder' : notification.type === 'pulseSummary' ? 'pulseSummary' : genericNotificationTitle(notification),
+        title: initiative?.name || genericNotificationTitle(notification),
+        body: notification.type === 'pulseSummary'
+          ? `${notification.occurrenceCount} project and initiative updates`
+          : notification.type === 'initiativeReminder'
+            ? `${notification.actor.displayName} set a reminder`
+            : /initiativeUpdate/i.test(notification.type)
+              ? `${notification.actor.displayName} shared an initiative update`
+              : withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        initiativeId: initiative?.id,
+        initiativeIds: initiative ? [initiative.id] : [],
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+        updateId: notification.sourceType === 'initiativeUpdate' ? notification.sourceId : undefined,
+        hostKind: isInitiative
+          ? (hostKind === 'initiative-overview' ? 'initiative-overview' : 'initiative-updates')
+          : hostKind,
       }]
     }
     if (!issue || issue.archivedAt || notification.deletedAt || notification.archivedAt) return []
@@ -475,9 +635,6 @@ function InboxMissingIssue() {
   return <div className="flow-inbox-detail-state flow-inbox-detail-state--error" role="alert"><strong>Issue is no longer available</strong></div>
 }
 
-function InboxReviewDetail({ review, onOpen }: { review: CodeReview; onOpen: () => void }) {
-  return <div className="flow-inbox-review-detail"><header><span className={`flow-inbox-review-provider ${review.provider}`}>{review.provider === 'github' ? 'GH' : 'GL'}</span><div><small>{review.provider === 'github' ? 'GitHub pull request' : 'GitLab merge request'}</small><h2>{review.title}</h2></div></header><p>{review.author.displayName} · {review.repositoryName || 'External repository'} #{review.number}</p><dl><div><dt>Status</dt><dd>{review.status}</dd></div><div><dt>Reviewers</dt><dd>{review.reviewerIds.length || 'None'}</dd></div><div><dt>Checks</dt><dd>{review.checks.length ? review.checks.map(check => check.status).join(', ') : 'No checks reported'}</dd></div></dl><button type="button" onClick={onOpen}>Open review</button></div>
-}
 
 function ProjectReminderDetail({ project, onOpen, overdue }: { project: Project; onOpen: () => void; overdue: boolean }) {
   return <div className="flow-inbox-project-reminder"><header><span style={{ background: project.color }}/><div><small>Project update reminder</small><h2>{project.name}</h2></div></header><p>{overdue?'This project is missing its scheduled update.':'The next project update is due soon.'} Post an update to reset the cadence and notify subscribers.</p><dl><div><dt>Health</dt><dd>{overdue?'No update':project.health.replace(/([A-Z])/g,' $1')}</dd></div><div><dt>Status</dt><dd>{project.status.name}</dd></div>{project.targetDate&&<div><dt>Target date</dt><dd>{project.targetDate}</dd></div>}</dl><button type="button" onClick={onOpen}>Open project</button></div>
@@ -514,13 +671,16 @@ function notificationVisibleForDisplay(notification: InboxProjection, display: I
   return display.showSnoozed || !notification.snoozedUntil || new Date(notification.snoozedUntil).getTime() <= Date.now()
 }
 
-/** Keep the two inbox scopes deterministic until user-specific rules are available. */
+/** Priority membership follows LS-0715 rule groups when Priority inbox is on. */
 function matchesInboxTab(notification: InboxProjection, tab: InboxTab) {
   if (tab === 'all') return true
-  const priorityTypes = ['assignment', 'mention', 'comment', 'review', 'reminder', 'triage', 'project', 'status']
+  const rules = readPriorityInboxRuleState()
   const otherTypes = ['reaction', 'reactions', 'subscription', 'subscriptions', 'pulse', 'apps', 'integration', 'customerRequest', 'customerRequests', 'document', 'documents', 'loop', 'loops', 'system']
-  const priority = priorityTypes.includes(notification.notificationType)
-    || (!otherTypes.includes(notification.notificationType) && ['assignment', 'mention', 'comment', 'project'].includes(notification.kind))
+  const priority = notificationTypeMatchesPriorityRules(notification.notificationType, notification.kind, rules)
+    || (!otherTypes.includes(notification.notificationType)
+      && !notificationTypeMatchesPriorityRules(notification.notificationType, notification.kind, rules)
+      && ['assignment', 'mention', 'comment', 'project'].includes(notification.kind)
+      && (rules['assigned-to-you'] || rules['mentions'] || rules['replies'] || rules['project-updates']))
   return tab === 'priority' ? priority : !priority
 }
 

@@ -3,6 +3,7 @@ import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { toggleFavoriteFor } from '@/lib/favorites';
 import { customerRevenueLabel, formatCustomerRevenue } from '@/lib/customer-settings';
 import {
+  Archive,
   Bell,
   Check,
   Copy,
@@ -14,6 +15,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { MyIssuesList } from "@/components/my-issues/my-issues-list";
+import { createIssueDisplayOptions } from "@/components/my-issues/my-issues-display-defaults";
+import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
+import { buildIssueGroups } from "@/components/issue-explorer/issue-grouping";
 import { toast } from "sonner";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -24,6 +29,7 @@ import {
   createCustomerRequest,
   createIssue,
   deleteCustomer,
+  archiveCustomerNeed,
   deleteCustomerRequest,
   deleteCustomerRequestAttachment,
   removeSubscription,
@@ -50,8 +56,13 @@ export function CustomerDetailPage({
   const [adding, setAdding] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const requests = data.customerRequests.filter(
+  const [showArchivedNeeds, setShowArchivedNeeds] = useState(false);
+  const allRequests = data.customerRequests.filter(
     (item) => item.customerId === customer.id,
+  );
+  const archivedCustomerNeedsCount = allRequests.filter((item) => item.archivedAt).length;
+  const requests = allRequests.filter(
+    (item) => showArchivedNeeds || !item.archivedAt,
   );
   const favorite = data.favorites.some(
     (item) =>
@@ -253,7 +264,7 @@ export function CustomerDetailPage({
           </DropdownMenu.Root></>}
           {customer.size != null && <><label>Size</label><span>{customer.size}</span></>}
           {customer.annualRevenue != null && <><label>{customerRevenueLabel(data.workspaceSettings.featureSettings)}</label><span>{formatCustomerRevenue(customer.annualRevenue,data.workspaceSettings.featureSettings)}</span></>}
-          <label>Requests</label><span>{requests.length}</span>
+          <label>Requests</label><span>{allRequests.filter((item) => !item.archivedAt).length}</span>
           {customer.ownerId && (
             <>
               <label>Owner</label>
@@ -267,9 +278,22 @@ export function CustomerDetailPage({
             </>
           )}
         </section>
+        <CustomerIssues data={data} customer={customer} onOpenIssue={id => onOpenResource("issue", id)} />
         <div className="customer-requests-heading">
           <span>Requests</span>
           <small>{requests.length}</small>
+          {archivedCustomerNeedsCount > 0 && (
+            <button
+              aria-pressed={showArchivedNeeds}
+              className="customer-show-archived"
+              type="button"
+              onClick={() => setShowArchivedNeeds((value) => !value)}
+            >
+              {showArchivedNeeds
+                ? "Hide archived"
+                : `Show archived (${archivedCustomerNeedsCount})`}
+            </button>
+          )}
           <button onClick={() => setAdding(true)}>
             <Plus size={13} />
             Add request
@@ -381,12 +405,14 @@ function CustomerRequestRow({
     }
   };
   return (
-    <div className="customer-request-row">
+    <div className={`customer-request-row${request.archivedAt ? " is-archived" : ""}`}>
       <div>
         <strong>{request.body}</strong>
         <small>
           {request.creator.displayName} ·{" "}
           {new Date(request.createdAt).toLocaleDateString()} · {request.source}
+          {request.priority ? " · Important" : ""}
+          {request.archivedAt ? " · Archived" : ""}
         </small>
         {issue && (
           <button onClick={() => onOpenResource("issue", issue.id)}>
@@ -439,6 +465,14 @@ function CustomerRequestRow({
             <DropdownMenu.Item onSelect={() => fileRef.current?.click()}>
               <Paperclip size={14} />
               Attach file
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              onSelect={() =>
+                void archiveCustomerNeed(request.id, !request.archivedAt).then(onReload)
+              }
+            >
+              <Archive size={14} />
+              {request.archivedAt ? "Unarchive" : "Archive"}
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Item
@@ -574,5 +608,24 @@ function CustomerRequestComposer({
         ]}/>
       </label>
     </div>
+  );
+}
+
+/** Linear customer view: issues linked through this customer's requests, on the shared issue row. */
+function CustomerIssues({ data, customer, onOpenIssue }: { data: BootstrapData; customer: Customer; onOpenIssue: (id: string) => void }) {
+  const [grouping, setGrouping] = useState<"status" | "priority" | "assignee" | "none">("status");
+  const issueIds = new Set(data.customerRequests.filter((request) => request.customerId === customer.id && request.issueId && !request.archivedAt).map((request) => request.issueId!));
+  const rows = data.issues.filter((issue) => issueIds.has(issue.id) && !issue.archivedAt).map((issue) => issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data));
+  if (!rows.length) return null;
+  const groups = buildIssueGroups(rows, createIssueDisplayOptions({ grouping, completedWindow: "all" }), { data });
+  return (
+    <section className="customer-issues" aria-label="Customer issues">
+      <div className="customer-requests-heading">
+        <span>Issues</span>
+        <small>{rows.length}</small>
+        <SelectControl label="Grouping" value={grouping} onChange={(value) => setGrouping(value as typeof grouping)} options={[{ value: "status", label: "Status" }, { value: "priority", label: "Priority" }, { value: "assignee", label: "Assignee" }, { value: "none", label: "No grouping" }]} />
+      </div>
+      <MyIssuesList groups={groups} displayProperties={new Set(["id", "status", "priority", "labels", "assignee", "updated"])} onOpenIssue={(row) => onOpenIssue(row.id)} />
+    </section>
   );
 }

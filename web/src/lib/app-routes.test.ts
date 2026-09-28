@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   initiativePath,
+  settingsPath,
   issuePath,
   automationNewPath,
   automationPath,
@@ -8,12 +9,15 @@ import {
   apiKeyPath,
   apiKeyEditPath,
   diaryPath,
+  welcomePath,
+  meetingsPath,
   inboxPath,
   labelPath,
   meetingPath,
   newAPIKeyPath,
   newSigningKeyPath,
   parseAppRoute,
+  releasePipelinePath,
   projectPath,
   projectSavedViewEditPath,
   projectSavedViewPath,
@@ -60,11 +64,40 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       teamKey: "ENG",
     });
+    expect(parseAppRoute("/acme/settings/authentication")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "authentication",
+    });
     expect(parseAppRoute("/acme/settings/account/preferences")).toEqual({
       kind: "settings",
       workspaceSlug: "acme",
       page: "preferences",
     });
+    expect(parseAppRoute("/acme/settings/account/shortcuts")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "shortcuts",
+    });
+
+    expect(parseAppRoute("/acme/settings/asks")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+    });
+    expect(parseAppRoute("/acme/settings/asks/email-intake/new")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksEmailIntakeMode: "new",
+    });
+    expect(parseAppRoute("/acme/settings/asks/slack-conn-1")).toEqual({
+      kind: "settings",
+      workspaceSlug: "acme",
+      page: "asks",
+      asksIntegrationId: "slack-conn-1",
+    });
+
     expect(
       parseAppRoute("/acme/settings/account/security/api-keys/new"),
     ).toEqual({
@@ -176,6 +209,8 @@ describe("application routes", () => {
 
   it("generates canonical secondary routes", () => {
     expect(diaryPath("acme")).toBe("/acme/diary");
+    expect(welcomePath("acme")).toBe("/acme/welcome");
+    expect(meetingsPath("acme")).toBe("/acme/meetings");
     expect(meetingPath("acme", "meeting 1")).toBe(
       "/acme/meeting/meeting%201",
     );
@@ -221,6 +256,14 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       meetingId: "meeting-1",
     });
+    expect(parseAppRoute("/acme/welcome")).toEqual({
+      kind: "welcome",
+      workspaceSlug: "acme",
+    });
+    expect(parseAppRoute("/acme/meetings")).toEqual({
+      kind: "meetings",
+      workspaceSlug: "acme",
+    });
     expect(parseAppRoute("/acme/automations/new")).toEqual({
       kind: "automation-new",
       workspaceSlug: "acme",
@@ -253,4 +296,54 @@ describe("application routes", () => {
       resourceType: "issue",
     });
   });
+  it("parses pipeline deleted releases and archive tabs", () => {
+    expect(parseAppRoute("/acme/pipeline/app/releases/deleted")).toEqual({
+      kind: "release-pipeline",
+      workspaceSlug: "acme",
+      pipelineSlug: "app",
+      tab: "deleted",
+    });
+    expect(parseAppRoute("/acme/pipeline/app/releases/archived")).toEqual({
+      kind: "release-pipeline",
+      workspaceSlug: "acme",
+      pipelineSlug: "app",
+      tab: "archive",
+    });
+    expect(releasePipelinePath("acme", "app", "deleted")).toBe(
+      "/acme/pipeline/app/releases/deleted",
+    );
+  });
+
 });
+
+describe('settings aliases and deep links', () => {
+  it('maps reference settings URLs onto Flow pages', () => {
+    expect(parseAppRoute('/acme/settings/ai/coding-sessions')).toMatchObject({ kind: 'settings', page: 'coding-sessions' })
+    expect(parseAppRoute('/acme/settings/ai/coding-sessions/environments')).toMatchObject({ kind: 'settings', page: 'coding-environments' })
+    expect(parseAppRoute('/acme/settings/skill/skill_1/edit')).toMatchObject({ kind: 'settings', page: 'agents', agentSkillMode: 'edit', agentSkillId: 'skill_1' })
+    expect(parseAppRoute('/acme/settings/workspace/welcome-message')).toMatchObject({ kind: 'settings', page: 'workspace', workspaceView: 'welcome-message' })
+    expect(parseAppRoute('/acme/settings/asks/email-intake/addr-1/edit')).toMatchObject({ kind: 'settings', page: 'asks', asksEmailIntakeId: 'addr-1' })
+    expect(parseAppRoute('/acme/settings/asks/email-intake/new')).toMatchObject({ page: 'asks', asksEmailIntakeMode: 'new' })
+    expect(parseAppRoute('/acme/settings/asks/web-forms/form-1/pages/new')).toEqual({ kind: 'settings', workspaceSlug: 'acme', page: 'asks' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/retire')).toMatchObject({ page: 'team', teamKey: 'ENG', teamSection: 'overview', teamSubPath: 'retire' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/triage/memories')).toMatchObject({ page: 'team', teamSection: 'triage' })
+    expect(settingsPath('acme', 'team', 'ENG', 'overview', 'set-parent')).toBe('/acme/settings/teams/ENG/set-parent')
+    expect(parseAppRoute('/acme/settings/account/code-and-reviews/coding-tools')).toMatchObject({ kind: 'settings', page: 'code-and-reviews', accountView: 'coding-tools' })
+    expect(parseAppRoute('/acme/settings/labels')).toMatchObject({ kind: 'settings', page: 'issue-labels' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/labels')).toMatchObject({ kind: 'settings', page: 'team', teamKey: 'ENG', teamSection: 'issue-labels' })
+  })
+
+  it('parses API, webhook, loops, and notification sub-pages', () => {
+    expect(parseAppRoute('/acme/settings/api/keys')).toMatchObject({ kind: 'settings', page: 'api', apiView: 'keys' })
+    expect(parseAppRoute('/acme/settings/api/webhooks/new')).toMatchObject({ kind: 'settings', page: 'api', webhookId: 'new' })
+    expect(parseAppRoute('/acme/settings/api/webhooks/hook_1/edit')).toMatchObject({ kind: 'settings', page: 'api', webhookId: 'hook_1' })
+    expect(parseAppRoute('/acme/settings/loops')).toMatchObject({ kind: 'settings', page: 'loops' })
+    expect(parseAppRoute('/acme/settings/account/notifications/priority-filter')).toMatchObject({ kind: 'settings', page: 'notifications', notificationChannel: 'priority-filter' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/project-labels')).toMatchObject({ kind: 'settings', page: 'team', teamSection: 'project-labels' })
+    expect(settingsPath('acme', 'coding-sessions')).toBe('/acme/settings/ai/coding-sessions')
+    expect(parseAppRoute('/acme/settings/teams/ENG/templates/issue/new')).toMatchObject({ page: 'team', teamSection: 'templates', teamSubPath: 'issue/new' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/templates/project/tpl_1/edit')).toMatchObject({ teamSection: 'templates', teamSubPath: 'project/tpl_1/edit' })
+    expect(parseAppRoute('/acme/settings/teams/ENG/recurring-issues/new')).toMatchObject({ teamSection: 'recurring-issues', teamSubPath: 'new' })
+    expect(settingsPath('acme', 'team', 'ENG', 'templates', 'issue/new')).toBe('/acme/settings/teams/ENG/templates/issue/new')
+  })
+})

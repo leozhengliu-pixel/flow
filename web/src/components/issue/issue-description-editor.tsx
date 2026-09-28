@@ -12,7 +12,7 @@ import type { EditorView } from '@tiptap/pm/view'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { descriptionDocumentJSON, parseDescriptionContent, sameDocument, serializeDescription, type DescriptionSnapshot } from './editor/editor-content'
 import { prosemirrorJSONToYXmlFragment, ySyncPluginKey } from '@tiptap/y-tiptap'
 import { applyUpdate, Doc as YDoc } from 'yjs'
@@ -26,10 +26,14 @@ import { DescriptionCallout } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
 import { MentionExtension } from './editor/mention-extension'
+import { createMentionHydrationExtension } from './editor/mention-hydration'
+import { EntityStoreContext } from '@/store'
+import { InlineCommentMark } from './editor/inline-comment-mark'
 import { MentionMenu } from './editor/mention-menu'
 import { HeadingActions } from './editor/heading-actions'
 import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
+import { CollabEditing } from '@/components/editor/collab-editing'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
 import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRecovery, readDescriptionRecovery, writeDescriptionRecovery } from './editor/description-recovery'
@@ -142,6 +146,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     persistTimerRef.current = window.setTimeout(() => void persistRef.current(), 1_500)
   }
 
+  const workspaceStore = useContext(EntityStoreContext)
+  const mentionHydration = createMentionHydrationExtension(() => workspaceStore)
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -158,10 +164,13 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       DescriptionCallout,
       DescriptionDiagram,
       MentionExtension,
+      mentionHydration,
+      InlineCommentMark,
       SlashCommandExtension,
       ...(collaborationSession ? [
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
         CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { ...collaboration.viewer, name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),
+        CollabEditing,
       ] : []),
     ],
     content: collaborationSession ? undefined : initial.content,
@@ -525,6 +534,7 @@ function schemaExtensions() {
     DescriptionCallout,
     DescriptionDiagram,
     MentionExtension,
+    InlineCommentMark,
     SlashCommandExtension,
   ]
 }

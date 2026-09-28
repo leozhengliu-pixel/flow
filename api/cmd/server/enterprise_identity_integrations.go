@@ -405,20 +405,24 @@ func (s *server) finishEnterpriseOIDC(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "could not save authentication context")
 		return
 	}
-	data, _ := s.store.WorkspaceMetadata(workspaceKey)
+	workspaceID, err := s.store.WorkspaceIDForKey(ctx, workspaceKey)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
 	if autoProvision {
-		if err = s.store.EnsureWorkspaceMembership(ctx, data.Workspace.ID, session.User.ID); err != nil {
+		if err = s.store.EnsureWorkspaceMembership(ctx, workspaceID, session.User.ID); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not grant workspace access")
 			return
 		}
 	} else {
-		if _, status, membershipErr := s.store.WorkspaceRole(ctx, data.Workspace.ID, session.User.ID); membershipErr != nil || status != "active" {
+		if _, status, membershipErr := s.store.WorkspaceRole(ctx, workspaceID, session.User.ID); membershipErr != nil || status != "active" {
 			writeError(w, http.StatusForbidden, "workspace invitation required")
 			return
 		}
 	}
 	if role := identityRole(provider, claims); role != "" {
-		if err := s.store.UpdateMemberRole(ctx, data.Workspace.ID, session.User.ID, role); err != nil {
+		if err := s.store.UpdateMemberRole(ctx, workspaceID, session.User.ID, role); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not apply identity role")
 			return
 		}

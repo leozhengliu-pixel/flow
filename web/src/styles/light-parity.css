@@ -1,0 +1,228 @@
+/*
+ * Light-mode parity for shared components, matched to the reference app's
+ * measured light theme. Loaded last; every rule is scoped to the light theme,
+ * so dark mode is untouched. Values come from the --lx-* tokens.
+ */
+
+/* ── Menus: dropdown, context and row action menus ─────────────────────── */
+html:root[data-theme="light"] body .menu-content {
+  min-width: 160px;
+  padding: 6px 0;
+  border: .5px solid var(--lx-popover-border);
+  border-radius: 12px;
+  background: var(--lx-surface);
+  box-shadow: var(--lx-popover-shadow);
+}
+html:root[data-theme="light"] body .menu-content .menu-item {
+  position: relative;
+  height: 32px;
+  margin: 0 6px;
+  gap: 8px;
+  padding: 0 12px 0 8px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--lx-item-text);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root[data-theme="light"] body .menu-content .menu-item[data-highlighted],
+html:root[data-theme="light"] body .menu-content .menu-item[data-state="open"] {
+  background: var(--lx-item-hover);
+}
+html:root[data-theme="light"] body .menu-content .menu-item > svg:first-child {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  color: var(--lx-item-icon);
+}
+/* Destructive items keep the regular text color, like the reference menus. */
+html:root[data-theme="light"] body .menu-content .menu-item.danger,
+html:root[data-theme="light"] body .menu-content .menu-item.danger-item {
+  color: var(--lx-item-text) !important;
+}
+html:root[data-theme="light"] body .menu-content .menu-separator {
+  position: relative;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+html:root[data-theme="light"] body .menu-content .menu-separator:after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 0;
+  background: transparent;
+  border-bottom: .5px solid var(--lx-popover-border);
+}
+html:root[data-theme="light"] body .menu-content kbd,
+html:root[data-theme="light"] body .menu-content .menu-shortcut {
+  color: var(--lx-item-icon);
+  font-size: 11px;
+}
+
+/* ── Select popovers (settings selects, filters) ───────────────────────── */
+html:root[data-theme="light"] body .settings-select-menu,
+html:root[data-theme="light"] body .personal-select-menu,
+html:root[data-theme="light"] body .feature-select-menu,
+html:root[data-theme="light"] body .settings-scope-menu {
+  padding: 4px 0;
+  border: 0;
+  border-radius: 12px;
+  background: var(--lx-surface);
+  box-shadow: 0 0 0 .5px var(--lx-select-ring), var(--lx-popover-shadow);
+}
+html:root[data-theme="light"] body .settings-select-menu .menu-item,
+html:root[data-theme="light"] body .personal-select-menu .menu-item,
+html:root[data-theme="light"] body .feature-select-menu .menu-item,
+html:root[data-theme="light"] body .settings-scope-menu .menu-item {
+  position: relative;
+  height: 32px;
+  margin: 0;
+  padding: 0 35px 0 12px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--lx-item-text);
+  font-size: 13px;
+  font-weight: 400;
+}
+html:root[data-theme="light"] body .settings-select-menu .menu-item:before,
+html:root[data-theme="light"] body .personal-select-menu .menu-item:before,
+html:root[data-theme="light"] body .feature-select-menu .menu-item:before,
+html:root[data-theme="light"] body .settings-scope-menu .menu-item:before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 4px;
+  border-radius: 8px;
+  background: transparent;
+}
+html:root[data-theme="light"] body .settings-select-menu .menu-item[data-highlighted],
+html:root[data-theme="light"] body .personal-select-menu .menu-item[data-highlighted],
+html:root[data-theme="light"] body .feature-select-menu .menu-item[data-highlighted],
+html:root[data-theme="light"] body .settings-scope-menu .menu-item[data-highlighted] {
+  background: transparent;
+}
+html:root[data-theme="light"] body .settings-select-menu .menu-item[data-highlighted]:before,
+html:root[data-theme="light"] body .personal-select-menu .menu-item[data-highlighted]:before,
+html:root[data-theme="light"] body .feature-select-menu .menu-item[data-highlighted]:before,
+html:root[data-theme="light"] body .settings-scope-menu .menu-item[data-highlighted]:before {
+  background: var(--lx-item-hover);
+}
+html:root[data-theme="light"] body .settings-select-menu,
+html:root[data-theme="light"] body .personal-select-menu,
+html:root[data-theme="light"] body .feature-select-menu,
+html:root[data-theme="light"] body .settings-scope-menu {
+  isolation: isolate;
+}
+
+/* Select popovers pad their own viewport. */
+html:root[data-theme="light"] body .settings-select-menu,
+html:root[data-theme="light"] body .personal-select-menu {
+  padding: 0;
+}
+html:root[data-theme="light"] body .settings-select-option {
+  color: var(--lx-item-text);
+}
+html:root[data-theme="light"] body .settings-select-option[data-highlighted]:before {
+  background: var(--lx-item-hover);
+}
+
+/* ── Dialogs ───────────────────────────────────────────────────────────── */
+html:root[data-theme="light"] body .dialog-content {
+  border: .5px solid var(--lx-popover-border);
+  border-radius: 12px;
+  background: var(--lx-surface);
+  box-shadow: var(--lx-dialog-shadow);
+}
+html:root[data-theme="light"] body .dialog-content > h2,
+html:root[data-theme="light"] body .dialog-content .dialog-title {
+  color: var(--lx-title);
+  font-size: 15px;
+  font-weight: 450;
+}
+html:root[data-theme="light"] body .dialog-content textarea,
+html:root[data-theme="light"] body .dialog-content input:not([type="checkbox"]):not([type="radio"]):not([type="color"]) {
+  border: .5px solid var(--lx-field-border);
+  border-radius: 8px;
+  background: var(--lx-surface);
+}
+
+/* ── Tooltips ──────────────────────────────────────────────────────────── */
+html:root[data-theme="light"] body .flow-tooltip-content {
+  height: 28px;
+  border: .5px solid var(--lx-popover-border);
+  border-radius: 8px;
+  background: var(--lx-surface);
+  box-shadow: var(--lx-small-shadow);
+  color: var(--lx-item-text);
+  font: 450 11px/16.5px var(--font);
+}
+
+/* ── Buttons, select triggers and search fields ────────────────────────── */
+html:root[data-theme="light"] body .settings-action:not(.danger):not(.primary),
+html:root[data-theme="light"] body .personal-action:not(.danger):not(.primary),
+html:root[data-theme="light"] body .feature-button:not(.danger):not(.primary) {
+  border: .5px solid transparent;
+  background: var(--lx-control);
+  box-shadow: var(--lx-control-ring);
+  color: var(--lx-control-text);
+}
+html:root[data-theme="light"] body .settings-action:not(.danger):not(.primary):hover:not(:disabled),
+html:root[data-theme="light"] body .personal-action:not(.danger):not(.primary):hover:not(:disabled),
+html:root[data-theme="light"] body .feature-button:not(.danger):not(.primary):hover:not(:disabled) {
+  background: var(--lx-control-hover);
+}
+html:root[data-theme="light"] body .settings-action.primary,
+html:root[data-theme="light"] body .personal-action.primary,
+html:root[data-theme="light"] body .feature-button.primary {
+  border: .5px solid transparent;
+  box-shadow: var(--lx-primary-shadow);
+}
+/* Icon-only and row-level buttons stay flat. */
+html:root[data-theme="light"] body .settings-row--action .settings-action:not(.primary),
+html:root[data-theme="light"] body .feature-empty .feature-button[aria-label],
+html:root[data-theme="light"] body .feature-list-title .feature-button[aria-label],
+html:root[data-theme="light"] body .feature-domain-row .feature-button[aria-label] {
+  box-shadow: none;
+}
+html:root[data-theme="light"] body .settings-select:not(.settings-select--bare),
+html:root[data-theme="light"] body .settings-members-toolbar > .settings-select {
+  height: 32px;
+  border: .5px solid transparent;
+  border-radius: 8px;
+  background: var(--lx-control);
+  box-shadow: var(--lx-control-ring);
+  color: var(--lx-control-text);
+}
+html:root[data-theme="light"] body .settings-members-toolbar > label,
+html:root[data-theme="light"] body .settings-list-toolbar {
+  border: .5px solid var(--lx-input-border);
+  border-radius: 8px;
+  background: var(--lx-control);
+}
+html:root[data-theme="light"] body .settings-members-toolbar input,
+html:root[data-theme="light"] body .settings-list-toolbar input {
+  color: var(--lx-input-text);
+  font-weight: 500;
+}
+
+/* Menus show keyboard focus with the highlight fill, not an outline. */
+html:root[data-theme="light"] body .menu-content .menu-item:focus-visible,
+html:root[data-theme="light"] body .settings-select-option:focus-visible {
+  outline: 0;
+}
+
+/* Table group rows (Teams, Members) sit on a gray bar. */
+html:root[data-theme="light"] body .settings-members-group,
+html:root[data-theme="light"] body .settings-app .settings-main .settings-members-page .settings-members-group {
+  background: var(--bg-subtle);
+}
+/* The labels page filter is a borderless pill on the panel color. */
+html:root[data-theme="light"] body .settings-list-toolbar.domain-labels-search {
+  border-color: transparent;
+  border-radius: 999px;
+  background: transparent;
+}

@@ -15,3 +15,8 @@
 :root[data-theme="light"] .searchable-menu-create{color:var(--theme-text-primary)}
 :root[data-theme="light"] .searchable-menu-create svg{color:var(--theme-text-tertiary)}
 :root[data-theme="light"] .searchable-menu-create strong{color:var(--theme-text-primary)}
+/* Reference highlight: a rounded row inset 6px from the menu edges, in both themes. */
+.searchable-menu-search input::placeholder{color:var(--pk-faint)}
+html:root .searchable-menu-scroll [role=menuitem]{position:relative;isolation:isolate}
+html:root .searchable-menu-scroll [role=menuitem][data-menu-active]{background:transparent;color:var(--pk-text)}
+html:root .searchable-menu-scroll [role=menuitem][data-menu-active]::before{content:"";position:absolute;inset:0 6px;z-index:-1;border-radius:8px;background:var(--pk-hover)}

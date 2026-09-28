@@ -68,6 +68,13 @@ it("localizes settings navigation and keeps the active route announced", () => {
   expect(screen.getByPlaceholderText("搜索…")).toBeVisible();
 });
 
+it('does not advertise the retired shortcuts settings page', () => {
+  const input = { ...props(), page: 'shortcuts' as const };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(screen.getByRole('status')).toHaveTextContent('找不到你要访问的页面');
+  expect(screen.queryByRole('button', { name: '快捷键' })).toBeNull();
+});
+
 it("filters settings using translated labels", async () => {
   const user = userEvent.setup();
   render(

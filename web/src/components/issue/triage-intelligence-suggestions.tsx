@@ -22,10 +22,16 @@ export function TriageIntelligenceSuggestions({
   issue,
   data,
   onIssueUpdated,
+  maxSuggestions,
+  isVisibleInTriageAccept,
 }: {
   issue: Issue
   data: BootstrapData
   onIssueUpdated?: (issue: Issue) => void
+  /** Cap property suggestion chips (Fast accept uses 3). */
+  maxSuggestions?: number
+  /** When true, marks the panel as visible in triage accept host. */
+  isVisibleInTriageAccept?: boolean
 }) {
   const [removed, setRemoved] = useState<Set<string>>(() => new Set())
   const [remoteSuggestions, setRemoteSuggestions] = useState<IssueSuggestion[]>()
@@ -65,6 +71,8 @@ export function TriageIntelligenceSuggestions({
     (item): item is PropertySuggestion =>
       item.type === 'assignee' || item.type === 'project' || item.type === 'label' || item.type === 'team',
   )
+  const visiblePropertySuggestions =
+    typeof maxSuggestions === 'number' ? propertySuggestions.slice(0, maxSuggestions) : propertySuggestions
   const duplicates = suggestions.filter(item => item.type === 'similarIssue')
   const related = suggestions.filter(item => item.type === 'relatedIssue')
 
@@ -107,7 +115,7 @@ export function TriageIntelligenceSuggestions({
   if (!thinking && !suggestions.length) return null
 
   return (
-    <section className="triage-intelligence-panel" aria-label="Triage Intelligence">
+    <section className="triage-intelligence-panel" aria-label="Triage Intelligence" data-triage-accept={isVisibleInTriageAccept || undefined}>
       <header>
         <span className="triage-intelligence-title">
           <Sparkles size={14} />
@@ -130,11 +138,11 @@ export function TriageIntelligenceSuggestions({
         </div>
       ) : (
         <div className="triage-intelligence-body">
-          {propertySuggestions.length > 0 && (
+          {visiblePropertySuggestions.length > 0 && (
             <div className="triage-intelligence-row">
               <span className="triage-intelligence-row-label">Suggestions</span>
               <div className="triage-intelligence-chips">
-                {propertySuggestions.map(suggestion => (
+                {visiblePropertySuggestions.map(suggestion => (
                   <PropertySuggestionChip
                     key={suggestion.id}
                     suggestion={suggestion}

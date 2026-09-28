@@ -24,6 +24,7 @@ func TestDetailMutationsRespectFeatureFlags(t *testing.T) {
 	}
 	issue := data.Issues[0]
 	cycle := data.Cycles[0].ID
+	issue.CycleID = nil
 	data.CycleSettings[issue.Team.ID] = domain.CycleSettings{Enabled: false}
 	if _, err = applyUpdate(&data, &issue, domain.IssueUpdateInput{CycleID: &cycle}); err == nil {
 		t.Fatal("disabled cycle accepted")

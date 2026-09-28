@@ -83,6 +83,7 @@ export function applyFavoriteDelta(data: BootstrapData, delta: { resourceType: s
   else if (resourceType === 'initiative') next.initiatives = data.initiatives.map(item => item.id === resourceId ? { ...item, favorite: marked } : item)
   else if (resourceType === 'view') next.savedViews = data.savedViews.map(item => item.id === resourceId ? { ...item, favorite: marked } : item)
   else if (resourceType === 'review') next.reviews = (data.reviews ?? []).map(item => item.id === resourceId || item.slugId === resourceId ? { ...item, favorite: marked } : item)
+  else if (resourceType === 'label') next.labels = data.labels.map(item => item.id === resourceId ? { ...item, favorite: marked } : item)
   return next
 }
 

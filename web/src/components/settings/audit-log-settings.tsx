@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { BootstrapData } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
+import { AuditLogStreaming } from "./audit-log-streaming";
 import { Toggle } from "@/components/ui/toggle";
 import {
   DropdownMenu,
@@ -51,6 +52,8 @@ export function AuditLogSettings({ data }: { data: BootstrapData }) {
           date-range queries.
         </p>
       </div>
+      {["admin", "owner"].includes(data.viewerRole) && <AuditLogStreaming />}
+      <h3 className="settings-audit-recent">Recent events</h3>
       <div className="settings-audit-controls">
         <label>
           <Search />

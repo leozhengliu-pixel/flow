@@ -16,6 +16,10 @@ import { createProject as createProjectRequest, createProjectMilestone as create
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, IssueUpdateInput, Presence, Project, ProjectMilestone } from '@/types/flow'
 import type { ProjectCreateInput } from '@/components/projects-page/projects-page'
+import {
+  relevanceInputFromProject,
+  sortProjectsByRelevance,
+} from '@/components/projects-page/projects-relevance'
 
 import './issue-project-picker.css'
 
@@ -37,7 +41,12 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
   const [createdMilestones, setCreatedMilestones] = useState<Record<string, ProjectMilestone[]>>({})
   const allProjects = [...createdProjects, ...data.projects.filter(item => !createdProjects.some(created => created.id === item.id))]
   const project = allProjects.find(item => item.id === issue.project?.id)
-  const projects = allProjects.filter(item => !item.archivedAt && (!item.teamIds.length || item.teamIds.includes(issue.team.id)))
+  const projects = sortProjectsByRelevance(
+    allProjects
+      .filter(item => !item.archivedAt && (!item.teamIds.length || item.teamIds.includes(issue.team.id)))
+      .map(relevanceInputFromProject),
+    { id: data.viewer.id, activeTeamIds: [issue.team.id] },
+  ).map(item => allProjects.find(project => project.id === item.id)!)
   const milestones = [...(project?.milestones ?? []), ...(project ? createdMilestones[project.id] ?? [] : [])].filter((item, index, values) => values.findIndex(value => value.id === item.id) === index)
   const milestone = milestones.find(item => item.id === issue.projectMilestoneId)
   const projectLabels = labelsForResource(data.labels, 'project', data.labelGroups)

@@ -1,5 +1,6 @@
 import { animate, useMotionValue, useMotionValueEvent, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { ClientStorage } from '@/lib/client-storage'
 import { motionPresets } from '@/lib/motion-presets'
 
 const compactQuery = '(max-width: 1024px)'
@@ -10,11 +11,12 @@ const portalSelector = '[data-radix-popper-content-wrapper], [role="menu"], [rol
 
 function readPreferences() {
   try {
-    const stored = localStorage.getItem(widthKey)
-    const width = stored === null ? 244 : Number(stored)
+    const stored = ClientStorage.getString(widthKey, 'local')
+    const width = stored === undefined ? 244 : Number(stored)
     // The old 52px rail also resulted from Number(null). Never migrate that
     // ambiguous value into an intentional collapsed preference.
-    return { width: Number.isFinite(width) && width > 64 ? clampWidth(width) : 244, collapsed: localStorage.getItem(collapsedKey) === 'true' }
+    const collapsedRaw = ClientStorage.getString(collapsedKey, 'local')
+    return { width: Number.isFinite(width) && width > 64 ? clampWidth(width) : 244, collapsed: collapsedRaw === 'true' }
   } catch { return { width: 244, collapsed: false } }
 }
 
@@ -94,7 +96,7 @@ export function useSidebarLayout(open: boolean, onOpenChange?: (open: boolean) =
   }, [floatingOpen])
   useEffect(() => {
     if (resizing) return
-    try { localStorage.setItem(widthKey, String(width)); localStorage.setItem(collapsedKey, String(collapsed)) } catch { /* Optional local preference. */ }
+    ClientStorage.setString(widthKey, String(width), 'local'); ClientStorage.setString(collapsedKey, String(collapsed), 'local')
   }, [width, collapsed, resizing])
   useMotionValueEvent(railWidth, 'change', value => document.documentElement.style.setProperty('--sidebar', `${value}px`))
   useLayoutEffect(() => {

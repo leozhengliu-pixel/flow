@@ -6,4 +6,5 @@
 :global(:root[data-theme="light"]) .regular{background:var(--toggle-regular-off)}
 :global(:root[data-theme="light"]) .regular:hover:not(:disabled):not(:checked){background:var(--toggle-regular-off-hover)}
 :global(:root[data-theme="light"]) .regular:checked{background:var(--toggle-regular-on)}
-:global(:root[data-theme="light"]) .regular:after{box-shadow:var(--toggle-regular-knob-shadow)}
+:global(:root[data-theme="light"]) .regular{--toggle-knob:14px;--toggle-left:3px;--toggle-checked-left:13px}
+:global(:root[data-theme="light"]) .regular:after{box-shadow:none}

@@ -1,3 +1,5 @@
+import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
+import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
 import {
   Suspense,
   useCallback,
@@ -13,6 +15,8 @@ import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
+import { useSecuritySetting } from '@/hooks/use-security-setting';
+import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
 import {
   Activity,
   AppWindow,
@@ -22,15 +26,17 @@ import {
   Braces,
   Building2,
   ChevronDown,
+  ChevronRight,
   CircleDot,
   Code2,
   FileText,
   Flame,
-  FileClock,
+  Repeat2,
   History,
   Import,
   Upload,
   KeyRound,
+  KeyboardOff,
   LayoutTemplate,
   Link2,
   ListFilter,
@@ -70,13 +76,10 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import {
   connectIntegration,
   createAgentSkill,
-  createAPIKey,
   createIdentityProvider,
   createOAuthApplication,
-  createWebhook,
   deleteIdentityProvider,
   deleteOAuthApplication,
-  deleteWebhook,
   disconnectIntegration,
   revokeAPIKey,
   revokeOAuthAuthorization,
@@ -97,8 +100,22 @@ import {
   uploadWorkspaceLogo,
   deleteWorkspaceLogo,
   verifyIdentityProvider,
+  disableWorkspaceInviteLink,
+  fetchWorkspaceInviteLink,
+  rotateWorkspaceInviteLink,
 } from "@/lib/api";
-import type { SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
+import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
+import {
+  apiKeysSettingsPath,
+  applicationEditPath,
+  applicationSettingsPath,
+  identityProviderSettingsPath,
+  settingsPath,
+  webhookSettingsPath,
+} from "@/lib/app-routes";
+import { agentSkillsSettingsBackLink } from "@/lib/agent-skills-settings-back-link";
+import { useNavigate } from "react-router-dom";
+import { OAuthAppImage } from "./application-header";
 import type {
   APIKey,
   BootstrapData,
@@ -107,9 +124,7 @@ import type {
   OAuthApplication,
   ProjectTemplate,
   ReleasePipeline,
-  Team,
   UserSettings,
-  Webhook,
   WorkspaceMutationInput,
   WorkspaceMember,
   WorkspaceSettings,
@@ -119,6 +134,8 @@ import { TeamCreatePage } from '@/lib/route-pages';
 import {
   SettingsPageTitle as PageTitle,
   SettingsRow as Row,
+  SettingsCrumb,
+  SettingsGroup as Group,
   SettingsSection as Section,
   SettingsSelect as Select,
   SettingsToggle as Toggle,
@@ -129,6 +146,9 @@ import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from ".
 import "./settings.css";
 import "./workflow-settings.css";
 import "./advanced-settings.css";
+import "./settings-parity.css";
+import { WebhookEditPage } from "./webhook-edit-page";
+import { WorkspaceTeamsSettings } from "./workspace-teams-settings";
 import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
@@ -178,6 +198,46 @@ const CodeIntegrationSettings = lazyPage(
   () => import("./code-integration-settings"),
   "CodeIntegrationSettings",
 );
+const EnabledIntegrationsSettingsPage = lazyPage(
+  () => import("./enabled-integrations-page"),
+  "EnabledIntegrationsSettingsPage",
+);
+const IntegrationSettingsPage = lazyPage(
+  () => import("./integration-settings-page"),
+  "IntegrationSettingsPage",
+);
+const JiraSettingsPage = lazyPage(
+  () => import("@/components/settings/jira-settings"),
+  "JiraSettingsPage",
+);
+const JiraSyncPage = lazyPage(
+  () => import("@/components/settings/jira-sync-page"),
+  "JiraSyncPage",
+);
+const AsksSlackSettingsPage = lazyPage(
+  () => import("./asks-settings"),
+  "AsksSlackSettingsPage",
+);
+const AsksEmailIntakeDetailPage = lazyPage(
+  () => import("./asks-settings"),
+  "AsksEmailIntakeDetailPage",
+);
+const NewAsksEmailIntakePage = lazyPage(
+  () => import("./asks-settings"),
+  "NewAsksEmailIntakePage",
+);
+const IdentityProviderSettingsPage = lazyPage(
+  () => import("./identity-provider-settings-page"),
+  "IdentityProviderSettingsPage",
+);
+const ApplicationDetailsPage = lazyPage(
+  () => import("./application-pages"),
+  "ApplicationDetailsPage",
+);
+const ApplicationEditPage = lazyPage(
+  () => import("./application-pages"),
+  "ApplicationEditPage",
+);
 const AuditLogSettings = lazyPage(
   () => import("./audit-log-settings"),
   "AuditLogSettings",
@@ -188,7 +248,7 @@ const WorkflowAutomationSettings = lazyPage(
 );
 
 // oxlint-disable-next-line react/only-export-components -- Preloading must share the lazy instances used by SettingsBody.
-export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'agentSkillMode'> = {}) {
+export async function preloadSettingsPage(page: SettingsPageProps['page'], options: Pick<SettingsPageProps, 'releasePipelineMode' | 'integrationProvider' | 'integrationSlug' | 'jiraSyncMode' | 'agentSkillMode' | 'asksIntegrationId' | 'asksEmailIntakeMode'> = {}) {
   if (options.agentSkillMode) return
   if (['preferences', 'profile', 'notifications', 'code-and-reviews', 'account-security', 'connections', 'agents'].includes(page)) return PersonalSettings.preload()
   if (page === 'issue-labels' || page === 'project-labels' || page === 'initiative-labels') return DomainLabelsSettings.preload()
@@ -201,8 +261,16 @@ export async function preloadSettingsPage(page: SettingsPageProps['page'], optio
   if (page === 'import-export') return ImportExportSettings.preload()
   if (page === 'workflows') return WorkflowAutomationSettings.preload()
   if (page === 'releases' && options.releasePipelineMode) return PipelineEditorPage.preload()
+  if (page === 'integrations' && options.integrationSlug === 'enabled') return EnabledIntegrationsSettingsPage.preload()
+  if (page === 'integrations' && options.integrationProvider === 'jira') {
+    if (options.jiraSyncMode) return JiraSyncPage.preload()
+    return JiraSettingsPage.preload()
+  }
   if (page === 'integrations' && options.integrationProvider) return CodeIntegrationSettings.preload()
-  if (['ai', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
+  if (page === 'integrations' && options.integrationSlug) return IntegrationSettingsPage.preload()
+  if (page === 'asks' && options.asksEmailIntakeMode) return NewAsksEmailIntakePage.preload()
+  if (page === 'asks' && options.asksIntegrationId) return AsksSlackSettingsPage.preload()
+  if (['ai', 'coding-sessions', 'coding-environments', 'initiatives', 'documents', 'customer-requests', 'releases', 'pulse', 'asks', 'emojis', 'integrations'].includes(page)) return FeatureSettingsPage.preload()
 }
 
 type StoredSettings = {
@@ -219,16 +287,35 @@ type SettingListItem = {
 type SettingsPageProps = {
   data: BootstrapData;
   page: SettingsPageId;
-  notificationChannel?: 'desktop'|'mobile'|'email'|'slack';
-  onNavigateNotification?: (channel?: 'desktop'|'mobile'|'email'|'slack') => void;
+  notificationChannel?: NotificationSettingsView;
+  onNavigateNotification?: (channel?: NotificationSettingsView) => void;
   apiKeyMode?: "new" | "detail" | "edit";
   apiKeyId?: string;
   signingKeyMode?: "new";
   teamKey?: string;
   teamSection?: TeamSettingsSection;
   releasePipelineMode?: "new" | "edit";
+  workspaceView?: "welcome-message";
+  accountView?: "coding-tools";
+  apiView?: "keys";
+  webhookId?: string;
   releasePipelineSlug?: string;
   integrationProvider?: IntegrationProvider;
+  integrationSlug?: string;
+  jiraSyncMode?: "new" | "edit";
+  jiraProjectId?: string;
+  onOpenJiraSyncNew?: () => void;
+  onOpenJiraSyncEdit?: (jiraProjectId: string) => void;
+  asksIntegrationId?: string;
+  asksEmailIntakeMode?: "new";
+  asksEmailIntakeId?: string;
+  onOpenAsksSlack?: (integrationId: string) => void;
+  onOpenAsksEmailIntake?: (addressId?: string) => void;
+  onOpenWelcomeMessage?: () => void;
+  onOpenCodingTools?: () => void;
+  identityProviderId?: string;
+  applicationId?: string;
+  applicationMode?: "detail" | "edit";
   issueTemplateMode?: "new" | "new-form" | "edit";
   issueTemplateId?: string;
   projectTemplateMode?: "new" | "edit";
@@ -240,7 +327,9 @@ type SettingsPageProps = {
     page: SettingsPageId,
     teamKey?: string,
     teamSection?: TeamSettingsSection,
+    teamSubPath?: string,
   ) => void;
+  teamSubPath?: string;
   onCreateAPIKey?: () => void;
   onCreateSigningKey?: () => void;
   onOpenAPIKey?: (key: APIKey) => void;
@@ -250,7 +339,7 @@ type SettingsPageProps = {
   onOpenAgentHistory?: () => void;
   onCreateReleasePipeline: () => void;
   onOpenReleasePipeline: (pipeline: ReleasePipeline) => void;
-  onOpenIntegration: (provider: IntegrationProvider) => void;
+  onOpenIntegration: (provider: IntegrationProvider | string) => void;
   onCreateIssueTemplate: (form: boolean) => void;
   onOpenIssueTemplate: (template: IssueTemplate) => void;
   onDuplicateIssueTemplate: (template: IssueTemplate) => void;
@@ -301,8 +390,8 @@ const NAV: { title: string; items: NavItem[] }[] = [
     title: "Features",
     items: [
       { id: "ai", label: "AI & Agents", icon: Sparkles },
+      { id: "loops", label: "Loops", icon: Repeat2 },
       { id: "initiatives", label: "Initiatives", icon: Zap },
-      { id: "initiative-labels", label: "Initiative labels", icon: Tag },
       { id: "documents", label: "Documents", icon: FileText },
       { id: "customer-requests", label: "Customer requests", icon: UsersRound },
       { id: "releases", label: "Releases", icon: Rocket },
@@ -319,7 +408,6 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "teams", label: "Teams", icon: UsersRound },
       { id: "members", label: "Members", icon: UserRound },
       { id: "security", label: "Security", icon: ShieldCheck },
-      { id: "audit-log", label: "Audit log", icon: FileClock },
       { id: "api", label: "API", icon: Braces },
       { id: "applications", label: "Applications", icon: AppWindow },
       { id: "import-export", label: "Import & export", icon: Import },
@@ -352,7 +440,7 @@ const DEFAULT_VALUES: StoredSettings["values"] = {
   codeReviewsEnabled: true,
   autoConvertDrafts: false,
   mergeStrategy: "Squash and merge",
-  codeTheme: "Flow Light",
+  codeTheme: "Match interface theme",
   codeFont: "12px, Regular, Default",
   reviewCommentsFilter: "Exclude Bots",
   reviewRequests: true,
@@ -509,6 +597,7 @@ export function SettingsPage(props: SettingsPageProps) {
     props.releasePipelineMode,
     props.releasePipelineSlug,
     props.integrationProvider,
+    props.integrationSlug,
   ]);
   useEffect(() => {
     const focusSearch = (event: globalThis.KeyboardEvent) => {
@@ -770,6 +859,7 @@ function SettingsBody(
   const { page } = props;
   const isWorkspaceAdmin =
     props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
+  if (page === 'shortcuts') return <div className="settings-shortcuts-not-found" role="status"><KeyboardOff size={68} strokeWidth={1}/><strong>{t('Not found')}</strong><span>{t('We could not find the page you were looking for')}</span></div>;
   const personal = [
     "preferences",
     "profile",
@@ -804,9 +894,18 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
+  if (page === "code-and-reviews" && props.accountView === "coding-tools")
+    return (
+      <CodingToolsSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("code-and-reviews")}
+        onReload={props.onReload}
+      />
+    );
   if (personal)
     return (
       <PersonalSettings
+        onOpenCodingTools={props.onOpenCodingTools}
         page={page}
         notificationChannel={props.notificationChannel}
         onNavigateNotification={props.onNavigateNotification}
@@ -889,13 +988,22 @@ function SettingsBody(
     return (
       <ProjectUpdateSettings data={props.data} onReload={props.onReload} />
     );
+  if (page === "workspace" && props.workspaceView === "welcome-message")
+    return (
+      <WelcomeMessageSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("workspace")}
+        onReload={props.onReload}
+      />
+    );
   if (page === "workspace") return <WorkspacePage {...props} />;
   if (page === "teams")
     return (
-      <TeamsPage
+      <WorkspaceTeamsSettings
         data={props.data}
         onCreate={props.onCreateTeam}
         onOpen={(team) => props.onNavigate("team", team.key)}
+        onReload={props.onReload}
       />
     );
   if (page === "members")
@@ -905,8 +1013,28 @@ function SettingsBody(
     return (
       <ApiPage
         data={props.data}
-        onCreateAPIKey={props.onCreateAPIKey}
+        apiView={props.apiView}
+        webhookId={props.webhookId}
+        onNavigate={props.onNavigate}
         onReload={props.onReload}
+      />
+    );
+  if (page === "applications" && props.applicationId && props.applicationMode === "edit")
+    return (
+      <ApplicationEditPage
+        data={props.data}
+        applicationId={props.applicationId}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("applications")}
+      />
+    );
+  if (page === "applications" && props.applicationId)
+    return (
+      <ApplicationDetailsPage
+        data={props.data}
+        applicationId={props.applicationId}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("applications")}
       />
     );
   if (page === "applications")
@@ -940,12 +1068,77 @@ function SettingsBody(
       />
     );
   }
+  if (page === "integrations" && props.integrationSlug === "enabled")
+    return (
+      <EnabledIntegrationsSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("integrations")}
+        onOpenSlug={(slug) => props.onOpenIntegration(slug)}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "integrations" && props.integrationProvider === "jira" && props.jiraSyncMode)
+    return (
+      <JiraSyncPage
+        data={props.data}
+        mode={props.jiraSyncMode}
+        jiraProjectId={props.jiraProjectId}
+        onBack={() => props.onOpenIntegration("jira")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "integrations" && props.integrationProvider === "jira")
+    return (
+      <JiraSettingsPage
+        data={props.data}
+        onBack={() => props.onNavigate("integrations")}
+        onReload={props.onReload}
+        onOpenSyncNew={() => props.onOpenJiraSyncNew?.()}
+        onOpenSyncEdit={(jiraProjectId) => props.onOpenJiraSyncEdit?.(jiraProjectId)}
+        onOpenConnectedAccounts={() => props.onNavigate("connections")}
+      />
+    );
   if (page === "integrations" && props.integrationProvider)
     return (
       <CodeIntegrationSettings
-        provider={props.integrationProvider}
+        provider={props.integrationProvider as "github" | "gitlab"}
         data={props.data}
         onBack={() => props.onNavigate("integrations")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "integrations" && props.integrationSlug)
+    return (
+      <IntegrationSettingsPage
+        slug={props.integrationSlug}
+        data={props.data}
+        onBack={() => props.onNavigate("integrations")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksEmailIntakeMode === "new")
+    return (
+      <NewAsksEmailIntakePage
+        data={props.data}
+        onBack={() => props.onNavigate("asks")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksEmailIntakeId)
+    return (
+      <AsksEmailIntakeDetailPage
+        data={props.data}
+        addressId={props.asksEmailIntakeId}
+        onBack={() => props.onNavigate("asks")}
+        onReload={props.onReload}
+      />
+    );
+  if (page === "asks" && props.asksIntegrationId)
+    return (
+      <AsksSlackSettingsPage
+        data={props.data}
+        integrationId={props.asksIntegrationId}
+        onBack={() => props.onNavigate("asks")}
         onReload={props.onReload}
       />
     );
@@ -958,7 +1151,9 @@ function SettingsBody(
         data={props.data}
         team={team}
         section={props.teamSection ?? "overview"}
-        onNavigate={(section) => props.onNavigate("team", team.key, section)}
+        onNavigate={(section, subPath) => props.onNavigate("team", team.key, section, subPath)}
+        subPath={props.teamSubPath}
+        onOpenTeams={() => props.onNavigate("teams")}
         onReload={props.onReload}
       />
     ) : (
@@ -967,20 +1162,31 @@ function SettingsBody(
       </div>
     );
   }
+  if (page === "security" && props.identityProviderId)
+    return (
+      <IdentityProviderSettingsPage
+        data={props.data}
+        providerId={props.identityProviderId}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("security")}
+      />
+    );
   if (page === "security")
     return (
       <>
-        <SecurityPage data={props.data} onReload={props.onReload} />
-        <SecuritySupplement
-          data={props.data}
-          onNavigate={props.onNavigate}
-          onReload={props.onReload}
-        />
+        <SecurityPage data={props.data} onReload={props.onReload} onNavigate={props.onNavigate} />
       </>
+    );
+  if (page === "authentication")
+    return (
+      <AuthenticationPage data={props.data} onReload={props.onReload} />
     );
   if (
     [
       "ai",
+      "loops",
+      "coding-sessions",
+      "coding-environments",
       "initiatives",
       "documents",
       "customer-requests",
@@ -996,6 +1202,9 @@ function SettingsBody(
         page={
           page as
             | "ai"
+            | "loops"
+            | "coding-sessions"
+            | "coding-environments"
             | "initiatives"
             | "documents"
             | "customer-requests"
@@ -1011,6 +1220,8 @@ function SettingsBody(
         onOpenIntegration={props.onOpenIntegration}
         onReload={props.onReload}
         onNavigateSettings={props.onNavigate}
+        onOpenAsksSlack={props.onOpenAsksSlack}
+        onOpenAsksEmailIntake={props.onOpenAsksEmailIntake}
       />
     );
   return (
@@ -1061,7 +1272,7 @@ function AgentSkillEditor({
   return (
     <div className="agent-skill-editor-page">
       <nav>
-        <button onClick={onCancel}>Agent personalization</button>
+        <button onClick={onCancel}>{agentSkillsSettingsBackLink(data.workspace.urlKey).label}</button>
         <span>›</span>
         <span>{existing ? existing.name : "New skill"}</span>
       </nav>
@@ -1123,34 +1334,6 @@ function ActionButton({
     >
       {children}
     </button>
-  );
-}
-
-function FieldRow({
-  title,
-  description,
-  value,
-  onCommit,
-}: {
-  title: string;
-  description?: string;
-  value: string;
-  onCommit: (value: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <Row title={title} description={description}>
-      <input
-        className="settings-input"
-        aria-label={title}
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          if (draft !== value) onCommit(draft);
-        }}
-      />
-    </Row>
   );
 }
 
@@ -1252,11 +1435,22 @@ function WorkspacePage(
         </Row>
       </Section>
       <Section title="Member onboarding">
-        <FieldRow
+        <Row
           title="Welcome message"
-          value={props.data.workspaceSettings.welcomeMessage ?? ""}
-          onCommit={(value) => void savePreferences({ welcomeMessage: value })}
-        />
+          description="Configure a message that new users will receive when they join the workspace"
+          className="personal-row-link"
+          role="button"
+          tabIndex={0}
+          onClick={() => props.onOpenWelcomeMessage?.()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") props.onOpenWelcomeMessage?.();
+          }}
+        >
+          <span className="personal-row-link-meta">
+            {props.data.workspaceSettings.welcomeMessageEnabled ? "Enabled" : "Disabled"}
+            <ChevronRight size={14} />
+          </span>
+        </Row>
         <Row title="Default home view">
           <Select
             label="Default home view"
@@ -1274,21 +1468,45 @@ function WorkspacePage(
         </Row>
       </Section>
       <Section title="Danger zone">
-        <Row
-          danger
-          title="Delete workspace"
-          description="Schedule workspace to be permanently deleted"
-        >
-          <ActionButton danger onClick={() => setConfirm(true)}>
-            Delete workspace
-          </ActionButton>
-        </Row>
+        {props.data.workspace.deletionRequestedAt ? (
+          <Row
+            danger
+            title="Workspace scheduled for deletion"
+            description={`Deletion requested ${new Date(props.data.workspace.deletionRequestedAt).toLocaleString()}. Cancel to keep this workspace.`}
+          >
+            <ActionButton
+              onClick={() => {
+                void (async () => {
+                  const { cancelOrganizationDeletion } = await import(
+                    "@/lib/organization-settings-helper"
+                  );
+                  const updated = await cancelOrganizationDeletion(
+                    props.data.workspace.urlKey,
+                  );
+                  if (updated) await props.onReload();
+                })();
+              }}
+            >
+              Cancel deletion
+            </ActionButton>
+          </Row>
+        ) : (
+          <Row
+            danger
+            title="Delete workspace"
+            description="Schedule workspace to be permanently deleted"
+          >
+            <ActionButton danger onClick={() => setConfirm(true)}>
+              Delete workspace
+            </ActionButton>
+          </Row>
+        )}
       </Section>
       <ConfirmDialog
         open={confirm}
-        title="Delete workspace?"
-        description={`This permanently deletes ${props.data.workspace.name} and all of its data.`}
-        confirm="Delete workspace"
+        title="Schedule workspace deletion?"
+        description={`This schedules ${props.data.workspace.name} for permanent deletion. You can cancel from the Danger zone until deletion completes.`}
+        confirm="Schedule deletion"
         onCancel={() => setConfirm(false)}
         onConfirm={async () => {
           setConfirm(false);
@@ -1420,55 +1638,6 @@ function download(filename: string, content: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function TeamsPage({
-  data,
-  onCreate,
-  onOpen,
-}: {
-  data: BootstrapData;
-  onCreate: () => void;
-  onOpen: (team: Team) => void;
-}) {
-  return (
-    <>
-      <PageTitle
-        description="Teams organize issues, projects, cycles, and views."
-        action={
-          <ActionButton primary onClick={onCreate}>
-            New team
-          </ActionButton>
-        }
-      >
-        Teams
-      </PageTitle>
-      <Section>
-        {data.teams.map((team) => (
-          <button
-            className="settings-team-row"
-            key={team.id}
-            onClick={() => onOpen(team)}
-          >
-            <span className="settings-team-icon" style={{ color: team.color }}>
-              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-            </span>
-            <div>
-              <strong data-i18n-ignore>{team.name}</strong>
-              <span>
-                {team.key} ·{" "}
-                {
-                  data.issues.filter((issue) => issue.team.id === team.id)
-                    .length
-                }{" "}
-                issues
-              </span>
-            </div>
-            <ChevronDown size={14} />
-          </button>
-        ))}
-      </Section>
-    </>
-  );
-}
 export function MembersPage({
   data,
   onReload,
@@ -1874,104 +2043,6 @@ export function MembersPage({
           </footer>
         </DialogContent>
       </Dialog>
-    </>
-  );
-}
-
-function SecuritySupplement({
-  data,
-  onNavigate,
-  onReload,
-}: {
-  data: BootstrapData;
-  onNavigate: (page: SettingsPageId) => void;
-  onReload: () => Promise<void>;
-}) {
-  const [uploadPolicyOpen,setUploadPolicyOpen] = useState(false);
-  const [privacyDialog,setPrivacyDialog] = useState<"support"|"health"|null>(null);
-  const settings = data.workspaceSettings;
-  const save = async (patch: Partial<WorkspaceSettings>) => {
-    try {
-      await updateWorkspacePreferences(patch);
-      await onReload();
-      toast.success("Security policy saved");
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save policy",
-      );
-    }
-  };
-  return (
-    <>
-      <Section title="File uploads">
-        <Row
-          title="Restrict file uploads"
-          description="Restrict uploaded file types. Images and videos remain allowed."
-        >
-          <ActionButton onClick={()=>setUploadPolicyOpen(true)}>Configure</ActionButton>
-        </Row>
-      </Section>
-      {uploadPolicyOpen && <UploadPolicyDialog settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setUploadPolicyOpen(false)}/>}
-      <Section title="Application approvals">
-        <Row
-          title="Review third-party applications"
-          description="Control which applications can be installed to your workspace"
-        >
-          <Toggle
-            label="Review third-party applications"
-            checked={Boolean(settings.reviewThirdPartyApplications)}
-            onChange={(value) =>
-              void save({ reviewThirdPartyApplications: value })
-            }
-          />
-        </Row>
-        <Row
-          title="Reduce personal information from support integrations"
-          description="Personal information from support integrations will not be stored"
-        >
-          <ActionButton onClick={()=>setPrivacyDialog("support")}>Configure</ActionButton>
-        </Row>
-      </Section>
-      <Section title="MCP connections">
-        <Row
-          title="Active MCP connections"
-          description={`${data.oauthAuthorizations.filter((item) => !item.revokedAt).length} active connections across workspace members`}
-        >
-          <ActionButton onClick={() => onNavigate("applications")}>
-            Review
-          </ActionButton>
-        </Row>
-        <Row
-          title="Allowed MCP connectors"
-          description="Choose which MCP connectors Flow Agent can use"
-        >
-          <Select
-            label="Allowed MCP connectors"
-            value={
-              (settings.allowedMcpConnectors ?? "all") === "all"
-                ? "All connectors"
-                : "Approved connectors"
-            }
-            options={["All connectors", "Approved connectors"]}
-            onChange={(value) =>
-              void save({
-                allowedMcpConnectors:
-                  value === "All connectors" ? "all" : "approved",
-              })
-            }
-          />
-        </Row>
-      </Section>
-      <Section title="Compliance">
-        <Row
-          title="HIPAA compliance"
-          description="Enable privacy and security measures for protected health information"
-        >
-          <ActionButton onClick={()=>setPrivacyDialog("health")}>Configure</ActionButton>
-        </Row>
-      </Section>
-      <ApplicationPolicySettings admin={data.viewerRole==="admin"||data.viewerRole==="owner"}/>
-      {privacyDialog&&<DataPrivacyDialog kind={privacyDialog} settings={settings} onSave={async patch=>{await updateWorkspacePreferences(patch);await onReload()}} onClose={()=>setPrivacyDialog(null)}/>}
     </>
   );
 }
@@ -2768,11 +2839,15 @@ function MembersPageV2({
 function SecurityPage({
   data,
   onReload,
+  onNavigate,
 }: {
   data: BootstrapData;
   onReload: () => Promise<void>;
+  onNavigate: (page: SettingsPageId, teamKey?: string, teamSection?: TeamSettingsSection) => void;
 }) {
   const [settings, setSettings] = useState(data.workspaceSettings);
+  const [uploadPolicyOpen, setUploadPolicyOpen] = useState(false);
+  const [privacyDialog, setPrivacyDialog] = useState<"support" | "health" | null>(null);
   useEffect(
     () => setSettings(data.workspaceSettings),
     [data.workspaceSettings],
@@ -2793,7 +2868,7 @@ function SecurityPage({
   const toggle = (
     title: string,
     key: keyof WorkspaceSettings,
-    description: string,
+    description?: string,
   ) => (
     <Row title={title} description={description}>
       <Toggle
@@ -2803,267 +2878,318 @@ function SecurityPage({
       />
     </Row>
   );
+  const services = settings.allowedAuthServices?.length
+    ? settings.allowedAuthServices
+    : [
+        ...(settings.googleAuthEnabled !== false ? (["google"] as const) : []),
+        ...(settings.emailAuthEnabled !== false ? (["email"] as const) : []),
+      ];
+  const toggleService = (service: "google" | "email", enabled: boolean) => {
+    const next = enabled
+      ? Array.from(new Set([...services, service]))
+      : services.filter((item) => item !== service && !(service === "email" && item === "passkey"));
+    void save({
+      ...settings,
+      allowedAuthServices: next as WorkspaceSettings["allowedAuthServices"],
+      googleAuthEnabled: next.includes("google"),
+      emailAuthEnabled: next.includes("email") || next.includes("passkey"),
+    });
+  };
+  const permission = (title: string, settingKey: SecuritySettingKey, description: string) => (
+    <PermissionRow title={title} description={description} settingKey={settingKey} settings={settings} save={save} />
+  );
+  const identityProviders = data.identityProviders?.length ?? 0;
   return (
     <>
-      <PageTitle description="Manage authentication, permissions, and access policies for your workspace.">
-        Security
-      </PageTitle>
-      <Section title="Workspace access">
-        {toggle(
-          "Invite links",
-          "inviteLinksEnabled",
-          "Allow members to invite people with a workspace link.",
-        )}
-        <Row
-          title="Allow guest accounts"
-          description="Guest invitations are rejected when this is disabled"
-        >
-          <Toggle
-            label="Allow guest accounts"
-            checked={settings.guestsAllowed}
-            onChange={(value) =>
-              void save({ ...settings, guestsAllowed: value })
-            }
+      <PageTitle>Security</PageTitle>
+      <Section grouped title="Workspace access">
+        <Group title="Invite links" description="A uniquely generated invite link allows anyone with the link to join your workspace">
+          {toggle("Enable invite links", "inviteLinksEnabled")}
+          <WorkspaceInviteLinkRow data={data} enabled={Boolean(settings.inviteLinksEnabled)} />
+        </Group>
+        <Group title="Workspace login and restrictions" description="Anyone with an email address at these domains is allowed to sign up for this workspace.">
+          <ApprovedDomainRows
+            domains={settings.allowedDomains ?? []}
+            onChange={(allowedDomains) => void save({ ...settings, allowedDomains })}
           />
-        </Row>
+        </Group>
+        <Group title="Authentication methods" description="Admins and guests can always authenticate via Google and email/passkeys—even when disabled for members">
+          <Row title="Google authentication" description="When enabled, this is available to all workspace members and guests">
+            <Toggle label="Google authentication" checked={services.includes("google")} onChange={(value) => toggleService("google", value)} />
+          </Row>
+          <Row title="Email & passkey authentication" description="When enabled, this is available to all workspace members and guests">
+            <Toggle label="Email & passkey authentication" checked={services.includes("email") || services.includes("passkey")} onChange={(value) => toggleService("email", value)} />
+          </Row>
+          <Row title="SAML & SCIM" description={identityProviders ? `${identityProviders} identity provider${identityProviders === 1 ? "" : "s"} configured` : "Manage logins via an identity provider’s SSO"}>
+            <ActionButton onClick={() => onNavigate("authentication")}>Configure</ActionButton>
+          </Row>
+          {toggle("Disable authentication bypass for admins", "disableAdminBypass", "When enabled, admins are restricted to the enabled authentication methods")}
+          {toggle("Require two-factor authentication", "requireTwoFactor", "Require a second factor for all members")}
+          <Row title="Session duration" description="How long members stay signed in before re-authenticating">
+            <Select
+              label="Session duration"
+              value={`${settings.sessionDurationDays} days`}
+              options={["7 days", "30 days", "90 days"]}
+              onChange={(value) => void save({ ...settings, sessionDurationDays: Number(value.split(" ")[0]) })}
+            />
+          </Row>
+          {toggle("Allow guest accounts", "guestsAllowed", "Guest invitations are rejected when this is disabled")}
+        </Group>
       </Section>
-      <Section title="Authentication methods">
-        {toggle(
-          "Google authentication",
-          "googleAuthEnabled",
-          "When enabled, this is available to all workspace members and guests",
-        )}
-        {toggle(
-          "Email & passkey authentication",
-          "emailAuthEnabled",
-          "When enabled, this is available to all workspace members and guests",
-        )}
-        <Row
-          title="Require two-factor authentication"
-          description="Require a second factor for all members."
-        >
-          <Toggle
-            label="Require two-factor authentication"
-            checked={settings.requireTwoFactor}
-            onChange={(value) =>
-              void save({ ...settings, requireTwoFactor: value })
-            }
-          />
-        </Row>
-        {toggle(
-          "Disable authentication bypass for admins",
-          "disableAdminBypass",
-          "When enabled, admins are restricted to the enabled authentication methods",
-        )}
-        <Row title="Session duration">
-          <Select
-            label="Session duration"
-            value={`${settings.sessionDurationDays} days`}
-            options={["7 days", "30 days", "90 days"]}
-            onChange={(value) =>
-              void save({
-                ...settings,
-                sessionDurationDays: Number(value.split(" ")[0]),
-              })
-            }
-          />
-        </Row>
-      </Section>
-      <EnterpriseIdentityProviders data={data} onReload={onReload} />
-      <Section title="Workspace login and restrictions">
-        <FieldRow
-          title="Approved email domains"
-          description="Anyone with an email address at these domains is allowed to sign up for this workspace."
-          value={(settings.allowedDomains ?? []).join(", ")}
-          onCommit={(value) =>
-            void save({
-              ...settings,
-              allowedDomains: value
-                .split(",")
-                .map((item) => item.trim())
-                .filter(Boolean),
-            })
-          }
-        />
-      </Section>
-      <Section title="Workspace management">
-        <PermissionRow
-          title="New user invitations"
-          value={settings.invitePermission}
-          onChange={(value) =>
-            void save({ ...settings, invitePermission: value })
-          }
-        />
-        <PermissionRow
-          title="Team creation"
-          value={settings.teamCreatePermission}
-          onChange={(value) =>
-            void save({ ...settings, teamCreatePermission: value })
-          }
-        />
-        <PermissionRow
-          title="Manage workspace labels"
-          value={settings.labelPermission}
-          onChange={(value) =>
-            void save({ ...settings, labelPermission: value })
-          }
-        />
-        <PermissionRow
-          title="Manage workspace templates"
-          value={settings.templatePermission}
-          onChange={(value) =>
-            void save({ ...settings, templatePermission: value })
-          }
-        />
-        <PermissionRow
-          title="Workspace initiatives"
-          value={settings.initiativePermission ?? "members"}
-          onChange={(value) =>
-            void save({ ...settings, initiativePermission: value })
-          }
-        />
-        <PermissionRow
-          title="Manage loops"
-          value={settings.loopPermission ?? "members"}
-          onChange={(value) =>
-            void save({ ...settings, loopPermission: value })
-          }
-        />
-        <PermissionRow
-          title="Modify agent guidance"
-          value={settings.agentGuidancePermission ?? "admins"}
-          onChange={(value) =>
-            void save({ ...settings, agentGuidancePermission: value })
-          }
-        />
-        <PermissionRow
-          title="API key creation"
-          value={settings.apiKeyPermission}
-          onChange={(value) =>
-            void save({ ...settings, apiKeyPermission: value })
-          }
-        />
+      <Section grouped title="Workspace management">
+        <Group title="Permissions" description="Choose who can perform various actions across the workspace">
+          {permission("New user invitations", "invitePermission", "Who can invite new members to the workspace")}
+          {permission("Team creation", "teamCreatePermission", "Who can create new teams")}
+          {permission("Workspace initiatives", "initiativePermission", "Who can create workspace level initiatives")}
+          {permission("Manage workspace labels", "labelPermission", "Who can create, update, and delete workspace labels")}
+          {permission("Manage workspace templates", "templatePermission", "Who can manage workspace templates")}
+          {permission("Manage pinned views", "pinnedViewPermission", "Who can pin views to team pages and edit, reorder, or remove them")}
+          {permission("Manage loops", "loopPermission", "Who can create, update, and delete workspace loops")}
+          {permission("API key creation", "apiKeyPermission", "Who can create API keys to interact with the Flow API on their behalf")}
+          {permission("Import data", "importPermission", "Who can import data from other services")}
+          {permission("Modify agent guidance", "agentGuidancePermission", "Who can modify workspace-level agent guidance prompts")}
+        </Group>
+        <Group title="File uploads" description="Restrict the file types users are allowed to upload. Images and videos remain allowed.">
+          <Row title="Restrict file uploads" description={settings.restrictFileUploads ? `${settings.allowedFileExtensions?.length ?? 0} allowed file types` : undefined}>
+            <ActionButton onClick={() => setUploadPolicyOpen(true)}>Configure</ActionButton>
+          </Row>
+        </Group>
+        <Group title="Audit log" description="Review security-relevant events across the workspace">
+          <Row title="Audit log">
+            <ActionButton onClick={() => onNavigate("audit-log")}>Open</ActionButton>
+          </Row>
+        </Group>
       </Section>
       <Section title="Integrations & applications">
-        {toggle(
-          "Prevent guests from interacting with agents in the workspace",
-          "preventGuestAgents",
-          "Restrict agent invocation to full workspace members only",
-        )}
-        {toggle(
-          "Enable Flow Agent web search",
-          "agentWebSearch",
-          "Allow Flow Agent to search the public web for current information and cite sources",
-        )}
-        {toggle(
-          "Allow external sources to trigger loops",
-          "externalLoopTriggers",
-          "Select which external sources can trigger loops",
-        )}
-        {toggle(
-          "Enable Flow Agent MCP connectors",
-          "mcpConnectorsEnabled",
-          "Allow Flow Agent to use MCP connectors",
-        )}
+        {toggle("Review third-party applications", "reviewThirdPartyApplications", "Control which applications can be installed to your workspace")}
+        <Row title="Reduce personal information from support integrations" description="Personal information from support integrations won’t be stored">
+          <ActionButton onClick={() => setPrivacyDialog("support")}>Configure</ActionButton>
+        </Row>
+        {toggle("Prevent guests from interacting with agents in the workspace", "preventGuestAgents", "Restrict agent invocation to full workspace members only")}
       </Section>
+      <ApplicationPolicySettings admin={data.viewerRole === "admin" || data.viewerRole === "owner"} />
+      <Section grouped title="AI & Agents">
+        <Group title="Web search" description="Let Flow Agent use current public information">
+          {toggle("Enable Flow Agent web search", "agentWebSearch", "Allow Flow Agent to search the public web for current information and cite sources")}
+        </Group>
+        <Group title="Trusted external sources">
+          <Row title="External sources" description="Manage allowed sources in Loops settings">
+            <ActionButton onClick={() => onNavigate("loops")}>Open Loops settings</ActionButton>
+          </Row>
+        </Group>
+        <Group title="MCP connectors">
+          {toggle("Enable Flow Agent MCP connectors", "mcpConnectorsEnabled", "Allow Flow Agent to use MCP connectors")}
+          <Row title="Active MCP connections" description="Review MCP connections from all workspace members">
+            <ActionButton onClick={() => onNavigate("applications")}>Review</ActionButton>
+          </Row>
+          <Row title="Allowed MCP connectors" description="Choose which MCP connectors Flow Agent can use">
+            <Select
+              label="Allowed MCP connectors"
+              value={(settings.allowedMcpConnectors ?? "all") === "all" ? "All connectors" : "Approved connectors"}
+              options={["All connectors", "Approved connectors"]}
+              onChange={(value) => void save({ ...settings, allowedMcpConnectors: value === "All connectors" ? "all" : "approved" })}
+            />
+          </Row>
+        </Group>
+      </Section>
+      <Section title="Compliance">
+        <Row title="HIPAA compliance" description="Enable privacy and security measures to ensure that Protected Health Information is handled appropriately">
+          <ActionButton onClick={() => setPrivacyDialog("health")}>Configure</ActionButton>
+        </Row>
+      </Section>
+      {uploadPolicyOpen && <UploadPolicyDialog settings={settings} onSave={async (patch) => { await updateWorkspacePreferences(patch); await onReload(); }} onClose={() => setUploadPolicyOpen(false)} />}
+      {privacyDialog && <DataPrivacyDialog kind={privacyDialog} settings={settings} onSave={async (patch) => { await updateWorkspacePreferences(patch); await onReload(); }} onClose={() => setPrivacyDialog(null)} />}
+    </>
+  );
+}
+function ApprovedDomainRows({
+  domains,
+  onChange,
+}: {
+  domains: string[];
+  onChange: (domains: string[]) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const commit = () => {
+    const domain = draft.trim().toLowerCase().replace(/^@/, "");
+    setAdding(false);
+    setDraft("");
+    if (domain && !domains.includes(domain)) onChange([...domains, domain]);
+  };
+  return (
+    <>
+      {domains.length === 0 && !adding && (
+        <Row title="No approved email domains" className="settings-row--empty">
+          <ActionButton onClick={() => setAdding(true)}><Plus size={14} />Add domain</ActionButton>
+        </Row>
+      )}
+      {domains.map((domain) => (
+        <Row key={domain} title={domain}>
+          <ActionButton onClick={() => onChange(domains.filter((item) => item !== domain))}>Remove</ActionButton>
+        </Row>
+      ))}
+      {adding ? (
+        <Row title="New domain">
+          <input
+            autoFocus
+            className="settings-input"
+            aria-label="Domain"
+            placeholder="example.com"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commit();
+              if (event.key === "Escape") { setAdding(false); setDraft(""); }
+            }}
+            onBlur={commit}
+          />
+        </Row>
+      ) : domains.length > 0 && (
+        <Row title="Add another domain">
+          <ActionButton onClick={() => setAdding(true)}><Plus size={14} />Add domain</ActionButton>
+        </Row>
+      )}
     </>
   );
 }
 function PermissionRow({
   title,
-  value,
-  onChange,
+  description,
+  settingKey,
+  settings,
+  save,
 }: {
   title: string;
-  value: string;
-  onChange: (value: string) => void;
+  description?: string;
+  settingKey: SecuritySettingKey;
+  settings: WorkspaceSettings;
+  save: (next: WorkspaceSettings) => Promise<void>;
 }) {
+  const security = useSecuritySetting(settingKey, settings, save);
   return (
-    <Row title={title}>
-      <Select
-        label={title}
-        value={value === "admins" ? "Only admins" : "All members"}
-        options={["Only admins", "All members"]}
-        onChange={(next) =>
-          onChange(next === "Only admins" ? "admins" : "members")
-        }
-      />
-    </Row>
+    <>
+      <Row title={title} description={description}>
+        <Select
+          label={title}
+          value={security.value}
+          options={security.options.map((option) => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          onChange={security.onValueChange}
+        />
+      </Row>
+      {settingKey === "apiKeyPermission" && (
+        <ConfirmDialog
+          open={security.confirmOpen}
+          title={security.confirmTitle}
+          description={security.confirmDescription}
+          confirm="Confirm"
+          onCancel={security.cancelRestrict}
+          onConfirm={() => void security.confirmRestrict()}
+        />
+      )}
+    </>
   );
 }
 function ApiPage({
   data,
-  onCreateAPIKey,
+  apiView,
+  webhookId,
+  onNavigate,
   onReload,
 }: {
   data: BootstrapData;
-  onCreateAPIKey?: () => void;
+  apiView?: "keys";
+  webhookId?: string;
+  onNavigate: (page: SettingsPageId) => void;
   onReload: () => Promise<void>;
 }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>(["read", "write"]);
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [secret, setSecret] = useState("");
+  const navigate = useNavigate();
+  const [settings, setSettings] = useState(data.workspaceSettings);
+  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
   const [editingOAuth, setEditingOAuth] = useState<
     OAuthApplication | null | undefined
   >(undefined);
-  const [editingWebhook, setEditingWebhook] = useState<
-    Webhook | null | undefined
-  >(undefined);
-  const items = (data.apiKeys ?? []).filter(
-    (item) => item.creatorId === data.viewer.id && !item.revokedAt,
-  );
-  const submit = async () => {
+  const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
+  const apiPath = settingsPath(data.workspace.urlKey, "api");
+  const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt);
+  if (webhookId) {
+    const webhook = webhookId === "new" ? null : data.webhooks.find((item) => item.id === webhookId);
+    if (webhook === undefined)
+      return (
+        <div className="settings-empty">
+          <h3>Webhook not found</h3>
+          <ActionButton onClick={() => navigate(apiPath)}>Back to API</ActionButton>
+        </div>
+      );
+    return (
+      <WebhookEditPage
+        data={data}
+        webhook={webhook}
+        onClose={() => navigate(apiPath)}
+        onSaved={onReload}
+      />
+    );
+  }
+  if (apiView === "keys")
+    return <IssuedApiKeysPage data={data} onBack={() => navigate(apiPath)} onReload={onReload} />;
+  const save = async (next: WorkspaceSettings) => {
+    setSettings(next);
     try {
-      const result = await createAPIKey({ name, scopes, teamIds });
-      setSecret(result.secret);
+      await updateWorkspacePreferences(next);
       await onReload();
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not create API key",
-      );
+      setSettings(data.workspaceSettings);
+      toast.error(error instanceof Error ? error.message : "Could not save policy");
     }
-  };
-  const reset = () => {
-    setOpen(false);
-    setSecret("");
-    setName("");
-    setTeamIds([]);
-    setScopes(["read", "write"]);
   };
   return (
     <>
-      <PageTitle description="Developer applications, webhooks, and member API access.">
+      <PageTitle description="Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.">
         API
       </PageTitle>
-      <Section title="OAuth applications">
+      <Section title="OAuth applications" description="Manage your organization's OAuth applications.">
         {data.oauthApplications.map((item) => (
           <Row
             key={item.id}
-            title={item.name}
+            title={
+              <span className="settings-inline-title">
+                <OAuthAppImage app={item} size={22} />
+                <span data-i18n-ignore>{item.name}</span>
+              </span>
+            }
             description={`${item.clientId} · ${item.scopes.join(", ")}`}
           >
-            <ActionButton onClick={() => setEditingOAuth(item)}>
-              Configure
-            </ActionButton>
+            <div className="settings-inline-actions">
+              <ActionButton
+                onClick={() =>
+                  navigate(
+                    applicationSettingsPath(data.workspace.urlKey, item.id),
+                  )
+                }
+              >
+                Open
+              </ActionButton>
+              <ActionButton
+                onClick={() =>
+                  navigate(applicationEditPath(data.workspace.urlKey, item.id))
+                }
+              >
+                Edit
+              </ActionButton>
+            </div>
           </Row>
         ))}
-        {!data.oauthApplications.length && (
-          <div className="settings-empty compact">
-            <AppWindow size={24} />
-            <h3>No OAuth applications</h3>
-            <p>Create an application for third-party OAuth access.</p>
-          </div>
-        )}
-        <div className="settings-section-action">
+        <Row title={data.oauthApplications.length ? "" : "No OAuth applications"} className="settings-row--action">
           <ActionButton onClick={() => setEditingOAuth(null)}>
             <Plus size={14} />
             New OAuth application
           </ActionButton>
-        </div>
+        </Row>
       </Section>
-      <Section title="Webhooks">
+      <Section title="Webhooks" description="Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.">
         {data.webhooks.map((item) => (
           <Row
             key={item.id}
@@ -3078,197 +3204,111 @@ function ApiPage({
                   void updateWebhook(item.id, { enabled: value }).then(onReload)
                 }
               />
-              <ActionButton onClick={() => setEditingWebhook(item)}>
+              <ActionButton onClick={() => navigate(webhookSettingsPath(data.workspace.urlKey, item.id))}>
                 Configure
               </ActionButton>
             </div>
           </Row>
         ))}
-        {!data.webhooks.length && (
-          <div className="settings-empty compact">
-            <Radio size={24} />
-            <h3>No webhooks</h3>
-            <p>Send workspace events to an HTTPS endpoint.</p>
-          </div>
-        )}
-        <div className="settings-section-action">
-          <ActionButton onClick={() => setEditingWebhook(null)}>
+        <Row title={data.webhooks.length ? "" : "No webhooks"} className="settings-row--action">
+          <ActionButton onClick={() => navigate(webhookSettingsPath(data.workspace.urlKey, "new"))}>
             <Plus size={14} />
             New webhook
           </ActionButton>
-        </div>
+        </Row>
       </Section>
-      <Section title="Personal API keys">
+      <Section
+        title="API keys"
+        description={
+          <>
+            Control whether workspace members can create personal API keys. View your own keys in{" "}
+            <button type="button" className="settings-inline-link" onClick={() => onNavigate("account-security")}>
+              Security &amp; access
+            </button>{" "}
+            settings.
+          </>
+        }
+      >
+        {admin ? (
+          <PermissionRow
+            title="API key creation"
+            description="Choose which members can create personal API keys"
+            settingKey="apiKeyPermission"
+            settings={settings}
+            save={save}
+          />
+        ) : (
+          <Row title="API key creation" description="Choose which members can create personal API keys">
+            <span className="settings-static">{securityPermissionLabel(settings.apiKeyPermission)}</span>
+          </Row>
+        )}
         <Row
-          title="Member API key creation"
-          description="Controlled by the workspace Security policy."
+          title="Issued keys"
+          description={admin ? "View and manage API keys created by workspace members" : "API keys you created"}
+          className="personal-row-link"
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate(apiKeysSettingsPath(data.workspace.urlKey))}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") navigate(apiKeysSettingsPath(data.workspace.urlKey));
+          }}
         >
-          <span className="settings-static">
-            {data.workspaceSettings.apiKeyPermission === "admins"
-              ? "Admins only"
-              : "All members"}
+          <span className="personal-row-link-meta">
+            {issuedKeys.length ? `${issuedKeys.length} ${issuedKeys.length === 1 ? "key" : "keys"}` : "No API keys"}
           </span>
         </Row>
-        {items.map((item) => (
-          <Row
-            key={item.id}
-            title={item.name}
-            description={`${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${(item.teamIds ?? []).length ? `${(item.teamIds ?? []).length} teams` : "all teams"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
-          >
-            <ActionButton
-              danger
-              onClick={() => void revokeAPIKey(item.id).then(onReload)}
-            >
-              Revoke
-            </ActionButton>
-          </Row>
-        ))}
-        {!items.length && (
-          <div className="settings-empty compact">
-            <Braces size={24} />
-            <h3>No personal API keys</h3>
-            <p>Create a scoped key to access the Flow API.</p>
-          </div>
-        )}
-        <div className="settings-section-action">
-          <ActionButton
-            onClick={() =>
-              onCreateAPIKey ? onCreateAPIKey() : setOpen(true)
-            }
-          >
-            <Plus size={14} />
-            New API key
-          </ActionButton>
-        </div>
       </Section>
-      <Dialog
-        open={open}
-        onOpenChange={(value) => (value ? setOpen(true) : reset())}
-      >
-        <DialogContent className="settings-confirm">
-          <DialogTitle>
-            {secret ? "API key created" : "New API key"}
-          </DialogTitle>
-          {secret ? (
-            <>
-              <p>This secret is shown once.</p>
-              <input
-                className="settings-input"
-                readOnly
-                value={secret}
-                onFocus={(event) => event.currentTarget.select()}
-              />
-              <footer>
-                <ActionButton
-                  onClick={() => {
-                    void navigator.clipboard.writeText(secret);
-                    toast.success("Copied");
-                  }}
-                >
-                  Copy
-                </ActionButton>
-                <ActionButton primary onClick={reset}>
-                  Done
-                </ActionButton>
-              </footer>
-            </>
-          ) : (
-            <>
-              <label>
-                Name
-                <input
-                  className="settings-input"
-                  autoFocus
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </label>
-              <label>
-                Scopes
-                <div className="settings-segmented">
-                  <button
-                    className={scopes.includes("read") ? "active" : ""}
-                    onClick={() =>
-                      setScopes((current) =>
-                        current.includes("read")
-                          ? current.filter((x) => x !== "read")
-                          : [...current, "read"],
-                      )
-                    }
-                  >
-                    Read
-                  </button>
-                  <button
-                    className={scopes.includes("write") ? "active" : ""}
-                    onClick={() =>
-                      setScopes((current) =>
-                        current.includes("write")
-                          ? current.filter((x) => x !== "write")
-                          : [...current, "write"],
-                      )
-                    }
-                  >
-                    Write
-                  </button>
-                </div>
-              </label>
-              <fieldset className="settings-check-list">
-                <legend>Team access</legend>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={!teamIds.length}
-                    onChange={() => setTeamIds([])}
-                  />
-                  All teams
-                </label>
-                {data.teams.map((team) => (
-                  <label key={team.id}>
-                    <input
-                      type="checkbox"
-                      checked={teamIds.includes(team.id)}
-                      onChange={(event) =>
-                        setTeamIds((current) =>
-                          event.target.checked
-                            ? [...current, team.id]
-                            : current.filter((id) => id !== team.id),
-                        )
-                      }
-                    />
-                    <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-                    <span data-i18n-ignore>{team.name}</span>
-                  </label>
-                ))}
-              </fieldset>
-              <footer>
-                <ActionButton onClick={reset}>Cancel</ActionButton>
-                <ActionButton
-                  primary
-                  disabled={!name.trim() || !scopes.length}
-                  onClick={() => void submit()}
-                >
-                  Create key
-                </ActionButton>
-              </footer>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
       {editingOAuth !== undefined && (
         <OAuthEditor
           app={editingOAuth}
           onClose={() => setEditingOAuth(undefined)}
           onSaved={onReload}
         />
-      )}{" "}
-      {editingWebhook !== undefined && (
-        <WebhookEditor
-          data={data}
-          webhook={editingWebhook}
-          onClose={() => setEditingWebhook(undefined)}
-          onSaved={onReload}
-        />
       )}
+    </>
+  );
+}
+function IssuedApiKeysPage({
+  data,
+  onBack,
+  onReload,
+}: {
+  data: BootstrapData;
+  onBack: () => void;
+  onReload: () => Promise<void>;
+}) {
+  const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
+  const keys = (data.apiKeys ?? []).filter((item) => !item.revokedAt);
+  const creator = (id: string) => data.users.find((user) => user.id === id)?.displayName ?? "Unknown";
+  return (
+    <>
+      <SettingsCrumb onClick={onBack}>API</SettingsCrumb>
+      <PageTitle description={admin ? "API keys created by members of this workspace." : "API keys you created in this workspace."}>
+        Issued keys
+      </PageTitle>
+      <Section>
+        {keys.map((item) => (
+          <Row
+            key={item.id}
+            title={<span data-i18n-ignore>{item.name}</span>}
+            description={`${creator(item.creatorId)} · ${item.prefix}… · ${item.scopes == null ? "Full access" : item.scopes.length ? item.scopes.join(", ") : "No permissions"} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : "never used"}`}
+          >
+            {(admin || item.creatorId === data.viewer.id) && (
+              <ActionButton
+                danger
+                onClick={() =>
+                  void revokeAPIKey(item.id)
+                    .then(onReload)
+                    .catch((error) => toast.error(error instanceof Error ? error.message : "Could not revoke key"))
+                }
+              >
+                Revoke
+              </ActionButton>
+            )}
+          </Row>
+        ))}
+        {!keys.length && <Row title="No API keys" />}
+      </Section>
     </>
   );
 }
@@ -3279,16 +3319,60 @@ function ApplicationsPage({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const authorizations = (data.oauthAuthorizations ?? []).filter(
     (item) => !item.revokedAt,
   );
-  const empty = !data.integrationConnections.length && !authorizations.length;
+  const empty =
+    !data.integrationConnections.length &&
+    !authorizations.length &&
+    !data.oauthApplications.length;
   return (
     <>
       <PageTitle description="Third-party applications authorized for this workspace.">
         Applications
       </PageTitle>
-      <Section>
+      <Section title="Workspace OAuth applications">
+        {data.oauthApplications.map((item) => (
+          <Row
+            key={item.id}
+            title={
+              <span className="settings-inline-title">
+                <OAuthAppImage app={item} size={22} />
+                <span data-i18n-ignore>{item.name}</span>
+              </span>
+            }
+            description={`${item.clientId} · ${item.scopes.join(", ")}`}
+          >
+            <div className="settings-inline-actions">
+              <ActionButton
+                onClick={() =>
+                  navigate(
+                    applicationSettingsPath(data.workspace.urlKey, item.id),
+                  )
+                }
+              >
+                Open
+              </ActionButton>
+              <ActionButton
+                onClick={() =>
+                  navigate(applicationEditPath(data.workspace.urlKey, item.id))
+                }
+              >
+                Edit
+              </ActionButton>
+            </div>
+          </Row>
+        ))}
+        {!data.oauthApplications.length && (
+          <div className="settings-empty compact">
+            <AppWindow size={24} />
+            <h3>No OAuth applications</h3>
+            <p>Create developer applications from the API settings page.</p>
+          </div>
+        )}
+      </Section>
+      <Section title="Authorized applications">
         {authorizations.map((item) => (
           <Row
             key={item.id}
@@ -3332,148 +3416,6 @@ function ApplicationsPage({
         )}
       </Section>
     </>
-  );
-}
-function WebhookEditor({
-  data,
-  webhook,
-  onClose,
-  onSaved,
-}: {
-  data: BootstrapData;
-  webhook: Webhook | null;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [name, setName] = useState(webhook?.name ?? "");
-  const [url, setUrl] = useState(webhook?.url ?? "");
-  const [resourceTypes, setResourceTypes] = useState(
-    webhook?.resourceTypes ?? ["issues"],
-  );
-  const [teamIds, setTeamIds] = useState(webhook?.teamIds ?? []);
-  const resources = [
-    "issues",
-    "comments",
-    "projects",
-    "cycles",
-    "documents",
-    "customers",
-  ];
-  const save = async () => {
-    try {
-      const input = {
-        name: name.trim(),
-        url: url.trim(),
-        resourceTypes,
-        teamIds,
-        enabled: webhook?.enabled ?? true,
-      };
-      if (webhook) await updateWebhook(webhook.id, input);
-      else await createWebhook(input);
-      await onSaved();
-      onClose();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save webhook",
-      );
-    }
-  };
-  return (
-    <Dialog open onOpenChange={(value) => !value && onClose()}>
-      <DialogContent className="settings-invite-dialog settings-webhook-dialog">
-        <DialogTitle>
-          {webhook ? "Configure webhook" : "New webhook"}
-        </DialogTitle>
-        <label>
-          Name
-          <input
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label>
-          Endpoint URL
-          <input
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://example.com/webhooks/flow"
-          />
-        </label>
-        <fieldset className="settings-check-list">
-          <legend>Resources</legend>
-          {resources.map((resource) => (
-            <label key={resource}>
-              <input
-                type="checkbox"
-                checked={resourceTypes.includes(resource)}
-                onChange={(event) =>
-                  setResourceTypes((current) =>
-                    event.target.checked
-                      ? [...current, resource]
-                      : current.filter((item) => item !== resource),
-                  )
-                }
-              />
-              {title(resource)}
-            </label>
-          ))}
-        </fieldset>
-        <fieldset className="settings-check-list">
-          <legend>Teams</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={!teamIds.length}
-              onChange={() => setTeamIds([])}
-            />
-            All teams
-          </label>
-          {data.teams.map((team) => (
-            <label key={team.id}>
-              <input
-                type="checkbox"
-                checked={teamIds.includes(team.id)}
-                onChange={(event) =>
-                  setTeamIds((current) =>
-                    event.target.checked
-                      ? [...current, team.id]
-                      : current.filter((id) => id !== team.id),
-                  )
-                }
-              />
-              <ViewGlyph color={team.color} icon={team.icon || "Team"} />
-              <span data-i18n-ignore>{team.name}</span>
-            </label>
-          ))}
-        </fieldset>
-        <footer>
-          {webhook && (
-            <ActionButton
-              danger
-              onClick={() =>
-                void deleteWebhook(webhook.id).then(async () => {
-                  await onSaved();
-                  onClose();
-                })
-              }
-            >
-              Delete
-            </ActionButton>
-          )}
-          <ActionButton onClick={onClose}>Cancel</ActionButton>
-          <ActionButton
-            primary
-            disabled={
-              !name.trim() || !/^https?:\/\//.test(url) || !resourceTypes.length
-            }
-            onClick={() => void save()}
-          >
-            Save
-          </ActionButton>
-        </footer>
-      </DialogContent>
-    </Dialog>
   );
 }
 function OAuthEditor({
@@ -3761,10 +3703,180 @@ function IntegrationsSettings({
           );
         })}
       </Section>
-      <EnterpriseIdentityProviders data={data} onReload={onReload} />
     </>
   );
 }
+function AuthenticationPage({
+  data,
+  onReload,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+}) {
+  const [settings, setSettings] = useState(data.workspaceSettings);
+  useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
+  const save = async (next: WorkspaceSettings) => {
+    setSettings(next);
+    try {
+      await updateWorkspacePreferences(next);
+      await onReload();
+      toast.success("Authentication settings saved");
+    } catch (error) {
+      setSettings(data.workspaceSettings);
+      toast.error(error instanceof Error ? error.message : "Could not save authentication settings");
+    }
+  };
+  const services = settings.allowedAuthServices?.length
+    ? settings.allowedAuthServices
+    : [
+        ...(settings.googleAuthEnabled !== false ? (["google"] as const) : []),
+        ...(settings.emailAuthEnabled !== false ? (["email"] as const) : []),
+      ];
+  const toggleService = (service: "google" | "email" | "passkey" | "saml" | "appUser", enabled: boolean) => {
+    const next = enabled
+      ? Array.from(new Set([...services, service]))
+      : services.filter((item) => item !== service);
+    void save({
+      ...settings,
+      allowedAuthServices: next as WorkspaceSettings["allowedAuthServices"],
+      googleAuthEnabled: next.includes("google"),
+      emailAuthEnabled: next.includes("email") || next.includes("passkey"),
+    });
+  };
+  return (
+    <>
+      <PageTitle description="Configure enterprise SSO and which login methods members can use.">
+        Authentication
+      </PageTitle>
+      <EnterpriseIdentityProviders data={data} onReload={onReload} />
+      <Section title="Other domains">
+        <p className="settings-section-note">
+          Control how all other email domains (those not approved by an identity provider above) can authenticate.
+        </p>
+        <Row title="Google authentication" description="Currently available to all members and guests">
+          <Toggle
+            label="Google authentication"
+            checked={services.includes("google")}
+            onChange={(value) => toggleService("google", value)}
+          />
+        </Row>
+        <Row title="Email & passkey authentication" description="Currently available to all members and guests">
+          <Toggle
+            label="Email & passkey authentication"
+            checked={services.includes("email") || services.includes("passkey")}
+            onChange={(value) => toggleService("email", value)}
+          />
+        </Row>
+        <Row title="SAML authentication" description="Allow SAML/SSO for domains without a dedicated identity provider row">
+          <Toggle
+            label="SAML authentication"
+            checked={services.includes("saml")}
+            onChange={(value) => toggleService("saml", value)}
+          />
+        </Row>
+        <Row title="App users" description="Allow application / agent accounts to authenticate">
+          <Toggle
+            label="App users"
+            checked={services.includes("appUser")}
+            onChange={(value) => toggleService("appUser", value)}
+          />
+        </Row>
+      </Section>
+    </>
+  );
+}
+function WorkspaceInviteLinkRow({
+  data,
+  enabled,
+}: {
+  data: BootstrapData;
+  enabled: boolean;
+}) {
+  const [link, setLink] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!enabled) {
+      setLink("");
+      return;
+    }
+    void fetchWorkspaceInviteLink(data.workspace.urlKey)
+      .then(async (result) => {
+        if ("token" in result && result.enabled) {
+          setLink(`${window.location.origin}/join/${result.token}`);
+          return;
+        }
+        const rotated = await rotateWorkspaceInviteLink(data.workspace.urlKey);
+        setLink(`${window.location.origin}/join/${rotated.token}`);
+      })
+      .catch(() => setLink(""));
+  }, [data.workspace.urlKey, enabled]);
+  if (!enabled) return null;
+  return (
+    <Row
+      title="Workspace invite link"
+      description={
+        link || "Generate a shareable join link for this workspace."
+      }
+    >
+      <div className="settings-inline-actions">
+        <ActionButton
+          disabled={!link || busy}
+          onClick={() => {
+            if (!link) return;
+            void navigator.clipboard.writeText(link);
+            toast.success("Invite link copied");
+          }}
+        >
+          Copy link
+        </ActionButton>
+        <ActionButton
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void rotateWorkspaceInviteLink(data.workspace.urlKey)
+              .then((rotated) => {
+                setLink(`${window.location.origin}/join/${rotated.token}`);
+                toast.success("Invite link rotated");
+              })
+              .catch((error) =>
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not rotate invite link",
+                ),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          Rotate
+        </ActionButton>
+        <ActionButton
+          danger
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void disableWorkspaceInviteLink(data.workspace.urlKey)
+              .then(() => {
+                setLink("");
+                toast.success("Invite link disabled");
+              })
+              .catch((error) =>
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : "Could not disable invite link",
+                ),
+              )
+              .finally(() => setBusy(false));
+          }}
+        >
+          Disable
+        </ActionButton>
+      </div>
+    </Row>
+  );
+}
+
 function EnterpriseIdentityProviders({
   data,
   onReload,
@@ -3772,6 +3884,7 @@ function EnterpriseIdentityProviders({
   data: BootstrapData;
   onReload: () => Promise<void>;
 }) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState<IdentityProvider | null | undefined>(
       undefined,
     ),
@@ -3827,6 +3940,18 @@ function EnterpriseIdentityProviders({
               }
             >
               Verify
+            </ActionButton>
+            <ActionButton
+              onClick={() =>
+                navigate(
+                  identityProviderSettingsPath(
+                    data.workspace.urlKey,
+                    item.id,
+                  ),
+                )
+              }
+            >
+              Open
             </ActionButton>
             <ActionButton onClick={() => setEditing(item)}>
               Configure

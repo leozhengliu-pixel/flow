@@ -13,7 +13,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -31,8 +30,12 @@ func requestActor(s *server, r *http.Request) domain.User {
 }
 
 func (s *server) getUserSettings(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	writeJSON(w, http.StatusOK, data.UserSettings[requestActor(s, r).ID])
+	_, settings, ok := s.store.AccountCollections(workspaceKey(r), requestActor(s, r).ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, settings)
 }
 
 func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
@@ -53,6 +56,9 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if !slices.Contains([]string{"default", "daily", "weekly", "never"}, input.PulseSchedule) {
 			return errInvalid
+		}
+		if err := validateCodingToolSettings(&input); err != nil {
+			return err
 		}
 		data.UserSettings[actor.ID] = input
 		updated = input
@@ -219,6 +225,10 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.SessionDurationDays < 1 || input.SessionDurationDays > 365 {
 			return errInvalid
 		}
+		if input.WelcomeMessage != data.WorkspaceSettings.WelcomeMessage || input.WelcomeMessageTitle != data.WorkspaceSettings.WelcomeMessageTitle {
+			editedAt := time.Now().UTC()
+			input.WelcomeMessageEditedByID, input.WelcomeMessageEditedAt = data.Viewer.ID, &editedAt
+		}
 		input.AllowedDomains = normalizedStrings(input.AllowedDomains)
 		for index := range input.AllowedDomains {
 			input.AllowedDomains[index] = strings.ToLower(strings.TrimPrefix(input.AllowedDomains[index], "@"))
@@ -283,9 +293,40 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 				return fmt.Errorf("%w: Asks requires an enabled, verified team email intake address", errInvalid)
 			}
 		}
+		channels := make([]domain.AsksSlackChannelMapping, 0, len(input.FeatureSettings.AsksSlackChannels))
+		seenChannels := map[string]struct{}{}
+		for _, item := range input.FeatureSettings.AsksSlackChannels {
+			channel := strings.TrimSpace(item.Channel)
+			teamID := strings.TrimSpace(item.TeamID)
+			templateID := strings.TrimSpace(item.TemplateID)
+			if channel == "" || teamID == "" {
+				return fmt.Errorf("%w: Asks Slack channel mapping requires channel and teamId", errInvalid)
+			}
+			key := strings.ToLower(channel)
+			if _, exists := seenChannels[key]; exists {
+				return fmt.Errorf("%w: duplicate Asks Slack channel mapping", errInvalid)
+			}
+			if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
+				return fmt.Errorf("%w: Asks Slack channel team not found", errInvalid)
+			}
+			if templateID != "" && !slices.ContainsFunc(data.IssueTemplates, func(template domain.IssueTemplate) bool {
+				return template.ID == templateID && (template.TeamID == "" || template.TeamID == teamID)
+			}) {
+				return fmt.Errorf("%w: Asks Slack channel template not found", errInvalid)
+			}
+			seenChannels[key] = struct{}{}
+			channels = append(channels, domain.AsksSlackChannelMapping{
+				Channel:    channel,
+				TeamID:     teamID,
+				TemplateID: templateID,
+				Enabled:    item.Enabled,
+			})
+		}
+		input.FeatureSettings.AsksSlackChannels = channels
 		if !slices.Contains([]string{"daily", "weekly", "never"}, input.FeatureSettings.PulseWorkspaceSchedule) {
 			return errInvalid
 		}
+		ensureAllowedAuthServices(&input, data.WorkspaceSettings, patch)
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input
@@ -522,6 +563,8 @@ type labelGroupInput struct {
 	Description  *string `json:"description,omitempty"`
 	ResourceType *string `json:"resourceType,omitempty"`
 	ArchivedAt   *string `json:"archivedAt,omitempty"`
+	// Scope is a team ID for team-owned groups; empty means workspace.
+	Scope *string `json:"scope,omitempty"`
 }
 
 func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
@@ -540,6 +583,12 @@ func (s *server) createLabelGroup(w http.ResponseWriter, r *http.Request) {
 			return "", errInvalid
 		}
 		created = domain.LabelGroup{ID: fmt.Sprintf("label_group_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#8b8d98", Scope: "Workspace", ResourceType: resource, CreatedAt: time.Now().UTC()}
+		if input.Scope != nil && *input.Scope != "" && *input.Scope != "Workspace" {
+			if !teamExists(data, *input.Scope) {
+				return "", errNotFound
+			}
+			created.Scope = *input.Scope
+		}
 		if input.Color != nil {
 			created.Color = *input.Color
 		}
@@ -1158,8 +1207,8 @@ func (s *server) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		if strings.EqualFold(data.ViewerRole, "guest") {
 			return "", fmt.Errorf("%w: guest users cannot create personal API keys", store.ErrAuthForbidden)
 		}
-		if data.WorkspaceSettings.APIKeyPermission == "admins" && !workspaceAdminRole(data.ViewerRole) {
-			return "", fmt.Errorf("%w: API key creation is limited to admins", store.ErrAuthForbidden)
+		if !roleSatisfiesWorkspacePermission(data.ViewerRole, data.WorkspaceSettings.APIKeyPermission) {
+			return "", fmt.Errorf("%w: API key creation is limited by workspace security policy", store.ErrAuthForbidden)
 		}
 		for _, existing := range data.APIKeys {
 			if existing.RevokedAt == nil && existing.CreatorID == actor.ID && strings.EqualFold(strings.TrimSpace(existing.Name), input.Name) {
@@ -1409,6 +1458,7 @@ func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
 type oauthInput struct {
 	Name         *string   `json:"name,omitempty"`
 	Description  *string   `json:"description,omitempty"`
+	LogoURL      *string   `json:"logoUrl,omitempty"`
 	RedirectURIs *[]string `json:"redirectUris,omitempty"`
 	Scopes       *[]string `json:"scopes,omitempty"`
 }
@@ -1438,6 +1488,9 @@ func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
 	}
 	if input.Description != nil {
 		app.Description = strings.TrimSpace(*input.Description)
+	}
+	if input.LogoURL != nil {
+		app.LogoURL = strings.TrimSpace(*input.LogoURL)
 	}
 	if input.RedirectURIs != nil {
 		app.RedirectURIs = normalizedStrings(*input.RedirectURIs)
@@ -1541,7 +1594,7 @@ func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "gitlab", "slack"}, provider) {
+	if !supportedIntegration(provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
@@ -1573,6 +1626,15 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 	if provider == "gitlab" && secret == "" {
 		writeError(w, http.StatusBadRequest, "API access token is required")
 		return
+	}
+	if provider == "jira" {
+		if err := validateJiraConnectConfig(input.Config); err != nil {
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		if len(input.Scopes) == 0 {
+			input.Scopes = []string{"read:jira-work", "write:jira-work", "read:jira-user", "offline_access"}
+		}
 	}
 	delete(input.Config, "apiToken")
 	if secret != "" {
@@ -1616,7 +1678,7 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 // the browser response; the callback performs the server-side token exchange.
 func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	provider := strings.ToLower(r.PathValue("provider"))
-	if !slices.Contains([]string{"github", "gitlab", "slack"}, provider) {
+	if !supportedIntegration(provider) {
 		writeError(w, http.StatusBadRequest, "unsupported integration")
 		return
 	}
@@ -1666,8 +1728,17 @@ func (s *server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		query.Set("redirect_uri", redirectURI)
 		query.Set("response_type", "code")
 		query.Set("state", state)
-		if len(connection.Scopes) > 0 {
-			query.Set("scope", strings.Join(connection.Scopes, " "))
+		scopes := connection.Scopes
+		if len(scopes) == 0 && provider == "figma" {
+			scopes = []string{"file_content:read", "file_metadata:read"}
+			connection.Scopes = scopes
+		}
+		if len(scopes) > 0 {
+			query.Set("scope", strings.Join(scopes, " "))
+		}
+		if provider == "jira" && strings.TrimSpace(connection.Config["mode"]) != "custom_personal" {
+			query.Set("audience", "api.atlassian.com")
+			query.Set("prompt", "consent")
 		}
 		u.RawQuery = query.Encode()
 		result = map[string]string{"provider": provider, "connectionId": connection.ID, "state": state, "authorizationURL": u.String()}
@@ -1800,18 +1871,42 @@ func (s *server) finishIntegrationOAuth(w http.ResponseWriter, r *http.Request) 
 		if strings.TrimSpace(r.URL.Query().Get("error")) != "" {
 			status = http.StatusBadRequest
 		}
+		if wantsHTMLRedirect(r) {
+			http.Redirect(w, r, integrationOAuthCompletePath(provider, workspaceKey(r), "error", providerError), http.StatusSeeOther)
+			return
+		}
 		writeError(w, status, providerError)
 		return
 	}
-	if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		appURL := strings.TrimRight(os.Getenv("FLOW_APP_URL"), "/")
-		if appURL == "" {
-			appURL = "http://localhost:5173"
-		}
-		http.Redirect(w, r, appURL+"/"+url.PathEscape(workspaceKey(r))+"/settings/integrations", http.StatusSeeOther)
+	if wantsHTMLRedirect(r) {
+		http.Redirect(w, r, integrationOAuthCompletePath(provider, workspaceKey(r), "connected", ""), http.StatusSeeOther)
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
+}
+
+// finishIntegrationOAuthJSON completes a browser/popup OAuth code exchange for
+// providers whose redirect URI lands on the SPA (e.g. Figma /connect/figma/callback).
+func (s *server) finishIntegrationOAuthJSON(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Code  string `json:"code"`
+		State string `json:"state"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	code, state := strings.TrimSpace(input.Code), strings.TrimSpace(input.State)
+	if code == "" || state == "" {
+		writeError(w, http.StatusBadRequest, "OAuth code and state are required")
+		return
+	}
+	// Reuse the GET callback path by synthesizing a request query.
+	q := r.URL.Query()
+	q.Set("code", code)
+	q.Set("state", state)
+	r.URL.RawQuery = q.Encode()
+	r.Header.Set("Accept", "application/json")
+	s.finishIntegrationOAuth(w, r)
 }
 
 func exchangeIntegrationToken(ctx context.Context, tokenURL string, config integrationOAuthConfig, code string, allowLocal bool) (string, string, int64, error) {
@@ -2069,6 +2164,9 @@ func (s *server) disconnectIntegrationConnection(w http.ResponseWriter, r *http.
 		if before == len(data.IntegrationConnections) {
 			return errNotFound
 		}
+		if provider == "jira" && !slices.ContainsFunc(data.IntegrationConnections, func(item domain.IntegrationConnection) bool { return item.Provider == "jira" }) {
+			ensureJiraLinksCleared(data, "jira")
+		}
 		return nil
 	})
 	if err == nil {
@@ -2086,6 +2184,7 @@ func (s *server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		if before == len(data.IntegrationConnections) {
 			return errNotFound
 		}
+		ensureJiraLinksCleared(data, provider)
 		return nil
 	})
 	if err != nil {
@@ -2205,4 +2304,32 @@ func (s *server) deleteDocumentTemplate(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+var knownCodingTools = []string{"claudeCodeDesktop", "codex", "cursor", "devin", "windsurf", "factory", "conductor", "customUrl"}
+
+// validateCodingToolSettings keeps coding-tool launch settings safe to open:
+// only known tools, and a custom link that is a plain http(s) URL.
+func validateCodingToolSettings(input *domain.UserSettings) error {
+	tools := make([]string, 0, len(input.EnabledCodingTools))
+	for _, tool := range input.EnabledCodingTools {
+		if !slices.Contains(knownCodingTools, tool) {
+			return fmt.Errorf("%w: unknown coding tool %q", errInvalid, tool)
+		}
+		if !slices.Contains(tools, tool) {
+			tools = append(tools, tool)
+		}
+	}
+	input.EnabledCodingTools = tools
+	input.CustomDeepLinkURLTemplate = strings.TrimSpace(input.CustomDeepLinkURLTemplate)
+	if link := input.CustomDeepLinkURLTemplate; link != "" {
+		lower := strings.ToLower(link)
+		if len(link) > 2000 || (!strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://")) {
+			return fmt.Errorf("%w: custom link must be an http(s) URL", errInvalid)
+		}
+	}
+	if len(input.CodingPromptTemplate) > 8000 {
+		return fmt.Errorf("%w: prompt template is too long", errInvalid)
+	}
+	return nil
 }

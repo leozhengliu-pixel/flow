@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
 import {
-  createLabelGroup, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel,
+  createLabelGroup, createTeamLabel, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel,
   deleteWorkspaceLabel, moveWorkspaceLabelToTeams, updateLabelGroup, updateTeamLabel, updateWorkspaceLabel,
 } from '@/lib/api'
 import {
@@ -14,7 +14,7 @@ import {
   DropdownMenuSubTrigger, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import type { BootstrapData, IssueLabel, LabelGroup, LabelResourceType } from '@/types/flow'
+import type { BootstrapData, IssueLabel, LabelGroup, LabelResourceType, Team } from '@/types/flow'
 import { toggleFavoriteFor } from '@/lib/favorites'
 import { groupsForResource, isWorkspaceLabel, labelResourceType } from '@/lib/labels'
 import { useI18n } from '@/i18n/i18n'
@@ -25,7 +25,8 @@ export { ProjectStatusesSettings } from './issues-projects-settings'
 type ScopeFilter = 'workspace' | 'all' | 'archived'
 type LabelSort = 'workflow' | 'name' | 'description' | 'usage' | 'lastAppliedAt' | 'createdAt'
 
-export function DomainLabelsSettings({ data, resourceType, onReload }: { data: BootstrapData; resourceType: LabelResourceType; onReload: () => Promise<void> }) {
+/** Labels table for the workspace, or for one team when `team` is set. */
+export function DomainLabelsSettings({ data, resourceType, team, onReload }: { data: BootstrapData; resourceType: LabelResourceType; team?: Team; onReload: () => Promise<void> }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState<{ kind: 'label'|'group'; groupId?: string }|null>(null)
@@ -34,17 +35,18 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
   const [selected, setSelected] = useState<string[]>([])
   const [collapsedScopes, setCollapsedScopes] = useState<string[]>([])
   const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set())
-  const allGroups = useMemo(() => groupsForResource(data.labelGroups, resourceType).filter(group => !deletedIds.has(group.id)), [data.labelGroups, resourceType, deletedIds])
+  const teamIds = useMemo(() => new Set(data.teams.map(item => item.id)), [data.teams])
+  const allGroups = useMemo(() => groupsForResource(data.labelGroups, resourceType).filter(group => !deletedIds.has(group.id) && (team ? group.scope === team.id : !teamIds.has(group.scope ?? ''))), [data.labelGroups, resourceType, deletedIds, team, teamIds])
   const groups = useMemo(() => allGroups.filter(group => scope === 'archived' ? Boolean(group.archivedAt) : !group.archivedAt), [allGroups, scope])
   const labels = useMemo(() => data.labels.filter(item => {
     if (deletedIds.has(item.id) || deletedIds.has(item.groupId ?? '')) return false
     if (labelResourceType(item) !== resourceType) return false
     if (scope === 'archived') return Boolean(item.archivedAt)
     if (item.archivedAt) return false
-    if (scope === 'workspace' && !isWorkspaceLabel(item)) return false
+    if (team ? item.scope !== team.id : scope === 'workspace' && !isWorkspaceLabel(item)) return false
     const value = query.trim().toLowerCase()
     return !value || item.name.toLowerCase().includes(value) || (item.description ?? '').toLowerCase().includes(value)
-  }), [data.labels, query, resourceType, scope, deletedIds])
+  }), [data.labels, query, resourceType, scope, deletedIds, team])
   const sortedLabels = useMemo(() => sortLabels(labels, sort, data, resourceType), [labels, sort, data, resourceType])
   const sections = useMemo(
     () => labelSections(sortedLabels, groups, Boolean(query.trim()) || scope === 'archived'),
@@ -72,6 +74,11 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
   }
   const archiveLabel = (label: IssueLabel) => saveLabel(label, { archivedAt: label.archivedAt ? '' : new Date().toISOString() })
   const moveLabelToTeams = async (label: IssueLabel) => { await run(() => moveWorkspaceLabelToTeams(label.id)) }
+  const createLabel = (input: NewLabelInput, groupId?: string) => team
+    ? createTeamLabel(team.id, { ...input, color: input.color ?? '#5E6AD2', resourceType: resourceType === 'project' ? 'project' : 'issue', groupId })
+    : createWorkspaceLabel({ ...input, resourceType, groupId })
+  const inheritedCount = team ? data.labels.filter(item => isWorkspaceLabel(item) && !item.archivedAt && labelResourceType(item) === resourceType).length : 0
+  const resourceNoun = resourceType === 'issue' ? 'issue' : resourceType === 'project' ? 'project' : 'initiative'
   const toggleSelected = (id: string) => setSelected(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
   const toggleGroupSelected = (group: LabelGroup, childIds: string[]) => setSelected(current => {
     const ids = [group.id, ...childIds]
@@ -87,7 +94,7 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
     creatingGroupId={creating?.kind === 'label' ? creating.groupId : undefined}
     onCancelCreate={() => setCreating(null)}
     onCreateInGroup={groupId => setCreating({ kind: 'label', groupId })}
-    onCreateLabel={async (input, groupId) => Boolean(await run(() => createWorkspaceLabel({ ...input, resourceType, groupId })))}
+    onCreateLabel={async (input, groupId) => Boolean(await run(() => createLabel(input, groupId)))}
     onToggleGroupSelected={toggleGroupSelected}
     onToggleSelected={toggleSelected}
     onSaveLabel={saveLabel}
@@ -125,13 +132,17 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
   const startCreating = (kind: 'label'|'group') => { setScope('workspace'); setCreating({ kind }); setSelected([]) }
 
   return <div className="domain-labels-page" data-i18n-ignore>
-    <header className="settings-page-header domain-labels-header"><div><h1>{t(resourceType === 'issue' ? 'Issue labels' : resourceType === 'project' ? 'Project labels' : 'Initiative labels')}</h1></div></header>
+    <header className="settings-page-header domain-labels-header">
+      <div><h1>{t(`${team ? 'Team ' + resourceNoun : resourceNoun.charAt(0).toUpperCase() + resourceNoun.slice(1)} labels`)}</h1></div>
+      <div className="settings-header-actions">
+        <button className="settings-action" disabled={scope === 'archived'} onClick={() => startCreating('group')}>{t('New group')}</button>
+        <button className="settings-action primary" disabled={scope === 'archived'} onClick={() => startCreating('label')}>{t('New label')}</button>
+      </div>
+    </header>
     <div className="domain-labels-toolbar">
       <div className="settings-list-toolbar domain-labels-search"><Search size={14}/><input aria-label={t('Filter labels')} placeholder={t('Filter by name…')} value={query} onChange={event => setQuery(event.target.value)}/></div>
-      <ScopeButton value={scope} resourceType={resourceType} onChange={value => { setScope(value); setSelected([]) }}/>
+      {!team && <ScopeButton value={scope} resourceType={resourceType} onChange={value => { setScope(value); setSelected([]) }}/>}
       <span/>
-      <button className="settings-action" disabled={scope === 'archived'} onClick={() => startCreating('group')}>{t('New group')}</button>
-      <button className="settings-action primary" disabled={scope === 'archived'} onClick={() => startCreating('label')}>{t('New label')}</button>
     </div>
     <section className="settings-section domain-labels-section"><div className="domain-labels-grid">
       <div className="domain-labels-table-header">
@@ -142,16 +153,17 @@ export function DomainLabelsSettings({ data, resourceType, onReload }: { data: B
         <LabelSortHeader label={t(scope === 'archived' ? 'Archived' : 'Created')} sortKey="createdAt" sort={sort} onSort={setSort}/>
       </div>
       {creating?.kind === 'group' && (
-        <InlineLabelRow kind="group" onCancel={() => setCreating(null)} onSave={async input => { const group = await run(() => createLabelGroup({ ...input, resourceType })); if (group) setCreating({ kind: 'label', groupId: group.id }); return Boolean(group) }}/>
+        <InlineLabelRow kind="group" onCancel={() => setCreating(null)} onSave={async input => { const group = await run(() => createLabelGroup({ ...input, resourceType, scope: team?.id })); if (group) setCreating({ kind: 'label', groupId: group.id }); return Boolean(group) }}/>
       )}
       {creating?.kind === 'label' && !creating.groupId && (
-        <InlineLabelRow kind="label" onCancel={() => setCreating(null)} onSave={async input => { const label = await run(() => createWorkspaceLabel({ ...input, resourceType })); if (label) setCreating(null); return Boolean(label) }}/>
+        <InlineLabelRow kind="label" onCancel={() => setCreating(null)} onSave={async input => { const label = await run(() => createLabel(input)); if (label) setCreating(null); return Boolean(label) }}/>
       )}
       {scope === 'all' ? scopes.map(item => <div className="domain-label-scope-block" key={item.id}>
         <ScopeSectionHeader label={item.id === 'workspace' ? t('Workspace') : item.label} count={item.labels.length} collapsed={collapsedScopes.includes(item.id)} onToggle={() => setCollapsedScopes(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])}/>
         {!collapsedScopes.includes(item.id) && renderSections(labelSections(item.labels, item.id === 'workspace' ? groups : [], true))}
       </div>) : scope === 'archived' ? <ArchivedRows groups={groups} labels={sortedLabels} data={data} resourceType={resourceType} availableGroups={allGroups.filter(group => !group.archivedAt)} selected={selected} onToggleGroupSelected={toggleGroupSelected} onToggleSelected={toggleSelected} onSaveLabel={saveLabel} onArchiveLabel={archiveLabel} onDeleteLabel={deleteLabel} onArchiveGroup={async group => { await run(() => updateLabelGroup(group.id, { archivedAt: '' })) }} onDeleteGroup={deleteGroup}/> : renderSections(sections)}
-      {!labels.length && !groups.length && !creating && <div className="domain-labels-empty">{t(scope === 'archived' ? 'No archived labels' : resourceType === 'issue' ? 'No issue labels' : resourceType === 'project' ? 'No project labels' : 'No initiative labels')}</div>}
+      {!labels.length && !groups.length && !creating && <div className={`domain-labels-empty${team && scope !== 'archived' ? ' is-team' : ''}`}>{t(scope === 'archived' ? 'No archived labels' : team ? `This team doesn’t have any ${resourceNoun} labels yet` : 'No labels found')}</div>}
+      {team && scope !== 'archived' && inheritedCount > 0 && <p className="domain-labels-inherited"><strong>{inheritedCount} {t(inheritedCount === 1 ? 'label' : 'labels')}</strong> {t('inherited from workspace')}</p>}
     </div></section>
     {selected.length > 0 && (
       <BulkLabelBar count={selected.length} archived={scope === 'archived'} onFavorite={() => void bulk('favorite')} onArchive={() => void bulk('archive')} onDelete={() => void bulk('delete')} onClear={() => setSelected([])}/>

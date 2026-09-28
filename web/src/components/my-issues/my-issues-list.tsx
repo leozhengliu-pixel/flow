@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, ChevronRight, Clock3, GitPullRequest, Link2, PackageOpen, Plus } from 'lucide-react'
+import { Check, ChevronDown, Clock3, Link2, PackageOpen, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
@@ -11,6 +11,8 @@ import { PropertyMenu, type PropertyMenuKind } from '@/components/property/prope
 import { LabelHoverPreview } from '@/components/property/label-hover-preview'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
+import { ContextMenuIcon } from './context-menu-icon'
+import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties, useIssueRowActions } from './issue-row-actions'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
@@ -20,6 +22,7 @@ import { toggleGroupedLabelIds } from '@/lib/labels'
 import { PersonHover } from '@/components/property/person-info'
 import { isPeopleProperty } from '@/lib/people'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { IssueWidgetAdornments } from '@/components/issues-split-view'
 
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
@@ -47,6 +50,9 @@ export interface MyIssuesCreateContext {
   projectMilestoneId?: string
   cycleId?: string
   labelIds?: string[]
+  parentId?: string
+  /** Relate the new issue to an existing one once it is created. */
+  related?: { issueId: string; kind: 'related' | 'parent' | 'blocked' | 'blocking' }
 }
 
 export interface MyIssuesRowData {
@@ -75,6 +81,8 @@ export interface MyIssuesRowData {
   autoClosed?: boolean
   autoClosedAt?: string
   triagedAt?: string
+  /** In the team's triage queue (triage enabled, backlog, never accepted). */
+  triage?: boolean
   templateId?: string
   initiativeIds?: string[]
   projectStatusId?: string
@@ -83,6 +91,8 @@ export interface MyIssuesRowData {
   projectLabelIds?: string[]
   projectLeadId?: string
   projectMilestoneNames?: string[]
+  /** Name of the milestone this issue is in (not the project's first milestone). */
+  milestoneName?: string
   projectMilestoneId?: string
   milestoneProgress?: number
   rawMilestoneDate?: string
@@ -104,6 +114,10 @@ export interface MyIssuesRowData {
   hasLinks?: boolean
   linkCount?: number
   pullRequestCount?: number
+  /** LS-0359 — dominant linked PR lifecycle for row chrome. */
+  pullRequestLifecycle?: 'open' | 'inReview' | 'approved' | 'merged' | 'closed' | 'draft'
+  blockedByCount?: number
+  blockingCount?: number
   releaseCount?: number
   hasContent?: boolean
   estimate?: number
@@ -128,13 +142,15 @@ export interface MyIssuesRowData {
   viewMatch?: boolean
 }
 
-export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number }
+export interface MyIssuesGroupData { id: string; label: string; stateType?: MyIssuesStateType; state?: MyIssuesRowData['state']; createContext?: MyIssuesCreateContext; issues: MyIssuesRowData[]; totalCount?: number; /** Set on sub-groups (display sub-grouping / board rows). */ parentGroupId?: string; parentLabel?: string }
 
 export interface MyIssuesListProps {
   groups: MyIssuesGroupData[]
   loading?: boolean
   error?: string
   selectedIds?: ReadonlySet<string>
+  /** Row shown in the split-layout detail pane. */
+  activeIssueId?: string
   collapsedGroupIds?: ReadonlySet<string>
   displayProperties?: ReadonlySet<MyIssuesProperty>
   nestedSubIssues?: boolean
@@ -155,6 +171,7 @@ export interface MyIssuesListProps {
 
 type MyIssuesListEntry =
   | { key: string; kind: 'group'; group: MyIssuesGroupData; collapsed: boolean }
+  | { key: string; kind: 'parent'; label: string; count: number }
   | { key: string; kind: 'issue'; issue: MyIssuesRowData; nestedLines: readonly boolean[]; groupEnd: boolean }
 
 const VIRTUALIZATION_THRESHOLD = 80
@@ -165,22 +182,25 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
   return context.loadingMore ? <div className={styles.loadingMore}>Loading more…</div> : null
 }
 
-export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached }: MyIssuesListProps) {
-  const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap(group => {
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached }: MyIssuesListProps) {
+  const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
-    if (collapsed) return [header]
+    const parent: MyIssuesListEntry[] = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId ? [{ key: `parent:${group.parentGroupId}`, kind: 'parent', label: group.parentLabel ?? '', count: groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0) }] : []
+    if (collapsed) return [...parent, header]
     const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
-    return [header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
+    return [...parent, header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
   }), [collapsedGroupIds, groups, nestedSubIssues])
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return <MyIssuesListEmpty/>
   let identifierLength = 6
   for (const group of groups) for (const issue of group.issues) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
-  const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'group'
+  const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'
+    ? <MyIssuesParentGroupHeader label={entry.label} count={entry.count}/>
+    : entry.kind === 'group'
     ? <div style={{ paddingBottom: !entry.collapsed && !entry.group.issues.length ? 4 : 2 }}><MyIssuesGroupHeader collapsed={entry.collapsed} createIssueLabel={createIssueLabel} group={entry.group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/></div>
-    : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
+    : <div style={{ paddingBottom: entry.groupEnd ? 2 : 0 }}><MyIssuesRow issue={entry.issue} active={activeIssueId === entry.issue.id} selected={selectedIds.has(entry.issue.id)} displayProperties={displayProperties} nestedLines={entry.nestedLines} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(entry.issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/></div>
   if (entries.length > VIRTUALIZATION_THRESHOLD) return <Virtuoso
     className={styles.virtualList}
     role="list"
@@ -195,27 +215,34 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}
   />
   return <div className={styles.list} role="list" aria-label="Issues" style={{ '--issue-identifier-width': `${identifierLength}ch` } as CSSProperties}>
-    {groups.map(group => {
+    {groups.map((group, index) => {
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
-      return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`}>
+      const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
+      return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
+        {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
         <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>
-        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
+        {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}
   </div>
 }
 
+/** Top-level header when a sub-grouping is active (Linear renders the primary group above its sub-groups). */
+function MyIssuesParentGroupHeader({ label, count }: { label: string; count: number }) {
+  return <header className={styles.parentGroupHeader}><span data-i18n-ignore className={styles.groupName}>{label}</span><span className={styles.groupCount}>{count}</span></header>
+}
+
 export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCreateIssue, onGroupCollapsedChange }: { collapsed: boolean; createIssueLabel: string; group: MyIssuesGroupData; onCreateIssue?: (group: MyIssuesGroupData) => void; onGroupCollapsedChange?: (groupId: string, collapsed: boolean) => void }) {
-  return <header className={styles.groupHeader}>
+  return <header className={styles.groupHeader} data-subgroup={group.parentGroupId ? true : undefined}>
     <button className={styles.collapseButton} aria-label={collapsed ? 'Expand group' : 'Collapse group'} aria-expanded={!collapsed} onClick={() => onGroupCollapsedChange?.(group.id, !collapsed)}><ChevronDown size={12}/></button>
     <GroupStateIcon state={group.state ?? group.issues[0]?.state} type={group.stateType}/><span data-i18n-ignore id={`my-issues-group-${group.id}`} className={styles.groupName}>{group.label}</span><span className={styles.groupCount}>{group.totalCount ?? group.issues.length}</span>
     {onCreateIssue && <button className={styles.createButton} aria-label={createIssueLabel} onClick={() => onCreateIssue(group)}><Plus size={16}/></button>}
   </header>
 }
 
-export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
-  issue: MyIssuesRowData; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
+export function MyIssuesRow({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
+  issue: MyIssuesRowData; active?: boolean; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
   onPropertyChange?: (issue: MyIssuesRowData, property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onRetryMutation?: (issue: MyIssuesRowData) => void
   onSelect?: (issueId: string, selected: boolean, range: boolean) => void
@@ -227,11 +254,11 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
     if ((event.target as Element).closest('button,input,[role="checkbox"]')) { event.preventDefault(); return }
     if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); open() }
   }
-  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '16px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('release') && '52px', displayProperties.has('links') && '52px', displayProperties.has('pullRequests') && '52px', '18px'].filter(Boolean).join(' ')
+  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('release') && '52px', displayProperties.has('links') && '52px', displayProperties.has('pullRequests') && '52px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
-      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-selected={selected} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
+      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
         {nestedDepth>0&&<NestedIssueGuide lines={nestedLines}/>}
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
         {displayProperties.has('priority') && <RowCommandPicker
@@ -266,7 +293,7 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <PropertyBadge key={label.id} label={label}/>)}</span>}/> : null}
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={styles.dueDate}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
-            {displayProperties.has('milestone') && issue.projectMilestoneNames?.[0] ? <span className={styles.dueDate} aria-label={`Milestone ${issue.projectMilestoneNames[0]}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.projectMilestoneNames[0]}</span></span> : null}
+            {displayProperties.has('milestone') && issue.milestoneName ? <span className={styles.dueDate} aria-label={`Milestone ${issue.milestoneName}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.milestoneName}</span></span> : null}
             {displayProperties.has('customers') && issue.customerNames?.length ? <span className={styles.badgeGroup}>{issue.customerNames.map(name => <span className={styles.badge} key={name}><span data-i18n-ignore>{name}</span></span>)}</span> : null}
             {displayProperties.has('customerRevenue') && customerRevenueTotal(issue) > 0 ? <span className={styles.badge} aria-label={`Customer revenue ${formatRowCustomerRevenue(customerRevenueTotal(issue))}`}>{formatRowCustomerRevenue(customerRevenueTotal(issue))}</span> : null}
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
@@ -282,7 +309,17 @@ export function MyIssuesRow({ issue, selected = false, displayProperties = DEFAU
         {displayProperties.has('timeInStatus') && <time className={styles.rowDate} aria-label={issue.timeInStatusMinutes == null ? 'Time in status unavailable' : `${formatTimeInStatus(issue.timeInStatusMinutes)} in status`}>{issue.timeInStatusMinutes == null ? null : <><Clock3 size={12}/>{formatTimeInStatus(issue.timeInStatusMinutes)}</>}</time>}
         {displayProperties.has('release') && <span className={styles.rowDate} aria-label={issue.releaseCount ? `${issue.releaseCount} releases` : 'No releases'}>{issue.releaseCount ? <><PackageOpen size={12}/>{issue.releaseCount}</> : null}</span>}
         {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
-        {displayProperties.has('pullRequests') && <span className={styles.rowDate} aria-label={issue.pullRequestCount ? `${issue.pullRequestCount} pull requests` : 'No pull requests'}>{issue.pullRequestCount ? <><GitPullRequest size={12}/>{issue.pullRequestCount}</> : null}</span>}
+        {displayProperties.has('pullRequests') || issue.blockedByCount || issue.blockingCount ? (
+          <span className={styles.rowDate}>
+            <IssueWidgetAdornments
+              showPullRequests={displayProperties.has('pullRequests')}
+              pullRequestLifecycle={issue.pullRequestLifecycle}
+              pullRequestCount={issue.pullRequestCount ?? 0}
+              blockedByCount={issue.blockedByCount ?? 0}
+              blockingCount={issue.blockingCount ?? 0}
+            />
+          </span>
+        ) : null}
         <span aria-hidden="true"/>
       </a>
     </ContextMenu.Trigger>
@@ -320,6 +357,7 @@ function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (che
 }
 
 export function IssueContextMenu({ editable, issue, options, onPropertyChange, onAction }: { editable:boolean;issue:MyIssuesRowData;options: MyIssuesRowPropertyOptions; onPropertyChange: (property: MyIssuesEditableProperty, value: string | string[]) => void | Promise<void>; onAction?: (action: MyIssuesContextAction) => void }) {
+  const rowActions = useIssueRowActions()
   return <ContextMenu.Content data-flow-motion="floating" className={styles.contextMenu} collisionPadding={10}>
     {editable&&<><ContextPropertySub label="Status" shortcut="S" options={options.status} selectedIds={[issue.state.id]} onSelect={id => onPropertyChange('status', id)}/>
     <ContextPropertySub label="Priority" shortcut="P" options={options.priority} selectedIds={[String(issue.priority)]} onSelect={id => onPropertyChange('priority', id)}/>
@@ -327,8 +365,11 @@ export function IssueContextMenu({ editable, issue, options, onPropertyChange, o
     <ContextPropertySub label="Due date" shortcut="⇧ D" options={options.dueDate} selectedIds={[issue.dueDate ?? '']} onSelect={id => onPropertyChange('dueDate', id)}/>
     <ContextPropertySub multi label="Labels" shortcut="L" options={options.labels} selectedIds={issue.labels?.map(label => label.id) ?? []} onSelect={id => onPropertyChange('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], id, options.labels))}/>
     <ContextPropertySub label="Project" shortcut="⇧ P" options={options.project} selectedIds={[issue.project?.id ?? '']} onSelect={id => onPropertyChange('project', id)}/>
-    <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/></>}
-    {onAction&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><span>Copy</span><ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
+    {editable && <IssueRowEstimateItem row={issue}/>}
+    {(options.cycle ?? []).some(option => option.id) && <ContextPropertySub label="Cycle" shortcut="⇧ C" options={options.cycle??[]} selectedIds={[issue.cycleId ?? '']} onSelect={id => onPropertyChange('cycle', id)}/>}
+    <IssueRowMoreProperties row={issue}/></>}
+    {editable && rowActions && <IssueRowActionGroups row={issue} onDelete={onAction ? () => onAction('delete') : undefined}/>}
+    {onAction&&!(editable&&rowActions)&&<>{editable&&<ContextMenu.Separator className={styles.menuSeparator}/>}<ContextMenu.Sub><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label="Copy"/><span>Copy</span><span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}><MyIssuesMenuItem action="copyUrl" label="Copy issue URL" shortcut="⌘ ⇧ ," onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyId" label="Copy issue ID" onAction={onAction} submenu={false}/><MyIssuesMenuItem action="copyTitle" label="Copy issue title" onAction={onAction} submenu={false}/></ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub><ContextMenu.Separator className={styles.menuSeparator}/><MyIssuesMenuItem action="delete" label="Delete" shortcut="⌘ ⌫" danger onAction={onAction} submenu={false}/></>}
   </ContextMenu.Content>
 }
 
@@ -338,14 +379,14 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   const command = usePropertyCommand({ open: open && people, options, personOptions: people, selectedIds, onSelect: option => onSelect(option.id), onOpenChange: setOpen })
   const selected = new Set(selectedIds)
   const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options: people ? command.filteredOptions : options }]
-  return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<ChevronRight size={12}/></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
+  return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
     {people && <div className="property-command-search"><input ref={command.inputRef} aria-label="Search people" placeholder="Search people…" value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
     {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => <PersonHover key={option.id || 'none'} userId={people ? option.id : undefined}>{multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>}</PersonHover>)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
 function MyIssuesMenuItem({ action, danger, label, onAction, shortcut, submenu = true }: { action: MyIssuesContextAction; danger?: boolean; label: string; onAction: (action: MyIssuesContextAction) => void; shortcut?: string; submenu?: boolean }) {
-  return <ContextMenu.Item className={styles.menuItem} data-danger={danger} onSelect={() => onAction(action)}><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}{submenu && <ChevronRight size={12}/>}</ContextMenu.Item>
+  return <ContextMenu.Item className={styles.menuItem} data-danger={danger} onSelect={() => onAction(action)}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}{submenu && <span className={styles.menuChevron} aria-hidden="true">▶</span>}</ContextMenu.Item>
 }
 
 function MyIssuesOptionIcon({ option }: { option: MyIssuesContextOption }) {

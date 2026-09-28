@@ -187,7 +187,7 @@ services:
         redis-cli --cluster create redis-cluster-1:6379 redis-cluster-2:6379 redis-cluster-3:6379 --cluster-replicas 0 --cluster-yes || true
 
   minio:
-    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
     profiles: ["s3"]
     command: server /data --console-address ":9001"
     environment:
@@ -200,7 +200,7 @@ services:
       - flow-s3-data:/data
 
   minio-init:
-    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    image: quay.io/minio/mc:RELEASE.2025-07-21T05-28-08Z
     profiles: ["s3"]
     depends_on:
       - minio

@@ -2324,3 +2324,10 @@
   color: var(--on-accent);
   font: 500 13px inherit;
 }
+
+.workspace-members-toolbar .workspace-members-cvh-search,
+.workspace-members-toolbar .cvh-search {
+  width: 300px;
+  max-width: 300px;
+}
+.member-profile-kind{margin-left:8px;padding:1px 6px;border-radius:999px;background:var(--bg-subtle);color:var(--issue-muted);font-size:11px;font-weight:500}

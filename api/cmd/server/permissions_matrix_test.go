@@ -86,3 +86,19 @@ func TestPermissionPathClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkspacePermissionOwnersMatrix(t *testing.T) {
+	settings := domain.WorkspaceSettings{APIKeyPermission: "owners", InvitePermission: "owners_and_admins"}
+	if workspacePermissionAllows(settings, "apiKey", "admin") {
+		t.Fatal("admin should not pass owners-only apiKey permission")
+	}
+	if !workspacePermissionAllows(settings, "apiKey", "owner") {
+		t.Fatal("owner should pass owners-only apiKey permission")
+	}
+	if !workspacePermissionAllows(settings, "invite", "admin") {
+		t.Fatal("admin should pass owners_and_admins invite permission")
+	}
+	if workspacePermissionAllows(settings, "invite", "member") {
+		t.Fatal("member should not pass owners_and_admins invite permission")
+	}
+}

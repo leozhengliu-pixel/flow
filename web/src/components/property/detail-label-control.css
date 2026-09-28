@@ -1,0 +1,21 @@
+.detail-label-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.detail-label-control__picker {
+  min-width: 0;
+  flex: 1;
+}
+.detail-label-control__pile {
+  flex: none;
+}
+.detail-label-control.is-readonly .detail-label-control__picker,
+.detail-label-control.is-archived .detail-label-control__picker {
+  opacity: 0.55;
+  pointer-events: none;
+}
+.detail-label-control.is-archived .detail-label-control__pile {
+  opacity: 0.45;
+}

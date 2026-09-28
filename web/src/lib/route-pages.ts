@@ -3,6 +3,10 @@ export const WorkspaceOnboarding = lazyPage(
   () => import("@/components/workspace/workspace-onboarding"),
   "WorkspaceOnboarding",
 );
+export const WelcomeOnboarding = lazyPage(
+  () => import("@/components/onboarding/welcome-onboarding"),
+  "WelcomeOnboarding",
+);
 export const WorkspaceDirectoryPage = lazyPage(
   () => import("@/components/workspace-directory/workspace-directory-page"),
   "WorkspaceDirectoryPage",
@@ -27,9 +31,45 @@ export const AuthPage = lazyPage(
   () => import("@/components/auth/auth-page"),
   "AuthPage",
 );
+export const AuthTokenPage = lazyPage(
+  () => import("@/components/auth/auth-token-page"),
+  "AuthTokenPage",
+);
+export const AuthErrorPage = lazyPage(
+  () => import("@/components/auth/auth-error-page"),
+  "AuthErrorPage",
+);
+export const AuthGoogleCallbackPage = lazyPage(
+  () => import("@/components/auth/auth-google-callback-page"),
+  "AuthGoogleCallbackPage",
+);
+export const MobileAuthPage = lazyPage(
+  () => import("@/components/auth/mobile-auth-page"),
+  "MobileAuthPage",
+);
+export const InviteLinkAccept = lazyPage(
+  () => import("@/components/auth/invite-link-accept"),
+  "InviteLinkAccept",
+);
 export const OAuthAuthorizePage = lazyPage(
   () => import("@/components/auth/oauth-authorize-page"),
   "OAuthAuthorizePage",
+);
+export const CompleteOAuthView = lazyPage(
+  () => import("@/components/auth/complete-oauth-view"),
+  "CompleteOAuthView",
+);
+export const CompleteFigmaAuthView = lazyPage(
+  () => import("@/components/auth/complete-figma-auth-view"),
+  "CompleteFigmaAuthView",
+);
+export const CompleteSentryAuthView = lazyPage(
+  () => import("@/components/auth/complete-sentry-auth-view"),
+  "CompleteSentryAuthView",
+);
+export const AuthDesktopRedirectFigma = lazyPage(
+  () => import("@/components/auth/auth-desktop-redirect-figma"),
+  "AuthDesktopRedirectFigma",
 );
 export const WorkspaceSearchPage = lazyPage(
   () => import("@/components/search/workspace-search-page"),

@@ -84,6 +84,23 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 				}
 				continue
 			}
+			if target.Kind() == reflect.Ptr && target.Type().Elem().Kind() == reflect.Struct {
+				if target.IsNil() {
+					target.Set(reflect.New(target.Type().Elem()))
+				}
+				// Map-shaped collections store one JSON value per struct field
+				// (same as WorkspaceSettings). Merge each record into the
+				// pointed-to struct instead of treating the value as a full
+				// WorkspaceInviteLink document.
+				encoded, err := json.Marshal(map[string]json.RawMessage{key: value})
+				if err != nil {
+					return data, err
+				}
+				if err := json.Unmarshal(encoded, target.Interface()); err != nil {
+					return data, err
+				}
+				continue
+			}
 			if target.Kind() != reflect.Map || target.Type().Key().Kind() != reflect.String {
 				return data, fmt.Errorf("invalid map field %s", field)
 			}

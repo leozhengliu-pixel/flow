@@ -8,3 +8,12 @@
 :root[data-theme="light"] .issue-code-review em[data-status=closed]{color:var(--theme-text-tertiary)}
 :root[data-theme="light"] .issue-code-review>button{color:var(--theme-text-secondary)}
 :root[data-theme="light"] .issue-code-review>button:hover{background:var(--theme-surface-active);color:var(--theme-text-primary)}
+.issue-deploy-previews{display:flex;flex-wrap:wrap;gap:6px;padding:4px 6px 2px}
+.issue-deploy-preview{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border:.5px solid var(--theme-border);border-radius:9999px;background:var(--theme-surface-1);color:var(--theme-text-primary);font-size:12px;text-decoration:none}
+.issue-deploy-preview:hover{background:var(--theme-surface-hover)}
+.issue-deploy-preview small{color:var(--theme-text-secondary);font-size:11px}
+.issue-deploy-preview svg{width:11px;height:11px;color:var(--theme-text-tertiary)}
+.issue-deploy-preview__dot{width:6px;height:6px;border-radius:9999px;background:var(--theme-text-tertiary)}
+.issue-deploy-preview__dot[data-state=ready]{background:var(--semantic-success)}
+.issue-deploy-preview__dot[data-state=building],.issue-deploy-preview__dot[data-state=pending]{background:var(--inbox-status-started)}
+.issue-deploy-preview__dot[data-state=failed]{background:var(--semantic-danger-text)}

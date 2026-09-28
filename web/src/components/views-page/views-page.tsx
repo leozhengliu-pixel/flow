@@ -38,6 +38,8 @@ import styles from "./views-page.module.css";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { FlowPlusIcon, ViewsDirectoryHeader } from "./views-directory-header";
+import { ContentViewHeaderInlineSearch } from "@/components/content-view/content-view-header-search";
+import { useInlineFilter } from "@/lib/inline-filter";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
 
@@ -114,6 +116,8 @@ export function ViewsPage({
   const [properties, setProperties] = useState<Set<DisplayProperty>>(
     () => new Set(readProperties(`${storageKey}:properties`)),
   );
+  const inlineFilter = useInlineFilter(`${storageKey}:inline`);
+  const [viewQuery, setViewQuery] = useState(inlineFilter.lastSearchTerm);
   const teamFavorite =
     scope.kind === "team" &&
     data.favorites.some(
@@ -133,6 +137,18 @@ export function ViewsPage({
       ),
     [data.viewer, direction, ordering, usersById, views],
   );
+  const filteredViews = useMemo(() => {
+    const needle = viewQuery.trim().toLocaleLowerCase();
+    if (!needle) return orderedViews;
+    return orderedViews.filter((view) => {
+      const owner = usersById.get(view.ownerId ?? "");
+      return [view.name, view.description ?? "", owner?.displayName ?? "", owner?.name ?? ""]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(needle);
+    });
+  }, [orderedViews, usersById, viewQuery]);
+
   const groups = useMemo(
     () =>
       scope.kind === "team"
@@ -141,7 +157,7 @@ export function ViewsPage({
               id: scope.team.id,
               kind: "team" as const,
               label: scope.team.name,
-              views: orderedViews,
+              views: filteredViews,
             },
           ]
         : [
@@ -149,16 +165,16 @@ export function ViewsPage({
               id: "personal",
               kind: "personal" as const,
               label: "Personal views",
-              views: orderedViews.filter((view) => view.scope === "personal"),
+              views: filteredViews.filter((view) => view.scope === "personal"),
             },
             {
               id: "workspace",
               kind: "workspace" as const,
               label: data.workspace.name,
-              views: orderedViews.filter((view) => view.scope !== "personal"),
+              views: filteredViews.filter((view) => view.scope !== "personal"),
             },
           ].filter((group) => group.views.length),
-    [data.workspace.name, orderedViews, scope],
+    [data.workspace.name, filteredViews, scope],
   );
   const favoriteViewIds = useMemo(
     () => new Set((data.favorites ?? []).filter((item) => item.userId === data.viewer.id && item.resourceType === "view").map((item) => item.resourceId)),
@@ -263,7 +279,7 @@ export function ViewsPage({
     />;
   };
 
-  const tableHeader = orderedViews.length > 0 && (
+  const tableHeader = filteredViews.length > 0 && (
         <div
           className={styles.columns}
           style={
@@ -356,7 +372,19 @@ export function ViewsPage({
         ]}
         title="Views"
         toolbarEnd={
-          <ViewsDisplayMenu
+          <>
+            <ContentViewHeaderInlineSearch
+              inlineFilter={inlineFilter}
+              alwaysShowOnDesktop
+              placeholder={t("Find a view…")}
+              value={viewQuery}
+              onChange={(value) => {
+                setViewQuery(value);
+                inlineFilter.setTerm(value);
+              }}
+              maxWidth={180}
+            />
+            <ViewsDisplayMenu
             direction={direction}
             ordering={ordering}
             properties={properties}
@@ -367,9 +395,10 @@ export function ViewsPage({
             }}
             onToggleProperty={toggleProperty}
           />
+          </>
         }
       />
-      {orderedViews.length > 0 ? <VirtualColumnList
+      {filteredViews.length > 0 ? <VirtualColumnList
         virtualize={listEntries.length > VIEW_VIRTUALIZATION_THRESHOLD}
         header={tableHeader}
         className={`${styles.content} ${styles.virtualContent}`}
@@ -379,11 +408,16 @@ export function ViewsPage({
         increaseViewportBy={{ top: 180, bottom: 480 }}
         itemContent={(_index, entry) => entry.kind === "group" ? renderGroupHeader(entry.group) : renderView(entry.view)}
       /> : <section
-        className={`${styles.content} ${!orderedViews.length ? styles.contentEmpty : ""}`}
+        className={`${styles.content} ${!orderedViews.length || viewQuery.trim() ? styles.contentEmpty : ""}`}
       >
-        {!orderedViews.length && (
+        {!orderedViews.length ? (
           <ViewsEmptyState onCreate={onCreate} resource={resource} />
-        )}
+        ) : viewQuery.trim() ? (
+          <div className={styles.emptySearch} role="status">
+            <strong>{t("No matching views")}</strong>
+            <p>{t("Try another search term.")}</p>
+          </div>
+        ) : null}
       </section>}
     </div>
   );

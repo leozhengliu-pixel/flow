@@ -131,15 +131,15 @@ export function IssueReleasePicker({ data, issue, grouped = false, externalAncho
   return <Popover.Root open={open} onOpenChange={value => { if (value) setOpen(true); else close() }}>
     {externalAnchor ? <Popover.Anchor virtualRef={externalAnchor}/> : <Popover.Anchor asChild>{anchor}</Popover.Anchor>}
     <Popover.Portal><Popover.Content data-flow-motion="floating" className="issue-release-picker issue-release-picker--root" align="start" side={externalAnchor ? 'right' : 'bottom'} alignOffset={externalAnchor ? -43 : 0} sideOffset={externalAnchor ? -1.5 : grouped ? -36 : 4} collisionPadding={16} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (onMenuEscape) { event.preventDefault(); onMenuEscape() } }} onKeyDown={event => { if (externalAnchor && event.key === 'ArrowLeft') { event.preventDefault(); onPopoverOpenChange?.(false); return }; onKeyDown(event) }}>
-      <ReleaseSearch autoFocus value={query} placeholder={t('Add to release…')} shortcut="⌥ R" activeId={activeId} onChange={value => { setQuery(value); setPipelinesOpen(false); setCreateOpen(false) }}/>
+      <ReleaseSearch autoFocus value={query} placeholder={t('Add to release…')} shortcut={externalAnchor ? undefined : '⌥ R'} activeId={activeId} onChange={value => { setQuery(value); setPipelinesOpen(false); setCreateOpen(false) }}/>
       <div className="issue-release-results" role="listbox" aria-multiselectable="true">
         {selectedOptions.map(item => <ReleaseOption active={activeId === item.id} checked disabled={saving} item={item} key={item.id} pipeline={pipelines.find(value => value.id === item.pipelineId)} onActive={() => { setActiveId(item.id); setPipelinesOpen(false) }} onChoose={() => void toggle(item.id)}/>)}
         {selectedOptions.length > 0 && availableOptions.length > 0 && <ReleaseSeparator/>}
         {availableOptions.map(item => <ReleaseOption active={activeId === item.id} checked={false} disabled={saving || Boolean(item.stageFrozenAt)} item={item} key={item.id} pipeline={pipelines.find(value => value.id === item.pipelineId)} onActive={() => { setActiveId(item.id); setPipelinesOpen(false) }} onChoose={() => void toggle(item.id)}/>)}
-        {(selectedOptions.length > 0 || availableOptions.length > 0) && <ReleaseSeparator/>}
-        <AllPipelinesOption active={activeId === '__pipelines'} open={pipelinesOpen} pipelines={pipelines} releases={activeReleases} selected={selected} saving={saving} onActive={() => setActiveId('__pipelines')} onCreate={create} onOpenChange={setPipelinesOpen} onToggle={toggle}/>
+        {pipelines.length > 0 && (selectedOptions.length > 0 || availableOptions.length > 0) && <ReleaseSeparator/>}
+        {pipelines.length > 0 && <AllPipelinesOption active={activeId === '__pipelines'} open={pipelinesOpen} pipelines={pipelines} releases={activeReleases} selected={selected} saving={saving} onActive={() => setActiveId('__pipelines')} onCreate={create} onOpenChange={setPipelinesOpen} onToggle={toggle}/>}
         {canCreate && defaultPipeline && <CreateReleaseOption active={activeId === '__create'} name={query.trim()} open={createOpen} pipeline={defaultPipeline} saving={saving} onActive={() => setActiveId('__create')} onCreate={create} onOpenChange={setCreateOpen}/>}
-        {!filtered.length && !canCreate && !pipelines.length && <p>{t('No releases found')}</p>}
+        {!filtered.length && !canCreate && <p>{t('No matching releases')}</p>}
       </div>
     </Popover.Content></Popover.Portal>
   </Popover.Root>

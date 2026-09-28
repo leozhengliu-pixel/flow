@@ -1,10 +1,11 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
-import { ArrowDownUp, Check, ChevronDown, LayoutGrid, List } from 'lucide-react'
+import { ArrowDownUp, Check, ChevronDown, Columns2, Eye, EyeOff, LayoutGrid, List } from 'lucide-react'
 import { DisplayIcon } from './my-issues-icons'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
-import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesProperty } from './my-issues-surface'
+import type { MyIssuesDisplayOptions, MyIssuesGrouping, MyIssuesOrdering, MyIssuesProperty } from './my-issues-surface'
+import { GROUPING_LABELS, ORDERING_LABELS, defaultOrderDirection } from '@/components/issue-explorer/issue-grouping'
 import styles from './my-issues-display-menu.module.css'
 
 export interface MyIssuesDisplayMenuProps {
@@ -14,23 +15,30 @@ export interface MyIssuesDisplayMenuProps {
   onChange: (options: MyIssuesDisplayOptions) => void
   hiddenProperties?: MyIssuesProperty[]
   availableGroupings?: MyIssuesGrouping[]
+  /** Orderings the backing query can execute (server-paged lists support fewer). */
+  availableOrderings?: MyIssuesOrdering[]
+  /** View toggles this surface can honor (Linear showTriageIssues / showArchivedItems / showSubTeamIssues). */
+  toggles?: ('triage' | 'archived' | 'subTeam')[]
   hideSubGrouping?: boolean
+  /** Surfaces without an issue preview pane cannot offer the split layout. */
+  hideSplit?: boolean
+  /** Current groups for the Group ordering panel (Linear ViewOptionsGroupsPanel): hide / show each group. */
+  groups?: { id: string; label: string; count: number }[]
+  /** Parent labels offered by the "Label group" grouping; the grouping is hidden without any. */
+  labelGroupOptions?: { id: string; name: string }[]
+  /** Footer actions (Linear "Reset to view default" / "Save as default for view"). */
+  onReset?: () => void
+  resetLabel?: string
+  onSaveDefault?: () => void
+  saveDefaultLabel?: string
 }
 
 type DisplayPatch = Partial<MyIssuesDisplayOptions>
 
-const groupingOptions: { value: MyIssuesGrouping; label: string }[] = [
-  { value: 'none', label: 'No grouping' },
-  { value: 'focus', label: 'Focus' },
-  { value: 'status', label: 'Status' },
-  { value: 'agent', label: 'Agent' },
-  { value: 'project', label: 'Project' },
-  { value: 'priority', label: 'Priority' },
-  { value: 'cycle', label: 'Cycle' },
-  { value: 'label', label: 'Label' },
-  { value: 'team', label: 'Team' },
-  { value: 'customer', label: 'Customer' },
-]
+const GROUPING_ORDER: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'agent', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'parent', 'sla', 'customer', 'release', 'releaseDate', 'labelGroup', 'activityDate']
+const groupingOptions: { value: MyIssuesGrouping; label: string }[] = GROUPING_ORDER.map(value => ({ value, label: GROUPING_LABELS[value] }))
+const ORDERING_ORDER: MyIssuesOrdering[] = ['importance', 'title', 'status', 'assignee', 'priority', 'estimate', 'created', 'updated', 'myActivity', 'dueDate', 'linkCount', 'customerCount', 'customerRevenue', 'timeInStatus']
+const orderingOptions: { value: MyIssuesOrdering; label: string }[] = ORDERING_ORDER.map(value => ({ value, label: ORDERING_LABELS[value] }))
 
 const subGroupingOptions = groupingOptions.filter(option => option.value !== 'focus')
 
@@ -66,7 +74,7 @@ const propertyOptions: { value: MyIssuesProperty; label: string }[] = [
   { value: 'pullRequests', label: 'Pull requests' },
 ]
 
-export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, hideSubGrouping = false, open, onOpenChange, options, onChange }: MyIssuesDisplayMenuProps) {
+export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings, availableOrderings, toggles = [], hideSubGrouping = false, hideSplit = false, groups = [], labelGroupOptions = [], open, onOpenChange, options, onChange, onReset, resetLabel = 'Reset', onSaveDefault, saveDefaultLabel = 'Save as default for view' }: MyIssuesDisplayMenuProps) {
   const { t } = useI18n()
   const change = (patch: DisplayPatch) => onChange({ ...options, ...patch })
   const toggleProperty = (property: MyIssuesProperty) => {
@@ -75,8 +83,10 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
     else properties.add(property)
     change({ properties })
   }
-  const visibleGroupingOptions = availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions
-  const visibleSubGroupingOptions = availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions
+  const visibleGroupingOptions = (availableGroupings ? groupingOptions.filter(option => availableGroupings.includes(option.value)) : groupingOptions).filter(option => option.value !== 'labelGroup' || labelGroupOptions.length > 0)
+  const visibleSubGroupingOptions = (availableGroupings ? subGroupingOptions.filter(option => availableGroupings.includes(option.value)) : subGroupingOptions).filter(option => option.value === 'none' || option.value !== options.grouping)
+  const visibleOrderingOptions = availableOrderings ? orderingOptions.filter(option => availableOrderings.includes(option.value)) : orderingOptions
+  const direction = options.orderDirection ?? defaultOrderDirection(options.ordering)
 
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
@@ -89,6 +99,7 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
         <div className={styles.layoutTabs} role="tablist" aria-label="Layout">
           <button type="button" role="tab" aria-selected={options.layout === 'list'} onClick={() => change({ layout: 'list' })}><List size={14} />{t('List')}</button>
           <button type="button" role="tab" aria-selected={options.layout === 'board'} disabled={options.grouping === 'focus'} onClick={() => change({ layout: 'board' })}><LayoutGrid size={13} />{t('Board')}</button>
+          {!hideSplit && options.layout === 'split' && <button type="button" role="tab" aria-selected={options.layout === 'split'} onClick={() => change({ layout: 'split' })}><Columns2 size={13} />{t('Split')}</button>}
         </div>
 
         <section className={styles.section} aria-label={t('Grouping options')}>
@@ -103,20 +114,42 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
                 data-order={options.groupOrder}
                 onClick={() => change({ groupOrder: options.groupOrder === 'asc' ? 'desc' : 'asc' })}
               ><ArrowDownUp size={14} /></button>
-              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout })} />
+              <SelectControl ariaLabel="Grouping" value={options.grouping} options={visibleGroupingOptions} onChange={grouping => change({ grouping, layout: grouping === 'focus' ? 'list' : options.layout, ...(grouping === 'labelGroup' && !options.labelGroupId ? { labelGroupId: labelGroupOptions[0]?.id } : {}) })} />
             </div>
           </div>
+          {options.grouping === 'labelGroup' && labelGroupOptions.length > 0 && <SelectField label="Label group" value={options.labelGroupId ?? labelGroupOptions[0].id} options={labelGroupOptions.map(group => ({ value: group.id, label: group.name }))} onChange={labelGroupId => change({ labelGroupId })} />}
           {!hideSubGrouping && <SelectField label={options.layout === 'board' ? 'Rows' : 'Sub-grouping'} value={options.subGrouping} options={visibleSubGroupingOptions} onChange={subGrouping => change({ subGrouping })} />}
-          <SelectField disabled={options.grouping === 'focus'} label="Ordering" value={options.ordering} options={[{ value: 'importance' as const, label: 'Importance' }, { value: 'priority' as const, label: 'Priority' }, { value: 'created' as const, label: 'Created' }, { value: 'updated' as const, label: 'Updated' }]} onChange={ordering => change({ ordering })} />
+          <div className={styles.groupingControl}>
+            <span className={styles.rowLabel}>{t('Ordering')}</span>
+            <div className={styles.groupingActions}>
+              <button
+                type="button"
+                className={styles.orderButton}
+                disabled={options.grouping === 'focus'}
+                aria-label={`Ordering direction: ${direction === 'asc' ? 'ascending' : 'descending'}`}
+                title={t('Direction')}
+                data-order={direction}
+                onClick={() => change({ orderDirection: direction === 'asc' ? 'desc' : 'asc' })}
+              ><ArrowDownUp size={14} /></button>
+              <SelectControl ariaLabel="Ordering" disabled={options.grouping === 'focus'} value={options.ordering} options={visibleOrderingOptions} onChange={ordering => change({ ordering, orderDirection: undefined })} />
+            </div>
+          </div>
           <SwitchRow label="Order completed by recency" checked={options.orderCompletedByRecency} onChange={orderCompletedByRecency => change({ orderCompletedByRecency })} />
+        </section>
+
+        <section className={styles.section} aria-label={t('Visible issues')}>
           <SelectField label="Completed issues" value={options.completedWindow} options={completedOptions} onChange={completedWindow => change({ completedWindow })} />
           <SwitchRow label="Show sub-issues" checked={options.showSubIssues} onChange={showSubIssues => change({ showSubIssues, nestedSubIssues: showSubIssues ? options.nestedSubIssues : false })} />
+          {toggles.includes('triage') && <SwitchRow label="Show triage issues" checked={options.showTriageIssues !== false} onChange={showTriageIssues => change({ showTriageIssues })} />}
+          {toggles.includes('archived') && <SwitchRow label="Show archived issues" checked={Boolean(options.showArchived)} onChange={showArchived => change({ showArchived })} />}
+          {toggles.includes('subTeam') && <SwitchRow label="Show sub-team issues" checked={options.showSubTeamIssues !== false} onChange={showSubTeamIssues => change({ showSubTeamIssues })} />}
         </section>
 
         <section className={styles.section} aria-label={t(options.layout === 'board' ? 'Board options' : 'List options')}>
           <span className={styles.sectionLabel}>{t(options.layout === 'board' ? 'Board options' : 'List options')}</span>
           {options.layout === 'board' && <SwitchRow label="Show empty columns" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           {options.layout === 'list' && <SwitchRow label="Nested sub-issues" checked={options.nestedSubIssues} onChange={nestedSubIssues => change({ nestedSubIssues, showSubIssues: nestedSubIssues || options.showSubIssues })} />}
+          {options.layout === 'list' && <SwitchRow label="Show empty groups" checked={options.showEmptyGroups} onChange={showEmptyGroups => change({ showEmptyGroups })} />}
           <span className={styles.sectionLabel}>{t('Display properties')}</span>
           <div className={styles.propertyGrid}>
             {propertyOptions.filter(property => !hiddenProperties.includes(property.value)).map(property => {
@@ -127,6 +160,22 @@ export function MyIssuesDisplayMenu({ hiddenProperties = [], availableGroupings,
             })}
           </div>
         </section>
+        {groups.length > 1 && options.grouping !== 'none' && <section className={styles.section} aria-label={t('Group ordering')}>
+          <span className={styles.sectionLabel}>{t('Groups')}</span>
+          <div className={styles.groupList}>
+            {groups.map(group => {
+              const hidden = options.hiddenGroupIds.includes(group.id)
+              return <button key={group.id} type="button" className={styles.groupToggle} data-hidden={hidden || undefined} aria-pressed={!hidden} aria-label={`${hidden ? t('Show group') : t('Hide group')} ${group.label}`} onClick={() => change({ hiddenGroupIds: hidden ? options.hiddenGroupIds.filter(id => id !== group.id) : [...options.hiddenGroupIds, group.id] })}>
+                {hidden ? <EyeOff size={13}/> : <Eye size={13}/>}<span data-i18n-ignore>{group.label}</span><small>{group.count}</small>
+              </button>
+            })}
+          </div>
+          {!options.showEmptyGroups && <p className={styles.groupHint}>{t('Empty groups are hidden')}</p>}
+        </section>}
+        {(onReset || onSaveDefault) && <footer className={styles.footer}>
+          {onReset && <button type="button" className={styles.footerButton} onClick={onReset}>{t(resetLabel)}</button>}
+          {onSaveDefault && <button type="button" className={`${styles.footerButton} ${styles.footerPrimary}`} onClick={onSaveDefault}>{t(saveDefaultLabel)}</button>}
+        </footer>}
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>

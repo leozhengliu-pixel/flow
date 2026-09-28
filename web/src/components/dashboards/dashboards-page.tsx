@@ -64,6 +64,21 @@ import type {
 } from "@/types/flow";
 
 import "./dashboards-page.css";
+import {
+  autofixWidgets,
+  layoutToWidgets,
+  moveWidgetInLayout,
+  widgetsToLayout,
+} from "./dashboard-layout";
+import {
+  WidgetActionsMenu,
+  cloneWidget,
+  formatOriginDescription,
+  insightDefaultTitle as widgetInsightDefaultTitle,
+} from "./widget-actions";
+import { useWidgetInsight } from "@/components/insights/use-widget-insight";
+import { workspaceIssuesPath } from "@/lib/app-routes";
+
 
 type DashboardFilters = NonNullable<Dashboard["filters"]>;
 type InsightDisplay = "chart" | "table" | "metric";
@@ -283,6 +298,54 @@ export function DashboardsPage({
   };
   const openInsight = (widgetId?: string) => {
     if (selected) onOpenWidget(selected.id, widgetId ?? "new");
+  };
+  const applyLayoutWidgets = async (widgets: DashboardWidget[]) => {
+    if (!selected) return;
+    const layout = autofixWidgets(widgetsToLayout(widgets));
+    const byId = new Map(widgets.map((item) => [item.id, item]));
+    await patchDashboard({ widgets: layoutToWidgets(layout, byId) });
+  };
+  const duplicateWidget = async (widget: DashboardWidget) => {
+    if (!selected) return;
+    const clone = cloneWidget(widget, selected.widgets.length);
+    await applyLayoutWidgets([...selected.widgets, clone]);
+  };
+  const deleteWidget = async (widget: DashboardWidget) => {
+    if (!selected) return;
+    const previous = selected.widgets;
+    await applyLayoutWidgets(selected.widgets.filter((item) => item.id !== widget.id));
+    toast(t("Insight removed"), {
+      action: {
+        label: t("Undo"),
+        onClick: () => {
+          void applyLayoutWidgets(previous);
+        },
+      },
+    });
+  };
+  const copyWidgetToDashboard = async (widget: DashboardWidget, targetId: string) => {
+    const target = items.find((item) => item.id === targetId);
+    if (!target) return;
+    const clone = {
+      ...cloneWidget(widget, target.widgets.length),
+      description: widget.description || formatOriginDescription(selected?.name ?? "dashboard"),
+      title: widget.title || widgetInsightDefaultTitle(widget.config),
+    };
+    try {
+      const updated = await updateDashboard(target.id, { widgets: [...target.widgets, clone] });
+      setItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch {
+      toast.error(t("Could not update dashboard"));
+    }
+  };
+  const dropWidgetOn = async (sourceId: string, targetWidgetId: string) => {
+    if (!selected || sourceId === targetWidgetId) return;
+    const layout = moveWidgetInLayout(widgetsToLayout(selected.widgets), sourceId, {
+      kind: "widget",
+      widgetId: targetWidgetId,
+    });
+    const byId = new Map(selected.widgets.map((item) => [item.id, item]));
+    await patchDashboard({ widgets: layoutToWidgets(layout, byId) });
   };
   const saveInsight = async (draft: InsightDraft) => {
     if (!selected) return;
@@ -587,32 +650,47 @@ export function DashboardsPage({
           ) : loading ? (
             <LoaderCircle className="dashboard-spin" />
           ) : selected.widgets.length && results.length ? (
-            <div className="dashboard-grid">
-              {results.map((result, index) => (
-                <DashboardCard
-                  key={result.widget.id}
-                  result={result}
-                  onEdit={() => openInsight(result.widget.id)}
-                  onExplore={() => onExploreIssues(readFilters(result.widget.config))}
-                  onMove={(direction) => void reorderWidget(result.widget.id, index + direction)}
-                  onDropWidget={(sourceId) => void reorderWidget(sourceId, index)}
-                  onRemove={() =>
-                    void patchDashboard({
-                      widgets: selected.widgets.filter(
-                        (widget) => widget.id !== result.widget.id,
-                      ),
-                    })
-                  }
-                  onResize={() =>
-                    void patchDashboard({
-                      widgets: selected.widgets.map((widget) =>
-                        widget.id === result.widget.id
-                          ? { ...widget, width: widget.width === 2 ? 1 : 2 }
-                          : widget,
-                      ),
-                    })
-                  }
-                />
+            <div className="dashboard-grid dashboard-layout" data-dashboard-layout="rows">
+              {widgetsToLayout(selected.widgets).rows.map((row) => (
+                <div className="dashboard-layout-row" key={row.id} data-drop="row">
+                  {row.columns.map((column) => (
+                    <div
+                      className={`dashboard-layout-column width-${column.width}`}
+                      key={column.id}
+                      data-drop="column"
+                    >
+                      {column.items.map((item) => {
+                        const result = results.find((entry) => entry.widget.id === item.widgetId);
+                        if (!result) return null;
+                        return (
+                          <DashboardCard
+                            key={result.widget.id}
+                            result={result}
+                            dashboard={selected}
+                            dashboards={items}
+                            workspaceKey={data.workspace.urlKey}
+                            onEdit={() => openInsight(result.widget.id)}
+                            onExplore={() => onExploreIssues(readFilters(result.widget.config))}
+                            onDropWidget={(sourceId) => void dropWidgetOn(sourceId, result.widget.id)}
+                            onDuplicate={() => void duplicateWidget(result.widget)}
+                            onDelete={() => void deleteWidget(result.widget)}
+                            onCopyToDashboard={(dashboardId) => void copyWidgetToDashboard(result.widget, dashboardId)}
+                            onCreateDashboard={() => { setCreateOpen(true); }}
+                            onResize={() =>
+                              void patchDashboard({
+                                widgets: selected.widgets.map((widget) =>
+                                  widget.id === result.widget.id
+                                    ? { ...widget, width: widget.width === 2 ? 1 : 2 }
+                                    : widget,
+                                ),
+                              })
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
               ))}
             </div>
           ) : selected.widgets.length ? (
@@ -1120,19 +1198,29 @@ function DashboardMenu({
 
 function DashboardCard({
   result,
+  dashboard,
+  dashboards,
+  workspaceKey,
   onEdit,
   onExplore,
-  onMove,
   onDropWidget,
-  onRemove,
+  onDuplicate,
+  onDelete,
+  onCopyToDashboard,
+  onCreateDashboard,
   onResize,
 }: {
   result: DashboardWidgetResult;
+  dashboard: Dashboard;
+  dashboards: Dashboard[];
+  workspaceKey: string;
   onEdit: () => void;
   onExplore: () => void;
-  onMove: (direction: -1 | 1) => void;
   onDropWidget: (sourceId: string) => void;
-  onRemove: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onCopyToDashboard: (dashboardId: string) => void;
+  onCreateDashboard: () => void;
   onResize: () => void;
 }) {
   const { t } = useI18n();
@@ -1140,10 +1228,16 @@ function DashboardCard({
     result.widget.config?.display ??
       (result.widget.type === "issue_count" ? "metric" : "chart"),
   ) as InsightDisplay;
+  const insight = useWidgetInsight({
+    widget: result.widget,
+    workspaceIssuesPath: workspaceIssuesPath(workspaceKey, "all"),
+    locationSearch: typeof location !== "undefined" ? location.search : "",
+  });
   return (
     <article
       className={result.widget.width === 2 ? "wide" : ""}
       draggable
+      data-widget-id={result.widget.id}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData("text/dashboard-widget", result.widget.id);
@@ -1162,47 +1256,42 @@ function DashboardCard({
     >
       <header>
         <strong>{result.widget.title}</strong>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
+        <button type="button" aria-label={t("Explore issues")} onClick={onExplore}>
+          <Expand />
+        </button>
+        <button type="button" aria-label={t(result.widget.width === 2 ? "Half width" : "Full width")} onClick={onResize}>
+          <LayoutDashboard />
+        </button>
+        <WidgetActionsMenu
+          widget={result.widget}
+          dashboard={dashboard}
+          dashboards={dashboards}
+          onEdit={onEdit}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+          onCopyToDashboard={onCopyToDashboard}
+          onCreateDashboard={onCreateDashboard}
+          trigger={
             <button aria-label={t("Open insight menu")} type="button">
               <MoreHorizontal />
             </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content data-flow-motion="floating"
-              align="end"
-              className="dashboard-menu"
-              sideOffset={4}
-            >
-              <DropdownMenu.Item onSelect={onEdit}>
-                <Filter />
-                {t("Edit insight")}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onExplore}>
-                <Expand />
-                {t("Explore issues")}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => onMove(-1)}>
-                <ArrowUp />
-                {t("Move earlier")}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={() => onMove(1)}>
-                <ArrowDown />
-                {t("Move later")}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onResize}>
-                <LayoutDashboard />
-                {t(result.widget.width === 2 ? "Half width" : "Full width")}
-              </DropdownMenu.Item>
-              <DropdownMenu.Item className="danger" onSelect={onRemove}>
-                <Trash2 />
-                {t("Remove from dashboard")}
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+          }
+        />
       </header>
-      <WidgetValue result={result} display={display} />
+      <div
+        data-chart-hover={insight.hovered ? "hover" : insight.drill ? "drill" : undefined}
+        onMouseLeave={() => insight.onHover(undefined)}
+      >
+        <WidgetValue
+          result={result}
+          display={display}
+          onHoverPoint={(id) => insight.onHover(id ? { slice: id } : undefined)}
+          onSelectPoint={(id) => {
+            insight.onDrill({ slice: id });
+            onExplore();
+          }}
+        />
+      </div>
     </article>
   );
 }
@@ -1210,10 +1299,16 @@ function DashboardCard({
 function WidgetValue({
   result,
   display,
+  onHoverPoint,
+  onSelectPoint,
 }: {
   result: DashboardWidgetResult;
   display: InsightDisplay;
+  onHoverPoint?: (id?: string) => void;
+  onSelectPoint?: (id: string) => void;
 }) {
+  void onHoverPoint;
+  void onSelectPoint;
   const { t } = useI18n();
   if (result.widget.type === "issue_count")
     return (

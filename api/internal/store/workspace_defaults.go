@@ -24,8 +24,25 @@ func EmptyWorkspace(name, urlKey, region string, viewer domain.User) domain.Boot
 		InitiativeUpdates: map[string][]domain.InitiativeUpdate{}, Comments: map[string][]domain.Comment{}, Activities: map[string][]domain.ActivityEvent{},
 		SavedViews: []domain.SavedView{}, Notifications: []domain.Notification{}, Loops: []domain.Loop{}, CustomEmojis: []domain.CustomEmoji{}, AgentSessions: []domain.AgentSession{}, AgentSkills: []domain.PersonalAgentSkill{},
 	}
+	data.Labels = defaultWorkspaceLabels(now)
 	normalize(&data)
 	return data
+}
+
+// defaultWorkspaceLabels are the issue labels every new workspace starts with.
+func defaultWorkspaceLabels(now time.Time) []domain.IssueLabel {
+	labels := []domain.IssueLabel{
+		{Name: "Bug", Color: "#EB5757"},
+		{Name: "Feature", Color: "#BB87FC"},
+		{Name: "Improvement", Color: "#4EA7FC"},
+	}
+	for index := range labels {
+		labels[index].ID = fmt.Sprintf("label_%d_%d", now.UnixNano(), index)
+		labels[index].Scope = "Workspace"
+		labels[index].ResourceType = "issue"
+		labels[index].CreatedAt = now
+	}
+	return labels
 }
 
 func defaultTeamKey(urlKey string) string {

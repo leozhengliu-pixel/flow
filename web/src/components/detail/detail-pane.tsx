@@ -1,26 +1,39 @@
 import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, Plus, RotateCw, UserRound, X } from 'lucide-react'
+import * as ContextMenu from '@radix-ui/react-context-menu'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentPicker, IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
+import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
+import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
+import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useDescriptionSelectionActions } from './description-selection-actions'
-import { fetchIssueRecord } from '@/lib/api'
+import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
 import { toast } from 'sonner'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
 import * as Dialog from '@radix-ui/react-dialog'
-import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone, WorkflowState } from '@/types/flow'
+import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Comment, DeployPreview, FlowDocument, Issue, IssueLabel, IssueRelationType, IssueUpdateInput, Presence, Project, ProjectMilestone, WorkflowState } from '@/types/flow'
 import { Button } from '@/components/ui/button'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { PagedActivityTimeline } from '@/components/activity/paged-activity-timeline'
+import { ClientEditorProvider } from '@/components/editor/client-editor-provider'
+import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import type { ActivityHighlightTarget } from '@/components/activity/activity-highlight'
 import { Composer } from '@/components/editor/composer'
 import { Avatar } from '@/components/issue/issue-row'
-import { AddReactionIcon, AttachmentIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { AddReactionIcon, AttachmentIcon, NoAssigneeIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { LinkExistingSubIssue } from './link-existing-sub-issue'
+import { SimilarIssues } from './similar-issues'
+import { TriageActions } from '@/components/triage/triage-actions'
 import { SubIssueEditor } from '@/components/issue/sub-issue-editor'
 import { RelationPicker } from '@/components/issue/relation-picker'
 import { IssueHeader } from '@/components/issue/issue-header'
 import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { AssigneePicker, PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
 import { CyclePicker, EstimatePicker, LabelPicker } from '@/components/issue/label-project-pickers'
+import { DetailLabelControl } from '@/components/property/detail-label-control'
+import { EmbeddedCustomerNeedForm } from '@/components/customer/embedded-customer-need-form'
+import './issue-customer-needs.css'
 import { IssueProjectPicker } from '@/components/issue/issue-project-picker'
 import type { NewProjectDraft } from '@/components/projects-page/new-project-dialog'
 import { IssueAttachments, type AttachmentUploadState } from '@/components/issue/issue-attachments'
@@ -28,7 +41,7 @@ import { descriptionImageSrcs } from '@/components/issue/editor/image-extension'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
 import { IssueReleasePicker } from '@/components/issue/issue-release-picker'
 import { IssueSubscriberPicker } from '@/components/issue/issue-subscriber-picker'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { useIssueAutosave } from '@/components/issue/editor/use-issue-autosave'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
@@ -36,7 +49,6 @@ import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import type { IssueOptionsActions } from '@/components/issue/issue-options-menu'
 import { documentPath } from '@/lib/app-routes'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
-import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { useI18n } from '@/i18n/i18n'
 import { Toggle } from '@/components/ui/toggle'
 import { DisplayIcon } from '@/components/ui/view-action-icons'
@@ -45,12 +57,16 @@ import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { TriageIntelligenceSuggestions } from '@/components/issue/triage-intelligence-suggestions'
 import './issue-code-reviews.css'
 import './issue-history-state.css'
+import './issue-agent-rail.css'
 
-export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onCreateLabel,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;returnPath?:string;navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateLabel?:(name:string,groupId?:string)=>Promise<IssueLabel>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File, options?:{embed?:boolean})=>Promise<Attachment|void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
-  const{t}=useI18n(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
+export function DetailPane({issue,data,comments,activities,historyLoading=false,historyError,onRetryHistory,highlightTarget,presence=[],workspacePresence,full=false,embedded=false,issueOptionsActions,onClose,onNavigateIssue,onNavigateRoot,returnPath,navigationIssueIds,onUpdate,onIssueUpdated,onDelete,onCreateSubIssue,onCreateProject,onCreateProjectMilestone,onCreateLabel,onReactIssue,onComment,onEditComment,onDeleteComment,onReactComment,onResolveComment,onRelation,onDeleteRelation,onUpload,onDeleteAttachment}:{issue:Issue;data:BootstrapData;comments:Comment[];activities:ActivityEvent[];historyLoading?:boolean;historyError?:string;onRetryHistory?:()=>void;highlightTarget?:ActivityHighlightTarget;presence?:Presence[];workspacePresence?:Presence[];full?:boolean;embedded?:boolean;issueOptionsActions?:IssueOptionsActions;onClose:()=>void;onExpand?:()=>void;onNavigateIssue?:(issue:Issue)=>void;onNavigateRoot?:()=>void;returnPath?:string;navigationIssueIds?:string[];onUpdate:(input:IssueUpdateInput)=>Promise<void>;onIssueUpdated?:(issue:Issue)=>void;onDelete:()=>Promise<void>;onCreateSubIssue:(input:SubIssueInput)=>Promise<void>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateProjectMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateLabel?:(name:string,groupId?:string)=>Promise<IssueLabel>;onReactIssue:(emoji:string)=>Promise<void>;onComment:(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>Promise<void>;onEditComment:(id:string,body:string,bodyData?:Record<string,unknown>)=>Promise<void>;onDeleteComment:(id:string)=>Promise<void>;onReactComment:(id:string,emoji:string)=>Promise<void>;onResolveComment?:(id:string,resolved:boolean)=>Promise<void>;onRelation:(type:IssueRelationType,relatedIssueId:string)=>Promise<void>;onDeleteRelation:(relationId:string)=>Promise<void>;onUpload:(file:File, options?:{embed?:boolean})=>Promise<Attachment|void>;onDeleteAttachment:(attachmentId:string)=>Promise<void>}){
+  const{t}=useI18n(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subEditorKey,setSubEditorKey]=useState(0),[linkOpen,setLinkOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
+  const [triageAction,setTriageAction]=useState<'decline'|'duplicate'|'snooze'>()
+  const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`issue:${issue.id}`, false)
   const fileRef=useRef<HTMLInputElement>(null)
   const uploadCommentFile=async(file:File)=>{const attachment=await onUpload(file,{embed:false});if(!attachment?.url)throw new Error('Upload failed');return attachment.url}
+  const threadSummariesEnabled=Boolean(resolvedTeamSettings(data.teamSettings,issue.team.id)?.resolvedThreadSummaries)
   const descriptionSelection = useDescriptionSelectionActions(issue, data, onComment, uploadCommentFile)
   const {state:saveState,schedule,flush,retry}=useIssueAutosave(onUpdate)
   useEffect(()=>{setTitle(issue.title)},[issue.id,issue.title])
@@ -71,6 +87,8 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const openIssue=(target:Issue)=>{void flush().then(saved=>{if(saved)onNavigateIssue?.(target)})}
   const related=(id:string)=>data.issues.find(i=>i.id===id)
   const parentIssue=issue.parentId?related(issue.parentId):undefined
+  // Relations recorded on other issues that point here ("Duplicated by", reverse blocking) without a reciprocal row.
+  const inboundRelations=data.issues.flatMap(source=>source.id===issue.id?[]:source.relations.filter(relation=>relation.relatedIssueId===issue.id&&relation.type!=='parent_of'&&relation.type!=='sub_issue_of'&&!issue.relations.some(own=>own.relatedIssueId===source.id)).map(relation=>({source,relation})))
   const availableStates=statesForIssue(data,issue)
   const labelScopes=new Set(labelTeamScopeIds(issue.team.id,data.teams,data.teamSettings))
   const availableLabels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope))
@@ -79,6 +97,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const inlineImageSrcs=descriptionImageSrcs(issue.description,issue.descriptionState,issue.documentContent?.contentData)
   const commentMediaSrcs=comments.reduce((srcs,comment)=>{for(const src of descriptionImageSrcs(comment.body,undefined,comment.bodyData))srcs.add(src);return srcs},new Set<string>())
   const fileAttachments=issue.attachments.filter(attachment=>attachment.contentType!=='text/uri-list'&&!inlineImageSrcs.has(attachment.url)&&!commentMediaSrcs.has(attachment.url))
+  const [localCustomerRequests,setLocalCustomerRequests]=useState<import('@/types/flow').CustomerRequest[]>([])
   const customerRequests=data.customerRequests.filter(request=>request.issueId===issue.id)
   const linkedReviews=data.reviews.filter(review=>review.issueIds.includes(issue.id))
   const releasesEnabled=data.workspaceSettings.featureFlags.releases??true
@@ -101,8 +120,9 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         <IssueTitleEditor value={title} onChange={value=>{setTitle(value);schedule({title:value})}} onBlur={()=>void flush()}/>
         {parentIssue&&<IssueParentContext parent={parentIssue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={()=>openIssue(parentIssue)}/>}
         <TriageIntelligenceSuggestions issue={issue} data={data} onIssueUpdated={onIssueUpdated}/>
+        {Boolean(data.teamSettings?.[issue.team.id]?.triageEnabled&&issue.state.type==='backlog'&&!issue.triagedAt)&&<div className="issue-triage-actions"><span>{t('Triage')}</span><TriageActions issue={issue} data={data} team={issue.team} open={triageAction} onOpenChange={setTriageAction} onDone={updated=>onIssueUpdated?.(updated)}/></div>}
         <div className="issue-mobile-properties" aria-label="Issue properties">
-          <StatusPicker value={issue.state} states={availableStates} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<AssigneePicker value={issue.assignee} users={data.users} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})}/><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}<LabelPicker emptyLabel="Start typing to create a new label" value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel} onCreate={createLabel}/><IssueProjectPicker data={data} issue={issue} presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{releasesEnabled&&<IssueReleasePicker data={data} issue={issue}/>}
+          <StatusPicker value={issue.state} states={availableStates} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} settings={resolvedTeamSettings(data.teamSettings,issue.team.id)} onChange={estimate=>onUpdate({estimate})}/>}<AssigneePicker value={issue.assignee} users={data.users} hoverContext={{ member: issue.assignee ? data.members.find(item=>item.user.id===issue.assignee?.id) : undefined, online: Boolean(issue.assignee && (issue.assignee.id===data.viewer.id || peoplePresence.some(item=>item.user.id===issue.assignee?.id))), workspaceName: issue.team.name }} onChange={assigneeId=>onUpdate({assigneeId})}/><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}<DetailLabelControl changeLabelAction="changeLabelAction" host="issue" isArchived={Boolean(issue.archivedAt)} isReadOnly={Boolean(issue.archivedAt)}><LabelPicker emptyLabel="Start typing to create a new label" value={issue.labels} labels={availableLabels} labelGroups={data.labelGroups} onToggle={toggleLabel} onCreate={createLabel}/></DetailLabelControl><IssueProjectPicker data={data} issue={issue} presence={peoplePresence} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{releasesEnabled&&<IssueReleasePicker data={data} issue={issue}/>}
         </div>
         <IssueDescriptionEditor
           selectionActions={descriptionSelection.actions}
@@ -128,30 +148,51 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         />
         <div className="document-actions"><EmojiPicker onSelect={onReactIssue}><Button className="issue-document-action" variant="ghost" aria-label="Add reaction"><AddReactionIcon/></Button></EmojiPicker><Button className="issue-document-action" variant="ghost" aria-label="Attach images, files, or videos" onClick={()=>fileRef.current?.click()}><AttachmentIcon/></Button><input ref={fileRef} type="file" multiple hidden onChange={e=>{for(const file of Array.from(e.target.files??[]))void upload(file);e.target.value='' }}/></div>
         <ReactionPills reactions={issue.reactions} viewerId={data.viewer.id} onToggle={onReactIssue}/>
-        {subIssues.length===0&&<div className="issue-empty-sub-issue-row"><Button className="issue-empty-sub-issue-action" variant="ghost" aria-label="Create new sub-issue" onClick={()=>setSubOpen(true)}><Plus size={16}/>Add sub-issues</Button></div>}
-        {subOpen&&<SubIssueEditor parent={issue} data={data} onCancel={()=>setSubOpen(false)} onCreate={async input=>{await onCreateSubIssue(input);setSubOpen(false)}}/>}
-        {subIssues.length>0&&<section className="issue-detail-section flow-sub-issues"><header><button className="sub-issues-collapse" aria-label={t(subCollapsed?'Expand sub-issues section':'Collapse sub-issues section')} aria-expanded={!subCollapsed} onClick={()=>setSubCollapsed(value=>!value)}><ChevronDown/><span>{t('Sub-issues')}</span></button><span className="sub-issues-progress"><SubIssueProgressRing completed={subCompleted} total={subIssues.length}/><span>{subCompleted}/{subIssues.length}</span></span><span/><SubIssueDisplayMenu value={subDisplay} onChange={setSubDisplay}/><button className="sub-issues-create" aria-label={t('Create new sub-issue')} onClick={()=>setSubOpen(true)}><Plus/></button></header>{!subCollapsed&&<div className="sub-issues-list">{subIssues.map(({issue:child,depth})=><DetailSubIssueRow child={child} data={data} depth={depth} key={child.id} selected={subSelected.has(child.id)} properties={subDisplay.properties} onOpen={()=>openIssue(child)} onSelect={()=>setSubSelected(current=>{const next=new Set(current);if(next.has(child.id))next.delete(child.id);else next.add(child.id);return next})}/>)}</div>}</section>}
-        {issue.relations.length>0&&<IssueSection title="Relations" count={issue.relations.length}>{issue.relations.map(relation=>{const target=related(relation.relatedIssueId);return <div className="linked-issue relation-row" key={relation.id}><Link2 size={14}/><span>{relationLabel(relation.type)}</span><strong>{target?.identifier} {target?.title}</strong><button aria-label="Remove relation" onClick={()=>onDeleteRelation(relation.id)}><X size={12}/></button></div>})}</IssueSection>}
+        {subIssues.length===0&&<div className="issue-empty-sub-issue-row" style={{position:'relative'}}><ContextMenu.Root><ContextMenu.Trigger asChild><Button className="issue-empty-sub-issue-action" variant="ghost" aria-label="Create new sub-issue" onClick={()=>setSubOpen(true)}><Plus size={16}/>Add sub-issues</Button></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="sub-issues-add-menu"><ContextMenu.Item className="sub-issues-add-menu__item" onSelect={()=>setLinkOpen(true)}><Link2 size={16}/><span>{t('Link existing issue as sub-issue…')}</span></ContextMenu.Item><ContextMenu.Item className="sub-issues-add-menu__item" onSelect={()=>setSubOpen(true)}><Plus size={16}/><span>{t('Create new sub-issue')}</span><kbd>⌘ ⇧ O</kbd></ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root><LinkExistingSubIssue anchorOnly open={linkOpen} onOpenChange={setLinkOpen} parent={issue} data={data} onIssueUpdated={onIssueUpdated}/></div>}
+        {subIssues.length>0&&<section className="issue-detail-section flow-sub-issues"><header><button className="sub-issues-collapse" aria-label={t(subCollapsed?'Expand sub-issues section':'Collapse sub-issues section')} aria-expanded={!subCollapsed} onClick={()=>setSubCollapsed(value=>!value)}><SubIssuesCaret/><span>{t('Sub-issues')}</span></button><span className="sub-issues-progress"><SubIssueProgressRing completed={subCompleted} total={subIssues.length}/><span>{subCompleted}/{subIssues.length}</span></span><span/><SubIssueDisplayMenu value={subDisplay} onChange={setSubDisplay}/><ContextMenu.Root><ContextMenu.Trigger asChild><button className="sub-issues-create" aria-label={t('Create new sub-issue')} onClick={()=>setSubOpen(true)}><Plus/></button></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="sub-issues-add-menu"><ContextMenu.Item className="sub-issues-add-menu__item" onSelect={()=>setLinkOpen(true)}><Link2 size={16}/><span>{t('Link existing issue as sub-issue…')}</span></ContextMenu.Item><ContextMenu.Item className="sub-issues-add-menu__item" onSelect={()=>setSubOpen(true)}><Plus size={16}/><span>{t('Create new sub-issue')}</span><kbd>⌘ ⇧ O</kbd></ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root><LinkExistingSubIssue anchorOnly open={linkOpen} onOpenChange={setLinkOpen} parent={issue} data={data} onIssueUpdated={onIssueUpdated}/></header>{!subCollapsed&&<div className="sub-issues-list">{subIssues.map(({issue:child,depth})=><DetailSubIssueRow child={child} data={data} depth={depth} key={child.id} selected={subSelected.has(child.id)} properties={subDisplay.properties} onOpen={()=>openIssue(child)} onSelect={()=>setSubSelected(current=>{const next=new Set(current);if(next.has(child.id))next.delete(child.id);else next.add(child.id);return next})}/>)}</div>}</section>}
+        {subOpen&&<SubIssueEditor key={subEditorKey} parent={issue} data={data} onCancel={()=>setSubOpen(false)} onCreate={async input=>{await onCreateSubIssue(input);setSubEditorKey(key=>key+1)}}/>}
+        <SimilarIssues issue={issue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={openIssue} onMarkDuplicate={target=>void onRelation('duplicate',target.id)}/>
+        {issue.relations.length+inboundRelations.length>0&&<IssueSection title="Relations" count={issue.relations.length+inboundRelations.length}>{issue.relations.map(relation=>{const target=related(relation.relatedIssueId);return <div className="linked-issue relation-row" key={relation.id}><Link2 size={14}/><span>{relationLabel(relation.type)}</span><strong>{target?.identifier} {target?.title}</strong><button aria-label="Remove relation" onClick={()=>onDeleteRelation(relation.id)}><X size={12}/></button></div>})}{inboundRelations.map(({source,relation})=><div className="linked-issue relation-row" key={`in-${relation.id}`}><Link2 size={14}/><span>{inverseRelationLabel(relation.type)}</span><a href={`/${data.workspace.urlKey}/issue/${source.identifier}`} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey)return;event.preventDefault();openIssue(source)}}><strong data-i18n-ignore>{source.identifier} {source.title}</strong></a><span/></div>)}</IssueSection>}
         {linkedReviews.length>0&&<IssueCodeReviews actions={issueOptionsActions} reviews={linkedReviews}/>}
         {(linkedDocuments.length>0||linkedResources.length>0)&&<IssueResources documents={linkedDocuments} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment}/>}
-        {data.workspaceSettings.featureFlags['customer-requests'] !== false && customerRequests.length>0&&<IssueSection title="Customer requests" count={customerRequests.length}>{customerRequests.map(request=>{const customer=data.customers.find(item=>item.id===request.customerId);return <div className="linked-issue issue-resource-row" key={request.id}><UserRound size={14}/><span>{customer?.name??'Customer'}</span><strong>{request.body}</strong></div>})}</IssueSection>}
+        {data.workspaceSettings.featureFlags['customer-requests'] !== false && <IssueCustomerNeedsSection data={data} issueId={issue.id} requests={[...localCustomerRequests, ...customerRequests]} onLocalCreated={request=>setLocalCustomerRequests(current=>[request,...current.filter(item=>item.id!==request.id)])}/>}
         <IssueAttachments attachments={fileAttachments} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
         <IssueAgentTasks key={`${data.workspace.id}:${issue.id}`} issue={issue} data={data}/>
         {descriptionSelection.panels}
         <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
         {historyLoading&&<div className="issue-history-state" role="status">{t('Loading activity...')}</div>}
         {historyError&&!historyLoading&&<div className="issue-history-state" role="alert"><span>{t('Could not load activity')}: {historyError}</span>{onRetryHistory&&<Button variant="ghost" size="sm" onClick={onRetryHistory}><RotateCw size={14}/>{t('Retry')}</Button>}</div>}
-        <PagedActivityTimeline issueId={issue.id} cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onUpload={uploadCommentFile}/><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
+        <div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider></div><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
       </article>
-      <IssueProperties issue={issue} data={data} activities={activities} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
+      <div className="issue-agent-rail">
+        {agentOpen ? (
+          <EntityAgentPanel
+            contextIssues={[issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data)]}
+            onRequestClose={() => setAgentOpen(false)}
+            open={agentOpen}
+            target={{ type: 'issue', id: issue.id, title: issue.title, identifier: issue.identifier, issueIds: [issue.id] }}
+          />
+        ) : (
+          <IssueProperties issue={issue} data={data} activities={activities} presence={peoplePresence} releasesEnabled={releasesEnabled} onCreateMilestone={onCreateProjectMilestone} onCreateProject={onCreateProject} onCreateLabel={createLabel} onUpdate={onUpdate} onToggleLabel={toggleLabel}/>
+        )}
+      </div>
     </div></div>
     {relationType&&<RelationPicker open onOpenChange={open=>!open&&setRelationType(null)} type={relationType} issueId={issue.id} issues={data.issues} onSelect={id=>onRelation(relationType,id)}/>}
   </section>
 }
 
+const PREVIEW_STATE_LABEL:Record<DeployPreview['state'],string>={ready:'Ready',building:'Building',pending:'Pending',failed:'Failed',inactive:'Inactive'}
+/** Linear deploy previews: one chip per environment from the linked pull requests. */
+export function DeployPreviews({reviews}:{reviews:CodeReview[]}){
+  const{t}=useI18n()
+  const previews=reviews.flatMap(review=>(review.previews??[]).filter(preview=>preview.state!=='inactive').map(preview=>({preview,review})))
+  if(!previews.length)return null
+  return <div className="issue-deploy-previews" aria-label={t('Previews')}>{previews.map(({preview,review})=>{const href=preview.state==='ready'?preview.url:preview.logUrl||preview.url;const body=<><span className="issue-deploy-preview__dot" data-state={preview.state} aria-hidden/><span data-i18n-ignore>{preview.environment}</span><small>{t(PREVIEW_STATE_LABEL[preview.state])}</small>{href&&<ExternalLink/>}</>;return <FlowTooltip key={`${review.id}-${preview.id}`} label={`${review.repositoryOwner}/${review.repositoryName} #${review.number}${preview.commitSha?` · ${preview.commitSha.slice(0,7)}`:''}`}>{href?<a className="issue-deploy-preview" data-state={preview.state} href={href} target="_blank" rel="noreferrer">{body}</a>:<span className="issue-deploy-preview" data-state={preview.state} tabIndex={0}>{body}</span>}</FlowTooltip>})}</div>
+}
+
 function IssueCodeReviews({actions,reviews}:{actions?:IssueOptionsActions;reviews:CodeReview[]}){
   const[collapsed,setCollapsed]=useState(false)
-  return <section className="issue-detail-section issue-code-reviews"><header><button aria-expanded={!collapsed} aria-label={collapsed?'Expand pull requests section':'Collapse pull requests section'} onClick={()=>setCollapsed(value=>!value)} type="button"><ChevronDown/><span>Pull requests</span></button><span>{reviews.length}</span></header>{!collapsed&&reviews.map(review=><a className="issue-code-review" href={review.url} key={review.id} rel="noreferrer" target="_blank"><GitPullRequest/><span><strong data-i18n-ignore>{review.title}</strong><small data-i18n-ignore>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span><em data-status={review.status}>{review.status==='inReview'?'In review':review.status[0].toUpperCase()+review.status.slice(1)}</em><ExternalLink className="issue-code-review__external"/><button aria-label={`Unlink pull request ${review.title}`} disabled={!actions} onClick={event=>{event.preventDefault();event.stopPropagation();void actions?.unlinkReview(review.id)}} type="button"><X/></button></a>)}</section>
+  return <section className="issue-detail-section issue-code-reviews"><header><button aria-expanded={!collapsed} aria-label={collapsed?'Expand pull requests section':'Collapse pull requests section'} onClick={()=>setCollapsed(value=>!value)} type="button"><ChevronDown/><span>Pull requests</span></button><span>{reviews.length}</span></header>{!collapsed&&reviews.map(review=><a className="issue-code-review" href={review.url} key={review.id} rel="noreferrer" target="_blank"><GitPullRequest/><span><strong data-i18n-ignore>{review.title}</strong><small data-i18n-ignore>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span><em data-status={review.status}>{review.status==='inReview'?'In review':review.status[0].toUpperCase()+review.status.slice(1)}</em><ExternalLink className="issue-code-review__external"/><button aria-label={`Unlink pull request ${review.title}`} disabled={!actions} onClick={event=>{event.preventDefault();event.stopPropagation();void actions?.unlinkReview(review.id)}} type="button"><X/></button></a>)}{!collapsed&&<DeployPreviews reviews={reviews}/>}</section>
 }
 
 type SubIssueProperty='priority'|'sla'|'id'|'status'|'labels'|'milestone'|'cycle'|'dueDate'|'links'|'customers'|'customerRevenue'|'assignee'
@@ -161,14 +202,21 @@ function flattenSubIssues(parent:Issue,issues:Issue[],nested:boolean){const byId
 
 function DetailSubIssueRow({child,data,depth,properties,selected,onOpen,onSelect}:{child:Issue;data:BootstrapData;depth:number;properties:Set<SubIssueProperty>;selected:boolean;onOpen:()=>void;onSelect:()=>void}){
   const labels=child.labels.slice(0,3),cycle=data.cycles.find(item=>item.id===child.cycleId),project=data.projects.find(item=>item.id===child.project?.id),milestone=(project?.milestones??[]).find(item=>item.id===child.projectMilestoneId),sla=data.issueSlas.find(item=>item.issueId===child.id&&item.status!=='removed'),rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined,requests=data.customerRequests.filter(item=>item.issueId===child.id),customers=requests.map(item=>data.customers.find(customer=>customer.id===item.customerId)).filter((customer):customer is NonNullable<typeof customer>=>Boolean(customer)),revenue=customers.reduce((total,customer)=>total+(customer.annualRevenue??0),0),hasStatus=properties.has('status')
-  return <a className="detail-sub-issue-row" data-selected={selected} data-depth={depth} data-has-status={hasStatus} style={{'--sub-depth':depth} as React.CSSProperties} href={`/${data.workspace.urlKey}/issue/${child.identifier}`} onClick={event=>{if((event.target as Element).closest('button,[role=checkbox]')){event.preventDefault();return}event.preventDefault();onOpen()}}><span className="detail-sub-checkbox" role="checkbox" tabIndex={0} aria-label="Select issue" aria-checked={selected} onClick={event=>{event.preventDefault();event.stopPropagation();onSelect()}} onKeyDown={event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();onSelect()}}}>{selected&&<CheckboxMark/>}</span>{hasStatus&&<StatusIcon state={child.state} size={14}/>}<span className="detail-sub-title" data-i18n-ignore>{properties.has('id')&&<small>{child.identifier}</small>}{child.title}</span><span className="detail-sub-properties">{properties.has('priority')&&child.priority>0&&<span className="detail-sub-priority">{child.priorityLabel}</span>}{properties.has('sla')&&sla&&<IssueSLAIndicator compact sla={sla} ruleName={rule?.name}/>} {properties.has('labels')&&labels.map(label=><span className="detail-sub-badge" key={label.id}><i style={{background:label.color}}/><b data-i18n-ignore>{label.name}</b></span>)}{properties.has('milestone')&&milestone&&<span className="detail-sub-badge"><b data-i18n-ignore>{milestone.name}</b></span>}{properties.has('cycle')&&cycle&&<span className="detail-sub-badge"><b data-i18n-ignore>{cycle.name}</b></span>}{properties.has('dueDate')&&child.dueDate&&<span className="detail-sub-badge"><b>{child.dueDate.slice(5)}</b></span>}{properties.has('links')&&child.attachments.length>0&&<span className="detail-sub-badge"><Link2/><b>{child.attachments.length}</b></span>}{properties.has('customers')&&customers.map(customer=><span className="detail-sub-badge" key={customer.id}><b data-i18n-ignore>{customer.name}</b></span>)}{properties.has('customerRevenue')&&revenue>0&&<span className="detail-sub-badge"><b>{new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',notation:'compact'}).format(revenue)}</b></span>}{properties.has('assignee')&&child.assignee&&<Avatar name={child.assignee.displayName}/>}</span></a>
+  return <a className="detail-sub-issue-row" data-selected={selected} data-depth={depth} data-has-status={hasStatus} style={{'--sub-depth':depth} as React.CSSProperties} href={`/${data.workspace.urlKey}/issue/${child.identifier}`} onClick={event=>{if((event.target as Element).closest('button,[role=checkbox]')){event.preventDefault();return}event.preventDefault();onOpen()}}><span className="detail-sub-checkbox" role="checkbox" tabIndex={0} aria-label="Select issue" aria-checked={selected} onClick={event=>{event.preventDefault();event.stopPropagation();onSelect()}} onKeyDown={event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();onSelect()}}}>{selected&&<CheckboxMark/>}</span>{hasStatus&&<StatusIcon state={child.state} size={14}/>}<span className="detail-sub-title" data-i18n-ignore>{properties.has('id')&&<small>{child.identifier}</small>}{child.title}</span><span className="detail-sub-properties">{properties.has('priority')&&child.priority>0&&<span className="detail-sub-priority">{child.priorityLabel}</span>}{properties.has('sla')&&sla&&<IssueSLAIndicator compact sla={sla} ruleName={rule?.name}/>} {properties.has('labels')&&labels.map(label=><span className="detail-sub-badge" key={label.id}><i style={{background:label.color}}/><b data-i18n-ignore>{label.name}</b></span>)}{properties.has('milestone')&&milestone&&<span className="detail-sub-badge"><b data-i18n-ignore>{milestone.name}</b></span>}{properties.has('cycle')&&cycle&&<span className="detail-sub-badge"><b data-i18n-ignore>{cycle.name}</b></span>}{properties.has('dueDate')&&child.dueDate&&<span className="detail-sub-badge"><b>{child.dueDate.slice(5)}</b></span>}{properties.has('links')&&child.attachments.length>0&&<span className="detail-sub-badge"><Link2/><b>{child.attachments.length}</b></span>}{properties.has('customers')&&customers.map(customer=><span className="detail-sub-badge" key={customer.id}><b data-i18n-ignore>{customer.name}</b></span>)}{properties.has('customerRevenue')&&revenue>0&&<span className="detail-sub-badge"><b>{new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',notation:'compact'}).format(revenue)}</b></span>}{properties.has('assignee')&&(child.assignee?<Avatar name={child.assignee.displayName}/>:<NoAssigneeIcon className="detail-sub-unassigned" size={18}/>)}</span></a>
 }
 
 function SubIssueDisplayMenu({value,onChange}:{value:SubIssueDisplay;onChange:(value:SubIssueDisplay)=>void}){const{t}=useI18n();const toggle=(property:SubIssueProperty)=>{const properties=new Set(value.properties);if(properties.has(property))properties.delete(property);else properties.add(property);onChange({...value,properties})};const names:Record<SubIssueProperty,string>={priority:'Priority',sla:'SLA',id:'ID',status:'Status',labels:'Labels',milestone:'Milestone',cycle:'Cycle',dueDate:'Due date',links:'Links',customers:'Customers',customerRevenue:'Customer revenue',assignee:'Assignee'};return <Popover.Root><Popover.Trigger asChild><button className="sub-issues-display" aria-label={t('Display options')}><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className="sub-issues-display-menu" align="end" sideOffset={4}><label><span>{t('Ordering')}</span><span className="sub-issue-order"><SubIssueSelect ariaLabel={t('View ordering')} value={value.ordering} options={[{id:'priority',label:t('Priority')},{id:'created',label:t('Created')},{id:'updated',label:t('Updated')}]} onChange={ordering=>onChange({...value,ordering:ordering as SubIssueDisplay['ordering']})}/><button aria-label={t('Direction')} onClick={()=>onChange({...value,direction:value.direction==='asc'?'desc':'asc'})}>{value.direction==='asc'?'↑':'↓'}</button></span></label><label><span>{t('Completed issues')}</span><SubIssueSelect ariaLabel={t('Completed issues')} value={value.completed} options={[{id:'all',label:t('All')},{id:'none',label:t('None')}]} onChange={completed=>onChange({...value,completed:completed as SubIssueDisplay['completed']})}/></label><label><span>{t('Nested sub-issues')}</span><Toggle checked={value.nested} label={t('Nested sub-issues')} onChange={nested=>onChange({...value,nested})}/></label><h4>{t('Display properties')}</h4><div>{(Object.keys(names) as SubIssueProperty[]).map(property=><button aria-pressed={value.properties.has(property)} key={property} onClick={()=>toggle(property)}>{t(names[property])}</button>)}</div></Popover.Content></Popover.Portal></Popover.Root>}
 
 function SubIssueSelect({ariaLabel,value,options,onChange}:{ariaLabel:string;value:string;options:{id:string;label:string}[];onChange:(value:string)=>void}){return <Select.Root value={value} onValueChange={onChange}><Select.Trigger className="sub-issue-select" aria-label={ariaLabel}><Select.Value/><Select.Icon><ChevronDown/></Select.Icon></Select.Trigger><Select.Portal><Select.Content data-flow-motion="floating" className="sub-issue-select-menu" position="popper" sideOffset={4}><Select.Viewport>{options.map(option=><Select.Item className="sub-issue-select-item" value={option.id} key={option.id}><Select.ItemText>{option.label}</Select.ItemText><Select.ItemIndicator><Check/></Select.ItemIndicator></Select.Item>)}</Select.Viewport></Select.Content></Select.Portal></Select.Root>}
 
-function IssueProperties({issue,data,activities,presence=[],releasesEnabled,onCreateMilestone,onCreateProject,onCreateLabel,onUpdate,onToggleLabel}:{issue:Issue;data:BootstrapData;activities:ActivityEvent[];presence?:Presence[];releasesEnabled:boolean;onCreateMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateLabel?:(name:string,groupId?:string)=>void|Promise<void>;onUpdate:(i:IssueUpdateInput)=>Promise<void>;onToggleLabel:(id:string)=>Promise<void>}){const labelScopes=new Set(labelTeamScopeIds(issue.team.id,data.teams,data.teamSettings));const labels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope));const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined;const member=issue.assignee?data.members.find(item=>item.user.id===issue.assignee?.id):undefined;const online=Boolean(issue.assignee&&(issue.assignee.id===data.viewer.id||presence.some(item=>item.user.id===issue.assignee?.id)));const estimateType=resolvedTeamSettings(data.teamSettings,issue.team.id)?.estimateType??'notUsed';return <aside className="issue-properties"><h3>Properties</h3><StatusPicker value={issue.state} states={statesForIssue(data,issue)} hoverHistory={{activities,issueCreatedAt:issue.createdAt}} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} estimateType={estimateType} onChange={estimate=>onUpdate({estimate})}/>}<div className="issue-assignee-property"><AssigneePicker value={issue.assignee} users={data.users} hoverContext={{member,online,workspaceName:issue.team.name,project:issue.project}} onChange={assigneeId=>onUpdate({assigneeId})}/>{issue.assignee&&<a className="issue-assignee-profile" href={`/${data.workspace.urlKey}/members`} aria-label="Go to user"><ChevronRight size={15}/></a>}</div><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}{sla&&<PropertyGroup title="SLA"><IssueSLAIndicator sla={sla} ruleName={rule?.name}/></PropertyGroup>}<PropertyGroup title="Labels"><LabelPicker emptyLabel="Start typing to create a new label" inline value={issue.labels} labels={labels} labelGroups={data.labelGroups} onToggle={onToggleLabel} onCreate={onCreateLabel}/></PropertyGroup><IssueProjectPicker grouped data={data} issue={issue} presence={presence} onCreateMilestone={onCreateMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/>{issue.dueDate&&<PropertyGroup title="Due date"><DueDatePicker value={issue.dueDate} onChange={dueDate=>onUpdate({dueDate})}/></PropertyGroup>}{releasesEnabled&&<IssueReleasePicker grouped data={data} issue={issue}/>}</aside>}
+function IssueProperties({issue,data,activities,presence=[],releasesEnabled,onCreateMilestone,onCreateProject,onCreateLabel,onUpdate,onToggleLabel}:{issue:Issue;data:BootstrapData;activities:ActivityEvent[];presence?:Presence[];releasesEnabled:boolean;onCreateMilestone?:(projectId:string,input:{name:string})=>Promise<ProjectMilestone>;onCreateProject?:(draft:NewProjectDraft)=>Promise<Project>;onCreateLabel?:(name:string,groupId?:string)=>void|Promise<void>;onUpdate:(i:IssueUpdateInput)=>Promise<void>;onToggleLabel:(id:string)=>Promise<void>}){const labelScopes=new Set(labelTeamScopeIds(issue.team.id,data.teams,data.teamSettings));const labels=labelsForResource(data.labels,'issue',data.labelGroups).filter(label=>!label.scope||label.scope==='Workspace'||labelScopes.has(label.scope));const sla=data.issueSlas.find(item=>item.issueId===issue.id&&item.status!=='removed');const rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined;const member=issue.assignee?data.members.find(item=>item.user.id===issue.assignee?.id):undefined;const online=Boolean(issue.assignee&&(issue.assignee.id===data.viewer.id||presence.some(item=>item.user.id===issue.assignee?.id)));const estimateType=resolvedTeamSettings(data.teamSettings,issue.team.id)?.estimateType??'notUsed';return <aside className="issue-properties"><h3>Properties</h3><StatusPicker value={issue.state} states={statesForIssue(data,issue)} hoverHistory={{activities,issueCreatedAt:issue.createdAt}} onChange={stateId=>onUpdate({stateId})}/><PriorityPicker value={issue.priority} onChange={priority=>onUpdate({priority})}/>{estimateType!=='notUsed'&&<EstimatePicker value={issue.estimate} settings={resolvedTeamSettings(data.teamSettings,issue.team.id)} onChange={estimate=>onUpdate({estimate})}/>}<div className="issue-assignee-property"><AssigneePicker value={issue.assignee} users={data.users} hoverContext={{member,online,workspaceName:issue.team.name,project:issue.project}} onChange={assigneeId=>onUpdate({assigneeId})}/>{issue.assignee&&<a className="issue-assignee-profile" href={`/${data.workspace.urlKey}/members`} aria-label="Go to user"><ChevronRight size={15}/></a>}</div><IssueAgentPicker issue={issue} data={data} onUpdate={onUpdate}/>{data.cycleSettings[issue.team.id]?.enabled === true && <CyclePicker valueId={issue.cycleId} cycles={data.cycles} issues={data.issues} teamId={issue.team.id} onChange={cycleId=>onUpdate({cycleId})}/>}{sla&&<PropertyGroup title="SLA"><IssueSLAIndicator sla={sla} ruleName={rule?.name}/></PropertyGroup>}<PropertyGroup title="Labels"><DetailLabelControl changeLabelAction="changeLabelAction" host="issue" isArchived={Boolean(issue.archivedAt)} isReadOnly={Boolean(issue.archivedAt)}><LabelPicker emptyLabel="Start typing to create a new label" inline value={issue.labels} labels={labels} labelGroups={data.labelGroups} onToggle={onToggleLabel} onCreate={onCreateLabel}/></DetailLabelControl></PropertyGroup><IssueProjectPicker grouped data={data} issue={issue} presence={presence} onCreateMilestone={onCreateMilestone} onCreateProject={onCreateProject} onUpdate={onUpdate}/><IssueDueDate issue={issue} onUpdate={onUpdate}/>{releasesEnabled&&(data.releases.some(release=>release.issueIds.includes(issue.id))||data.releasePipelines.some(pipeline=>pipeline.type==='scheduled'&&pipeline.teamIds.includes(issue.team.id)))&&<IssueReleasePicker grouped data={data} issue={issue}/>}</aside>}
+/** The due date appears once the issue has one (set from the issue menu or ⇧D), and stays while this issue is open. */
+function IssueDueDate({issue,onUpdate}:{issue:Issue;onUpdate:(input:IssueUpdateInput)=>void|Promise<unknown>}){
+  const shown=useRef<string|undefined>(undefined)
+  if(issue.dueDate)shown.current=issue.id
+  if(!issue.dueDate&&shown.current!==issue.id)return null
+  return <div className="issue-due-date-row"><DueDatePicker value={issue.dueDate??''} triggerClassName="label-project-trigger issue-due-date-trigger" onChange={async dueDate=>{await onUpdate({dueDate})}}/></div>
+}
 function PropertyGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="property-group"><h4>{title}</h4>{children}</section>}
 function IssueSection({title,count,children}:{title:string;count:number;children:React.ReactNode}){return <section className="issue-detail-section"><header><strong>{title}</strong><span>{count}</span></header>{children}</section>}
 function IssueParentContext({parent,issues,workspaceKey,onOpen}:{parent:Issue;issues:Issue[];workspaceKey:string;onOpen:()=>void}){const children=parent.subIssueIds.map(id=>issues.find(issue=>issue.id===id)).filter((issue):issue is Issue=>Boolean(issue)&&!issue!.archivedAt),completed=children.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length;return <div className="issue-parent-context"><span>Sub-issue of</span><a href={`/${workspaceKey}/issue/${parent.identifier}`} onClick={event=>{if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;event.preventDefault();onOpen()}}><StatusIcon state={parent.state} size={14}/><strong data-i18n-ignore>{parent.identifier}</strong><span data-i18n-ignore>{parent.title}</span></a>{children.length>0&&<button aria-label={`Open sub-issues of ${parent.identifier}`} onClick={onOpen}><SubIssueProgressRing completed={completed} total={children.length}/><span>{completed}/{children.length}</span></button>}</div>}
@@ -180,5 +228,85 @@ function IssueResources({documents,links,workspaceKey,actions,onDeleteLink}:{doc
   </section>
 }
 function safeHost(value:string){try{return new URL(value).hostname}catch{return 'Link'}}
+function inverseRelationLabel(type:IssueRelationType){return type==='duplicate'?'Duplicated by':type==='blocks'?'Blocked by':type==='blocked_by'?'Blocking':'Related'}
 function relationLabel(type:IssueRelationType){return type==='blocked_by'?'Blocked by':type==='blocks'?'Blocking':type==='duplicate'?'Duplicate of':type==='parent_of'?'Parent of':type==='sub_issue_of'?'Sub-issue of':'Related'}
 function statesForIssue(data:BootstrapData,issue:Issue,seen=new Set<string>()):WorkflowState[]{const settings=data.teamSettings[issue.team.id];if(settings?.inheritWorkflowStatuses&&settings.parentTeamId&&!seen.has(issue.team.id)){seen.add(issue.team.id);return statesForIssue(data,{...issue,team:{...issue.team,id:settings.parentTeamId}},seen)}const specific=data.states.some(state=>state.teamId===issue.team.id);return data.states.filter(state=>specific?state.teamId===issue.team.id:!state.teamId).sort((left,right)=>(left.position??0)-(right.position??0))}
+
+function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: {
+  data: BootstrapData
+  issueId: string
+  requests: import('@/types/flow').CustomerRequest[]
+  onLocalCreated: (request: import('@/types/flow').CustomerRequest) => void
+}) {
+  const [adding, setAdding] = useState(false)
+  const [open, setOpen] = useState(true)
+  const [showArchived, setShowArchived] = useState(false)
+  useEffect(() => {
+    const onAdd = (event: Event) => {
+      if ((event as CustomEvent<{ issueId: string }>).detail?.issueId !== issueId) return
+      event.preventDefault()
+      setOpen(true)
+      setAdding(true)
+    }
+    window.addEventListener('flow:add-customer-request', onAdd)
+    return () => window.removeEventListener('flow:add-customer-request', onAdd)
+  }, [issueId])
+  const merged = useMemo(() => {
+    const seen = new Set<string>()
+    const rows: import('@/types/flow').CustomerRequest[] = []
+    for (const item of requests) {
+      if (seen.has(item.id)) continue
+      seen.add(item.id)
+      rows.push(item)
+    }
+    return rows
+  }, [requests])
+  const archivedCount = merged.filter(item => item.archivedAt).length
+  const visible = merged.filter(item => showArchived || !item.archivedAt)
+  // Like the reference, the section appears once the issue has a request or one is being added.
+  if (!merged.length && !adding) return null
+  return (
+    <section className="issue-detail-section issue-customer-needs">
+      <header>
+        <button className="issue-section-collapse" aria-label={open ? 'Collapse customers section' : 'Expand customers section'} aria-expanded={open} onClick={() => setOpen(value => !value)}><ChevronDown/><span>Customers</span></button>
+        {!open && <span>{visible.length}</span>}
+        <span/>
+        {open && archivedCount > 0 && (
+          <button className="issue-customer-needs-archived" aria-pressed={showArchived} type="button" onClick={() => setShowArchived(value => !value)}>
+            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+          </button>
+        )}
+        {open && <button className="issue-customer-needs-add" aria-label="Add customer request" type="button" onClick={() => setAdding(true)}><Plus size={16}/></button>}
+      </header>
+      {open && adding && (
+        <EmbeddedCustomerNeedForm
+          data={data}
+          host="issuePage"
+          issueId={issueId}
+          onCancel={() => setAdding(false)}
+          onCreated={async (request) => {
+            onLocalCreated(request)
+            setAdding(false)
+          }}
+        />
+      )}
+      {open && visible.map(request => {
+        const customer = data.customers.find(item => item.id === request.customerId)
+        return (
+          <div className={`linked-issue issue-resource-row${request.archivedAt ? ' is-archived' : ''}`} key={request.id}>
+            <UserRound size={14}/>
+            <span>{customer?.name ?? 'Customer'}</span>
+            <strong>{request.body}</strong>
+            {request.priority ? <em className="issue-need-important">Important</em> : null}
+            {request.sourceUrl ? <a href={request.sourceUrl} rel="noreferrer" target="_blank">Source</a> : null}
+          </div>
+        )
+      })}
+    </section>
+  )
+}
+
+/** Disclosure triangle for the sub-issue header; points right when collapsed. */
+function SubIssuesCaret() {
+  return <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7.00194 10.6239C6.66861 10.8183 6.25 10.5779 6.25 10.192V5.80802C6.25 5.42212 6.66861 5.18169 7.00194 5.37613L10.7596 7.56811C11.0904 7.76105 11.0904 8.23895 10.7596 8.43189L7.00194 10.6239Z"/></svg>
+}

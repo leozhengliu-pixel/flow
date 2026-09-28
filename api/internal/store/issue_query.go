@@ -20,11 +20,13 @@ import (
 var ErrIssueQuery = errors.New("invalid issue query")
 
 type IssueFilter struct {
-	And      []IssueFilter `json:"and,omitempty"`
-	Or       []IssueFilter `json:"or,omitempty"`
-	Field    string        `json:"field,omitempty"`
-	Operator string        `json:"operator,omitempty"`
-	Values   []string      `json:"values,omitempty"`
+	And []IssueFilter `json:"and,omitempty"`
+	Or  []IssueFilter `json:"or,omitempty"`
+	// Not negates a compound child (for example "is not" on a translated filter).
+	Not      *IssueFilter `json:"not,omitempty"`
+	Field    string       `json:"field,omitempty"`
+	Operator string       `json:"operator,omitempty"`
+	Values   []string     `json:"values,omitempty"`
 }
 
 type IssueRecordQuery struct {
@@ -57,6 +59,20 @@ type IssueRecordAccess struct {
 	WorkspaceID    string
 	VisibleTeamIDs []string
 	Admin          bool
+	// ArchivedTeamIDs are deleted teams in their restoration window. Their
+	// issues stay hidden from everyone, including admins.
+	ArchivedTeamIDs []string
+}
+
+// ArchivedTeamIDs lists deleted teams that are still restorable.
+func ArchivedTeamIDs(data domain.Bootstrap) []string {
+	var ids []string
+	for _, team := range data.Teams {
+		if team.ArchivedAt != nil {
+			ids = append(ids, team.ID)
+		}
+	}
+	return ids
 }
 
 func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, userID string) (domain.Bootstrap, error) {
@@ -215,7 +231,7 @@ func (s *SQLiteStore) IssueQueryAccess(ctx context.Context, workspace, userID st
 	if err := rows.Err(); err != nil {
 		return data, IssueRecordAccess{}, err
 	}
-	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: visibleIssueTeams(data, userID, role)}
+	access := IssueRecordAccess{UserID: userID, WorkspaceID: data.Workspace.ID, Admin: isWorkspaceAdminRole(role), VisibleTeamIDs: visibleIssueTeams(data, userID, role), ArchivedTeamIDs: ArchivedTeamIDs(data)}
 	return data, access, nil
 }
 
@@ -305,7 +321,25 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			clauses = append(clauses, "("+strings.Join(children, group.join)+")")
 		}
 	}
+	if node.Not != nil {
+		sql, values, err := compileIssueFilter(*node.Not, depth+1, remaining)
+		if err != nil {
+			return "", nil, err
+		}
+		clauses = append(clauses, "NOT ("+sql+")")
+		args = append(args, values...)
+	}
 	if node.Field != "" {
+		if node.Field == "sharedWith" {
+			// Issues explicitly shared with these users (issue permission grants).
+			if len(node.Values) == 0 || len(node.Values) > 100 {
+				return "", nil, ErrIssueQuery
+			}
+			users, values := bindList("p.subject_id", node.Values)
+			clauses = append(clauses, "EXISTS (SELECT 1 FROM issue_permission_records p WHERE p.workspace_key=i.workspace_key AND p.issue_id=i.id AND p.subject_type='user' AND "+users+")")
+			args = append(args, values...)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		if node.Field == "customerId" || node.Field == "customers" {
 			clause, values, err := compileCustomerFilter(node)
 			if err != nil {
@@ -315,7 +349,7 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			args = append(args, values...)
 			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 		}
-		if issueAttributeFields[node.Field] {
+		if isIssueAttributeField(node.Field) {
 			clause, values, err := compileIssueAttribute(node)
 			if err != nil {
 				return "", nil, err
@@ -440,6 +474,11 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 		}
 		teams, values := bindList("i.team_id", query.Access.VisibleTeamIDs)
 		clauses = append(clauses, "("+teams+" OR i.id IN (SELECT id FROM shared_issues))")
+		args = append(args, values...)
+	}
+	if query.Access != nil && len(query.Access.ArchivedTeamIDs) > 0 {
+		archivedTeams, values := bindList("i.team_id", query.Access.ArchivedTeamIDs)
+		clauses = append(clauses, "NOT "+archivedTeams)
 		args = append(args, values...)
 	}
 	if query.Archived != "all" {
@@ -610,10 +649,13 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	}
 	prefix, prefixArgs := issueAccessCTE(query)
 	column := "sort_order"
+	expression := ""
 	switch query.Sort {
 	case "", "sortOrder":
 	case "priority":
+		// Linear orders "No priority" (0) after Low (4).
 		column = "priority"
+		expression = "(CASE WHEN i.priority=0 THEN 5 ELSE i.priority END)"
 	case "createdAt":
 		column = "created_at"
 	case "updatedAt":
@@ -622,6 +664,9 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		column = "title"
 	default:
 		return page, ErrIssueQuery
+	}
+	if expression == "" {
+		expression = "i." + column
 	}
 	direction := "ASC"
 	if query.Direction == "desc" {
@@ -668,7 +713,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		if direction == "DESC" {
 			operator = "<"
 		}
-		where += " AND (i." + column + operator + "? OR (i." + column + "=? AND i.id" + operator + "?))"
+		where += " AND (" + expression + operator + "? OR (" + expression + "=? AND i.id" + operator + "?))"
 		args = append(args, value, value, cursor.ID)
 	}
 	payload := "i.data"
@@ -679,7 +724,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	if query.Summary && query.IncludeDescription {
 		descriptionColumn = "COALESCE(" + s.jsonText("i.data", "description") + ", '')"
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+",i."+column+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY i."+column+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+","+expression+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY "+expression+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return page, err
 	}

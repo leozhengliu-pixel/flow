@@ -1,0 +1,7 @@
+.burn-up-graph__legend strong {
+  font-variant-numeric: tabular-nums;
+}
+.burn-up-graph[data-burn-up="true"] path {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+}

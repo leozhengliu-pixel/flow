@@ -87,19 +87,6 @@
   flex: 1;
   overflow: hidden;
 }
-.emptyGraphic {
-  position: absolute;
-  top: 54px;
-  left: 50%;
-  width: 214px;
-  height: auto;
-  transform: translateX(-50%);
-  color: var(--theme-text-primary);
-  opacity: 0.045;
-}
-.emptyGraphic path {
-  fill: currentColor;
-}
 .composer {
   position: absolute;
   z-index: 2;
@@ -793,11 +780,6 @@
     top: auto;
     width: calc(100% - 24px);
   }
-  .emptyGraphic {
-    top: 18%;
-    width: 168px;
-    height: auto;
-  }
   .conversation {
     bottom: 152px;
   }
@@ -853,62 +835,6 @@
 .fileInput {
   display: none;
 }
-.examples {
-  position: absolute;
-  top: calc(41% + 124px);
-  left: 50%;
-  width: 712px;
-  transform: translateX(-50%);
-}
-.examplesWithError { top: calc(41% + 148px); }
-.examples > header {
-  height: 28px;
-  display: flex;
-  align-items: center;
-  padding: 0 4px 0 16px;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-}
-.examples > header > button {
-  width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  margin-left: auto;
-  padding: 0;
-  border: 0.5px solid transparent;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--theme-text-secondary);
-}
-.examples > header > button:hover { background: var(--theme-surface-hover); }
-.examples > header svg { width: 12px; height: 12px; }
-.examples > div { display: grid; grid-template-columns: repeat(3, 232px); gap: 8px; margin-top: 8px; }
-.examples > div > button {
-  height: 135px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 16px;
-  border: 0.5px solid var(--theme-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--theme-text-primary);
-  text-align: left;
-}
-.examples > div > button:hover,
-.examples > div > button:focus-visible { background: var(--theme-surface-hover); outline: 0; }
-.examples > div > button > svg { width: 15px; height: 15px; color: var(--theme-text-secondary); }
-.examples > div > button > span { display: grid; gap: 5px; }
-.examples strong { font-size: 13px; font-weight: 500; }
-.examples small { color: var(--theme-text-secondary); font-size: 12px; line-height: 18px; }
-@media (max-width: 800px) {
-  .examples { top: calc(42.4% + 124px); width: calc(100% - 48px); }
-  .examples.examplesWithError { top: calc(42.4% + 148px); }
-  .examples > div { grid-template-columns: 1fr; }
-  .examples > div > button { height: 92px; }
-}
 :global(:root[data-theme="light"]) .page { border-color: var(--border); background: var(--bg-panel); box-shadow: var(--shadow); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .page > header { border-color: var(--theme-border); }
 :global(:root[data-theme="light"]) .switcher { color: var(--theme-text-primary); }
@@ -931,7 +857,6 @@
 }
 :global(:root[data-theme="light"]) .headerIcon svg,
 :global(:root[data-theme="light"]) .mobileMenu svg { width: 16px; height: 16px; }
-:global(:root[data-theme="light"]) .emptyGraphic { color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .composer { border-color: var(--popover-border); background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); }
 :global(:root[data-theme="light"]) .editor { color: var(--agent-composer-text); }
 :global(:root[data-theme="light"]) .editor:empty:before { color: var(--theme-text-tertiary); }
@@ -996,12 +921,3 @@
 :global(:root[data-theme="light"]) .confirmOverlay button { border-color: var(--theme-border); }
 :global(:root[data-theme="light"]) .deleteButton { background: var(--semantic-danger) !important; color: var(--on-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
-:global(:root[data-theme="light"]) .examples > header { color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .examples > header > button { color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .examples > header > button:hover,
-:global(:root[data-theme="light"]) .examples > div > button:hover,
-:global(:root[data-theme="light"]) .examples > div > button:focus-visible { background: var(--theme-surface-hover); }
-:global(:root[data-theme="light"]) .examples > div > button { border: 0.5px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-1); color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .examples strong { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
-:global(:root[data-theme="light"]) .examples > div > button > svg,
-:global(:root[data-theme="light"]) .examples small { color: var(--theme-text-secondary); }

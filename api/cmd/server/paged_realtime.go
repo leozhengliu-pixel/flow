@@ -19,28 +19,7 @@ func pagedRealtimeRequest(r *http.Request) bool {
 }
 
 func (s *server) pagedRealtimeMetadata(r *http.Request) (domain.Bootstrap, store.IssueRecordQuery, error) {
-	data, query, err := s.issueRecordsQuery(r)
-	if err != nil {
-		return data, query, err
-	}
-	if s.authDisabled {
-		var ok bool
-		data, ok = s.store.WorkspaceMetadata(query.Workspace)
-		if !ok {
-			return data, query, store.ErrAuthForbidden
-		}
-		data.ViewerRole = "admin"
-		if err := s.store.ApplyTeamDefaultFavorites(r.Context(), &data, data.Viewer.ID); err != nil {
-			return data, query, err
-		}
-	} else {
-		data, err = s.store.PagedWorkspaceMetadata(r.Context(), query.Workspace, authUser(r).ID)
-		if err != nil {
-			return data, query, err
-		}
-		filterBootstrapForAPIKey(&data, r)
-	}
-	return data, query, nil
+	return s.issueRecordsQuery(r)
 }
 
 func (s *server) pagedPresence(r *http.Request, values []domain.Presence) ([]domain.Presence, error) {
@@ -61,6 +40,9 @@ func (s *server) pagedPresence(r *http.Request, values []domain.Presence) ([]dom
 	for id := range visible {
 		data.Issues = append(data.Issues, domain.Issue{ID: id})
 	}
+	values = slices.DeleteFunc(values, func(item domain.Presence) bool {
+		return item.DocumentID != "" && !s.documentPresenceAllowed(r, item.DocumentID)
+	})
 	return filterPresenceForViewer(data, values), nil
 }
 

@@ -378,3 +378,57 @@ describe('release detail associated issues', () => {
     expect(screen.getAllByText('Loading issues').length).toBeGreaterThan(0)
   })
 })
+
+describe('deleted releases route (LS-0190)', () => {
+  it('routes View recently deleted releases to the pipeline deleted page', async () => {
+    const user = userEvent.setup()
+    const onNavigate = vi.fn()
+    renderPage(
+      <ReleasesPage
+        data={pageData({ releasePipelines: [pipeline()], releases: [release()], teams: [{ id: 'team-1', name: 'Engineering', key: 'ENG', color: '#000' }] as never })}
+        pipelineSlug="app"
+        onNavigate={onNavigate}
+        onOpenSidebar={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Pipeline options' }))
+    await user.click(await screen.findByText('View recently deleted releases'))
+    expect(onNavigate).toHaveBeenCalledWith('/workspace/pipeline/app/releases/deleted')
+  })
+
+  it('renders empty deleted releases copy', () => {
+    renderPage(
+      <ReleasesPage
+        data={pageData({ releasePipelines: [pipeline()], releases: [], trash: [] })}
+        pipelineSlug="app"
+        pipelineTab="deleted"
+        onNavigate={vi.fn()}
+        onOpenSidebar={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+    expect(screen.getByText('No recently deleted releases')).toBeVisible()
+    expect(screen.getByText(/30 days/)).toBeVisible()
+  })
+})
+
+describe('changelog notes scope (LS-0459)', () => {
+  it('shows scope picker and Write with Agent on changelog', () => {
+    renderPage(
+      <ReleasesPage
+        data={pageData({
+          releasePipelines: [pipeline()],
+          releases: [release({ status: 'released', releaseNotes: 'Shipped', releasedAt: '2026-09-01T00:00:00Z' })],
+        })}
+        pipelineSlug="app"
+        pipelineTab="changelog"
+        onNavigate={vi.fn()}
+        onOpenSidebar={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+    expect(screen.getByLabelText('Select release notes scope')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Write with Agent' })).toBeDisabled()
+  })
+})

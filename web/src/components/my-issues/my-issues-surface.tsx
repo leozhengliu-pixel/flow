@@ -1,29 +1,49 @@
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import { DetailsIcon, FilterIcon } from './my-issues-icons'
 import { InsightsIcon } from '@/components/ui/view-action-icons'
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { useIssueSurfaceControls } from './use-issue-surface-controls'
-import { MyIssuesDisplayMenu } from './my-issues-display-menu'
+import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from './my-issues-display-menu'
 import { MyIssuesFilterMenu } from './my-issues-filter-menu'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import styles from './my-issues.module.css'
+import {
+  ContentViewContainer,
+  ContentViewHeader,
+  ContentViewHeaderTitle,
+  ContentViewSubheader,
+  ToolbarButtonsNavigation,
+} from '@/components/content-view'
 
-export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity'
-export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'none'
+export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity' | 'shared'
+export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'releaseDate' | 'labelGroup' | 'activityDate' | 'none'
+export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 'priority' | 'estimate' | 'created' | 'updated' | 'myActivity' | 'dueDate' | 'linkCount' | 'customerCount' | 'customerRevenue' | 'timeInStatus'
 export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'sla' | 'estimate' | 'release' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'myActivity' | 'created' | 'updated' | 'pullRequests'
 
 export interface MyIssuesDisplayOptions {
-  layout: 'list' | 'board'
+  /** Linear layouts: split = narrow list beside the selected issue. */
+  layout: 'list' | 'board' | 'split'
   grouping: MyIssuesGrouping
+  /** The parent label group used by the `labelGroup` grouping (Linear "group by label group"). */
+  labelGroupId?: string
   groupOrder: 'asc' | 'desc'
   subGrouping: MyIssuesGrouping
-  ordering: 'importance' | 'created' | 'updated' | 'priority'
+  ordering: MyIssuesOrdering
+  /** Unset means the ordering field's natural direction (Linear `viewOrderingDirection`). */
+  orderDirection?: 'asc' | 'desc'
   completedWindow: 'all' | 'pastDay' | 'pastWeek' | 'pastMonth' | 'currentCycle' | 'none'
   orderCompletedByRecency: boolean
   showSubIssues: boolean
   showEmptyGroups: boolean
   nestedSubIssues: boolean
   hiddenGroupIds: string[]
+  /** Linear `showTriageIssues`; undefined means the surface default. */
+  showTriageIssues?: boolean
+  /** Linear `showArchivedItems`. */
+  showArchived?: boolean
+  /** Linear `showSubTeamIssues`; only meaningful on team-scoped views. */
+  showSubTeamIssues?: boolean
   properties: Set<MyIssuesProperty>
 }
 
@@ -46,6 +66,8 @@ export interface MyIssuesSurfaceProps {
   onFilterToggle?: (filter: MyIssuesFilterKey, option: MyIssuesFilterOption) => void
   onViewChange?: (view: MyIssuesView) => void
   onOpenSidebar?: () => void
+  /** Surface-specific display menu capabilities (available groupings/orderings, toggles, footer). */
+  displayMenuProps?: Partial<Omit<MyIssuesDisplayMenuProps, 'open' | 'onOpenChange' | 'options' | 'onChange'>>
 }
 
 export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id']
@@ -56,6 +78,7 @@ const views: { id: MyIssuesView; label: string }[] = [
   { id: 'created', label: 'Created' },
   { id: 'subscribed', label: 'Subscribed' },
   { id: 'activity', label: 'Activity' },
+  { id: 'shared', label: 'Shared with me' },
 ]
 
 const filterGroups = [
@@ -84,27 +107,30 @@ const filterGroups = [
 
 export function MyIssuesSurface({
   activeView = 'assigned', children, filterBar, detailsOpen = false, insightsOpen = false, displayOptions = defaultMyIssuesDisplayOptions, filterOpenSignal = 0, filters = [], viewCounts, viewHref,
-  filterOptions, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar,
+  filterOptions, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar, displayMenuProps,
 }: MyIssuesSurfaceProps) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
-  return <main className={styles.surface} data-my-issues-surface="true">
-    <header className={styles.header}>
-      <button className={styles.mobileSidebarButton} aria-label="Open sidebar" data-sidebar-trigger onClick={onOpenSidebar}><span/><span/><span/></button>
-      <h2>My issues</h2>
-    </header>
-    <div className={styles.toolbar}>
-      <nav className={styles.tabs} aria-label="My issues views">
-        {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
-      </nav>
-      <div className={styles.actions}>
-        <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
-        <MyIssuesDisplayMenu open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
-        <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
-        <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton>
-      </div>
-    </div>
+  return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
+    <ContentViewHeader compact onOpenSidebar={onOpenSidebar}>
+      <ContentViewHeaderTitle title="My issues" />
+    </ContentViewHeader>
+    <ContentViewSubheader
+      start={
+        <nav className={styles.tabs} aria-label="My issues views">
+          {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
+        </nav>
+      }
+      end={
+        <ToolbarButtonsNavigation className={styles.actions}>
+          <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
+          <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
+          <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
+          <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut="⌘ I"><ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton></FlowTooltip>
+        </ToolbarButtonsNavigation>
+      }
+    />
     {filterBar}<div className={styles.content} data-insights-open={insightsOpen}>{children}</div>
-  </main>
+  </ContentViewContainer>
 }
 
 const ToolbarButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { label: string; pressed?: boolean }>(function ToolbarButton({ children, label, pressed, ...props }, ref) {

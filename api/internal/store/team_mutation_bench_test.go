@@ -90,6 +90,30 @@ func BenchmarkTeamSettingsParentPatch(b *testing.B) {
 	}
 }
 
+func BenchmarkTeamSettingsTimezonePatch(b *testing.B) {
+	for _, teams := range []int{1000, 10000, 20000} {
+		b.Run(fmt.Sprintf("%dTeams", teams), func(b *testing.B) {
+			repo, key := benchmarkWorkspace(b, "timezone", teams)
+			ctx := context.Background()
+			child := "bulk-team-00000"
+			zones := []string{"Asia/Shanghai", "UTC"}
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				zone := zones[i%2]
+				if err := repo.MutateWorkspace(ctx, key, "team.settings_updated", child, map[string]string{"timezone": zone}, func(next *domain.Bootstrap) error {
+					settings := next.TeamSettings[child]
+					settings.Timezone = zone
+					next.TeamSettings[child] = settings
+					return nil
+				}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
 // Non-scoped event clones the whole workspace so write cost can be compared.
 func BenchmarkGenericTeamMutationBaseline(b *testing.B) {
 	for _, teams := range []int{1000, 10000} {

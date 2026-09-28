@@ -161,6 +161,7 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	data.CustomEmojis = []domain.CustomEmoji{}
 	data.Asks = []domain.Ask{}
 	data.Loops = []domain.Loop{}
+	data.LoopRuns = nil
 	data.SLARules = []domain.SLARule{}
 	data.IssueSLAs = []domain.IssueSLA{}
 	data.SLAEvents = []domain.SLAEvent{}
@@ -200,6 +201,7 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	data.OAuthApplications = []domain.OAuthApplication{}
 	data.OAuthAuthorizations = []domain.OAuthAuthorization{}
 	data.Webhooks = []domain.Webhook{}
+	data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	data.IntegrationConnections = []domain.IntegrationConnection{}
 	data.IdentityProviders = []domain.IdentityProvider{}
 	data.IntegrationDeliveries = []domain.IntegrationDelivery{}
