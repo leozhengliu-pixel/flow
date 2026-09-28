@@ -156,6 +156,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   for (const count of counts) { offsets.push(offset); offset += count }
   if (loading) return <div className={styles.loadingMore} role="status">Loading issues…</div>
   if (error && !cache.retainedEntities) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
+  if (rowProps.emptyState && groups.every(group => !group.count)) return rowProps.emptyState
   if (!groups.length) return <div className={styles.state}>No issues</div>
   if (layout === 'board') {
     const drop = (group: Group, before?: Issue) => {
