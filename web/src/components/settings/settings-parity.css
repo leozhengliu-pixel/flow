@@ -435,3 +435,252 @@ html:root .settings-app .settings-main .feature-domain-row .feature-button[aria-
   min-width: 32px;
   padding: 0;
 }
+
+/*
+ * Settings › Members (workspace). Measured from the reference at 1470x708:
+ * rows span x253-1454; column starts Name 305, Email 731, Status 1009,
+ * Teams 1155, Joined 1237, Last seen 1319; checkbox x266; "…" 28px at the end.
+ * Colors come from the --settings-members-* / --settings-role-badge-* tokens.
+ */
+html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-page-header { margin-bottom: 13px; }
+html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar {
+  grid-template-columns: 300px auto 1fr auto auto;
+  column-gap: 0;
+  margin-bottom: 21px;
+}
+html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label {
+  border: .5px solid var(--settings-members-search-border);
+  border-radius: 8px;
+  background: var(--settings-members-control-bg);
+  box-shadow: var(--settings-members-control-ring);
+}
+html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input {
+  color: var(--settings-members-control-text);
+  font-weight: 400;
+}
+html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > label input::placeholder { color: var(--theme-text-tertiary); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter {
+  box-sizing: border-box;
+  height: 32px;
+  min-width: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-left: 6px;
+  padding: 0 10px 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--settings-members-control-bg);
+  box-shadow: var(--settings-members-control-ring);
+  color: var(--settings-members-control-text);
+  font: 400 13px var(--font);
+  white-space: nowrap;
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter > svg { flex: none; color: var(--theme-text-secondary); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter:hover,
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-filter[data-state="open"] { background: var(--settings-members-row-hover); }
+html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-action.primary { margin-left: 9px; }
+
+/* Column header row and member rows share one grid. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
+  grid-template-columns: minmax(0, 426fr) minmax(0, 278fr) 146px 82px 82px 99px 28px;
+  column-gap: 0;
+  padding: 0 8px 0 52px;
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns { color: var(--theme-text-secondary); font: 450 12px var(--font); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: -6px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  color: var(--theme-text-secondary);
+  font: 450 12px var(--font);
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort="name"] { margin-left: -7px; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button[data-sort="status"] { margin-left: 0; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns button:hover { background: var(--settings-members-row-hover); color: var(--theme-text-primary); }
+
+/* Group header: an inset rounded bar, not a tinted band. */
+html:root .settings-app .settings-main .settings-members-page.settings-workspace-members .settings-members-group {
+  height: 32px;
+  gap: 8px;
+  padding: 0 0 0 54px;
+  border-radius: 8px;
+  background: var(--settings-members-group-bg);
+  font: 500 12px var(--font);
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-group strong { color: var(--theme-text-secondary); font-weight: 500; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-group span { color: var(--theme-text-tertiary); font-size: 12px; font-weight: 500; }
+
+/* Rows */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
+  height: 50px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--theme-text-secondary);
+  font: 450 12px var(--font);
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row:hover { background: var(--settings-members-row-hover); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-selected { background: var(--settings-members-row-selected); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-selected:hover { background: var(--settings-members-row-selected-hover); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child { gap: 10px; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-avatar { font-size: 11px; font-weight: 400; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child strong { color: var(--text); font-size: 13px; font-weight: 500; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row > span:first-child small { color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-link {
+  min-width: 0;
+  overflow: hidden;
+  color: inherit;
+  outline: 0;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The profile link covers the whole row; the checkbox and menu sit above it. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-link::after { content: ""; position: absolute; inset: 0; border-radius: 8px; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-link:focus-visible::after { box-shadow: inset 0 0 0 1px var(--focus-ring); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row time { color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-role {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 3px;
+  font: 450 12px/19px var(--font);
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-role.is-admin { background: var(--settings-role-badge-bg); color: var(--settings-role-badge-fg); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-online {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin: 0;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 1px solid var(--bg-panel);
+  background: var(--settings-member-online);
+}
+
+/* Selection checkbox: revealed on hover, focus, or while anything is selected. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-check {
+  position: absolute;
+  z-index: 1;
+  top: 18px;
+  left: 13px;
+  border-color: var(--settings-members-check-border);
+  opacity: 0;
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-check:checked { border-color: var(--checkbox-selected-border); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row:hover .settings-member-check,
+html:root .settings-app .settings-main .settings-workspace-members .has-selection .settings-member-check,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-check:focus-visible { opacity: 1; }
+
+/* Row actions: 28px round button at the row end. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-more {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 9999px;
+  color: var(--theme-text-secondary);
+  opacity: 0;
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-more:hover,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-more[data-state="open"] { background: var(--bg-hover); color: var(--theme-text-primary); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row:hover .settings-member-more,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row:focus-within .settings-member-more,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-selected .settings-member-more,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-more[data-state="open"] { opacity: 1; }
+
+/* Bulk selection bar: bottom-centre of the settings panel. */
+html:root .settings-app .settings-workspace-members .settings-members-bulk-bar {
+  position: fixed;
+  z-index: 30;
+  bottom: 52px;
+  left: calc(50% + 118px);
+  box-sizing: border-box;
+  min-width: 218px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 16px;
+  border: .5px solid var(--settings-members-bulk-border);
+  border-radius: 9999px;
+  background: var(--settings-members-bulk-bg);
+  box-shadow: var(--settings-members-bulk-shadow);
+  color: var(--theme-text-primary);
+  font: 400 12px var(--font);
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+html:root .settings-app .settings-workspace-members .settings-members-bulk-bar > span { flex: 1; }
+html:root .settings-app .settings-workspace-members .settings-members-bulk-actions {
+  box-sizing: border-box;
+  width: 84px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--settings-members-control-bg);
+  box-shadow: var(--settings-members-control-ring);
+  color: var(--theme-text-primary);
+  font: 500 12px var(--font);
+}
+html:root .settings-app .settings-workspace-members .settings-members-bulk-actions > svg { color: var(--theme-text-secondary); }
+html:root .settings-app .settings-workspace-members .settings-members-bulk-actions:hover,
+html:root .settings-app .settings-workspace-members .settings-members-bulk-actions[data-state="open"] { background: var(--bg-hover); }
+html:root .settings-app .settings-workspace-members .settings-members-bulk-clear {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+}
+html:root .settings-app .settings-workspace-members .settings-members-bulk-clear:hover { background: var(--bg-hover); color: var(--theme-text-primary); }
+
+/* Member menus (portaled): filter 142 wide, row actions 175 wide, 32px items. */
+html:root body .menu-content.settings-members-menu[role="menu"] { min-width: 142px; }
+html:root body .menu-content.settings-members-filter-menu[role="menu"] { width: 142px; }
+html:root body .menu-content.settings-member-action-menu[role="menu"] { width: 175px; }
+html:root body .menu-content.settings-members-menu[role="menu"] .menu-item { height: 32px; min-height: 32px; }
+html:root body .menu-content.settings-members-menu[role="menu"] .settings-members-menu-check { display: inline-flex; margin-left: auto; color: var(--theme-text-secondary); }
+
+@media (max-width: 900px) {
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row {
+    grid-template-columns: minmax(0, 1fr) 110px 90px 36px;
+    padding: 0 8px 0 40px;
+  }
+  html:root .settings-app .settings-main .settings-members-page.settings-workspace-members .settings-members-group { padding-left: 40px; }
+}
+@media (max-width: 760px) {
+  html:root .settings-app .settings-workspace-members .settings-members-bulk-bar { left: 50%; }
+}
+@media (max-width: 620px) {
+  html:root .settings-app .settings-main .settings-workspace-members .settings-members-columns,
+  html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row { grid-template-columns: minmax(0, 1fr) 92px 36px; }
+  html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar { grid-template-columns: 1fr auto auto; row-gap: 8px; }
+  html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-members-filter { justify-self: start; margin-left: 0; }
+}
+/* Linear leaves a 2px gap between every group header and row (header y203 → row y237 → header y289). */
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-group + .settings-member-directory-row,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row + .settings-member-directory-row,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row + .settings-members-group { margin-top: 2px; }

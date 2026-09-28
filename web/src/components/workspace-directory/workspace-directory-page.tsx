@@ -1,5 +1,4 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { ApplicationMembers } from '@/components/agent/application-members';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { formatCustomerRevenue } from '@/lib/customer-settings';
@@ -34,17 +33,13 @@ import {
   type SetStateAction,
 } from "react";
 import { VirtualColumnList } from '@/components/ui/virtual-column-list';
-import { toast } from "sonner";
 import { toggleFavoriteFor } from "@/lib/favorites";
-import { addSubscription, inviteMembers, removeSubscription, setTeamMembership } from "@/lib/api";
+import { addSubscription, removeSubscription, setTeamMembership } from "@/lib/api";
 import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
 import { useI18n } from "@/i18n/i18n";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { SelectControl } from "@/components/ui/select-control";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
-import { TeamIcon } from "@/components/issue/issue-icons";
 import { CustomerDialog } from "@/components/customer-detail/customer-dialog";
 import type {
   BootstrapData,
@@ -65,6 +60,8 @@ import {
   DirectoryPeopleIcon,
   type DirectoryFilterGroup,
 } from "./directory-menus";
+import { InviteMembersDialog } from "./invite-members-dialog";
+import { memberColumnIds, useMemberDirectoryPreferences, type MemberColumn, type MemberOrdering } from "./use-member-directory-preferences";
 
 type DirectoryKind = "members" | "customers" | "teams";
 type CustomerColumn =
@@ -140,13 +137,7 @@ export function WorkspaceDirectoryPage({
     <main className="main-panel workspace-directory" aria-label={title}>
       <DirectoryHeader
         title={title}
-        count={
-          kind === "members"
-            ? data.members.length + data.invitations.filter(invitation => invitation.status === "pending").length
-            : kind === "customers"
-              ? customerResultCount
-              : undefined
-        }
+        count={kind === "customers" ? customerResultCount : undefined}
         onOpenSidebar={onOpenSidebar}
         onCreate={kind === "members" && data.viewerRole !== "admin" && data.viewerRole !== "owner" ? undefined : () =>
           kind === "members"
@@ -162,9 +153,10 @@ export function WorkspaceDirectoryPage({
               ? t("New customer")
               : t("Create new team")
         }
-        options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : kind === 'members' ? <ApplicationMembers data={data} onReload={onReload}/> : undefined}
+        createVariant={kind === "members" ? "ghost" : "pill"}
+        options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : undefined}
       />
-      {kind === "members" && <MembersDirectory data={data} onOpen={onNavigateMember} onOpenTeam={onNavigateTeam} />}
+      {kind === "members" && <MembersDirectory key={`${data.workspace.id}:${data.viewer.id}`} data={data} onOpen={onNavigateMember} onOpenTeam={onNavigateTeam} />}
       {kind === "customers" && (
         <CustomersDirectory
           featureSettings={data.workspaceSettings.featureSettings}
@@ -189,13 +181,13 @@ export function WorkspaceDirectoryPage({
           onReload={onReload}
         />
       )}
-      <InviteMembersDialog
+      {kind === "members" && <InviteMembersDialog
         open={inviteOpen}
         workspace={data.workspace}
         teams={data.teams}
-        onOpenChange={setInviteOpen}
-        onSent={onReload}
-      />
+        onClose={() => setInviteOpen(false)}
+        onInvited={onReload}
+      />}
       <CustomerDialog
         currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
         open={customerOpen}
@@ -213,6 +205,7 @@ function DirectoryHeader({
   title,
   count,
   createLabel,
+  createVariant = "pill",
   onCreate,
   onOpenSidebar,
   options,
@@ -220,6 +213,7 @@ function DirectoryHeader({
   title: string;
   count?: number;
   createLabel: string;
+  createVariant?: "pill" | "ghost";
   onCreate?: () => void;
   onOpenSidebar: () => void;
   options?: ReactNode;
@@ -239,8 +233,8 @@ function DirectoryHeader({
       <h1>{title}</h1>
       {count !== undefined && <small>{count}</small>}
       {options}
-      <button
-        className="workspace-directory__icon-button workspace-directory__create"
+      {onCreate && <button
+        className={`workspace-directory__icon-button workspace-directory__create${createVariant === "ghost" ? " is-ghost" : ""}`}
         type="button"
         aria-label={createLabel}
         title={createLabel}
@@ -248,7 +242,7 @@ function DirectoryHeader({
       >
         <Plus />
         <span>{createLabel}</span>
-      </button>
+      </button>}
     </header>
   );
 }
@@ -281,32 +275,55 @@ function TeamsOptions({ onOpenSettings }: { onOpenSettings: () => void }) {
   );
 }
 
+type MemberStatusFilter = "admin" | "guest" | "member";
+type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation };
+const MEMBER_COLUMN_WIDTHS: Record<MemberColumn, string> = { status: "99px", joined: "94px", teams: "71px" };
+const MEMBER_ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+function memberStatusFilter(role: WorkspaceMember["role"]): MemberStatusFilter | undefined {
+  if (role === "owner" || role === "admin") return "admin";
+  if (role === "guest" || role === "member") return role;
+  return undefined;
+}
+
+function memberEntryStatus(entry: MemberEntry) {
+  if (entry.kind === "invitation") return memberStatusFilter(entry.invitation.role);
+  return entry.member.user.app ? undefined : memberStatusFilter(entry.member.role);
+}
+
+function memberStatusLabel(entry: MemberEntry) {
+  if (entry.kind === "invitation") return `${capitalize(entry.invitation.role)} (Invited)`;
+  if (entry.member.user.app || entry.member.role === "app") return "Application";
+  return capitalize(entry.member.role);
+}
+
+function memberEntryName(entry: MemberEntry) {
+  return entry.kind === "member" ? entry.member.user.displayName : entry.invitation.email;
+}
+
+function memberEntryJoined(entry: MemberEntry) {
+  return entry.kind === "member" ? entry.member.joinedAt : entry.invitation.createdAt;
+}
+
+function compareMemberEntries(left: MemberEntry, right: MemberEntry, ordering: MemberOrdering) {
+  const byName = memberEntryName(left).localeCompare(memberEntryName(right));
+  if (ordering === "status") return memberStatusLabel(left).localeCompare(memberStatusLabel(right)) || byName;
+  if (ordering === "joined") return (new Date(memberEntryJoined(left)).getTime() - new Date(memberEntryJoined(right)).getTime()) || byName;
+  return byName;
+}
+
+function memberDirectoryColumns(columns: Set<MemberColumn>) {
+  return `minmax(160px, 1fr) ${memberColumnIds.filter(column => columns.has(column)).map(column => MEMBER_COLUMN_WIDTHS[column]).join(" ")} 85px`;
+}
+
 function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; onOpen: (user: User) => void; onOpenTeam:(team:Team)=>void }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"name" | "status" | "joined">("name");
-  const [direction, setDirection] = useState<1 | -1>(1);
-  const [roles, setRoles] = useState<Set<string>>(new Set());
-  const [teamIds, setTeamIds] = useState<Set<string>>(new Set());
-  const members = useMemo(
-    () =>
-      [...data.members].sort((left, right) => {
-        const leftValue =
-          sort === "name"
-            ? left.user.displayName
-            : sort === "status"
-              ? left.role
-              : left.joinedAt;
-        const rightValue =
-          sort === "name"
-            ? right.user.displayName
-            : sort === "status"
-              ? right.role
-              : right.joinedAt;
-        return leftValue.localeCompare(rightValue) * direction;
-      }),
-    [data.members, direction, sort],
-  );
+  const [preferences, setPreferences] = useMemberDirectoryPreferences(data.workspace.id, data.viewer.id);
+  const { ordering, descending } = preferences;
+  const columns = useMemo(() => new Set(preferences.columns), [preferences.columns]);
+  const [statuses, setStatuses] = useState<Set<string>>(new Set());
+  const [advanced, setAdvanced] = useState(false);
   const teamsByUserId = useMemo(() => {
     const teamsById = new Map(data.teams.map(team => [team.id, team]));
     const result = new Map<string, Team[]>();
@@ -319,84 +336,106 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     }
     return result;
   }, [data.teamMembers, data.teams]);
-  type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation };
   const entries = useMemo<MemberEntry[]>(() => [
-    ...members.map(member => ({ kind: "member" as const, member })),
+    ...data.members.map(member => ({ kind: "member" as const, member })),
     ...data.invitations.filter(invitation => invitation.status === "pending").map(invitation => ({ kind: "invitation" as const, invitation })),
-  ], [data.invitations, members]);
-  const filtered = useMemo(() => {
-    const needle = query.trim();
-    return entries.filter((entry) => {
-      if (entry.kind === "member") {
-        if (needle && !personMatchesQuery(entry.member.user, needle)) return false;
-        if (roles.size && !roles.has(entry.member.role)) return false;
-        if (teamIds.size && !(teamsByUserId.get(entry.member.user.id) ?? []).some((team) => teamIds.has(team.id))) return false;
+  ], [data.invitations, data.members]);
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const entry of entries) {
+      const status = memberEntryStatus(entry);
+      if (status) counts.set(status, (counts.get(status) ?? 0) + 1);
+    }
+    return counts;
+  }, [entries]);
+  const visible = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return entries
+      .filter((entry) => {
+        if (entry.kind === "member" ? needle && !personMatchesQuery(entry.member.user, needle) : needle && !entry.invitation.email.toLocaleLowerCase().includes(needle)) return false;
+        if (statuses.size) {
+          const status = memberEntryStatus(entry);
+          if (!status || !statuses.has(status)) return false;
+        }
         return true;
-      }
-      if (entry.kind === "invitation") {
-        if (needle && !entry.invitation.email.toLocaleLowerCase().includes(needle.toLocaleLowerCase())) return false;
-        if (roles.size && !roles.has(entry.invitation.role)) return false;
-        if (teamIds.size && !entry.invitation.teamIds.some((id) => teamIds.has(id))) return false;
-        return true;
-      }
-      return false;
-    });
-  }, [entries, query, roles, teamIds, teamsByUserId]);
-  const filtersActive = roles.size > 0 || teamIds.size > 0;
+      })
+      .sort((left, right) => compareMemberEntries(left, right, ordering) * (descending ? -1 : 1));
+  }, [descending, entries, ordering, query, statuses]);
+  const filtersActive = advanced || statuses.size > 0;
+  const countLabel = (count: number) => `${count} ${count === 1 ? "member" : "members"}`;
   const filterGroups: DirectoryFilterGroup[] = [
-    { id: "status", label: "Status", icon: <UsersRound />, choices: [
+    { id: "status", label: "Status", icon: <DirectoryPeopleIcon />, choices: ([
       { id: "admin", label: "Admin" },
-      { id: "member", label: "Member" },
       { id: "guest", label: "Guest" },
-      { id: "app", label: "Application" },
-    ] },
-    { id: "team", label: "Teams", icon: <UsersRound />, choices: data.teams.map((team) => ({ id: team.id, label: team.name, keywords: team.key })) },
+      { id: "member", label: "Member" },
+    ] as const).map(choice => ({ ...choice, meta: statusCounts.get(choice.id) ? countLabel(statusCounts.get(choice.id)!) : undefined })) },
   ];
   const changeFilter = (groupId: string, choiceId: string, checked: boolean) => {
-    const toggle = (current: Set<string>) => {
+    if (groupId !== "status") return;
+    setStatuses((current) => {
       const next = new Set(current);
       if (checked) next.add(choiceId);
       else next.delete(choiceId);
       return next;
-    };
-    if (groupId === "status") setRoles(toggle);
-    if (groupId === "team") setTeamIds(toggle);
+    });
   };
-  const changeSort = (next: typeof sort) => {
-    if (sort === next) setDirection((value) => (value === 1 ? -1 : 1));
-    else {
-      setSort(next);
-      setDirection(1);
-    }
+  const clearFilters = () => { setStatuses(new Set()); setAdvanced(false); };
+  const setOrdering = (next: MemberOrdering) => setPreferences(current => ({ ...current, ordering: next }));
+  const toggleDirection = () => setPreferences(current => ({ ...current, descending: !current.descending }));
+  const changeSort = (next: MemberOrdering) => setPreferences(current => current.ordering === next
+    ? { ...current, descending: !current.descending }
+    : { ...current, ordering: next, descending: false });
+  const toggleColumn = (column: MemberColumn) => setPreferences(current => ({
+    ...current,
+    columns: current.columns.includes(column) ? current.columns.filter(id => id !== column) : memberColumnIds.filter(id => id === column || current.columns.includes(id)),
+  }));
+  const shortDate = (value: Date) => new Intl.DateTimeFormat("en-US", value.getFullYear() === new Date().getFullYear() ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }).format(value);
+  const dateTimeTitle = (value: Date) => `${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(value)}, ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }).format(value)}`;
+  const longDate = (value: Date) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(value);
+  const renderStatus = (entry: MemberEntry) => {
+    const label = t(memberStatusLabel(entry));
+    const badge = entry.kind === "member" && !entry.member.user.app && (entry.member.role === "admin" || entry.member.role === "owner");
+    return <span className="workspace-member-status">{badge ? <span className="workspace-member-role">{label}</span> : label}</span>;
+  };
+  const renderTeams = (teams: Team[], extra: number) => {
+    const team = teams[0];
+    return <div className="workspace-member-teams">{team ? <button type="button" aria-label={`Open team ${team.name}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(team) }}><TeamGlyph team={team} /><span>{team.key}</span>{extra > 0 ? <small>+{extra}</small> : null}</button> : null}</div>;
   };
   const renderEntry = (entry: MemberEntry) => {
     if (entry.kind === "invitation") {
       const invitation = entry.invitation;
-      const team = data.teams.find(item => invitation.teamIds.includes(item.id));
+      const invitedTeams = data.teams.filter(item => invitation.teamIds.includes(item.id));
+      const invited = new Date(invitation.createdAt);
       return <div className="workspace-directory-member-row is-invited">
-        <span className="workspace-members-indent" aria-hidden="true"/>
         <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong>{invitation.email}</strong><small>{invitation.email}</small></span></div>
-        <span className={invitation.role === "admin" ? "workspace-member-role" : ""}>{capitalize(invitation.role)} (Invited)</span>
-        <time title="Invited to workspace">{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(invitation.createdAt))}</time>
-        <div className="workspace-member-teams">{team ? <button type="button" onClick={() => onOpenTeam(team)}><TeamGlyph team={team}/>{team.key}{invitation.teamIds.length > 1 ? ` +${invitation.teamIds.length - 1}` : ""}</button> : null}</div>
-        <span className="workspace-member-last-seen"/><span className="workspace-members-end" aria-hidden="true"/>
+        {columns.has("status") && renderStatus(entry)}
+        {columns.has("joined") && <time className="workspace-member-date" dateTime={invitation.createdAt} title={`Invited ${dateTimeTitle(invited)}`}>{shortDate(invited)}</time>}
+        {columns.has("teams") && renderTeams(invitedTeams, invitedTeams.length - 1)}
+        <span className="workspace-member-last-seen" />
       </div>;
     }
     const member = entry.member;
     const user = member.user;
-    const teams = teamsByUserId.get(user.id) ?? [];
+    const teams = member.status === "active" ? teamsByUserId.get(user.id) ?? [] : [];
+    const joined = new Date(member.joinedAt);
+    const lastSeen = member.lastSeenAt ? new Date(member.lastSeenAt) : undefined;
+    const online = member.status === "active" && !user.app && (user.id === data.viewer.id || (lastSeen !== undefined && Date.now() - lastSeen.getTime() < MEMBER_ONLINE_WINDOW_MS));
     return <a
       className="workspace-directory-member-row"
       href={`/${encodeURIComponent(data.workspace.urlKey)}/profiles/${encodeURIComponent(user.name)}`}
-      onClick={event => { event.preventDefault(); onOpen(user) }}
+      onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onOpen(user) }}
     >
-      <span className="workspace-members-indent" aria-hidden="true" />
       <div className="workspace-member-identity"><DirectoryUserAvatar user={user} /><span><strong>{user.displayName}</strong><small>{user.name || user.email.split("@")[0]}</small></span></div>
-      <span className={member.role === "admin" ? "workspace-member-role" : ""}>{user.app ? t('Application') : member.role[0].toUpperCase() + member.role.slice(1)}</span>
-      <time title="Joined workspace">{new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.joinedAt))}</time>
-      <div className="workspace-member-teams">{member.status === "active" && teams[0] ? <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(teams[0]) }}><TeamGlyph team={teams[0]} />{teams[0].key}{teams.length > 1 ? ` +${teams.length - 1}` : ""}</button> : null}</div>
-      <span className="workspace-member-last-seen">{user.id === data.viewer.id ? <><i />Online</> : member.status === "suspended" ? "Suspended" : member.lastSeenAt ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(member.lastSeenAt)) : "Never"}</span>
-      <span className="workspace-members-end" aria-hidden="true" />
+      {columns.has("status") && renderStatus(entry)}
+      {columns.has("joined") && <time className="workspace-member-date" dateTime={member.joinedAt} title={`Joined ${dateTimeTitle(joined)}`}>{shortDate(joined)}</time>}
+      {columns.has("teams") && renderTeams(teams, teams.length - 1)}
+      {online
+        ? <span className="workspace-member-last-seen is-online"><i aria-hidden="true" />{t("Online")}</span>
+        : member.status === "suspended"
+          ? <span className="workspace-member-last-seen">{t("Suspended")}</span>
+          : lastSeen
+            ? <time className="workspace-member-last-seen" dateTime={member.lastSeenAt} title={`Last seen ${longDate(lastSeen)}`}>{shortDate(lastSeen)}</time>
+            : <span className="workspace-member-last-seen">{t("Never")}</span>}
     </a>;
   };
   return (
@@ -413,17 +452,52 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
         <span />
         <DirectoryFilterMenu
           groups={filterGroups}
+          hideSearch
+          menuClassName="workspace-members-filter-menu"
+          submenuClassName="workspace-members-filter-menu"
+          onAdvanced={() => setAdvanced(true)}
           onChoice={changeFilter}
-          selected={{ status: roles, team: teamIds }}
-          showAdvanced={false}
+          selected={{ status: statuses }}
+        />
+        <DirectoryDisplayMenu<MemberColumn, MemberOrdering>
+          className="is-compact"
+          descending={descending}
+          onDirection={toggleDirection}
+          onOrdering={setOrdering}
+          onProperty={toggleColumn}
+          ordering={ordering}
+          orderingOptions={[
+            { id: "name", label: "Name" },
+            { id: "status", label: "Status" },
+            { id: "joined", label: "Joined" },
+          ]}
+          properties={columns}
+          propertyOptions={[
+            { id: "status", label: "Status" },
+            { id: "joined", label: "Joined" },
+            { id: "teams", label: "Teams" },
+          ]}
         />
       </div>
-      {filtered.length === 0 ? (
-        filtersActive && !query ? (
+      {filtersActive && (
+        <DirectoryFilterBar
+          advanced={advanced}
+          chips={statuses.size ? [{ id: "status", label: "Status", value: (["admin", "guest", "member"] as const).filter(id => statuses.has(id)).map(capitalize).join(", ") }] : []}
+          groups={filterGroups}
+          onAdvanced={() => setAdvanced(true)}
+          onChoice={changeFilter}
+          onClear={clearFilters}
+          onRemoveAdvanced={() => setAdvanced(false)}
+          onRemoveChip={() => setStatuses(new Set())}
+          selected={{ status: statuses }}
+        />
+      )}
+      {visible.length === 0 ? (
+        statuses.size > 0 && !query ? (
           <DirectoryFilteredEmpty
             hiddenCount={entries.length}
             noun="members"
-            onClear={() => { setRoles(new Set()); setTeamIds(new Set()); }}
+            onClear={clearFilters}
           />
         ) : (
           <div className="workspace-members-empty" role="status">
@@ -437,31 +511,17 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
           </div>
         )
       ) : (
-        <div className={`workspace-directory__table workspace-members-table${filtered.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}>
+        <div
+          className={`workspace-directory__table workspace-members-table${visible.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
+          style={{ "--member-columns": memberDirectoryColumns(columns) } as React.CSSProperties}
+        >
           <DirectoryRows header={<div className="workspace-members-columns">
-            <span className="workspace-members-indent" />
-            <DirectorySortHeader
-              active={sort === "name"}
-              direction={direction}
-              label="Name"
-              onClick={() => changeSort("name")}
-            />
-            <DirectorySortHeader
-              active={sort === "status"}
-              direction={direction}
-              label="Status"
-              onClick={() => changeSort("status")}
-            />
-            <DirectorySortHeader
-              active={sort === "joined"}
-              direction={direction}
-              label="Joined"
-              onClick={() => changeSort("joined")}
-            />
-            <span>Teams</span>
-            <span>Last seen</span>
-            <span className="workspace-members-end" />
-          </div>} items={filtered} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : `invitation:${entry.invitation.id}`} render={renderEntry}/>
+            <DirectorySortHeader active={ordering === "name"} descending={descending} label="Name" onClick={() => changeSort("name")} />
+            {columns.has("status") && <DirectorySortHeader active={ordering === "status"} descending={descending} label="Status" onClick={() => changeSort("status")} />}
+            {columns.has("joined") && <DirectorySortHeader active={ordering === "joined"} descending={descending} label="Joined" onClick={() => changeSort("joined")} />}
+            {columns.has("teams") && <span>{t("Teams")}</span>}
+            <span>{t("Last seen")}</span>
+          </div>} items={visible} itemKey={entry => entry.kind === "member" ? `member:${entry.member.user.id}` : `invitation:${entry.invitation.id}`} render={renderEntry}/>
         </div>
       )}
     </>
@@ -471,18 +531,23 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
 function DirectorySortHeader({
   label,
   active,
-  direction,
+  descending,
   onClick,
 }: {
   label: string;
   active: boolean;
-  direction: 1 | -1;
+  descending: boolean;
   onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick} aria-label={`Order by ${label}`}>
+    <button
+      type="button"
+      className="workspace-members-sort"
+      onClick={onClick}
+      aria-label={active ? `Order by ${label}, sorted ${descending ? "descending" : "ascending"}` : `Order by ${label}`}
+    >
       {label}
-      {active ? direction === 1 ? <ArrowDown /> : <ArrowUp /> : null}
+      {active ? descending ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" /> : null}
     </button>
   );
 }
@@ -1320,91 +1385,6 @@ function DirectoryFilteredEmpty({
         </button>
       </div>
     </div>
-  );
-}
-
-function InviteMembersDialog({
-  open,
-  workspace,
-  teams,
-  onOpenChange,
-  onSent,
-}: {
-  open: boolean;
-  workspace: BootstrapData["workspace"];
-  teams: Team[];
-  onOpenChange: (open: boolean) => void;
-  onSent: () => Promise<void>;
-}) {
-  const [emails, setEmails] = useState("");
-  const [error, setError] = useState("");
-  const [role, setRole] = useState<"admin"|"member"|"guest">("member");
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
-  const [sending, setSending] = useState(false);
-  useEffect(() => {
-    if (!open) setError("");
-  }, [open]);
-  const send = async () => {
-    const values = emails
-      .split(/[\s,;]+/)
-      .filter((value) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value));
-    if (!values.length) {
-      setError("Enter at least one email address to send an invite");
-      return;
-    }
-    if (role === "guest" && !teamId) { setError("Select a team for guest access"); return; }
-    setSending(true);
-    try {
-      const invitations = await inviteMembers(workspace.urlKey, { emails: values, role, teamIds: teamId ? [teamId] : [] });
-      const token = invitations.find(item => item.token)?.token;
-      if (token) await navigator.clipboard?.writeText(`${location.origin}/invite/${token}`);
-      await onSent();
-      toast.success(`${values.length} invitation${values.length === 1 ? "" : "s"} sent`);
-      setEmails("");
-      onOpenChange(false);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not send invitations");
-    } finally { setSending(false); }
-  };
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="workspace-invite-dialog">
-        <DialogTitle>
-          <span className="workspace-dialog-avatar">
-            {workspace.name.slice(0, 2).toUpperCase()}
-          </span>
-          Invite to your workspace
-        </DialogTitle>
-        <label>
-          Email
-          <textarea
-            autoFocus
-            aria-label="Email"
-            aria-invalid={Boolean(error)}
-            placeholder="email@foxmail.com, email2@foxmail.com…"
-            value={emails}
-            onChange={(event) => {
-              setEmails(event.target.value);
-              setError("");
-            }}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key === "Enter")
-                send();
-            }}
-          />
-          {error && <span className="workspace-invite-error">{error}</span>}
-        </label>
-        <div className="workspace-invite-access">
-          <label>Role<SelectControl label="Role" value={role} onChange={value => setRole(value as typeof role)} options={[{value:"member",label:"Member - Full access with limited permissions"},{value:"admin",label:"Admin - Full administrative access"},{value:"guest",label:"Guest - Limited access to teams"}]}/></label>
-          {role==='guest'&&<label>Team<SelectControl label="Team" value={teamId} onChange={setTeamId} options={[{value:"",label:"Select a team"},...teams.map(team=>({value:team.id,label:team.name,entityName:true,icon:<TeamIcon team={team} size={14}/> }))]}/></label>}
-        </div>
-        <footer>
-          <button type="button" disabled={sending} onClick={() => void send()}>
-            {sending ? "Sending…" : "Send invites"}
-          </button>
-        </footer>
-      </DialogContent>
-    </Dialog>
   );
 }
 

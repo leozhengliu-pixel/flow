@@ -167,6 +167,8 @@ export interface MyIssuesListProps {
   createIssueLabel?: string
   loadingMore?: boolean
   onEndReached?: () => void
+  /** Replaces the default empty state. */
+  emptyState?: ReactNode
 }
 
 type MyIssuesListEntry =
@@ -182,7 +184,7 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
   return context.loadingMore ? <div className={styles.loadingMore}>Loading more…</div> : null
 }
 
-export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached }: MyIssuesListProps) {
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState }: MyIssuesListProps) {
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
@@ -193,7 +195,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
   }), [collapsedGroupIds, groups, nestedSubIssues])
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
-  if (!groups.some(group => group.issues.length)) return <MyIssuesListEmpty/>
+  if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
   let identifierLength = 6
   for (const group of groups) for (const issue of group.issues) identifierLength = Math.max(identifierLength, [...issue.identifier].length)
   const renderEntry = (entry: MyIssuesListEntry) => entry.kind === 'parent'

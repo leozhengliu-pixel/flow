@@ -81,9 +81,19 @@ export interface IssueExplorerPageProps {
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>
   onUpdateIssues: (issueIds: string[], input: IssueUpdateInput) => Promise<Issue[]>
   onDeleteIssues: (issueIds: string[]) => Promise<void>
+  /** Replaces the view-summary details panel (member profiles show a profile aside beside the list). */
+  detailsPanel?: ReactNode
+  /** localStorage key for the details open state; defaults to the scope's key. */
+  detailsStorageKey?: string
+  /** Replaces the empty list state. */
+  emptyState?: ReactNode
+  /** Extra class on the explorer container. */
+  className?: string
+  /** Noun for the insights toolbar button ("Open {label}"); defaults to "view insights". */
+  insightsLabel?: string
 }
 
-export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${preferenceScope ?? storageScope}:${boardRoute ? 'board' : view}`
   const sourceView = savedView ?? duplicateFrom
@@ -93,7 +103,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [teamDefault, setTeamDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewDefaults?.[teamViewKey] : undefined)
   const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
-  const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, false))
+  const detailsKey = detailsStorageKey ?? `${data.workspace.urlKey}:issue-explorer:${storageScope}:details`
+  const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(detailsKey, false))
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [drillRows, setDrillRows] = useState<MyIssuesRowData[]>()
   const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
@@ -240,12 +251,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     onSaveDefault: saveDisplayAsViewDefault,
     saveDefaultLabel: savedView ? 'Save as default for view' : 'Save as team default',
   }
-  const changeDetails = (open: boolean) => { setDetailsOpen(open); if (open) setInsightsOpen(false); writeValue(`${data.workspace.urlKey}:issue-explorer:${storageScope}:details`, String(open)) }
+  const changeDetails = (open: boolean) => { setDetailsOpen(open); if (open) setInsightsOpen(false); writeValue(detailsKey, String(open)) }
   const changeInsights = (open: boolean) => { setInsightsOpen(open); if (open) { setDetailsOpen(false); setPreviewIssueId(undefined) } }
   const openIssueFromExplorer = (row: MyIssuesRowData) => {
     const issue = issuesById.get(row.id)
     if (!issue) { void fetchIssueRecord(row.id, undefined, data.workspace.urlKey).then(issue => onOpenIssue(issue, boundedIssueSequence(rows.map(row => row.id), issue.id))).catch(() => toast.error('Could not load issue')); return }
-    if (detailsOpen || split) setPreviewIssueId(issue.id)
+    // A custom details panel (profile aside) is not an issue preview pane: rows open the issue.
+    if ((detailsOpen && !detailsPanel) || split) setPreviewIssueId(issue.id)
     else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
   }
   const splitOrigin = savedView
@@ -384,6 +396,9 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       onOpenSidebar={onOpenSidebar}
       displayMenuProps={displayMenuProps}
       resourceHeader={resourceHeader}
+      className={className}
+      insightsLabel={insightsLabel}
+      detailsShortcutTooltip={Boolean(detailsPanel)}
       viewEditor={viewEditor && (viewEditor === 'edit' && savedView ? <EditCustomViewHeader
         orgKey={data.workspace.urlKey}
         viewId={savedView.id}
@@ -415,7 +430,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       </>}
     >
       <IssuesSplitLayout
-        detailsOpen={(detailsOpen || split) && !insightsOpen}
+        detailsOpen={((detailsOpen && (!detailsPanel || Boolean(previewIssue))) || split) && !insightsOpen}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
@@ -427,6 +442,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         onTotalChange={setPagedTotal}
         onLoadedIssuesChange={setPagedIssues}
+        emptyState={emptyState}
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         propertyOptions={rowOptions}
@@ -446,6 +462,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
+        emptyState={emptyState}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
         onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
@@ -504,7 +521,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         }
         fallbackDetail={
           <>
-            {(!savedView || previewIssue) && <MyIssuesDetailsPane
+            {(!savedView || previewIssue) && (!detailsPanel || previewIssue) && <MyIssuesDetailsPane
               open={detailsOpen}
               width={detailsWidth}
               onWidthChange={setDetailsWidth}
@@ -514,6 +531,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
               summary={summary}
               onSummaryItemSelect={summaryFilter}
             />}
+            {detailsPanel && detailsOpen && !previewIssue && !insightsOpen && detailsPanel}
             {savedView && detailsOpen && !previewIssue && <SavedViewDetailsPanel
               favorite={savedViewFavorite}
               menu={savedViewMenu}

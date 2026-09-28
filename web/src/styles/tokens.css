@@ -590,3 +590,21 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Composer property chips, measured per theme. Used by styles/picker-parity.css. */
 :root{--chip-bg:lch(13.861% 1.139 272);--chip-ring:0 0 0 .5px lch(100 0 0/.143),0 .5px 1px lch(0 0 0/.3);--chip-text:lch(63.304% 1.425 272);--chip-strong:lch(90.826% 1.425 272)}
 :root[data-theme="light"]{--chip-bg:lch(99.997% .5 282);--chip-ring:0 0 0 .5px lch(0 0 0/.09),0 3px 6px -2px lch(0 0 0/.02),0 1px 1px lch(0 0 0/.04);--chip-text:lch(39.176% 1.25 282);--chip-strong:lch(19.588% 1.25 282)}
+
+/* Workspace members directory + invite dialog, measured from Linear (dark) with light-theme counterparts. */
+:root{--member-role-badge-bg:rgb(95 105 210/.2);--member-role-badge-fg:#adbbff;--presence-online:#26a644;--invite-dialog-bg:lch(9.2% .85 272);--invite-dialog-border:lch(22.2% 1.3 272);--invite-dialog-field-border:lch(30.6% 1.3 272);--invite-dialog-shadow:0 7px 32px lch(0 0 0/.35),0 3px 12px lch(0 0 0/.25),0 1px 2px lch(0 0 0/.2)}
+:root[data-theme="light"]{--member-role-badge-bg:rgb(94 106 210/.12);--member-role-badge-fg:#4b55b8;--presence-online:#26a644;--invite-dialog-bg:lch(100% 0 282);--invite-dialog-border:lch(91.9% 0 282);--invite-dialog-field-border:lch(86.5% 0 282);--invite-dialog-shadow:0 9px 48px lch(0 0 0/.08),0 6px 24px lch(0 0 0/.1),0 1px 1px lch(0 0 0/.04)}
+
+/* Settings › Members table, measured from Linear (dark) with light-theme counterparts. Used by components/settings/settings-parity.css. */
+:root{--settings-role-badge-bg:rgb(95 105 210/.2);--settings-role-badge-fg:#adbbff;--settings-member-online:#26a644;--settings-members-control-bg:var(--theme-control);--settings-members-control-ring:none;--settings-members-control-text:var(--text);--settings-members-search-border:#3f4042;--settings-members-group-bg:var(--bg-subtle);--settings-members-row-hover:var(--surface-elevated);--settings-members-row-selected:lch(15.966% 18.242 286.445);--settings-members-row-selected-hover:lch(17.5% 19.5 286.445);--settings-members-check-border:var(--sub-checkbox-border);--settings-members-bulk-bg:var(--surface-elevated);--settings-members-bulk-border:var(--theme-border);--settings-members-bulk-shadow:var(--pk-card-shadow)}
+:root[data-theme="light"]{--settings-role-badge-bg:rgb(94 106 210/.12);--settings-role-badge-fg:#4b55b8;--settings-member-online:#26a644;--settings-members-control-bg:var(--lx-control);--settings-members-control-ring:var(--lx-control-ring);--settings-members-control-text:var(--lx-control-text);--settings-members-search-border:var(--lx-input-border);--settings-members-group-bg:var(--bg-subtle);--settings-members-row-hover:var(--theme-control-hover);--settings-members-row-selected:color-mix(in srgb,var(--accent-primary) 8%,transparent);--settings-members-row-selected-hover:color-mix(in srgb,var(--accent-primary) 11%,transparent);--settings-members-check-border:var(--sub-checkbox-border);--settings-members-bulk-bg:lch(100% 0 282);--settings-members-bulk-border:lch(91.9% 0 282);--settings-members-bulk-shadow:var(--pk-card-shadow)}
+:root{--member-profile-card-bg:lch(9.232% .85 272);--member-profile-card-border:lch(16.793% 1.93 272)}
+:root[data-theme="light"]{--member-profile-card-bg:lch(100% 0 282);--member-profile-card-border:lch(91.9% 0 282)}
+:root{--invite-dialog-control-bg:lch(13.861% 1.139 272)}
+:root[data-theme="light"]{--invite-dialog-control-bg:lch(96.5% 0 282)}
+:root{--invite-role-menu-bg:lch(16.433% 1.3 272);--invite-role-menu-ring:lch(38.032% 2.38 272);--invite-role-menu-fg:lch(91.554% 1.65 272);--invite-role-menu-highlight:lch(25.69% 1.975 272)}
+:root[data-theme="light"]{--invite-role-menu-bg:lch(100% 0 282);--invite-role-menu-ring:lch(86.5% 0 282);--invite-role-menu-fg:lch(9.794% 0 282);--invite-role-menu-highlight:lch(94.4% .5 282)}
+:root{--directory-display-menu-bg:lch(12.72% .85 272);--directory-display-menu-ring:lch(24.833% 1.93 272)}
+:root[data-theme="light"]{--directory-display-menu-bg:lch(100% 0 282);--directory-display-menu-ring:lch(86.5% 0 282)}
+:root{--directory-filter-count:lch(41.778% 1.425 272)}
+:root[data-theme="light"]{--directory-filter-count:lch(64.64% 1.25 282)}

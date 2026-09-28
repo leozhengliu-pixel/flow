@@ -5041,6 +5041,9 @@ function App() {
                     memberProfilePath(data.workspace.urlKey, user.name, view),
                   )
                 }
+                onOpenMember={(member) =>
+                  navigateTo(memberProfilePath(data.workspace.urlKey, member.name))
+                }
                 onOpenIssue={openIssue}
                 onUpdateIssue={updateIssueFromPage}
                 onUpdateIssues={updateIssuesFromPage}

@@ -20,15 +20,19 @@ import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security
 import {
   Activity,
   AppWindow,
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Bell,
   Bot,
   Braces,
   Building2,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleDot,
   Code2,
+  Command,
   FileText,
   Flame,
   Repeat2,
@@ -69,8 +73,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { AppLink } from "@/components/ui/app-link";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import {
@@ -110,6 +119,7 @@ import {
   applicationEditPath,
   applicationSettingsPath,
   identityProviderSettingsPath,
+  memberProfilePath,
   settingsPath,
   webhookSettingsPath,
 } from "@/lib/app-routes";
@@ -149,6 +159,7 @@ import "./advanced-settings.css";
 import "./settings-parity.css";
 import { WebhookEditPage } from "./webhook-edit-page";
 import { WorkspaceTeamsSettings } from "./workspace-teams-settings";
+import { InviteMembersDialog } from "@/components/workspace-directory/invite-members-dialog";
 import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
@@ -2047,6 +2058,68 @@ export function MembersPage({
   );
 }
 
+const MEMBER_FILTERS = [
+  "All",
+  "Admins",
+  "Members",
+  "Guests",
+  "Applications",
+  "Pending invites",
+  "Suspended",
+  "Left workspace",
+] as const;
+type MemberFilter = (typeof MEMBER_FILTERS)[number];
+type MemberSort = "name" | "email" | "status" | "joined" | "lastSeen";
+type AssignableRole = "admin" | "member" | "guest";
+const MEMBER_ONLINE_WINDOW_MS = 5 * 60 * 1000;
+
+function isApplicationMember(member: WorkspaceMember) {
+  return Boolean(member.user.app) || member.role === "app";
+}
+
+function memberMatchesFilter(member: WorkspaceMember, filter: MemberFilter) {
+  const app = isApplicationMember(member);
+  const active = member.status === "active";
+  switch (filter) {
+    case "All":
+      return true;
+    case "Admins":
+      return (
+        !app && active && (member.role === "admin" || member.role === "owner")
+      );
+    case "Members":
+      return !app && active && member.role === "member";
+    case "Guests":
+      return !app && active && member.role === "guest";
+    case "Applications":
+      return app;
+    case "Suspended":
+      return !active;
+    default:
+      // Pending invites are invitations, not members; departed members are not
+      // part of the workspace payload.
+      return false;
+  }
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(document.documentElement.lang || "en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatFullDate(value: string) {
+  return new Intl.DateTimeFormat(document.documentElement.lang || "en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 function MembersPageV2({
   data,
   onReload,
@@ -2056,57 +2129,44 @@ function MembersPageV2({
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("All");
-  const [sort, setSort] = useState<
-    "name" | "email" | "status" | "joined" | "lastSeen"
-  >("name");
+  const [filter, setFilter] = useState<MemberFilter>("All");
+  const [sort, setSort] = useState<MemberSort>("name");
   const [descending, setDescending] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [emails, setEmails] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "member" | "guest">(
-    "member",
-  );
-  const [inviteTeams, setInviteTeams] = useState<string[]>(
-    data.teams.map((team) => team.id),
-  );
-  const [roleTarget, setRoleTarget] = useState<WorkspaceMember>();
-  const [roleDraft, setRoleDraft] = useState<"admin" | "member" | "guest">(
-    "member",
-  );
   const [identityTarget, setIdentityTarget] = useState<{
     member: WorkspaceMember;
     field: "displayName" | "username" | "email";
     value: string;
   }>();
-  const [teamsTarget, setTeamsTarget] = useState<WorkspaceMember>();
+  const [teamsTargets, setTeamsTargets] = useState<WorkspaceMember[]>();
   const [teamDraft, setTeamDraft] = useState<string[]>([]);
   const [confirmTarget, setConfirmTarget] = useState<{
-    member: WorkspaceMember;
+    members: WorkspaceMember[];
     action: "suspend" | "remove" | "resume";
   }>();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const normalized = query.trim().toLowerCase();
+  const now = Date.now();
+  const isMemberOfTeam = (userId: string, teamId: string) =>
+    data.teamMembers.some(
+      (item) => item.userId === userId && item.teamId === teamId,
+    );
+  const isOnline = (member: WorkspaceMember) =>
+    member.status === "active" &&
+    (member.user.id === data.viewer.id ||
+      (member.lastSeenAt
+        ? now - new Date(member.lastSeenAt).getTime() < MEMBER_ONLINE_WINDOW_MS
+        : false));
   const visibleMembers = data.members
-    .filter((member) => {
-      const matchesQuery =
-        !normalized ||
-        `${member.user.displayName} ${member.user.name} ${member.user.email}`
-          .toLowerCase()
-          .includes(normalized);
-      const matchesStatus =
-        status === "All" ||
-        (status === "Admins" &&
-          member.role === "admin" &&
-          member.status === "active") ||
-        (status === "Members" &&
-          member.role === "member" &&
-          member.status === "active") ||
-        (status === "Guests" &&
-          member.role === "guest" &&
-          member.status === "active") ||
-        (status === "Suspended" && member.status === "suspended");
-      return matchesQuery && matchesStatus;
-    })
+    .filter(
+      (member) =>
+        memberMatchesFilter(member, filter) &&
+        (!normalized ||
+          `${member.user.displayName} ${member.user.name} ${member.user.email}`
+            .toLowerCase()
+            .includes(normalized)),
+    )
     .sort((left, right) => {
       const value = (member: WorkspaceMember) =>
         sort === "name"
@@ -2117,25 +2177,47 @@ function MembersPageV2({
               ? `${member.status}:${member.role}`
               : sort === "joined"
                 ? member.joinedAt
-                : (member.lastSeenAt ?? "");
+                : isOnline(member)
+                  ? "~"
+                  : (member.lastSeenAt ?? "");
       return value(left).localeCompare(value(right)) * (descending ? -1 : 1);
     });
   const pending = data.invitations.filter(
     (invitation) =>
       invitation.status === "pending" &&
-      (status === "All" || status === "Pending invites") &&
+      (filter === "All" || filter === "Pending invites") &&
       (!normalized || invitation.email.toLowerCase().includes(normalized)),
   );
-  const applications =
-    status === "All" || status === "Applications"
-      ? data.oauthApplications.filter(
-          (application) =>
-            !normalized || application.name.toLowerCase().includes(normalized),
-        )
-      : [];
-  const active = visibleMembers.filter((member) => member.status === "active"),
+  const active = visibleMembers.filter(
+      (member) => member.status === "active" && !isApplicationMember(member),
+    ),
+    applications = visibleMembers.filter(
+      (member) => member.status === "active" && isApplicationMember(member),
+    ),
     suspended = visibleMembers.filter(
       (member) => member.status === "suspended",
+    );
+  const selectedMembers = data.members.filter((member) =>
+    selectedIds.includes(member.user.id),
+  );
+  const selecting = selectedMembers.length > 0;
+  useEffect(() => {
+    if (!selecting) return;
+    const clearOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      // Menus and dialogs close first; the selection clears on the next Escape.
+      if (document.querySelector('[role="menu"], [role="dialog"]')) return;
+      event.stopPropagation();
+      setSelectedIds([]);
+    };
+    window.addEventListener("keydown", clearOnEscape, true);
+    return () => window.removeEventListener("keydown", clearOnEscape, true);
+  }, [selecting]);
+  const toggleSelected = (userId: string, checked: boolean) =>
+    setSelectedIds((current) =>
+      checked
+        ? [...new Set([...current, userId])]
+        : current.filter((id) => id !== userId),
     );
   const change = async (action: () => Promise<unknown>, success: string) => {
     setBusy(true);
@@ -2151,31 +2233,13 @@ function MembersPageV2({
       setBusy(false);
     }
   };
-  const order = (key: typeof sort) => {
+  const order = (key: MemberSort) => {
     if (sort === key) setDescending((value) => !value);
     else {
       setSort(key);
       setDescending(false);
     }
   };
-  const sendInvites = () =>
-    change(async () => {
-      const parsed = emails
-        .split(/[\s,;]+/)
-        .map((value) => value.trim())
-        .filter(Boolean);
-      if (!parsed.length)
-        throw new Error(t("Enter at least one email address"));
-      if (inviteRole === "guest" && !inviteTeams.length)
-        throw new Error(t("Guests must be assigned to a team"));
-      await inviteMembers(data.workspace.urlKey, {
-        emails: parsed,
-        role: inviteRole,
-        teamIds: inviteTeams,
-      });
-      setInviteOpen(false);
-      setEmails("");
-    }, "Invitation sent");
   const exportCsv = () => {
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`;
     download(
@@ -2214,61 +2278,244 @@ function MembersPageV2({
       "text/csv",
     );
   };
+  const openTeams = (targets: WorkspaceMember[]) => {
+    setTeamsTargets(targets);
+    setTeamDraft([]);
+  };
+  const changeRole = (targets: WorkspaceMember[], role: AssignableRole) =>
+    void change(
+      () =>
+        Promise.all(
+          targets
+            .filter((member) => member.role !== role)
+            .map((member) =>
+              updateMemberRole(data.workspace.urlKey, member.user.id, role),
+            ),
+        ),
+      "Role updated",
+    );
+  const memberActions = (targets: WorkspaceMember[]) => {
+    const others = targets.filter(
+      (member) => member.user.id !== data.viewer.id,
+    );
+    const people = others.filter((member) => !isApplicationMember(member));
+    const single = targets.length === 1 ? people[0] : undefined;
+    const inEveryTeam = targets.every((member) =>
+      data.teams.every((team) => isMemberOfTeam(member.user.id, team.id)),
+    );
+    const suspendable = others.filter((member) => member.status === "active");
+    const restorable = others.filter(
+      (member) => member.status === "suspended",
+    );
+    return (
+      <>
+        <DropdownMenuItem
+          disabled={inEveryTeam}
+          onSelect={() => openTeams(targets)}
+        >
+          {t("Add to teams…")}
+        </DropdownMenuItem>
+        {people.length > 0 && (
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>{t("Change role")}</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="settings-members-menu">
+              {(["admin", "member", "guest"] as const).map((role) => (
+                <DropdownMenuItem
+                  key={role}
+                  onSelect={() => changeRole(people, role)}
+                >
+                  {t(title(role))}
+                  {people.every((member) => member.role === role) && (
+                    <Check className="settings-members-menu-check" size={14} />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        )}
+        {single && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() =>
+                setIdentityTarget({
+                  member: single,
+                  field: "displayName",
+                  value: single.user.displayName,
+                })
+              }
+            >
+              {t("Update name…")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                setIdentityTarget({
+                  member: single,
+                  field: "username",
+                  value: single.user.name,
+                })
+              }
+            >
+              {t("Update username…")}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() =>
+                setIdentityTarget({
+                  member: single,
+                  field: "email",
+                  value: single.user.email,
+                })
+              }
+            >
+              {t("Update email…")}
+            </DropdownMenuItem>
+          </>
+        )}
+        {others.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            {restorable.length > 0 && (
+              <DropdownMenuItem
+                onSelect={() =>
+                  setConfirmTarget({ members: restorable, action: "resume" })
+                }
+              >
+                {t("Restore user…")}
+              </DropdownMenuItem>
+            )}
+            {suspendable.length > 0 && (
+              <DropdownMenuItem
+                onSelect={() =>
+                  setConfirmTarget({ members: suspendable, action: "suspend" })
+                }
+              >
+                {t("Suspend user…")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem
+              className="danger-item"
+              onSelect={() =>
+                setConfirmTarget({ members: others, action: "remove" })
+              }
+            >
+              {t("Remove from workspace…")}
+            </DropdownMenuItem>
+          </>
+        )}
+      </>
+    );
+  };
+  const sortButton = (key: MemberSort, label: string) => (
+    <button
+      type="button"
+      data-sort={key}
+      aria-label={`${t("Order by")} ${t(label)}${
+        sort === key
+          ? `, ${t(descending ? "sorted descending" : "sorted ascending")}`
+          : ""
+      }`}
+      onClick={() => order(key)}
+    >
+      {t(label)}
+      {sort === key &&
+        (descending ? (
+          <ArrowUp aria-hidden size={12} />
+        ) : (
+          <ArrowDown aria-hidden size={12} />
+        ))}
+    </button>
+  );
   const header = (
     <div className="settings-members-columns">
-      <button onClick={() => order("name")}>{t("Name")}</button>
-      <button onClick={() => order("email")}>{t("Email")}</button>
-      <button onClick={() => order("status")}>{t("Status")}</button>
+      {sortButton("name", "Name")}
+      {sortButton("email", "Email")}
+      {sortButton("status", "Status")}
       <span>{t("Teams")}</span>
-      <button onClick={() => order("joined")}>{t("Joined")}</button>
-      <button onClick={() => order("lastSeen")}>{t("Last seen")}</button>
+      {sortButton("joined", "Joined")}
+      {sortButton("lastSeen", "Last seen")}
       <span />
+    </div>
+  );
+  const group = (label: string, count: number) => (
+    <div className="settings-members-group" role="presentation">
+      <strong>{t(label)}</strong>
+      <span>{count}</span>
     </div>
   );
   const memberRow = (member: WorkspaceMember) => {
     const memberships = data.teamMembers.filter(
       (item) => item.userId === member.user.id,
     );
+    const teamNames = data.teams
+      .filter((team) => memberships.some((item) => item.teamId === team.id))
+      .map((team) => team.name);
+    const selected = selectedIds.includes(member.user.id);
+    const app = isApplicationMember(member);
+    const privileged = member.role === "admin" || member.role === "owner";
     return (
-      <div className="settings-member-directory-row" key={member.user.id}>
+      <div
+        className={`settings-member-directory-row${selected ? " is-selected" : ""}`}
+        key={member.user.id}
+      >
         <span>
+          <input
+            type="checkbox"
+            className="settings-member-check"
+            aria-label={`${t("Select")} ${member.user.name}`}
+            checked={selected}
+            onChange={(event) =>
+              toggleSelected(member.user.id, event.target.checked)
+            }
+          />
           <b className="settings-member-avatar">
             {initials(member.user.displayName)}
           </b>
           <i>
-            <strong data-i18n-ignore>{member.user.displayName}</strong>
+            <AppLink
+              className="settings-member-link"
+              href={memberProfilePath(data.workspace.urlKey, member.user.name)}
+            >
+              <strong data-i18n-ignore>{member.user.displayName}</strong>
+            </AppLink>
             <small data-i18n-ignore>{member.user.name}</small>
           </i>
         </span>
-        <span data-i18n-ignore>{member.user.email}</span>
+        <span data-i18n-ignore>{app ? "" : member.user.email}</span>
         <span>
-          <em className={`settings-member-role is-${member.role}`}>
-            {t(title(member.role))}
-            {member.status === "suspended" ? ` (${t("Suspended")})` : ""}
-          </em>
+          {app ? (
+            t("Application")
+          ) : privileged ? (
+            <em className="settings-member-role is-admin">
+              {t(title(member.role))}
+            </em>
+          ) : (
+            t(title(member.role))
+          )}
         </span>
-        <span>
-          <button
-            className="settings-member-teams"
-            onClick={() => {
-              setTeamsTarget(member);
-              setTeamDraft(memberships.map((item) => item.teamId));
-            }}
-          >
-            {memberships.length
-              ? `${memberships.length} ${t(memberships.length === 1 ? "team" : "teams")}`
-              : t("No teams")}
-          </button>
+        <span title={teamNames.join(", ") || undefined}>
+          {memberships.length
+            ? `${memberships.length} ${t(memberships.length === 1 ? "team" : "teams")}`
+            : t("No teams")}
         </span>
-        <time>{formatDate(member.joinedAt)}</time>
+        <time
+          dateTime={member.joinedAt}
+          title={`${t("Joined")} ${formatDateTime(member.joinedAt)}`}
+        >
+          {formatDate(member.joinedAt)}
+        </time>
         <span>
-          {member.user.id === data.viewer.id ? (
-            <>
+          {isOnline(member) ? (
+            <span className="settings-member-presence">
               <i className="settings-member-online" />
               {t("Online")}
-            </>
+            </span>
           ) : member.lastSeenAt ? (
-            formatDate(member.lastSeenAt)
+            <time
+              dateTime={member.lastSeenAt}
+              title={`${t("Last seen")} ${formatFullDate(member.lastSeenAt)}`}
+            >
+              {formatDate(member.lastSeenAt)}
+            </time>
           ) : (
             t("Never")
           )}
@@ -2277,102 +2524,32 @@ function MembersPageV2({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
+                type="button"
                 className="settings-member-more"
                 aria-label={`${t("Open menu")} ${member.user.displayName}`}
               >
-                <MoreHorizontal size={15} />
+                <MoreHorizontal size={16} />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="settings-member-action-menu"
+              className="settings-members-menu settings-member-action-menu"
               data-i18n-ignore
             >
-              <DropdownMenuItem
-                onSelect={() => {
-                  setRoleTarget(member);
-                  setRoleDraft(member.role as typeof roleDraft);
-                }}
-              >
-                {t("Change role…")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() =>
-                  setIdentityTarget({
-                    member,
-                    field: "displayName",
-                    value: member.user.displayName,
-                  })
-                }
-              >
-                {t("Update name…")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
-                  setIdentityTarget({
-                    member,
-                    field: "username",
-                    value: member.user.name,
-                  })
-                }
-              >
-                {t("Update username…")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() =>
-                  setIdentityTarget({
-                    member,
-                    field: "email",
-                    value: member.user.email,
-                  })
-                }
-              >
-                {t("Update email…")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {member.status === "suspended" ? (
-                <DropdownMenuItem
-                  onSelect={() =>
-                    setConfirmTarget({ member, action: "resume" })
-                  }
-                >
-                  {t("Restore user…")}
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem
-                  disabled={member.user.id === data.viewer.id}
-                  onSelect={() =>
-                    setConfirmTarget({ member, action: "suspend" })
-                  }
-                >
-                  {t("Suspend user…")}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  setTeamsTarget(member);
-                  setTeamDraft(memberships.map((item) => item.teamId));
-                }}
-              >
-                {t("Manage teams…")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="danger-item"
-                disabled={member.user.id === data.viewer.id}
-                onSelect={() => setConfirmTarget({ member, action: "remove" })}
-              >
-                {t("Remove from workspace…")}
-              </DropdownMenuItem>
+              {memberActions([member])}
             </DropdownMenuContent>
           </DropdownMenu>
         </span>
       </div>
     );
   };
+  const confirmCount = confirmTarget?.members.length ?? 0;
+  const confirmSubject =
+    confirmCount === 1
+      ? (confirmTarget?.members[0].user.displayName ?? "")
+      : `${confirmCount} ${t("members")}`;
   return (
-    <div className="settings-members-page" data-i18n-ignore>
+    <div className="settings-members-page settings-workspace-members" data-i18n-ignore>
       <PageTitle>{t("Members")}</PageTitle>
       <div className="settings-members-toolbar">
         <label>
@@ -2384,65 +2561,66 @@ function MembersPageV2({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <Select
-          label={t("Member status")}
-          value={t(status)}
-          options={[
-            "All",
-            "Admins",
-            "Members",
-            "Guests",
-            "Applications",
-            "Pending invites",
-            "Suspended",
-            "Left workspace",
-          ].map(t)}
-          onChange={(value) => {
-            const values = [
-              "All",
-              "Admins",
-              "Members",
-              "Guests",
-              "Applications",
-              "Pending invites",
-              "Suspended",
-              "Left workspace",
-            ];
-            setStatus(values.find((item) => t(item) === value) ?? "All");
-          }}
-        />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="settings-members-filter"
+              aria-label={t("Member filter")}
+            >
+              {t(filter)}
+              <ChevronDown aria-hidden size={12} />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            sideOffset={4}
+            className="settings-members-menu settings-members-filter-menu"
+          >
+            <DropdownMenuPrimitive.RadioGroup
+              value={filter}
+              onValueChange={(value) => setFilter(value as MemberFilter)}
+            >
+              {MEMBER_FILTERS.map((value) => (
+                <DropdownMenuPrimitive.RadioItem
+                  key={value}
+                  value={value}
+                  className="menu-item"
+                >
+                  {t(value)}
+                  <DropdownMenuPrimitive.ItemIndicator className="settings-members-menu-check">
+                    <Check size={14} />
+                  </DropdownMenuPrimitive.ItemIndicator>
+                </DropdownMenuPrimitive.RadioItem>
+              ))}
+            </DropdownMenuPrimitive.RadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <span />
         <ActionButton onClick={exportCsv}>{t("Export CSV")}</ActionButton>
         <ActionButton primary onClick={() => setInviteOpen(true)}>
           {t("Invite")}
         </ActionButton>
       </div>
-      <div className="settings-members-directory">
+      <div
+        className={`settings-members-directory${selecting ? " has-selection" : ""}`}
+      >
         {header}
         {active.length > 0 && (
           <>
-            <div className="settings-members-group">
-              <strong>{t("Active")}</strong>
-              <span>{active.length}</span>
-            </div>
+            {group("Active", active.length)}
             {active.map(memberRow)}
           </>
         )}
-        {suspended.length > 0 && (
+        {applications.length > 0 && (
           <>
-            <div className="settings-members-group">
-              <strong>{t("Suspended")}</strong>
-              <span>{suspended.length}</span>
-            </div>
-            {suspended.map(memberRow)}
+            {group("Application", applications.length)}
+            {applications.map(memberRow)}
           </>
         )}
         {pending.length > 0 && (
           <>
-            <div className="settings-members-group">
-              <strong>{t("Invited")}</strong>
-              <span>{pending.length}</span>
-            </div>
+            {group("Pending invites", pending.length)}
             {pending.map((invitation) => (
               <div
                 className="settings-member-directory-row is-invited"
@@ -2454,32 +2632,37 @@ function MembersPageV2({
                   </b>
                   <i>
                     <strong data-i18n-ignore>{invitation.email}</strong>
-                    <small data-i18n-ignore>{invitation.email}</small>
+                    <small>{t("Invited")}</small>
                   </i>
                 </span>
                 <span data-i18n-ignore>{invitation.email}</span>
-                <span>
-                  <em className={`settings-member-role is-${invitation.role}`}>
-                    {t(title(invitation.role))} ({t("Invited")})
-                  </em>
-                </span>
+                <span>{t(title(invitation.role))}</span>
                 <span>
                   {invitation.teamIds.length}{" "}
                   {t(invitation.teamIds.length === 1 ? "team" : "teams")}
                 </span>
-                <time>{formatDate(invitation.createdAt)}</time>
+                <time
+                  dateTime={invitation.createdAt}
+                  title={`${t("Invited")} ${formatDateTime(invitation.createdAt)}`}
+                >
+                  {formatDate(invitation.createdAt)}
+                </time>
                 <span>—</span>
                 <span>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
+                        type="button"
                         className="settings-member-more"
-                        aria-label={t("Open menu")}
+                        aria-label={`${t("Open menu")} ${invitation.email}`}
                       >
-                        <MoreHorizontal size={15} />
+                        <MoreHorizontal size={16} />
                       </button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
+                    <DropdownMenuContent
+                      align="end"
+                      className="settings-members-menu"
+                    >
                       <DropdownMenuItem
                         onSelect={() =>
                           void change(
@@ -2516,38 +2699,16 @@ function MembersPageV2({
             ))}
           </>
         )}
-        {applications.length > 0 && (
+        {suspended.length > 0 && (
           <>
-            <div className="settings-members-group">
-              <strong>{t("Application")}</strong>
-              <span>{applications.length}</span>
-            </div>
-            {applications.map((application) => (
-              <div
-                className="settings-member-directory-row is-application"
-                key={application.id}
-              >
-                <span>
-                  <b className="settings-member-avatar">AP</b>
-                  <i>
-                    <strong data-i18n-ignore>{application.name}</strong>
-                    <small>application</small>
-                  </i>
-                </span>
-                <span>—</span>
-                <span>{t("Application")}</span>
-                <span>—</span>
-                <time>—</time>
-                <span>—</span>
-                <span />
-              </div>
-            ))}
+            {group("Suspended", suspended.length)}
+            {suspended.map(memberRow)}
           </>
         )}
         {!active.length &&
-          !suspended.length &&
+          !applications.length &&
           !pending.length &&
-          !applications.length && (
+          !suspended.length && (
             <div className="settings-empty compact">
               <UserRound size={24} />
               <h3>{t("No members found")}</h3>
@@ -2555,122 +2716,53 @@ function MembersPageV2({
             </div>
           )}
       </div>
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="settings-invite-dialog">
-          <DialogTitle>
-            <span className="settings-invite-mark">
-              <span data-i18n-ignore>{data.workspace.name.slice(0, 2).toUpperCase()}</span>
-            </span>
-            {t("Invite to your workspace")}
-          </DialogTitle>
-          <label>
-            {t("Email")}
-            <textarea
-              autoFocus
-              aria-label={t("Email")}
-              data-i18n-ignore
-              placeholder="email@foxmail.com, email2@foxmail.com…"
-              value={emails}
-              onChange={(event) => setEmails(event.target.value)}
-            />
-          </label>
-          <label>
-            {t("Role")}
-            <Select
-              label={t("Invitation role")}
-              value={t(title(inviteRole))}
-              options={["Member", "Admin", "Guest"].map(t)}
-              onChange={(value) =>
-                setInviteRole(
-                  (["member", "admin", "guest"] as const)[
-                    ["Member", "Admin", "Guest"].map(t).indexOf(value)
-                  ] ?? "member",
-                )
-              }
-            />
-          </label>
-          {inviteRole === "guest" && (
-            <label>
-              {t("Teams")}
+      {selecting && (
+        <div
+          className="settings-members-bulk-bar"
+          role="toolbar"
+          aria-label={t("Selected members")}
+        >
+          <span>
+            {selectedMembers.length} {t("selected")}
+          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
               <button
-                className="settings-select"
-                onClick={() =>
-                  setInviteTeams((current) =>
-                    current.length ? [] : data.teams.map((team) => team.id),
-                  )
-                }
+                type="button"
+                className="settings-members-bulk-actions"
+                aria-label={t("Open command menu")}
               >
-                {inviteTeams.length
-                  ? `${inviteTeams.length} ${t("selected")}`
-                  : t("Select teams")}
+                <Command aria-hidden size={12} />
+                {t("Actions")}
               </button>
-            </label>
-          )}
-          <footer>
-            <ActionButton
-              primary
-              disabled={busy || !emails.trim()}
-              onClick={() => void sendInvites()}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              side="top"
+              align="center"
+              sideOffset={8}
+              className="settings-members-menu settings-member-action-menu"
+              data-i18n-ignore
             >
-              {busy ? t("Sending…") : t("Send invites")}
-            </ActionButton>
-          </footer>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={Boolean(roleTarget)}
-        onOpenChange={(open) => !open && setRoleTarget(undefined)}
-      >
-        <DialogContent className="settings-member-dialog">
-          <DialogTitle>{t("Change role")}</DialogTitle>
-          {(["admin", "member", "guest"] as const).map((value) => (
-            <label className="settings-member-role-option" key={value}>
-              <input
-                type="radio"
-                checked={roleDraft === value}
-                onChange={() => setRoleDraft(value)}
-              />
-              <span>
-                <strong>
-                  {t(value === "admin" ? "Workspace admin" : title(value))}
-                </strong>
-                <small>
-                  {t(
-                    value === "admin"
-                      ? "Full control of the workspace including security and all settings"
-                      : value === "member"
-                        ? "Standard workspace access with the ability to act within all public teams"
-                        : "Access limited to specific teams, with no workspace views or features",
-                  )}
-                </small>
-              </span>
-            </label>
-          ))}
-          <footer>
-            <ActionButton onClick={() => setRoleTarget(undefined)}>
-              {t("Cancel")}
-            </ActionButton>
-            <ActionButton
-              primary
-              disabled={busy}
-              onClick={() =>
-                roleTarget &&
-                void change(
-                  () =>
-                    updateMemberRole(
-                      data.workspace.urlKey,
-                      roleTarget.user.id,
-                      roleDraft,
-                    ),
-                  "Role updated",
-                ).then(() => setRoleTarget(undefined))
-              }
-            >
-              {t("Save")}
-            </ActionButton>
-          </footer>
-        </DialogContent>
-      </Dialog>
+              {memberActions(selectedMembers)}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <button
+            type="button"
+            className="settings-members-bulk-clear"
+            aria-label={t("Clear selected")}
+            onClick={() => setSelectedIds([])}
+          >
+            <X aria-hidden size={14} />
+          </button>
+        </div>
+      )}
+      <InviteMembersDialog
+        workspace={data.workspace}
+        teams={data.teams}
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        onInvited={onReload}
+      />
       <Dialog
         open={Boolean(identityTarget)}
         onOpenChange={(open) => !open && setIdentityTarget(undefined)}
@@ -2721,62 +2813,68 @@ function MembersPageV2({
         </DialogContent>
       </Dialog>
       <Dialog
-        open={Boolean(teamsTarget)}
-        onOpenChange={(open) => !open && setTeamsTarget(undefined)}
+        open={Boolean(teamsTargets)}
+        onOpenChange={(open) => !open && setTeamsTargets(undefined)}
       >
         <DialogContent className="settings-member-dialog">
-          <DialogTitle>{t("Manage teams")}</DialogTitle>
-          {data.teams.map((team) => (
-            <label className="settings-member-team-option" key={team.id}>
-              <input
-                type="checkbox"
-                checked={teamDraft.includes(team.id)}
-                onChange={(event) =>
-                  setTeamDraft((current) =>
-                    event.target.checked
-                      ? [...current, team.id]
-                      : current.filter((id) => id !== team.id),
-                  )
-                }
-              />
-              <span data-i18n-ignore>{team.name}</span>
-            </label>
-          ))}
+          <DialogTitle>{t("Add to teams")}</DialogTitle>
+          {data.teams
+            .filter(
+              (team) =>
+                !teamsTargets?.every((member) =>
+                  isMemberOfTeam(member.user.id, team.id),
+                ),
+            )
+            .map((team) => (
+              <label className="settings-member-team-option" key={team.id}>
+                <input
+                  type="checkbox"
+                  checked={teamDraft.includes(team.id)}
+                  onChange={(event) =>
+                    setTeamDraft((current) =>
+                      event.target.checked
+                        ? [...current, team.id]
+                        : current.filter((id) => id !== team.id),
+                    )
+                  }
+                />
+                <ViewGlyph color={team.color} icon={team.icon || "Team"} />
+                <span data-i18n-ignore>{team.name}</span>
+              </label>
+            ))}
           <footer>
-            <ActionButton onClick={() => setTeamsTarget(undefined)}>
+            <ActionButton onClick={() => setTeamsTargets(undefined)}>
               {t("Cancel")}
             </ActionButton>
             <ActionButton
               primary
-              disabled={busy}
-              onClick={() =>
-                teamsTarget &&
+              disabled={busy || !teamDraft.length}
+              onClick={() => {
+                const targets = teamsTargets ?? [];
                 void change(
                   () =>
                     Promise.all(
-                      data.teams.map((team) => {
-                        const current = data.teamMembers.some(
-                            (item) =>
-                              item.teamId === team.id &&
-                              item.userId === teamsTarget.user.id,
-                          ),
-                          next = teamDraft.includes(team.id);
-                        return current === next
-                          ? Promise.resolve()
-                          : setTeamMembership(
+                      teamDraft.flatMap((teamId) =>
+                        targets
+                          .filter(
+                            (member) => !isMemberOfTeam(member.user.id, teamId),
+                          )
+                          .map((member) =>
+                            setTeamMembership(
                               data.workspace.urlKey,
-                              team.id,
-                              teamsTarget.user.id,
-                              next,
+                              teamId,
+                              member.user.id,
+                              true,
                               "member",
-                            );
-                      }),
+                            ),
+                          ),
+                      ),
                     ),
                   "Team access updated",
-                ).then(() => setTeamsTarget(undefined))
-              }
+                ).then(() => setTeamsTargets(undefined));
+              }}
             >
-              {t("Save")}
+              {t("Add")}
             </ActionButton>
           </footer>
         </DialogContent>
@@ -2785,7 +2883,13 @@ function MembersPageV2({
         open={Boolean(confirmTarget)}
         title={
           confirmTarget
-            ? `${t(confirmTarget.action === "resume" ? "Restore" : "Suspend")} ${confirmTarget.member.user.displayName}?`
+            ? `${t(
+                confirmTarget.action === "resume"
+                  ? "Restore"
+                  : confirmTarget.action === "remove"
+                    ? "Remove"
+                    : "Suspend",
+              )} ${confirmSubject}?`
             : ""
         }
         description={
@@ -2802,34 +2906,34 @@ function MembersPageV2({
             ? "Remove"
             : confirmTarget?.action === "resume"
               ? "Restore"
-              : "Confirm",
+              : "Suspend",
         )}
         onCancel={() => setConfirmTarget(undefined)}
         onConfirm={() => {
           if (!confirmTarget) return;
-          const action =
-            confirmTarget.action === "suspend"
-              ? suspendMember(
-                  data.workspace.urlKey,
-                  confirmTarget.member.user.id,
-                )
-              : confirmTarget.action === "resume"
-                ? resumeMember(
-                    data.workspace.urlKey,
-                    confirmTarget.member.user.id,
-                  )
-                : removeMember(
-                    data.workspace.urlKey,
-                    confirmTarget.member.user.id,
-                  );
+          const { action, members } = confirmTarget;
+          const run = (userId: string) =>
+            action === "suspend"
+              ? suspendMember(data.workspace.urlKey, userId)
+              : action === "resume"
+                ? resumeMember(data.workspace.urlKey, userId)
+                : removeMember(data.workspace.urlKey, userId);
           void change(
-            () => action,
-            confirmTarget.action === "resume"
+            () => Promise.all(members.map((member) => run(member.user.id))),
+            action === "resume"
               ? "Member restored"
-              : confirmTarget.action === "remove"
+              : action === "remove"
                 ? "Member removed"
                 : "Member suspended",
-          ).then(() => setConfirmTarget(undefined));
+          ).then(() => {
+            setConfirmTarget(undefined);
+            if (action === "remove")
+              setSelectedIds((current) =>
+                current.filter(
+                  (id) => !members.some((member) => member.user.id === id),
+                ),
+              );
+          });
         }}
       />
     </div>

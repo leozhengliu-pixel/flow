@@ -1,17 +1,9 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
-import {
-  ArrowDownWideNarrow,
-  ArrowUpNarrowWide,
-  Check,
-  ChevronDown,
-  Search,
-} from "lucide-react";
+import { ArrowDownWideNarrow, Check, ChevronDown, Search, ArrowDownNarrowWide } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PersonHover } from '@/components/property/person-info';
 import type { User } from '@/types/flow';
-
-import './workspace-directory.css';
 
 import './workspace-directory.css';
 
@@ -46,6 +38,8 @@ export function DirectoryFilterMenu({
   triggerClassName = 'workspace-directory__icon-button',
   open: controlledOpen,
   onOpenChange,
+  hideSearch = false,
+  submenuClassName = '',
 }: {
   groups: DirectoryFilterGroup[];
   selected: Record<string, Set<string>>;
@@ -59,6 +53,9 @@ export function DirectoryFilterMenu({
   triggerClassName?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Keep type-to-filter but only reveal the search field once the viewer types (Linear's short filter menus). */
+  hideSearch?: boolean;
+  submenuClassName?: string;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -123,7 +120,7 @@ export function DirectoryFilterMenu({
           sideOffset={3.5}
           collisionPadding={8}
         >
-          <DirectoryFilterSearch autoFocus label="Add Filter…" query={query} shortcut={trigger === 'icon' && !triggerNode ? 'F' : undefined} onQuery={setQuery}/>
+          <DirectoryFilterSearch autoFocus hidden={hideSearch && !query} label="Add Filter…" query={query} shortcut={trigger === 'icon' && !triggerNode ? 'F' : undefined} onQuery={setQuery}/>
           <div className="workspace-directory-filter-menu__items">
             {!query && showAdvanced && onAdvanced && (
               <>
@@ -147,6 +144,8 @@ export function DirectoryFilterMenu({
                 onPointerAway={() => setActiveGroup(current => current === group.id ? null : current)}
                 onChoice={onChoice}
                 onDirect={onDirect}
+                hideSearch={hideSearch}
+                submenuClassName={submenuClassName}
                 selected={selected[group.id] ?? new Set()}
               />
             ))}
@@ -170,6 +169,8 @@ function FilterGroup({
   selected,
   onChoice,
   onDirect,
+  hideSearch = false,
+  submenuClassName = '',
 }: {
   group: DirectoryFilterGroup;
   open: boolean;
@@ -178,6 +179,8 @@ function FilterGroup({
   selected: Set<string>;
   onChoice: (groupId: string, choiceId: string, checked: boolean) => void;
   onDirect?: (groupId: string) => void;
+  hideSearch?: boolean;
+  submenuClassName?: string;
 }) {
   const [query, setQuery] = useState("");
   const choices = (group.choices ?? []).filter((choice) =>
@@ -201,11 +204,12 @@ function FilterGroup({
           </DropdownMenu.SubTrigger>
           <DropdownMenu.Portal>
             <DropdownMenu.SubContent data-flow-motion="floating"
-              className="workspace-directory-filter-submenu"
+              className={`workspace-directory-filter-submenu ${submenuClassName}`.trim()}
               sideOffset={5}
+              alignOffset={hideSearch && !query ? -7 : 0}
               collisionPadding={8}
             >
-              <DirectoryFilterSearch label="Filter…" query={query} submenu onQuery={setQuery}/>
+              <DirectoryFilterSearch hidden={hideSearch && !query} label="Filter…" query={query} submenu onQuery={setQuery}/>
               <div className="workspace-directory-filter-menu__items">
                 {choices.map((choice) =>
                   group.selectionMode === "single" ? (
@@ -252,8 +256,8 @@ function FilterGroup({
   );
 }
 
-function DirectoryFilterSearch({ autoFocus = false, label, onQuery, query, shortcut, submenu = false }: { autoFocus?: boolean; label: string; onQuery: (value: string) => void; query: string; shortcut?: string; submenu?: boolean }) {
-  return <label className={`workspace-directory-filter-menu__search${submenu ? ' is-submenu' : ''}`}><Search/><input aria-label={label} autoFocus={autoFocus} onChange={event => onQuery(event.target.value)} onKeyDown={event => {
+function DirectoryFilterSearch({ autoFocus = false, hidden = false, label, onQuery, query, shortcut, submenu = false }: { autoFocus?: boolean; hidden?: boolean; label: string; onQuery: (value: string) => void; query: string; shortcut?: string; submenu?: boolean }) {
+  return <label className={`workspace-directory-filter-menu__search${submenu ? ' is-submenu' : ''}${hidden ? ' is-hidden' : ''}`}><Search/><input aria-label={label} autoFocus={autoFocus} onChange={event => onQuery(event.target.value)} onKeyDown={event => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault(); event.stopPropagation();
       const items = event.currentTarget.closest('[role="menu"]')?.querySelectorAll<HTMLElement>('[role^="menuitem"]');
@@ -288,6 +292,7 @@ export function DirectoryDisplayMenu<
   onOrdering,
   onDirection,
   onProperty,
+  className = "",
 }: {
   ordering: TOrdering;
   orderingOptions: DirectoryOrderingOption<TOrdering>[];
@@ -297,6 +302,7 @@ export function DirectoryDisplayMenu<
   onOrdering: (ordering: TOrdering) => void;
   onDirection: () => void;
   onProperty: (property: TProperty) => void;
+  className?: string;
 }) {
   const activeOrdering =
     orderingOptions.find((option) => option.id === ordering)?.label ?? ordering;
@@ -314,7 +320,7 @@ export function DirectoryDisplayMenu<
       <Popover.Portal>
         <Popover.Content data-flow-motion="floating"
           align="end"
-          className="workspace-directory-display-menu"
+          className={`workspace-directory-display-menu ${className}`.trim()}
           sideOffset={3.5}
         >
           <div className="workspace-directory-display-menu__ordering">
@@ -327,7 +333,7 @@ export function DirectoryDisplayMenu<
               onClick={onDirection}
               type="button"
             >
-              {descending ? <ArrowDownWideNarrow /> : <ArrowUpNarrowWide />}
+              {descending ? <ArrowDownWideNarrow /> : <ArrowDownNarrowWide />}
             </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
