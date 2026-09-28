@@ -32,7 +32,7 @@ const SAVED_VIEW_VIRTUALIZATION_THRESHOLD = 40
 
 export function IssueExplorerSurface({
   children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, displayMenuProps, resourceHeader,
+  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false,
 }: {
   children: ReactNode
   scopeName: string
@@ -68,6 +68,11 @@ export function IssueExplorerSurface({
   displayMenuProps?: Partial<Omit<MyIssuesDisplayMenuProps, 'open' | 'onOpenChange' | 'options' | 'onChange'>>
   /** Titled resource views (label, member, customer…) instead of the team/workspace breadcrumb and tabs. */
   resourceHeader?: { icon?: ReactNode; title: ReactNode; actions?: ReactNode; tabs?: { id: string; label: string; href: string; active: boolean; onSelect: () => void }[] }
+  className?: string
+  /** Noun for the insights button ("Open {label}"). */
+  insightsLabel?: string
+  /** Show the details toggle's ⌘ I shortcut in a tooltip instead of the native title. */
+  detailsShortcutTooltip?: boolean
 }) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
@@ -170,10 +175,16 @@ export function IssueExplorerSurface({
         <ToolbarButtonsNavigation className={styles.actions}>
           <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon /></ToolbarButton>} />
           <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
-          <ToolbarButton label={insightsOpen ? 'Close view insights' : 'Open view insights'} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
+          <ToolbarButton label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
           </ToolbarButton>
-          {!creatingView && (
+          {!creatingView && (detailsShortcutTooltip ? (
+            <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut={isMacPlatform() ? '⌘ I' : 'Ctrl I'}>
+              <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}>
+                <DetailsIcon open={detailsOpen} />
+              </ToolbarButton>
+            </FlowTooltip>
+          ) : (
             <ToolbarButton
               label={savedView ? (detailsOpen ? 'Close view details' : 'Open view details') : (detailsOpen ? 'Close details' : 'Open details')}
               title={`${detailsOpen ? 'Close' : 'Open'} details (⌘I)`}
@@ -182,14 +193,14 @@ export function IssueExplorerSurface({
             >
               <DetailsIcon open={detailsOpen} />
             </ToolbarButton>
-          )}
+          ))}
         </ToolbarButtonsNavigation>
       }
     />
   )
 
   return (
-    <ContentViewContainer framed data-issue-explorer="true">
+    <ContentViewContainer framed data-issue-explorer="true" className={className}>
       {header}
       {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
       {filterBar}
@@ -198,6 +209,11 @@ export function IssueExplorerSurface({
       </div>
     </ContentViewContainer>
   )
+}
+
+function isMacPlatform() {
+  if (typeof navigator === 'undefined') return true
+  return /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent)
 }
 
 function ToolbarButton({ children, label, pressed, className, ...props }: ComponentPropsWithRef<'button'> & { label: string; pressed?: boolean }) {
