@@ -16,7 +16,11 @@ export function applyAgentStreamEvent(session: AgentSession | undefined, event: 
       if (index >= 0) parts[index] = event.part
       else parts.push(event.part)
     }
-    return { ...message, content: event.type === 'text.delta' ? message.content + (event.delta ?? '') : message.content, parts }
+    // text.replaced: the server moved mid-task narration into the work group, so the answer restarts.
+    const content = event.type === 'text.delta' ? message.content + (event.delta ?? '') : event.type === 'text.replaced' ? event.delta ?? '' : message.content
+    const text = parts.findIndex(part => part.type === 'text')
+    if (event.type === 'text.replaced' && text >= 0) parts[text] = { ...parts[text], text: content }
+    return { ...message, content, parts }
   })
   return { ...session, messages, updatedAt: new Date().toISOString() }
 }
