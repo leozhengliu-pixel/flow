@@ -7,7 +7,7 @@ import './project-label-picker.css'
 import { projectLabelOptions } from './project-label-menu-model'
 import { LabelHoverPreviewContent } from './label-hover-preview'
 
-export function ProjectLabelControl({ labels, labelGroups, selectedIds, onChange, sidebar = false, open, onOpenChange, onCreateLabel }: {
+export function ProjectLabelControl({ labels, labelGroups, selectedIds, onChange, sidebar = false, open, onOpenChange, onCreateLabel, addTooltip, addTooltipShortcut }: {
   labels: IssueLabel[]
   labelGroups: LabelGroup[]
   selectedIds: string[]
@@ -16,6 +16,8 @@ export function ProjectLabelControl({ labels, labelGroups, selectedIds, onChange
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onCreateLabel?: (name: string, groupId?: string) => Promise<IssueLabel>
+  addTooltip?: string
+  addTooltipShortcut?: string
 }) {
   const options = projectLabelOptions(labels, labelGroups)
   const selected = options.filter(option => selectedIds.includes(option.id)).sort((a, b) => Number(Boolean(b.groupId)) - Number(Boolean(a.groupId)) || (a.groupLabel ?? a.label).localeCompare(b.groupLabel ?? b.label))
@@ -28,7 +30,7 @@ export function ProjectLabelControl({ labels, labelGroups, selectedIds, onChange
   return <div className={`project-label-control${sidebar ? ' is-sidebar' : ''}`}>
     {selected.map(chip)}
     <div className="project-label-last">
-      <PropertyMenu kind="project-labels" label="Labels" multiple options={options} selectedIds={selectedIds} onChange={toggle} onCreate={create} open={open} onOpenChange={onOpenChange} side={sidebar ? 'left' : 'bottom'} triggerRole="button" ariaLabel="Add label" triggerClassName={`project-label-add${sidebar && selected.length ? ' is-icon' : ''}`} trigger={sidebar && !selected.length ? <><LabelIcon size={16}/><span>Add label</span></> : sidebar ? <Plus size={16}/> : <span>Add label…</span>}/>
+      <PropertyMenu kind="project-labels" label="Labels" multiple options={options} selectedIds={selectedIds} onChange={toggle} onCreate={create} open={open} onOpenChange={onOpenChange} tooltip={addTooltip} tooltipShortcut={addTooltipShortcut} side={sidebar ? 'left' : 'bottom'} triggerRole="button" ariaLabel="Add label" triggerClassName={`project-label-add${sidebar && selected.length ? ' is-icon' : ''}`} trigger={sidebar && !selected.length ? <><LabelIcon size={16}/><span>Add label</span></> : sidebar ? <Plus size={16}/> : <span>Add label…</span>}/>
     </div>
   </div>
 }

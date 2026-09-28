@@ -145,6 +145,10 @@ func refreshDisplayReferences(data *domain.Bootstrap) {
 			value := user(*data.Projects[i].Lead)
 			data.Projects[i].Lead = &value
 		}
+		if data.Projects[i].Creator != nil {
+			value := user(*data.Projects[i].Creator)
+			data.Projects[i].Creator = &value
+		}
 	}
 	for i := range data.Initiatives {
 		data.Initiatives[i].Creator = user(data.Initiatives[i].Creator)

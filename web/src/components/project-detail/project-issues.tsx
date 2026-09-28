@@ -274,6 +274,7 @@ export function ProjectNewView({
 
 export function ProjectIssues({
   issueData,
+  issueSummary,
   workflowStates,
   cycles,
   display,
@@ -304,6 +305,9 @@ export function ProjectIssues({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Issue>();
   const [loadedIssues, setLoadedIssues] = useState<Issue[]>([]);
+  // Paged pages only hold a slice of the project, so rely on the server-side project summary total.
+  const projectHasNoIssues = issueData?.issueCollectionPaged ? issueSummary?.total === 0 : projectIssues.length === 0;
+  const showProjectIntro = !milestoneScope && projectHasNoIssues;
   const pagedQuery = useMemo<IssueQueryInput>(() => {
     const conditions: Record<string, unknown>[] = [issueFiltersToQueryAst(filters)];
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
@@ -498,7 +502,7 @@ export function ProjectIssues({
         issues={projectIssues}
         onChange={onFiltersChange}
       />
-      {issueData?.issueCollectionPaged ? <PagedIssueList
+      {showProjectIntro ? null : issueData?.issueCollectionPaged ? <PagedIssueList
         data={issueData} query={pagedQuery} layout={display.layout}
         onLoadedIssuesChange={setLoadedIssues} onOpenIssueRecord={onOpenIssue}
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
@@ -549,7 +553,10 @@ export function ProjectIssues({
             selectedIds={selected}
           />
         ))}
-      {!issueData?.issueCollectionPaged && !groups.length && (
+      {showProjectIntro && (
+        <ProjectIssuesEmptyState onCreateIssue={() => onCreateIssue(project.id)} />
+      )}
+      {!issueData?.issueCollectionPaged && !groups.length && (milestoneScope || projectIssues.length > 0) && (
         <div className="project-issues__empty">
           <strong>No matching issues</strong>
           <span>Change the filters or create a new issue.</span>
@@ -781,4 +788,33 @@ function toRowData(issue: Issue, issues: Issue[]): MyIssuesRowData {
     ...issueHierarchyFields(issue, issues),
     sortOrder: issue.sortOrder,
   };
+}
+
+function ProjectIssuesEmptyState({ onCreateIssue }: { onCreateIssue: () => void }) {
+  return (
+    <div className="project-issues__intro">
+      <ProjectIssuesEmptyMark />
+      <strong>Add issues to the project</strong>
+      <p>Start building your project by creating an issue.</p>
+      <p>You can also add teams, team members, and project dates in the project sidebar.</p>
+      <div>
+        <button onClick={onCreateIssue} type="button">
+          Create new issue
+          <kbd>C</kbd>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProjectIssuesEmptyMark() {
+  return (
+    <svg className="project-issues__intro-mark" viewBox="0 0 86 80" fill="none" aria-hidden="true">
+      <rect className="project-issues__intro-shadow" x="17.75" y="17.75" width="50.5" height="56.5" rx="7.25" />
+      <rect className="project-issues__intro-card" x="17.75" y="11.75" width="50.5" height="56.5" rx="7.25" />
+      <circle className="project-issues__intro-line" cx="29" cy="26" r="3.25" />
+      <path className="project-issues__intro-line" d="M37 26h20M29 38h28M29 47h22M29 56h14" />
+      <circle className="project-issues__intro-orbit" cx="43" cy="40" r="39" />
+    </svg>
+  );
 }

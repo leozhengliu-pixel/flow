@@ -27,6 +27,7 @@ import { DescriptionDiagram } from './editor/diagram-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
 import { MentionExtension } from './editor/mention-extension'
 import { MentionMenu } from './editor/mention-menu'
+import { HeadingActions } from './editor/heading-actions'
 import { useI18n } from '@/i18n/i18n'
 import { handleEditorSubmit } from './editor/editor-keyboard'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
@@ -499,6 +500,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       {blockedRef.current && <button type="button" onClick={() => window.location.reload()}>{t('Reload latest version')}</button>}
     </div>}
     <EditorContent editor={editor}/>
+    {editor.isEditable && <HeadingActions editor={editor} rootRef={rootRef}/>}
     <BubbleMenu editor={editor} options={{placement:'top',offset:6,shift:{padding:12},flip:true}} shouldShow={({ from, to, editor: current }) => from !== to && !current.isActive('codeBlock')}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>
     {slash.active && <SlashCommandMenu
       commands={filteredCommands}

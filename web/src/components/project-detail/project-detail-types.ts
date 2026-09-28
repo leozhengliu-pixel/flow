@@ -94,7 +94,10 @@ export type ProjectDetailProps = {
     updateId: string,
     attachmentId: string,
   ) => Promise<ProjectUpdate>;
-  onCommentProject: (projectId: string, body: string, bodyData?: Record<string,unknown>) => Promise<Comment>;
+  onCommentProject: (projectId: string, body: string, bodyData?: Record<string,unknown>, parentId?: string) => Promise<Comment>;
+  onUpdateProjectComment: (projectId: string, commentId: string, body: string, bodyData?: Record<string, unknown>) => Promise<Comment>;
+  onDeleteProjectComment: (projectId: string, commentId: string) => Promise<void>;
+  onReactProjectComment: (projectId: string, commentId: string, emoji: string) => Promise<Comment>;
   onCreateResource: (
     projectId: string,
     input: { type?: "link" | "document"; title?: string; url?: string },
@@ -157,6 +160,9 @@ export type ProjectDetailProps = {
   onDeleteIssues: (issueIds: string[]) => Promise<void>;
   onCreateIssue: (projectId: string, projectMilestoneId?: string, context?: MyIssuesCreateContext) => void;
   onOpenSidebar?: () => void;
+  /** Projects list the project was opened from; the "Projects ›" crumb only renders when set. */
+  projectsOriginPath?: string;
+  onOpenProjects?: () => void;
 };
 
 export const PROJECT_HEALTHS: { id: Project["health"]; label: string }[] = [

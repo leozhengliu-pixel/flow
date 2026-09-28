@@ -45,6 +45,18 @@ describe('Agent chat panel streaming', () => {
     expect(screen.getByText('Summary')).toBeVisible()
   })
 
+  it('hands a finished assistant reply back through onUseResponse', async () => {
+    const onUseResponse = vi.fn()
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentChatPanel initialSession={session} issues={[]} onClose={onClose} onUseResponse={onUseResponse} useResponseLabel="Insert into update" open/></I18nProvider>)
+    const buttons = await screen.findAllByRole('button', { name: 'Insert into update' })
+    expect(buttons).toHaveLength(1)
+    await user.click(buttons[0])
+    expect(onUseResponse).toHaveBeenCalledWith('Summary')
+    expect(onClose).toHaveBeenCalled()
+  })
+
   it('aborts an in-flight stream from the stop control', async () => {
     let signal: AbortSignal | undefined
     streams.streamNewAgentSession.mockImplementation((_input, _onEvent, nextSignal) => {

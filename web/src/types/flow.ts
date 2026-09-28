@@ -608,6 +608,9 @@ export interface Project {
   health: "onTrack" | "atRisk" | "offTrack" | "noUpdate";
   status: { id: UUID; name: string; color: string; type: string };
   lead?: User;
+  /** Absent on projects created before the creator was recorded. */
+  creatorId?: UUID;
+  creator?: User;
   memberIds: UUID[];
   labelIds: UUID[];
   teamIds: UUID[];

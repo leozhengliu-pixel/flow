@@ -627,6 +627,8 @@ type Project struct {
 	Health               string                       `json:"health"`
 	Status               ProjectStatus                `json:"status"`
 	Lead                 *User                        `json:"lead,omitempty"`
+	CreatorID            string                       `json:"creatorId,omitempty"`
+	Creator              *User                        `json:"creator,omitempty"`
 	MemberIDs            []string                     `json:"memberIds"`
 	LabelIDs             []string                     `json:"labelIds"`
 	TeamIDs              []string                     `json:"teamIds"`
@@ -636,6 +638,7 @@ type Project struct {
 	Resources            []ProjectResource            `json:"resources"`
 	Milestones           []ProjectMilestone           `json:"milestones"`
 	Comments             []Comment                    `json:"comments"`
+	CommentAttachments   []Attachment                 `json:"commentAttachments,omitempty"`
 	DescriptionRevisions []ProjectDescriptionRevision `json:"descriptionRevisions"`
 	UpdateCadence        string                       `json:"updateCadence"`
 	UpdateSchedule       *ProjectUpdateSchedule       `json:"updateSchedule,omitempty"`

@@ -1671,6 +1671,11 @@ export function listProjectRelations(
 ): Promise<PageResult<import("@/types/flow").ProjectRelation>> {
   return request(`/api/projects/${id}/relations`);
 }
+export function listProjectHistory(
+  id: string,
+): Promise<PageResult<import("@/types/flow").AuditLogEntry>> {
+  return request(`/api/projects/${encodeURIComponent(id)}/history?limit=200`);
+}
 export function createProjectRelation(
   id: string,
   input: Partial<import("@/types/flow").ProjectRelation>,
@@ -2847,11 +2852,43 @@ export function createProjectComment(
   projectId: string,
   body: string,
   bodyData?:Record<string,unknown>,
+  parentId?: string,
 ): Promise<Comment> {
   return request(`/api/projects/${projectId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body, bodyData, parentId }),
+  });
+}
+export function updateProjectComment(
+  projectId: string,
+  commentId: string,
+  body: string,
+  bodyData?: Record<string, unknown>,
+): Promise<Comment> {
+  return request(`/api/projects/${projectId}/comments/${commentId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ body, bodyData }),
+  });
+}
+export function deleteProjectComment(
+  projectId: string,
+  commentId: string,
+): Promise<void> {
+  return request(`/api/projects/${projectId}/comments/${commentId}`, {
+    method: "DELETE",
+  });
+}
+export function toggleProjectCommentReaction(
+  projectId: string,
+  commentId: string,
+  emoji: string,
+): Promise<Comment> {
+  return request(`/api/projects/${projectId}/comments/${commentId}/reactions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ emoji }),
   });
 }
 export function createProjectUpdate(
@@ -2921,6 +2958,18 @@ export function uploadProjectUpdateAttachment(
   const body = new FormData();
   body.append("file", file);
   return request(`/api/projects/${projectId}/updates/${updateId}/attachments`, {
+    method: "POST",
+    body,
+  });
+}
+/** Uploads media inserted inline into a project comment or update body. */
+export function uploadProjectCommentAttachment(
+  projectId: string,
+  file: File,
+): Promise<Attachment> {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/api/projects/${projectId}/comment-attachments`, {
     method: "POST",
     body,
   });

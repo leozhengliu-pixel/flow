@@ -69,6 +69,15 @@ describe('personal settings workflows', () => {
     api.updateNotificationPreferences.mockImplementation(async value => value)
   })
 
+  it('shows the locale default first day until the user picks one', () => {
+    const input = { ...props('preferences'), values: { ...values, firstDay: '' } } as ComponentProps<typeof PersonalSettings>
+    const { unmount } = render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(screen.getByRole('combobox', { name: 'First day of the week' })).toHaveTextContent('Sunday')
+    unmount()
+    render(<I18nProvider><PersonalSettings {...props('preferences')}/></I18nProvider>)
+    expect(screen.getByRole('combobox', { name: 'First day of the week' })).toHaveTextContent('Monday')
+  })
+
   it('updates preference toggles, menus, and sidebar customization', async () => {
     const user = userEvent.setup()
     const input = props('preferences')

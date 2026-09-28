@@ -18,6 +18,7 @@ import { usePeopleDirectory } from './people-context'
 import { PersonInfo } from './person-info'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { displayUserName } from '@/lib/runtime-preferences'
+import { TooltipShortcut } from '@/components/ui/tooltip'
 
 export interface PropertyOption {
   searchOnly?: boolean
@@ -40,13 +41,15 @@ export interface PropertyOption {
   archived?: boolean
   icon?: ReactNode
   i18nIgnore?: boolean
+  /** An action row (e.g. "Invite and add…") that never shows a selection checkbox. */
+  action?: boolean
   hoverContent?: ReactNode
   hoverClassName?: string
 }
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -82,6 +85,9 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   onOpenChange?: (open: boolean) => void
   labelGroupId?: string
   embedded?: boolean
+  /** Plain hover tooltip for the trigger (label plus optional shortcut); `hoverContent` takes precedence. */
+  tooltip?: string
+  tooltipShortcut?: string
 }) {
   const { t } = useI18n()
   const directory = usePeopleDirectory()
@@ -100,7 +106,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const selectionKey = JSON.stringify(selected)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
   const selectedPerson = selected.length === 1 ? menuOptions.find(option => option.id === selected[0])?.person : undefined
-  if (!hoverContent && selectedPerson) {
+  if (!hoverContent && !tooltip && selectedPerson) {
     hoverContent = <PersonInfo person={selectedPerson}/>
     hoverClassName = 'person-info-surface'
   }
@@ -143,9 +149,11 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
         {trigger ?? (compact ? <>{icon ?? iconFor(label)}<span data-i18n-ignore={valueIsEntityName || undefined}>{value || label}</span></> : <><span>{icon ?? iconFor(label)}</span><span className="property-label">{label}</span><span className="property-value" data-i18n-ignore={valueIsEntityName || undefined}>{value || `Add ${label.toLowerCase()}`}</span></>)}
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
+  const plainTooltip = !hoverContent && Boolean(tooltip)
+  const tooltipContent = hoverContent ?? (tooltip ? <><span className="flow-tooltip-copy">{tooltip}</span>{tooltipShortcut && <kbd className="flow-tooltip-shortcut"><TooltipShortcut value={tooltipShortcut}/></kbd>}</> : undefined)
   const menuTrigger = customTrigger
     ? <Popover.Anchor asChild>{customTrigger({ open, activeTrigger, openMenu: triggerId => { setActiveTrigger(triggerId); setHoverOpen(false); setOpen(true) } })}</Popover.Anchor>
-    : hoverContent ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger
+    : tooltipContent ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger
   const content = kind === 'project-labels' ? <ProjectLabelMenuContent options={options} selectedIds={selected} groupId={labelGroupId} onChoose={id => { void onChange?.(id) }} onCreate={onCreate} onClose={() => setOpen(false)}/> : <div onKeyDown={onCommandKeyDown}>
           <div className={`property-command-search${hideSearch && !command.query ? ' is-visually-hidden' : ''}`}>
             <input ref={command.inputRef} value={command.query} onFocus={() => setOpenLabelGroupId(undefined)} onChange={event => command.onQueryChange(event.target.value)} aria-label={placeholder} aria-controls={listboxId} aria-activedescendant={command.activeId ? `${listboxId}-${command.activeId || 'none'}` : undefined} placeholder={placeholder} autoComplete="off" spellCheck={false}/>
@@ -160,14 +168,14 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
           </div>}
         </div>
   if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>{content}</Tooltip.Provider>
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root open={Boolean(hoverContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined) } }}>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         {content}
       </Popover.Content>
     </Popover.Portal>
-  </Popover.Root>{hoverContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={hoverClassName ?? 'property-hover-tooltip'} side="left" align="center" sideOffset={6} collisionPadding={8}>{hoverContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={plainTooltip ? 'bottom' : 'left'} align="center" sideOffset={6} collisionPadding={8}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
 }
 
 function VirtualStandardOptions({ sections, activeId, selected, label, multiple, listboxId, onChoose, onActive }: {
@@ -247,7 +255,7 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
 function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, showGroupLabel = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; showGroupLabel?: boolean; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
   const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   if (option.hoverContent) return <OptionHover className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
   return labelHover && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row

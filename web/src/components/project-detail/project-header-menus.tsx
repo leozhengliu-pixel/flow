@@ -18,6 +18,7 @@ import { ProjectUpdateScheduleDialog } from './project-update-schedule-dialog'
 import { projectScheduleLabel } from './project-schedule'
 import { SubscriptionIcon } from '@/components/ui/view-action-icons'
 import { SlackIcon } from '@/components/issue/issue-icons'
+import { FlowTooltip } from '@/components/ui/tooltip'
 
 const EVENT_OPTIONS = [
   ['issueAdded', 'An issue is added to the project'],
@@ -45,7 +46,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
   }
   return <>
     <Popover.Root onOpenChange={onOpenChange} open={open}>
-      <Popover.Trigger asChild><button aria-label={t('Setup project notifications')} className="project-detail-page__header-action" data-active={Boolean(subscription)} type="button"><SubscriptionIcon/></button></Popover.Trigger>
+      <FlowTooltip disabled={open} label={t('Project notifications')}><Popover.Trigger asChild><button aria-label={t('Setup project notifications')} className="project-detail-page__header-action" data-active={Boolean(subscription)} type="button"><SubscriptionIcon/></button></Popover.Trigger></FlowTooltip>
       <Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="project-notifications" collisionPadding={16} sideOffset={4}>
         <NotificationOptionSection className="project-notifications__section" title={<><span>{t('Send inbox notifications for')}</span> <span data-i18n-ignore>{project.name}</span></>}>{EVENT_OPTIONS.map(([eventName,label]) => <NotificationCheckbox disabled={saving} checked={events.includes(eventName)} key={eventName} label={t(label)} onChange={checked => void changeEvent(eventName,checked)}/>)}</NotificationOptionSection>
         <NotificationOptionSection className="project-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={saving} checked={events.includes('pulse')} label={t('Subscribe to project updates')} onChange={checked => void changeEvent('pulse',checked)}/></NotificationOptionSection>

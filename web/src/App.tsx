@@ -52,6 +52,7 @@ import {
   deleteInitiativeUpdate,
   deleteIssue,
   deleteProject,
+  deleteProjectComment,
   deleteProjectMilestone,
   deleteProjectResource,
   deleteProjectUpdate,
@@ -78,6 +79,7 @@ import {
   toggleInitiativeCommentReaction,
   toggleInitiativeUpdateReaction,
   toggleIssueReaction,
+  toggleProjectCommentReaction,
   toggleProjectUpdateReaction,
   updateComment,
   updateAgentSession as updateAgentSessionRequest,
@@ -90,6 +92,7 @@ import {
   updateInitiativeUpdate,
   updateIssue,
   updateProject,
+  updateProjectComment,
   updateProjectMilestone,
   updateProjectResource,
   updateProjectUpdate,
@@ -151,7 +154,7 @@ import {
   writeNavigationCache,
 } from "@/lib/navigation-cache";
 import { fetchWorkspacePreferences } from '@/lib/api';
-import { navigationReturnPath, navigationLabel, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
+import { navigationReturnPath, navigationLabel, projectsListOriginPath, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
   IssueOptionsActions,
   IssueConversionKind,
@@ -168,6 +171,7 @@ import type { NewProjectDraft } from "@/components/projects-page/new-project-dia
 import { WorkspaceOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, OAuthAuthorizePage, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
+import { createIssueShortcutContext } from "@/lib/create-issue-shortcut";
 import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import {
@@ -606,12 +610,12 @@ function App() {
       }
       if (pressed === "q" || pressed === "c") {
         e.preventDefault();
-        openCreateIssue();
+        openCreateIssue(pressed === "c" ? createIssueShortcutContext(route, data) : undefined);
       }
     };
     addEventListener("keydown", key);
     return () => removeEventListener("keydown", key);
-  }, [data, navigateTo, openCreateIssue]);
+  }, [data, navigateTo, openCreateIssue, route]);
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (
@@ -2818,9 +2822,9 @@ function App() {
     await removeProjectMilestone(projectId, milestoneId);
     return created;
   };
-  const commentOnProject = async (projectId: string, body: string, bodyData?:Record<string,unknown>) => {
+  const commentOnProject = async (projectId: string, body: string, bodyData?:Record<string,unknown>, parentId?: string) => {
     const comment = await run(
-      () => createProjectComment(projectId, body, bodyData),
+      () => createProjectComment(projectId, body, bodyData, parentId),
       "Could not post project comment",
     );
     setData((current) =>
@@ -2838,6 +2842,74 @@ function App() {
           }
         : current,
     );
+    return comment;
+  };
+  const replaceProjectComment = (projectId: string, comment: Comment) =>
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    comments: (project.comments ?? []).map((existing) =>
+                      existing.id === comment.id ? comment : existing,
+                    ),
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+  const editProjectComment = async (
+    projectId: string,
+    commentId: string,
+    body: string,
+    bodyData?: Record<string, unknown>,
+  ) => {
+    const comment = await run(
+      () => updateProjectComment(projectId, commentId, body, bodyData),
+      "Could not edit project comment",
+    );
+    replaceProjectComment(projectId, comment);
+    return comment;
+  };
+  const removeProjectComment = async (projectId: string, commentId: string) => {
+    await run(
+      () => deleteProjectComment(projectId, commentId),
+      "Could not delete project comment",
+    );
+    setData((current) =>
+      current
+        ? {
+            ...current,
+            projects: current.projects.map((project) =>
+              project.id === projectId
+                ? {
+                    ...project,
+                    comments: (project.comments ?? []).filter(
+                      (comment) =>
+                        comment.id !== commentId &&
+                        comment.parentId !== commentId,
+                    ),
+                  }
+                : project,
+            ),
+          }
+        : current,
+    );
+  };
+  const reactToProjectComment = async (
+    projectId: string,
+    commentId: string,
+    emoji: string,
+  ) => {
+    const comment = await run(
+      () => toggleProjectCommentReaction(projectId, commentId, emoji),
+      "Could not update project comment reaction",
+    );
+    replaceProjectComment(projectId, comment);
     return comment;
   };
   const changeProjectDisplayDefault = async (
@@ -5774,6 +5846,10 @@ function App() {
                   projectPath(data.workspace.urlKey, selectedProject, tab),
                 )
               }
+              projectsOriginPath={projectsListOriginPath(location.state, data.workspace.urlKey)}
+              onOpenProjects={() =>
+                navigateTo(projectsListOriginPath(location.state, data.workspace.urlKey) ?? projectsPath(data.workspace.urlKey))
+              }
               onUpdate={changeProject}
               onCreateUpdate={addProjectUpdate}
               onUpdateProjectUpdate={changeProjectUpdate}
@@ -5783,6 +5859,9 @@ function App() {
               onUploadProjectUpdateAttachment={addProjectUpdateAttachment}
               onDeleteProjectUpdateAttachment={removeProjectUpdateAttachment}
               onCommentProject={commentOnProject}
+              onUpdateProjectComment={editProjectComment}
+              onDeleteProjectComment={removeProjectComment}
+              onReactProjectComment={reactToProjectComment}
               onCreateResource={addProjectResource}
               onUpdateResource={changeProjectResource}
               onDeleteResource={removeProjectResource}
