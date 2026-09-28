@@ -318,6 +318,8 @@ type workflowInput struct {
 	Actions                                      []domain.WorkflowAction `json:"actions"`
 	Enabled                                      *bool                   `json:"enabled,omitempty"`
 	MaxAttempts                                  int                     `json:"maxAttempts,omitempty"`
+	OwnerID                                      *string                 `json:"ownerId,omitempty"`
+	TrustedSourceKeys                            *[]string               `json:"trustedSourceKeys,omitempty"`
 }
 
 func validateWorkflowInput(data *domain.Bootstrap, input workflowInput) (*time.Time, error) {
@@ -379,7 +381,17 @@ func (s *server) createWorkflowDefinition(w http.ResponseWriter, r *http.Request
 		if max < 1 {
 			max = 3
 		}
-		created = domain.WorkflowDefinition{ID: fmt.Sprintf("workflow_%d", now.UnixNano()), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), TeamID: input.TeamID, Trigger: input.Trigger, Schedule: strings.TrimSpace(input.Schedule), Conditions: input.Conditions, Actions: input.Actions, Enabled: enabled, MaxAttempts: max, NextRunAt: next, CreatorID: data.Viewer.ID, CreatedAt: now, UpdatedAt: now}
+		ownerID := data.Viewer.ID
+		if input.OwnerID != nil && strings.TrimSpace(*input.OwnerID) != "" {
+			ownerID = strings.TrimSpace(*input.OwnerID)
+		}
+		if userByID(data, ownerID) == nil {
+			return "", fmt.Errorf("%w: owner not found", errInvalid)
+		}
+		created = domain.WorkflowDefinition{ID: fmt.Sprintf("workflow_%d", now.UnixNano()), Name: strings.TrimSpace(input.Name), Description: strings.TrimSpace(input.Description), TeamID: input.TeamID, Trigger: input.Trigger, Schedule: strings.TrimSpace(input.Schedule), Conditions: input.Conditions, Actions: input.Actions, Enabled: enabled, MaxAttempts: max, NextRunAt: next, CreatorID: data.Viewer.ID, OwnerID: ownerID, CreatedAt: now, UpdatedAt: now}
+		if input.TrustedSourceKeys != nil {
+			created.TrustedSourceKeys = slices.Clone(*input.TrustedSourceKeys)
+		}
 		if created.Conditions == nil {
 			created.Conditions = map[string]string{}
 		}
@@ -409,6 +421,22 @@ func (s *server) updateWorkflowDefinition(w http.ResponseWriter, r *http.Request
 		item.Name, item.Description, item.TeamID, item.Trigger, item.Schedule, item.Conditions, item.Actions, item.MaxAttempts, item.NextRunAt, item.UpdatedAt = strings.TrimSpace(input.Name), strings.TrimSpace(input.Description), input.TeamID, input.Trigger, strings.TrimSpace(input.Schedule), input.Conditions, input.Actions, max(1, input.MaxAttempts), next, time.Now().UTC()
 		if input.Enabled != nil {
 			item.Enabled = *input.Enabled
+		}
+		if input.OwnerID != nil {
+			ownerID := strings.TrimSpace(*input.OwnerID)
+			if ownerID == "" {
+				ownerID = item.CreatorID
+			}
+			if userByID(data, ownerID) == nil {
+				return fmt.Errorf("%w: owner not found", errInvalid)
+			}
+			item.OwnerID = ownerID
+		}
+		if item.OwnerID == "" {
+			item.OwnerID = item.CreatorID
+		}
+		if input.TrustedSourceKeys != nil {
+			item.TrustedSourceKeys = slices.Clone(*input.TrustedSourceKeys)
 		}
 		updated = *item
 		return nil

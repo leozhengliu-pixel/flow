@@ -15,7 +15,6 @@ import {
   Heading,
   LayoutTemplate,
   ListChecks,
-  MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -40,7 +39,6 @@ import {
 import { toast } from "sonner";
 
 import {
-  connectIntegration,
   createIssueTemplate,
   createProjectStatus,
   createProjectTemplate,
@@ -89,6 +87,7 @@ import type {
   TemplateSubIssue,
 } from "@/types/flow";
 
+import { SlackUpdates } from "./slack-updates";
 import "./issues-projects-settings.css";
 import "./issue-template-settings.css";
 import "./project-template-settings.css";
@@ -3379,7 +3378,7 @@ export function SLASettings({
           <h1>{t("SLAs")}</h1>
           <p>
             {t(
-              "Set response and resolution expectations for issues that match defined rules.",
+              "Service-level agreements (SLAs) automatically apply deadlines to issues when they match predefined parameters. While often used to define response times to customer issues, they can also be used to define internal standards for bug and time-sensitive issue resolution.",
             )}{" "}
             <a
               href="https://flow.app/docs/sla"
@@ -3397,7 +3396,7 @@ export function SLASettings({
           <span>
             <strong>{t("Enable SLAs")}</strong>
             <small>
-              {t("Apply SLA rules and deadlines across your workspace.")}
+              {t("Workspace-wide access to issue SLA automations and notifications")}
             </small>
           </span>
           <SettingsToggle
@@ -3409,6 +3408,25 @@ export function SLASettings({
             }
           />
         </div>
+        {enabled && (
+          <div className="ip-setting-row">
+            <span>
+              <strong>{t("Work week")}</strong>
+              <small>{t("Used to determine business day SLAs")}</small>
+            </span>
+            <SettingsSelect
+              label={t("Work week")}
+              value={settings.workWeek === "sunThu" ? "sunThu" : "monFri"}
+              options={[
+                { value: "monFri", label: "Mon-Fri" },
+                { value: "sunThu", label: "Sun-Thu" },
+              ]}
+              onChange={(value) =>
+                run(() => updateSLASettings({ workWeek: value as "monFri" | "sunThu" }))
+              }
+            />
+          </div>
+        )}
       </section>
       <section className="ip-settings-section">
         <header>
@@ -3560,20 +3578,6 @@ export function ProjectUpdateSettings({
       setSaving(false);
     }
   };
-  const connectSlack = async () => {
-    setSaving(true);
-    try {
-      await connectIntegration("slack", {
-        name: "Slack",
-        config: { source: "project-updates" },
-      });
-      toast.success(t("Slack connected"));
-    } catch (error) {
-      toast.error(errorMessage(error));
-    } finally {
-      setSaving(false);
-    }
-  };
   return (
     <div className="ip-settings-page" data-i18n-ignore>
       <header className="settings-page-header ip-page-header">
@@ -3581,7 +3585,7 @@ export function ProjectUpdateSettings({
           <h1>{t("Project updates")}</h1>
           <p>
             {t(
-              "Configure when project updates are expected and where reminders are sent.",
+              "Short status reports about the progress and health of your projects. Project members regularly post updates, and subscribers automatically receive them in their inbox.",
             )}{" "}
             <a
               href="https://flow.app/docs/project-updates"
@@ -3597,11 +3601,11 @@ export function ProjectUpdateSettings({
       <section className="ip-settings-section">
         <header>
           <h3>{t("Update schedule")}</h3>
+          <p>{t("Configure how often updates are expected on projects. Project leads will receive reminders to post updates.")}</p>
         </header>
         <div className="ip-setting-row">
           <span>
-            <strong>{t("Update cadence")}</strong>
-            <small>{cadenceLabel}</small>
+            <strong>{cadence ? cadenceLabel : t("No expectation for updates")}</strong>
           </span>
           {editing ? (
             <div className="ip-update-editor">
@@ -3633,27 +3637,13 @@ export function ProjectUpdateSettings({
         </div>
       </section>
       <section className="ip-settings-section">
-        <header>
-          <h3 data-i18n-ignore>Slack</h3>
-        </header>
-        <div className="ip-setting-row">
-          <span className="ip-slack-label">
-            <MessageSquare size={17} />
-            <span>
-              <strong>{t("Project update notifications")}</strong>
-              <small>
-                {t("Send project update reminders and notifications to Slack.")}
-              </small>
-            </span>
-          </span>
-          <button
-            className="settings-action"
-            disabled={saving}
-            onClick={() => void connectSlack()}
-          >
-            {t("Connect")}
-          </button>
-        </div>
+        <SlackUpdates
+          data={data}
+          kind="project"
+          variant="row"
+          disabled={saving}
+          onReload={onReload}
+        />
       </section>
     </div>
   );
@@ -3717,6 +3707,34 @@ export function ProjectStatusesSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
+  return (
+    <div className="ip-settings-page ip-project-statuses-page" data-i18n-ignore>
+      <header className="settings-page-header ip-page-header">
+        <div>
+          <h1>{t("Project statuses")}</h1>
+          <p>
+            {t(
+              "Project statuses define the workflow that projects go through from start to completion",
+            )}
+          </p>
+        </div>
+      </header>
+      <ProjectStatusesSection data={data} onReload={onReload} />
+    </div>
+  );
+}
+
+/** LS-0676 reusable project status list — shared by workspace + team (LS-0595) pages. */
+export function ProjectStatusesSection({
+  data,
+  onReload,
+  disabled = false,
+}: {
+  data: BootstrapData;
+  onReload: () => Promise<void>;
+  disabled?: boolean;
+}) {
+  const { t } = useI18n();
   const [creating, setCreating] = useState<StatusType | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
@@ -3736,6 +3754,7 @@ export function ProjectStatusesSettings({
     }
   };
   const move = (status: ProjectStatus, delta: number) => {
+    if (disabled) return;
     const group = ordered.filter((item) => item.type === status.type);
     const index = group.findIndex((item) => item.id === status.id);
     const target = index + delta;
@@ -3747,33 +3766,24 @@ export function ProjectStatusesSettings({
     void run(() => reorderProjectStatuses(next.map((item) => item.id)));
   };
   const moveBefore = (status: ProjectStatus, target: ProjectStatus) => {
+    if (disabled) return;
     if (status.id === target.id || status.type !== target.type) return;
     const next = ordered.filter((item) => item.id !== status.id),
       targetIndex = next.findIndex((item) => item.id === target.id);
     next.splice(targetIndex, 0, status);
     void run(() => reorderProjectStatuses(next.map((item) => item.id)));
   };
-  const busy = creating !== null || editing !== null;
+  const busy = disabled || creating !== null || editing !== null;
   return (
-    <div className="ip-settings-page ip-project-statuses-page" data-i18n-ignore>
-      <header className="settings-page-header ip-page-header">
-        <div>
-          <h1>{t("Project statuses")}</h1>
-          <p>
-            {t(
-              "Project statuses define the workflow that projects go through from start to completion",
-            )}
-          </p>
-        </div>
-      </header>
       <section
         className="ip-status-card"
         role="list"
         aria-label={t("Project statuses")}
+        data-disabled={disabled || undefined}
       >
         {STATUS_SECTIONS.map((section) => {
           const statuses = ordered.filter((item) => item.type === section.type),
-            canReorder = statuses.length > 1;
+            canReorder = !disabled && statuses.length > 1;
           return (
             <div className="ip-status-section" role="list" key={section.type}>
               <header>
@@ -3781,7 +3791,7 @@ export function ProjectStatusesSettings({
                 <button
                   aria-label={t("Create new project status")}
                   disabled={busy}
-                  onClick={() => setCreating(section.type)}
+                  onClick={() => { if (!disabled) setCreating(section.type) }}
                 >
                   <Plus />
                 </button>
@@ -3863,7 +3873,6 @@ export function ProjectStatusesSettings({
           );
         })}
       </section>
-    </div>
   );
 }
 function StatusEditor({

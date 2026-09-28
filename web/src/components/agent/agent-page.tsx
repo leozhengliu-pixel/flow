@@ -1,10 +1,9 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
   AlertCircle,
   Check,
-  Box,
   ChevronRight,
   CircleCheck,
   Copy,
@@ -15,12 +14,12 @@ import {
   Search,
   Star,
   Trash2,
-  UsersRound,
   X,
 } from "lucide-react";
 import {
   deleteAgentSession,
   fetchAgentStatus,
+  getAgentSession,
   resolveAgentApproval,
   updateAgentSession,
 } from "@/lib/api";
@@ -36,10 +35,17 @@ import {
   AgentSubmitIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
+import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
+import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
 import { AgentElicitation } from './agent-elicitation';
+import {
+  asPersistedConversation,
+  useDeferredHydratedConversation,
+} from '@/hooks/use-deferred-hydrated-conversation';
+import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue';
 
 export function AgentPage({
   chatSlug,
@@ -62,12 +68,12 @@ export function AgentPage({
     [error, setError] = useState<string>(),
     [historyOpen, setHistoryOpen] = useState(false),
     [skillsOpen, setSkillsOpen] = useState(false),
+    [mentions, setMentions] = useState<AgentMention[]>([]),
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
     [editingId, setEditingId] = useState<string>(),
     [approvalBusy, setApprovalBusy] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
-    [examplesVisible, setExamplesVisible] = useState(true),
     [attachments, setAttachments] = useState<File[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -95,7 +101,7 @@ export function AgentPage({
       active = false;
     };
   }, []);
-  const current = useMemo(
+  const currentSummary = useMemo(
     () =>
       chatSlug
         ? sessions.find(
@@ -104,6 +110,18 @@ export function AgentPage({
         : sessions.find((item) => item.id === activeStreamId),
     [activeStreamId, chatSlug, sessions],
   );
+  const deferredConversation = useMemo(() => {
+    if (!currentSummary) return currentSummary;
+    if ((currentSummary.messages?.length ?? 0) > 0) return currentSummary;
+    return asPersistedConversation(currentSummary, async (id) => {
+      const full = await getAgentSession(id);
+      setSessions((list) =>
+        list.map((item) => (item.id === full.id ? full : item)),
+      );
+      return full;
+    });
+  }, [currentSummary]);
+  const current = useDeferredHydratedConversation(deferredConversation) ?? undefined;
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
@@ -159,9 +177,17 @@ export function AgentPage({
             void onReload();
           }
       };
+      const mentioned = {
+        issueIds: mentions.filter((item) => item.type === "issue").map((item) => item.id),
+        projectIds: mentions.filter((item) => item.type === "project").map((item) => item.id),
+        documentIds: mentions.filter((item) => item.type === "document").map((item) => item.id),
+        userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
+        mentions,
+      };
       if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
-      else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal);
-      else await streamNewAgentSession({ message: providerMessage, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal, mentioned);
+      else await streamNewAgentSession({ message: providerMessage, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
+      setMentions([]);
       writeInput("");
       clearAgentDraft(agentDraftKey);
       setAttachments([]);
@@ -439,7 +465,7 @@ export function AgentPage({
               requestAnimationFrame(() => editorRef.current?.focus());
             }}
           />
-        ) : <AgentBackground />}
+        ) : null}
         {editingId && (
           <div className={styles.editing}>
             <span>{t("Editing message")}</span>
@@ -474,23 +500,16 @@ export function AgentPage({
             </div>
           )}
           <div className={styles.editorScroll}>
-            <div
-              ref={editorRef}
-              aria-label={t("Send a message to Flow AI")}
+            <AgentMentionInput
+              editorRef={editorRef}
               className={styles.editor}
-              contentEditable={!busy}
-              data-placeholder={current ? t("Reply…") : t("Ask Flow…")}
-              role="textbox"
-              suppressContentEditableWarning
-              onInput={(event) =>
-                setInput(event.currentTarget.textContent ?? "")
-              }
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  void send();
-                }
-              }}
+              ariaLabel={t("Send a message to Flow AI")}
+              data={data}
+              disabled={busy}
+              placeholder={current ? t("Reply…") : t("Ask Flow…")}
+              value={input}
+              onChange={(value, next) => { setInput(value); setMentions(next); }}
+              onSubmit={() => void send()}
             />
           </div>
           <footer>
@@ -586,20 +605,7 @@ export function AgentPage({
               {error}
             </span>
           )}
-          {status && !status.enabled && (
-            <span className={styles.error}>
-              {t("Flow Agent is not configured")}
-            </span>
-          )}
         </div>
-        {!current && examplesVisible && <section className={`${styles.examples}${status&&!status.enabled?` ${styles.examplesWithError}`:''}`}>
-          <header><span>{t("Get started with some examples")}</span><button aria-label={t("Dismiss")} onClick={()=>setExamplesVisible(false)} type="button"><X/></button></header>
-          <div>
-            <AgentExample icon={<Box/>} title={t("Create a new project")} description={t("Turn an idea into a well-scoped project")} onClick={()=>{writeInput(t("Help me create a new project"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
-            <AgentExample icon={<Search/>} title={t("Research a topic")} description={t("Research a topic across the issue backlog")} onClick={()=>{writeInput(t("Research a topic across the issue backlog"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
-            <AgentExample icon={<UsersRound/>} title={t("Set up new team")} description={t("Create a team that matches how your organization works")} onClick={()=>{writeInput(t("Help me set up a new team"));requestAnimationFrame(()=>editorRef.current?.focus())}}/>
-          </div>
-        </section>}
       </section>
       {deleteTarget && (
         <div className={styles.confirmOverlay} role="presentation">
@@ -632,10 +638,6 @@ export function AgentPage({
     </main>
   );
 }
-
-function AgentExample({description,icon,onClick,title}:{description:string;icon:ReactNode;onClick:()=>void;title:string}){return <button onClick={onClick} type="button">{icon}<span><strong>{title}</strong><small>{description}</small></span></button>}
-
-function AgentBackground(){return <svg aria-hidden="true" className={styles.emptyGraphic} viewBox="0 0 48 48"><path d="M10 6a4 4 0 0 0-4 4v28a4 4 0 0 0 8 0v-8h16a4 4 0 0 0 0-8H14v-8h24a4 4 0 0 0 0-8H10Z"/><circle cx="35" cy="38" r="4"/></svg>}
 
 function Conversation({
   busy,
@@ -723,8 +725,11 @@ function AgentMessageParts({ message, onRetry, onToolApproval, approvalBusy }: {
   const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
   const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "toolCall") ?? [];
   const other = message.parts?.filter(part => !["text", "reasoning", "toolCall"].includes(part.type)) ?? [];
+  const queue = summarizeElicitationQueue(other);
+  const submitting = other.some(part => part.type === "elicitation" && part.status === "running");
   return <div className={styles.messageParts}>
     {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>}
+    <AgentElicitationResponseQueue answeredCount={queue.answeredCount} elicitationCount={queue.elicitationCount} isSubmitting={submitting} />
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
@@ -857,23 +862,6 @@ function markdown(session: AgentSession) {
     .join("\n\n");
 }
 
-function readAgentDraft(key: string): { input: string; skillIds: string[] } | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) ?? "null") as { input?: unknown; skillIds?: unknown } | null;
-    if (!value || typeof value.input !== "string") return null;
-    return { input: value.input, skillIds: Array.isArray(value.skillIds) ? value.skillIds.filter((id): id is string => typeof id === "string") : [] };
-  } catch {
-    return null;
-  }
-}
-
-function writeAgentDraft(key: string, draft: { input: string; skillIds: string[] }) {
-  try { localStorage.setItem(key, JSON.stringify({ ...draft, updatedAt: new Date().toISOString() })); } catch { /* Draft persistence is best-effort in private browsing. */ }
-}
-
-function clearAgentDraft(key: string) {
-  try { localStorage.removeItem(key); } catch { /* Draft cleanup is best-effort in private browsing. */ }
-}
 
 function writeInputToEditor(editorRef: RefObject<HTMLDivElement | null>, value: string) {
   if (editorRef.current && editorRef.current.textContent !== value) editorRef.current.textContent = value;

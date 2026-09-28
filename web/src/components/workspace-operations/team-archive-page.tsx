@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Menu, MoreHorizontal, Rocket, Trash2 } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { BootstrapData, Team, TrashEntry } from '@/types/flow'
 import { purgeTrashEntry, restoreTrashEntry, updateCycle, updateIssue, updateProject } from '@/lib/api'
@@ -9,6 +9,7 @@ import { MyIssuesFilterBar } from '@/components/my-issues/my-issues-filter-bar'
 import { toggleFilterOption, updateFilterOperator, updateFilterValues, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { applyExplorerFilters, explorerFilterOptions, explorerPropertyOptions, ISSUE_FILTER_LABELS } from '@/components/issue-explorer/issue-explorer-model'
 import { teamArchivePath, type TeamArchiveTab } from '@/lib/app-routes'
+import { useArchivedModelsLoader } from '@/hooks/use-archived-models-loader'
 import { FilterIcon } from '@/components/ui/view-action-icons'
 import './workspace-operations.css'
 
@@ -22,6 +23,7 @@ const tabs: ArchiveTabDefinition[] = [
   { id: 'recently-deleted-projects', label: 'Recently deleted projects', title: 'Recently deleted projects', empty: 'No matching projects', resource: 'project' },
   { id: 'recently-deleted-initiatives', label: 'Recently deleted initiatives', title: 'Recently deleted initiatives', empty: 'No matching initiatives', resource: 'initiative' },
   { id: 'recently-deleted-documents', label: 'Recently deleted documents', title: 'Recently deleted documents', empty: 'No matching documents', resource: 'document' },
+  { id: 'recently-deleted-releases', label: 'Recently deleted releases', title: 'Recently deleted releases', empty: 'No recently deleted releases', resource: 'release' },
 ]
 
 export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,onReload}:{data:BootstrapData;team:Team;tab:TeamArchiveTab;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>}){
@@ -29,13 +31,35 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   const[filterOpen,setFilterOpen]=useState(false)
   const[filters,setFilters]=useState<MyIssuesAppliedFilter[]>([])
   const tab=tabs.find(item=>item.id===tabId)??tabs[0]
-  const scopedArchivedIssues=useMemo(()=>data.issues.filter(item=>item.team.id===team.id&&item.archivedAt),[data.issues,team.id])
+  const archivedLoader = useArchivedModelsLoader({
+    teamId: team.id,
+    workspaceKey: data.workspace.urlKey,
+    autoLoadOnMount: tab.id === 'issues',
+    loadThreshold: 30,
+    modelsPerLoad: 50,
+  })
+  const scopedArchivedIssues = useMemo(
+    () => (tab.id === 'issues' ? archivedLoader.models : data.issues.filter(item => item.team.id === team.id && item.archivedAt)),
+    [archivedLoader.models, data.issues, tab.id, team.id],
+  )
   const issueOptions=useMemo(()=>explorerPropertyOptions(data,scopedArchivedIssues),[data,scopedArchivedIssues])
   const archivedIssues=tab.id==='issues'?applyExplorerFilters(scopedArchivedIssues,filters,data):[]
   const archivedProjects=tab.id==='projects'?data.projects.filter(item=>item.teamIds.includes(team.id)&&item.archivedAt):[]
   const archivedCycles=tab.id==='cycles'?data.cycles.filter(item=>item.teamId===team.id&&item.status==='completed'):[]
   const trash=tab.resource?data.trash.filter(item=>item.resourceType===tab.resource&&item.teamIds?.includes(team.id)):[]
-  const count=trash.length+archivedIssues.length+archivedProjects.length+archivedCycles.length
+  const count = trash.length + archivedIssues.length + archivedProjects.length + archivedCycles.length
+  const listRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (tab.id !== 'issues') return
+    const node = listRef.current
+    if (!node) return
+    const onScroll = () => {
+      const distance = node.scrollHeight - node.scrollTop - node.clientHeight
+      archivedLoader.loadMore(distance)
+    }
+    node.addEventListener('scroll', onScroll, { passive: true })
+    return () => node.removeEventListener('scroll', onScroll)
+  }, [archivedLoader.loadMore, tab.id])
 
   useEffect(()=>{setFilterOpen(false);setFilters([])},[tab.id])
 
@@ -50,7 +74,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   return <main className="main-panel operations-page archive-page" aria-label={`${team.name} archive`}>
     <header className="operations-header operations-special-header archive-header">
       <button className="operations-mobile-menu" aria-label={t('Open sidebar')} data-sidebar-trigger onClick={onOpenSidebar}><Menu/></button>
-      <div className="operations-heading"><h2>{t(tab.title)}</h2><span className="archive-count">{count}</span></div>
+      <div className="operations-heading"><h2>{t(tab.title)}</h2><span className="archive-count">{tab.id==='issues' && archivedLoader.totalCount != null ? archivedLoader.totalCount : count}</span></div>
     </header>
     <div className="archive-toolbar">
       <nav className="archive-tabs" aria-label={t('Archive sections')}>{tabs.map(item=>{
@@ -67,13 +91,16 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
       />}
     </div>
     {tab.id==='issues'&&filters.length>0&&<div className="archive-applied-filters"><MyIssuesFilterBar filters={filters} filterOptions={filter=>explorerFilterOptions(filter.field,issueOptions)} onAdd={()=>setFilterOpen(true)} onClear={()=>setFilters([])} onOperatorChange={(id,operator)=>setFilters(current=>updateFilterOperator(current,id,operator))} onRemove={id=>setFilters(current=>current.filter(filter=>filter.id!==id))} onValuesChange={(id,options)=>setFilters(current=>updateFilterValues(current,id,options))}/></div>}
-    {count>0&&<div className="archive-list">
+    {count>0&&<div className="archive-list" ref={listRef}>
       {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload()}}/>)}
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}
       {trash.map(item=><ArchiveRow icon={archiveIcon(item.resourceType)} key={item.id} title={<span data-i18n-ignore>{item.title}</span>} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)} onPurge={()=>purge(item)}/>)}
+      {tab.id==='issues' && archivedLoader.loading && <div className="archive-row archive-loading-row"><span/><span/><div><strong>{t('Loading…')}</strong></div></div>}
+      {tab.id==='issues' && archivedLoader.hasMore && !archivedLoader.loading && <div className="archive-row"><span/><span/><div><button type="button" className="ui-pill" onClick={()=>archivedLoader.loadMore(0)}>{t('Load more')}</button></div></div>}
     </div>}
-    {!count&&<div className="archive-empty"><ArchiveEmptyIllustration/><strong>{t(tab.empty)}</strong></div>}
+    {!count&&!(tab.id==='issues'&&archivedLoader.loading)&&<div className="archive-empty"><ArchiveEmptyIllustration/><strong>{t(tab.empty)}</strong></div>}
+    {tab.id==='issues'&&!count&&archivedLoader.loading&&<div className="archive-empty"><strong>{t('Loading…')}</strong></div>}
   </main>
 }
 
@@ -94,5 +121,5 @@ function ArchiveEmptyIllustration(){return <svg className="archive-empty-illustr
   <path className="archive-empty-dim" d="M75.0606 52.5154L75 52.5L74.96 58.1754C74.96 58.9706 75.3921 59.5981 75.9226 60.0495C76.4508 60.499 77.1397 60.8336 77.841 61.0696C79.2198 61.5335 80.901 61.6975 81.9905 61.4042L95.3198 57.816L95.3218 57.8155C96.5091 57.5025 97.0154 56.4306 97.2323 55.6874C97.3476 55.2926 97.4036 54.9196 97.4314 54.649C97.4338 54.6248 97.4363 54.6015 97.4387 54.579C97.4499 54.4742 97.4592 54.3872 97.4561 54.317C97.458 54.2762 97.4589 54.2432 97.4594 54.2193L97.4599 54.1902C97.4599 54.6902 97.46 54.1754 97.46 54.1754V51.1016C97.1936 51.7608 96.659 52.2672 95.96 52.5873V54.1745L95.9597 54.1878C95.9595 54.2007 95.9589 54.2218 95.9576 54.2502C95.9551 54.3069 95.9499 54.3917 95.9392 54.496C95.9175 54.707 95.8747 54.9851 95.7924 55.2671C95.6143 55.8774 95.3307 56.2622 94.9387 56.3652L94.9343 56.3664L81.6006 59.9558C80.8967 60.1453 79.5351 60.057 78.3194 59.6479C77.7236 59.4474 77.2273 59.1903 76.8947 58.9072C76.5643 58.626 76.46 58.3802 76.46 58.1754V55.0362C76.2376 54.8438 76.033 54.6347 75.8513 54.4097C75.3773 53.823 75.0966 53.1681 75.0606 52.5154Z"/>
 </svg>}
 
-function archiveIcon(type:string){return type==='issue'?<CircleDashed/>:type==='document'?<FilePenLine/>:type==='project'?<Rocket/>:<Archive/>}
+function archiveIcon(type:string){return type==='issue'?<CircleDashed/>:type==='document'?<FilePenLine/>:type==='project'?<Rocket/>:type==='release'?<Rocket/>:<Archive/>}
 function typeLabel(type:string){return type[0].toUpperCase()+type.slice(1)}

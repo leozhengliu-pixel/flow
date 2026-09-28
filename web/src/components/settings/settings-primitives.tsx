@@ -5,7 +5,11 @@ import type {
   ReactNode,
 } from "react";
 
+import { ChevronLeft } from "lucide-react";
+
 import { Toggle } from "@/components/ui/toggle";
+import { ViewGlyph } from "@/components/views/view-icon-picker";
+import type { Team } from "@/types/flow";
 import { isPeopleProperty } from '@/lib/people'
 import { PropertyMenu } from '@/components/property/property-menu'
 
@@ -38,6 +42,7 @@ export function SettingsSection({
   children,
   className = "",
   description,
+  grouped = false,
   headerClassName = "",
   id,
   title,
@@ -46,6 +51,8 @@ export function SettingsSection({
   children: ReactNode;
   className?: string;
   description?: ReactNode;
+  /** Children are SettingsGroup blocks, each with its own card. */
+  grouped?: boolean;
   headerClassName?: string;
   id?: string;
   title?: ReactNode;
@@ -66,8 +73,28 @@ export function SettingsSection({
       {description && (
         <p className="settings-section-description">{description}</p>
       )}
-      <div className="settings-card">{children}</div>
+      {grouped ? children : <div className="settings-card">{children}</div>}
     </section>
+  );
+}
+
+export function SettingsGroup({
+  children,
+  description,
+  title,
+}: {
+  children: ReactNode;
+  description?: ReactNode;
+  title: ReactNode;
+}) {
+  return (
+    <div className="settings-group">
+      <header>
+        <strong>{title}</strong>
+        {description && <p>{description}</p>}
+      </header>
+      <div className="settings-card">{children}</div>
+    </div>
   );
 }
 
@@ -243,5 +270,41 @@ function SettingsCheck() {
     <svg aria-hidden="true" viewBox="0 0 16 16">
       <path d="M4.3 7.24a.75.75 0 1 0-1.1 1.02l3.25 3.5a.75.75 0 0 0 1.13-.04l5.25-6.5a.75.75 0 0 0-1.16-.94l-4.71 5.83L4.3 7.24Z" />
     </svg>
+  );
+}
+
+/** Back link pinned to the panel's top-left corner, as on team sub-pages. */
+export function SettingsCrumb({
+  children,
+  icon,
+  onClick,
+}: {
+  children: ReactNode;
+  icon?: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button className="settings-crumb" type="button" onClick={onClick}>
+      <ChevronLeft size={14} aria-hidden />
+      {icon && <span className="settings-crumb-icon">{icon}</span>}
+      <span className="settings-crumb-label">{children}</span>
+    </button>
+  );
+}
+
+export function TeamSettingsCrumb({
+  team,
+  onClick,
+}: {
+  team: Pick<Team, "name" | "color" | "icon">;
+  onClick: () => void;
+}) {
+  return (
+    <SettingsCrumb
+      icon={<ViewGlyph color={team.color} icon={team.icon || "Team"} />}
+      onClick={onClick}
+    >
+      <span data-i18n-ignore>{team.name}</span>
+    </SettingsCrumb>
   );
 }

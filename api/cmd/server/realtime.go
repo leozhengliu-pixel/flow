@@ -294,12 +294,24 @@ func (s *server) realtimeEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) documentPresenceAllowed(r *http.Request, documentID string) bool {
+	data, _, err := s.pagedRealtimeMetadata(r)
+	if err != nil {
+		return false
+	}
+	document, ok := s.store.DocumentByID(workspaceKey(r), documentID)
+	if !ok {
+		return false
+	}
+	return documentRole(s, data, document) != "none"
+}
+
 func filterPresenceForViewer(data domain.Bootstrap, values []domain.Presence) []domain.Presence {
 	return slices.DeleteFunc(slices.Clone(values), func(item domain.Presence) bool {
 		if item.IssueID != "" && !slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == item.IssueID }) {
 			return true
 		}
-		if item.DocumentID != "" && !slices.ContainsFunc(data.Documents, func(document domain.Document) bool {
+		if item.DocumentID != "" && len(data.Documents) > 0 && !slices.ContainsFunc(data.Documents, func(document domain.Document) bool {
 			return document.ID == item.DocumentID || document.SlugID == item.DocumentID
 		}) {
 			return true
@@ -450,11 +462,7 @@ func (s *server) updatePresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if input.DocumentID != "" {
-		data := s.workspaceData(r)
-		index := slices.IndexFunc(data.Documents, func(document domain.Document) bool {
-			return document.ID == input.DocumentID || document.SlugID == input.DocumentID
-		})
-		if index < 0 || documentRole(s, data, data.Documents[index]) == "none" {
+		if !s.documentPresenceAllowed(r, input.DocumentID) {
 			writeError(w, http.StatusForbidden, "Document is outside your permissions")
 			return
 		}
@@ -498,9 +506,7 @@ func (s *server) listPresence(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if documentID != "" {
-		data := s.workspaceData(r)
-		index := slices.IndexFunc(data.Documents, func(document domain.Document) bool { return document.ID == documentID || document.SlugID == documentID })
-		if index < 0 || documentRole(s, data, data.Documents[index]) == "none" {
+		if !s.documentPresenceAllowed(r, documentID) {
 			writeError(w, http.StatusForbidden, "Document is outside your permissions")
 			return
 		}

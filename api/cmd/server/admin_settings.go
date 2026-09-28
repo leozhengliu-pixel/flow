@@ -18,6 +18,7 @@ import (
 type webhookInput struct {
 	Name            *string   `json:"name,omitempty"`
 	URL             *string   `json:"url,omitempty"`
+	ApplicationID   *string   `json:"applicationId,omitempty"`
 	ResourceTypes   *[]string `json:"resourceTypes,omitempty"`
 	TeamIDs         *[]string `json:"teamIds,omitempty"`
 	TeamRestriction *string   `json:"teamRestriction,omitempty"`
@@ -34,6 +35,25 @@ func (s *server) listWebhooks(w http.ResponseWriter, r *http.Request) {
 			result = append(result, publicWebhook(item))
 		}
 	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *server) listWebhookFailures(w http.ResponseWriter, r *http.Request) {
+	data := s.workspaceData(r)
+	actor := requestActor(s, r)
+	id := r.PathValue("id")
+	index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == id })
+	if index < 0 || !webhookActorCanManage(&data, actor, data.Webhooks[index]) {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	result := make([]domain.WebhookFailureEvent, 0)
+	for _, item := range data.WebhookFailureEvents {
+		if item.WebhookID == id {
+			result = append(result, item)
+		}
+	}
+	slices.Reverse(result)
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -102,13 +122,17 @@ func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteWebhook(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+		id := r.PathValue("id")
 		before := len(data.Webhooks)
 		data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
-			return item.ID == r.PathValue("id") && webhookActorCanManage(data, actor, item)
+			return item.ID == id && webhookActorCanManage(data, actor, item)
 		})
 		if len(data.Webhooks) == before {
 			return errNotFound
 		}
+		data.WebhookFailureEvents = slices.DeleteFunc(data.WebhookFailureEvents, func(item domain.WebhookFailureEvent) bool {
+			return item.WebhookID == id
+		})
 		return nil
 	})
 	if err != nil {
@@ -123,6 +147,10 @@ func webhookActorCanManage(data *domain.Bootstrap, actor domain.User, item domai
 }
 
 func webhookVisibleToBootstrap(data *domain.Bootstrap, item domain.Webhook) bool {
+	// The audit log stream is managed from the audit log page only.
+	if item.AuditLog {
+		return false
+	}
 	if item.TeamRestriction == "" || item.TeamRestriction == "all" {
 		return true
 	}
@@ -166,6 +194,13 @@ func applyWebhookInput(data *domain.Bootstrap, item *domain.Webhook, input webho
 			return fmt.Errorf("%w: webhook URL must be http or https", errInvalid)
 		}
 		item.URL = value
+	}
+	if input.ApplicationID != nil {
+		value := strings.TrimSpace(*input.ApplicationID)
+		if value != "" && !slices.ContainsFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == value }) {
+			return errInvalid
+		}
+		item.ApplicationID = value
 	}
 	if input.ResourceTypes != nil {
 		allowed := []string{"issues", "comments", "attachments", "documents", "reactions", "projects", "project_updates", "cycles", "labels", "users", "issue_sla", "initiatives", "customers", "customer_requests", "releases", "milestones", "relations"}

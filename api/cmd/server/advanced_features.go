@@ -130,12 +130,13 @@ func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
 }
 
 type customerRequestInput struct {
-	CustomerID string  `json:"customerId,omitempty"`
-	Body       *string `json:"body,omitempty"`
-	Source     *string `json:"source,omitempty"`
-	SourceURL  *string `json:"sourceUrl,omitempty"`
-	IssueID    *string `json:"issueId,omitempty"`
-	ProjectID  *string `json:"projectId,omitempty"`
+	CustomerID string   `json:"customerId,omitempty"`
+	Body       *string  `json:"body,omitempty"`
+	Source     *string  `json:"source,omitempty"`
+	SourceURL  *string  `json:"sourceUrl,omitempty"`
+	IssueID    *string  `json:"issueId,omitempty"`
+	ProjectID  *string  `json:"projectId,omitempty"`
+	Priority   *float64 `json:"priority,omitempty"`
 }
 
 type releaseInput struct {
@@ -281,6 +282,9 @@ func trashTeamIDs(data *domain.Bootstrap, value any) []string {
 	case domain.Document:
 		ids = slices.Clone(item.TeamIDs)
 	case domain.Release:
+		if pipeline := releasePipelineByID(data, item.PipelineID); pipeline != nil {
+			ids = append(ids, pipeline.TeamIDs...)
+		}
 		for _, projectID := range item.ProjectIDs {
 			if project, err := fullProjectByID(data, projectID); err == nil {
 				ids = append(ids, project.TeamIDs...)
@@ -614,13 +618,24 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 	var input domain.CommentUpdateInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
-		writeError(w, http.StatusBadRequest, "body is required")
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if !commentUpdateHasBody(input) && input.Resolved == nil && input.ThreadSummary == nil {
+		writeError(w, http.StatusBadRequest, "body or resolved is required")
 		return
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated, current domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_updated", id, input, func(data *domain.Bootstrap) error {
+	eventType := "document.comment_updated"
+	if input.Resolved != nil && !commentUpdateHasBody(input) {
+		if *input.Resolved {
+			eventType = "document.comment_resolved"
+		} else {
+			eventType = "document.comment_unresolved"
+		}
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -636,11 +651,15 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 			current = data.Comments[id][index]
 			return errConflict
 		}
-		now := time.Now().UTC()
-		data.Comments[id][index].Body = strings.TrimSpace(input.Body)
-		data.Comments[id][index].BodyData = input.BodyData
-		data.Comments[id][index].EditedAt = &now
-		data.Comments[id][index].Version++
+		summaries := false
+		if len(document.TeamIDs) > 0 {
+			summaries = teamResolvedThreadSummaries(data, document.TeamIDs[0])
+		} else if len(document.ProjectIDs) > 0 {
+			if project, projectErr := fullProjectByID(data, document.ProjectIDs[0]); projectErr == nil && len(project.TeamIDs) > 0 {
+				summaries = teamResolvedThreadSummaries(data, project.TeamIDs[0])
+			}
+		}
+		applyCommentPatch(&data.Comments[id][index], input, data.Comments[id], summaries)
 		updated = data.Comments[id][index]
 		return nil
 	})
@@ -750,6 +769,9 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		if input.ProjectID != nil {
 			created.ProjectID = *input.ProjectID
 		}
+		if input.Priority != nil {
+			created.Priority = *input.Priority
+		}
 		data.CustomerRequests = append([]domain.CustomerRequest{created}, data.CustomerRequests...)
 		for _, customer := range data.Customers {
 			if customer.ID == created.CustomerID {
@@ -799,6 +821,9 @@ func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			item.ProjectID = *input.ProjectID
+		}
+		if input.Priority != nil {
+			item.Priority = *input.Priority
 		}
 		item.UpdatedAt = time.Now().UTC()
 		updated = *item
@@ -1700,7 +1725,7 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		paused := slices.Contains(rule.PauseStatuses, issue.State.ID) || slices.Contains(rule.PauseStatuses, issue.State.Type)
 		if paused && sla.PausedAt == nil {
 			if rule.BusinessHours {
-				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue))
+				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue), slaWorkWeek(data))
 			}
 			sla.PausedAt, sla.Status = &now, "paused"
 			recordSLAEvent(data, issue.ID, sla.ID, "paused", now)
@@ -1726,7 +1751,7 @@ func applySLARules(data *domain.Bootstrap, issue *domain.Issue, now time.Time) {
 		if sla.PausedAt == nil {
 			sla.RemainingMinutes = int(sla.DueAt.Sub(now).Minutes())
 			if rule.BusinessHours {
-				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue))
+				sla.RemainingMinutes = businessMinutes(now, sla.DueAt, slaTimezone(data, *issue), slaWorkWeek(data))
 			}
 			if now.After(sla.DueAt) && sla.BreachedAt == nil {
 				sla.BreachedAt, sla.Status = &now, "breached"
@@ -1766,16 +1791,28 @@ func (s *server) updateProjectUpdateSettings(w http.ResponseWriter, r *http.Requ
 
 func (s *server) updateSLASettings(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Enabled *bool `json:"enabled"`
+		Enabled  *bool   `json:"enabled"`
+		WorkWeek *string `json:"workWeek"`
 	}
-	if !decodeJSON(w, r, &input) || input.Enabled == nil {
-		writeError(w, http.StatusBadRequest, "enabled is required")
+	if !decodeJSON(w, r, &input) || (input.Enabled == nil && input.WorkWeek == nil) {
+		writeError(w, http.StatusBadRequest, "enabled or workWeek is required")
 		return
 	}
-	result := map[string]any{"enabled": *input.Enabled}
+	if input.WorkWeek != nil && *input.WorkWeek != slaWorkWeekMonFri && *input.WorkWeek != slaWorkWeekSunThu {
+		writeError(w, http.StatusBadRequest, "workWeek must be monFri or sunThu")
+		return
+	}
+	var result map[string]any
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_settings.updated", "workspace", input, func(data *domain.Bootstrap) error {
 		if data.Settings == nil {
 			data.Settings = map[string]any{}
+		}
+		result = map[string]any{"enabled": slaEnabled(data), "workWeek": slaWorkWeek(data)}
+		if input.Enabled != nil {
+			result["enabled"] = *input.Enabled
+		}
+		if input.WorkWeek != nil {
+			result["workWeek"] = *input.WorkWeek
 		}
 		data.Settings["sla"] = result
 		appendAudit(data, "updated", "sla_settings", "workspace", result)

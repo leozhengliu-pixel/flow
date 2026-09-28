@@ -172,6 +172,7 @@ const TEAM_SEARCH_SECTIONS: SettingsTeamSearchGroup[] = [
     keywords: ['coding agents', 'loops'],
     items: [
       { title: 'Connected agents', keywords: ['coding agents'] },
+      { title: 'Agent connectors', keywords: ['mcp', 'connectors'] },
       { title: 'Loops', keywords: ['agent automations'] },
     ],
   },
@@ -446,6 +447,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Status name', keywords: ['name'] },
           { title: 'Status color', keywords: ['color'] },
           { title: 'Status type', keywords: ['backlog', 'planned', 'started', 'completed', 'canceled'] },
+          { title: 'Inherit from parent or workspace', keywords: ['inherit', 'team project statuses', 'team-project-statuses'] },
         ],
       },
     ],
@@ -476,7 +478,9 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
         items: [
           { title: 'Flow Agent', keywords: ['assistant'] },
           { title: 'Code Intelligence', keywords: ['code search'] },
-          { title: 'Coding Sessions', keywords: ['agents'] },
+          { title: 'Coding Sessions', keywords: ['agents', 'coding sessions', 'harness'] },
+          { title: 'Coding environments', keywords: ['environments', 'coding'] },
+          { title: 'Trusted sources', keywords: ['allowlist', 'trusted sources', 'agent safety'] },
           { title: 'Loops', keywords: ['automations'] },
           { title: 'Triage Intelligence', keywords: ['triage', 'suggestions', 'duplicates'] },
         ],
@@ -725,6 +729,23 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'SCIM', keywords: ['provisioning'] },
           { title: 'Allowed domains', keywords: ['domain'] },
           { title: 'Authentication', keywords: ['login'] },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'authentication',
+    title: 'Authentication',
+    section: 'Administration',
+    keywords: ['saml', 'oidc', 'sso', 'login', 'passkey', 'google', 'allowedAuthServices', 'identity provider'],
+    groups: [
+      {
+        title: 'Authentication',
+        items: [
+          { title: 'Identity providers', keywords: ['saml', 'oidc', 'sso'] },
+          { title: 'Google authentication', keywords: ['google', 'login'] },
+          { title: 'Email & passkey authentication', keywords: ['email', 'passkey'] },
+          { title: 'Allowed login methods', keywords: ['allowedAuthServices'] },
         ],
       },
     ],

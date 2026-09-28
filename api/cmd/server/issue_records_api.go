@@ -38,7 +38,12 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		data, _ = s.store.WorkspaceMetadata(query.Workspace)
 		data.ViewerRole = "admin"
 	}
-	if !s.authDisabled {
+	if s.authDisabled {
+		// Development mode has no viewer, but deleted teams still stay hidden.
+		if archived := store.ArchivedTeamIDs(data); len(archived) > 0 {
+			query.Access = &store.IssueRecordAccess{Admin: true, ArchivedTeamIDs: archived}
+		}
+	} else {
 		query.Access = &access
 		if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && apiKeyTeamRestrictionSelected(key) {
 			query.AllowedTeamIDs = slices.Clone(key.TeamIDs)
@@ -73,6 +78,10 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 		}
 		for _, child := range node.Or {
 			result.Or = append(result.Or, convert(child))
+		}
+		if node.Not != nil {
+			negated := convert(*node.Not)
+			result.Not = &negated
 		}
 		return result
 	}
@@ -680,6 +689,15 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 			current = issue.NextOccurrenceAt.UTC().Format(time.RFC3339)
 		}
 		if strings.TrimSpace(*input.NextOccurrenceAt) != current && !(strings.TrimSpace(*input.NextOccurrenceAt) == "" && issue.NextOccurrenceAt == nil) {
+			return false
+		}
+	}
+	if input.SnoozedUntil != nil {
+		current := ""
+		if issue.SnoozedUntil != nil {
+			current = issue.SnoozedUntil.UTC().Format(time.RFC3339)
+		}
+		if strings.TrimSpace(*input.SnoozedUntil) != current {
 			return false
 		}
 	}

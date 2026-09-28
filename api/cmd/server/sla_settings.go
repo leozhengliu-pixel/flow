@@ -10,6 +10,27 @@ func slaEnabled(data *domain.Bootstrap) bool {
 	enabled, configured := settings["enabled"].(bool)
 	return !configured || enabled
 }
+const (
+	slaWorkWeekMonFri = "monFri"
+	slaWorkWeekSunThu = "sunThu"
+)
+
+// slaWorkWeek is the workspace's business week for business-hour SLAs.
+func slaWorkWeek(data *domain.Bootstrap) string {
+	settings, _ := data.Settings["sla"].(map[string]any)
+	if value, _ := settings["workWeek"].(string); value == slaWorkWeekSunThu {
+		return slaWorkWeekSunThu
+	}
+	return slaWorkWeekMonFri
+}
+
+func nonWorkingDay(day time.Weekday, workWeek string) bool {
+	if workWeek == slaWorkWeekSunThu {
+		return day == time.Friday || day == time.Saturday
+	}
+	return day == time.Saturday || day == time.Sunday
+}
+
 func slaTimezone(data *domain.Bootstrap, issue domain.Issue) *time.Location {
 	zone, err := time.LoadLocation(data.TeamSettings[issue.Team.ID].Timezone)
 	if err != nil {
@@ -18,7 +39,7 @@ func slaTimezone(data *domain.Bootstrap, issue domain.Issue) *time.Location {
 	return zone
 }
 
-func businessDeadline(from time.Time, minutes int, zone *time.Location) time.Time {
+func businessDeadline(from time.Time, minutes int, zone *time.Location, workWeek string) time.Time {
 	if minutes <= 0 {
 		return from
 	}
@@ -27,7 +48,7 @@ func businessDeadline(from time.Time, minutes int, zone *time.Location) time.Tim
 	for {
 		start := time.Date(current.Year(), current.Month(), current.Day(), 9, 0, 0, 0, zone)
 		end := time.Date(current.Year(), current.Month(), current.Day(), 17, 0, 0, 0, zone)
-		if current.Weekday() == time.Saturday || current.Weekday() == time.Sunday || !current.Before(end) {
+		if nonWorkingDay(current.Weekday(), workWeek) || !current.Before(end) {
 			current = start.AddDate(0, 0, 1)
 			continue
 		}
@@ -43,9 +64,9 @@ func businessDeadline(from time.Time, minutes int, zone *time.Location) time.Tim
 	}
 }
 
-func businessMinutes(from, to time.Time, zone *time.Location) int {
+func businessMinutes(from, to time.Time, zone *time.Location, workWeek string) int {
 	if from.After(to) {
-		return -businessMinutes(to, from, zone)
+		return -businessMinutes(to, from, zone, workWeek)
 	}
 	current := from.In(zone)
 	end := to.In(zone)
@@ -53,7 +74,7 @@ func businessMinutes(from, to time.Time, zone *time.Location) int {
 	for current.Before(end) {
 		start := time.Date(current.Year(), current.Month(), current.Day(), 9, 0, 0, 0, zone)
 		close := time.Date(current.Year(), current.Month(), current.Day(), 17, 0, 0, 0, zone)
-		if current.Weekday() != time.Saturday && current.Weekday() != time.Sunday {
+		if !nonWorkingDay(current.Weekday(), workWeek) {
 			left := current
 			if left.Before(start) {
 				left = start
@@ -73,7 +94,7 @@ func businessMinutes(from, to time.Time, zone *time.Location) int {
 
 func slaDeadline(data *domain.Bootstrap, issue domain.Issue, rule domain.SLARule, now time.Time, minutes int) time.Time {
 	if rule.BusinessHours {
-		return businessDeadline(now, minutes, slaTimezone(data, issue))
+		return businessDeadline(now, minutes, slaTimezone(data, issue), slaWorkWeek(data))
 	}
 	return now.Add(time.Duration(minutes) * time.Minute)
 }

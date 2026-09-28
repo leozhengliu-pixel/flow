@@ -350,6 +350,8 @@
 .project-details-sidebar__property-trigger.is-empty { color: var(--pd-label); }
 .project-details-sidebar__property-trigger:hover { background: var(--project-property-hover); color: var(--pd-text); }
 .project-details-sidebar__property-trigger[aria-expanded=true] { background: var(--project-property-hover); color: var(--pd-text); }
+html .project-details-sidebar .project-label-control .project-label-add:hover,
+html .project-details-sidebar .project-label-control .project-label-add[aria-expanded=true] { background: var(--project-property-hover); color: var(--pd-text); }
 .project-details-sidebar__property-trigger:focus-visible { box-shadow: inset 0 0 0 1px lch(53% 52.26 286.91); }
 .project-details-sidebar__property-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-details-sidebar__property-trigger > svg { width: 16px; height: 16px; flex: 0 0 16px; }

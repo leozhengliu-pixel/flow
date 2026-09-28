@@ -614,6 +614,47 @@ func (s *SQLiteStore) ResetPassword(ctx context.Context, token, password string)
 	return err
 }
 
+// RequestLoginToken issues a one-time kind=login token for magic-link / SSO bounce (LS-0083).
+func (s *SQLiteStore) RequestLoginToken(ctx context.Context, email string) (string, error) {
+	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil || !user.Active {
+		return "", nil
+	}
+	if !user.EmailVerified {
+		return "", nil
+	}
+	return s.createAuthToken(ctx, user.ID, "login", time.Hour)
+}
+
+// LoginWithAuthToken consumes a kind=login token for email+authToken sign-in.
+// When forceReauth is true, existing sessions for the user are revoked first.
+func (s *SQLiteStore) LoginWithAuthToken(ctx context.Context, email, token string, forceReauth bool) (domain.AuthSession, string, error) {
+	email = normalizeEmail(email)
+	if email == "" || strings.TrimSpace(token) == "" {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	user, _, err := s.authUserByEmail(ctx, email)
+	if err != nil || !user.Active {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	userID, err := s.consumeAuthToken(ctx, token, "login")
+	if err != nil {
+		return domain.AuthSession{}, "", ErrAuthExpired
+	}
+	if userID != user.ID {
+		return domain.AuthSession{}, "", ErrAuthInvalid
+	}
+	if !user.EmailVerified {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		_, _ = s.db.ExecContext(ctx, `UPDATE auth_users SET email_verified_at=?,updated_at=? WHERE id=? AND email_verified_at IS NULL`, now, now, user.ID)
+		user.EmailVerified = true
+	}
+	if forceReauth {
+		_, _ = s.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id=?`, user.ID)
+	}
+	return s.createSession(ctx, user)
+}
+
 func (s *SQLiteStore) WorkspaceRole(ctx context.Context, workspaceID, userID string) (string, string, error) {
 	var role, status string
 	err := s.db.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&role, &status)
@@ -672,40 +713,18 @@ func isWorkspaceAdminRole(role string) bool {
 }
 
 func (s *SQLiteStore) AccountForUser(ctx context.Context, userID string) (domain.AccountBootstrap, error) {
+	result, err := s.OAuthAccountForUser(ctx, userID)
+	if err != nil {
+		return result, err
+	}
 	counts, err := s.issueCollectionCounts(ctx)
 	if err != nil {
-		return domain.AccountBootstrap{}, err
+		return result, err
 	}
-	user, err := s.authUserByID(ctx, userID)
-	if err != nil {
-		return domain.AccountBootstrap{}, err
+	for i := range result.Workspaces {
+		result.Workspaces[i].IssueCount = counts[result.Workspaces[i].Workspace.URLKey]
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT workspace_id,role,joined_at FROM workspace_memberships WHERE user_id=? AND status='active' ORDER BY joined_at`, userID)
-	if err != nil {
-		return domain.AccountBootstrap{}, err
-	}
-	defer rows.Close()
-	result := domain.AccountBootstrap{Viewer: user, Workspaces: []domain.WorkspaceMembership{}}
-	for rows.Next() {
-		var workspaceID, role, joinedRaw string
-		if err := rows.Scan(&workspaceID, &role, &joinedRaw); err != nil {
-			return result, err
-		}
-		data, key, ok := s.workspaceByID(workspaceID)
-		if !ok {
-			continue
-		}
-		joined, _ := time.Parse(time.RFC3339Nano, joinedRaw)
-		result.Workspaces = append(result.Workspaces, domain.WorkspaceMembership{Workspace: data.Workspace, Role: titleRole(role), JoinedAt: joined, IssueCount: counts[key]})
-		if result.LastWorkspaceKey == "" {
-			result.LastWorkspaceKey = key
-		}
-	}
-	var preferred string
-	if err := s.db.QueryRowContext(ctx, `SELECT last_workspace_key FROM auth_account_state WHERE user_id=?`, userID).Scan(&preferred); err == nil && slices.ContainsFunc(result.Workspaces, func(item domain.WorkspaceMembership) bool { return item.Workspace.URLKey == preferred }) {
-		result.LastWorkspaceKey = preferred
-	}
-	return result, rows.Err()
+	return result, nil
 }
 
 func (s *SQLiteStore) SetLastWorkspace(ctx context.Context, userID, workspaceKey string) error {
@@ -1045,6 +1064,13 @@ func (s *SQLiteStore) ListInvitations(ctx context.Context, workspaceID string) (
 func (s *SQLiteStore) UpdateMemberRole(ctx context.Context, workspaceID, userID, role string) error {
 	if !validWorkspaceRole(role) {
 		return fmt.Errorf("invalid role")
+	}
+	var current string
+	if err := s.db.QueryRowContext(ctx, `SELECT role FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID).Scan(&current); err != nil {
+		return ErrAuthForbidden
+	}
+	if strings.EqualFold(current, role) {
+		return nil
 	}
 	if err := s.ensureAdminRemains(ctx, workspaceID, userID); err != nil {
 		return err
@@ -1387,11 +1413,13 @@ func OmitDirectoryExcludedTeams(data *domain.Bootstrap) {
 	}
 	allowed := make(map[string]bool, len(data.Teams))
 	for _, team := range data.Teams {
-		if directoryExcludedTeam(team) && !memberOf[team.ID] {
+		if team.ArchivedAt != nil || directoryExcludedTeam(team) && !memberOf[team.ID] {
 			continue
 		}
 		allowed[team.ID] = true
 	}
+	// Memberships of deleted or hidden teams never leave with the payload.
+	data.TeamMembers = slices.DeleteFunc(data.TeamMembers, func(member domain.TeamMember) bool { return !allowed[member.TeamID] })
 	if len(allowed) == len(data.Teams) {
 		return
 	}
@@ -1425,7 +1453,7 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 			break
 		}
 	}
-	if team == nil {
+	if team == nil || team.ArchivedAt != nil {
 		return false
 	}
 	memberRole := ""
@@ -1483,8 +1511,15 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 }
 
 func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest bool) {
+	archived := map[string]bool{}
+	for _, id := range ArchivedTeamIDs(*data) {
+		archived[id] = true
+	}
 	data.Teams = slices.DeleteFunc(data.Teams, func(team domain.Team) bool { return !allowed[team.ID] })
 	data.Issues = slices.DeleteFunc(data.Issues, func(issue domain.Issue) bool {
+		if archived[issue.Team.ID] {
+			return true
+		}
 		if allowed[issue.Team.ID] {
 			return false
 		}

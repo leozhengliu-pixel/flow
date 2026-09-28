@@ -1,3 +1,18 @@
+.virtualColumns{
+  height:100%;
+  width:100%;
+}
+.virtualColumns :global([data-viewport-type="element"]){
+  display:flex !important;
+  height:100%;
+}
+.virtualCards{
+  width:100%;
+}
+.cards[data-virtualized=true]{
+  min-height:0;
+  flex:1 1 auto;
+}
 .board{
   --board-card-background:var(--theme-surface-1);
   --board-card-hover:var(--theme-surface-hover);
@@ -310,3 +325,12 @@
   .card{width:318px}
   .columnHeader{padding-inline:12px}
 }
+/* Board rows (sub-grouping swimlanes). */
+.swimlanes{height:100%;overflow:auto;display:flex;flex-direction:column;gap:8px;padding-bottom:8px}
+.swimlane{flex:0 0 auto}
+.swimlaneHeader{position:sticky;left:0;height:32px;display:flex;align-items:center;gap:8px;padding:0 12px;color:var(--theme-text-primary);font-size:13px;font-weight:500}
+.swimlaneHeader .swimlaneCount{color:var(--issue-muted);font-size:12px;font-weight:400}
+.columnMenuSeparator{height:1px;margin:4px 0;background:var(--theme-border-subtle)}
+.swimlaneHeader>button:first-child{width:20px;height:20px;border:0;border-radius:999px;background:transparent;color:var(--theme-text-secondary);cursor:pointer}
+.swimlaneHeader>button:first-child[aria-expanded=false]{transform:rotate(-90deg)}
+.swimlaneBoard{height:min(560px,70vh)}

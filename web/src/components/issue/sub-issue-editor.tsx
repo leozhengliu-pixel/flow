@@ -1,4 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimates'
 import { CalendarDays, ChevronRight, CircleDashed, MoreHorizontal, Paperclip } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 
@@ -12,6 +13,7 @@ import type { DescriptionSnapshot } from '@/components/issue/editor/editor-conte
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from '@/lib/labels'
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
+import { ExistingDraftDiscardDialog } from '@/components/create-issue/create-issue-dialog'
 
 export interface SubIssueInput {
   title: string
@@ -38,7 +40,7 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const [saving, setSaving] = useState(false)
   const [stateId, setStateId] = useState(defaultState.id)
   const [priority, setPriority] = useState(parent.priority)
-  const [estimate, setEstimate] = useState(parent.estimate ?? 0)
+  const [estimate, setEstimate] = useState(parent.estimate ?? NO_ESTIMATE)
   const [assigneeId, setAssigneeId] = useState(parent.assignee?.id ?? '')
   const [projectId, setProjectId] = useState(parent.project?.id ?? '')
   const [cycleId, setCycleId] = useState('')
@@ -46,6 +48,9 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const [labelIds, setLabelIds] = useState<string[]>([])
   const [attachments, setAttachments] = useState<File[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
+  const [discardOpen, setDiscardOpen] = useState(false)
+  // Like the full composer, only ask before throwing away something the user typed.
+  const cancel = () => { if (title.trim() || description?.markdown.trim() || attachments.length) setDiscardOpen(true); else onCancel() }
   const state = teamStates.find(item => item.id === stateId) ?? defaultState
   const assignee = data.users.find(user => user.id === assigneeId)
   const project = data.projects.find(item => item.id === projectId)
@@ -57,13 +62,13 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
   const labelGroupNames = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.name])), [data.labelGroups])
   const labelGroupColors = useMemo(() => new Map(data.labelGroups.map(group => [group.id, group.color])), [data.labelGroups])
   const estimateType = resolvedTeamSettings(data.teamSettings, parent.team.id)?.estimateType ?? 'notUsed'
-  const estimateValues = estimateType === 'fibonacci' ? [0,1,2,3,5,8,13,21] : estimateType === 'exponential' ? [0,1,2,4,8,16] : [0,1,2,3,5,8]
+  const estimateOptions = estimatePickerOptions(resolvedTeamSettings(data.teamSettings, parent.team.id))
   const toggleLabel = (id: string) => setLabelIds(current => toggleGroupedLabelIds(current, id, labels))
   const submit = async () => {
     if (!title.trim() || saving) return
     setSaving(true)
     try {
-      await onCreate({ title: title.trim(), description: description?.markdown.trim() ?? '', stateId, priority, estimate: estimate || undefined, assigneeId: assigneeId || undefined, projectId: projectId || undefined, cycleId: cycleId || undefined, dueDate: dueDate || undefined, labelIds, attachments })
+      await onCreate({ title: title.trim(), description: description?.markdown.trim() ?? '', stateId, priority, estimate: estimate >= 0 ? estimate : undefined, assigneeId: assigneeId || undefined, projectId: projectId || undefined, cycleId: cycleId || undefined, dueDate: dueDate || undefined, labelIds, attachments })
     } finally { setSaving(false) }
   }
   return <form className="sub-issue-editor" onSubmit={event => { event.preventDefault(); void submit() }}>
@@ -75,14 +80,15 @@ export function SubIssueEditor({ parent, data, onCancel, onCreate }: { parent: I
     <div className="sub-issue-actions"><div className="sub-issue-properties">
       <button type="button" className="sub-issue-team" aria-label="Set team" disabled><TeamIcon team={parent.team} /><span data-i18n-ignore>{parent.team.key}</span></button>
       <PropertyMenu compact label="Priority" value={priority ? ['', 'Urgent', 'High', 'Medium', 'Low'][priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({ id: String(id), label, icon: <PriorityIcon priority={id}/> }))} onChange={id => setPriority(Number(id))}/>
-      {estimateType!=='notUsed'&&<PropertyMenu compact label="Estimate" value={estimate?`${estimate} point${estimate===1?'':'s'}`:'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={estimate}/>} options={estimateValues.map(value=>({id:String(value),label:value?`${value} point${value===1?'':'s'}`:'No estimate',icon:<EstimateGlyph value={value}/>}))} onChange={id=>setEstimate(Number(id))}/>}
+      {estimateType!=='notUsed'&&<PropertyMenu compact label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={id=>setEstimate(Number(id))}/>}
       <PropertyMenu compact label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon size={14}/>} options={[{ id: '', label: 'No assignee', icon: <NoAssigneeIcon size={14}/> }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, icon: <Avatar name={user.displayName}/> }))]} onChange={setAssigneeId}/>
       <PropertyMenu compact multiple label="Labels" value={labelIds.length ? `${labelIds.length} labels` : 'Labels'} selectedIds={labelIds} icon={<LabelIcon size={14}/>} options={labels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, groupColor: label.groupId ? labelGroupColors.get(label.groupId) : undefined }))} onChange={toggleLabel}/>
       <PropertyMenu compact label="Cycle" value={cycle?.name ?? ''} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon size={14}/>} options={[{ id: '', label: 'No cycle', icon: <CycleIcon noCycle size={14}/> }, ...cycles.map(item => ({ id: item.id, label: item.name, icon: <CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)} size={14}/>, i18nIgnore: true }))]} onChange={setCycleId} trigger={cycle ? <><CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,cycle.id)} size={14}/><span data-i18n-ignore>{cycle.name}</span></> : <CycleIcon size={14}/>} triggerClassName="sub-issue-cycle-trigger" ariaLabel="Add to cycle"/>
       <SubIssueMoreMenu data={data} dueDate={dueDate} project={project} onDueDate={setDueDate} onProject={setProjectId}/>
       <button type="button" className="sub-issue-attach" aria-label="Attach images, files, or videos" title={attachments.length ? `${attachments.length} file${attachments.length === 1 ? '' : 's'} selected` : undefined} onClick={() => fileRef.current?.click()}><Paperclip/>{attachments.length > 0 && <span>{attachments.length}</span>}</button>
       <input ref={fileRef} type="file" multiple hidden onChange={event => { setAttachments(Array.from(event.target.files ?? [])); event.target.value = '' }}/>
-    </div><button type="button" className="sub-issue-cancel" aria-label="Discard sub-issue" onClick={onCancel}>Cancel</button><button type="submit" className="sub-issue-create" disabled={!title.trim() || saving}>{saving ? 'Creating…' : 'Create'}</button></div>
+    </div><button type="button" className="sub-issue-cancel" aria-label="Discard sub-issue" onClick={cancel}>Cancel</button><button type="submit" className="sub-issue-create" disabled={!title.trim() || saving}>{saving ? 'Creating…' : 'Create'}</button></div>
+    <ExistingDraftDiscardDialog primary description="Confirm that you want to discard this draft." open={discardOpen} onCancel={() => setDiscardOpen(false)} onDiscard={() => { setDiscardOpen(false); onCancel() }}/>
   </form>
 }
 

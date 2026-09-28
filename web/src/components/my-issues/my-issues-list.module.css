@@ -1,7 +1,7 @@
 .list{min-width:0;padding:0 0 8px;font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif}.virtualList{width:100%;height:100%;min-width:0;font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;scrollbar-color:var(--scrollbar-thumb) transparent}.loadingMore{height:44px;display:grid;place-items:center;color:var(--issue-muted);font-size:12px}.group{min-width:0;padding:0 0 2px}.groupHeader{height:36px;margin:0 8px;display:flex;align-items:center;gap:8px;padding:0 8px 0 0;overflow:hidden;border-radius:8px;background:var(--theme-surface-1)}
 .groupHeader+div{padding-top:2px}
 .collapseButton,.createButton{display:grid;place-items:center;border:0;background:transparent;color:var(--theme-text-secondary);padding:0;cursor:pointer}.collapseButton{width:28px;height:36px;flex:0 0 28px}.collapseButton[aria-expanded=false] svg{transform:rotate(-90deg)}.collapseButton svg{transition:transform 120ms}.groupState{width:14px;height:14px;display:grid;place-items:center;margin-left:-2px}.groupName{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--theme-text-primary);font-size:13px;font-weight:500}.groupCount{color:var(--issue-muted);font-size:12px}.createButton{width:24px;height:24px;margin-left:auto;border-radius:999px}.createButton:hover,.collapseButton:hover{background:var(--bg-active);color:var(--text)}
-.row{--row-columns:8px 18px 16px var(--issue-identifier-width,52px) 16px minmax(80px,1fr) 60px 18px;position:relative;box-sizing:border-box;height:44px;width:100%;display:grid;grid-template-columns:var(--row-columns);column-gap:8px;align-items:center;border-radius:8px;color:var(--issue-fg);outline:0;cursor:pointer;text-decoration:none;transition:color .15s,background-color .15s}.row:hover{background:var(--bg-subtle)}.row[data-selected=true]{background:var(--bg-active)}.row:focus-visible{background:var(--bg-subtle);box-shadow:inset 0 0 0 1px var(--row-focus-border)}
+.row{--row-columns:8px 18px 16px var(--issue-identifier-width,52px) 22px minmax(80px,1fr) 60px 18px;position:relative;box-sizing:border-box;height:44px;width:100%;display:grid;grid-template-columns:var(--row-columns);column-gap:8px;align-items:center;border-radius:8px;color:var(--issue-fg);outline:0;cursor:pointer;text-decoration:none;transition:color .15s,background-color .15s}.row:hover{background:var(--bg-subtle)}.row[data-selected=true]{background:var(--bg-active)}.row:focus-visible{background:var(--bg-subtle);box-shadow:inset 0 0 0 1px var(--row-focus-border)}
 .row[data-nested=true]{padding-left:calc(var(--nested-depth,1) * 24px)}.nestingGuide{position:absolute;z-index:0;inset:0 auto 0 0;width:calc(var(--nested-depth,1) * 24px);overflow:visible;pointer-events:none}.nestingSegment{position:absolute;left:calc(var(--nest-level) * 24px + 49.5px);top:0;bottom:0;width:1px;background:var(--nested-issue-line)}.nestingSegment.nestingLast{bottom:auto;height:16px}.nestingBranch{position:absolute;left:0;top:15px;width:10px;height:9px;overflow:visible;fill:var(--nested-issue-line)}
 .checkboxCell{width:18px;height:22px;display:flex;align-items:center}.checkbox{width:14px;height:14px;display:grid;place-items:center;padding:0;border:1px solid var(--checkbox-border);border-radius:3px;background:transparent;color:var(--on-accent);opacity:0;cursor:pointer}.row:hover .checkbox,.row:focus-within .checkbox,.checkbox[data-checked=true]{opacity:1}.checkbox[data-checked=true]{border-color:var(--selection-border);background:var(--selection-fill)}.checkbox svg{stroke-width:2.5}.identifier{overflow:hidden;color:var(--issue-muted);font-size:13px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .propertyTrigger{min-width:22px;min-height:22px;display:flex;align-items:center;justify-content:center;padding:3px;border:0;border-radius:4px;background:transparent;color:inherit;cursor:pointer}.propertyTrigger:hover{background:var(--bg-active)}.propertyTrigger:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}.propertyTrigger>.priority{width:16px;height:16px}.priority{display:block;color:var(--issue-muted);overflow:hidden}
@@ -39,3 +39,40 @@
 .badges>.propertyTrigger:last-of-type{flex:0 0 auto}
 .checkbox[data-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 .rowDate{display:flex;align-items:center;justify-content:center;gap:4px}.rowDate svg{flex:0 0 12px}
+/* Sub-grouping: primary header sits above indented sub-group headers. */
+.parentGroupHeader{height:32px;margin:6px 8px 2px;display:flex;align-items:center;gap:8px;padding:0 10px;color:var(--theme-text-primary)}
+.groupHeader[data-subgroup]{margin-left:24px}
+.row[data-active]{background:var(--bg-active)}.row[data-active]::before{content:'';position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:var(--accent-primary)}
+:global(:root[data-theme="light"]) .groupHeader{background:var(--bg-sidebar)}
+:global(html:root[data-theme="light"]) .contextMenu .menuItem,:global(html:root[data-theme="light"]) .contextSubmenu .menuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--lx-item-text);font-weight:450}
+:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-highlighted],:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-state=open],:global(html:root[data-theme="light"]) .contextSubmenu .menuItem[data-highlighted]{background:var(--lx-item-hover)}
+:global(html:root[data-theme="light"]) .contextMenu .menuItem[data-danger=true]{color:var(--lx-item-text)}
+:global(html:root[data-theme="light"]) .contextMenu .menuSeparator:after,:global(html:root[data-theme="light"]) .contextSubmenu .menuSeparator:after{left:0;right:0;background:var(--lx-popover-border)}
+:global(html:root[data-theme="light"]) .contextMenu,:global(html:root[data-theme="light"]) .contextSubmenu{border-color:var(--lx-popover-border);background:var(--lx-surface);box-shadow:var(--lx-popover-shadow)}
+.menuItem>.menuIcon{width:16px;height:16px;flex:0 0 16px;margin:0 8px 0 0;color:var(--issue-muted)}
+:global(html:root[data-theme="light"]) .menuItem>.menuIcon{color:var(--lx-item-icon)}
+.contextMenu{width:max-content;min-width:180px;max-width:calc(100vw - 20px)}
+.contextMenu .menuItem>span:not(:only-child){white-space:nowrap}
+.contextMenu .menuItem>kbd{padding-left:12px;white-space:nowrap}
+/* Issue search submenus (set parent, relations): picker header, then status icon, muted identifier, title. */
+.contextSubmenu.issueSubmenu{width:320px;padding:0}
+.issueSearch{height:36px;display:flex;align-items:center;padding:0 12px 0 14px;border-bottom:.5px solid var(--pk-divider)}
+.issueSearch input{flex:1;min-width:0;height:36px;padding:0;border:0;outline:0;background:transparent;color:var(--pk-text);font:400 13px/normal var(--font)}
+.issueSearch input::placeholder{color:var(--pk-muted)}
+.issueResults{padding:6px 0}
+.issueSubmenu .submenuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text)}
+.issueSubmenu .submenuItem[data-highlighted]{background:var(--pk-hover)}
+.issueSubmenu .submenuItem>svg{flex:0 0 14px}
+.issueSubmenu .submenuItem>.issueIdentifier{flex:none;color:var(--pk-muted)}
+.issueEmpty{height:32px;display:flex;align-items:center;padding:0 14px;color:var(--pk-muted);font-size:13px}
+.menuIcon>svg{width:16px;height:16px;display:block}
+/* Row context menu in both themes: picker surface, inset rows, neutral highlight. */
+.menuItem>span.menuIcon{display:grid;place-items:center}
+.contextMenu:not(#_),.contextSubmenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);box-shadow:var(--pk-shadow);color:var(--pk-text)}
+.contextMenu:not(#_) .menuItem,.contextSubmenu:not(#_) .menuItem,.contextSubmenu:not(#_) .submenuItem{margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
+.contextMenu:not(#_) .menuItem[data-highlighted],.contextMenu:not(#_) .menuItem[data-state=open],.contextSubmenu:not(#_) .menuItem[data-highlighted],.contextSubmenu:not(#_) .menuItem[data-state=open],.contextSubmenu:not(#_) .submenuItem[data-highlighted]{background:var(--pk-hover)}
+.contextMenu:not(#_) .menuItem>.menuIcon{color:var(--pk-text)}
+.contextMenu:not(#_) .menuItem>kbd,.contextSubmenu:not(#_) .menuItem>kbd,.contextSubmenu:not(#_) .submenuItem>kbd{color:var(--pk-muted);font-size:11px;font-weight:500}
+.contextMenu:not(#_) .menuSeparator:after,.contextSubmenu:not(#_) .menuSeparator:after{left:0;right:0;background:var(--pk-divider)}
+.menuItem>.menuIcon svg:not(#_){margin:0;color:inherit}
+.menuChevron{flex:none;margin-left:auto;padding-left:8px;color:var(--pk-faint);font-size:6px;line-height:1}

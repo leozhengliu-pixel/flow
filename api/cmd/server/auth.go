@@ -99,9 +99,18 @@ type workspaceKeyContextKey struct{}
 func (s *server) authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.authDisabled {
-			r = r.WithContext(store.ContextWithRealtimeClient(r.Context(), r.Header.Get("X-Client-ID")))
+			viewer := s.store.Account().Viewer
+			ctx := context.WithValue(r.Context(), authUserContextKey{}, viewer)
+			ctx = store.ContextWithActor(ctx, viewer)
+			ctx = store.ContextWithRealtimeClient(ctx, r.Header.Get("X-Client-ID"))
+			r = r.WithContext(ctx)
+			if !s.authorizeWorkspaceRequest(w, r, viewer) {
+				return
+			}
+			next.ServeHTTP(w, r)
+			return
 		}
-		if s.authDisabled || publicAuthPath(r.URL.Path) {
+		if publicAuthPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -362,7 +371,7 @@ func publicAuthPath(path string) bool {
 	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
-	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/")
+return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/") || path == "/api/auth/token-login" || path == "/api/auth/magic-link"
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -391,6 +400,10 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 	if key == "" || r.URL.Path == "/api/account/bootstrap" || r.URL.Path == "/api/invitations/accept" || (r.Method == http.MethodPost && r.URL.Path == "/api/workspaces") {
 		return true
 	}
+	// Access-status must work for authenticated non-members (OrganizationNotFound).
+	if r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/api/workspaces/") && strings.HasSuffix(r.URL.Path, "/access-status") {
+		return true
+	}
 	// Workspace membership and feature gates require metadata only. Resource
 	// authorization below loads the entities required by the specific route.
 	var data domain.Bootstrap
@@ -403,25 +416,34 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusForbidden, "You don't have access to this workspace")
 			return false
 		}
-	} else if r.URL.Path == "/api/workspace/preferences" {
-		data, ok = s.store.WorkspaceSettingsMetadata(key)
 	} else {
-		data, ok = s.store.WorkspaceMetadata(key)
+		data, ok = s.store.WorkspaceSettingsMetadata(key)
+		if ok && teamManagementRequest(r) {
+			teamID := teamIDFromWorkspacePath(r.URL.Path)
+			if settings, found := s.store.TeamSettingsFor(key, teamID); found {
+				data.TeamSettings = map[string]domain.TeamSettings{teamID: settings}
+			}
+		}
+		if ok && r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/trash/") {
+			data.Trash = s.store.TrashSnapshot(key)
+		}
 	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return false
 	}
-	if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
-		cookie, err := r.Cookie(sessionCookieName)
-		durationDays := data.WorkspaceSettings.SessionDurationDays
-		if durationDays < 1 {
-			durationDays = 30
-		}
-		if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
-			clearSessionCookie(w, r)
-			writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
-			return false
+	if !s.authDisabled {
+		if _, apiAuthenticated := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); !apiAuthenticated {
+			cookie, err := r.Cookie(sessionCookieName)
+			durationDays := data.WorkspaceSettings.SessionDurationDays
+			if durationDays < 1 {
+				durationDays = 30
+			}
+			if err != nil || !s.store.EnforceSessionDuration(r.Context(), cookie.Value, durationDays) {
+				clearSessionCookie(w, r)
+				writeError(w, http.StatusUnauthorized, "Your workspace session has expired")
+				return false
+			}
 		}
 	}
 	role, status, err := data.ViewerRole, "active", error(nil)
@@ -479,7 +501,9 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 			return false
 		}
 	}
-	if !s.resourceAllowed(r, key, user.ID) {
+	// AUTH_DISABLED previously skipped authorizeWorkspaceRequest entirely, so
+	// team-scoped resourceAllowed checks must not block local/dev fixtures.
+	if !s.authDisabled && !s.resourceAllowed(r, key, user.ID) {
 		writeError(w, http.StatusForbidden, "This resource is outside your teams")
 		return false
 	}
@@ -507,6 +531,9 @@ func featureForPath(path string) string {
 		return "ai-agent"
 	}
 	if strings.HasPrefix(path, "/api/loops") {
+		return "loops"
+	}
+	if (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/")) && strings.HasSuffix(path, "/loop-runs") {
 		return "loops"
 	}
 	if strings.HasPrefix(path, "/api/issue-suggestions") ||
@@ -550,6 +577,9 @@ func adminOnlyRequest(r *http.Request) bool {
 	if strings.HasPrefix(path, "/api/webhooks") {
 		return true
 	}
+	if strings.HasPrefix(path, "/api/workspaces/") && strings.Contains(path, "/deleted-teams") {
+		return true
+	}
 	if strings.HasPrefix(path, "/api/workflows") || strings.HasPrefix(path, "/api/workflow-runs") {
 		return true
 	}
@@ -560,6 +590,9 @@ func adminOnlyRequest(r *http.Request) bool {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/workspaces/") && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) && !strings.Contains(path, "/teams/") {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(path, "/cancel-deletion") {
 		return true
 	}
 	return false
@@ -587,15 +620,16 @@ func permissionForRequest(r *http.Request) string {
 		return "initiative"
 	case strings.HasPrefix(path, "/api/loops"):
 		return "loop"
+	case strings.HasPrefix(path, "/api/imports"), strings.HasPrefix(path, "/api/migrations"):
+		return "import"
+	case strings.HasPrefix(path, "/api/teams/") && (strings.Contains(path, "/resources") || strings.Contains(path, "/resource-sections")):
+		return "pinnedView"
 	default:
 		return ""
 	}
 }
 
 func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {
-	if workspaceAdminRole(role) {
-		return true
-	}
 	if role == "guest" {
 		return false
 	}
@@ -623,8 +657,40 @@ func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, ro
 		}
 	case "agentGuidance":
 		value = settings.AgentGuidancePermission
+		if value == "" {
+			value = "admins"
+		}
+	case "import":
+		value = settings.ImportPermission
+		if value == "" {
+			value = "admins"
+		}
+	case "pinnedView":
+		value = settings.PinnedViewPermission
+		if value == "" {
+			value = "members"
+		}
 	}
-	return value == "members" || value == "everyone"
+	return roleSatisfiesWorkspacePermission(role, value)
+}
+
+// roleSatisfiesWorkspacePermission implements the LS-0764 matrix:
+// members | owners_and_admins | owners | admins (+ legacy everyone / admins_only).
+func roleSatisfiesWorkspacePermission(role, value string) bool {
+	role = strings.ToLower(strings.TrimSpace(role))
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "members", "everyone", "user":
+		return role == "member" || role == "admin" || role == "owner"
+	case "owners_and_admins", "admins":
+		return role == "admin" || role == "owner"
+	case "owners":
+		return role == "owner"
+	case "admins_only":
+		return role == "admin"
+	default:
+		return role == "admin" || role == "owner"
+	}
 }
 
 func teamManagementRequest(r *http.Request) bool {
@@ -1561,6 +1627,54 @@ func (s *server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"reset": true})
 }
 
+func (s *server) tokenLogin(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email       string `json:"email"`
+		AuthToken   string `json:"authToken"`
+		Service     string `json:"service"`
+		InviteLink  string `json:"inviteLink"`
+		ForceReauth bool   `json:"forceReauth"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	_ = input.Service
+	_ = input.InviteLink
+	session, token, err := s.store.LoginWithAuthToken(r.Context(), input.Email, input.AuthToken, input.ForceReauth)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	setSessionCookie(w, r, token, session.ExpiresAt)
+	writeJSON(w, http.StatusOK, session)
+}
+
+func (s *server) magicLink(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Email string `json:"email"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	token, err := s.store.RequestLoginToken(r.Context(), input.Email)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not create login link")
+		return
+	}
+	if token != "" && s.mailer != nil {
+		if err := s.mailer.sendMagicLink(input.Email, token); err != nil {
+			writeError(w, http.StatusBadGateway, "Could not send login email")
+			return
+		}
+	}
+	response := map[string]any{"sent": true}
+	if token != "" && devAuthTokens() {
+		response["loginToken"] = token
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+
 func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
 	if !ok {
@@ -1785,6 +1899,9 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	membership, err := s.store.AcceptInvitation(r.Context(), input.Token, authUser(r).ID)
+	if err == nil {
+		s.sendWelcomeMessage(r.Context(), membership.Workspace.URLKey, authUser(r).ID)
+	}
 	respondMutation(w, err, http.StatusOK, membership)
 }
 

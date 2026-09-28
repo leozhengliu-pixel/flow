@@ -1,0 +1,80 @@
+.cvh-search {
+  --cvh-search-max-width: 160px;
+  position: relative;
+  width: min(var(--cvh-search-max-width), 100%);
+  height: 28px;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--bg-subtle, var(--theme-surface-1));
+  color: var(--muted, var(--theme-text-tertiary));
+}
+.cvh-search.is-always-visible {
+  width: min(300px, 100%);
+  max-width: 300px;
+}
+.cvh-search.is-inline {
+  max-width: var(--cvh-search-max-width);
+}
+.cvh-search > svg {
+  position: absolute;
+  z-index: 1;
+  left: 10px;
+  top: 7px;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  color: var(--muted, var(--theme-text-tertiary));
+}
+.cvh-search > input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  padding: 6px 28px 6px 32px;
+  border: 0.5px solid transparent;
+  border-radius: 999px;
+  outline: 0;
+  background: transparent;
+  color: var(--text, var(--theme-text-primary));
+  font: 500 13px / normal inherit;
+}
+.cvh-search > input::placeholder {
+  color: var(--muted, var(--theme-text-tertiary));
+}
+.cvh-search > input:focus {
+  border-color: var(--theme-border-strong);
+  box-shadow: 0 0 0 2px var(--focus-ring, #5e6ad229);
+}
+.cvh-search > input::-webkit-search-cancel-button {
+  display: none;
+}
+.cvh-search > button {
+  position: absolute;
+  right: 4px;
+  top: 2px;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted, var(--theme-text-tertiary));
+  cursor: pointer;
+}
+.cvh-search > button:hover {
+  background: var(--theme-surface-hover);
+  color: var(--text, var(--theme-text-primary));
+}
+.cvh-search > button svg {
+  width: 12px;
+  height: 12px;
+}
+:root[data-theme="light"] .cvh-search {
+  background: var(--theme-surface-1);
+}
+:root[data-theme="light"] .cvh-search > input:focus {
+  border-color: var(--theme-border-strong);
+}

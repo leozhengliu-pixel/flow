@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"reflect"
 	"slices"
 	"strings"
@@ -803,6 +802,9 @@ func normalize(data *domain.Bootstrap) {
 	if data.Subscriptions == nil {
 		data.Subscriptions = []domain.Subscription{}
 	}
+	if data.ThreadSubscriptions == nil {
+		data.ThreadSubscriptions = []domain.ThreadSubscription{}
+	}
 	if data.AuditLog == nil {
 		data.AuditLog = []domain.AuditLogEntry{}
 	}
@@ -821,6 +823,12 @@ func normalize(data *domain.Bootstrap) {
 	normalizeParity(data)
 	if data.Webhooks == nil {
 		data.Webhooks = []domain.Webhook{}
+	}
+	if data.OAuthSyncGroupRequests == nil {
+		data.OAuthSyncGroupRequests = []domain.OAuthSyncGroupRequest{}
+	}
+	if data.WebhookFailureEvents == nil {
+		data.WebhookFailureEvents = []domain.WebhookFailureEvent{}
 	}
 	for _, team := range data.Teams {
 		settings := data.TeamSettings[team.ID]
@@ -1137,7 +1145,7 @@ func defaultUserSettings(userID string) domain.UserSettings {
 }
 
 func defaultWorkspaceSettings() domain.WorkspaceSettings {
-	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "dashboards": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true, "triage-intelligence": false}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", InitiativeUpdateWeekday: 4, InitiativeUpdateHour: 14, CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}, TriageIntelligence: domain.TriageIntelligenceSettings{AssigneeAction: "suggest", ProjectAction: "suggest", LabelAction: "suggest", TeamAction: "suggest", DuplicateAction: "suggest", RelatedAction: "suggest"}}, GoogleAuthEnabled: true, EmailAuthEnabled: true, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", UpdatedAt: time.Now().UTC()}
+	return domain.WorkspaceSettings{FiscalMonth: "January", GuestsAllowed: true, SessionDurationDays: 30, InvitePermission: "admins", TeamCreatePermission: "members", LabelPermission: "members", TemplatePermission: "members", APIKeyPermission: "members", FeatureFlags: map[string]bool{"ai": true, "initiatives": true, "documents": true, "customer-requests": true, "releases": true, "pulse": true, "asks": true, "dashboards": true, "sidebar-teams": true, "sidebar-try": true, "recently-deleted": true, "audit-log": true, "emojis": true, "triage-intelligence": false}, FeatureSettings: domain.FeatureSettings{InitiativeUpdateSchedule: "none", InitiativeUpdateWeekday: 4, InitiativeUpdateHour: 14, CustomerRevenueFormat: "annual", CustomerRevenueCurrency: "USD", CustomerManualEdits: true, CustomerStatuses: []domain.FeatureOption{{ID: "active", Name: "Active", Color: "#4cb782"}, {ID: "prospect", Name: "Prospect", Color: "#5e6ad2"}, {ID: "churned", Name: "Churned", Color: "#f2c94c"}, {ID: "lost", Name: "Lost", Color: "#eb5757"}}, CustomerTiers: []domain.FeatureOption{}, CustomerExcludedDomains: []string{}, CustomerGenericDomains: []string{}, PulseWorkspaceSchedule: "daily", AsksEmailAddresses: []string{}, TriageIntelligence: domain.TriageIntelligenceSettings{AssigneeAction: "suggest", ProjectAction: "suggest", LabelAction: "suggest", TeamAction: "suggest", DuplicateAction: "suggest", RelatedAction: "suggest"}}, GoogleAuthEnabled: true, EmailAuthEnabled: true, AllowedAuthServices: []string{"google", "email"}, CodingAgentSettings: domain.CodingAgentSettings{}, InitiativePermission: "members", LoopPermission: "members", AgentGuidancePermission: "admins", UpdatedAt: time.Now().UTC()}
 }
 
 func defaultStateID(data *domain.Bootstrap, teamID string) string {
@@ -1196,26 +1204,23 @@ func (s *SQLiteStore) BootstrapForContext(ctx context.Context, workspaceKey stri
 		workspaceKey = s.lastWorkspaceKey
 	}
 	data, ok := s.workspaces[workspaceKey]
-	if ok {
-		// Scoped team writes mutate TeamSettings/CycleSettings in place under the
-		// exclusive lock. Snapshot those maps before unlocking so cloneBootstrap
-		// cannot iterate a map the writer is updating.
-		data.TeamSettings = maps.Clone(data.TeamSettings)
-		data.CycleSettings = maps.Clone(data.CycleSettings)
-	}
-	s.mu.RUnlock()
 	if !ok {
+		s.mu.RUnlock()
 		return domain.Bootstrap{}, false
 	}
+	// Clone under the read lock so concurrent writers cannot race shared slices/maps.
 	clone := cloneBootstrap(data)
-	if data.Issues == nil {
-		issues, err := s.readIssueRecords(ctx, data.Workspace.URLKey)
+	workspaceURLKey := data.Workspace.URLKey
+	issuesNil := data.Issues == nil
+	s.mu.RUnlock()
+	if issuesNil {
+		issues, err := s.readIssueRecords(ctx, workspaceURLKey)
 		if err != nil {
 			return domain.Bootstrap{}, false
 		}
 		clone.Issues = issues
 	}
-	if err := s.hydrateContentRecords(ctx, data.Workspace.URLKey, &clone); err != nil {
+	if err := s.hydrateContentRecords(ctx, workspaceURLKey, &clone); err != nil {
 		return domain.Bootstrap{}, false
 	}
 	refreshDisplayReferences(&clone)
@@ -1754,6 +1759,10 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	if actor, ok := actorFromContext(ctx); ok {
 		viewer = actor
 	}
+	if viewer.ID == "" {
+		viewer = bootstrapViewer()
+		s.viewer = viewer
+	}
 	data := EmptyWorkspace(name, urlKey, region, viewer)
 	event := &domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "workspace.created", AggregateID: data.Workspace.ID, Payload: json.RawMessage(fmt.Sprintf(`{"urlKey":%q}`, urlKey)), CreatedAt: time.Now().UTC()}
 	if err := s.persistWorkspace(ctx, urlKey, data, event); err != nil {
@@ -1764,8 +1773,15 @@ func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region 
 	s.workspaces[urlKey] = stored
 	s.lastWorkspaceKey = urlKey
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	_, _ = s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now)
-	_, _ = s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, viewer.ID, urlKey, now)
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,email_verified_at,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,display_name=excluded.display_name,active=excluded.active,updated_at=excluded.updated_at`, viewer.ID, nullableString(viewer.Email), viewer.Name, viewer.DisplayName, viewer.AvatarURL, "", nullableTime(viewer.EmailVerified, time.Now().UTC()), boolInt(viewer.Active), now, now); err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("auth user: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO workspace_memberships(workspace_id,user_id,role,status,joined_at,last_seen_at) VALUES(?,?,?,?,?,?) ON CONFLICT(workspace_id,user_id) DO UPDATE SET role=excluded.role,status=excluded.status,joined_at=excluded.joined_at,last_seen_at=excluded.last_seen_at`, data.Workspace.ID, viewer.ID, "owner", "active", now, now); err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("workspace membership: %w", err)
+	}
+	if _, err := s.db.ExecContext(ctx, `INSERT INTO auth_account_state(user_id,last_workspace_key,updated_at) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET last_workspace_key=excluded.last_workspace_key,updated_at=excluded.updated_at`, viewer.ID, urlKey, now); err != nil {
+		return domain.Bootstrap{}, fmt.Errorf("auth account state: %w", err)
+	}
 	if len(data.Teams) > 0 {
 		_, _ = s.db.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?) ON CONFLICT(workspace_id,team_id,user_id) DO UPDATE SET role=excluded.role,joined_at=excluded.joined_at`, data.Workspace.ID, data.Teams[0].ID, viewer.ID, "owner", now)
 	}
@@ -1858,6 +1874,50 @@ func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, 
 	s.workspaces[workspace.URLKey] = data
 	s.lastWorkspaceKey = workspace.URLKey
 	return data, nil
+}
+
+func (s *SQLiteStore) ScheduleWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
+	var updated domain.Workspace
+	err := s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_scheduled", workspaceKey, nil, func(data *domain.Bootstrap) error {
+		if data.Workspace.DeletionRequestedAt != nil {
+			updated = data.Workspace
+			return nil
+		}
+		now := time.Now().UTC()
+		data.Workspace.DeletionRequestedAt = &now
+		updated = data.Workspace
+		return nil
+	})
+	return updated, err
+}
+
+func (s *SQLiteStore) CancelWorkspaceDeletion(ctx context.Context, workspaceKey string) (domain.Workspace, error) {
+	var updated domain.Workspace
+	err := s.MutateWorkspace(ctx, workspaceKey, "workspace.deletion_canceled", workspaceKey, nil, func(data *domain.Bootstrap) error {
+		data.Workspace.DeletionRequestedAt = nil
+		updated = data.Workspace
+		return nil
+	})
+	return updated, err
+}
+
+func (s *SQLiteStore) WorkspaceAccessStatus(ctx context.Context, workspaceKey, userID string) (exists bool, hasMembership bool, role string, data domain.Bootstrap, ok bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	bootstrap, found := s.workspaces[workspaceKey]
+	if !found {
+		return false, false, "", domain.Bootstrap{}, false
+	}
+	exists = true
+	data = bootstrap
+	if userID == "" {
+		return exists, false, "", data, true
+	}
+	role, status, err := s.WorkspaceRole(ctx, bootstrap.Workspace.ID, userID)
+	if err != nil || status != "active" {
+		return exists, false, "", data, true
+	}
+	return exists, true, role, data, true
 }
 
 func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, workspaceKey string) error {

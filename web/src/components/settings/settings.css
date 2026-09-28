@@ -13,6 +13,11 @@
 .settings-search-collapse{width:24px!important;height:24px!important;display:grid!important;place-items:center;padding:0!important;color:var(--theme-text-tertiary)!important}
 .settings-search-collapse svg{width:12px!important;height:12px!important;transition:transform .15s ease}
 .settings-search-collapse[aria-expanded=false] svg{transform:rotate(-90deg)}
+.settings-content:has(>.settings-shortcuts-not-found){width:100%;max-width:none;min-height:100%;padding:0;display:grid;place-items:center}
+.settings-shortcuts-not-found{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;color:var(--theme-text-secondary)}
+.settings-shortcuts-not-found>svg{margin-bottom:8px;color:var(--theme-text-secondary)}
+.settings-shortcuts-not-found strong{font-size:13px;font-weight:600;color:var(--theme-text-primary)}
+.settings-shortcuts-not-found span{font-size:13px}
 .settings-search-group-items{display:flex;flex-direction:column;gap:1px;padding:1px 0 3px 25px}
 .settings-search-result{display:flex!important;height:28px!important;align-items:center!important;padding:0 8px!important;color:var(--theme-text-secondary)!important;font-weight:450!important;text-align:left}
 .settings-search-result.is-section{color:var(--theme-text-primary)!important}
@@ -244,3 +249,17 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
 :root[data-theme="light"] .settings-action.primary{border-color:transparent;background:var(--accent-primary);color:var(--on-accent)}
 :root[data-theme="light"] body .settings-select-menu,:root[data-theme="light"] body .personal-select-menu{border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-surface-2)}
 :root[data-theme="light"] body .settings-member-action-menu,:root[data-theme="light"] body .settings-team-membership-menu{border:.5px solid var(--theme-border);border-radius:12px;background:var(--theme-surface-2)}
+
+.settings-section-note{margin:0 0 12px;padding:0 16px;color:var(--muted);font-size:13px;line-height:1.45}
+
+.settings-inline-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.personal-connection-soon {
+  color: var(--color-text-tertiary, #8a8f98);
+  font-size: 12px;
+  font-weight: 500;
+}

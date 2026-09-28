@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Clock3,
   MoreHorizontal,
+  Play,
   Plus,
   Settings2,
   Sparkles,
@@ -23,8 +24,13 @@ import {
   sendAgentMessage,
   updateDraft,
   updateLoop,
+  updateWorkspacePreferences,
   type LoopMutation,
+  runLoopNow,
 } from "@/lib/api";
+import { LoopRuns } from "./loop-runs";
+import { AutomationOwnerSelect } from "@/components/automation/automation-owner-select";
+import { AutomationTrustedSourceEditor } from "@/components/automation/automation-trusted-source-editor";
 import { loopPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import type { BootstrapData, Loop } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
@@ -328,9 +334,9 @@ function LoopRow({
           {loop.enabled ? t("Enabled") : t("Disabled")}
         </span>
         {showLastRun && (
-          <span className="loops-row-updated">
+          <span className="loops-row-updated" title={t("Last run")}>
             <Clock3 size={13} />
-            {new Date(loop.updatedAt).toLocaleDateString()}
+            {loop.lastRunAt ? new Date(loop.lastRunAt).toLocaleDateString() : t("Never")}
           </span>
         )}
       </button>
@@ -353,6 +359,19 @@ function LoopRow({
             <Settings2 size={14} />
             {t("Edit loop")}
           </button>
+          {loop.triggerType === "schedule" && loop.enabled && (
+            <button
+              onClick={() => {
+                setMenu(false);
+                void runLoopNow(loop.id)
+                  .then(() => toast.success(t("Loop started")))
+                  .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not start the loop")));
+              }}
+            >
+              <Play size={14} />
+              {t("Run now")}
+            </button>
+          )}
           <button
             onClick={() => {
               setMenu(false);
@@ -457,8 +476,19 @@ function LoopEditor({
   const [allowOutside, setAllowOutside] = useState(
     loop?.allowChangesOutsideTrigger ?? draftValues.allowChangesOutsideTrigger ?? true,
   );
-  const [allowExternal, setAllowExternal] = useState(
-    loop?.allowExternalSync ?? draftValues.allowExternalSync ?? false,
+  // Flow has no two-way sync yet, so the stored value is kept but not editable.
+  const allowExternal = loop?.allowExternalSync ?? draftValues.allowExternalSync ?? false;
+  const [ownerId, setOwnerId] = useState(
+    loop?.ownerId ?? draftValues.ownerId ?? loop?.creator?.id ?? data.viewer.id,
+  );
+  const [trustedSourceKeys, setTrustedSourceKeys] = useState<string[]>(
+    loop?.trustedSourceKeys ?? draftValues.trustedSourceKeys ?? [],
+  );
+  const [trustedSourcesMode, setTrustedSourcesMode] = useState(
+    data.workspaceSettings.trustedSourcesMode ?? "none",
+  );
+  const [trustedSourcesAllowlist, setTrustedSourcesAllowlist] = useState<string[]>(
+    data.workspaceSettings.trustedSourcesAllowlist ?? [],
   );
   const [composeOpen, setComposeOpen] = useState(false);
   const [composePrompt, setComposePrompt] = useState("");
@@ -494,11 +524,24 @@ function LoopEditor({
         ? scopeTeamIds.filter((id) => id !== teamId)
         : [...scopeTeamIds, teamId],
     );
+  const integrationServices = useMemo(() => {
+    const services = new Set<string>();
+    for (const item of data.integrationConnections ?? []) {
+      if (item.provider) services.add(item.provider);
+      if (item.status === "connected" || item.status === "ready") {
+        if (item.provider) services.add(item.provider);
+      }
+    }
+    // Always offer email as a catalog option for trusted-source editors.
+    services.add("email");
+    return [...services];
+  }, [data.integrationConnections]);
   const draftMetadata = useMemo(() => ({
     name: name.trim(), icon, color, level, triggerType, triggerConfig, instructions,
     connectorIds, teamAccess, allowChangesOutsideTrigger: allowOutside, allowExternalSync: allowExternal,
+    ownerId, trustedSourceKeys,
     enabled: loop?.enabled ?? true,
-  } satisfies Partial<Loop>), [allowExternal, allowOutside, color, connectorIds, icon, instructions, level, loop?.enabled, name, teamAccess, triggerConfig, triggerType]);
+  } satisfies Partial<Loop>), [allowExternal, allowOutside, color, connectorIds, icon, instructions, level, loop?.enabled, name, ownerId, teamAccess, triggerConfig, triggerType, trustedSourceKeys]);
   const initialDraftMetadata = useRef(draftMetadata);
   const hasDraftContent = Boolean(name.trim() || instructions.trim() || connectorIds.length);
   useEffect(() => {
@@ -542,13 +585,19 @@ function LoopEditor({
         color,
         level,
         triggerType,
-        triggerConfig,
+        // Schedules run in the editor's timezone.
+        triggerConfig:
+          triggerType === "schedule"
+            ? { ...triggerConfig, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }
+            : triggerConfig,
         instructions: instructions.trim(),
         connectorIds,
         teamAccess,
         allowChangesOutsideTrigger:
           triggerType === "schedule" ? false : allowOutside,
         allowExternalSync: allowExternal,
+        ownerId,
+        trustedSourceKeys,
         enabled: loop?.enabled ?? true,
       };
       if (loop) await updateLoop(loop.id, input);
@@ -913,6 +962,15 @@ function LoopEditor({
         </section>
         <section className="loops-editor-section loops-permissions">
           <h2>{t("Permissions")}</h2>
+          <AutomationOwnerSelect
+            ownerId={ownerId}
+            creator={loop?.creator}
+            creatorId={loop?.creator?.id ?? data.viewer.id}
+            users={data.users}
+            viewer={data.viewer}
+            viewerRole={data.viewerRole}
+            onChangeOwner={setOwnerId}
+          />
           <label>
             <span>
               <strong>{t("Team access")}</strong>
@@ -952,21 +1010,28 @@ function LoopEditor({
               />
             </label>
           )}
-          <label>
-            <span>
-              <strong>{t("Externally synced issues and comments")}</strong>
-              <small>
-                {t(
-                  "Allow posting to externally synced issues and comments. Posted content may be visible to users outside of Flow.",
-                )}
-              </small>
-            </span>
-            <input
-              type="checkbox"
-              checked={allowExternal}
-              onChange={(event) => setAllowExternal(event.target.checked)}
-            />
-          </label>
+          <AutomationTrustedSourceEditor
+            users={data.users}
+            integrationServices={integrationServices}
+            policySourceKeys={trustedSourceKeys}
+            trustedSourcesMode={trustedSourcesMode}
+            trustedSourcesAllowlist={trustedSourcesAllowlist}
+            onPolicyKeysChange={setTrustedSourceKeys}
+            onAllowlistChange={(next) => {
+              setTrustedSourcesMode(next.trustedSourcesMode);
+              setTrustedSourcesAllowlist(next.trustedSourcesAllowlist);
+              void updateWorkspacePreferences({
+                trustedSourcesMode: next.trustedSourcesMode,
+                trustedSourcesAllowlist: next.trustedSourcesAllowlist,
+              }).catch((error) =>
+                toast.error(
+                  error instanceof Error
+                    ? error.message
+                    : t("Could not update trusted sources"),
+                ),
+              );
+            }}
+          />
           <p className="loops-settings-note">
             {t("Coding sessions can be enabled for Loops in")}{" "}
             <a href={`/${data.workspace.urlKey}/settings/ai/automation`}>
@@ -975,6 +1040,7 @@ function LoopEditor({
             .
           </p>
         </section>
+        {loop && <LoopRuns loop={loop} />}
       </div>
       {composeOpen && (
         <div className="loops-modal-backdrop">

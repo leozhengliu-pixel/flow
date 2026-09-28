@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -617,18 +616,16 @@ func (s *SQLiteStore) issueCollectionCounts(ctx context.Context) (map[string]int
 // this projection instead of the compatibility full-bootstrap API.
 func (s *SQLiteStore) WorkspaceMetadata(workspace string) (domain.Bootstrap, bool) {
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if workspace == "" {
 		workspace = s.lastWorkspaceKey
 	}
 	data, ok := s.workspaces[workspace]
-	if ok {
-		data.TeamSettings = maps.Clone(data.TeamSettings)
-		data.CycleSettings = maps.Clone(data.CycleSettings)
-	}
-	s.mu.RUnlock()
 	if !ok {
 		return domain.Bootstrap{}, false
 	}
+	// Skip heavy collections; clone the rest while the read lock is held so a
+	// concurrent mutateTeamMetadata writer cannot race cloneBootstrap.
 	data.Issues = nil
 	data.Activities = nil
 	data.Comments = nil
