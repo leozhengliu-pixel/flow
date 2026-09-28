@@ -104,7 +104,7 @@ describe('ProjectCreationAgent', () => {
     render(<I18nProvider><ProjectCreationAgent onApplyDraft={onApplyDraft} onClose={vi.fn()} onHide={vi.fn()}/></I18nProvider>)
 
     await waitFor(() => expect(api.fetchAgentStatus).toHaveBeenCalled())
-    const input = screen.getByRole('textbox', { name: 'Send a message to Linear AI' })
+    const input = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
     await user.type(input, 'Create a launch project')
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
     await waitFor(() => expect(onApplyDraft).toHaveBeenCalledWith({ name: 'Launch', targetDate: '2027-06-30', milestones: ['Beta'] }))
@@ -126,7 +126,7 @@ describe('ProjectCreationAgent', () => {
     await user.type(screen.getByRole('textbox', { name: 'Milestone description' }), 'Manual milestone')
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     await user.click(screen.getByRole('button', { name: 'Create with Agent' }))
-    const input = screen.getByRole('textbox', { name: 'Send a message to Linear AI' })
+    const input = screen.getByRole('textbox', { name: 'Send a message to Flow Agent' })
     await user.type(input, 'Add the final milestone')
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
 

@@ -504,3 +504,53 @@
 @media (prefers-reduced-motion: reduce) {
   .project-creation-agent__spinner { animation: none; }
 }
+
+/* "Updated project draft" step — Linear: 12px label, then a 41px bordered card with the project glyph and name. */
+.project-creation-agent__draft-update {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+.project-creation-agent__draft-update-label {
+  padding: 0 12px;
+  color: var(--theme-text-secondary);
+  font: 450 12px/15px var(--font);
+}
+.project-creation-agent__draft-card {
+  box-sizing: border-box;
+  min-height: 41px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px 10px 14px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 6px;
+  color: var(--text);
+  font: 500 12px/18px var(--font);
+}
+.project-creation-agent__draft-card svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.project-creation-agent__draft-card span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Linear: the request sits in a filled bubble and "<draft> added to context" stays on one line, truncating the name. */
+.project-creation-agent__message--user { background: var(--agent-user-bubble-bg); }
+.project-creation-agent__turn--user .project-creation-agent__context {
+  width: auto;
+  max-width: calc(100% - 16px);
+  white-space: nowrap;
+}
+.project-creation-agent__context span:first-of-type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.project-creation-agent__context span:last-child { flex: none; }

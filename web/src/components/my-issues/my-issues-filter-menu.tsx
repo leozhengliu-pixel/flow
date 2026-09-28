@@ -1,4 +1,4 @@
-import { cloneElement, Fragment, isValidElement, useMemo, useState, type ReactElement } from 'react'
+import { cloneElement, Fragment, isValidElement, useMemo, useRef, useState, type ReactElement } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command } from 'cmdk'
@@ -135,10 +135,19 @@ function ValueMenu({ field, filters, label, onClose, onToggle, onToggleAny, opti
   const selectedIds = useMemo(() => filters.filter(filter => filter.field === field).flatMap(filter => filter.values?.map(value => value.value) ?? [filter.value]), [field, filters])
   const command = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
   const [aiPending, setAiPending] = useState(false)
+  // Hosts build the next filter list from their current props, so apply AI results one render at a time.
+  const toggleAnyRef = useRef(onToggleAny)
+  toggleAnyRef.current = onToggleAny
   const runAIFilter = (query: string) => {
     setAiPending(true)
-    void resolveAIFilter(query, optionsFor).then(parsed => {
-      if (parsed.length) { for (const item of parsed) onToggleAny(item.field, item.option); onClose() }
+    void resolveAIFilter(query, optionsFor).then(async parsed => {
+      if (parsed.length) {
+        for (const [index, item] of parsed.entries()) {
+          if (index) await new Promise(resolve => setTimeout(resolve, 16))
+          toggleAnyRef.current(item.field, item.option)
+        }
+        onClose()
+      }
       else onToggle(field, interpretAIQuery(query))
     }).finally(() => setAiPending(false))
   }

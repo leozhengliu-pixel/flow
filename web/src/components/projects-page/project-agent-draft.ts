@@ -57,12 +57,31 @@ export function parseProjectAgentDraft(text: string): ProjectAgentDraft | undefi
   return Object.keys(result).length ? result : undefined
 }
 
+/**
+ * Split an assistant reply into the prose shown in chat and the draft applied to the form.
+ * Linear shows only a short sentence plus an "Updated project draft" card, never the raw JSON.
+ */
+export function splitProjectAgentReply(text: string): { prose: string; draft?: ProjectAgentDraft } {
+  const draft = parseProjectAgentDraft(text)
+  const fenced = text.match(/```(?:json)?\s*\{[\s\S]*?\}\s*```/i)
+  let prose = text
+  if (fenced) prose = text.replace(fenced[0], '')
+  else {
+    const start = text.indexOf('{')
+    const end = text.lastIndexOf('}')
+    if (start >= 0 && end > start && findJsonObject(text.slice(start, end + 1))) prose = text.slice(0, start) + text.slice(end + 1)
+  }
+  prose = prose.replace(/\n{3,}/g, '\n\n').trim()
+  return { prose: draft ? prose : text, draft }
+}
+
 export function projectAgentPrompt(message: string): string {
   return [
     'Draft a new project from the request below.',
-    'Return a concise explanation followed by a JSON object with these optional keys:',
+    'Reply with one or two plain sentences describing what you filled in (no field names, no JSON in the sentence), then a fenced json block with only the keys you are setting:',
     'name, summary, description, status, priority, startDate, targetDate, milestones, team, lead, members, initiatives, labels, dependencies.',
-    'Dates must use YYYY-MM-DD. milestones must be an array of short strings.',
+    'Dates must use YYYY-MM-DD; turn relative deadlines such as "within two weeks" into a targetDate counted from today.',
+    'priority must be one of No priority, Urgent, High, Medium, Low. Only include milestones when the request asks for them; they must be an array of short strings.',
     '',
     message.trim(),
   ].join('\n')
@@ -108,7 +127,9 @@ function normalizeObject(value: Record<string, unknown>): ProjectAgentDraft {
   const summary = read('summary', 'shortSummary')
   const description = read('description', 'details')
   const status = read('status')
-  const priority = read('priority')
+  // Providers sometimes answer with the numeric scale (0 = none … 4 = low) instead of a label.
+  const numericPriority = typeof value.priority === 'number' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][value.priority] : undefined
+  const priority = read('priority') ?? numericPriority
   const startDate = read('startDate', 'start_date', 'start date')
   const targetDate = read('targetDate', 'target_date', 'target date', 'endDate')
   const team = read('team', 'teamName', 'team name')

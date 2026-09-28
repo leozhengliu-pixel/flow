@@ -571,9 +571,19 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 			if slices.Contains(fields, "triageIntel") {
 				raw["triageIntel"] = activeIssueSuggestions(&data, issue.ID)
 			}
-			projected := map[string]any{"id": issue.ID}
+			// Always carry the human identifier (e.g. ENG-12) so agents never cite internal ids.
+			projected := map[string]any{"id": issue.ID, "identifier": issue.Identifier}
 			for _, field := range fields {
-				projected[field] = raw[field]
+				switch field {
+				case "url":
+					projected[field] = mcpIssueURL(data.Workspace.URLKey, issue.Identifier, args)
+				default:
+					projected[field] = raw[field]
+				}
+			}
+			if slices.Contains(fields, "priority") {
+				// The numeric scale (0 = none, 1 = urgent … 4 = low) is easy to misread; ship the label too.
+				projected["priorityLabel"] = issue.PriorityLabel
 			}
 			items = append(items, projected)
 		}

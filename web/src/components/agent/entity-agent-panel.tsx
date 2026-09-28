@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { FileText } from 'lucide-react'
+import { ProjectIcon } from '@/components/issue/issue-icons'
 import { fetchAgentStatus, getAgentSession, listAgentSessions, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '@/types/flow'
@@ -233,7 +235,14 @@ export function EntityAgentPanel({
       next = session
         ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal)
         : await streamNewAgentSession(
-            { message, issueIds, location: 'toolbar' },
+            {
+              message,
+              issueIds,
+              // Give the model the entity this panel belongs to, not only its issues.
+              ...(target.type === 'document' ? { documentIds: [target.id] } : {}),
+              ...(target.type === 'project' ? { projectIds: [target.id] } : {}),
+              location: 'toolbar',
+            },
             onEvent,
             controller.signal,
           )
@@ -279,6 +288,12 @@ export function EntityAgentPanel({
         variant={variant}
       >
         <EntityAgentThread
+          addedContext={
+            // Projects and documents are attached to new sessions (projectIds / documentIds).
+            target.type === 'project' || target.type === 'document'
+              ? [{ key: entityKey, icon: target.type === 'project' ? <ProjectIcon size={14}/> : <FileText size={14}/>, label: target.title }]
+              : undefined
+          }
           approvalBusy={approvalBusy}
           contextIssues={contextIssues}
           conversationDraftKey={conversationDraftKey}

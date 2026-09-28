@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Plus, Search, Users } from 'lucide-react'
+import { Box, ChevronRight, FileText, Plus, RotateCcw, Search, Users } from 'lucide-react'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { AgentChevronDownIcon, AgentSkillsIcon } from './agent-icons'
-import type { AgentMention } from './agent-mention-input'
+import { mentionIcon, type AgentMention } from './agent-mention-input'
+import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { useI18n } from '@/i18n/i18n'
 import { AgentPanel } from './agent-panel'
-import { EntityAgentThread, clearEntityThreadDraft } from './entity-agent-thread'
+import { EntityAgentThread, clearEntityThreadDraft, type AgentContextEntity } from './entity-agent-thread'
 import styles from './agent-chat-panel.module.css'
 import { conversationDraftKeyFor } from './agent-drafts'
+
+/** The entity the user is looking at; attached to the first message of a new conversation. */
+export type AgentPageContext = { type: 'project' | 'document' | 'issue'; id: string; label: string }
 
 export function AgentChatPanel({
   data,
@@ -25,6 +29,11 @@ export function AgentChatPanel({
   onUseResponse,
   useResponseLabel = 'Use response',
   open,
+  pageContext,
+  autoSubmit = false,
+  draftFence = 'update',
+  onDraft,
+  draftCard,
 }: {
   /** Workspace data enables @-mentions and the Skills picker. */
   data?: BootstrapData
@@ -39,6 +48,15 @@ export function AgentChatPanel({
   onUseResponse?: (content: string) => void
   useResponseLabel?: string
   open: boolean
+  /** Current page entity (project, document, issue) shown as a removable context chip for new conversations. */
+  pageContext?: AgentPageContext
+  /** Send `initialPrompt` as soon as the panel opens (Linear's "Write with Agent"). */
+  autoSubmit?: boolean
+  /** Fence tag (e.g. `update`) whose block is taken out of the reply and handed to `onDraft`. */
+  draftFence?: string
+  onDraft?: (draft: string) => void
+  /** Labels for the "Created draft" card; `current` is the host's text, used to mark the draft outdated. */
+  draftCard?: { context: string; title: string; current?: string }
 }) {
   const { t } = useI18n()
   const [messages, setMessages] = useState<AgentMessage[]>([])
@@ -56,6 +74,27 @@ export function AgentChatPanel({
   const [skillIds, setSkillIds] = useState<string[]>([])
   const [removedContext, setRemovedContext] = useState<string[]>([])
   const contextIssues = useMemo(() => issues.filter(issue => !removedContext.includes(issue.id)), [issues, removedContext])
+  const [attachedContext, setAttachedContext] = useState<AgentContextEntity[]>([])
+  // Drafts are derived from the stored replies, so a resumed chat still shows its "Created draft" card.
+  const drafts = useMemo(() => Object.fromEntries(messages.flatMap(message => {
+    const draft = message.role === 'assistant' ? splitAgentDraft(message.content, draftFence).draft : undefined
+    return draft ? [[message.id, draft]] : []
+  })), [draftFence, messages])
+  const card = draftCard ?? { context: pageContext?.label ?? session?.title ?? t('Project'), title: 'Update draft' }
+  const autoSubmitted = useRef(false)
+  const splitDraft = (content: string) => splitAgentDraft(content, draftFence)
+  const displayMessages = useMemo(() => draftFence
+    ? messages.map(message => message.role === 'assistant' ? { ...message, content: splitAgentDraft(message.content, draftFence).prose } : message)
+    : messages, [draftFence, messages])
+  const pageContextKey = pageContext ? `${pageContext.type}:${pageContext.id}` : ''
+  // The page entity only applies to a conversation that has not started yet, and not once the user removed it.
+  const activePageContext = pageContext && !session && !messages.length && !removedContext.includes(pageContextKey) ? pageContext : undefined
+  const pageContextEntities: AgentContextEntity[] = activePageContext ? [{
+    key: pageContextKey,
+    icon: pageContextIcon(activePageContext, data),
+    label: activePageContext.label,
+    onRemove: () => setRemovedContext(current => [...current, pageContextKey]),
+  }] : []
   const idsOf = (type: AgentMention['type']) => mentions.filter(item => item.type === type).map(item => item.id)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
 
@@ -89,6 +128,7 @@ export function AgentChatPanel({
   }, [initialPrompt])
 
   const close = () => {
+    autoSubmitted.current = false
     setMessages([])
     setSession(undefined)
     setInput('')
@@ -102,6 +142,7 @@ export function AgentChatPanel({
     setMentions([])
     setSkillIds([])
     setRemovedContext([])
+    setAttachedContext([])
     clearEntityThreadDraft(draftKey)
     onClose()
   }
@@ -129,6 +170,13 @@ export function AgentChatPanel({
       { id: `pending-${Date.now()}`, role: 'user', content: message, mentions, createdAt: new Date().toISOString() },
     ])
     const mentioned = { issueIds: idsOf('issue'), projectIds: idsOf('project'), documentIds: idsOf('document'), userIds: idsOf('user'), mentions }
+    const pageIdsOf = (type: AgentPageContext['type']) => activePageContext?.type === type ? [activePageContext.id] : []
+    if (!session) {
+      setAttachedContext([
+        ...pageContextEntities.map(({ onRemove: _onRemove, ...item }) => item),
+        ...contextIssues.map(issue => ({ key: issue.id, icon: <StatusIcon state={issue.state} size={14}/>, label: `${issue.identifier} ${issue.title}` })),
+      ])
+    }
     setInput('')
     setMentions([])
     setError(undefined)
@@ -180,6 +228,9 @@ export function AgentChatPanel({
         if (event.type === 'session.completed' && event.session) {
           setMessages(event.session.messages)
           setStreamParts([])
+          const reply = event.session.messages.filter(item => item.role === 'assistant').at(-1)
+          const draft = reply && draftFence ? splitDraft(reply.content).draft : undefined
+          if (reply && draft) onDraft?.(draft)
         }
       }
       next = session
@@ -187,9 +238,9 @@ export function AgentChatPanel({
         : await streamNewAgentSession(
             {
               message,
-              issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...mentioned.issueIds])],
-              projectIds: mentioned.projectIds,
-              documentIds: mentioned.documentIds,
+              issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...pageIdsOf('issue'), ...mentioned.issueIds])],
+              projectIds: [...new Set([...pageIdsOf('project'), ...mentioned.projectIds])],
+              documentIds: [...new Set([...pageIdsOf('document'), ...mentioned.documentIds])],
               userIds: mentioned.userIds,
               mentions,
               skillIds,
@@ -217,6 +268,13 @@ export function AgentChatPanel({
     }
   }
 
+  // Linear's "Write with Agent" sends its request as soon as the panel is ready.
+  useEffect(() => {
+    if (!open || !autoSubmit || autoSubmitted.current || !status?.enabled || session || messages.length || !input.trim()) return
+    autoSubmitted.current = true
+    void submit()
+  })
+
   return (
     <AgentPanel
       fullscreen={fullscreen}
@@ -234,12 +292,41 @@ export function AgentChatPanel({
       variant="floating"
     >
       <EntityAgentThread
+        renderMessageAttachment={message => {
+          const draft = drafts[message.id]
+          if (!draft) return null
+          // The editor may reformat markdown, so compare loosely: outdated once the host no longer holds the draft's opening words.
+          const opening = draft.replace(/[#*_>`-]/g, '').replace(/\s+/g, ' ').trim().slice(0, 24)
+          const current = (card.current ?? '').replace(/<[^>]+>/g, ' ').replace(/[#*_>`-]/g, '').replace(/\s+/g, ' ')
+          const outdated = Boolean(onDraft) && card.current !== undefined && !current.includes(opening)
+          return (
+            <div className={styles.draftUpdate}>
+              <span className={styles.draftUpdateLabel}>{t('Created draft')}</span>
+              <div className={styles.draftCard}>
+                <div className={styles.draftCardTitle}>
+                  <span data-i18n-ignore>{card.context}</span>
+                  <ChevronRight aria-hidden="true" size={12} />
+                  <b>{t(card.title)}</b>
+                </div>
+                <p data-i18n-ignore>{draft}</p>
+                {outdated && (
+                  <div className={styles.draftCardFooter}>
+                    <span>{t('Outdated')}</span>
+                    <button onClick={() => onDraft?.(draft)} type="button"><RotateCcw aria-hidden="true" size={12} />{t('Restore')}</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        }}
         renderMessageActions={onUseResponse ? (message, index) => message.role === 'assistant' && message.content.trim() && !(loading && index === messages.length - 1) ? (
           <button className={styles.useResponse} onClick={() => { onUseResponse(message.content.trim()); close() }} type="button">
             {t(useResponseLabel)}
           </button>
         ) : null : undefined}
         approvalBusy={approvalBusy}
+        addedContext={attachedContext}
+        contextEntities={pageContextEntities}
         contextIssues={contextIssues}
         mentionData={data}
         onMentionsChange={setMentions}
@@ -247,7 +334,7 @@ export function AgentChatPanel({
         footerStart={data ? <SkillsPicker data={data} disabled={Boolean(session)} selectedIds={skillIds} onChange={setSkillIds} onCreate={onCreateSkill}/> : undefined}
         conversationDraftKey={draftKey}
         emptyLabel={t('Ask Flow about the selected issues')}
-        placeholder={status && !status.enabled ? t('Flow Agent is not configured') : t('Ask Flow…')}
+        placeholder={status && !status.enabled ? t('Flow Agent is not configured') : data ? t('@ to mention any issue, project, or document') : t('Ask Flow…')}
         welcome={{
           title: t('Welcome to Flow'),
           subtitle: t('Ask anything or tell Flow what you need'),
@@ -261,7 +348,7 @@ export function AgentChatPanel({
         error={error}
         input={input}
         loading={loading}
-        messages={messages}
+        messages={displayMessages}
         onInputChange={setInput}
         onStop={() => abortRef.current?.abort()}
         onSubmit={() => void submit()}
@@ -298,4 +385,19 @@ function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { dat
       onChange(selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : [...selectedIds, id])
     }}
   />
+}
+
+function pageContextIcon(context: AgentPageContext, data?: BootstrapData) {
+  if (data) return mentionIcon(context, data)
+  return context.type === 'project' ? <ProjectIcon size={14}/> : context.type === 'document' ? <FileText size={14}/> : null
+}
+
+/** Split a reply into chat prose and the fenced draft block (```update … ```); an unfinished block is hidden too. */
+export function splitAgentDraft(content: string, fence?: string): { prose: string; draft?: string } {
+  if (!fence) return { prose: content }
+  const pattern = new RegExp('```' + fence + '[^\\S\\n]*\\n?([\\s\\S]*?)(```|$)')
+  const match = content.match(pattern)
+  if (!match) return { prose: content }
+  const prose = content.replace(match[0], '').replace(/\n{3,}/g, '\n\n').trim()
+  return { prose, draft: match[2] === '```' ? match[1].trim() || undefined : undefined }
 }

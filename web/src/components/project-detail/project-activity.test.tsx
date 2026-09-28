@@ -15,7 +15,7 @@ const apiMocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...apiMocks }))
 vi.mock('@/lib/route-pages', () => ({
-  AgentChatPanel: ({ initialPrompt, onClose, onUseResponse, useResponseLabel }: { initialPrompt?: string; onClose: () => void; onUseResponse?: (content: string) => void; useResponseLabel?: string }) => <div data-testid="agent-panel"><p>{initialPrompt}</p><button onClick={onClose} type="button">Close agent</button>{onUseResponse && <button onClick={() => { onUseResponse('Agent drafted update'); onClose() }} type="button">{useResponseLabel}</button>}</div>,
+  AgentChatPanel: ({ autoSubmit, initialPrompt, onClose, onDraft, pageContext }: { autoSubmit?: boolean; initialPrompt?: string; onClose: () => void; onDraft?: (draft: string) => void; pageContext?: { label: string } }) => <div data-testid="agent-panel" data-auto-submit={autoSubmit ? 'true' : undefined}><p>{initialPrompt}</p><span>{pageContext?.label}</span><button onClick={onClose} type="button">Close agent</button>{onDraft && <button onClick={() => onDraft('Agent drafted update')} type="button">Finish draft</button>}</div>,
 }))
 
 function activityProps() {
@@ -165,15 +165,18 @@ describe('ProjectActivity', () => {
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Attach images, files, or videos' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Write with Agent' }))
-    expect(await screen.findByTestId('agent-panel')).toHaveTextContent('Draft a project update for "Project one"')
+    const panel = await screen.findByTestId('agent-panel')
+    expect(panel).toHaveTextContent('Help me write an update for this project: Project one')
+    expect(panel).toHaveAttribute('data-auto-submit', 'true')
   })
 
-  it('inserts the agent reply into the update composer', async () => {
+  it('writes the agent draft straight into the update composer', async () => {
     const { container } = render(<I18nProvider><ProjectActivity {...activityProps()} /></I18nProvider>)
     await userEvent.click(screen.getByRole('tab', { name: 'Update' }))
     await userEvent.click(screen.getByRole('button', { name: 'Write with Agent' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Insert into update' }))
-    expect(screen.queryByTestId('agent-panel')).toBeNull()
+    await userEvent.click(await screen.findByRole('button', { name: 'Finish draft' }))
+    // Linear keeps the agent panel open next to the drafted update.
+    expect(screen.getByTestId('agent-panel')).toBeInTheDocument()
     await waitFor(() => expect(container.querySelector('.project-activity__editor')).toHaveTextContent('Agent drafted update'))
     expect(screen.getByRole('button', { name: 'Post update' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Post update' })).toHaveClass('is-primary')

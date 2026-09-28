@@ -23,7 +23,7 @@ import {
 import { AgentRichText } from "@/components/agent/agent-rich-text";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import type { NewProjectDraft } from "./new-project-dialog";
-import { parseProjectAgentDraft, projectAgentPrompt } from "./project-agent-draft";
+import { parseProjectAgentDraft, projectAgentPrompt, splitProjectAgentReply } from "./project-agent-draft";
 import "./project-creation-agent.css";
 
 export type ProjectCreationAgentProps = {
@@ -327,13 +327,32 @@ export function ProjectCreationAgent({
                       </button>
                     </div>
                   )}
-                  <article className={`project-creation-agent__message project-creation-agent__message--${message.role}`}>
-                    <AgentRichText className="project-creation-agent__rich-text" content={message.content} />
-                  </article>
+                  {(() => {
+                    const reply = message.role === "assistant" ? splitProjectAgentReply(message.content) : { prose: message.content, draft: undefined };
+                    const draftName = reply.draft?.name?.trim() || draft?.name?.trim() || t("Untitled project");
+                    return (
+                      <>
+                        {reply.draft && (
+                          <div className="project-creation-agent__draft-update">
+                            <span className="project-creation-agent__draft-update-label">{t("Updated project draft")}</span>
+                            <div className="project-creation-agent__draft-card">
+                              <ViewGlyph color="currentColor" icon="Project" />
+                              <span data-i18n-ignore>{draftName}</span>
+                            </div>
+                          </div>
+                        )}
+                        {reply.prose && (
+                          <article className={`project-creation-agent__message project-creation-agent__message--${message.role}`}>
+                            <AgentRichText className="project-creation-agent__rich-text" content={reply.prose} />
+                          </article>
+                        )}
+                      </>
+                    );
+                  })()}
                   {message.role === "user" && index === 0 && (
                     <div className="project-creation-agent__context">
                       <ViewGlyph color="currentColor" icon="Project" />
-                      <span>Untitled draft</span>
+                      <span data-i18n-ignore>{draft?.name?.trim() || "Untitled draft"}</span>
                       <span>{t("added to context")}</span>
                     </div>
                   )}
@@ -380,7 +399,7 @@ export function ProjectCreationAgent({
           </div>
         )}
         <textarea
-          aria-label={t("Send a message to Linear AI")}
+          aria-label={t("Send a message to Flow Agent")}
           disabled={busy}
           onChange={(event) => setInput(event.target.value)}
           onKeyDown={(event) => {
@@ -389,7 +408,7 @@ export function ProjectCreationAgent({
               void send();
             }
           }}
-          placeholder={t("Draft your project with Linear…")}
+          placeholder={t("Draft your project with Flow…")}
           ref={inputRef}
           rows={1}
           value={input}

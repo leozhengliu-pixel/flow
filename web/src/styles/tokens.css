@@ -608,3 +608,7 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root[data-theme="light"]{--directory-display-menu-bg:lch(100% 0 282);--directory-display-menu-ring:lch(86.5% 0 282)}
 :root{--directory-filter-count:lch(41.778% 1.425 272)}
 :root[data-theme="light"]{--directory-filter-count:lch(64.64% 1.25 282)}
+:root{--agent-user-bubble-bg:lch(13.861% 1.043 272)}
+:root[data-theme="light"]{--agent-user-bubble-bg:lch(94.4% .5 282)}
+/* Linear hides the Work on issue search until you type (type-to-filter stays available). */
+.work-menu-search:has(input:placeholder-shown){position:absolute;width:1px;height:1px;overflow:hidden;padding:0;border:0;clip-path:inset(50%)}

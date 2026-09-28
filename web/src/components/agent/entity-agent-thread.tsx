@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Check, ChevronRight, LoaderCircle, X } from 'lucide-react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { ArrowUp, Check, Copy, LoaderCircle, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
 import { AgentRichText } from './agent-rich-text'
+import { AgentWorkGroup } from './agent-work-group'
+import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
 import type { AgentMessage, AgentMessagePart, BootstrapData } from '@/types/flow'
@@ -27,9 +29,13 @@ export type EntityAgentThreadProps = {
   onStop?: () => void
   enabled?: boolean
   emptyLabel?: string
+  /** Composer placeholder for an empty conversation; once messages exist the composer reads "Reply…". */
   placeholder?: string
   contextIssues?: MyIssuesRowData[]
-  contextChips?: ReactNode
+  /** Page entities attached to the next new conversation (e.g. the project being viewed). */
+  contextEntities?: AgentContextEntity[]
+  /** Entities that were attached when the conversation started; shown as "added to context" under the first message. */
+  addedContext?: AgentContextEntity[]
   conversationDraftKey: string
   approvalBusy?: string
   onToolApproval?: (call: AgentMessagePart['toolCall'] | undefined, decision: 'approve' | 'reject') => void
@@ -45,7 +51,11 @@ export type EntityAgentThreadProps = {
   onRemoveContext?: (issueId: string) => void
   /** Extra controls rendered under a message (e.g. "Insert into update"). */
   renderMessageActions?: (message: AgentMessage, index: number) => ReactNode
+  /** Content rendered between a reply and its actions (e.g. Linear's "Created draft" card). */
+  renderMessageAttachment?: (message: AgentMessage, index: number) => ReactNode
 }
+
+export type AgentContextEntity = { key: string; icon?: ReactNode; label: string; onRemove?: () => void }
 
 /** LS-0253 EntityAgentThread — shared conversation + draft renderer for page/sidebar panels. */
 export function EntityAgentThread({
@@ -61,7 +71,8 @@ export function EntityAgentThread({
   emptyLabel,
   placeholder,
   contextIssues = [],
-  contextChips,
+  contextEntities = [],
+  addedContext = [],
   conversationDraftKey,
   approvalBusy,
   onToolApproval,
@@ -73,6 +84,7 @@ export function EntityAgentThread({
   footerStart,
   onRemoveContext,
   renderMessageActions,
+  renderMessageAttachment,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -107,6 +119,12 @@ export function EntityAgentThread({
   }, [conversationDraftKey])
 
   const decide = onToolApproval ?? (() => undefined)
+  const firstUserIndex = messages.findIndex(message => message.role === 'user')
+  const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'toolCall')
+  const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'toolCall')
+  const composerPlaceholder = messages.length && enabled
+    ? t('Reply…')
+    : placeholder ?? (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))
 
   return (
     <div className={styles.thread}>
@@ -139,83 +157,110 @@ export function EntityAgentThread({
           </div>
           )
         )}
-        {messages.map((message, index) => (
-          <article
-            className={message.role === 'user' ? styles.userMessage : styles.agentMessage}
-            data-highlighted={highlightedMessageId === message.id || undefined}
-            key={message.id || `${message.role}-${index}`}
-          >
-            <strong>{message.role === 'user' ? t('You') : t('Flow Agent')}</strong>
-            {message.role === 'assistant' && (
-              <>
-                <ThreadMessageActivity
-                  approvalBusy={approvalBusy}
-                  onToolApproval={decide}
-                  parts={message.parts ?? []}
-                />
-                {(() => {
-                  const elicitations = message.parts?.filter(part => part.type === 'elicitation') ?? []
-                  const queue = summarizeElicitationQueue(elicitations)
-                  return (
-                    <>
-                      <AgentElicitationResponseQueue
-                        answeredCount={queue.answeredCount}
-                        elicitationCount={queue.elicitationCount}
-                        isSubmitting={elicitations.some(part => part.status === 'running')}
+        {messages.map((message, index) => {
+          const isUser = message.role === 'user'
+          const time = shouldShowAgentTime(messages, index) ? formatAgentTime(message.createdAt, t('Today')) : ''
+          const work = isUser ? [] : (message.parts ?? []).filter(part => part.type === 'reasoning' || part.type === 'toolCall')
+          const streaming = loading && index === messages.length - 1
+          const extraActions = renderMessageActions?.(message, index)
+          const showFeedback = !isUser && Boolean(message.content.trim()) && !streaming
+          return (
+            <Fragment key={message.id || `${message.role}-${index}`}>
+              {time && <time className={styles.messageTime} dateTime={message.createdAt}>{time}</time>}
+              <article
+                className={isUser ? styles.userMessage : styles.agentMessage}
+                data-highlighted={highlightedMessageId === message.id || undefined}
+              >
+                {!isUser && (
+                  <>
+                    {work.length > 0 && (
+                      <AgentWorkGroup
+                        approvalBusy={approvalBusy}
+                        className={styles.work}
+                        message={message}
+                        onToolApproval={decide}
+                        parts={work}
                       />
-                      {elicitations.map(part => <AgentElicitation key={part.id} part={part} />)}
-                    </>
-                  )
-                })()}
-              </>
-            )}
-            {message.content && message.role === 'user' && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
-              <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
-            ) : message.content && (
-              <AgentRichText
-                ariaLabel={message.role === 'user' ? t('Your message') : t('AI message')}
-                className={styles.messageDocument}
-                content={message.content}
-              />
-            )}
-            {renderMessageActions?.(message, index)}
-          </article>
-        ))}
-        {loading && (
+                    )}
+                    {(() => {
+                      const elicitations = message.parts?.filter(part => part.type === 'elicitation') ?? []
+                      const queue = summarizeElicitationQueue(elicitations)
+                      return (
+                        <>
+                          <AgentElicitationResponseQueue
+                            answeredCount={queue.answeredCount}
+                            elicitationCount={queue.elicitationCount}
+                            isSubmitting={elicitations.some(part => part.status === 'running')}
+                          />
+                          {elicitations.map(part => <AgentElicitation key={part.id} part={part} />)}
+                        </>
+                      )
+                    })()}
+                  </>
+                )}
+                {message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
+                  <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
+                ) : message.content && (
+                  <AgentRichText
+                    ariaLabel={isUser ? t('Your message') : t('AI message')}
+                    className={styles.messageDocument}
+                    content={message.content}
+                  />
+                )}
+                {!isUser && !streaming && renderMessageAttachment?.(message, index)}
+                {isUser && index === firstUserIndex && addedContext.length > 0 && (
+                  <div className={styles.addedContext}>
+                    {addedContext.map(item => (
+                      <span key={item.key}>
+                        {item.icon}
+                        <b data-i18n-ignore>{item.label}</b>
+                        <span>{t('added to context')}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(showFeedback || extraActions) && (
+                  <div className={styles.messageActions}>
+                    {showFeedback && <MessageFeedback content={message.content} />}
+                    {extraActions}
+                  </div>
+                )}
+              </article>
+            </Fragment>
+          )
+        })}
+        {loading && streamWork.length > 0 && (
+          <AgentWorkGroup
+            approvalBusy={approvalBusy}
+            className={styles.work}
+            message={{}}
+            onToolApproval={decide}
+            parts={streamWork}
+            running
+          />
+        )}
+        {loading && !streamWork.length && (
           <div className={styles.thinking} data-state="loading">
             <LoaderCircle />
             {t('Thinking…')}
           </div>
         )}
-        {streamParts.map(part => (
+        {streamOther.map(part => (
           <div className={styles.streamPart} key={part.id}>
-            {part.type === 'elicitation' ? (
-              <AgentElicitation part={part} />
-            ) : part.type === 'toolCall' ? (
-              <>
-                <span>{`${part.status === 'completed' ? '✓' : part.status === 'pending' ? '!' : '…'} ${part.toolCall?.name.replaceAll('_', ' ')}`}</span>
-                {part.status === 'pending' && part.toolCall?.approvalId && (
-                  <span className={styles.approvalActions}>
-                    <button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decide(part.toolCall, 'reject')} type="button">
-                      {t('Reject tool')}
-                    </button>
-                    <button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void decide(part.toolCall, 'approve')} type="button">
-                      {t('Approve tool')}
-                    </button>
-                  </span>
-                )}
-              </>
-            ) : part.type === 'reasoning' ? (
-              `Thinking: ${part.text ?? ''}`
-            ) : (
-              part.text
-            )}
+            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.text}
           </div>
         ))}
       </div>
-      {(contextIssues.length > 0 || contextChips) && (
+      {/* Context chips describe what a new conversation will start with; once it has started they read as "added to context". */}
+      {!messages.length && (contextIssues.length > 0 || contextEntities.length > 0) && (
           <div className={styles.context}>
-            {contextChips}
+            {contextEntities.map(item => (
+              <span key={item.key}>
+                {item.icon}
+                <b data-i18n-ignore>{item.label}</b>
+                {item.onRemove && <button type="button" className={styles.contextRemove} aria-label={t('Remove from context')} onClick={item.onRemove}><X size={14}/></button>}
+              </span>
+            ))}
             {contextIssues.map(issue => (
               <span data-i18n-ignore key={issue.id}>
                 <StatusIcon state={issue.state} size={14} />
@@ -233,7 +278,7 @@ export function EntityAgentThread({
             data={mentionData}
             disabled={!enabled || composerDisabled || loading}
             pageIssues={contextIssues}
-            placeholder={placeholder ?? (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))}
+            placeholder={composerPlaceholder}
             value={input}
             onChange={(value, mentions) => { onInputChange(value); onMentionsChange?.(mentions) }}
             onSubmit={onSubmit}
@@ -249,10 +294,7 @@ export function EntityAgentThread({
               onSubmit()
             }
           }}
-          placeholder={
-            placeholder ??
-            (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))
-          }
+          placeholder={composerPlaceholder}
           ref={inputRef}
           rows={2}
           value={input}
@@ -281,59 +323,31 @@ export function EntityAgentThread({
   )
 }
 
-function ThreadMessageActivity({
-  parts,
-  onToolApproval,
-  approvalBusy,
-}: {
-  parts: AgentMessagePart[]
-  onToolApproval: (call: AgentMessagePart['toolCall'] | undefined, decision: 'approve' | 'reject') => void
-  approvalBusy?: string
-}) {
+/** Thumbs up / down and copy for a finished assistant reply. */
+function MessageFeedback({ content }: { content: string }) {
   const { t } = useI18n()
-  const work = parts.filter(part => part.type === 'reasoning' || part.type === 'toolCall')
-  if (!work.length) return null
-  const running = work.some(
-    part =>
-      part.status === 'running' ||
-      part.status === 'pending' ||
-      part.toolCall?.status === 'running' ||
-      part.toolCall?.status === 'pending',
-  )
+  const [rating, setRating] = useState<'up' | 'down'>()
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1500)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+  const copy = () => {
+    void navigator.clipboard?.writeText(content).then(() => setCopied(true), () => undefined)
+  }
   return (
-    <details className={styles.messageActivity} open={running || undefined}>
-      <summary>
-        {running ? <LoaderCircle /> : <Check />}
-        <span>{running ? t('Thinking…') : t('Work completed')}</span>
-        <ChevronRight />
-      </summary>
-      <div>
-        {work.map(part => (
-          <div key={part.id}>
-            {part.type === 'reasoning' ? (
-              <>
-                <strong>{t('Reasoning')}</strong>
-                <p>{part.text}</p>
-              </>
-            ) : (
-              <>
-                <span>{part.toolCall?.name.replaceAll('_', ' ')}</span>
-                {part.status === 'pending' && part.toolCall?.approvalId && (
-                  <span className={styles.approvalActions}>
-                    <button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void onToolApproval(part.toolCall, 'reject')} type="button">
-                      {t('Reject tool')}
-                    </button>
-                    <button disabled={approvalBusy === part.toolCall.approvalId} onClick={() => void onToolApproval(part.toolCall, 'approve')} type="button">
-                      {t('Approve tool')}
-                    </button>
-                  </span>
-                )}
-              </>
-            )}
-          </div>
-        ))}
-      </div>
-    </details>
+    <>
+      <button className={styles.feedbackButton} aria-label={t('Good response')} aria-pressed={rating === 'up'} onClick={() => setRating(current => current === 'up' ? undefined : 'up')} type="button">
+        <ThumbsUp />
+      </button>
+      <button className={styles.feedbackButton} aria-label={t('Bad response')} aria-pressed={rating === 'down'} onClick={() => setRating(current => current === 'down' ? undefined : 'down')} type="button">
+        <ThumbsDown />
+      </button>
+      <button className={styles.feedbackButton} aria-label={copied ? t('Copied to clipboard') : t('Copy message')} onClick={copy} type="button">
+        {copied ? <Check /> : <Copy />}
+      </button>
+    </>
   )
 }
 

@@ -248,6 +248,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs))
 	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions)
+	titleDone := s.startAgentSessionTitle(r, *session, mentions)
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
 	parts := []domain.AgentMessagePart{}
@@ -437,7 +438,74 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if strings.TrimSpace(finalText) == "" {
 		return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent provider returned an empty response"))
 	}
+	// Give the parallel title request a moment so the completed session usually carries it.
+	if titleDone != nil {
+		select {
+		case <-titleDone:
+		case <-time.After(2500 * time.Millisecond):
+		}
+	}
 	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
+}
+
+const agentTitleSystemPrompt = `Write a short title for a chat that starts with the request below.
+Rules: 3 to 7 words; use the language of the request; name the concrete subject (project, issue, or topic) when one is given; Title Case for English; no quotes, emoji, or trailing punctuation. Reply with the title only.`
+
+// startAgentSessionTitle names a new chat the way Linear does ("Summarize Compare Test Project Status")
+// instead of echoing the first line. It runs beside the main turn and only replaces the default title.
+func (s *server) startAgentSessionTitle(r *http.Request, session domain.AgentSession, extra string) <-chan struct{} {
+	if !s.agentAutoTitle || s.store == nil || len(session.Messages) != 1 || session.Messages[0].Role != "user" || session.Title != agentSessionTitle(session.Messages[0].Content) {
+		return nil
+	}
+	done := make(chan struct{})
+	workspace := workspaceKey(r)
+	request := session.Messages[0].Content
+	if runes := []rune(request); len(runes) > 1200 {
+		request = string(runes[:1200])
+	}
+	if extra = strings.TrimSpace(extra); extra != "" {
+		if runes := []rune(extra); len(runes) > 800 {
+			extra = string(runes[:800])
+		}
+		request += "\n\nContext:\n" + extra
+	}
+	go func() {
+		defer close(done)
+		ctx, cancel := contextWithTimeout(r, 20*time.Second)
+		defer cancel()
+		turn, err := s.requestAgentTurnWithoutTools(ctx, []agentProviderMessage{{Role: "system", Content: agentTitleSystemPrompt}, {Role: "user", Content: request}})
+		if err != nil {
+			return
+		}
+		title := cleanAgentSessionTitle(turn.Text)
+		if title == "" {
+			return
+		}
+		_ = s.store.MutateWorkspace(ctx, workspace, "agent.session_titled", session.ID, nil, func(data *domain.Bootstrap) error {
+			current, err := ownedAgentSession(data, session.ID)
+			if err != nil || len(current.Messages) == 0 || current.Title != agentSessionTitle(current.Messages[0].Content) {
+				return err
+			}
+			current.Title = title
+			return nil
+		})
+	}()
+	return done
+}
+
+// contextWithTimeout outlives the HTTP request so background work can finish after the stream closes.
+func contextWithTimeout(r *http.Request, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(r.Context()), timeout)
+}
+
+func cleanAgentSessionTitle(text string) string {
+	title := strings.TrimSpace(strings.Split(strings.TrimSpace(text), "\n")[0])
+	title = strings.Trim(title, "\"'`“”‘’「」#*_ ")
+	title = strings.TrimRight(title, ".。!！?？:：")
+	if runes := []rune(title); len(runes) > 60 {
+		title = string(runes[:60])
+	}
+	return strings.TrimSpace(title)
 }
 
 func (s *server) agentToolRequiresApproval(name string) bool {

@@ -4,8 +4,6 @@ import * as Popover from "@radix-ui/react-popover";
 import {
   AlertCircle,
   Check,
-  ChevronRight,
-  CircleCheck,
   Copy,
   LoaderCircle,
   MoreHorizontal,
@@ -35,6 +33,8 @@ import {
   AgentSubmitIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
+import { AgentWorkGroup } from "./agent-work-group";
+import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
 import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
@@ -735,91 +735,6 @@ function AgentMessageParts({ message, onRetry, onToolApproval, approvalBusy }: {
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
     {text && <AgentRichText className={styles.messageDocument} content={text}/>}
   </div>;
-}
-
-function AgentWorkGroup({ message, parts, onToolApproval, approvalBusy }: { message: AgentMessage; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
-  const { t } = useI18n();
-  const running = parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
-  const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
-  const [open, setOpen] = useState(running || failed);
-  useEffect(() => {
-    if (running || failed) setOpen(true);
-  }, [failed, running]);
-  const toolCount = parts.filter(part => part.type === "toolCall").length;
-  const duration = Math.max(1, Math.round((message.durationMs ?? 0) / 1000));
-  const label = running
-    ? t("Working…")
-    : message.durationMs
-      ? `${t("Worked for")} ${duration} ${t(duration === 1 ? "second" : "seconds")}`
-      : toolCount > 2
-        ? `${t("Used")} ${toolCount} ${t("tools")}`
-        : t("Work completed");
-  return <details className={`${styles.workGroup}${failed ? ` ${styles.workFailed}` : ""}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{running ? <LoaderCircle className={styles.spin}/> : failed ? <AlertCircle/> : <CircleCheck/>}<span>{label}</span><ChevronRight/></summary>
-    <div className={styles.workItems}>
-      {parts.map(part => part.type === "reasoning"
-        ? <div className={styles.reasoningRow} key={part.id}><span>{part.status === "running" ? t("Thinking…") : t("Reasoning")}</span>{part.text && <p>{part.text}</p>}</div>
-        : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
-    </div>
-  </details>;
-}
-
-function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullable<AgentMessage["parts"]>[number]; onApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
-  const { t } = useI18n();
-  const call = part.toolCall!;
-  const running = call.status === "running" || call.status === "pending";
-  const detail = readableToolDetail(call.arguments);
-  const approvalPending = call.status === "pending" && Boolean(call.approvalId);
-  return <details className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`} open={approvalPending || call.status === "error" || undefined}>
-    <summary>{running ? <LoaderCircle className={styles.spin}/> : call.status === "error" ? <AlertCircle/> : <Check/>}<span>{toolStatusLabel(call.name, running)}</span>{detail && <small>{detail}</small>}<ChevronRight/></summary>
-    <div>{approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}{call.error && <p role="alert">{call.error}</p>}<code>{JSON.stringify(call.result ?? call.arguments ?? {}, null, 2)}</code></div>
-  </details>;
-}
-
-function toolStatusLabel(name: string, running: boolean) {
-  const labels: Record<string, [string, string]> = {
-    list_issues: ["Looking at issues…", "Looked at issues"], list_projects: ["Looking at projects…", "Looked at projects"],
-    list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
-    search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: ["Updating issue…", "Updated issue"],
-    save_project: ["Updating project…", "Updated project"], save_initiative: ["Updating initiative…", "Updated initiative"],
-  };
-  if (labels[name]) return labels[name][running ? 0 : 1];
-  const [verb, ...words] = name.split("_");
-  const subject = words.join(" ") || "workspace";
-  const verbs: Record<string, [string, string]> = {
-    list: ["Looking at", "Looked at"], get: ["Looking at", "Looked at"], search: ["Searching", "Searched"], extract: ["Extracting", "Extracted"],
-    save: ["Updating", "Updated"], update: ["Updating", "Updated"], create: ["Creating", "Created"], delete: ["Deleting", "Deleted"],
-    prepare: ["Preparing", "Prepared"], merge: ["Merging", "Merged"], submit: ["Submitting", "Submitted"], resolve: ["Resolving", "Resolved"],
-  };
-  const action = verbs[verb]?.[running ? 0 : 1];
-  if (action) return `${action} ${subject}${running ? "…" : ""}`;
-  const fallback = name.replaceAll("_", " ").replace(/^./, value => value.toUpperCase());
-  return running ? `${fallback}…` : fallback;
-}
-
-function readableToolDetail(value: Record<string, unknown> | undefined) {
-  if (!value) return "";
-  for (const key of ["query", "id", "name", "issueId", "projectId"]) {
-    if (typeof value[key] === "string") return String(value[key]);
-  }
-  return "";
-}
-
-function shouldShowAgentTime(messages: AgentMessage[], index: number) {
-  if (index === 0) return true;
-  const current = Date.parse(messages[index].createdAt);
-  const previous = Date.parse(messages[index - 1].createdAt);
-  return !Number.isFinite(current) || !Number.isFinite(previous) || current - previous >= 12 * 60 * 60 * 1000;
-}
-
-function formatAgentTime(value: string, todayLabel: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const now = new Date();
-  const sameDay = date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
-  const time = date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
-  if (sameDay) return `${todayLabel} ${time}`;
-  return `${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })} ${time}`;
 }
 
 function lastUserMessage(messages: AgentMessage[], before: number) {
