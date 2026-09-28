@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { Component, Fragment, type ErrorInfo, type ReactNode } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import styles from './agent-panel-layout.module.css'
 
@@ -30,7 +30,8 @@ export class AgentPanelErrorBoundary extends Component<
         />
       )
     }
-    return <div key={this.state.retries}>{this.props.children}</div>
+    // A keyed Fragment (not a div) so the fixed panel never becomes a grid item of the app shell; the key still remounts on retry.
+    return <Fragment key={this.state.retries}>{this.props.children}</Fragment>
   }
 }
 
