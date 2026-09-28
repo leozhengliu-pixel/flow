@@ -34,4 +34,15 @@ describe('LS-0018 ActivityPage', () => {
     expect(document.querySelector('[data-update-id="upd-9"]')).toBeTruthy()
     expect(screen.getByLabelText('Include project activity')).toBeChecked()
   })
+
+  it('omits the title and preferences header when hideHeader is set', () => {
+    render(
+      <ActivityPage entityId="proj-2" entityType="project" hideHeader>
+        <article data-update-id="upd-1">Update one</article>
+      </ActivityPage>,
+    )
+    expect(screen.queryByRole('heading', { name: 'Activity' })).toBeNull()
+    expect(screen.queryByLabelText('Include project activity')).toBeNull()
+    expect(document.querySelector('[data-restore-scroll-view="activity-sidebar-proj-2"]')).toBeTruthy()
+  })
 })
