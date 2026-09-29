@@ -1,4 +1,4 @@
-import { type AppRoute, agentPath, customersPath, documentsPath, draftsPath, inboxPath, initiativesPath, loopsPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, teamCyclesPath, teamHomePath, teamInitiativesPath, teamIssuesPath, teamProjectsPath, teamsPath, teamViewsPath, workspaceViewsPath } from './app-routes'
+import { type AppRoute, agentPath, customersPath, documentsPath, draftsPath, inboxPath, initiativesPath, loopsPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, teamCyclesPath, teamHomePath, teamInitiativesPath, teamIssuesPath, teamProjectsPath, teamsPath, teamTriagePath, teamViewsPath, workspaceViewsPath } from './app-routes'
 
 export function sidebarRoutePath(route: AppRoute): string | undefined {
   if (!('workspaceSlug' in route) || !route.workspaceSlug) return
@@ -19,7 +19,8 @@ export function sidebarRoutePath(route: AppRoute): string | undefined {
     case 'releases': case 'release-pipeline': case 'release': case 'release-note': return releasePipelinesPath(w)
     case 'loops': case 'loop-editor': return loopsPath(w)
     case 'team-overview': case 'team-documents': case 'team-members': case 'team-loops': case 'team-resources': case 'team-links': case 'team-updates': case 'team-update': return teamHomePath(w, route.teamKey)
-    case 'team-issues': case 'team-triage': case 'team-board': case 'team-archive': return teamIssuesPath(w, route.teamKey)
+    case 'team-triage': return teamTriagePath(w, route.teamKey)
+    case 'team-issues': case 'team-board': case 'team-archive': return teamIssuesPath(w, route.teamKey)
     case 'team-cycles': case 'cycle': case 'cycle-upcoming': return teamCyclesPath(w, route.teamKey)
     case 'team-projects': case 'team-projects-saved-view': case 'team-projects-new-view': return teamProjectsPath(w, route.teamKey)
     case 'team-initiatives': return teamInitiativesPath(w, route.teamKey)
