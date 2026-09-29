@@ -79,3 +79,7 @@
 .contextMenu:not(#_) .menuSeparator:after,.contextSubmenu:not(#_) .menuSeparator:after{left:0;right:0;background:var(--pk-divider)}
 .menuItem>.menuIcon svg:not(#_){margin:0;color:inherit}
 .menuChevron{flex:none;margin-left:auto;padding-left:8px;color:var(--pk-faint);font-size:6px;line-height:1}
+/* Linear brightens the status icon under the pointer (filter: brightness(1.32) in dark). */
+.statusTrigger svg{transition:filter .15s ease}.statusTrigger:hover svg,.statusTrigger[data-state=open] svg{filter:brightness(1.32)}
+:global(:root[data-theme="light"]) .statusTrigger:hover svg,:global(:root[data-theme="light"]) .statusTrigger[data-state=open] svg{filter:brightness(.82)}
+

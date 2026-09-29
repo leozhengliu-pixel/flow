@@ -49,7 +49,7 @@ export interface PropertyOption {
 
 export type PropertyMenuKind = 'standard' | 'labels' | 'project-labels' | 'project' | 'milestone'
 
-export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut }: {
+export function PropertyMenu({ label, value, icon, options, onChange, onCreate, multiple = false, closeOnSelect, keepSelectedVisible = false, selectedId, selectedIds = [], compact = false, emptyLabel, hideSearch = false, createOptionLabel, searchPlaceholder, searchShortcut, showGroupHeadings = true, kind: explicitKind, teamName, trigger, customTrigger, triggerClassName, triggerRole = 'combobox', surfaceClassName, side = 'bottom', align = 'start', alignOffset = 0, ariaLabel, hoverContent, hoverClassName, hoverPlacement = 'left', valueIsEntityName = false, open: controlledOpen, onOpenChange, labelGroupId, embedded = false, tooltip, tooltipShortcut }: {
   label: string
   value?: string
   icon?: ReactNode
@@ -82,6 +82,8 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   ariaLabel?: string
   hoverContent?: ReactNode
   hoverClassName?: string
+  /** Where the rich hover card opens: beside the trigger (property sidebars) or below it (list rows, like Linear). */
+  hoverPlacement?: 'left' | 'below'
   valueIsEntityName?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -181,7 +183,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
         {content}
       </Popover.Content>
     </Popover.Portal>
-  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={plainTooltip ? 'bottom' : 'left'} align="center" sideOffset={6} collisionPadding={8}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={!plainTooltip && hoverPlacement === 'below' ? 14 : 6} collisionPadding={8}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
 }
 
 function VirtualStandardOptions({ sections, activeId, selected, label, multiple, listboxId, onChoose, onActive }: {

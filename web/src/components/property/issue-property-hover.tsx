@@ -1,21 +1,23 @@
 import { Building2, Layers3 } from 'lucide-react'
 import type { ActivityEvent, ProjectSummary, User, WorkspaceMember, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
-import { StatusIcon } from '@/components/issue/issue-icons'
+import { StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
+import { TRIAGE_STATUS } from '@/components/triage/triage-model'
+import { formatStatusDuration, timeInStatus } from './time-in-status'
 import { PersonIdentityDetails } from './person-info'
 import { personDisplayName } from '@/lib/people'
 import { useI18n } from '@/i18n/i18n'
 
-export function StatusHoverPreview({ state, activities, issueCreatedAt }: { state: WorkflowState; activities: ActivityEvent[]; issueCreatedAt: string }) {
-  const changes = activities
-    .filter(activity => activity.metadata.state)
-    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
-  const currentChange = [...changes].reverse().find(activity => activity.metadata.state === state.name)
-  const previous = [...changes].reverse().find(activity => activity.metadata.stateBefore && activity.metadata.stateBefore !== state.name)
+/** Linear's "Time in status" card: every status the issue has been in with the time spent there, current one bright. */
+export function StatusHoverPreview({ state, activities, issueCreatedAt, states, triagedAt, inTriage = false, loading = false }: { state: Pick<WorkflowState, 'id' | 'name' | 'type' | 'color'>; activities: ActivityEvent[]; issueCreatedAt: string; states?: WorkflowState[]; triagedAt?: string | null; inTriage?: boolean; loading?: boolean }) {
+  const stints = timeInStatus({ activities, createdAt: issueCreatedAt, current: state, states, triagedAt, inTriage })
   return <div className="status-hover-preview">
     <strong>Time in status</strong>
-    {previous&&<div><StatusIcon state={{...state,name:previous.metadata.stateBefore,color:'var(--status-neutral)',type:'unstarted'}}/><span>{previous.metadata.stateBefore}</span><time>{duration(issueCreatedAt,previous.createdAt)}</time></div>}
-    <div><StatusIcon state={state}/><span>{state.name}</span><time>{duration(currentChange?.createdAt ?? issueCreatedAt)}</time></div>
+    {stints.map(stint => <div key={stint.key} data-current={stint.current || undefined}>
+      {stint.type === 'triage' ? <WorkflowStatusGlyph state={TRIAGE_STATUS}/> : <StatusIcon state={{ id: stint.id ?? stint.key, name: stint.name, type: stint.type as WorkflowState['type'], color: stint.color ?? (stint.current ? state.color : 'var(--status-neutral)') }} size={14}/>}
+      <span data-i18n-ignore>{stint.name}</span>
+      <time>{loading && !stint.current ? '' : formatStatusDuration(stint.ms)}</time>
+    </div>)}
     <footer><span>Change status</span><kbd>S</kbd></footer>
   </div>
 }
@@ -39,13 +41,3 @@ export function PropertyShortcutTooltip({ label, shortcut }: { label: string; sh
   return <div className="property-shortcut-tooltip"><span>{label}</span><kbd>{shortcut}</kbd></div>
 }
 
-function duration(from: string, to = new Date().toISOString()) {
-  const milliseconds = Math.max(0, new Date(to).getTime() - new Date(from).getTime())
-  const minutes = Math.floor(milliseconds / 60_000)
-  if (minutes < 60) return `${Math.max(1, minutes)}m`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
-  const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d`
-  return `${Math.floor(days / 30)}mo`
-}
