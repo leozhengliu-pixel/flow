@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -17,7 +17,10 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
-import type { IssueSLA } from '@/types/flow'
+import type { ActivityEvent, IssueSLA } from '@/types/flow'
+import { fetchIssueHistory } from '@/lib/api'
+import { ApplicationStoreContext } from '@/store/application-store-context'
+import { StatusHoverPreview } from '@/components/property/issue-property-hover'
 import { toggleGroupedLabelIds } from '@/lib/labels'
 import { PersonHover } from '@/components/property/person-info'
 import { isPeopleProperty } from '@/lib/people'
@@ -303,6 +306,10 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
           searchShortcut="S"
           selectedIds={[issue.state.id]}
           options={propertyOptions.status}
+          hoverContent={<RowStatusHover issue={issue}/>}
+          hoverClassName="property-rich-hover"
+          hoverPlacement="below"
+          triggerClassName={`${styles.propertyTrigger} ${styles.statusTrigger}`}
           onSelect={value => change('status', value)}
           trigger={<StatusIcon state={{ id: issue.state.id, name: issue.state.name, type: issue.state.type, color: issue.state.color }} size={14}/>}
         />}
@@ -371,9 +378,29 @@ export function SubIssueProgress({progress,subIssues,onOpenSubIssue}:{progress:N
   return <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button type="button" className={styles.subIssueProgress} aria-label={`${progress.completed} of ${progress.total} sub-issues completed`} onPointerEnter={enter} onPointerLeave={leave} onFocus={enter} onBlur={leave} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(value=>!value)}}><SubIssueProgressRing completed={progress.completed} total={progress.total}/><span>{progress.completed}/{progress.total}</span></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className={styles.subIssuePopover} side="top" align="start" sideOffset={4} collisionPadding={8} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onPointerEnter={enter} onPointerLeave={leave}>{subIssues.map(item=><button type="button" className={styles.subIssuePopoverRow} key={item.id} onClick={event=>{event.preventDefault();event.stopPropagation();setOpen(false);onOpenSubIssue?.(item)}}><StatusIcon state={{id:item.state.id,name:item.state.name,type:item.state.type,color:item.state.color}} size={16}/><span data-i18n-ignore>{item.title}</span></button>)}</Popover.Content></Popover.Portal></Popover.Root>
 }
 
-export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard' }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind }) {
+const statusHistoryCache = new Map<string, { stateId: string; activities: ActivityEvent[] }>()
+
+/** Status hover for list rows: the issue's history is loaded when the card first opens. */
+function RowStatusHover({ issue }: { issue: MyIssuesRowData }) {
+  const app = useContext(ApplicationStoreContext)
+  const cached = statusHistoryCache.get(issue.id)
+  const fresh = cached?.stateId === issue.state.id ? cached : undefined
+  const [activities, setActivities] = useState<ActivityEvent[] | undefined>(fresh?.activities)
+  useEffect(() => {
+    if (fresh) return
+    const controller = new AbortController()
+    void fetchIssueHistory(issue.id, controller.signal)
+      .then(page => { statusHistoryCache.set(issue.id, { stateId: issue.state.id, activities: page.activities }); setActivities(page.activities) })
+      .catch(() => { if (!controller.signal.aborted) setActivities([]) })
+    return () => controller.abort()
+  }, [fresh, issue.id, issue.state.id])
+  const states = app?.data?.states.filter(state => !issue.teamId || !state.teamId || state.teamId === issue.teamId)
+  return <StatusHoverPreview state={issue.state} activities={activities ?? []} loading={!activities} issueCreatedAt={issue.createdAt} states={states} triagedAt={issue.triagedAt} inTriage={issue.state.id === 'triage'}/>
+}
+
+export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below' }) {
   const commandOptions = options.map((option, index) => ({ ...option, icon: <MyIssuesOptionIcon option={option}/>, shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : option.shortcut }))
-  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} onChange={onSelect}/>
+  return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} onChange={onSelect}/>
 }
 
 function IssueCheckbox({ checked, onChange }: { checked: boolean; onChange: (checked: boolean, range: boolean) => void }) {
