@@ -12,6 +12,11 @@ changes kept). Flow mirrored with DEV-2…DEV-5 (= FLO-1…FLO-4 onboarding issu
 | Add keyboard shortcut to toggle dark mode | **No suggestions found** · Run again | assignee = creator |
 | Project overview spacing differs from the Compare Test reference | **Suggestions**: assignee Skyler Anderson, project Compare Test | project Compare Test, assignee = creator (template reasons) |
 
+**Flow with the model (gpt-6-luna, 2026-09-29, ~20 s per issue):** Slack/GitHub → related DEV-3 *Connect your tools* ✓;
+dark-mode shortcut → no suggestions ✓; Compare Test spacing → project Compare Test + assignee (owner of the project's
+other issue) ✓; CSV crash → the model reply was cut off by the 4096-token output cap (reasoning counts against it) and
+fell back to the heuristic; triage calls now get 16k tokens.
+
 Linear is conservative: no label suggestions when no similar issue uses the label, no assignee just because someone
 created the issue, related issues only on real topical overlap; otherwise "No suggestions found".
 
