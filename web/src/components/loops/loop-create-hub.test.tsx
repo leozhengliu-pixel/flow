@@ -65,6 +65,32 @@ describe('LoopCreateHub', () => {
     expect(takeLoopAgentAutostart('loop-new')).toBe(true)
   })
 
+  it('centers "or pick a template" on a divider and uses Linear’s template icons', async () => {
+    const { view } = renderHub()
+    const heading = screen.getByRole('heading', { name: 'or pick a template' })
+    expect(heading.closest('.loops-hub-templates')).not.toBeNull()
+    const triage = await screen.findByRole('button', { name: /Triage agent/ })
+    // The orange Triage status glyph, not the server's generic icon.
+    const triageIcon = triage.querySelector('.loops-template-icon')!
+    expect(triageIcon.querySelector('.status-glyph')).not.toBeNull()
+    expect(triageIcon).toHaveStyle({ color: 'var(--inbox-status-triage)' })
+    const weekly = screen.getByRole('button', { name: /Weekly wrap/ }).querySelector('.loops-template-icon')!
+    expect(weekly.querySelector('svg.lucide-calendar-days')).not.toBeNull()
+    expect(view.container.querySelectorAll('.loops-template-icon svg')).toHaveLength(2)
+  })
+
+  it('lists location rows as team icon, name, then the muted key', async () => {
+    const user = userEvent.setup()
+    renderHub()
+    await user.click(screen.getByRole('button', { name: 'Start from scratch' }))
+    const option = within(await screen.findByRole('dialog')).getByRole('option', { name: /Test team/ })
+    const copy = option.querySelector('.loops-picker-copy')!
+    expect(copy.firstElementChild).toHaveTextContent('Test team')
+    expect(copy.lastElementChild?.tagName).toBe('SMALL')
+    expect(copy.textContent).toMatch(/^Test team\S+$/)
+    expect(option.querySelector('.command-item-icon')).not.toBeNull()
+  })
+
   it('starts from scratch in the workspace without the agent', async () => {
     const user = userEvent.setup()
     const { onNavigate } = renderHub()

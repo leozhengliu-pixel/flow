@@ -70,8 +70,14 @@ describe('LoopList', () => {
     await user.click(screen.getByRole('tab', { name: 'My loops' }))
     expect(screen.queryByText('Weekly wrap')).toBeNull()
     await user.click(screen.getByRole('tab', { name: 'All' }))
-    await user.click(screen.getByRole('button', { name: 'Find loops…' }))
-    await user.type(screen.getByPlaceholderText('Find loops…'), 'weekly')
+    // Linear: the search field sits inline right after the tabs; filter and display stay on the right.
+    const search = screen.getByRole('searchbox', { name: 'Find loops…' })
+    expect(screen.queryByRole('button', { name: 'Find loops…' })).toBeNull()
+    const left = search.closest('.loops-toolbar-left')!
+    expect(left).toContainElement(screen.getByRole('tablist', { name: 'Loops' }))
+    expect(screen.getByRole('button', { name: 'Filter' }).closest('.loops-toolbar-right')).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Display options' }).closest('.loops-toolbar-right')).not.toBeNull()
+    await user.type(search, 'weekly')
     expect(screen.getByText('Weekly wrap')).toBeVisible()
     expect(screen.queryByText('Triage agent')).toBeNull()
   })

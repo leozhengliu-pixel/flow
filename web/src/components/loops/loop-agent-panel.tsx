@@ -5,17 +5,28 @@ import { AgentPanel } from "@/components/agent/agent-panel";
 import { EntityAgentThread, clearEntityThreadDraft } from "@/components/agent/entity-agent-thread";
 import { useI18n } from "@/i18n/i18n";
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from "@/types/flow";
-import { LoopGlyph } from "./loop-glyph";
-import { isPublishedResult, loopToolResult, type LoopToolResult } from "./loop-data";
+import { isPublishCall, isPublishedResult, loopToolResult, type LoopToolResult } from "./loop-data";
+import { LoopBuilderMessage, type LoopVisual } from "./loop-builder-message";
+
+export { LoopToolCard } from "./loop-builder-message";
+
+/** The message the panel sends for a template draft (loopBuilderFirstMessage); Linear shows no bubble for it. */
+const TEMPLATE_SETUP_MESSAGE = /^Set up this loop from the .+ template$/;
+const POLL_INTERVAL_MS = 1500;
+/** Stop polling a turn that never finishes (about three minutes). */
+const MAX_POLLS = 120;
 
 /**
- * Loop-builder agent docked on the right of the loop editor. It attaches the loop (`loopIds`), can send its first
- * message on open, reports `save_loop` completions so the editor refetches, and hands off publishing.
+ * Loop-builder agent docked on the right of the loop editor (and of the loop page after publishing). It attaches the
+ * loop (`loopIds`), can send its first message on open, reports `save_loop` completions so the editor refetches, and
+ * hands off publishing. A turn that is still running on the server (the stream dropped when the page navigated to the
+ * published loop) is polled until the reply is saved.
  */
 export function LoopAgentPanel({
   data,
   loopId,
   title,
+  visual,
   open,
   autoMessage,
   onClose,
@@ -26,12 +37,15 @@ export function LoopAgentPanel({
   data: BootstrapData;
   loopId: string;
   title?: string;
+  /** Loop icon for the tool cards; a `templateId` also hides the auto-sent "Set up this loop from the … template". */
+  visual?: LoopVisual;
   open: boolean;
   /** Sent automatically when no conversation exists for this loop yet. */
   autoMessage?: string;
   onClose: () => void;
   onLoopSaved: (result: LoopToolResult | undefined) => void;
-  onPublished: (result: LoopToolResult) => void;
+  /** Omitted on the loop page, where the loop is already published. */
+  onPublished?: (result: LoopToolResult) => void;
   onNavigateLoop?: (result: LoopToolResult) => void;
 }) {
   const { t } = useI18n();
@@ -44,6 +58,8 @@ export function LoopAgentPanel({
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([]);
   const [error, setError] = useState<string>();
   const [approvalBusy, setApprovalBusy] = useState<string>();
+  const [polling, setPolling] = useState(false);
+  const [streamMessageId, setStreamMessageId] = useState<string>();
   const abortRef = useRef<AbortController | undefined>(undefined);
   const autoSent = useRef(false);
   const published = useRef(false);
@@ -91,12 +107,12 @@ export function LoopAgentPanel({
 
   const handleToolPart = useCallback((part: AgentMessagePart | undefined) => {
     const call = part?.toolCall;
-    if (!call || call.name !== "save_loop" || call.status !== "completed") return;
+    if (!call || call.name.replace(/^mcp__flow\./, "") !== "save_loop" || call.status !== "completed") return;
     const result = loopToolResult(call);
     callbacks.current.onLoopSaved(result);
-    if (result && isPublishedResult(result) && !published.current) {
+    if (result && (isPublishedResult(result) || isPublishCall(call)) && !published.current) {
       published.current = true;
-      callbacks.current.onPublished(result);
+      callbacks.current.onPublished?.(result);
     }
   }, []);
 
@@ -109,10 +125,12 @@ export function LoopAgentPanel({
       setError(undefined);
       setLoading(true);
       setStreamParts([]);
+      setStreamMessageId(undefined);
       const controller = new AbortController();
       abortRef.current = controller;
       const onEvent = (event: AgentStreamEvent) => {
         if (event.session) setSession(event.session);
+        if (event.messageId) setStreamMessageId(event.messageId);
         if (event.type === "session.started" && event.session) setMessages(event.session.messages);
         if (event.type === "text.replaced")
           setMessages((current) => (current.at(-1)?.role === "assistant" ? current.map((item, index) => (index === current.length - 1 ? { ...item, content: event.delta ?? "" } : item)) : current));
@@ -182,18 +200,55 @@ export function LoopAgentPanel({
     }
   };
 
-  const cards = useMemo(
-    () =>
-      Object.fromEntries(
-        messages.map((message) => [
-          message.id,
-          (message.parts ?? [])
-            .filter((part) => part.toolCall?.name === "save_loop" && part.toolCall.status === "completed")
-            .map((part) => ({ id: part.id, title: part.toolCall?.title, result: loopToolResult(part.toolCall) })),
-        ]),
-      ),
-    [messages],
+  // A turn still running on the server: the session ends with the user's message until the reply is saved.
+  const lastRole = messages.at(-1)?.role;
+  const sessionId = session?.id;
+  useEffect(() => {
+    if (!open || !hydrated || loading || !sessionId || lastRole !== "user") return;
+    let active = true;
+    let attempts = 0;
+    setPolling(true);
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      if (attempts > MAX_POLLS) {
+        window.clearInterval(timer);
+        setPolling(false);
+        return;
+      }
+      getAgentSession(sessionId)
+        .then((next) => {
+          if (!active || next.messages?.at(-1)?.role !== "assistant") return;
+          setSession(next);
+          setMessages(next.messages);
+          for (const part of next.messages.at(-1)?.parts ?? []) handleToolPart(part);
+        })
+        .catch(() => undefined);
+    }, POLL_INTERVAL_MS);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      setPolling(false);
+    };
+  }, [handleToolPart, hydrated, lastRole, loading, open, sessionId]);
+
+  const templateId = visual?.templateId;
+  const visibleMessages = useMemo(
+    () => (templateId ? messages.filter((message, index) => !(index === 0 && message.role === "user" && TEMPLATE_SETUP_MESSAGE.test(message.content.trim()))) : messages),
+    [messages, templateId],
   );
+  // Live questions and tool rows belong to the reply being streamed, so they render in its order.
+  const displayedMessages = useMemo(() => {
+    if (!loading || !streamParts.length) return visibleMessages;
+    const last = visibleMessages.at(-1);
+    if (last?.role === "assistant" && (!streamMessageId || last.id === streamMessageId)) {
+      const known = new Set(streamParts.map((part) => part.id));
+      return [...visibleMessages.slice(0, -1), { ...last, parts: [...(last.parts ?? []).filter((part) => !known.has(part.id)), ...streamParts] }];
+    }
+    return [...visibleMessages, { id: streamMessageId ?? "loop-builder-stream", role: "assistant" as const, content: "", createdAt: new Date().toISOString(), parts: streamParts }];
+  }, [loading, streamMessageId, streamParts, visibleMessages]);
+
+  const sessionTitle = session?.title?.trim();
+  const heading = sessionTitle && sessionTitle !== "New chat" && !TEMPLATE_SETUP_MESSAGE.test(sessionTitle) ? sessionTitle : (title ?? t("New chat"));
 
   return (
     <AgentPanel
@@ -202,7 +257,7 @@ export function LoopAgentPanel({
       loading={!hydrated}
       open={open}
       onRequestClose={onClose}
-      title={session?.title ?? title ?? t("New chat")}
+      title={heading}
       variant="sidebar"
     >
       <EntityAgentThread
@@ -212,70 +267,28 @@ export function LoopAgentPanel({
         enabled={Boolean(status?.enabled)}
         error={error}
         input={input}
-        loading={loading}
+        loading={loading || polling}
         mentionData={data}
-        messages={messages}
+        messages={displayedMessages}
         onInputChange={setInput}
         onSendSuggestion={(message) => void submit(message)}
         onStop={() => abortRef.current?.abort()}
         onSubmit={() => void submit()}
         onToolApproval={(call, decision) => void decide(call, decision)}
         placeholder={status && !status.enabled ? t("Flow Agent is not configured") : t("Describe what this loop should do…")}
-        renderMessageAttachment={(message) => {
-          const items = cards[message.id] ?? [];
-          if (!items.length) return null;
-          return (
-            <div className="loops-agent-cards">
-              {items.map((item) => (
-                <LoopToolCard key={item.id} title={item.title} result={item.result} onOpen={item.result && isPublishedResult(item.result) && onNavigateLoop ? () => onNavigateLoop(item.result!) : undefined} />
-              ))}
-            </div>
-          );
-        }}
-        streamParts={streamParts}
+        renderAssistantBody={(message, { streaming }) => (
+          <LoopBuilderMessage
+            approvalBusy={approvalBusy}
+            entityData={data}
+            message={message}
+            streaming={streaming}
+            teams={data.teams}
+            visual={visual}
+            onOpenLoop={onNavigateLoop}
+            onToolApproval={(call, decision) => void decide(call, decision)}
+          />
+        )}
       />
     </AgentPanel>
-  );
-}
-
-/** "Updated workflow definition draft" / "Created automation" card under a loop-builder reply. */
-export function LoopToolCard({ title, result, onOpen }: { title?: string; result?: LoopToolResult; onOpen?: () => void }) {
-  const { t } = useI18n();
-  const published = isPublishedResult(result);
-  const heading = title ?? (published ? "Created automation" : "Updated workflow definition draft");
-  const body = (
-    <>
-      <span className="loops-agent-card-icon" style={{ color: result?.color || undefined }}>
-        <LoopGlyph icon={result?.icon || "Automation"} size={14} />
-      </span>
-      <span className="loops-agent-card-copy">
-        <strong data-i18n-ignore>{result?.name || t("Untitled loop")}</strong>
-        {published ? (
-          <small>
-            {t("Ran")} {result?.runCount30d ?? 0} {t(result?.runCount30d === 1 ? "time (30d)" : "times (30d)")}
-            {result?.teamName && (
-              <>
-                {" · "}
-                <span data-i18n-ignore>{result.teamName}</span>
-              </>
-            )}
-          </small>
-        ) : (
-          result?.description && <small data-i18n-ignore>{result.description}</small>
-        )}
-      </span>
-    </>
-  );
-  return (
-    <div className="loops-agent-card">
-      <span className="loops-agent-card-title">{t(heading)}</span>
-      {onOpen ? (
-        <button className="loops-agent-card-body" type="button" onClick={onOpen}>
-          {body}
-        </button>
-      ) : (
-        <div className="loops-agent-card-body">{body}</div>
-      )}
-    </div>
   );
 }

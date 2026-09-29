@@ -27,6 +27,28 @@ export function takeLoopAgentAutostart(loopId: string) {
   }
 }
 
+const HANDOFF_KEY = "flow:loop-agent-handoff:";
+
+/** The loop builder published this loop: the loop page opens with the same conversation docked, like Linear. */
+export function markLoopAgentHandoff(loopId: string) {
+  try {
+    sessionStorage.setItem(`${HANDOFF_KEY}${loopId}`, "1");
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function takeLoopAgentHandoff(loopId: string) {
+  try {
+    const key = `${HANDOFF_KEY}${loopId}`;
+    const pending = sessionStorage.getItem(key) === "1";
+    sessionStorage.removeItem(key);
+    return pending;
+  } catch {
+    return false;
+  }
+}
+
 /** Templates are static for a session. */
 let templateCache: LoopTemplate[] | undefined;
 export function resetLoopTemplateCache() {
@@ -208,4 +230,25 @@ export function loopBuilderFirstMessage(loop: { templateId?: string; sourcePromp
   if (loop.sourcePrompt) return loop.sourcePrompt;
   if (loop.templateId) return `Set up this loop from the ${templateName || loop.name || loop.templateId} template`;
   return "";
+}
+
+/** `save_loop` that published the loop ("Created automation"); the server titles it, older results carry `published`. */
+export function isPublishCall(call: AgentToolCall | undefined) {
+  if (!call) return false;
+  if (call.title) return call.title === "Created automation";
+  return isPublishedResult(loopToolResult(call)) || call.arguments?.publish === true;
+}
+
+/**
+ * The builder's reply is the intro it says before its questions ("I've opened a draft…") followed by the final reply.
+ * They arrive as one text: split at the first paragraph break, or where two turns were joined without a space.
+ */
+export function splitBuilderReply(content: string, hasQuestions: boolean) {
+  const text = content.trim();
+  if (!hasQuestions || !text) return { intro: "", reply: text };
+  const paragraph = text.indexOf("\n\n");
+  if (paragraph > 0) return { intro: text.slice(0, paragraph).trim(), reply: text.slice(paragraph).trim() };
+  const joined = /[.!?:](?=[A-Z])/.exec(text);
+  if (joined) return { intro: text.slice(0, joined.index + 1).trim(), reply: text.slice(joined.index + 1).trim() };
+  return { intro: text, reply: "" };
 }

@@ -58,6 +58,11 @@ export type EntityAgentThreadProps = {
   renderMessageActions?: (message: AgentMessage, index: number) => ReactNode
   /** Content rendered between a reply and its actions (e.g. Linear's "Created draft" card). */
   renderMessageAttachment?: (message: AgentMessage, index: number) => ReactNode
+  /**
+   * Replaces an assistant message's body (work group, questions, text, attachment) — the loop builder lays its
+   * questions, answers and tool cards out in order. Feedback buttons still follow.
+   */
+  renderAssistantBody?: (message: AgentMessage, state: { index: number; streaming: boolean }) => ReactNode
 }
 
 export type AgentContextEntity = { key: string; icon?: ReactNode; label: string; onRemove?: () => void }
@@ -91,6 +96,7 @@ export function EntityAgentThread({
   onRemoveContext,
   renderMessageActions,
   renderMessageAttachment,
+  renderAssistantBody,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -185,7 +191,7 @@ export function EntityAgentThread({
                 className={isUser ? styles.userMessage : styles.agentMessage}
                 data-highlighted={highlightedMessageId === message.id || undefined}
               >
-                {!isUser && (
+                {!isUser && renderAssistantBody ? renderAssistantBody(message, { index, streaming }) : !isUser && (
                   <>
                     {work.length > 0 && (
                       <AgentWorkGroup
@@ -212,7 +218,7 @@ export function EntityAgentThread({
                     })()}
                   </>
                 )}
-                {message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
+                {!isUser && renderAssistantBody ? null : message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
                   <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
                 ) : answer ? answer.markdown && (
                   <AgentAnswerText
@@ -228,8 +234,8 @@ export function EntityAgentThread({
                     content={message.content}
                   />
                 )}
-                {answer && !streaming && <AgentReferencedIssues data={entityData} issues={answer.referencedIssues} />}
-                {!isUser && !streaming && renderMessageAttachment?.(message, index)}
+                {answer && !streaming && !renderAssistantBody && <AgentReferencedIssues data={entityData} issues={answer.referencedIssues} />}
+                {!isUser && !streaming && !renderAssistantBody && renderMessageAttachment?.(message, index)}
                 <AgentSuggestionChips disabled={!enabled || composerDisabled} onSelect={sendSuggestion} suggestions={suggestions} />
                 {isUser && index === firstUserIndex && addedContext.length > 0 && (
                   <div className={styles.addedContext}>
@@ -262,7 +268,8 @@ export function EntityAgentThread({
             running
           />
         )}
-        {loading && !streamWork.length && (
+        {/* A custom body shows its own progress once the reply has started. */}
+        {loading && !streamWork.length && !(renderAssistantBody && messages.at(-1)?.role === 'assistant') && (
           <div className={styles.thinking} data-state="loading">
             <LoaderCircle />
             {t('Thinking…')}

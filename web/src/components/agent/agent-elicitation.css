@@ -8,3 +8,11 @@
 :root[data-theme="light"] .agent-elicitation [role=alert]{color:var(--semantic-danger)}
 .agent-elicitation.is-choice{padding:12px 14px}.agent-elicitation.is-choice>p:first-child{margin:0 0 10px;font-weight:500}
 .agent-elicitation-chips{display:flex;flex-wrap:wrap;gap:6px}.agent-elicitation-chips button{height:28px;padding:0 10px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:var(--theme-control);color:var(--theme-text-primary);font:500 12px var(--font);cursor:pointer}.agent-elicitation-chips button:hover:not(:disabled){background:var(--theme-control-hover)}.agent-elicitation-chips button.is-chosen{border-color:var(--accent-primary);background:var(--accent-soft)}.agent-elicitation-chips button.is-skip{border-color:transparent;background:transparent;color:var(--theme-text-secondary)}.agent-elicitation-chips button:disabled:not(.is-chosen){opacity:.5}
+/* Loop builder (Linear): the question is plain text with inline chips; the answer becomes a quoted user bubble. */
+.agent-elicitation-inline{align-self:stretch;margin:10px 0;color:var(--theme-text-primary);font-size:13px;line-height:20px;min-width:0}
+.agent-elicitation-inline>p{margin:0 0 8px;white-space:pre-wrap;overflow-wrap:anywhere}
+.agent-elicitation-inline .agent-elicitation-inline-status{color:var(--theme-text-tertiary);font-size:12px}
+.agent-elicitation-inline [role=alert]{margin:6px 0 0;color:var(--semantic-danger);font-size:12px}
+.agent-elicitation-answer{align-self:flex-end;max-width:85%;display:flex;flex-direction:column;gap:2px;margin:10px 0 10px auto;padding:8px 12px;border-radius:8px;background:var(--agent-user-bubble-bg, var(--theme-surface-2));font-size:13px;line-height:20px;overflow-wrap:anywhere}
+.agent-elicitation-answer-question{color:var(--theme-text-tertiary)}
+.agent-elicitation-answer-value{color:var(--theme-text-primary)}

@@ -71,7 +71,11 @@ function singleChoice(prompt: ElicitationPrompt) {
   return options.length ? { key, field, options } : undefined;
 }
 
-export function AgentElicitation({ part }: { part: AgentMessagePart }) {
+/**
+ * `boxed` (default) is the connector form card. `inline` is Linear's loop-builder question: plain text with answer
+ * chips, and once answered a right-aligned quote of the question with the chosen answer.
+ */
+export function AgentElicitation({ part, variant = "boxed" }: { part: AgentMessagePart; variant?: "boxed" | "inline" }) {
   const prompt = part.elicitation;
   const [values, setValues] = useState<Record<string, unknown>>(() =>
     Object.fromEntries(
@@ -115,6 +119,44 @@ export function AgentElicitation({ part }: { part: AgentMessagePart }) {
     const picked = chosen || (prompt.action === "accept" || part.status === "completed" ? (part.text ?? "") : "");
     const answered = typeof prompt.action === "string" && prompt.action !== "accept" ? prompt.action : action;
     const done = Boolean(completed) || expired || Boolean(part.text && picked);
+    const question = prompt.message || choice.field.title || "";
+    if (variant === "inline") {
+      const answerLabel = choice.options.find((option) => option.const === picked)?.title || picked;
+      if (done && !expired && (answered === "decline" || answered === "cancel" || (picked && !busy)))
+        return (
+          <blockquote className="agent-elicitation-answer" aria-label="Your answer">
+            <span className="agent-elicitation-answer-question">{question}</span>
+            <span className="agent-elicitation-answer-value">{answered === "decline" || answered === "cancel" ? "Skipped" : answerLabel}</span>
+          </blockquote>
+        );
+      return (
+        <section className="agent-elicitation-inline" aria-label={question || "Question"}>
+          <p>{question}</p>
+          {expired ? (
+            <p className="agent-elicitation-inline-status" role="status">This request has expired.</p>
+          ) : (
+            <div className="agent-elicitation-chips" role="group" aria-label={choice.field.title || prompt.message}>
+              {choice.options.map((option) => (
+                <button
+                  aria-pressed={picked === option.const || undefined}
+                  className={picked === option.const ? "is-chosen" : undefined}
+                  disabled={busy || done}
+                  key={option.const}
+                  type="button"
+                  onClick={() => {
+                    setChosen(option.const);
+                    void respond("accept", { [choice.key]: option.const });
+                  }}
+                >
+                  {option.title || option.const}
+                </button>
+              ))}
+            </div>
+          )}
+          {error && <p role="alert">{error}</p>}
+        </section>
+      );
+    }
     return (
       <section className="agent-elicitation is-choice" aria-label={prompt.message || choice.field.title || "Question"}>
         <p>{prompt.message || choice.field.title}</p>

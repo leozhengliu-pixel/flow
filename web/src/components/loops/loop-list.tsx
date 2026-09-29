@@ -17,7 +17,7 @@ import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopTriggerType, Team } from "@/types/flow";
 import { LoopActionsMenu } from "./loop-actions";
 import { LoopCreateDialog, LoopCreateHub } from "./loop-create-hub";
-import { LoopGlyph } from "./loop-glyph";
+import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { loopOwner, useLoops } from "./loop-data";
 import { ENTITY_NAMES, isLoopDraft, loopTeamId, relativeTime, triggerSummary } from "./loop-model";
 
@@ -55,7 +55,6 @@ export function LoopList({
   // The team page has no tabs; it lists every loop of the team.
   const tab = embedded ? "all" : storedTab;
   const [query, setQuery] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const [statusFilters, setStatusFilters] = useState<StatusFilter[]>([]);
   const [typeFilters, setTypeFilters] = useState<LoopTriggerType[]>([]);
   const [hidden, setHidden] = useState<Column[]>([]);
@@ -165,28 +164,25 @@ export function LoopList({
       )}
       {!empty && (
         <div className="loops-toolbar">
-          <div className="loops-tabs" role="tablist" aria-label={t("Loops")}>
-            {(["mine", "all"] as const).map((item) => (
-              <button key={item} role="tab" aria-selected={tab === item} className={tab === item ? "is-active" : undefined} onClick={() => setTab(item)}>
-                {t(item === "mine" ? "My loops" : "All")}
-              </button>
-            ))}
+          {/* Linear: tabs, then the "Find loops…" field inline; filter and display stay on the right. */}
+          <div className="loops-toolbar-left">
+            <div className="loops-tabs" role="tablist" aria-label={t("Loops")}>
+              {(["mine", "all"] as const).map((item) => (
+                <button key={item} role="tab" aria-selected={tab === item} className={tab === item ? "is-active" : undefined} onClick={() => setTab(item)}>
+                  {t(item === "mine" ? "My loops" : "All")}
+                </button>
+              ))}
+            </div>
+            <label className="loops-search is-inline">
+              <Search size={14} />
+              <input type="search" aria-label={t("Find loops…")} placeholder={t("Find loops…")} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Escape" && setQuery("")} />
+            </label>
           </div>
           <div className="loops-toolbar-right">
             {embedded && (
               <button className="loops-new-button" onClick={() => setCreateOpen(true)}>
                 <PlusIcon />
                 {t("New loop")}
-              </button>
-            )}
-            {searchOpen || query ? (
-              <label className="loops-search">
-                <Search size={14} />
-                <input autoFocus aria-label={t("Find loops…")} placeholder={t("Find loops…")} value={query} onBlur={() => !query && setSearchOpen(false)} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Escape" && (setQuery(""), setSearchOpen(false))} />
-              </label>
-            ) : (
-              <button className="loops-icon-button" aria-label={t("Find loops…")} title={t("Find loops…")} onClick={() => setSearchOpen(true)}>
-                <Search size={14} />
               </button>
             )}
             <DropdownMenu>
@@ -309,8 +305,8 @@ function LoopRow({
     <div className={`loops-table-row${!draft && !loop.enabled ? " is-disabled" : ""}`} role="row">
       <button className="loops-row-link" onClick={onOpen} aria-label={loop.name || t("Untitled loop")} />
       <span className="loops-cell-name" role="cell">
-        <span className="loops-row-icon" style={{ color: loop.color || undefined }}>
-          <LoopGlyph icon={loop.icon || "Automation"} />
+        <span className="loops-row-icon" style={{ color: loopIconColor(loop) }}>
+          <LoopIcon source={loop} size={16} />
         </span>
         <span className="loops-row-copy">
           <strong data-i18n-ignore={loop.name ? true : undefined}>

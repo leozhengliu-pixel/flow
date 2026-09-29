@@ -233,7 +233,12 @@
 }
 .loops-tabs button:hover { color: var(--theme-text-primary); }
 .loops-tabs button.is-active { border-color: var(--theme-border); background: var(--theme-control); color: var(--theme-text-primary); }
+.loops-toolbar-left { min-width: 0; flex: 1; display: flex; align-items: center; gap: 8px; }
 .loops-toolbar-right { display: flex; align-items: center; gap: 6px; }
+.loops-search.is-inline { min-width: 0; border-color: transparent; background: transparent; padding: 0 6px; }
+.loops-search.is-inline:focus-within { border-color: var(--theme-border); background: var(--theme-surface-1); }
+.loops-search.is-inline input { width: 180px; }
+.loops-search input::-webkit-search-cancel-button { display: none; }
 .loops-search {
   height: 28px;
   display: inline-flex;
@@ -379,7 +384,10 @@
 .loops-hub-attach:disabled { opacity: 0.45; cursor: default; }
 .loops-hub-send { background: var(--accent-primary); color: var(--on-accent); }
 .loops-hub-send:disabled { background: var(--theme-control); color: var(--theme-text-tertiary); cursor: default; }
-.loops-hub-templates h3 { margin: 4px 0 10px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; }
+/* "or pick a template" sits centered on a hairline, like Linear. */
+.loops-hub-templates h3 { display: flex; align-items: center; gap: 12px; margin: 8px 0 14px; color: var(--theme-text-tertiary); font-size: 12px; font-weight: 500; text-align: center; }
+.loops-hub-templates h3::before,
+.loops-hub-templates h3::after { content: ""; flex: 1; height: 0.5px; background: var(--theme-border); }
 .loops-template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .loops-template-card {
   min-width: 0;
@@ -451,6 +459,15 @@
 .loops-instructions-prosemirror p { margin: 0 0 6px; }
 .loops-instructions-prosemirror ul,
 .loops-instructions-prosemirror ol { margin: 0 0 6px; padding-left: 22px; }
+/* Preflight strips list markers; instructions and run answers show them like Linear. */
+.loops-instructions-prosemirror ul,
+.loops-run-answer ul { list-style: disc; }
+.loops-instructions-prosemirror ol,
+.loops-run-answer ol { list-style: decimal; }
+.loops-instructions-prosemirror ul ul,
+.loops-run-answer ul ul { list-style: circle; }
+.loops-instructions-prosemirror li::marker,
+.loops-run-answer li::marker { color: var(--theme-text-secondary); }
 .loops-instructions-prosemirror li p { margin: 0; }
 .loops-instructions-prosemirror h1,
 .loops-instructions-prosemirror h2,
@@ -585,9 +602,33 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-agent-card-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .loops-agent-card-copy strong { overflow: hidden; font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .loops-agent-card-copy small { overflow: hidden; color: var(--theme-text-secondary); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.loops-agent-card { align-self: stretch; margin: 8px 0; }
+.loops-agent-cards .loops-agent-card { margin: 0; }
+.loops-agent-card-title.is-running { color: var(--theme-text-tertiary); }
+.loops-agent-card-title.is-error { color: var(--semantic-danger); }
+.loops-agent-card-copy { flex: 1; }
+.loops-agent-card.is-draft .loops-agent-card-body { padding: 8px 10px; }
+.loops-agent-card-team { min-width: 0; max-width: 45%; flex: none; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 0.5px solid var(--theme-border); border-radius: 9999px; color: var(--theme-text-secondary); font-size: 12px; white-space: nowrap; }
+.loops-agent-card-team > span { overflow: hidden; text-overflow: ellipsis; }
+/* Loop-builder reply text and work group */
+.loops-builder-text { align-self: stretch; margin: 0 0 4px; color: var(--theme-text-primary); font-size: 13px; line-height: 20.8px; }
+.loops-builder-text p { margin: 0; white-space: pre-wrap; }
+.loops-builder-text p + p,
+.loops-builder-text p + ul,
+.loops-builder-text p + ol,
+.loops-builder-text ul + p,
+.loops-builder-text ol + p { margin-top: 10px; }
+.loops-builder-text ul,
+.loops-builder-text ol { display: grid; gap: 3px; margin: 6px 0 0; padding-left: 20px; }
+.loops-builder-text ul { list-style: disc; }
+.loops-builder-text ol { list-style: decimal; }
+.loops-builder-text li::marker { color: var(--theme-text-secondary); }
+.loops-builder-text li p { margin: 0; }
+.loops-builder-work { margin: 8px 0; }
 
 /* Loop page */
-.loops-detail-scroll { min-height: 0; flex: 1; overflow: auto; padding: 40px 24px 48px; }
+.loops-detail-body { min-height: 0; flex: 1; display: flex; }
+.loops-detail-scroll { min-width: 0; min-height: 0; flex: 1; overflow: auto; padding: 40px 24px 48px; }
 .loops-detail { position: relative; width: min(720px, 100%); margin: 0 auto; }
 .loops-detail-actions { position: absolute; top: 0; right: 0; display: flex; gap: 6px; }
 .loops-detail-icon { width: 36px; height: 36px; display: grid; place-items: center; margin-bottom: 14px; border-radius: 9px; background: color-mix(in srgb, currentColor 14%, transparent); color: var(--theme-text-secondary); }
@@ -655,6 +696,15 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-work { margin: 4px 0 12px; }
 .loops-run-working { color: var(--theme-text-secondary); font-size: 13px; }
 .loops-run-answer { color: var(--theme-text-primary); font-size: 14px; line-height: 22px; }
+.loops-run-answer p { margin: 0; }
+.loops-run-answer p + p,
+.loops-run-answer p + ul,
+.loops-run-answer p + ol,
+.loops-run-answer ul + p,
+.loops-run-answer ol + p { margin-top: 12px; }
+.loops-run-answer ul,
+.loops-run-answer ol { display: grid; gap: 4px; margin: 6px 0 0; padding-left: 22px; }
+.loops-run-answer li p { margin: 0; }
 .loops-run-error {
   display: flex;
   align-items: flex-start;

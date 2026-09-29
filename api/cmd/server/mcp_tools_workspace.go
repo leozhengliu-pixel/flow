@@ -1575,8 +1575,20 @@ func (s *server) saveMCPLoop(ctx context.Context, actor mcpActor, data domain.Bo
 			}
 		}
 		if triggerType == "schedule" {
-			if hasAnyArg(args, eventKeys...) {
-				return nil, fmt.Errorf("event, value, filters, action and teams apply to event triggers, not schedules")
+			if hasAnyArg(args, "action", "event", "value", "filters") {
+				return nil, fmt.Errorf("event, value, filters and action apply to event triggers, not schedules")
+			}
+			// On a schedule, teams are the teams the loop may use (team access "selected").
+			if _, present := args["teams"]; present {
+				ids := []any{}
+				for _, value := range stringsArg(args, "teams") {
+					team, err := mcpFindTeam(data, value)
+					if err != nil {
+						return nil, err
+					}
+					ids = append(ids, team.ID)
+				}
+				config["teamIds"] = ids
 			}
 			if len(config) == 0 || id == "" && config["startDate"] == nil {
 				for key, value := range defaultLoopTriggerConfig("schedule", time.Now().UTC()) {

@@ -12,6 +12,8 @@ export type PickerItem = {
   label: string;
   icon?: ReactNode;
   detail?: string;
+  /** Where the muted detail sits: before the label (issue identifiers) or after it (team keys, like Linear). */
+  detailPosition?: "before" | "after";
   /** Business names are not translated. */
   entity?: boolean;
   disabled?: boolean;
@@ -80,8 +82,9 @@ export function LoopCommandPicker({
                 >
                   {item.icon && <span className="command-item-icon">{item.icon}</span>}
                   <span className="loops-picker-copy">
-                    {item.detail && <small data-i18n-ignore>{item.detail}</small>}
+                    {item.detail && item.detailPosition !== "after" && <small data-i18n-ignore>{item.detail}</small>}
                     <span data-i18n-ignore={item.entity || undefined}>{item.entity ? item.label : t(item.label)}</span>
+                    {item.detail && item.detailPosition === "after" && <small data-i18n-ignore>{item.detail}</small>}
                   </span>
                   {item.hint && <small className="loops-picker-hint">{t(item.hint)}</small>}
                 </Command.Item>
@@ -123,7 +126,7 @@ export function LoopLocationPicker({
       disabled: requiresTeam,
       hint: requiresTeam ? (levelHint ?? "Triage loops must belong to a team") : undefined,
     },
-    ...teams.map((team) => ({ id: team.id, label: team.name, entity: true, icon: <TeamIcon team={team} size={14} />, detail: team.key, keywords: team.key })),
+    ...teams.map((team) => ({ id: team.id, label: team.name, entity: true, icon: <TeamIcon team={team} size={14} />, detail: team.key, detailPosition: "after" as const, keywords: team.key })),
   ];
   return (
     <LoopCommandPicker

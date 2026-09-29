@@ -143,12 +143,15 @@ export function LoopTriggerEditor({
   config,
   onChange,
   readOnly = false,
+  level = "workspace",
 }: {
   data: TriggerData;
   triggerType: LoopTriggerType;
   config: Config;
   onChange?: TriggerChange;
   readOnly?: boolean;
+  /** Team loops already belong to one team, so the sentence has no "in [teams]" scope (Linear: "An issue is in triage"). */
+  level?: "workspace" | "team";
 }) {
   const change: TriggerChange = (type, next) => onChange?.(type, next);
   const set = (patch: Config) => change(triggerType, { ...config, ...patch });
@@ -163,7 +166,7 @@ export function LoopTriggerEditor({
     <div className="loops-trigger-event">
       <div className="loops-trigger-sentence" data-trigger={triggerType}>
         <TriggerTypeMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
-        <EventSentence data={data} triggerType={triggerType} config={config} onChange={set} readOnly={readOnly} />
+        <EventSentence data={data} triggerType={triggerType} config={config} onChange={set} readOnly={readOnly} teamScoped={level === "team"} />
       </div>
       {triggerType === "issue" && <IssueFilters data={data} config={config} onChange={set} readOnly={readOnly} />}
     </div>
@@ -275,10 +278,15 @@ function TriggerTypeMenu({ data, triggerType, config, onChange, readOnly }: { da
   );
 }
 
-function EventSentence({ data, triggerType, config, onChange, readOnly }: { data: TriggerData; triggerType: LoopTriggerType; config: Config; onChange: (patch: Config) => void; readOnly: boolean }) {
+function EventSentence({ data, triggerType, config, onChange, readOnly, teamScoped }: { data: TriggerData; triggerType: LoopTriggerType; config: Config; onChange: (patch: Config) => void; readOnly: boolean; teamScoped: boolean }) {
   const { t } = useI18n();
   const event = loopEvent(config);
-  const teams = <TeamScope data={data} config={config} onChange={onChange} readOnly={readOnly} />;
+  const teams = teamScoped ? null : (
+    <>
+      <span className="loops-sentence-text">{t("in")}</span>
+      <TeamScope data={data} config={config} onChange={onChange} readOnly={readOnly} />
+    </>
+  );
   if (triggerType !== "issue") {
     const found = ENTITY_EVENTS[triggerType as keyof typeof ENTITY_EVENTS]?.find((item) => item.id === event);
     const phrase: Record<string, string> = {
@@ -292,12 +300,7 @@ function EventSentence({ data, triggerType, config, onChange, readOnly }: { data
     return (
       <>
         <span className="loops-sentence-text">{t(phrase[event] ?? found?.label ?? event)}</span>
-        {triggerType !== "team" && (
-          <>
-            <span className="loops-sentence-text">{t("in")}</span>
-            {teams}
-          </>
-        )}
+        {triggerType !== "team" && teams}
       </>
     );
   }
@@ -316,7 +319,6 @@ function EventSentence({ data, triggerType, config, onChange, readOnly }: { data
           readOnly={readOnly}
           onSelect={(id) => onChange({ value: id === ANY ? ANY : id === NONE ? null : id })}
         />
-        <span className="loops-sentence-text">{t("in")}</span>
         {teams}
       </>
     );
@@ -331,7 +333,6 @@ function EventSentence({ data, triggerType, config, onChange, readOnly }: { data
   return (
     <>
       <span className="loops-sentence-text">{t(phrase[event] ?? "changes")}</span>
-      <span className="loops-sentence-text">{t("in")}</span>
       {teams}
     </>
   );

@@ -29,6 +29,21 @@ describe('LoopTriggerEditor', () => {
     expect(within(sentence as HTMLElement).getByRole('button', { name: 'Teams' })).toHaveTextContent('Select teams…')
   })
 
+  it('drops the team scope for team loops (Linear: "An issue is in triage") and keeps the picker for workspace loops', () => {
+    const team = renderTrigger({ level: 'team', config: { event: 'triage' } })
+    const sentence = team.view.container.querySelector('.loops-trigger-sentence')!
+    expect(sentence.textContent).toBe('An issueis in triage')
+    expect(within(sentence as HTMLElement).queryByRole('button', { name: 'Teams' })).toBeNull()
+    team.view.unmount()
+    const readOnly = renderTrigger({ level: 'team', readOnly: true, config: { event: 'status' } })
+    expect(readOnly.view.container.querySelector('.loops-trigger-sentence')).not.toHaveTextContent('All teams')
+    readOnly.view.unmount()
+    const workspace = renderTrigger({ level: 'workspace', config: { event: 'triage' } })
+    const scoped = workspace.view.container.querySelector('.loops-trigger-sentence')!
+    expect(scoped).toHaveTextContent('is in triagein')
+    expect(within(scoped as HTMLElement).getByRole('button', { name: 'Teams' })).toHaveTextContent('Select teams…')
+  })
+
   it('renders the triage template trigger with its filter chip', () => {
     const { view } = renderTrigger({ config: { event: 'triage', filters: [{ field: 'assignee', operator: 'is', value: null }] } })
     const sentence = view.container.querySelector('.loops-trigger-sentence')!

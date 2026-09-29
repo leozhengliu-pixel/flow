@@ -91,3 +91,5 @@
 .composer:not(#_) footer>span:empty{flex:1}
 .sentMention{display:inline-flex;align-items:center;gap:4px;margin:0 1px;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--pk-border);border-radius:4px;background:var(--chip-bg);font:450 13px/16px var(--font);vertical-align:baseline}
 .sentMention>span{color:var(--chip-text)}
+/* Preflight strips list markers; answers show bullets and numbers like Linear. */
+.messageDocument ul{list-style:disc}.messageDocument ol{list-style:decimal}.messageDocument ul ul{list-style:circle}.messageDocument li::marker{color:var(--theme-text-secondary)}

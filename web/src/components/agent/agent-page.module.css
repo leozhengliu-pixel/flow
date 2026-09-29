@@ -920,3 +920,8 @@
 :global(:root[data-theme="light"]) .confirmOverlay button { border-color: var(--theme-border); }
 :global(:root[data-theme="light"]) .deleteButton { background: var(--semantic-danger) !important; color: var(--on-danger); }
 :global(:root[data-theme="light"]) .attachments > span { border-color: var(--theme-border); background: var(--theme-surface-hover); }
+/* Preflight strips list markers; answers show bullets and numbers like Linear. */
+.messageDocument ul { list-style: disc; }
+.messageDocument ol { list-style: decimal; }
+.messageDocument ul ul { list-style: circle; }
+.messageDocument li::marker { color: var(--theme-text-secondary); }

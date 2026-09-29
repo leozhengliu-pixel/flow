@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -128,6 +129,10 @@ func (s *server) waitForAgentApproval(ctx context.Context, approvalID string, ap
 type agentEventWriter struct {
 	w       http.ResponseWriter
 	flusher http.Flusher
+	// detached: the client went away but the run continues (loop builder
+	// sessions navigate to the new loop mid-turn); later events are dropped.
+	detached bool
+	lenient  bool
 }
 
 func newAgentEventWriter(w http.ResponseWriter) (*agentEventWriter, error) {
@@ -147,7 +152,14 @@ func (w *agentEventWriter) send(event agentStreamEvent) error {
 	if err != nil {
 		return err
 	}
+	if w.detached {
+		return nil
+	}
 	if _, err := fmt.Fprintf(w.w, "event: %s\ndata: %s\n\n", event.Type, raw); err != nil {
+		if w.lenient {
+			w.detached = true
+			return nil
+		}
 		return err
 	}
 	w.flusher.Flush()
@@ -238,6 +250,14 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	session, err := ownedAgentSession(&data, id)
 	if err != nil {
 		return domain.AgentSession{}, err
+	}
+	if len(session.LoopIDs) > 0 {
+		// Publishing a loop navigates the page to the loop, which drops this
+		// stream; like Linear, the builder still finishes its reply.
+		r = r.WithContext(context.WithoutCancel(r.Context()))
+		if writer != nil {
+			writer.lenient = true
+		}
 	}
 	contextData, err := s.agentIssueContext(r, session.IssueIDs)
 	if err != nil {
@@ -346,8 +366,15 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 
 	finalText := ""
+	seenNarration := map[string]bool{}
 	for turnIndex := 0; turnIndex < maxAgentToolTurns; turnIndex++ {
 		turnStart := len(parts)
+		// The loop builder's intro and later replies are separate paragraphs.
+		if len(session.LoopIDs) > 0 && strings.TrimSpace(finalText) != "" && !strings.HasSuffix(finalText, "\n\n") {
+			if err := emit(agentProviderEvent{Type: "text.delta", Delta: "\n\n"}); err == nil {
+				finalText += "\n\n"
+			}
+		}
 		turn, err := s.requestAgentTurn(r.Context(), messages, emit)
 		if err != nil {
 			failureRequest := r
@@ -376,7 +403,19 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				parts[textIndex].Text = cleaned.String()
 			}
 		}
-		if len(turn.ToolCalls) > 0 && strings.TrimSpace(turn.Text) != "" {
+		narrationKey := strings.Join(strings.Fields(turn.Text), " ")
+		repeated := narrationKey != "" && seenNarration[narrationKey]
+		if narrationKey != "" {
+			seenNarration[narrationKey] = true
+		}
+		// The loop builder speaks before its questions, like Linear's "I've opened a draft…";
+		// that text is part of the reply, not folded narration.
+		keepVisible := len(session.LoopIDs) > 0 && !repeated && slices.ContainsFunc(turn.ToolCalls, func(call domain.AgentToolCall) bool {
+			return strings.TrimPrefix(call.Name, "mcp__flow.") == "ask_question"
+		})
+		if keepVisible {
+			// Stays in the reply; separated from earlier text before the turn started.
+		} else if len(turn.ToolCalls) > 0 && strings.TrimSpace(turn.Text) != "" {
 			// Linear keeps mid-task narration inside the work group; only the last turn's text is the answer.
 			narration := strings.TrimSpace(turn.Text)
 			turn.Text = ""
@@ -390,7 +429,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					delete(partText, "text")
 				}
 			}
-			if !agentTurnHasProgressMessage(turn.ToolCalls) {
+			if !repeated && !agentTurnHasProgressMessage(turn.ToolCalls) {
 				insertAt := min(turnStart, len(parts))
 				narrationPart := domain.AgentMessagePart{ID: fmt.Sprintf("%s_narration_%d", messageID, turnIndex), Type: "reasoning", Text: narration, Status: "completed"}
 				parts = append(parts[:insertAt], append([]domain.AgentMessagePart{narrationPart}, parts[insertAt:]...)...)
@@ -522,6 +561,14 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			call.Result = json.RawMessage(result)
 			if callErr == nil && strings.TrimPrefix(call.Name, "mcp__flow.") == "save_loop" {
 				call.Title = saveLoopToolTitle(result)
+				var saveArgs struct {
+					Publish bool `json:"publish"`
+				}
+				if _ = json.Unmarshal(call.Arguments, &saveArgs); saveArgs.Publish {
+					call.Title = "Created automation"
+				} else if call.Title == "" {
+					call.Title = "Updated workflow definition draft"
+				}
 			}
 			key := "tool:" + call.ID
 			if index, ok := partIndex[key]; ok {
@@ -576,6 +623,23 @@ func (s *server) startAgentSessionTitle(r *http.Request, session domain.AgentSes
 	}
 	done := make(chan struct{})
 	workspace := workspaceKey(r)
+	// Setting up a loop from a template: Linear titles the conversation with the loop's name.
+	if len(session.LoopIDs) > 0 {
+		if metadata, ok := s.store.WorkspaceMetadata(workspace); ok {
+			if loop := loopByID(&metadata, session.LoopIDs[0]); loop != nil && loop.TemplateID != "" && strings.TrimSpace(loop.Name) != "" {
+				_ = s.store.MutateWorkspace(context.WithoutCancel(r.Context()), workspace, "agent.session_titled", session.ID, nil, func(data *domain.Bootstrap) error {
+					current, err := ownedAgentSession(data, session.ID)
+					if err != nil {
+						return err
+					}
+					current.Title = loop.Name
+					return nil
+				})
+				close(done)
+				return done
+			}
+		}
+	}
 	request := session.Messages[0].Content
 	if runes := []rune(request); len(runes) > 1200 {
 		request = string(runes[:1200])

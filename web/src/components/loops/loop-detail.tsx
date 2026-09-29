@@ -5,13 +5,14 @@ import { Toggle } from "@/components/ui/toggle";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
-import { runLoopNow, updateLoop } from "@/lib/api";
-import { editLoopPath, loopRunPath, loopsPath, newLoopPath, teamLoopsPath } from "@/lib/app-routes";
+import { getLoop, runLoopNow, updateLoop } from "@/lib/api";
+import { editLoopPath, loopPath, loopRunPath, loopsPath, newLoopPath, teamLoopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopTriggerType } from "@/types/flow";
 import { LoopActionsMenu } from "./loop-actions";
-import { copyText, loopOwner, loopUrl, useLoopRecord } from "./loop-data";
-import { LoopGlyph } from "./loop-glyph";
+import { copyText, loopOwner, loopUrl, takeLoopAgentHandoff, useLoopRecord } from "./loop-data";
+import { LoopAgentPanel } from "./loop-agent-panel";
+import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { configStrings, isLoopDraft, loopTeam, relativeTime } from "./loop-model";
 import { LoopCommandPicker, RunLoopOnPicker, type PickerItem } from "./loop-pickers";
@@ -73,7 +74,7 @@ function entityItems(data: BootstrapData, type: LoopTriggerType): PickerItem[] {
     case "release":
       return (data.releases ?? []).map((item) => ({ id: item.id, label: item.name, detail: item.version, entity: true }));
     case "team":
-      return data.teams.map((item) => ({ id: item.id, label: item.name, detail: item.key, entity: true, icon: <TeamIcon team={item} size={14} /> }));
+      return data.teams.map((item) => ({ id: item.id, label: item.name, detail: item.key, detailPosition: "after", entity: true, icon: <TeamIcon team={item} size={14} /> }));
     case "cycle":
       return (data.cycles ?? []).map((item) => ({ id: item.id, label: item.name || `Cycle ${item.number}`, entity: true }));
     default:
@@ -99,6 +100,8 @@ export function LoopDetail({
   const { loop, setLoop, missing } = useLoopRecord(data, loopId);
   const [expanded, setExpanded] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(() => new URLSearchParams(window.location.search).get("versions") === "1");
+  // Published from the loop builder: keep its conversation docked while it finishes the reply.
+  const [agentOpen, setAgentOpen] = useState(() => takeLoopAgentHandoff(loopId));
   const { run, picker, busy } = useRunLoop(data, loop, onNavigate);
   const workspace = data.workspace.urlKey;
   useEffect(() => {
@@ -193,6 +196,7 @@ export function LoopDetail({
           </button>
         </div>
       </header>
+      <div className="loops-detail-body">
       <div className="loops-detail-scroll">
         <div className="loops-detail">
           <div className="loops-detail-actions">
@@ -205,8 +209,8 @@ export function LoopDetail({
               {t("Run now")}
             </button>
           </div>
-          <div className="loops-detail-icon" style={{ color: loop.color || undefined }}>
-            <LoopGlyph icon={loop.icon || "Automation"} size={20} />
+          <div className="loops-detail-icon" style={{ color: loopIconColor(loop) }}>
+            <LoopIcon source={loop} size={20} />
           </div>
           <h1 className="loops-detail-title" data-i18n-ignore>
             {loop.name || t("Untitled loop")}
@@ -250,7 +254,7 @@ export function LoopDetail({
 
           <section className="loops-card is-trigger" aria-label={t("Trigger")}>
             <h3>{t("Trigger")}</h3>
-            <LoopTriggerEditor data={data} triggerType={loop.triggerType} config={loop.triggerConfig ?? {}} readOnly />
+            <LoopTriggerEditor data={data} level={loop.level} triggerType={loop.triggerType} config={loop.triggerConfig ?? {}} readOnly />
           </section>
 
           <section className="loops-card is-instructions" aria-label={t("Instructions")}>
@@ -271,6 +275,23 @@ export function LoopDetail({
             </div>
           </section>
         </div>
+      </div>
+      {agentOpen && (
+        <LoopAgentPanel
+          data={data}
+          loopId={loop.id}
+          title={loop.name || undefined}
+          visual={{ templateId: loop.templateId, icon: loop.icon, color: loop.color }}
+          open={agentOpen}
+          onClose={() => setAgentOpen(false)}
+          onLoopSaved={() => {
+            void getLoop(loop.id)
+              .then(setLoop)
+              .catch(() => undefined);
+          }}
+          onNavigateLoop={(result) => result.id && result.id !== loop.id && onNavigate(loopPath(workspace, result.id))}
+        />
+      )}
       </div>
       {picker}
       <LoopVersionsDialog

@@ -74,4 +74,16 @@ describe('LoopInstructionsEditor', () => {
     expect(loopEntityMarkdown({ mentionType: 'user', label: 'Teammate' })).toBe('@Teammate')
     expect(loopEntityMarkdown({ mentionType: 'document', label: 'Spec', href: '/workspace/document/spec' })).toBe('[Spec](/workspace/document/spec)')
   })
+
+  it('renders ordered and bullet lists with markers (Tailwind preflight strips them)', async () => {
+    const view = render(<I18nProvider><LoopInstructionsEditor readOnly ariaLabel="Instructions" data={makeBootstrap()} value={'1. Read the issue\n2. Route it\n\n- Ping the owner'} onChange={vi.fn()}/></I18nProvider>)
+    await waitFor(() => expect(view.container.querySelector('.loops-instructions-prosemirror ol li')).toHaveTextContent('Read the issue'))
+    expect(view.container.querySelector('.loops-instructions-prosemirror ul li')).toHaveTextContent('Ping the owner')
+    // jsdom loads no stylesheets; read the rule itself (Node APIs are untyped in this project).
+    const fs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync: (path: string, encoding: 'utf8') => string }
+    const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd()
+    const css = fs.readFileSync(`${cwd}/src/components/loops/loops-page.css`, 'utf8')
+    expect(css).toMatch(/\.loops-instructions-prosemirror ul,\s*\.loops-run-answer ul \{ list-style: disc; \}/)
+    expect(css).toMatch(/\.loops-instructions-prosemirror ol,\s*\.loops-run-answer ol \{ list-style: decimal; \}/)
+  })
 })
