@@ -52,6 +52,25 @@ function choices(field: ElicitationField): Choice[] {
   );
 }
 
+function hostOf(url?: string) {
+  try {
+    return url ? new URL(url).host : "";
+  } catch {
+    return "";
+  }
+}
+
+/** A single required choice (e.g. the loop builder's questions) renders as Linear's answer chips. */
+function singleChoice(prompt: ElicitationPrompt) {
+  if (prompt.mode !== "form") return undefined;
+  const entries = Object.entries(prompt.schema?.properties ?? {});
+  if (entries.length !== 1) return undefined;
+  const [key, field] = entries[0];
+  if (field.type && field.type !== "string") return undefined;
+  const options = choices(field);
+  return options.length ? { key, field, options } : undefined;
+}
+
 export function AgentElicitation({ part }: { part: AgentMessagePart }) {
   const prompt = part.elicitation;
   const [values, setValues] = useState<Record<string, unknown>>(() =>
@@ -64,10 +83,11 @@ export function AgentElicitation({ part }: { part: AgentMessagePart }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [action, setAction] = useState("");
+  const [chosen, setChosen] = useState("");
   if (!prompt) return null;
   const completed = prompt.action || action;
   const expired = part.status === "error" && !completed;
-  const respond = async (next: "accept" | "decline" | "cancel") => {
+  const respond = async (next: "accept" | "decline" | "cancel", content = values) => {
     setBusy(true);
     setError("");
     try {
@@ -76,7 +96,7 @@ export function AgentElicitation({ part }: { part: AgentMessagePart }) {
         jsonRequest("POST", {
           action: next,
           ...(next === "accept" && prompt.mode === "form"
-            ? { content: values }
+            ? { content }
             : {}),
         }),
       );
@@ -89,6 +109,44 @@ export function AgentElicitation({ part }: { part: AgentMessagePart }) {
       setBusy(false);
     }
   };
+  const choice = singleChoice(prompt);
+  if (choice) {
+    // A resolved question comes back with the chosen answer as the part text.
+    const picked = chosen || (prompt.action === "accept" || part.status === "completed" ? (part.text ?? "") : "");
+    const answered = typeof prompt.action === "string" && prompt.action !== "accept" ? prompt.action : action;
+    const done = Boolean(completed) || expired || Boolean(part.text && picked);
+    return (
+      <section className="agent-elicitation is-choice" aria-label={prompt.message || choice.field.title || "Question"}>
+        <p>{prompt.message || choice.field.title}</p>
+        <div className="agent-elicitation-chips" role="group" aria-label={choice.field.title || prompt.message}>
+          {choice.options.map((option) => (
+            <button
+              aria-pressed={picked === option.const || undefined}
+              className={picked === option.const ? "is-chosen" : undefined}
+              disabled={busy || done}
+              key={option.const}
+              type="button"
+              onClick={() => {
+                setChosen(option.const);
+                void respond("accept", { [choice.key]: option.const });
+              }}
+            >
+              {option.title || option.const}
+            </button>
+          ))}
+          {!done && (
+            <button className="is-skip" disabled={busy} type="button" onClick={() => void respond("decline")}>
+              Skip
+            </button>
+          )}
+        </div>
+        {answered === "decline" && <p role="status">Skipped</p>}
+        {expired && <p role="status">This request has expired.</p>}
+        {error && <p role="alert">{error}</p>}
+      </section>
+    );
+  }
+  const host = hostOf(prompt.connectorUrl);
   return (
     <section
       className="agent-elicitation"
@@ -96,7 +154,7 @@ export function AgentElicitation({ part }: { part: AgentMessagePart }) {
     >
       <header>
         <strong>{prompt.connectorName}</strong>
-        <span>{new URL(prompt.connectorUrl).host}</span>
+        {host && <span>{host}</span>}
       </header>
       <p>{prompt.message}</p>
       {completed ? (
@@ -123,7 +181,7 @@ export function AgentElicitation({ part }: { part: AgentMessagePart }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Open {new URL(prompt.url!).host}
+              Open {hostOf(prompt.url)}
               <ExternalLink size={14} />
             </a>
           ) : (

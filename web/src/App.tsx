@@ -4778,11 +4778,13 @@ function App() {
         )}
         {page === "loops" &&
           loopsEnabled &&
-          (route.kind === "loops" || route.kind === "loop-editor") && (
+          (route.kind === "loops" || route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run") && (
             <LoopsPage
               data={data}
               draftId={route.kind === "loop-editor" ? route.draftId : undefined}
-              loopId={route.kind === "loop-editor" ? route.loopId : undefined}
+              loopId={route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run" ? route.loopId : undefined}
+              runId={route.kind === "loop-run" ? route.runId : undefined}
+              mode={route.kind === "loop-editor" ? "edit" : route.kind === "loop" ? "detail" : route.kind === "loop-run" ? "runs" : "list"}
               editing={route.kind === "loop-editor"}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onNavigate={path => navigateTo(route.kind === 'loop-editor' && path === loopsPath(data.workspace.urlKey) ? navigationReturnPath(location.state, data.workspace.urlKey, path) : path)}
@@ -6623,7 +6625,7 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
   if (route.kind === "document") return "document-detail";
   if (route.kind === "drafts") return "drafts";
   if (route.kind === "agent") return "agent";
-  if (route.kind === "loops" || route.kind === "loop-editor") return "loops";
+  if (route.kind === "loops" || route.kind === "loop-editor" || route.kind === "loop" || route.kind === "loop-run") return "loops";
   if (
     route.kind === "releases" ||
     route.kind === "release-pipeline" ||

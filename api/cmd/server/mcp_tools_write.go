@@ -922,6 +922,13 @@ func (s *server) saveMCPComment(ctx context.Context, actor mcpActor, data domain
 	id := stringArg(args, "id")
 	parentID := stringArg(args, "parentId")
 	if id != "" {
+		// Models sometimes pass the issue (ID or identifier such as DEV-14) as the
+		// comment id; when no comment matches, post a new comment on that issue.
+		if !mcpCommentVisible(data, id) && parentID == "" {
+			if issue, err := mcpFindIssue(data, id); err == nil {
+				return s.mutateAnyComment(ctx, actor, data, issue.ID, body, objectArg(args, "bodyData"), "create")
+			}
+		}
 		return s.mutateAnyComment(ctx, actor, data, id, body, objectArg(args, "bodyData"), "update")
 	}
 	if parentID != "" {

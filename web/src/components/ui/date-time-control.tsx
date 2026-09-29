@@ -10,6 +10,7 @@ type Mode = 'date' | 'datetime'
 
 export function DateTimeControl({
   className = '',
+  format,
   label,
   locale,
   min,
@@ -18,6 +19,8 @@ export function DateTimeControl({
   value,
 }: {
   className?: string
+  /** Custom trigger text (e.g. Linear's MM/DD/YYYY schedule date). */
+  format?: (value: string) => string
   label: string
   locale?: AppLocale
   min?: string
@@ -56,7 +59,7 @@ export function DateTimeControl({
   }}>
     <Popover.Trigger asChild>
       <button aria-label={label} className={`date-time-control ${className}`.trim()} type="button">
-        <span>{displayValue(value, mode)}</span><CalendarIcon/>
+        <span>{format ? format(value) : displayValue(value, mode)}</span><CalendarIcon/>
       </button>
     </Popover.Trigger>
     <Popover.Portal>

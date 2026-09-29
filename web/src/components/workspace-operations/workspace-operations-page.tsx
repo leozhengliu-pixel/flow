@@ -6,8 +6,8 @@ import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SelectControl } from '@/components/ui/select-control'
 import { ReleasesPage } from '@/components/releases/releases-page'
-import { createAsk, decideAsk, deleteAllDrafts, deleteAsk, deleteDraft } from '@/lib/api'
-import type { Ask, BootstrapData, Draft } from '@/types/flow'
+import { createAsk, decideAsk, deleteAllDrafts, deleteAsk, deleteDraft, deleteLoop } from '@/lib/api'
+import type { Ask, BootstrapData, Draft, Loop } from '@/types/flow'
 import type { ReleasePipelineTab, ReleaseRouteTab } from '@/lib/app-routes'
 import { customerPath, documentPath, initiativePath, issuePath, newLoopPath, projectPath, releasePath, releasePipelinePath, reviewPath, settingsPath } from '@/lib/app-routes'
 import { useI18n } from '@/i18n/i18n'
@@ -69,7 +69,8 @@ function DraftsPage({ data, onOpenSidebar, onReload, onNavigate, onResume }: { d
   const localComposerDrafts = readLocalComposerDrafts(data.viewer.id)
   const localTeamIds = new Set(localDrafts.map(item => typeof item.metadata?.teamId === 'string' ? item.metadata.teamId : ''))
   const localComposerKeys = new Set(localComposerDrafts.map(item => `${item.type}:${item.resourceId}`))
-  const drafts = [...data.drafts.filter(item => item.userId === data.viewer.id && isVisibleDraft(item) && !(item.type === 'issue' && localTeamIds.has(typeof item.metadata?.teamId === 'string' ? item.metadata.teamId : '')) && !localComposerKeys.has(`${item.type}:${item.resourceId ?? ''}`)), ...localDrafts, ...localComposerDrafts]
+  const loopDrafts = (data.loops ?? []).filter(loop => loop.status === 'draft' && loop.creator?.id === data.viewer.id).map(loopDraft)
+  const drafts = [...loopDrafts, ...data.drafts.filter(item => item.userId === data.viewer.id && isVisibleDraft(item) && !(item.type === 'issue' && localTeamIds.has(typeof item.metadata?.teamId === 'string' ? item.metadata.teamId : '')) && !localComposerKeys.has(`${item.type}:${item.resourceId ?? ''}`)), ...localDrafts, ...localComposerDrafts]
   const [confirm, setConfirm] = useState<{ kind: 'one'; draft: Draft } | { kind: 'all' }>()
   const [deleting, setDeleting] = useState(false)
   const discard = async () => {
@@ -78,10 +79,13 @@ function DraftsPage({ data, onOpenSidebar, onReload, onNavigate, onResume }: { d
     try {
       if (confirm.kind === 'all') {
         await deleteAllDrafts()
+        await Promise.all(loopDrafts.map(item => deleteLoop(item.id)))
         drafts.forEach(clearLocalDraft)
       } else {
         const remoteId = typeof confirm.draft.metadata?.remoteId === 'string' ? confirm.draft.metadata.remoteId : ''
-        if (!confirm.draft.id.startsWith('local:')) await deleteDraft(confirm.draft.id)
+        // Loop drafts are draft loops, not rows in the drafts table.
+        if (confirm.draft.metadata?.loopDraft) await deleteLoop(confirm.draft.id)
+        else if (!confirm.draft.id.startsWith('local:')) await deleteDraft(confirm.draft.id)
         else if (remoteId) await deleteDraft(remoteId)
         clearLocalDraft(confirm.draft)
       }
@@ -103,6 +107,11 @@ function DraftsPage({ data, onOpenSidebar, onReload, onNavigate, onResume }: { d
     {drafts.length === 0 ? <DraftEmpty/> : <div className="draft-groups">{groups.map(group => <section key={group.type}><h2>{t(group.label)}</h2><div className="draft-grid">{group.items.map(draft => { const href = draftHref(data, draft); return <article className={`draft-card is-${draft.type}`} key={draft.id}>{href ? <a aria-label={t('Edit draft')} className="draft-card-link" href={href} onClick={event => { event.preventDefault(); open(draft) }}/> : <button aria-label={t('Edit draft')} className="draft-card-link" onClick={() => open(draft)} type="button"/>}<header><DraftTypeIcon data={data} draft={draft}/><strong data-i18n-ignore>{draftTitle(data, draft) || t('Untitled draft')}</strong><time dateTime={draft.updatedAt} title={new Date(draft.updatedAt).toLocaleString()}>{relative(draft.updatedAt)}</time><button aria-label={t('Discard draft')} className="draft-discard" onClick={() => setConfirm({ kind: 'one', draft })} type="button"><Trash2/></button></header>{draft.type === 'loop' && <div className="draft-loop-scope"><ViewGlyph color="currentColor" icon="Team"/><span>{draft.metadata?.level === 'team' ? t('Team') : t('Workspace')}</span></div>}{(draft.type === 'comment' || draft.type === 'project_update' || draft.type === 'initiative_update' || draft.type === 'customer_need' || draft.type === 'pull_request_comment') && <div className="draft-context"><DraftContextIcon data={data} draft={draft}/><span>{t(draftContextLabel(draft))}</span></div>}{draft.type !== 'loop' && draft.body && <div aria-label={t('Draft content')} className="draft-content" role="document" data-i18n-ignore>{draft.body}</div>}</article>})}</div></section>)}</div>}
     <DraftDiscardDialog all={confirm?.kind === 'all'} deleting={deleting} open={Boolean(confirm)} onCancel={() => !deleting && setConfirm(undefined)} onConfirm={() => void discard()}/>
   </main>
+}
+
+/** A draft loop shown as a loop draft card. */
+function loopDraft(loop: Loop): Draft {
+  return { id: loop.id, userId: loop.creator?.id ?? '', type: 'loop', title: loop.name || 'Untitled loop', body: loop.instructions, metadata: { level: loop.level, name: loop.name, instructions: loop.instructions, loopDraft: true }, createdAt: loop.createdAt, updatedAt: loop.updatedAt }
 }
 
 function draftGroups(drafts: Draft[]) {

@@ -24,6 +24,7 @@ type Config struct {
 	Storage                        objectstore.Config
 	Auth                           AuthConfig
 	Agent                          AgentConfig
+	WebSearch                      WebSearchConfig
 	Telemetry                      TelemetryConfig
 }
 
@@ -39,6 +40,17 @@ type AgentConfig struct {
 	ToolsEnabled     bool
 	WriteTools       bool
 }
+
+// WebSearchConfig selects the web search provider loops and Flow Agent use.
+// An empty provider disables web search.
+type WebSearchConfig struct {
+	Provider string // tavily | brave | searxng | ""
+	APIKey   string
+	URL      string // searxng base URL, or an API base override for tavily/brave
+}
+
+// Enabled reports whether a provider is configured.
+func (c WebSearchConfig) Enabled() bool { return c.Provider != "" }
 
 type AuthConfig struct {
 	EmailEnabled   bool
@@ -142,6 +154,7 @@ func Load() (Config, error) {
 			Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second), MaxOutputTokens: integer("FLOW_AGENT_MAX_OUTPUT_TOKENS", 4096),
 			AnthropicVersion: value("FLOW_AGENT_ANTHROPIC_VERSION", "2023-06-01"), ToolsEnabled: boolean("FLOW_AGENT_TOOLS_ENABLED", true), WriteTools: boolean("FLOW_AGENT_WRITE_TOOLS", false),
 		},
+		WebSearch: WebSearchConfig{Provider: strings.ToLower(value("FLOW_WEB_SEARCH_PROVIDER", "")), APIKey: secret("FLOW_WEB_SEARCH_API_KEY"), URL: strings.TrimRight(value("FLOW_WEB_SEARCH_URL", ""), "/")},
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
 	return config, config.Validate()
@@ -222,8 +235,33 @@ func (c Config) Validate() error {
 	if c.Agent.MaxOutputTokens < 1 || c.Agent.MaxOutputTokens > 131072 {
 		return fmt.Errorf("FLOW_AGENT_MAX_OUTPUT_TOKENS must be between 1 and 131072")
 	}
+	if err := c.WebSearch.Validate(); err != nil {
+		return err
+	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")
+	}
+	return nil
+}
+
+// Validate checks the web search provider settings.
+func (c WebSearchConfig) Validate() error {
+	switch c.Provider {
+	case "":
+		return nil
+	case "tavily", "brave":
+		if c.APIKey == "" {
+			return fmt.Errorf("FLOW_WEB_SEARCH_API_KEY is required when FLOW_WEB_SEARCH_PROVIDER=%s", c.Provider)
+		}
+	case "searxng":
+		if c.URL == "" {
+			return fmt.Errorf("FLOW_WEB_SEARCH_URL is required when FLOW_WEB_SEARCH_PROVIDER=searxng")
+		}
+	default:
+		return fmt.Errorf("FLOW_WEB_SEARCH_PROVIDER must be tavily, brave, searxng, or empty")
+	}
+	if c.URL != "" && !strings.HasPrefix(c.URL, "http://") && !strings.HasPrefix(c.URL, "https://") {
+		return fmt.Errorf("FLOW_WEB_SEARCH_URL must be an http(s) URL")
 	}
 	return nil
 }

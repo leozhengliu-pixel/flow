@@ -30,6 +30,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/objectstore"
 	"flow/api/internal/store"
+	"flow/api/internal/websearch"
 )
 
 var (
@@ -54,6 +55,7 @@ type server struct {
 	workflowSchedulerStarted       atomic.Bool
 	deliverySchedulerStarted       atomic.Bool
 	settingsLastSweep              atomic.Int64
+	agentOrigin                    atomic.Value // last browser origin on an agent request; loop-run links fall back to it
 	deliverySchedulerMu            sync.Mutex
 	deliverySchedulerCancel        context.CancelFunc
 	deliverySchedulerDone          chan struct{}
@@ -61,6 +63,8 @@ type server struct {
 	externalAuth                   *externalAuth
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
+	webSearch                      websearch.Provider // nil when no provider is configured
+	webFetcher                     *websearch.Fetcher
 	triageRuns                     sync.Map
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
@@ -120,6 +124,8 @@ func main() {
 		externalAuth:                   external,
 		agent:                          applicationConfig.Agent,
 		agentClient:                    &http.Client{Timeout: applicationConfig.Agent.Timeout},
+		webSearch:                      websearch.New(websearch.Config{Provider: applicationConfig.WebSearch.Provider, APIKey: applicationConfig.WebSearch.APIKey, URL: applicationConfig.WebSearch.URL}, nil),
+		webFetcher:                     &websearch.Fetcher{},
 		allowedOrigin:                  applicationConfig.AppURL,
 		workspaceRegionSelectorEnabled: applicationConfig.WorkspaceRegionSelectorEnabled,
 		workspaceDefaultRegion:         applicationConfig.WorkspaceDefaultRegion,
@@ -367,6 +373,17 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/loops/{id}", s.deleteLoop)
 	mux.HandleFunc("GET /api/loops/{id}/runs", s.listLoopRuns)
 	mux.HandleFunc("POST /api/loops/{id}/runs", s.runLoopNow)
+	mux.HandleFunc("GET /api/loops/{id}/runs/{runId}", s.getLoopRun)
+	mux.HandleFunc("POST /api/loops/{id}/duplicate", s.duplicateLoop)
+	mux.HandleFunc("GET /api/loop-templates", s.listLoopTemplates)
+	mux.HandleFunc("GET /api/loop-config", s.getLoopConfig)
+	mux.HandleFunc("GET /api/workspace/loop-settings", s.getLoopConfig)
+	mux.HandleFunc("PATCH /api/workspace/loop-settings", s.updateLoopSettings)
+	mux.HandleFunc("POST /api/loops/attachments", s.uploadLoopAttachment)
+	mux.HandleFunc("GET /api/loops/{id}/versions", s.listLoopVersions)
+	mux.HandleFunc("GET /api/loops/{id}/versions/{versionId}", s.getLoopVersion)
+	mux.HandleFunc("POST /api/loops/{id}/versions/{versionId}/restore", s.restoreLoopVersion)
+	mux.HandleFunc("POST /api/loops/{id}/runs/{runId}/feedback", s.setLoopRunFeedback)
 	mux.HandleFunc("GET /api/project-templates", s.listProjectTemplates)
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
@@ -918,7 +935,16 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	// envelope avoids a second transaction, but they must never leak through the
 	// workspace bootstrap response.
 	// Loop run history is served by /api/loops/{id}/runs.
+	if len(data.Loops) > 0 {
+		loops := make([]domain.Loop, len(data.Loops))
+		for index, loop := range data.Loops {
+			loops[index] = presentLoop(data.LoopRuns, loop)
+		}
+		data.Loops = loops
+	}
 	data.LoopRuns = nil
+	data.LoopVersions = nil
+	data.LoopAttachments = nil
 	delete(data.Settings, dashboardsSettingsKey)
 	delete(data.Settings, postsSettingsKey)
 	delete(data.Settings, feedSettingsKey)
@@ -4781,6 +4807,9 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 		}
 		visible, err := s.store.IssueAttachmentVisible(ctx, store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access}, url)
 		if err == nil && visible {
+			return true
+		}
+		if metadata, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && loopAttachmentVisible(metadata, userID, url) {
 			return true
 		}
 		data, err = s.store.PagedWorkspaceMetadata(ctx, data.Workspace.URLKey, userID)
