@@ -4,7 +4,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Check, ChevronDown, Clock3, Link2, PackageOpen, Plus } from 'lucide-react'
 import type { MyIssuesProperty } from './my-issues-surface'
-import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
 import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { PropertyMenu, type PropertyMenuKind } from '@/components/property/property-menu'
@@ -405,7 +405,7 @@ function MyIssuesOptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.kind === 'labels') return <LabelIcon className={styles.optionIcon} size={14}/>
   return <span className={styles.optionSpacer}/>
 }
-function GroupStateIcon({ state, type }: { state?: MyIssuesRowData['state']; type?: MyIssuesStateType }) { return state || type ? <span className={styles.groupState}><StatusIcon state={state ?? { id: type!, name: type!, type: type!, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
+function GroupStateIcon({ state, type }: { state?: MyIssuesRowData['state']; type?: MyIssuesStateType }) { if (state?.id === 'triage') return <span className={styles.groupState}><WorkflowStatusGlyph state={state} size={14}/></span>; return state || type ? <span className={styles.groupState}><StatusIcon state={state ?? { id: type!, name: type!, type: type!, color: 'var(--theme-text-secondary)' }} size={14}/></span> : null }
 function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[number]}|{children:ReactNode;color:string}){
   if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>

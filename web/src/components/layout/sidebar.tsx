@@ -96,7 +96,9 @@ import {
   savedViewPathId,
   workspaceViewsPath,
   loopsPath,
+  teamTriagePath,
 } from "@/lib/app-routes";
+import { isIssueInTriage, isSnoozed } from "@/components/triage/triage-model";
 import { useI18n } from "@/i18n/i18n";
 import type {
   AccountBootstrap,
@@ -730,6 +732,7 @@ export function Sidebar({
                       featureEnabled("initiatives") && data.teamSettings[team.id]?.showInitiatives !== false
                     }
                     team={team}
+                    triageCount={data.teamSettings[team.id]?.triageEnabled ? data.issues.filter(issue => issue.team.id === team.id && !issue.archivedAt && isIssueInTriage(issue, data.teamSettings) && !isSnoozed(issue)).length : undefined}
                     activeIssues={navigationRoute.kind === 'team-issues' && navigationRoute.teamKey.toLowerCase() === team.key.toLowerCase()}
                     workspaceSlug={workspaceSlug}
                     page={page}
@@ -1470,6 +1473,7 @@ function TeamNavigation({
   workspaceSlug,
   page,
   activeIssues,
+  triageCount,
   cyclesEnabled,
   current,
   upcoming,
@@ -1482,6 +1486,7 @@ function TeamNavigation({
   workspaceSlug: string;
   page: PageId | "not-found";
   activeIssues: boolean;
+  triageCount?: number;
   cyclesEnabled: boolean;
   current: boolean;
   upcoming: boolean;
@@ -1522,6 +1527,15 @@ function TeamNavigation({
             to={overviewPath}
             onClick={onNavigate}
           />
+          {triageCount !== undefined && (
+            <Nav
+              icon={<TriageIcon />}
+              label="Triage"
+              count={triageCount}
+              to={teamTriagePath(workspaceSlug, team.key)}
+              onClick={onNavigate}
+            />
+          )}
           <Nav
             active={activeIssues}
             icon={<IssuesIcon />}
@@ -1753,6 +1767,7 @@ function Nav({
   icon,
   label,
   badge,
+  count,
   active,
   onClick,
   to,
@@ -1760,6 +1775,8 @@ function Nav({
   icon: ReactElement;
   label: string;
   badge?: number;
+  /** A plain muted count (Linear's Triage count), unlike the unread `badge` pill. */
+  count?: number;
   active?: boolean;
   onClick?: () => void;
   to?: string;
@@ -1773,6 +1790,8 @@ function Nav({
         <span className="nav-unread" aria-label={`${badge} unread`}>
           {badge > 99 ? "99+" : badge}
         </span>
+      ) : count ? (
+        <span className="nav-count">{count > 99 ? "99+" : count}</span>
       ) : null}
     </>
   );
@@ -2305,6 +2324,21 @@ function FlowIcon({ name, style }: { name: string; style?: CSSProperties }) {
       style={style}
     >
       <use href={`#${name}`} />
+    </svg>
+  );
+}
+function TriageIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        d="M15 8A7 7 0 1 1 1 8a7 7 0 0 1 14 0Zm-1.5 0a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Z"
+      />
+      <path
+        fill="currentColor"
+        d="M6.86 7.38V6.03c0-.47-.55-.71-.88-.37L4.15 7.56a.54.54 0 0 0 0 .75l1.98 2.06c.27.28.73.08.73-.31V8.63h2.28v1.34c0 .47.55.71.88.37l1.83-1.9a.54.54 0 0 0 0-.75L9.87 5.63c-.27-.28-.73-.08-.73.31v1.44H6.86Z"
+      />
     </svg>
   );
 }

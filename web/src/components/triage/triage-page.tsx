@@ -14,7 +14,7 @@ import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, Team } from '@/types/flow'
 import { FastTriageAcceptEditor } from './fast-triage-accept-editor'
 import { TriageActions } from './triage-actions'
-import { isSnoozed } from './triage-model'
+import { isSnoozed, TRIAGE_STATUS } from './triage-model'
 import { useTriageShortcuts } from './use-triage-shortcuts'
 import { TriageEmptyPage, TriageNotSelectedPage } from './triage-not-selected-page'
 import './triage.css'
@@ -58,7 +58,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
   const options = useMemo(() => explorerPropertyOptions(data, issues), [data, issues])
   const visible = useMemo(() => sortTriage(applyExplorerFilters(issues.filter(issue => showSnoozed || !isSnoozed(issue)), filters, data), ordering), [data, filters, issues, ordering, showSnoozed])
   const snoozedCount = issues.filter(issue => isSnoozed(issue)).length
-  const groups = useMemo(() => [{ id: 'triage', label: t('Triage'), issues: visible.map(issue => ({ ...issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data), viewMatch: true })) }], [data, t, visible])
+  const groups = useMemo(() => [{ id: 'triage', label: t('Triage'), state: { ...TRIAGE_STATUS }, issues: visible.map(issue => ({ ...issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data), viewMatch: true })) }], [data, t, visible])
   const selected = visible.find(issue => issue.id === selectedId) ?? null
 
   const settle = (next: Issue) => {
