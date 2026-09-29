@@ -50,10 +50,10 @@ const triageAISystemPrompt = `You are Triage Intelligence for an issue tracker. 
 
 Be conservative. Only suggest something when the evidence is specific; "No suggestions" is a good answer and is better than a weak guess.
 - duplicate: only when a candidate issue describes the same problem or request. Otherwise null.
-- related: only candidate issues with genuine topical overlap (same feature, integration, workflow or bug area), at most 3. Shared generic words are not overlap.
-- assignee: only when someone clearly owns this area (e.g. they are assigned to closely related issues, lead the matching project, or guidance names them). Never suggest the issue's creator merely because they created it. Otherwise null.
+- related: only candidate issues with genuine topical overlap (same feature, integration, workflow or bug area), at most 3. Shared generic words, or merely being in the same project or team, are not overlap; the titles or descriptions must be about the same subject.
+- assignee: only when someone clearly owns this area (e.g. they are assigned to closely related issues, lead or are the only member of the matching project, or guidance names them). Never suggest the issue's creator merely because they created it. Otherwise null.
 - project: only when the issue clearly belongs to one project (it names it, or it matches the project's stated scope, or closely related issues are in it). Otherwise null.
-- labels: only when similar issues use the label or the label's definition clearly matches the issue. At most 3. Never suggest labels already on the issue.
+- labels: only labels that closely related candidate issues already carry (see each candidate's labels). A label name that merely fits (e.g. "Bug", "Feature") is not evidence. At most 3. Never suggest labels already on the issue.
 - team: only when a different team fits clearly better than the current one. Otherwise null.
 - Follow the workspace guidance when it is given.
 
@@ -574,30 +574,38 @@ func parseTriageAIReply(text string, input *triageAIContext) (*triageAIPlan, err
 		related++
 		add("relatedIssue", candidate.ID, target)
 	}
+	// Evidence the model can point at: issues it linked, or ones the scorer found similar.
+	similar := func(candidate domain.Issue) bool {
+		return used["relatedIssue\x00"+candidate.ID] || used["similarIssue\x00"+candidate.ID] || input.Scores[candidate.ID] > 0
+	}
+	var project *domain.Project
+	if reply.Project != nil && issue.Project == nil {
+		name := strings.ToLower(strings.TrimSpace(reply.Project.Name))
+		for index := range input.Projects {
+			if name != "" && strings.ToLower(input.Projects[index].Name) == name {
+				project = &input.Projects[index]
+				add("project", project.ID, reply.Project)
+				break
+			}
+		}
+	}
 	if reply.Assignee != nil && issue.Assignee == nil {
 		name := strings.ToLower(strings.TrimSpace(reply.Assignee.Name))
 		for _, member := range input.Members {
 			if name == "" || (strings.ToLower(member.User.Name) != name && strings.ToLower(member.User.DisplayName) != name && strings.ToLower(userDisplayName(member.User)) != name) {
 				continue
 			}
-			// Creating the issue is not evidence of ownership: keep the creator
-			// only when they already own a shortlisted related issue.
-			if member.User.ID == issue.Creator.ID && !slices.ContainsFunc(input.Candidates, func(candidate domain.Issue) bool {
-				return candidate.Assignee != nil && candidate.Assignee.ID == member.User.ID && input.Scores[candidate.ID] > 0
+			// Creating the issue is not evidence of ownership: keep the creator only
+			// when they lead the suggested project or own a similar issue or one in it.
+			leadsProject := project != nil && project.Lead != nil && project.Lead.ID == member.User.ID
+			if member.User.ID == issue.Creator.ID && !leadsProject && !slices.ContainsFunc(input.Candidates, func(candidate domain.Issue) bool {
+				inProject := project != nil && candidate.Project != nil && candidate.Project.ID == project.ID
+				return candidate.Assignee != nil && candidate.Assignee.ID == member.User.ID && (similar(candidate) || inProject)
 			}) {
 				break
 			}
 			add("assignee", member.User.ID, reply.Assignee)
 			break
-		}
-	}
-	if reply.Project != nil && issue.Project == nil {
-		name := strings.ToLower(strings.TrimSpace(reply.Project.Name))
-		for _, project := range input.Projects {
-			if name != "" && strings.ToLower(project.Name) == name {
-				add("project", project.ID, reply.Project)
-				break
-			}
 		}
 	}
 	labelPicks := 0
@@ -607,6 +615,12 @@ func parseTriageAIReply(text string, input *triageAIContext) (*triageAIPlan, err
 		for _, label := range input.Labels {
 			if name == "" || strings.ToLower(label.Label.Name) != name || slicesContainsIssueLabel(issue.Labels, label.Label.ID) || labelPicks >= triageAIMaxLabelPicks {
 				continue
+			}
+			// Like Linear, labels are learned from similar issues, not guessed from their names.
+			if !slices.ContainsFunc(input.Candidates, func(candidate domain.Issue) bool {
+				return similar(candidate) && slicesContainsIssueLabel(candidate.Labels, label.Label.ID)
+			}) {
+				break
 			}
 			labelPicks++
 			add("label", label.Label.ID, target)

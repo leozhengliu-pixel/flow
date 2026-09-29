@@ -2781,13 +2781,13 @@ export function fetchIssueSuggestions(
   suggestionsGeneratedAt?: string;
   suggestions: IssueSuggestion[];
 }> {
-  return request(`/api/issues/${issueId}/suggestions`, { signal });
+  return request(`/api/issue-records/${issueId}/suggestions`, { signal });
 }
 export function refreshIssueSuggestions(
   issueId: string,
 ): Promise<IssueSuggestion[]> {
   return request(
-    `/api/issues/${issueId}/suggestions/refresh`,
+    `/api/issue-records/${issueId}/suggestions/refresh`,
     jsonRequest("POST", {}),
   );
 }
@@ -2796,7 +2796,7 @@ export function acceptIssueSuggestion(
   suggestionId: string,
 ): Promise<IssueSuggestion> {
   return request(
-    `/api/issues/${issueId}/suggestions/${suggestionId}/accept`,
+    `/api/issue-records/${issueId}/suggestions/${suggestionId}/accept`,
     jsonRequest("POST", {}),
   );
 }
@@ -2805,7 +2805,7 @@ export function dismissIssueSuggestion(
   suggestionId: string,
 ): Promise<IssueSuggestion> {
   return request(
-    `/api/issues/${issueId}/suggestions/${suggestionId}/dismiss`,
+    `/api/issue-records/${issueId}/suggestions/${suggestionId}/dismiss`,
     jsonRequest("POST", {}),
   );
 }
