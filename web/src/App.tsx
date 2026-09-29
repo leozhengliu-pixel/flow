@@ -4381,7 +4381,8 @@ function App() {
   const asksEnabled = workspaceFeatureEnabled(featureFlags, "asks");
   const toolbarAgentSession = floatingAgentOpen ? undefined : data.agentSessions?.find(
     (item) =>
-      item.location === "toolbar" && !closedAgentSessionIds.has(item.id),
+      // Loop builder conversations are shown by the Loops pages themselves.
+      item.location === "toolbar" && !closedAgentSessionIds.has(item.id) && !item.loopIds?.length,
   );
   const toolbarAgentIssues = toolbarAgentSession
     ? toolbarAgentSession.issueIds
