@@ -247,7 +247,14 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs))
-	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions+s.agentWriteAccessNote())
+	webNote := ""
+	if data.WorkspaceSettings.AgentWebSearch && s.webSearchAvailable() {
+		r = r.WithContext(withAgentWebTools(r.Context()))
+		webNote = agentWebSearchNote
+	}
+	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions+s.agentWriteAccessNote()+webNote+loopBuilderPrompt(data, *session))
+	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
+	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
 	messageID := fmt.Sprintf("agent_message_%d", time.Now().UnixNano())
 	started := time.Now()
@@ -274,6 +281,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 	}
 	r = r.WithContext(context.WithValue(r.Context(), connectorContextKey{}, connectorContext))
+	if writer != nil && sessionHasDraftLoop(data, *session) {
+		r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{loopQuestionToolDefinition}))
+	}
 	if writer != nil {
 		snapshot := *session
 		if err := writer.send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
@@ -435,7 +445,28 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: `{"ok":true}`}})
 				continue
 			}
-			if s.agentToolRequiresApproval(call.Name) || strings.HasPrefix(call.Name, "external_") {
+			if call.Name == loopQuestionTool {
+				content, isError := s.askLoopQuestion(r, session, call, func(part domain.AgentMessagePart, kind string) error {
+					index, found := partIndex[part.ID]
+					if found {
+						parts[index] = part
+					} else {
+						partIndex[part.ID] = len(parts)
+						parts = append(parts, part)
+					}
+					if writer == nil {
+						return nil
+					}
+					return writer.send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
+				})
+				if placeholder, ok := partIndex["tool:"+call.ID]; ok && parts[placeholder].Type == "toolCall" {
+					parts = removeAgentPart(parts, partIndex, placeholder)
+					delete(partIndex, "tool:"+call.ID)
+				}
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
+				continue
+			}
+			if (s.agentToolRequiresApproval(call.Name) || strings.HasPrefix(call.Name, "external_")) && !sessionLoopTool(*session, call) {
 				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
 				call.ApprovalID = approvalID
 				call.Status = "pending"
@@ -489,6 +520,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				call.Status, call.Error = "error", callErr.Error()
 			}
 			call.Result = json.RawMessage(result)
+			if callErr == nil && strings.TrimPrefix(call.Name, "mcp__flow.") == "save_loop" {
+				call.Title = saveLoopToolTitle(result)
+			}
 			key := "tool:" + call.ID
 			if index, ok := partIndex[key]; ok {
 				parts[index].Status = call.Status
@@ -636,6 +670,9 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	if strings.HasPrefix(call.Name, "external_") {
 		return s.executeConnectorTool(r, data, call)
 	}
+	if isWebTool(call.Name) {
+		return s.executeWebTool(r.Context(), call.Name, call.Arguments)
+	}
 	definitions, err := s.agentToolDefinitions()
 	if err != nil {
 		return nil, err
@@ -660,6 +697,9 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 		args = map[string]any{}
 	}
 	args["__flowBaseURL"] = externalBaseURL(r)
+	if base, ok := r.Context().Value(agentBaseURLKey{}).(string); ok {
+		args["__flowBaseURL"] = base
+	}
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		actor.APIKey = key

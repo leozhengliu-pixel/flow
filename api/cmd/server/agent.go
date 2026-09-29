@@ -21,13 +21,14 @@ type agentChatInput struct {
 }
 
 type agentSessionInput struct {
-	Message     string   `json:"message"`
-	IssueIDs    []string `json:"issueIds"`
-	ProjectIDs  []string `json:"projectIds"`
-	DocumentIDs []string `json:"documentIds"`
-	UserIDs     []string `json:"userIds"`
-	SkillIDs    []string `json:"skillIds"`
-	Location    string   `json:"location"`
+	Message     string                `json:"message"`
+	IssueIDs    []string              `json:"issueIds"`
+	ProjectIDs  []string              `json:"projectIds"`
+	DocumentIDs []string              `json:"documentIds"`
+	UserIDs     []string              `json:"userIds"`
+	SkillIDs    []string              `json:"skillIds"`
+	LoopIDs     []string              `json:"loopIds"`
+	Location    string                `json:"location"`
 	Mentions    []domain.AgentMention `json:"mentions"`
 }
 
@@ -38,6 +39,7 @@ type agentMessageInput struct {
 	ProjectIDs  []string              `json:"projectIds"`
 	DocumentIDs []string              `json:"documentIds"`
 	UserIDs     []string              `json:"userIds"`
+	LoopIDs     []string              `json:"loopIds"`
 	Mentions    []domain.AgentMention `json:"mentions"`
 }
 
@@ -376,11 +378,14 @@ func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (do
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
 	title := agentSessionTitle(input.Message)
-	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), UserIDs: uniqueAgentIDs(input.UserIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now}
+	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
 			return fmt.Errorf("%w: one or more selected skills were not found", errInvalid)
+		}
+		if err := checkAgentLoops(data, session.LoopIDs); err != nil {
+			return err
 		}
 		data.AgentSessions = append(data.AgentSessions, session)
 		return nil
@@ -417,6 +422,10 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		session.ProjectIDs = mergeAgentIDs(session.ProjectIDs, input.ProjectIDs)
 		session.DocumentIDs = mergeAgentIDs(session.DocumentIDs, input.DocumentIDs)
 		session.UserIDs = mergeAgentIDs(session.UserIDs, input.UserIDs)
+		session.LoopIDs = mergeAgentIDs(session.LoopIDs, input.LoopIDs)
+		if err := checkAgentLoops(data, session.LoopIDs); err != nil {
+			return err
+		}
 		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 || len(session.UserIDs) > 25 {
 			return fmt.Errorf("%w: a conversation can reference at most 25 issues, projects and documents each", errInvalid)
 		}
@@ -715,4 +724,17 @@ func agentSystemPrompt(workspace string, issues []domain.Issue, skills ...[]doma
 		}
 	}
 	return prompt.String()
+}
+
+// checkAgentLoops confirms the loops a conversation builds exist.
+func checkAgentLoops(data *domain.Bootstrap, ids []string) error {
+	if len(ids) > 10 {
+		return fmt.Errorf("%w: a conversation can build at most 10 loops", errInvalid)
+	}
+	for _, id := range ids {
+		if loopByID(data, id) == nil {
+			return fmt.Errorf("%w: loop not found", errInvalid)
+		}
+	}
+	return nil
 }

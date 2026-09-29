@@ -162,6 +162,8 @@ func ProjectListBootstrapProjection(data *domain.Bootstrap) {
 	data.Asks = []domain.Ask{}
 	data.Loops = []domain.Loop{}
 	data.LoopRuns = nil
+	data.LoopVersions = nil
+	data.LoopAttachments = nil
 	data.SLARules = []domain.SLARule{}
 	data.IssueSLAs = []domain.IssueSLA{}
 	data.SLAEvents = []domain.SLAEvent{}

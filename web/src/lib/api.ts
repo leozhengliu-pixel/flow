@@ -49,7 +49,11 @@ import type {
   FlowDocument,
   LabelGroup,
   Loop,
+  LoopAttachment,
+  LoopConfig,
   LoopRun,
+  LoopTemplate,
+  LoopVersion,
   MigrationEntityMapping,
   MigrationJob,
   Notification,
@@ -2463,16 +2467,22 @@ export type LoopMutation = Partial<
   Pick<
     Loop,
     | "name"
+    | "description"
+    | "status"
     | "icon"
     | "color"
     | "level"
+    | "teamId"
     | "triggerType"
     | "triggerConfig"
     | "instructions"
+    | "instructionsData"
     | "connectorIds"
     | "teamAccess"
     | "allowChangesOutsideTrigger"
     | "allowExternalSync"
+    | "webSearch"
+    | "codeAccess"
     | "enabled"
     | "ownerId"
     | "trustedSourceKeys"
@@ -2481,8 +2491,12 @@ export type LoopMutation = Partial<
 export function listLoops(): Promise<Loop[]> {
   return request("/api/loops");
 }
+export function getLoop(id: string): Promise<Loop> {
+  return request(`/api/loops/${encodeURIComponent(id)}`);
+}
+/** Creates a draft loop; `templateId` / `prompt` seed it for the loop-builder agent. */
 export function createLoop(
-  input: LoopMutation & { name: string },
+  input: LoopMutation & { level: Loop["level"]; templateId?: string; prompt?: string; attachmentIds?: string[] },
 ): Promise<Loop> {
   return request("/api/loops", jsonRequest("POST", input));
 }
@@ -2492,11 +2506,55 @@ export function updateLoop(id: string, input: LoopMutation): Promise<Loop> {
     jsonRequest("PATCH", input),
   );
 }
+export function duplicateLoop(id: string): Promise<Loop> {
+  return request(`/api/loops/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
+}
+export function listLoopTemplates(): Promise<LoopTemplate[]> {
+  return request("/api/loop-templates");
+}
 export function listLoopRuns(id: string): Promise<LoopRun[]> {
   return request(`/api/loops/${encodeURIComponent(id)}/runs`);
 }
-export function runLoopNow(id: string): Promise<LoopRun> {
-  return request(`/api/loops/${encodeURIComponent(id)}/runs`, { method: "POST" });
+export function getLoopRun(id: string, runId: string): Promise<LoopRun> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`);
+}
+/** Starts a run; event loops need the entity to run on (`entityId` may be an identifier like DEV-14). */
+export function runLoopNow(id: string, target?: { entityType: string; entityId: string }): Promise<LoopRun> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs`, target ? jsonRequest("POST", target) : { method: "POST" });
+}
+export function listLoopVersions(id: string): Promise<LoopVersion[]> {
+  return request(`/api/loops/${encodeURIComponent(id)}/versions`);
+}
+export function getLoopVersion(id: string, versionId: string): Promise<LoopVersion> {
+  return request(`/api/loops/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`);
+}
+/** Applies a version's definition; the server records it as a new version. */
+export function restoreLoopVersion(id: string, versionId: string): Promise<Loop> {
+  return request(`/api/loops/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`, { method: "POST" });
+}
+/** 👍 / 👎 on a run; `null` removes the viewer's rating. */
+export function rateLoopRun(id: string, runId: string, rating: "up" | "down" | null, comment?: string): Promise<LoopRun> {
+  return request(
+    `/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/feedback`,
+    jsonRequest("POST", comment === undefined ? { rating } : { rating, comment }),
+  );
+}
+/** Uploads a file for the "Ask Flow to build the loop" prompt (sent as `attachmentIds` on create). */
+export function uploadLoopAttachment(file: File): Promise<LoopAttachment> {
+  const body = new FormData();
+  body.append("file", file);
+  return request("/api/loops/attachments", { method: "POST", body });
+}
+export function getLoopConfig(): Promise<LoopConfig> {
+  return request("/api/loop-config");
+}
+export function getLoopSettings(): Promise<LoopConfig> {
+  return request("/api/workspace/loop-settings");
+}
+export function updateLoopSettings(
+  input: Partial<Pick<LoopConfig, "externalLoopTriggers" | "trustedSourcesMode" | "trustedSourcesAllowlist" | "agentWebSearch">>,
+): Promise<LoopConfig> {
+  return request("/api/workspace/loop-settings", jsonRequest("PATCH", input));
 }
 export function deleteLoop(id: string): Promise<void> {
   return request(`/api/loops/${encodeURIComponent(id)}`, { method: "DELETE" });

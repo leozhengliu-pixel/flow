@@ -23,7 +23,7 @@ const routePages = {
   analytics: ['AnalyticsDashboardPage'], dashboards: ['DashboardsPage'],
   'release-note': ['WorkspaceSecondaryPage'], label: ['WorkspaceSecondaryPage'], drafts: ['WorkspaceOperationsPage'],
   agent: ['AgentPage'], releases: ['WorkspaceOperationsPage'], 'release-pipeline': ['WorkspaceOperationsPage'], release: ['WorkspaceOperationsPage'], asks: ['WorkspaceOperationsPage'],
-  loops: ['LoopsPage'], 'loop-editor': ['LoopsPage'], 'team-archive': ['TeamArchivePage'], 'new-team': ['TeamCreatePage'], settings: ['SettingsPage'],
+  loops: ['LoopsPage'], 'loop-editor': ['LoopsPage'], loop: ['LoopsPage'], 'loop-run': ['LoopsPage'], 'team-archive': ['TeamArchivePage'], 'new-team': ['TeamCreatePage'], settings: ['SettingsPage'],
   projects: ['ProjectsPage'], 'team-projects': ['ProjectsPage'], 'projects-new-view': ['ProjectsPage'], 'team-projects-new-view': ['ProjectsPage'],
   'projects-saved-view': ['ProjectsPage'], 'team-projects-saved-view': ['ProjectsPage'],
   project: ['ProjectDetailPage'], 'project-saved-view': ['ProjectDetailPage'], issue: ['DetailPane'],

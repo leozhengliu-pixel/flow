@@ -114,6 +114,12 @@ func (s *SQLiteStore) webhookNeeded(workspaceKey string) bool {
 			return true
 		}
 	}
+	// Event loops match on what an update changed, which needs previous values too.
+	for _, loop := range data.Loops {
+		if loop.Enabled && loop.Status != "draft" && loop.TriggerType != "" && loop.TriggerType != "schedule" {
+			return true
+		}
+	}
 	return false
 }
 
