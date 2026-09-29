@@ -95,6 +95,9 @@ func (s *server) getMCPIssue(ctx context.Context, actor mcpActor, data domain.Bo
 		"createdAt": issue.CreatedAt, "updatedAt": issue.UpdatedAt, "startedAt": issue.StartedAt, "completedAt": issue.CompletedAt,
 		"canceledAt": issue.CanceledAt, "archivedAt": issue.ArchivedAt, "recurrence": issue.Recurrence,
 	}
+	if issue.NextOccurrenceAt != nil {
+		result["nextOccurrenceAt"] = issue.NextOccurrenceAt
+	}
 	if issue.Project != nil {
 		result["project"] = map[string]any{"id": issue.Project.ID, "name": issue.Project.Name}
 		if issue.ProjectMilestoneID != nil {

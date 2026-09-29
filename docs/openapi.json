@@ -3005,6 +3005,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/cycles/{id}/graph": {
+      "get": {
+        "operationId": "get_cycles_id_graph",
+        "tags": [
+          "cycles"
+        ],
+        "summary": "GET /api/cycles/{id}/graph",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/cycles/{id}/resources": {
       "post": {
         "operationId": "post_cycles_id_resources",

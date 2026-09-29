@@ -19,6 +19,10 @@ import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { Toggle } from '@/components/ui/toggle'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
+import { RecurrenceDialog } from '@/components/issue/recurrence-picker'
+import { useRecurrenceSummary } from '@/components/issue/use-recurrence-summary'
+import { useI18n } from '@/i18n/i18n'
+import { recurrenceDate, recurrencePresetOptions } from '@/lib/recurrence'
 
 export interface CreateIssueInput {
   title: string
@@ -36,7 +40,10 @@ export interface CreateIssueInput {
   dueDate?: string
   labelIds?: string[]
   templateId?: string
-  recurrence?: '' | 'daily' | 'weekly' | 'monthly'
+  /** Preset or RRULE subset (see lib/recurrence); '' does not repeat. */
+  recurrence?: string
+  /** First occurrence date (YYYY-MM-DD) for a recurring issue. */
+  nextOccurrenceAt?: string
   teamId?: string
   parentId?: string
   createMore?: boolean
@@ -77,7 +84,8 @@ interface StoredIssueDraft {
   dueDate: string
   labelIds: string[]
   templateId?: string
-  recurrence?: '' | 'daily' | 'weekly' | 'monthly'
+  recurrence?: string
+  recurrenceStart?: string
   updatedAt?: string
 }
 
@@ -116,7 +124,8 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const [dueDate, setDueDate] = useState('')
   const [labelIds, setLabelIds] = useState<string[]>(initialContext?.labelIds ?? [])
   const [templateId, setTemplateId] = useState('')
-  const [recurrence, setRecurrence] = useState<'' | 'daily' | 'weekly' | 'monthly'>('')
+  const [recurrence, setRecurrence] = useState('')
+  const [recurrenceStart, setRecurrenceStart] = useState('')
   const [serverDraftId, setServerDraftId] = useState('')
   const [createMore, setCreateMore] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -178,10 +187,11 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setLabelIds(restored.labelIds ?? initialContext?.labelIds ?? [])
       setTemplateId(restored.templateId ?? '')
       setRecurrence(restored.recurrence ?? '')
+      setRecurrenceStart(restored.recurrenceStart ?? '')
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
       setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
-      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
+      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setRecurrenceStart(''); setCreateMore(false); setExpanded(false)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
       if (requestedStateId && availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
@@ -316,13 +326,14 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     setLabelIds([])
     setTemplateId('')
     setRecurrence('')
+    setRecurrenceStart('')
     setCreateMore(false)
     setExpanded(false)
   }
 
   const saveDraft = async () => {
     if (!hasDraftContent) return
-    const metadata = { title, description, stateId, priority, estimate, assigneeId, projectId, projectMilestoneId, cycleId, dueDate, labelIds, templateId, recurrence, teamId }
+    const metadata = { title, description, stateId, priority, estimate, assigneeId, projectId, projectMilestoneId, cycleId, dueDate, labelIds, templateId, recurrence, recurrenceStart, teamId }
     setSaving(true)
     setError(undefined)
     try {
@@ -375,6 +386,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
         labelIds: labelIds.filter(id => availableLabelIds.has(id)),
         templateId,
         recurrence,
+        ...(recurrence && recurrenceStart ? { nextOccurrenceAt: recurrenceStart } : {}),
         parentId: initialContext?.parentId,
         createMore,
       })
@@ -394,7 +406,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, recurrenceStart, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -443,7 +455,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
             {project && project.milestones.length > 0 && <MiniProperty label="Milestone" value={projectMilestone?.name ?? 'Milestone'} valueIsEntityName={Boolean(projectMilestone)} selectedId={projectMilestoneId} icon={<Diamond size={14}/>} options={[{id:'',label:'No milestone',icon:<Diamond size={14}/>},...project.milestones.map(item => ({id:item.id,label:item.name,icon:<Diamond size={14}/>,i18nIgnore:true}))]} onChange={setProjectMilestoneId}/>}
             <MiniProperty multiple label="Labels" value={selectedLabels.length ? selectedLabels.map(label => label.name).join(', ') : 'Labels'} selectedIds={labelIds} icon={<LabelIcon/>} options={availableLabels.map(item => ({ id: item.id, label: item.name, color: item.color, description: item.description, issueCount: item.issueCount, scope: item.scope, resourceType: item.resourceType, groupId: item.groupId, groupLabel: item.groupId ? labelGroupNames.get(item.groupId) : undefined, groupColor: item.groupId ? labelGroupColors.get(item.groupId) : undefined }))} onChange={toggleLabel} emptyLabel="Start typing to create a new label" onCreate={onCreateLabel ? async (name, groupId) => { const label = await onCreateLabel(name, groupId); setLabelIds(current => toggleGroupedLabelIds(current, label.id, [...availableLabels, label])) } : undefined}/>
             {data.cycleSettings[teamId]?.enabled === true && <MiniProperty label="Cycle" value={cycle?.name ?? 'Cycle'} valueIsEntityName={Boolean(cycle)} selectedId={cycleId} icon={<CycleIcon cycle={cycle} nextUpcomingId={nextUpcomingCycleId} progress={cycle?cycleIssueProgress(data.issues,cycle.id):0}/>} options={[{id:'',label:'No cycle',icon:<CycleIcon noCycle/>},...cycles.map(item=>({id:item.id,label:item.name,icon:<CycleIcon cycle={item} nextUpcomingId={nextUpcomingCycleId} progress={cycleIssueProgress(data.issues,item.id)}/>,i18nIgnore:true}))]} onChange={setCycleId} ariaLabel="Add to cycle"/>}
-            <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} onDueDateChange={setDueDate} onRecurrenceChange={setRecurrence} onInsertLink={() => setLinkOpen(true)}/>
+            <MoreActions active={open && !linkOpen} dueDate={dueDate} recurrence={recurrence} recurrenceStart={recurrenceStart} onDueDateChange={setDueDate} onRecurrenceChange={(value, start = '') => { setRecurrence(value); setRecurrenceStart(value ? start : '') }} onInsertLink={() => setLinkOpen(true)}/>
           </div>
 
           {(quickSuggestionsLoading || quickSuggestions.length > 0) && <div className={styles.quickSuggestions}>
@@ -504,8 +516,12 @@ function MiniProperty(props: React.ComponentProps<typeof PropertyMenu>) { return
 function EstimateGlyph({ value }: { value: number }) { return value ? <span aria-hidden="true" className="estimate-value-icon">{value}</span> : <CircleDashed aria-hidden="true"/> }
 function cycleIssueProgress(issues: Issue[], cycleId: string) { const scoped=issues.filter(issue=>issue.cycleId===cycleId&&!issue.archivedAt);return scoped.length?Math.round(scoped.filter(issue=>issue.state.type==='completed'||issue.state.type==='canceled').length/scoped.length*100):0 }
 
-function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenceChange, onInsertLink }: { active: boolean; dueDate: string; recurrence: '' | 'daily' | 'weekly' | 'monthly'; onDueDateChange: (date: string) => void; onRecurrenceChange: (value: '' | 'daily' | 'weekly' | 'monthly') => void; onInsertLink: () => void }) {
+function MoreActions({ active, dueDate, recurrence, recurrenceStart, onDueDateChange, onRecurrenceChange, onInsertLink }: { active: boolean; dueDate: string; recurrence: string; recurrenceStart: string; onDueDateChange: (date: string) => void; onRecurrenceChange: (value: string, start?: string) => void; onInsertLink: () => void }) {
+  const { t, locale } = useI18n()
   const [open, setOpen] = useState(false)
+  const [customOpen, setCustomOpen] = useState(false)
+  const presets = useMemo(() => recurrencePresetOptions(recurrenceDate(), t, locale), [locale, t])
+  const summary = useRecurrenceSummary(recurrence, recurrenceStart || undefined)
   const [dateOpen, setDateOpen] = useState(false)
   useEffect(() => {
     if (!active) return
@@ -531,9 +547,11 @@ function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenc
         <DropdownMenu.SubTrigger className={styles.menuItem}><CalendarIcon/><span>Set due date</span><kbd>⇧ D</kbd><ChevronRight/></DropdownMenu.SubTrigger>
         <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={styles.dateMenu} sideOffset={3} alignOffset={-5}><DueDateCommand value={dueDate} onSelect={async value => onDueDateChange(value)}/></DropdownMenu.SubContent></DropdownMenu.Portal>
       </DropdownMenu.Sub>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Repeat2/><span>Make recurring…</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={styles.moreMenu} sideOffset={3}>{(['daily','weekly','monthly'] as const).map(value=><DropdownMenu.CheckboxItem className={styles.menuItem} checked={recurrence===value} key={value} onCheckedChange={()=>onRecurrenceChange(recurrence===value?'':value)}><Repeat2/><span>{value[0].toUpperCase()+value.slice(1)}</span>{recurrence===value&&<span>✓</span>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+      <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Repeat2/><span>{recurrence ? t('Recurring') : t('Make recurring…')}</span><ChevronRight/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={styles.moreMenu} sideOffset={3}>{presets.map(option=><DropdownMenu.CheckboxItem className={styles.menuItem} checked={recurrence===option.value} key={option.value} onCheckedChange={()=>onRecurrenceChange(recurrence===option.value?'':option.value)}><Repeat2/><span>{option.label}</span>{recurrence===option.value&&<span>✓</span>}</DropdownMenu.CheckboxItem>)}<DropdownMenu.Item className={styles.menuItem} onSelect={()=>setCustomOpen(true)}><Repeat2/><span>{t('Custom…')}</span></DropdownMenu.Item>{recurrence&&<DropdownMenu.Item className={styles.menuItem} onSelect={()=>onRecurrenceChange('')}><X/><span>{t('Stop recurring')}</span></DropdownMenu.Item>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Item className={styles.menuItem} onSelect={onInsertLink}><Link2/><span>Add link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item>
     </DropdownMenu.Content></DropdownMenu.Portal>
+    {recurrence && <button type="button" className={styles.recurrenceChip} aria-label={t('Edit recurring schedule')} onClick={() => setCustomOpen(true)}><Repeat2/><span>{summary}</span></button>}
+    <RecurrenceDialog open={customOpen} onOpenChange={setCustomOpen} value={recurrence || undefined} nextOccurrenceAt={recurrenceStart || undefined} onSave={(value, start) => { onRecurrenceChange(value, start); setCustomOpen(false) }} onStop={() => { onRecurrenceChange(''); setCustomOpen(false) }}/>
   </DropdownMenu.Root>
 }
 

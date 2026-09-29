@@ -1,3 +1,5 @@
+import type { TimelineZoom } from './project-timeline-model'
+
 export type ProjectsDisplaySettings = {
   layout: 'list' | 'board' | 'timeline'
   grouping: string
@@ -8,6 +10,8 @@ export type ProjectsDisplaySettings = {
   showClosed: string
   showEmptyGroups: boolean
   properties: string[]
+  /** Timeline layout zoom (Week / Month / Quarter / Year); persisted with the other display options. */
+  timelineZoom?: TimelineZoom
 }
 
 export const DEFAULT_PROJECTS_DISPLAY: ProjectsDisplaySettings = {

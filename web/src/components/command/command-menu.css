@@ -1,0 +1,80 @@
+/* ⌘K context: the issue(s)/project the menu acts on, then the nested page trail. */
+html:root body .command-dialog .command-context {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px 0;
+  color: var(--pk-muted);
+  font-size: 12px;
+}
+html:root body .command-dialog .command-context-chip {
+  max-width: 60%;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--pk-chip-on);
+  box-shadow: var(--pk-chip-on-ring);
+  color: var(--pk-text);
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html:root body .command-dialog .command-context-page {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+html:root body .command-dialog .command-context-page svg {
+  flex: none;
+  color: var(--pk-faint);
+}
+html:root body .command-dialog .command-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html:root body .command-dialog .command-option-detail {
+  margin-left: 4px;
+  color: var(--pk-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+html:root body .command-dialog .command-option-current {
+  flex: none;
+  margin-left: auto;
+  color: var(--pk-muted);
+}
+html:root body .command-dialog .command-checkbox {
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--pk-faint);
+  border-radius: 4px;
+  color: var(--pk-text-strong);
+}
+html:root body .command-dialog .command-checkbox[data-checked="true"],
+html:root body .command-dialog .command-checkbox[data-checked="mixed"] {
+  border-color: var(--pk-control-selected);
+  background: var(--pk-control-selected);
+}
+html:root body .command-dialog .command-avatar {
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
+}
+html:root body .command-dialog .command-estimate {
+  min-width: 16px;
+  color: var(--pk-muted);
+  font-size: 11px;
+  text-align: center;
+}

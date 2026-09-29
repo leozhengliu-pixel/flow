@@ -126,3 +126,7 @@
 .quickSuggestions button svg { width: 12px; height: 12px; flex: none; }
 :global(:root[data-theme="light"]) .quickSuggestions { border-color: var(--border); }
 :global(:root[data-theme="light"]) .quickSuggestions button { color: var(--theme-text-secondary); }
+.recurrenceChip { height: 24px; max-width: 260px; display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border: .5px solid var(--border-strong); border-radius: 9999px; background: transparent; color: var(--muted); font: 500 12px/1 inherit; }
+.recurrenceChip:hover { background: var(--bg-active); color: var(--text); }
+.recurrenceChip svg { width: 13px; height: 13px; flex: none; }
+.recurrenceChip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

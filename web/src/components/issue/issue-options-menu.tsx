@@ -34,6 +34,7 @@ import './issue-options-menu.css'
 import { IssueReleasePicker } from './issue-release-picker'
 import { useI18n } from '@/i18n/i18n'
 import { IssueActionGlyph } from './issue-action-glyphs'
+import { RecurrenceDialog } from './recurrence-picker'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
@@ -51,7 +52,8 @@ export interface IssueOptionsActions {
   toggleRelease: (releaseId: string) => Promise<void>
   createRelated: (kind: RelatedIssueCreationKind, title: string) => Promise<void>
   convert: (kind: IssueConversionKind) => Promise<void>
-  setRecurring: (recurrence: 'daily' | 'weekly' | 'monthly') => Promise<void>
+  /** recurrence '' stops recurring; startDate (YYYY-MM-DD) is the first occurrence. */
+  setRecurring: (recurrence: string, startDate?: string) => Promise<void>
   toggleFavorite: () => Promise<void>
   remind: (remindAt: string) => Promise<void>
   runLoop: (prompt: string) => Promise<void>
@@ -109,7 +111,6 @@ export function IssueOptionsMenu({
   const [loopPrompt, setLoopPrompt] = useState(issue.description)
   const [selectedHistoryId, setSelectedHistoryId] = useState('current')
   const [busy, setBusy] = useState(false)
-  const [recurrenceDraft, setRecurrenceDraft] = useState<'daily' | 'weekly' | 'monthly'>('weekly')
   const parentFilterRef = useRef<HTMLInputElement>(null)
   const parentMenuRef = useRef<HTMLDivElement>(null)
   const anchors = useMemo(() => Object.fromEntries(['due','release','create','mark','copy','convert','remind'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
@@ -342,8 +343,9 @@ export function IssueOptionsMenu({
             <Option icon={<RefreshCw/>} label="Template..." onSelect={() => actions && void perform(() => actions.convert('template'), 'Issue template created')}/>
             <Option icon={<Repeat2/>} label="Recurring issue..." onSelect={() => {
               if (actions?.configureRecurring) { closeMenu(); actions.configureRecurring() }
-              else { setRecurrenceDraft(issue.recurrence || 'weekly'); openDialog('recurrence') }
+              else openDialog('recurrence')
             }}/>
+            {issue.recurrence && <Option icon={<X/>} label="Stop recurring" onSelect={() => setRecurrence('')}/>}
           </SubmenuSurface>}
           {submenu === 'remind' && <SubmenuSurface label="Remind me" anchor={anchors.remind} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu} searchable bare>
             <ReminderChoices data={data} teamId={issue.team.id} onChoose={remindAt} onCustom={() => {
@@ -361,10 +363,7 @@ export function IssueOptionsMenu({
       </Popover.Portal>
     </Popover.Root>
 
-    <ActionDialog open={dialog === 'recurrence'} title={t('Recurring issue…')} onOpenChange={value => !value && setDialog(null)}>
-      <SelectControl label={t('Repeat')} value={recurrenceDraft} options={['daily','weekly','monthly'].map(value => ({value,label:t(value[0].toUpperCase()+value.slice(1))}))} onChange={value => setRecurrenceDraft(value as typeof recurrenceDraft)}/>
-      <IssueOptionsDialogFooter busy={busy} disabled={!actions} action="Save" onCancel={() => setDialog(null)} onSubmit={() => setRecurrence(recurrenceDraft)}/>
-    </ActionDialog>
+    <RecurrenceDialog open={dialog === 'recurrence'} onOpenChange={value => !value && setDialog(null)} busy={busy || !actions} value={issue.recurrence} nextOccurrenceAt={issue.nextOccurrenceAt} timeZone={data?.teamSettings?.[issue.team.id]?.timezone} onSave={(value, start) => setRecurrence(value, start)} onStop={() => setRecurrence('')}/>
     <ActionDialog open={dialog === 'link'} title={`Add link to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>URL<input autoFocus type="url" placeholder="https://..." value={linkUrl} onChange={event => setLinkUrl(event.target.value)}/></label>
       <label>Title <small>(optional)</small><input value={linkTitle} onChange={event => setLinkTitle(event.target.value)}/></label>
@@ -417,9 +416,9 @@ export function IssueOptionsMenu({
     if (!actions) return
     void perform(() => actions.remind(date.toISOString()), 'Reminder set')
   }
-  function setRecurrence(value: 'daily' | 'weekly' | 'monthly') {
+  function setRecurrence(value: string, startDate?: string) {
     if (!actions) return
-    void perform(() => actions.setRecurring(value), 'Recurring issue enabled')
+    void perform(() => actions.setRecurring(value, startDate), value ? 'Recurring schedule saved' : 'Recurring stopped')
   }
 }
 

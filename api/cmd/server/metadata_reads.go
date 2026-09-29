@@ -21,6 +21,10 @@ func metadataReadRequest(r *http.Request) bool {
 		if p[1] == "teams" && len(p) == 4 && p[3] == "resources" {
 			return true
 		}
+		// The cycle graph loads its issues through authorized record queries.
+		if p[1] == "cycles" && len(p) == 4 && p[3] == "graph" {
+			return true
+		}
 	}
 	switch p[1] {
 	case "account", "workspace", "application-policies", "api-keys", "oauth", "notification-preferences", "push-subscriptions", "agent-skills", "agent", "exports":

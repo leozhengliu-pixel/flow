@@ -19,6 +19,7 @@ var issueAttributeFields = map[string]bool{
 	"templateId": true, "externalSource": true, "delegateId": true,
 	"firstLabel": true, "agentSessionId": true, "addedToCycle": true,
 	"hasLinks": true, "autoClosed": true, "triagedAt": true, "statusChangedAt": true,
+	"nextOccurrenceAt": true,
 }
 
 // Multi-valued properties are indexed as one presence row per value
@@ -27,7 +28,7 @@ var issueAttributePrefixes = []string{"relation:", "suggestedLabel:"}
 
 // issueAttributeVersion is stored in issue_attribute_migrations.complete; bump it
 // when issueAttributes gains fields so existing issues are re-indexed once.
-const issueAttributeVersion = 2
+const issueAttributeVersion = 3
 
 func isIssueAttributeField(field string) bool {
 	if issueAttributeFields[field] {
@@ -80,7 +81,7 @@ func issueAttributes(issue domain.Issue) map[string]string {
 	if issue.AutoClosed {
 		values["autoClosed"] = "true"
 	}
-	for field, value := range map[string]*time.Time{"triagedAt": issue.TriagedAt, "statusChangedAt": issue.StatusChangedAt} {
+	for field, value := range map[string]*time.Time{"triagedAt": issue.TriagedAt, "statusChangedAt": issue.StatusChangedAt, "nextOccurrenceAt": issue.NextOccurrenceAt} {
 		if value != nil {
 			values[field] = value.UTC().Format(issueRecordTimestamp)
 		}
