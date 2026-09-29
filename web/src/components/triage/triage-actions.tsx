@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { createComment, createRelation, updateIssue } from '@/lib/api'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { PriorityPicker } from '@/components/issue/core-property-pickers'
+import { useIssueSearch } from '@/components/issue/use-issue-search'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, Team } from '@/types/flow'
@@ -174,10 +175,12 @@ function ActionPopover({ label, shortcut, icon, open, onOpenChange, children }: 
 
 function DuplicatePicker({ issue, issues, disabled, onPick }: { issue: Issue; issues: Issue[]; disabled: boolean; onPick: (issue: Issue) => void }) {
   const { t } = useI18n()
-  const options = useMemo(() => issues.filter(item => item.id !== issue.id && !item.archivedAt).map(item => ({ id: item.id, label: `${item.identifier} ${item.title}` })), [issue.id, issues])
-  const command = usePropertyCommand({ open: true, options, onOpenChange: () => undefined, closeOnSelect: false, onSelect: option => { const target = issues.find(item => item.id === option.id); if (target) onPick(target) } })
+  const [search, setSearch] = useState('')
+  const candidates = useIssueSearch(search, issues)
+  const options = useMemo(() => candidates.filter(item => item.id !== issue.id && !item.archivedAt).map(item => ({ id: item.id, label: `${item.identifier} ${item.title}` })), [issue.id, candidates])
+  const command = usePropertyCommand({ open: true, options, onOpenChange: () => undefined, closeOnSelect: false, onSelect: option => { const target = candidates.find(item => item.id === option.id); if (target) onPick(target) } })
   return <div className="flow-triage-actions__search" onKeyDown={command.onKeyDown}>
-    <input ref={command.inputRef} autoFocus aria-label={t('Search issues')} placeholder={t('Mark as duplicate of…')} value={command.query} disabled={disabled} onChange={event => command.onQueryChange(event.target.value)}/>
+    <input ref={command.inputRef} autoFocus aria-label={t('Search issues')} placeholder={t('Mark as duplicate of…')} value={command.query} disabled={disabled} onChange={event => { setSearch(event.target.value); command.onQueryChange(event.target.value) }}/>
     <div role="listbox">{command.filteredOptions.slice(0, 8).map(option => <button key={option.id} type="button" role="option" aria-selected={command.activeId === option.id} disabled={disabled} onPointerMove={() => command.setActiveId(option.id)} onClick={() => command.choose(option)} data-i18n-ignore>{option.label}</button>)}</div>
   </div>
 }

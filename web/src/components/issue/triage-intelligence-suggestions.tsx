@@ -16,6 +16,7 @@ import { ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icon
 import { isIssueInTriage } from '@/components/triage/triage-model'
 import type { BootstrapData, Issue, IssueSuggestion } from '@/types/flow'
 import './triage-intelligence-suggestions.css'
+import { useIssuesById } from './use-issues-by-id'
 
 type PropertySuggestion = IssueSuggestion & {
   type: 'assignee' | 'project' | 'label' | 'team'
@@ -426,27 +427,7 @@ function PropertySuggestionChip({
 
 /** Suggested duplicate/related issues, loading any that the workspace snapshot does not include. */
 function useSuggestedIssues(suggestions: IssueSuggestion[], data: BootstrapData) {
-  const [fetched, setFetched] = useState<Map<string, Issue>>(() => new Map())
-  const idsKey = suggestions.map(item => item.suggestedIssueId).filter(Boolean).join(',')
-  const missing = idsKey ? idsKey.split(',').filter(id => !data.issues.some(item => item.id === id) && !fetched.has(id)).join(',') : ''
-  useEffect(() => {
-    if (!missing) return
-    const controller = new AbortController()
-    for (const id of missing.split(',')) {
-      void fetchIssueRecord(id, controller.signal, data.workspace.urlKey)
-        .then(issue => { if (!controller.signal.aborted && issue) setFetched(current => new Map(current).set(id, issue)) })
-        .catch(() => undefined)
-    }
-    return () => controller.abort()
-  }, [missing, data.workspace.urlKey])
-  return useMemo(() => {
-    const map = new Map(fetched)
-    for (const id of idsKey ? idsKey.split(',') : []) {
-      const local = data.issues.find(item => item.id === id)
-      if (local) map.set(id, local)
-    }
-    return map
-  }, [fetched, data.issues, idsKey])
+  return useIssuesById(suggestions.map(item => item.suggestedIssueId), data)
 }
 
 function normalizeRemote(result: unknown): RemoteSuggestions {
