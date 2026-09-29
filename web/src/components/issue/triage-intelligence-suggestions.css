@@ -370,6 +370,7 @@
   gap: 5px;
   margin: 0;
   padding-left: 18px;
+  list-style: disc;
   color: var(--theme-text-secondary);
   font-size: 12px;
   line-height: 1.45;
