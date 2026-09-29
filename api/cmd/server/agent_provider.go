@@ -83,6 +83,21 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 	}
 }
 
+type agentMaxOutputTokensKey struct{}
+
+// withAgentMaxOutputTokens raises the output budget for one call. Reasoning
+// models spend part of it thinking, so structured replies can otherwise be cut off.
+func withAgentMaxOutputTokens(ctx context.Context, tokens int) context.Context {
+	return context.WithValue(ctx, agentMaxOutputTokensKey{}, tokens)
+}
+
+func (s *server) agentMaxOutputTokens(ctx context.Context) int {
+	if tokens, ok := ctx.Value(agentMaxOutputTokensKey{}).(int); ok && tokens > s.agent.MaxOutputTokens {
+		return tokens
+	}
+	return s.agent.MaxOutputTokens
+}
+
 func (s *server) requestAgentTurnWithoutTools(ctx context.Context, messages []agentProviderMessage) (agentProviderTurn, error) {
 	emit := func(agentProviderEvent) error { return nil }
 	protocol := s.agent.Protocol
@@ -135,7 +150,7 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 	instructions, input := responsesInput(messages)
 	payload := map[string]any{
 		"model": s.agent.Model, "instructions": instructions, "input": input, "stream": true,
-		"max_output_tokens": s.agent.MaxOutputTokens, "store": false,
+		"max_output_tokens": s.agentMaxOutputTokens(ctx), "store": false,
 		"reasoning": map[string]any{"summary": "auto"},
 	}
 	if len(tools) > 0 {
@@ -232,7 +247,7 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 }
 
 func (s *server) requestChatCompletions(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
-	payload := map[string]any{"model": s.agent.Model, "messages": chatMessages(messages), "stream": true, "max_tokens": s.agent.MaxOutputTokens}
+	payload := map[string]any{"model": s.agent.Model, "messages": chatMessages(messages), "stream": true, "max_tokens": s.agentMaxOutputTokens(ctx)}
 	if len(tools) > 0 {
 		payload["tools"] = mapTools(tools, func(tool agentProviderTool, parameters any) any {
 			return map[string]any{"type": "function", "function": map[string]any{"name": tool.Name, "description": tool.Description, "parameters": parameters}}
@@ -323,7 +338,7 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 
 func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
 	system, input := anthropicMessages(messages)
-	payload := map[string]any{"model": s.agent.Model, "system": system, "messages": input, "stream": true, "max_tokens": s.agent.MaxOutputTokens}
+	payload := map[string]any{"model": s.agent.Model, "system": system, "messages": input, "stream": true, "max_tokens": s.agentMaxOutputTokens(ctx)}
 	if len(tools) > 0 {
 		payload["tools"] = mapTools(tools, func(tool agentProviderTool, parameters any) any {
 			return map[string]any{"name": tool.Name, "description": tool.Description, "input_schema": parameters}

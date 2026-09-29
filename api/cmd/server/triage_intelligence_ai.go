@@ -40,6 +40,8 @@ const (
 	triageAIMaxReasonWords    = 20
 	triageAIMaxThinkingRunes  = 1200
 	triageAIConcurrentRunsCap = 4
+	// The JSON reply is small, but reasoning models think first and that counts against the budget.
+	triageAIMaxOutputTokens = 16384
 )
 
 // triageAISlots bounds concurrent background model runs (bulk moves into
@@ -268,7 +270,7 @@ func (s *server) requestTriageAIPlan(ctx context.Context, actor mcpActor, query 
 		}
 	}
 	triageContext := buildTriageAIContext(&data, *issue, pool)
-	callCtx, cancel := context.WithTimeout(ctx, s.triageIntelligenceTimeout())
+	callCtx, cancel := context.WithTimeout(withAgentMaxOutputTokens(ctx, triageAIMaxOutputTokens), s.triageIntelligenceTimeout())
 	defer cancel()
 	turn, err := s.requestAgentTurnWithoutTools(callCtx, []agentProviderMessage{
 		{Role: "system", Content: triageAISystemPrompt},
@@ -277,7 +279,11 @@ func (s *server) requestTriageAIPlan(ctx context.Context, actor mcpActor, query 
 	if err != nil {
 		return nil, err
 	}
-	return parseTriageAIReply(turn.Text, &triageContext)
+	plan, err := parseTriageAIReply(turn.Text, &triageContext)
+	if err != nil && turn.StopReason != "" {
+		err = fmt.Errorf("%w (stop reason %q, %d characters)", err, turn.StopReason, len(turn.Text))
+	}
+	return plan, err
 }
 
 // buildTriageAIContext shortlists candidates with the token scorer (padded
