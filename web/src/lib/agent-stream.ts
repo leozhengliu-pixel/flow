@@ -18,6 +18,8 @@ export type AgentStreamInput = {
   projectIds?: string[]
   documentIds?: string[]
   userIds?: string[]
+  /** Loops the conversation builds; a draft loop turns on the loop-builder prompt. */
+  loopIds?: string[]
   mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }[]
   skillIds?: string[]
   location?: 'page' | 'toolbar'
@@ -29,6 +31,7 @@ export type AgentMessageMentions = {
   projectIds?: string[]
   documentIds?: string[]
   userIds?: string[]
+  loopIds?: string[]
   mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }[]
 }
 

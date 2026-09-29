@@ -252,6 +252,8 @@ export type AppRoute =
       loopId?: string;
       draftId?: string;
     }
+  | { kind: "loop"; workspaceSlug: string; loopId: string }
+  | { kind: "loop-run"; workspaceSlug: string; loopId: string; runId?: string }
   | {
       kind: "team-archive";
       workspaceSlug: string;
@@ -670,8 +672,17 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       ? { kind: "loop-editor", workspaceSlug, draftId }
       : { kind: "loop-editor", workspaceSlug };
   }
+  // Legacy `/loops/<id>` links open the loop page.
   if (section === "loops" && third && segments.length === 3)
+    return { kind: "loop", workspaceSlug, loopId: third };
+  if (section === "loop" && third && segments.length === 3)
+    return { kind: "loop", workspaceSlug, loopId: third };
+  if (section === "loop" && third && fourth === "edit" && segments.length === 4)
     return { kind: "loop-editor", workspaceSlug, loopId: third };
+  if (section === "loop" && third && fourth === "runs" && segments.length === 4)
+    return { kind: "loop-run", workspaceSlug, loopId: third };
+  if (section === "loop" && third && fourth === "run" && fifth && segments.length === 5)
+    return { kind: "loop-run", workspaceSlug, loopId: third, runId: fifth };
   if (section === "teams" && segments.length === 2)
     return { kind: "workspace-teams", workspaceSlug };
   if (section === "settings" && third === "new-team" && segments.length === 3)
@@ -1746,7 +1757,14 @@ export function newLoopPath(workspaceSlug: string) {
   return `${loopsPath(workspaceSlug)}/new`;
 }
 export function loopPath(workspaceSlug: string, loopId: string) {
-  return `${loopsPath(workspaceSlug)}/${encode(loopId)}`;
+  return `${workspaceRootPath(workspaceSlug)}/loop/${encode(loopId)}`;
+}
+export function editLoopPath(workspaceSlug: string, loopId: string) {
+  return `${loopPath(workspaceSlug, loopId)}/edit`;
+}
+/** Run history page; without `runId` it opens the latest run. */
+export function loopRunPath(workspaceSlug: string, loopId: string, runId?: string) {
+  return runId ? `${loopPath(workspaceSlug, loopId)}/run/${encode(runId)}` : `${loopPath(workspaceSlug, loopId)}/runs`;
 }
 export function teamArchivePath(
   workspaceSlug: string,

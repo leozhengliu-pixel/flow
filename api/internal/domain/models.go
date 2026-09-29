@@ -138,14 +138,14 @@ type AuthSession struct {
 }
 
 type AgentMessage struct {
-	ID         string             `json:"id"`
-	Role       string             `json:"role"`
-	Content    string             `json:"content"`
-	Parts      []AgentMessagePart `json:"parts,omitempty"`
+	ID      string             `json:"id"`
+	Role    string             `json:"role"`
+	Content string             `json:"content"`
+	Parts   []AgentMessagePart `json:"parts,omitempty"`
 	// Mentions are the resources @-mentioned in a user message, in order.
-	Mentions   []AgentMention     `json:"mentions,omitempty"`
-	DurationMS int64              `json:"durationMs,omitempty"`
-	CreatedAt  time.Time          `json:"createdAt"`
+	Mentions   []AgentMention `json:"mentions,omitempty"`
+	DurationMS int64          `json:"durationMs,omitempty"`
+	CreatedAt  time.Time      `json:"createdAt"`
 }
 
 // AgentMention is an @-mentioned issue, project, document or user.
@@ -184,27 +184,30 @@ type AgentToolCall struct {
 	Result    json.RawMessage `json:"result,omitempty"`
 	Status    string          `json:"status"`
 	Error     string          `json:"error,omitempty"`
+	// Title overrides the tool row label, e.g. "Updated workflow definition draft".
+	Title string `json:"title,omitempty"`
 	// ApprovalID is set while a write tool is waiting for the user decision.
 	// It is intentionally transient and omitted from normal tool calls.
 	ApprovalID string `json:"approvalId,omitempty"`
 }
 
 type AgentSession struct {
-	ID        string         `json:"id"`
-	SlugID    string         `json:"slugId"`
-	UserID    string         `json:"userId"`
-	Title     string         `json:"title"`
-	Favorite  bool           `json:"favorite"`
-	Location  string         `json:"location"`
-	IssueIDs  []string       `json:"issueIds"`
+	ID       string   `json:"id"`
+	SlugID   string   `json:"slugId"`
+	UserID   string   `json:"userId"`
+	Title    string   `json:"title"`
+	Favorite bool     `json:"favorite"`
+	Location string   `json:"location"`
+	IssueIDs []string `json:"issueIds"`
 	// ProjectIDs and DocumentIDs are resources @-mentioned in the conversation.
-	ProjectIDs  []string `json:"projectIds,omitempty"`
-	DocumentIDs []string `json:"documentIds,omitempty"`
-	UserIDs     []string `json:"userIds,omitempty"`
-	SkillIDs  []string       `json:"skillIds"`
-	Messages  []AgentMessage `json:"messages"`
-	CreatedAt time.Time      `json:"createdAt"`
-	UpdatedAt time.Time      `json:"updatedAt"`
+	ProjectIDs  []string       `json:"projectIds,omitempty"`
+	DocumentIDs []string       `json:"documentIds,omitempty"`
+	UserIDs     []string       `json:"userIds,omitempty"`
+	LoopIDs     []string       `json:"loopIds,omitempty"` // loops (usually drafts) the conversation is building
+	SkillIDs    []string       `json:"skillIds"`
+	Messages    []AgentMessage `json:"messages"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
 type PersonalAgentSkill struct {
@@ -850,26 +853,98 @@ type AskApproval struct {
 }
 
 type Loop struct {
-	ID                         string         `json:"id"`
+	ID                         string           `json:"id"`
+	Name                       string           `json:"name"`
+	Description                string           `json:"description"`
+	Status                     string           `json:"status"` // draft | published; loops stored before drafts are published
+	TemplateID                 string           `json:"templateId,omitempty"`
+	SourcePrompt               string           `json:"sourcePrompt,omitempty"`
+	TeamID                     string           `json:"teamId,omitempty"`
+	Icon                       string           `json:"icon,omitempty"`
+	Color                      string           `json:"color,omitempty"`
+	Level                      string           `json:"level"`
+	TriggerType                string           `json:"triggerType"`
+	TriggerConfig              map[string]any   `json:"triggerConfig,omitempty"`
+	Instructions               string           `json:"instructions"`
+	InstructionsData           map[string]any   `json:"instructionsData,omitempty"`
+	ConnectorIDs               []string         `json:"connectorIds"`
+	TeamAccess                 string           `json:"teamAccess"`
+	AllowChangesOutsideTrigger bool             `json:"allowChangesOutsideTrigger"`
+	AllowExternalSync          bool             `json:"allowExternalSync"`
+	WebSearch                  bool             `json:"webSearch"`
+	CodeAccess                 string           `json:"codeAccess"` // disabled | read | readWrite
+	Enabled                    bool             `json:"enabled"`
+	OwnerID                    string           `json:"ownerId,omitempty"`
+	TrustedSourceKeys          []string         `json:"trustedSourceKeys,omitempty"`
+	Creator                    User             `json:"creator"`
+	LastRunAt                  *time.Time       `json:"lastRunAt,omitempty"`
+	NextRunAt                  *time.Time       `json:"nextRunAt,omitempty"`
+	RunCount30d                int              `json:"runCount30d"`
+	CreatedAt                  time.Time        `json:"createdAt"`
+	UpdatedAt                  time.Time        `json:"updatedAt"`
+	PublishedAt                *time.Time       `json:"publishedAt,omitempty"`
+	Attachments                []LoopAttachment `json:"attachments,omitempty"`
+	Version                    int              `json:"version,omitempty"`
+	VersionID                  string           `json:"versionId,omitempty"`
+}
+
+// LoopDefinition is the part of a loop a published version snapshots.
+type LoopDefinition struct {
 	Name                       string         `json:"name"`
+	Description                string         `json:"description"`
 	Icon                       string         `json:"icon,omitempty"`
 	Color                      string         `json:"color,omitempty"`
 	Level                      string         `json:"level"`
+	TeamID                     string         `json:"teamId,omitempty"`
 	TriggerType                string         `json:"triggerType"`
-	TriggerConfig              map[string]any `json:"triggerConfig,omitempty"`
+	TriggerConfig              map[string]any `json:"triggerConfig"`
 	Instructions               string         `json:"instructions"`
+	InstructionsData           map[string]any `json:"instructionsData,omitempty"`
 	ConnectorIDs               []string       `json:"connectorIds"`
 	TeamAccess                 string         `json:"teamAccess"`
 	AllowChangesOutsideTrigger bool           `json:"allowChangesOutsideTrigger"`
 	AllowExternalSync          bool           `json:"allowExternalSync"`
-	Enabled                    bool           `json:"enabled"`
-	OwnerID                    string         `json:"ownerId,omitempty"`
-	TrustedSourceKeys          []string       `json:"trustedSourceKeys,omitempty"`
-	Creator                    User           `json:"creator"`
-	LastRunAt                  *time.Time     `json:"lastRunAt,omitempty"`
-	NextRunAt                  *time.Time     `json:"nextRunAt,omitempty"`
-	CreatedAt                  time.Time      `json:"createdAt"`
-	UpdatedAt                  time.Time      `json:"updatedAt"`
+	WebSearch                  bool           `json:"webSearch"`
+	CodeAccess                 string         `json:"codeAccess"`
+}
+
+// LoopVersion is an immutable snapshot of a published loop definition.
+type LoopVersion struct {
+	ID                  string         `json:"id"`
+	LoopID              string         `json:"loopId"`
+	Version             int            `json:"version"`
+	PublishedAt         time.Time      `json:"publishedAt"`
+	PublishedBy         User           `json:"publishedBy"`
+	ChangeSummary       []string       `json:"changeSummary"`
+	RestoredFromVersion int            `json:"restoredFromVersion,omitempty"`
+	Current             bool           `json:"current"`
+	Definition          LoopDefinition `json:"definition"`
+}
+
+// LoopAttachment is a file uploaded for the "Ask Flow to build the loop"
+// prompt; it moves onto the loop once a draft is created with it.
+type LoopAttachment struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	ContentType string    `json:"contentType"`
+	Size        int64     `json:"size"`
+	URL         string    `json:"url"`
+	CreatedAt   time.Time `json:"createdAt"`
+	CreatorID   string    `json:"creatorId,omitempty"`
+	LoopID      string    `json:"loopId,omitempty"`
+}
+
+// LoopRunFeedback is one user's thumbs up/down on a run.
+type LoopRunFeedback struct {
+	UserID  string    `json:"userId"`
+	Rating  string    `json:"rating"` // up | down
+	Comment string    `json:"comment,omitempty"`
+	At      time.Time `json:"at"`
+}
+
+type LoopRunFeedbackCounts struct {
+	Up   int `json:"up"`
+	Down int `json:"down"`
 }
 
 // LoopRun records one execution of a loop by the agent runtime.
@@ -878,22 +953,46 @@ type LoopRun struct {
 	LoopID           string            `json:"loopId"`
 	Status           string            `json:"status"`  // running | completed | failed
 	Trigger          string            `json:"trigger"` // manual | schedule | event
+	TriggerLabel     string            `json:"triggerLabel,omitempty"`
 	EventType        string            `json:"eventType,omitempty"`
 	EntityType       string            `json:"entityType,omitempty"`
 	EntityID         string            `json:"entityId,omitempty"`
 	EntityIdentifier string            `json:"entityIdentifier,omitempty"`
 	ActorID          string            `json:"actorId,omitempty"`
 	Output           string            `json:"output,omitempty"`
+	Steps            []LoopRunStep     `json:"steps,omitempty"`
 	ToolCalls        []LoopRunToolCall `json:"toolCalls,omitempty"`
 	Error            string            `json:"error,omitempty"`
-	StartedAt        time.Time         `json:"startedAt"`
-	FinishedAt       *time.Time        `json:"finishedAt,omitempty"`
+	Notices          []string          `json:"notices,omitempty"`
+	VersionID        string            `json:"versionId,omitempty"`
+	Version          int               `json:"version,omitempty"`
+	Feedback         []LoopRunFeedback `json:"feedback,omitempty"`
+	// Viewer fields are computed per request and never stored.
+	ViewerRating   *string                `json:"viewerRating"`
+	ViewerComment  string                 `json:"viewerComment,omitempty"`
+	FeedbackCounts *LoopRunFeedbackCounts `json:"feedbackCounts,omitempty"`
+	StartedAt      time.Time              `json:"startedAt"`
+	FinishedAt     *time.Time             `json:"finishedAt,omitempty"`
+}
+
+// LoopRunStep is a progress note (report_progress) the agent made during a run.
+type LoopRunStep struct {
+	Order   int       `json:"order"`
+	Title   string    `json:"title"`
+	Message string    `json:"message,omitempty"`
+	At      time.Time `json:"at"`
 }
 
 type LoopRunToolCall struct {
-	Name   string `json:"name"`
-	Status string `json:"status"` // completed | error | blocked
-	Error  string `json:"error,omitempty"`
+	Order      int        `json:"order"`
+	ID         string     `json:"id,omitempty"`
+	Name       string     `json:"name"`
+	Label      string     `json:"label,omitempty"`
+	Args       string     `json:"args,omitempty"`
+	Status     string     `json:"status"` // running | completed | error | blocked
+	Error      string     `json:"error,omitempty"`
+	StartedAt  *time.Time `json:"startedAt,omitempty"`
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
 }
 
 type ProjectTemplate struct {
@@ -1918,6 +2017,8 @@ type Bootstrap struct {
 	Asks                          []Ask                              `json:"asks"`
 	Loops                         []Loop                             `json:"loops"`
 	LoopRuns                      []LoopRun                          `json:"loopRuns,omitempty"`
+	LoopVersions                  []LoopVersion                      `json:"loopVersions,omitempty"`
+	LoopAttachments               []LoopAttachment                   `json:"loopAttachments,omitempty"`
 	SLARules                      []SLARule                          `json:"slaRules"`
 	IssueSLAs                     []IssueSLA                         `json:"issueSlas"`
 	SLAEvents                     []SLAEvent                         `json:"slaEvents"`

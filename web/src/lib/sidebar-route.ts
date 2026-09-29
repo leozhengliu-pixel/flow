@@ -17,7 +17,7 @@ export function sidebarRoutePath(route: AppRoute): string | undefined {
     case 'workspace-customers': case 'customer': return customersPath(w)
     case 'workspace-teams': case 'new-team': return teamsPath(w)
     case 'releases': case 'release-pipeline': case 'release': case 'release-note': return releasePipelinesPath(w)
-    case 'loops': case 'loop-editor': return loopsPath(w)
+    case 'loops': case 'loop-editor': case 'loop': case 'loop-run': return loopsPath(w)
     case 'team-overview': case 'team-documents': case 'team-members': case 'team-loops': case 'team-resources': case 'team-links': case 'team-updates': case 'team-update': return teamHomePath(w, route.teamKey)
     case 'team-triage': return teamTriagePath(w, route.teamKey)
     case 'team-issues': case 'team-board': case 'team-archive': return teamIssuesPath(w, route.teamKey)

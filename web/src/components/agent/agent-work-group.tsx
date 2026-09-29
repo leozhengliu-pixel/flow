@@ -8,7 +8,8 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
   const { t } = useI18n();
   // Older chats stored an unnamed placeholder for report_progress next to its step; it is not a real tool row.
   const settled = Boolean(message.durationMs) && !forceRunning;
-  const parts = allParts.filter(part => part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled);
+  // The loop builder's ask_question calls render as answer chips, never as tool rows.
+  const parts = allParts.filter(part => (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
   const running = forceRunning || parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
   const [open, setOpen] = useState(running || failed);
@@ -46,7 +47,7 @@ function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullab
   const detail = readableToolDetail(call.arguments, call.result);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
   return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined}>{toolStatusLabel(call.name, running, call.arguments)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined}>{call.title && !running ? t(call.title) : toolStatusLabel(call.name, running, call.arguments)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
     {call.error && <p className={styles.toolCallErrorText} role="alert">{call.error}</p>}
   </div>;

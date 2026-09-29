@@ -371,7 +371,7 @@ func publicAuthPath(path string) bool {
 	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
 		return true
 	}
-return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/") || path == "/api/auth/token-login" || path == "/api/auth/magic-link"
+	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/") || path == "/api/auth/token-login" || path == "/api/auth/magic-link"
 }
 
 func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Request, user domain.User) bool {
@@ -530,7 +530,7 @@ func featureForPath(path string) string {
 	if strings.HasPrefix(path, "/api/agent") {
 		return "ai-agent"
 	}
-	if strings.HasPrefix(path, "/api/loops") {
+	if strings.HasPrefix(path, "/api/loops") || strings.HasPrefix(path, "/api/loop-templates") || path == "/api/loop-config" {
 		return "loops"
 	}
 	if (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/")) && strings.HasSuffix(path, "/loop-runs") {
@@ -1673,7 +1673,6 @@ func (s *server) magicLink(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, response)
 }
-
 
 func (s *server) createInvitation(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))

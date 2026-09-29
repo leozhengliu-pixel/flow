@@ -26,7 +26,7 @@ import { useI18n } from "@/i18n/i18n";
 import {
   createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
   deleteDocumentTemplate, updateCustomEmoji, updateDocumentTemplate,
-  updateCustomerStatus, updateCustomerTier, updateIntegrationConnection, updateWorkspacePreferences,
+  updateCustomerStatus, updateCustomerTier, updateIntegrationConnection, updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
 import { loopsPath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
@@ -130,8 +130,35 @@ function LoopsFeatureSettings({data,settings,busy,setEnabled,setFeature,onSaveWo
         <FeatureRow title="Allow external sources to trigger loops" description="Select which external sources can trigger loops"><Toggle checked={settings.externalLoopTriggers===true} disabled={busy} label="Allow external sources to trigger loops" onChange={value=>void onSaveWorkspace({externalLoopTriggers:value})}/></FeatureRow>
       </FeatureCard>
     </FeatureSection>}
+    {enabled&&<LoopsWebSearchSettings busy={busy}/>}
     {enabled&&<AgentTrustedSourcesSettings data={data} settings={settings} disabled={busy} onReload={onReload} />}
   </FeatureShell>;
+}
+
+/** Web search availability comes from the server's provider; loops opt in per loop, Flow Agent chat per workspace. */
+function LoopsWebSearchSettings({busy}:{busy:boolean}) {
+  const { t } = useI18n();
+  const [config,setConfig]=useState<Awaited<ReturnType<typeof getLoopConfig>>>();
+  const [failed,setFailed]=useState(false);
+  useEffect(()=>{let active=true;getLoopConfig().then(next=>active&&setConfig(next)).catch(()=>active&&setFailed(true));return()=>{active=false};},[]);
+  useEffect(()=>{if(config&&window.location.hash==="#web-search")document.getElementById("web-search")?.scrollIntoView({block:"start"});},[config]);
+  const setAgentWebSearch=async(value:boolean)=>{
+    if(!config)return;
+    const previous=config;
+    setConfig({...config,agentWebSearch:value});
+    try{setConfig(await updateLoopSettings({agentWebSearch:value}));}
+    catch(error){setConfig(previous);toast.error(message(error));}
+  };
+  if(failed)return null;
+  const available=config?.webSearchAvailable===true;
+  return <div id="web-search"><FeatureSection title="Web search" description="Loops with Web search turned on can search the web and read pages to gather context.">
+    <FeatureCard>
+      <FeatureRow title="Web search provider" description={config===undefined?undefined:available?t("Configured ({provider})").replace("{provider}",config.webSearchProvider||t("custom")):"Web search isn't configured for this workspace. A server administrator can enable it by setting FLOW_WEB_SEARCH_PROVIDER (tavily, brave or searxng)."}>
+        <span className={`feature-status${available?" is-on":""}`}>{t(config===undefined?"Checking…":available?"Available":"Not configured")}</span>
+      </FeatureRow>
+      <FeatureRow title="Web search in Flow Agent chat" description="Let Flow Agent search the web when answering in chat"><Toggle checked={config?.agentWebSearch===true} disabled={busy||!available} label="Web search in Flow Agent chat" onChange={value=>void setAgentWebSearch(value)}/></FeatureRow>
+    </FeatureCard>
+  </FeatureSection></div>;
 }
 
 function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegration,onNavigateSettings}:{data:BootstrapData;onReload:()=>Promise<void>;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onOpenIntegration:(provider:IntegrationProvider|string)=>void;onNavigateSettings?: (page: SettingsPageId) => void}) {

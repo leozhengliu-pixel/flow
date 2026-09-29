@@ -21,6 +21,18 @@ type agentProviderMessage struct {
 	Content    string
 	ToolCalls  []domain.AgentToolCall
 	ToolResult *agentProviderToolResult
+	// Images are sent as image inputs with a user message.
+	Images []agentProviderImage
+}
+
+type agentProviderImage struct {
+	MediaType string // image/png | image/jpeg | image/gif | image/webp
+	Data      string // base64
+	Name      string
+}
+
+func (image agentProviderImage) dataURL() string {
+	return "data:" + image.MediaType + ";base64," + image.Data
 }
 
 type agentProviderToolResult struct {
@@ -62,6 +74,12 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 		for _, tool := range connectors {
 			tools = append(tools, tool.Definition)
 		}
+	}
+	if extra, ok := ctx.Value(agentExtraToolsKey{}).([]agentProviderTool); ok && len(tools) > 0 {
+		tools = append(tools, extra...)
+	}
+	if len(tools) > 0 && agentWebToolsEnabled(ctx) && s.webSearchAvailable() {
+		tools = append(tools, webToolDefinitions...)
 	}
 	// Loop runs narrow the tool list to what the loop is permitted to use.
 	if allow, ok := ctx.Value(agentToolFilterKey{}).(func(agentProviderTool) bool); ok {
@@ -474,7 +492,13 @@ func responsesInput(messages []agentProviderMessage) (string, []any) {
 			}
 			continue
 		}
-		if message.Content != "" {
+		if len(message.Images) > 0 && message.Role == "user" {
+			content := []any{map[string]any{"type": "input_text", "text": message.Content}}
+			for _, image := range message.Images {
+				content = append(content, map[string]any{"type": "input_image", "image_url": image.dataURL()})
+			}
+			input = append(input, map[string]any{"role": message.Role, "content": content})
+		} else if message.Content != "" {
 			input = append(input, map[string]any{"role": message.Role, "content": message.Content})
 		}
 		for _, call := range message.ToolCalls {
@@ -495,6 +519,13 @@ func chatMessages(messages []agentProviderMessage) []any {
 			continue
 		}
 		item := map[string]any{"role": message.Role, "content": message.Content}
+		if len(message.Images) > 0 && message.Role == "user" {
+			content := []any{map[string]any{"type": "text", "text": message.Content}}
+			for _, image := range message.Images {
+				content = append(content, map[string]any{"type": "image_url", "image_url": map[string]any{"url": image.dataURL()}})
+			}
+			item["content"] = content
+		}
 		if len(message.ToolCalls) > 0 {
 			calls := []any{}
 			for _, call := range message.ToolCalls {
@@ -522,6 +553,11 @@ func anthropicMessages(messages []agentProviderMessage) (string, []any) {
 		content := []any{}
 		if message.Content != "" {
 			content = append(content, map[string]any{"type": "text", "text": message.Content})
+		}
+		if message.Role == "user" {
+			for _, image := range message.Images {
+				content = append(content, map[string]any{"type": "image", "source": map[string]any{"type": "base64", "media_type": image.MediaType, "data": image.Data}})
+			}
 		}
 		for _, call := range message.ToolCalls {
 			var input any = map[string]any{}

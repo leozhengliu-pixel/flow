@@ -1510,19 +1510,38 @@ func (s *server) saveMCPLoop(ctx context.Context, actor mcpActor, data domain.Bo
 			return nil, fmt.Errorf("loop %q not found", id)
 		}
 		current = data.Loops[index]
-	} else if stringArg(args, "name") == "" {
+	} else if stringArg(args, "name") == "" && stringArg(args, "templateId") == "" {
 		return nil, fmt.Errorf("name is required when creating a loop")
 	}
+	wasDraft := id == "" || current.Status == "draft"
 	input := loopInput{}
-	for key, target := range map[string]**string{"name": &input.Name, "instructions": &input.Instructions, "icon": &input.Icon, "color": &input.Color, "level": &input.Level, "teamAccess": &input.TeamAccess} {
+	for key, target := range map[string]**string{"name": &input.Name, "description": &input.Description, "instructions": &input.Instructions, "icon": &input.Icon, "color": &input.Color, "level": &input.Level, "teamAccess": &input.TeamAccess, "codeAccess": &input.CodeAccess, "templateId": &input.TemplateID} {
 		if value, ok := args[key].(string); ok {
 			*target = &value
 		}
 	}
-	for key, target := range map[string]**bool{"enabled": &input.Enabled, "allowChangesOutsideTrigger": &input.AllowChangesOutsideTrigger} {
+	for key, target := range map[string]**bool{"enabled": &input.Enabled, "allowChangesOutsideTrigger": &input.AllowChangesOutsideTrigger, "allowExternalSync": &input.AllowExternalSync, "webSearch": &input.WebSearch} {
 		if hasBoolArg(args, key) {
 			value := boolArg(args, key)
 			*target = &value
+		}
+	}
+	if status := stringArg(args, "status"); status != "" {
+		input.Status = &status
+	}
+	if hasBoolArg(args, "publish") && boolArg(args, "publish") {
+		status := "published"
+		input.Status = &status
+	}
+	if value := stringArg(args, "team"); value != "" {
+		team, err := mcpFindTeam(data, value)
+		if err != nil {
+			return nil, err
+		}
+		input.TeamID = &team.ID
+		if input.Level == nil {
+			level := "team"
+			input.Level = &level
 		}
 	}
 	if value := stringArg(args, "owner"); value != "" {
@@ -1542,43 +1561,50 @@ func (s *server) saveMCPLoop(ctx context.Context, actor mcpActor, data domain.Bo
 	}
 	if triggerType == "" {
 		triggerType = "schedule"
+		if template := loopTemplateByID(stringArg(args, "templateId")); template != nil && id == "" {
+			triggerType = template.TriggerType
+		}
 	}
-	scheduleKeys := []string{"interval", "unit", "time", "starting", "timezone"}
-	eventKeys := []string{"action", "teams"}
+	scheduleKeys := []string{"interval", "unit", "time", "starting", "startDate", "timezone", "weekdays"}
+	eventKeys := []string{"action", "teams", "event", "value", "filters"}
 	if hasAnyArg(args, append(slices.Clone(scheduleKeys), eventKeys...)...) || input.TriggerType != nil {
 		config := map[string]any{}
 		if input.TriggerType == nil || *input.TriggerType == current.TriggerType {
-			for key, value := range current.TriggerConfig {
+			for key, value := range normalizeLoopTriggerConfig(triggerType, current.TriggerConfig) {
 				config[key] = value
 			}
 		}
 		if triggerType == "schedule" {
 			if hasAnyArg(args, eventKeys...) {
-				return nil, fmt.Errorf("action and teams apply to event triggers, not schedules")
+				return nil, fmt.Errorf("event, value, filters, action and teams apply to event triggers, not schedules")
 			}
-			if len(config) == 0 {
-				config = map[string]any{"interval": 1, "unit": "day", "time": "10:00"}
+			if len(config) == 0 || id == "" && config["startDate"] == nil {
+				for key, value := range defaultLoopTriggerConfig("schedule", time.Now().UTC()) {
+					if _, ok := config[key]; !ok {
+						config[key] = value
+					}
+				}
 			}
 			if hasNumberArg(args, "interval") {
 				config["interval"] = min(max(intArg(args, "interval", 1), 1), 30)
 			}
 			if value := stringArg(args, "unit"); value != "" {
-				if !slices.Contains([]string{"day", "week", "month"}, value) {
-					return nil, fmt.Errorf("unit must be day, week, or month")
+				if !slices.Contains([]string{"hour", "day", "week", "month"}, value) {
+					return nil, fmt.Errorf("unit must be hour, day, week, or month")
 				}
 				config["unit"] = value
 			}
 			if value := stringArg(args, "time"); value != "" {
-				if _, err := time.Parse("15:04", value); err != nil {
+				if !validClock(value) {
 					return nil, fmt.Errorf("time must be HH:MM")
 				}
 				config["time"] = value
 			}
-			if value := stringArg(args, "starting"); value != "" {
-				if _, err := time.Parse("2006-01-02", value); err != nil {
-					return nil, fmt.Errorf("starting must be YYYY-MM-DD")
+			if value := firstNonEmpty(stringArg(args, "startDate"), stringArg(args, "starting")); value != "" {
+				if !validDate(value) {
+					return nil, fmt.Errorf("startDate must be YYYY-MM-DD")
 				}
-				config["starting"] = value
+				config["startDate"] = value
 			}
 			if value := stringArg(args, "timezone"); value != "" {
 				if _, err := time.LoadLocation(value); err != nil {
@@ -1586,15 +1612,45 @@ func (s *server) saveMCPLoop(ctx context.Context, actor mcpActor, data domain.Bo
 				}
 				config["timezone"] = value
 			}
+			if _, present := args["weekdays"]; present {
+				days := []any{}
+				for _, day := range stringsArg(args, "weekdays") {
+					day = strings.ToLower(strings.TrimSpace(day))
+					if len(day) > 3 {
+						day = day[:3]
+					}
+					days = append(days, day)
+				}
+				config["weekdays"] = days
+			}
 		} else {
 			if hasAnyArg(args, scheduleKeys...) {
-				return nil, fmt.Errorf("interval, unit, time, starting, and timezone apply to schedule triggers")
+				return nil, fmt.Errorf("interval, unit, time, startDate, weekdays and timezone apply to schedule triggers")
 			}
 			if value := stringArg(args, "action"); value != "" {
 				if value != "created" && value != "created or updated" {
 					return nil, fmt.Errorf("action must be \"created\" or \"created or updated\"")
 				}
-				config["action"] = value
+				config["event"] = map[string]string{"created": "created", "created or updated": "updated"}[value]
+				if value == "created or updated" {
+					config["includeCreated"] = true
+				}
+			}
+			if value := stringArg(args, "event"); value != "" {
+				if !slices.Contains(loopTriggerEvents[triggerType], value) {
+					return nil, fmt.Errorf("event must be one of %s for %s triggers", strings.Join(loopTriggerEvents[triggerType], ", "), triggerType)
+				}
+				if value != config["event"] {
+					delete(config, "value")
+				}
+				config["event"] = value
+			}
+			if raw, present := args["value"]; present {
+				value, err := mcpLoopTriggerValue(data, fmt.Sprint(config["event"]), raw)
+				if err != nil {
+					return nil, err
+				}
+				config["value"] = value
 			}
 			if _, present := args["teams"]; present {
 				ids := []any{}
@@ -1607,8 +1663,36 @@ func (s *server) saveMCPLoop(ctx context.Context, actor mcpActor, data domain.Bo
 				}
 				config["teamIds"] = ids
 			}
+			if raw, present := args["filters"]; present {
+				items, _ := raw.([]any)
+				filters := []any{}
+				for _, item := range items {
+					filter, ok := item.(map[string]any)
+					if !ok {
+						return nil, fmt.Errorf("each filter needs field, operator and value")
+					}
+					field, _ := filter["field"].(string)
+					operator, _ := filter["operator"].(string)
+					if operator == "" {
+						operator = "is"
+					}
+					value, err := mcpLoopTriggerValue(data, field, filter["value"])
+					if err != nil {
+						return nil, err
+					}
+					filters = append(filters, map[string]any{"field": field, "operator": operator, "value": value})
+				}
+				config["filters"] = filters
+			}
 		}
 		input.TriggerConfig = config
+	}
+	if input.Enabled != nil && *input.Enabled && wasDraft && (input.Status == nil || *input.Status == "draft") {
+		// Drafts turn on when they are published.
+		input.Enabled = nil
+	}
+	if err := validateLoopInput(input); err != nil {
+		return nil, err
 	}
 	var result any
 	var err error
@@ -1624,5 +1708,57 @@ func (s *server) saveMCPLoop(ctx context.Context, actor mcpActor, data domain.Bo
 	if err := jsonClone(result, &saved); err != nil {
 		return nil, err
 	}
-	return map[string]any{"id": saved.ID, "name": saved.Name, "trigger": saved.TriggerType, "triggerConfig": saved.TriggerConfig, "instructions": saved.Instructions, "level": saved.Level, "enabled": saved.Enabled, "ownerId": saved.OwnerID, "created": id == "", "url": mcpWorkspaceURL(actor.WorkspaceKey, args, "loops", saved.ID)}, nil
+	return mcpLoopCard(actor.WorkspaceKey, data, args, saved, id == "", wasDraft && saved.Status == "published"), nil
+}
+
+// mcpLoopCard is the loop card the agent chat renders after save_loop.
+func mcpLoopCard(workspace string, data domain.Bootstrap, args map[string]any, loop domain.Loop, created, published bool) map[string]any {
+	teamName := ""
+	for _, team := range data.Teams {
+		if team.ID == loop.TeamID {
+			teamName = team.Name
+		}
+	}
+	link := mcpWorkspaceURL(workspace, args, "loop", loop.ID)
+	if loop.Status == "draft" {
+		link = mcpWorkspaceURL(workspace, args, "loops", "new") + "?draftId=" + url.QueryEscape(loop.ID)
+	}
+	return map[string]any{"id": loop.ID, "name": loop.Name, "description": loop.Description, "status": loop.Status, "trigger": loop.TriggerType, "triggerConfig": loop.TriggerConfig, "instructions": loop.Instructions, "level": loop.Level, "teamId": loop.TeamID, "teamName": teamName, "enabled": loop.Enabled, "runCount30d": loop.RunCount30d, "ownerId": loop.OwnerID, "created": created, "published": published, "url": link}
+}
+
+// mcpLoopTriggerValue resolves a trigger event or filter value given by name
+// (a person, "me", "none") to the stored form; other values stay as given.
+func mcpLoopTriggerValue(data domain.Bootstrap, field string, raw any) (any, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	value := strings.TrimSpace(fmt.Sprint(raw))
+	if number, ok := raw.(float64); ok {
+		value = strconv.Itoa(int(number))
+	}
+	lower := strings.ToLower(value)
+	if lower == "none" || lower == "no assignee" || lower == "unassigned" || lower == "no project" || lower == "null" {
+		return nil, nil
+	}
+	switch field {
+	case "assignee", "agent", "creator":
+		if lower == "any" {
+			return "any", nil
+		}
+		user, err := mcpFindUser(data, value)
+		if err != nil {
+			return nil, err
+		}
+		return user.ID, nil
+	case "team":
+		if lower == "any" {
+			return "any", nil
+		}
+		team, err := mcpFindTeam(data, value)
+		if err != nil {
+			return nil, err
+		}
+		return team.ID, nil
+	}
+	return value, nil
 }

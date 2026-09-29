@@ -38,7 +38,9 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return true
 	case "settings.project_archive":
 		return true
-	case "loop.created", "loop.updated", "loop.deleted",
+	case "loop.created", "loop.updated", "loop.deleted", "loop.duplicated", "loop.described",
+		"loop.run_started", "loop.run_progress", "loop.run_finished", "loop.scheduled",
+		"loop.version_restored", "loop.run_feedback", "loop.attachment_uploaded",
 		"workflow_definition.created", "workflow_definition.updated", "workflow_definition.deleted",
 		"ai.conversation_created", "ai.conversation_updated", "ai.prompt_progress_created":
 		return true

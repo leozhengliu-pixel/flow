@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -21,6 +22,8 @@ type fakeLoopProvider struct {
 	replies []string
 	tools   [][]string
 	inputs  []string
+	// wait, when set, runs before request n (0-based) is answered.
+	wait func(n int)
 }
 
 func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
@@ -36,17 +39,22 @@ func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	raw, _ := json.Marshal([]any{payload["instructions"], payload["input"]})
 	p.mu.Lock()
+	index := len(p.inputs)
 	p.tools, p.inputs = append(p.tools, names), append(p.inputs, string(raw))
 	reply := "Nothing to do."
 	if len(p.replies) > 0 {
 		reply, p.replies = p.replies[0], p.replies[1:]
 	}
+	wait := p.wait
 	p.mu.Unlock()
+	if wait != nil {
+		wait(index)
+	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	if strings.HasPrefix(reply, "tool:") {
 		name, args, _ := strings.Cut(strings.TrimPrefix(reply, "tool:"), " ")
 		quoted, _ := json.Marshal(args)
-		_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_1\",\"call_id\":\"call_1\",\"type\":\"function_call\",\"name\":\"" + name + "\",\"arguments\":\"\"}}\n\n" +
+		_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_1\",\"call_id\":\"call_" + strconv.Itoa(index) + "\",\"type\":\"function_call\",\"name\":\"" + name + "\",\"arguments\":\"\"}}\n\n" +
 			"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_1\",\"arguments\":" + string(quoted) + "}\n\n" +
 			"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
 		return
@@ -86,7 +94,7 @@ func waitForLoopRun(t *testing.T, handler http.Handler, loopID string) domain.Lo
 func TestScheduledLoopRunsNowAndRecordsOutput(t *testing.T) {
 	provider := &fakeLoopProvider{replies: []string{"Posted the weekly summary."}}
 	_, handler := newLoopTestServer(t, provider)
-	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Weekly summary", "instructions": "Summarize open bugs."}, http.StatusCreated)
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Weekly summary", "instructions": "Summarize open bugs.", "status": "published"}, http.StatusCreated)
 	run := requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
 	if run.Status != "running" || run.Trigger != "manual" {
 		t.Fatalf("started run = %#v", run)
@@ -118,7 +126,7 @@ func TestIssueLoopTriggersAndStaysOnTriggeringIssue(t *testing.T) {
 	other := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Unrelated", "teamId": teamID}, http.StatusCreated)
 	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{
 		"name": "Triage bugs", "instructions": "Comment on new bugs.", "triggerType": "issue",
-		"triggerConfig": map[string]any{"action": "created"}, "allowChangesOutsideTrigger": false,
+		"triggerConfig": map[string]any{"action": "created"}, "allowChangesOutsideTrigger": false, "status": "published",
 	}, http.StatusCreated)
 	provider.mu.Lock()
 	provider.replies = []string{"tool:save_comment " + `{"issueId":"` + other.ID + `","body":"hi"}`, "Done."}
@@ -147,7 +155,7 @@ func TestLoopRunNeedsConfiguredAgent(t *testing.T) {
 	}
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
-	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "No agent"}, http.StatusCreated)
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "No agent", "instructions": "Say hi.", "status": "published"}, http.StatusCreated)
 	requestJSON[any](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusConflict)
 }
 

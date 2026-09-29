@@ -284,6 +284,11 @@ export function Sidebar({
                   (typeof draft.metadata?.instructions === "string" &&
                     draft.metadata.instructions.trim()),
                 ),
+            ).length +
+            // Draft loops count until they are created.
+            (data.loops ?? []).filter(
+              (loop) =>
+                loop.status === "draft" && loop.creator?.id === data.viewer.id,
             ).length
           : 0;
   const activeWorkspaceEntry: SidebarEntry | undefined =

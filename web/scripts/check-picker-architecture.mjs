@@ -13,6 +13,8 @@ const dedicated = new Set([
   'issue/editor/mention-menu.tsx',
   // The agent composer's @-mention menu is the same inline, caret-driven interaction.
   'agent/agent-mention-input.tsx',
+  // Loop instructions use the same inline, caret-driven @-mention interaction.
+  'loops/loop-instructions-editor.tsx',
   // Account security's team scope combobox owns filtering and multi-select
   // semantics rather than using an issue property picker.
   'settings/personal-settings.tsx',

@@ -27,6 +27,7 @@ export function detailIdentity(route: AppRoute): string | undefined {
     case 'release': return `release:${route.pipelineSlug}:${route.releaseSlug}`
     case 'release-pipeline': return `pipeline:${route.pipelineSlug}`
     case 'loop-editor': return `loop:${route.loopId ?? route.draftId ?? 'new'}`
+    case 'loop': case 'loop-run': return `loop:${route.loopId}`
     case 'meeting': return `meeting:${route.meetingId}`
     case 'member-profile': return `member:${route.username}`
     case 'agent': return route.chatSlug ? `agent:${route.chatSlug}` : undefined

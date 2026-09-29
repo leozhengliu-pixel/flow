@@ -122,3 +122,43 @@ func TestLoadOIDCRoleMapping(t *testing.T) {
 		t.Fatalf("invalid OIDC default role error = %v", err)
 	}
 }
+
+func TestLoadWebSearchConfig(t *testing.T) {
+	for _, key := range []string{"FLOW_WEB_SEARCH_PROVIDER", "FLOW_WEB_SEARCH_API_KEY", "FLOW_WEB_SEARCH_URL"} {
+		t.Setenv(key, "")
+	}
+	loaded, err := Load()
+	if err != nil || loaded.WebSearch.Enabled() || loaded.WebSearch.Provider != "" {
+		t.Fatalf("default web search = %#v, %v", loaded.WebSearch, err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_PROVIDER", "Tavily")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_WEB_SEARCH_API_KEY") {
+		t.Fatalf("tavily without key error = %v", err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_API_KEY", "tvly-test")
+	if loaded, err := Load(); err != nil || loaded.WebSearch.Provider != "tavily" || loaded.WebSearch.APIKey != "tvly-test" || !loaded.WebSearch.Enabled() {
+		t.Fatalf("tavily config = %#v, %v", loaded.WebSearch, err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_PROVIDER", "brave")
+	if loaded, err := Load(); err != nil || loaded.WebSearch.Provider != "brave" {
+		t.Fatalf("brave config = %#v, %v", loaded.WebSearch, err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_PROVIDER", "searxng")
+	t.Setenv("FLOW_WEB_SEARCH_API_KEY", "")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_WEB_SEARCH_URL") {
+		t.Fatalf("searxng without URL error = %v", err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_URL", "https://search.example.com/")
+	if loaded, err := Load(); err != nil || loaded.WebSearch.URL != "https://search.example.com" {
+		t.Fatalf("searxng config = %#v, %v", loaded.WebSearch, err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_URL", "ftp://search.example.com")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "http(s)") {
+		t.Fatalf("non-http URL error = %v", err)
+	}
+	t.Setenv("FLOW_WEB_SEARCH_URL", "")
+	t.Setenv("FLOW_WEB_SEARCH_PROVIDER", "google")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_WEB_SEARCH_PROVIDER") {
+		t.Fatalf("unknown provider error = %v", err)
+	}
+}

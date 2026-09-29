@@ -23,3 +23,19 @@ it('URL mode opens a separate confirmation destination without asking for creden
  render(<AgentElicitation part={{id:'url',type:'elicitation',status:'pending',elicitation:{...prompt,mode:'url',url:'https://support.example.test/confirm',schema:undefined}}}/>);
  expect(screen.getByRole('link')).toHaveAttribute('href','https://support.example.test/confirm');expect(screen.queryByRole('textbox')).not.toBeInTheDocument();expect(request).not.toHaveBeenCalled();
 });
+it('renders loop-builder questions as answer chips and sends the picked option',async()=>{
+ const question:ElicitationPrompt={id:'q1',sessionId:'session',connectorName:'Flow Agent',connectorUrl:'',mode:'form',message:'How much should the triage loop do on its own?',schema:{type:'object',properties:{answer:{type:'string',title:'How much should the triage loop do on its own?',enum:['Route and close clear duplicates',"Route, but don't close",'Suggest changes only']}},required:['answer']}};
+ render(<AgentElicitation part={{id:'q1',type:'elicitation',status:'pending',elicitation:question}}/>);
+ expect(screen.getByText('How much should the triage loop do on its own?')).toBeVisible();
+ expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:"Route, but don't close"}));
+ await waitFor(()=>expect(request).toHaveBeenCalledWith('/api/agent/sessions/session/elicitations/q1',{method:'POST',body:JSON.stringify({action:'accept',content:{answer:"Route, but don't close"}})}));
+ expect(await screen.findByRole('button',{name:"Route, but don't close"})).toHaveAttribute('aria-pressed','true');
+ expect(screen.getByRole('button',{name:'Suggest changes only'})).toBeDisabled();
+});
+it('shows the resolved answer of a stored loop-builder question',()=>{
+ const question:ElicitationPrompt={id:'q2',sessionId:'session',connectorName:'Flow Agent',connectorUrl:'',mode:'form',message:'Skip any issues?',action:'accept',schema:{type:'object',properties:{answer:{type:'string',enum:['Review all','Skip already assigned']}},required:['answer']}};
+ render(<AgentElicitation part={{id:'q2',type:'elicitation',status:'completed',text:'Skip already assigned',elicitation:question}}/>);
+ expect(screen.getByRole('button',{name:'Skip already assigned'})).toHaveAttribute('aria-pressed','true');
+ expect(screen.queryByRole('button',{name:'Skip'})).not.toBeInTheDocument();
+});

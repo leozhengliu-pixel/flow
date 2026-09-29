@@ -59,6 +59,11 @@ describe("application routes", () => {
       workspaceSlug: "acme",
       draftId: "draft-loop-1",
     });
+    expect(parseAppRoute("/acme/loop/loop-1")).toEqual({ kind: "loop", workspaceSlug: "acme", loopId: "loop-1" });
+    expect(parseAppRoute("/acme/loops/loop-1")).toEqual({ kind: "loop", workspaceSlug: "acme", loopId: "loop-1" });
+    expect(parseAppRoute("/acme/loop/loop-1/edit")).toEqual({ kind: "loop-editor", workspaceSlug: "acme", loopId: "loop-1" });
+    expect(parseAppRoute("/acme/loop/loop-1/run/run-9")).toEqual({ kind: "loop-run", workspaceSlug: "acme", loopId: "loop-1", runId: "run-9" });
+    expect(parseAppRoute("/acme/loop/loop-1/runs")).toEqual({ kind: "loop-run", workspaceSlug: "acme", loopId: "loop-1" });
     expect(parseAppRoute("/acme/team/ENG/members")).toEqual({
       kind: "team-members",
       workspaceSlug: "acme",

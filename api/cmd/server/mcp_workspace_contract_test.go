@@ -565,13 +565,21 @@ func TestMCPSaveLoop(t *testing.T) {
 	f := newMCPContractFixture(t)
 	created := mcpObject(t, f, "save_loop", map[string]any{"name": "Weekly triage", "instructions": "Review the triage inbox.", "interval": 1, "unit": "week", "time": "09:30", "timezone": "Europe/Berlin"})
 	config := created["triggerConfig"].(map[string]any)
-	if created["trigger"] != "schedule" || config["unit"] != "week" || config["time"] != "09:30" || config["timezone"] != "Europe/Berlin" || created["enabled"] != true {
+	if created["trigger"] != "schedule" || config["unit"] != "week" || config["time"] != "09:30" || config["timezone"] != "Europe/Berlin" || created["enabled"] != false || created["status"] != "draft" || config["startDate"] == nil {
 		t.Fatalf("created: %v", created)
 	}
 	updated := mcpObject(t, f, "save_loop", map[string]any{"id": "Weekly triage", "trigger": "issue", "action": "created", "teams": []string{"TST"}, "enabled": false})
 	config = updated["triggerConfig"].(map[string]any)
-	if updated["trigger"] != "issue" || config["action"] != "created" || config["unit"] != nil || updated["enabled"] != false || len(config["teamIds"].([]any)) != 1 {
+	if updated["trigger"] != "issue" || config["event"] != "created" || config["unit"] != nil || updated["enabled"] != false || len(config["teamIds"].([]any)) != 1 {
 		t.Fatalf("updated: %v", updated)
+	}
+	published := mcpObject(t, f, "save_loop", map[string]any{"id": "Weekly triage", "event": "status", "value": "started", "filters": []any{map[string]any{"field": "assignee", "operator": "is", "value": nil}}, "publish": true})
+	config = published["triggerConfig"].(map[string]any)
+	if published["status"] != "published" || published["enabled"] != true || published["published"] != true || config["event"] != "status" || config["value"] != "started" || len(config["filters"].([]any)) != 1 {
+		t.Fatalf("published: %v", published)
+	}
+	if message := mcpToolError(t, f, "save_loop", map[string]any{"id": "Weekly triage", "status": "draft"}); !strings.Contains(message, "back to draft") {
+		t.Fatalf("unpublish: %s", message)
 	}
 	if loops := f.repository.Bootstrap().Loops; len(loops) != 1 || loops[0].Instructions != "Review the triage inbox." || loops[0].TriggerType != "issue" {
 		t.Fatalf("stored loops: %+v", loops)
