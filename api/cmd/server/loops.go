@@ -289,6 +289,9 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		}
 		publish := input.Status != nil && *input.Status == "published"
 		applyLoopInput(&created, input)
+		if len(input.InstructionsData) == 0 && strings.TrimSpace(created.Instructions) != "" {
+			created.InstructionsData = loopMarkdownDocument(data, created.Instructions)
+		}
 		if publish && input.Enabled == nil {
 			created.Enabled = true
 		}
@@ -353,6 +356,14 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		previousInstructions := loop.Instructions
 		next := *loop
 		applyLoopInput(&next, input)
+		// Markdown written without the editor (e.g. by the loop builder agent)
+		// replaces the rich document, which would otherwise go stale.
+		if input.Instructions != nil && len(input.InstructionsData) == 0 {
+			next.InstructionsData = nil
+			if strings.TrimSpace(next.Instructions) != "" {
+				next.InstructionsData = loopMarkdownDocument(data, next.Instructions)
+			}
+		}
 		if input.Status != nil {
 			next.Status = *input.Status
 		}
@@ -494,10 +505,26 @@ func (s *server) describeLoopAsync(workspace string, loop domain.Loop) {
 				return nil
 			}
 			current.Description = description
+			describeLatestLoopVersion(data, loop.ID, loop.Instructions, description)
 			return nil
 		})
 		if err != nil {
 			log.Printf("Loop description workspace=%s loop=%s: %v", workspace, loop.ID, err)
 		}
 	}()
+}
+
+// describeLatestLoopVersion gives the newest published version the generated
+// description: it was snapshotted before the description existed and
+// describes the same definition (same instructions).
+func describeLatestLoopVersion(data *domain.Bootstrap, loopID, instructions, description string) {
+	latest := -1
+	for index, version := range data.LoopVersions {
+		if version.LoopID == loopID && (latest < 0 || version.Version > data.LoopVersions[latest].Version) {
+			latest = index
+		}
+	}
+	if latest >= 0 && data.LoopVersions[latest].Definition.Instructions == instructions {
+		data.LoopVersions[latest].Definition.Description = description
+	}
 }
