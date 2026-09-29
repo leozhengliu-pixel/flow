@@ -165,6 +165,23 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 	}
 }
 
+// repairLoopLevel fixes team loops saved without their team (loops created
+// before the level picker existed): the trigger's single team becomes the loop's
+// team, otherwise the loop is workspace-level. Without this every edit of such
+// a loop, even disabling it, fails validation.
+func repairLoopLevel(loop *domain.Loop) {
+	if loop.Level != "team" || loop.TeamID != "" {
+		return
+	}
+	if ids, _ := loop.TriggerConfig["teamIds"].([]any); len(ids) == 1 {
+		if id, _ := ids[0].(string); id != "" {
+			loop.TeamID = id
+			return
+		}
+	}
+	loop.Level = "workspace"
+}
+
 // checkLoop validates a loop after an input was applied. Publishing also
 // needs a name and instructions.
 func checkLoop(data *domain.Bootstrap, loop domain.Loop, publishing bool) error {
@@ -307,6 +324,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		if created.OwnerID == "" {
 			created.OwnerID = data.Viewer.ID
 		}
+		repairLoopLevel(&created)
 		if err := checkLoop(data, created, publish); err != nil {
 			return "", err
 		}
@@ -377,6 +395,7 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		if next.OwnerID == "" {
 			next.OwnerID = next.Creator.ID
 		}
+		repairLoopLevel(&next)
 		if err := checkLoop(data, next, wasDraft && next.Status == "published"); err != nil {
 			return err
 		}

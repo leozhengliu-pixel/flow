@@ -18,8 +18,9 @@ import { loopPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopCodeAccess, LoopTriggerType } from "@/types/flow";
 import { LoopAgentPanel } from "./loop-agent-panel";
+import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
-import { activeTeams, loopBuilderFirstMessage, takeLoopAgentAutostart, useLoopConfig } from "./loop-data";
+import { activeTeams, loopBuilderFirstMessage, markLoopAgentHandoff, takeLoopAgentAutostart, useLoopConfig } from "./loop-data";
 import { ENTITY_NAMES, configStrings, defaultScheduleConfig, instructionsPlaceholder, isLoopDraft, loopTeamId } from "./loop-model";
 import { LoopTriggerEditor } from "./loop-trigger";
 
@@ -299,9 +300,10 @@ function LoopEditorForm({
           <div className="loops-editor-heading">
             <ViewIconPicker
               ariaLabel={t("Loop icon")}
-              color={form.color}
+              color={loopIconColor({ templateId: loop.templateId, icon: form.icon, color: form.color }) ?? form.color}
               icon={form.icon}
               onChange={(visual) => update({ icon: visual.icon, color: visual.color })}
+              triggerContent={loop.templateId ? <LoopIcon source={{ templateId: loop.templateId, icon: form.icon, color: form.color }} size={18} /> : undefined}
               prependIcons={["Automation", "CustomView"]}
               triggerClassName="loops-icon-picker"
             />
@@ -331,7 +333,7 @@ function LoopEditorForm({
 
           <section className="loops-card is-trigger" aria-label={t("Trigger")}>
             <h3>{t("Trigger")}</h3>
-            <LoopTriggerEditor data={data} triggerType={form.triggerType} config={form.triggerConfig} onChange={(triggerType, triggerConfig) => update({ triggerType, triggerConfig })} />
+            <LoopTriggerEditor data={data} level={form.level} triggerType={form.triggerType} config={form.triggerConfig} onChange={(triggerType, triggerConfig) => update({ triggerType, triggerConfig })} />
           </section>
 
           <section className="loops-card is-instructions" aria-label={t("Instructions")}>
@@ -524,6 +526,7 @@ function LoopEditorForm({
             data={data}
             loopId={loop.id}
             title={form.name || undefined}
+            visual={{ templateId: loop.templateId, icon: form.icon, color: form.color }}
             open={agentOpen}
             autoMessage={autoMessage}
             onClose={() => setAgentOpen(false)}
@@ -531,6 +534,8 @@ function LoopEditorForm({
             onPublished={(result) => {
               if (publishing.current) return;
               publishing.current = true;
+              // The builder keeps replying on the server; the loop page docks the conversation and follows it.
+              markLoopAgentHandoff(result.id ?? loop.id);
               void refetch().then((next) => finish(next ?? { ...loop, status: "published", enabled: true, id: result.id ?? loop.id }));
             }}
             onNavigateLoop={(result) => onNavigate(loopPath(workspace, result.id ?? loop.id))}

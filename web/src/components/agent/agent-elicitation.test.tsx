@@ -39,3 +39,24 @@ it('shows the resolved answer of a stored loop-builder question',()=>{
  expect(screen.getByRole('button',{name:'Skip already assigned'})).toHaveAttribute('aria-pressed','true');
  expect(screen.queryByRole('button',{name:'Skip'})).not.toBeInTheDocument();
 });
+it('inline (loop builder) questions are plain text with chips and no Skip, then quote the answer',async()=>{
+ const question:ElicitationPrompt={id:'q3',sessionId:'session',connectorName:'Flow Agent',connectorUrl:'',mode:'form',message:'How much should the triage loop do on its own?',schema:{type:'object',properties:{answer:{type:'string',enum:['Route and close clear duplicates',"Route, but don't close"]}},required:['answer']}};
+ const {container}=render(<AgentElicitation variant="inline" part={{id:'q3',type:'elicitation',status:'pending',elicitation:question}}/>);
+ expect(container.querySelector('.agent-elicitation')).toBeNull();
+ expect(container.querySelector('.agent-elicitation-inline')).not.toBeNull();
+ expect(screen.getByText('How much should the triage loop do on its own?')).toBeVisible();
+ expect(screen.queryByRole('button',{name:'Skip'})).not.toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:"Route, but don't close"}));
+ const answer=await screen.findByRole('blockquote',{name:'Your answer'});
+ expect(answer).toHaveClass('agent-elicitation-answer');
+ expect(answer.querySelector('.agent-elicitation-answer-question')).toHaveTextContent('How much should the triage loop do on its own?');
+ expect(answer.querySelector('.agent-elicitation-answer-value')).toHaveTextContent("Route, but don't close");
+ expect(screen.queryByRole('button',{name:'Route and close clear duplicates'})).not.toBeInTheDocument();
+});
+it('inline questions restore a stored answer as the quoted bubble; the boxed style keeps Skip',()=>{
+ const question:ElicitationPrompt={id:'q4',sessionId:'session',connectorName:'Flow Agent',connectorUrl:'',mode:'form',message:'Skip any issues?',action:'accept',schema:{type:'object',properties:{answer:{type:'string',enum:['Review all','Skip already assigned']}},required:['answer']}};
+ render(<AgentElicitation variant="inline" part={{id:'q4',type:'elicitation',status:'completed',text:'Skip already assigned',elicitation:question}}/>);
+ expect(screen.getByRole('blockquote',{name:'Your answer'})).toHaveTextContent('Skip any issues?Skip already assigned');
+ render(<AgentElicitation part={{id:'q5',type:'elicitation',status:'pending',elicitation:{...question,id:'q5',action:undefined}}}/>);
+ expect(screen.getByRole('button',{name:'Skip'})).toBeVisible();
+});

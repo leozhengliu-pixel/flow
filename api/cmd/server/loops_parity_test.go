@@ -408,3 +408,16 @@ func TestLoopBuilderFillsPromptDraftWithoutPublishing(t *testing.T) {
 		t.Fatal("prompt draft instructions missing from system prompt")
 	}
 }
+
+func TestRepairLoopLevelKeepsOldTeamLoopsEditable(t *testing.T) {
+	loop := domain.Loop{Level: "team", TriggerConfig: map[string]any{"teamIds": []any{"team_dev"}}}
+	repairLoopLevel(&loop)
+	if loop.Level != "team" || loop.TeamID != "team_dev" {
+		t.Fatalf("loop = %#v", loop)
+	}
+	loop = domain.Loop{Level: "team", TriggerConfig: map[string]any{}}
+	repairLoopLevel(&loop)
+	if loop.Level != "workspace" || loop.TeamID != "" {
+		t.Fatalf("loop without a team should become workspace-level: %#v", loop)
+	}
+}

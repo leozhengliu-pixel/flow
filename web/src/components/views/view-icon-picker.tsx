@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { Search } from 'lucide-react'
 import { FLOW_CORE_ICON_NAMES, FLOW_VIEW_ICON_ALIASES, FLOW_VIEW_ICON_NAMES } from './flow-view-icon-data'
@@ -26,7 +26,7 @@ export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAUL
   return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color, ...style }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
 }
 
-export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependIcons = [], prependTeam = false, triggerClassName }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependIcons?: string[]; prependTeam?: boolean; triggerClassName?: string }) {
+export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependIcons = [], prependTeam = false, triggerClassName, triggerContent }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependIcons?: string[]; prependTeam?: boolean; triggerClassName?: string; /** Replaces the glyph inside the trigger (e.g. a loop template's icon). */ triggerContent?: ReactNode }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'icons' | 'emojis'>('icons')
@@ -67,7 +67,7 @@ export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIE
   }
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
-    <Popover.Trigger asChild><button aria-label={ariaLabel ?? t('Choose icon')} className={`${styles.trigger} ${triggerClassName ?? ''}`} data-state={open ? 'open' : 'closed'} style={{ '--view-color': color } as CSSProperties} type="button"><ViewGlyph color={color} icon={icon}/></button></Popover.Trigger>
+    <Popover.Trigger asChild><button aria-label={ariaLabel ?? t('Choose icon')} className={`${styles.trigger} ${triggerClassName ?? ''}`} data-state={open ? 'open' : 'closed'} style={{ '--view-color': color } as CSSProperties} type="button">{triggerContent ?? <ViewGlyph color={color} icon={icon}/>}</button></Popover.Trigger>
     <Popover.Portal><Popover.Content data-flow-motion="floating" align={align} className={styles.content} collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => searchRef.current?.focus()) }} side="bottom" sideOffset={4}>
       <div aria-label={t('Icon type')} className={styles.tabs} role="tablist">
         <button aria-controls="view-icons-panel" aria-selected={tab === 'icons'} className={styles.tab} onClick={() => { setTab('icons'); setQuery(''); requestAnimationFrame(() => searchRef.current?.focus()) }} role="tab" type="button">{t('Icons')}</button>

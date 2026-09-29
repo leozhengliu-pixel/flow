@@ -10,11 +10,15 @@ const api = vi.hoisted(() => ({
   getLoop: vi.fn(),
   runLoopNow: vi.fn(),
   updateLoop: vi.fn(),
+  fetchAgentStatus: vi.fn(),
+  listAgentSessions: vi.fn(),
+  getAgentSession: vi.fn(),
 }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
 import { LoopDetail } from './loop-detail'
 import { RunLoopOnPicker } from './loop-pickers'
+import { markLoopAgentHandoff } from './loop-data'
 
 const baseLoop: Loop = {
   id: 'loop-1', name: 'Triage agent', description: 'Routes incoming issues to the right owner.', status: 'published', level: 'team', teamId: 'team-1',
@@ -37,6 +41,38 @@ describe('LoopDetail', () => {
     api.getLoop.mockReset()
     api.runLoopNow.mockReset().mockResolvedValue({ id: 'run-7' })
     api.updateLoop.mockReset()
+    api.fetchAgentStatus.mockReset().mockResolvedValue({ enabled: true })
+    api.listAgentSessions.mockReset().mockResolvedValue([])
+    api.getAgentSession.mockReset()
+    sessionStorage.clear()
+  })
+
+  it('docks the loop builder after it published the loop and follows the reply still running on the server', async () => {
+    const setup = { id: 'm-user', role: 'user', content: 'Set up this loop from the Triage agent template', createdAt: '2026-09-29T10:00:00Z' }
+    const reply = { id: 'm-reply', role: 'assistant', content: 'The Triage agent loop is live.', durationMs: 4000, createdAt: '2026-09-29T10:00:04Z', parts: [] }
+    const session = { id: 'session-1', title: 'Triage agent', loopIds: ['loop-1'], messages: [setup], updatedAt: '2026-09-29T10:00:00Z' }
+    api.listAgentSessions.mockResolvedValue([session])
+    api.getAgentSession.mockResolvedValue({ ...session, messages: [setup, reply] })
+    markLoopAgentHandoff('loop-1')
+    renderDetail({ ...baseLoop, templateId: 'triage-agent', icon: 'Triage' })
+    const panel = await screen.findByRole('complementary', { name: 'Loop agent' })
+    await waitFor(() => expect(panel).toHaveTextContent('The Triage agent loop is live.'), { timeout: 4000 })
+    expect(panel).not.toHaveTextContent('Set up this loop from the Triage agent template')
+    expect(api.getAgentSession).toHaveBeenCalledWith('session-1')
+    // The loop keeps the template's icon on its page.
+    expect(document.querySelector('.loops-detail-icon .status-glyph')).not.toBeNull()
+  })
+
+  it('opens without the agent panel otherwise', () => {
+    renderDetail()
+    expect(screen.queryByRole('complementary', { name: 'Loop agent' })).toBeNull()
+  })
+
+  it('shows the trigger without a team scope for team loops', () => {
+    renderDetail({ ...baseLoop, triggerConfig: { event: 'triage' } })
+    const trigger = screen.getByRole('region', { name: 'Trigger' })
+    expect(trigger).toHaveTextContent('An issueis in triage')
+    expect(trigger).not.toHaveTextContent('All teams')
   })
 
   it('shows the loop page header, run summary, trigger and instructions', () => {

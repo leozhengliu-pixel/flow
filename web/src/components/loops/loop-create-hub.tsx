@@ -8,7 +8,7 @@ import { newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopAttachment, LoopTemplate } from "@/types/flow";
 import { markLoopAgentAutostart, useLoopTemplates } from "./loop-data";
-import { LoopGlyph } from "./loop-glyph";
+import { LoopGlyph, LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopLocationPicker, type LoopLocation } from "./loop-pickers";
 
 type Entry = { kind: "scratch" } | { kind: "prompt"; prompt: string; attachmentIds: string[] } | { kind: "template"; template: LoopTemplate };
@@ -164,8 +164,8 @@ export function LoopCreateHub({
             ? Array.from({ length: 4 }, (_, index) => <div aria-hidden="true" className="loops-template-card is-loading" key={index} />)
             : templates.map((item) => (
                 <button className="loops-template-card" key={item.id} type="button" onClick={() => setEntry({ kind: "template", template: item })}>
-                  <span className="loops-template-icon" style={{ color: item.color || undefined }}>
-                    <LoopGlyph icon={item.icon} />
+                  <span className="loops-template-icon" style={{ color: loopIconColor({ templateId: item.id, icon: item.icon, color: item.color, template: true }) }}>
+                    <LoopIcon source={{ templateId: item.id, icon: item.icon, color: item.color, template: true }} size={14} />
                   </span>
                   <strong data-i18n-ignore>{item.name}</strong>
                   <span className="loops-template-description" data-i18n-ignore>
