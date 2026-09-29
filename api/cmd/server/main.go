@@ -61,6 +61,7 @@ type server struct {
 	externalAuth                   *externalAuth
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
+	triageRuns                     sync.Map
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
 	workspaceDefaultRegion         string

@@ -428,6 +428,8 @@ type Issue struct {
 	StartedAt              *time.Time          `json:"startedAt,omitempty"`
 	TriagedAt              *time.Time          `json:"triagedAt,omitempty"`
 	SuggestionsGeneratedAt *time.Time          `json:"suggestionsGeneratedAt,omitempty"`
+	SuggestionsSource      string              `json:"suggestionsSource,omitempty"`
+	SuggestionsThinking    string              `json:"suggestionsThinking,omitempty"`
 	StatusChangedAt        *time.Time          `json:"statusChangedAt,omitempty"`
 	AutoClosedAt           *time.Time          `json:"autoClosedAt,omitempty"`
 	CanceledAt             *time.Time          `json:"canceledAt,omitempty"`
