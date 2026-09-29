@@ -614,3 +614,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 .work-menu-search:has(input:placeholder-shown){position:absolute;width:1px;height:1px;overflow:hidden;padding:0;border:0;clip-path:inset(50%)}
 :root{--agent-work-quote-bar:lch(30.833% 1.93 272)}
 :root[data-theme="light"]{--agent-work-quote-bar:lch(86.5% 0 282)}
+:root{--initiatives-empty-dot-dim:lch(27.12% 1.48 272)}
+:root[data-theme="light"]{--initiatives-empty-dot-dim:lch(84.44% 0 282)}
