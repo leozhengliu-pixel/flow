@@ -1,64 +1,32 @@
 /**
- * LS-0325 InitiativesEmptyStateIcon — branded empty illustration (SVG, not CSS bars).
+ * Initiatives empty-state illustration: three stacked initiative cards (the middle one highlighted and offset),
+ * each with a ground line under it, an initiative glyph and three status dots. 108×80 like Linear's.
  */
 import type { SVGProps } from 'react'
 
 type IconProps = SVGProps<SVGSVGElement>
 
+const CARDS = [
+  { x: 1, y: 1, highlighted: false },
+  { x: 21, y: 29, highlighted: true },
+  { x: 1, y: 57, highlighted: false },
+]
+
 export function InitiativesEmptyStateIcon(props: IconProps) {
   return (
-    <svg
-      aria-hidden="true"
-      className="li-empty-initiatives-icon"
-      fill="none"
-      focusable="false"
-      height="78"
-      viewBox="0 0 110 78"
-      width="110"
-      {...props}
-    >
-      <g stroke="currentColor" strokeWidth="1.25" opacity="0.85">
-        <rect height="22" rx="11" transform="skewX(8)" width="88" x="2" y="2" />
-        <rect height="22" rx="11" transform="skewX(8)" width="88" x="18" y="28" />
-        <rect height="22" rx="11" transform="skewX(8)" width="88" x="2" y="54" />
-      </g>
-      <g fill="currentColor" opacity="0.55">
-        <circle cx="88" cy="10" r="1.4" />
-        <circle cx="94" cy="10" r="1.4" />
-        <circle cx="100" cy="10" r="1.4" />
-        <circle cx="102" cy="36" r="1.4" />
-        <circle cx="108" cy="36" r="1.4" />
-        <circle cx="88" cy="62" r="1.4" />
-        <circle cx="94" cy="62" r="1.4" />
-        <circle cx="100" cy="62" r="1.4" />
-      </g>
-      <path
-        d="M14 9.5 18 13.5 14 17.5"
-        fill="none"
-        opacity="0.7"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M30 35.5 34 39.5 30 43.5"
-        fill="none"
-        opacity="0.7"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-      <path
-        d="M14 61.5 18 65.5 14 69.5"
-        fill="none"
-        opacity="0.7"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
+    <svg aria-hidden="true" className="li-empty-initiatives-icon" fill="none" focusable="false" height="80" viewBox="0 0 108 80" width="108" {...props}>
+      {CARDS.map(({ x, y, highlighted }) => (
+        <g key={y} transform={`translate(${x} ${y})`}>
+          {/* Ground: the card's lower edge repeated 6px below, like a card resting on a base. */}
+          <path className="li-empty-initiatives-icon__base" d="M0 8.7h86V14a8 8 0 0 1-8 8H8a8 8 0 0 1-8-8Z" strokeWidth="1.5" />
+          <rect className={highlighted ? 'li-empty-initiatives-icon__card is-highlighted' : 'li-empty-initiatives-icon__card'} height="16" rx="8" strokeWidth="1.5" width="86" />
+          {/* Initiative glyph: an upward arrowhead. */}
+          <path className={highlighted ? 'li-empty-initiatives-icon__glyph is-highlighted' : 'li-empty-initiatives-icon__glyph'} d="M7.2 11.1 11.6 3.4a.6.6 0 0 1 1 0l4.4 7.7c.3.5-.2 1.1-.8.9l-3.6-1.4a.9.9 0 0 0-.6 0L8 12c-.6.2-1.1-.4-.8-.9Z" />
+          <circle className={highlighted ? 'li-empty-initiatives-icon__dot is-bright' : 'li-empty-initiatives-icon__dot is-strong'} cx="63.5" cy="8" r="1.5" />
+          <circle className="li-empty-initiatives-icon__dot is-mid" cx="70.5" cy="8" r="1.5" />
+          <circle className="li-empty-initiatives-icon__dot is-dim" cx="77.5" cy="8" r="1.5" />
+        </g>
+      ))}
     </svg>
   )
 }

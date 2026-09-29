@@ -2,3 +2,11 @@
 .li-list-title{margin:0;display:flex;align-items:center;gap:6px;font-size:13px;font-weight:500}
 .li-list-title__sep{color:var(--theme-text-secondary);font-weight:400}
 .li-empty-initiatives-icon{color:var(--theme-text-secondary);margin-left:-2px}
+/* Empty-state illustration: panel-filled cards with a secondary outline, a tertiary ground line, fading status dots. */
+.li-empty-initiatives-icon__base{fill:var(--bg-panel);stroke:var(--theme-text-tertiary)}
+.li-empty-initiatives-icon__card{fill:var(--bg-panel);stroke:var(--theme-text-secondary)}
+.li-empty-initiatives-icon__glyph{fill:var(--theme-text-secondary)}
+.li-empty-initiatives-icon__glyph.is-highlighted,.li-empty-initiatives-icon__dot.is-bright{fill:var(--bright)}
+.li-empty-initiatives-icon__dot.is-strong{fill:var(--theme-text-secondary)}
+.li-empty-initiatives-icon__dot.is-mid{fill:var(--theme-text-tertiary)}
+.li-empty-initiatives-icon__dot.is-dim{fill:var(--initiatives-empty-dot-dim)}
