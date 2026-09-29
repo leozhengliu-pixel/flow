@@ -362,3 +362,17 @@ func TestTriageIntelligenceFallsBackToHeuristicOnModelError(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentMaxOutputTokensOverrideOnlyRaisesTheBudget(t *testing.T) {
+	s := &server{agent: appconfig.AgentConfig{MaxOutputTokens: 4096}}
+	ctx := t.Context()
+	if got := s.agentMaxOutputTokens(ctx); got != 4096 {
+		t.Fatalf("default budget = %d", got)
+	}
+	if got := s.agentMaxOutputTokens(withAgentMaxOutputTokens(ctx, triageAIMaxOutputTokens)); got != triageAIMaxOutputTokens {
+		t.Fatalf("raised budget = %d", got)
+	}
+	if got := s.agentMaxOutputTokens(withAgentMaxOutputTokens(ctx, 1024)); got != 4096 {
+		t.Fatalf("an override must not lower the configured budget, got %d", got)
+	}
+}
