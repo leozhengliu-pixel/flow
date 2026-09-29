@@ -23,8 +23,10 @@ export const THEME_CSS_VAR_MAP: Record<string, string> = {
   bgShade: "--bg-subtle",
   bgBaseHover: "--bg-hover",
   bgShadeHover: "--bg-active",
-  bgSelected: "--theme-surface-active",
-  bgSelectedHover: "--theme-surface-hover",
+  // Accent-tinted selection fills (Linear's selected rows). They must not replace the neutral
+  // --theme-surface-hover / --theme-surface-active, which the app uses for plain hover and pressed states.
+  bgSelected: "--theme-selected",
+  bgSelectedHover: "--theme-selected-hover",
   bgFocus: "--theme-surface-1",
   bgModalOverlay: "--theme-overlay",
   bgBorder: "--border",
