@@ -1334,13 +1334,6 @@ function App() {
         createIssue({
           ...input,
           teamId: input.teamId || data.teams[0].id,
-          ...(input.recurrence
-            ? {
-                nextOccurrenceAt: nextOccurrence(
-                  input.recurrence,
-                ).toISOString(),
-              }
-            : {}),
         }),
       "Could not create issue",
     );
@@ -1727,12 +1720,11 @@ function App() {
           unlinkReview: unlinkSelectedReview,
           toggleRelease: toggleSelectedRelease,
           createRelated: createSelectedRelated,
-          configureRecurring: () => navigateTo(`${settingsPath(data!.workspace.urlKey, 'team', selectedIssue.team.key, 'recurring-issues')}?fromIssue=${encodeURIComponent(selectedIssue.id)}`),
           convert: convertSelectedIssue,
-          setRecurring: (recurrence) =>
+          setRecurring: (recurrence, startDate) =>
             updateIssueById(selectedIssue, {
               recurrence,
-              nextOccurrenceAt: nextOccurrence(recurrence).toISOString(),
+              ...(recurrence && startDate ? { nextOccurrenceAt: startDate } : {}),
             }).then(() => undefined),
           toggleFavorite: toggleSelectedFavorite,
           remind: remindSelectedIssue,
@@ -5864,6 +5856,7 @@ function App() {
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 issues={data.issues}
+                projectRelations={data.projectRelations}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={viewsTeam?.id}
                 teamSettings={data.teamSettings}
@@ -5912,6 +5905,7 @@ function App() {
                 onCommentProjectUpdate={commentOnProjectUpdate}
                 onReactProjectUpdate={reactToProjectUpdate}
                 onUpdateProject={changeProject}
+                onUpdateProjectMilestone={changeProjectMilestone}
                 onDeleteProject={removeProject}
                 onSetDisplayDefault={changeProjectDisplayDefault}
                 onCreateSavedView={addSavedView}
@@ -5984,6 +5978,7 @@ function App() {
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 issues={data.issues}
+                projectRelations={data.projectRelations}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={projectTeam?.id}
                 teamSettings={data.teamSettings}
@@ -6041,6 +6036,7 @@ function App() {
                 onCommentProjectUpdate={commentOnProjectUpdate}
                 onReactProjectUpdate={reactToProjectUpdate}
                 onUpdateProject={changeProject}
+                onUpdateProjectMilestone={changeProjectMilestone}
                 onDeleteProject={removeProject}
                 onSetDisplayDefault={changeProjectDisplayDefault}
                 onCreateSavedView={addSavedView}
@@ -6409,6 +6405,15 @@ function App() {
             onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
             onNavigateReviews={() => navigateTo(reviewsPath(data.workspace.urlKey))}
             onOpenResult={openSearchResult}
+            data={data}
+            onUpdateIssue={updateIssueFromPage}
+            onUpdateIssues={updateIssuesFromPage}
+            onDeleteIssues={deleteIssuesFromPage}
+            onCreateRelation={async (issueId, type, relatedIssueId) => {
+              await run(() => createRelation(issueId, type, relatedIssueId), "Could not add relation");
+              await refreshActivity();
+            }}
+            onCreateIssueWith={openCreateIssue}
           />
         )}
       </Suspense>
@@ -6762,8 +6767,10 @@ function applyOptimisticIssue(
   if (input.subscriberIds !== undefined)
     next.subscriberIds = input.subscriberIds;
   if (input.parentId !== undefined) next.parentId = input.parentId || undefined;
-  if (input.recurrence !== undefined)
+  if (input.recurrence !== undefined) {
     next.recurrence = input.recurrence || undefined;
+    if (!input.recurrence) next.nextOccurrenceAt = undefined;
+  }
   if (input.nextOccurrenceAt !== undefined)
     next.nextOccurrenceAt = input.nextOccurrenceAt || undefined;
   if (input.sortOrder !== undefined) next.sortOrder = input.sortOrder;
@@ -6781,14 +6788,6 @@ function applyOptimisticIssue(
     };
   }
   return next;
-}
-
-function nextOccurrence(recurrence: "daily" | "weekly" | "monthly") {
-  const date = new Date();
-  if (recurrence === "daily") date.setDate(date.getDate() + 1);
-  if (recurrence === "weekly") date.setDate(date.getDate() + 7);
-  if (recurrence === "monthly") date.setMonth(date.getMonth() + 1);
-  return date;
 }
 
 export default App;

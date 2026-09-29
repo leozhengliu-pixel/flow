@@ -1,0 +1,89 @@
+/* Projects › Timeline layout. Colours come from --project-timeline-* tokens in styles/tokens.css. */
+.lp-project-timeline { --timeline-label-width: 240px; color: var(--theme-text-primary); display: flex; flex: 1; flex-direction: column; min-height: 0; outline: 0; }
+.lp-project-timeline__toolbar { align-items: center; display: flex; gap: 8px; justify-content: flex-end; padding: 0 12px 8px; }
+.lp-project-timeline__zoom { border: .5px solid var(--theme-border-strong); border-radius: 6px; display: inline-flex; height: 28px; overflow: hidden; }
+.lp-project-timeline__zoom-option { background: transparent; border: 0; color: var(--theme-text-secondary); cursor: pointer; font-size: 12px; padding: 0 10px; }
+.lp-project-timeline__zoom-option + .lp-project-timeline__zoom-option { border-left: .5px solid var(--theme-border); }
+.lp-project-timeline__zoom-option:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.lp-project-timeline__zoom-option[aria-checked=true] { background: var(--theme-surface-2); color: var(--theme-text-primary); }
+.lp-project-timeline__today { background: var(--theme-surface-1); border: .5px solid var(--theme-border-strong); border-radius: 6px; color: var(--theme-text-primary); cursor: pointer; font-size: 12px; height: 28px; padding: 0 10px; }
+.lp-project-timeline__today:hover { background: var(--theme-surface-hover); }
+.lp-project-timeline__zoom-option:focus-visible, .lp-project-timeline__today:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+
+.lp-project-timeline__scroller { flex: 1; min-height: 0; overflow: auto; overscroll-behavior-x: contain; position: relative; }
+.lp-project-timeline__canvas { min-width: 100%; position: relative; }
+
+.lp-project-timeline__header { background: var(--bg-panel); border-bottom: .5px solid var(--theme-control-hover); display: flex; height: 48px; position: sticky; top: 0; z-index: 6; }
+.lp-project-timeline__corner { align-items: flex-end; background: var(--bg-panel); border-right: .5px solid var(--theme-control-hover); color: var(--theme-text-tertiary); display: flex; flex: 0 0 var(--timeline-label-width); font-size: 12px; left: 0; padding: 0 16px 8px; position: sticky; z-index: 2; }
+.lp-project-timeline__scale { flex: none; position: relative; }
+.lp-project-timeline__major, .lp-project-timeline__minor { height: 24px; left: 0; position: absolute; right: 0; }
+.lp-project-timeline__major { top: 0; }
+.lp-project-timeline__minor { top: 24px; }
+.lp-project-timeline__major > span, .lp-project-timeline__minor > span { box-sizing: border-box; color: var(--theme-text-tertiary); font-size: 11px; height: 24px; line-height: 24px; position: absolute; top: 0; white-space: nowrap; }
+.lp-project-timeline__minor > span { overflow: hidden; }
+.lp-project-timeline__major > span { border-left: .5px solid var(--theme-control-hover); padding-left: 8px; }
+.lp-project-timeline__major > span > b { color: var(--theme-text-secondary); font-weight: 500; left: calc(var(--timeline-label-width) + 8px); position: sticky; }
+.lp-project-timeline__minor > span { padding-left: 4px; }
+.lp-project-timeline__minor > span[data-emphasis] { color: var(--theme-text-secondary); }
+.lp-project-timeline__today-chip { background: var(--project-timeline-today); border-radius: 4px; color: var(--theme-background); font-size: 10px; font-weight: 500; line-height: 16px; padding: 0 4px; position: absolute; top: 28px; transform: translateX(-50%); white-space: nowrap; z-index: 1; }
+
+.lp-project-timeline__body { position: relative; user-select: none; }
+.lp-project-timeline__body[data-linking] { cursor: crosshair; }
+.lp-project-timeline__grid { bottom: 0; left: var(--timeline-label-width); pointer-events: none; position: absolute; top: 0; }
+.lp-project-timeline__grid > i { border-left: .5px solid var(--project-timeline-grid); bottom: 0; position: absolute; top: 0; }
+.lp-project-timeline__grid > i[data-emphasis] { border-left-color: var(--project-timeline-grid-strong); }
+.lp-project-timeline__today-line { border-left: 1px solid var(--project-timeline-today); bottom: 0; pointer-events: none; position: absolute; top: 0; z-index: 4; }
+
+.lp-project-timeline__group, .lp-project-timeline__row { display: flex; left: 0; position: absolute; right: 0; }
+.lp-project-timeline__group { border-bottom: .5px solid var(--theme-control); }
+.lp-project-timeline__group h2 { align-items: center; background: var(--bg-panel); color: var(--theme-text-primary); display: flex; font-size: 12px; font-weight: 500; gap: 7px; left: 0; margin: 0; padding: 0 16px; position: sticky; z-index: 3; }
+.lp-project-timeline__group h2 small { color: var(--theme-text-tertiary); font-size: 12px; font-weight: 400; }
+.lp-project-timeline__row[data-link-target] .lp-project-timeline__track { background: var(--project-timeline-link-target); }
+.lp-project-timeline__label { align-items: center; background: var(--bg-panel); border-right: .5px solid var(--theme-control-hover); display: flex; flex: 0 0 var(--timeline-label-width); left: 0; min-width: 0; padding: 0 8px; position: sticky; z-index: 5; }
+.lp-project-timeline__label > button { align-items: center; background: transparent; border: 0; border-radius: 6px; color: var(--theme-text-primary); cursor: pointer; display: flex; font-size: 13px; gap: 8px; height: 28px; min-width: 0; padding: 0 8px; width: 100%; }
+.lp-project-timeline__label > button:hover { background: var(--theme-surface-hover); }
+.lp-project-timeline__label > button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-project-timeline__track { flex: 1; position: relative; }
+
+.lp-project-timeline__bar { --timeline-progress: 0%; height: 24px; position: absolute; top: 6px; z-index: 2; }
+.lp-project-timeline__bar > button { background: linear-gradient(90deg, var(--project-timeline-bar-progress) var(--timeline-progress), var(--project-timeline-bar-bg) var(--timeline-progress)); border: .5px solid var(--project-timeline-bar-border); border-radius: 6px; color: var(--project-timeline-bar-text); cursor: grab; font-size: 12px; height: 100%; overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; white-space: nowrap; width: 100%; }
+.lp-project-timeline__bar > button:hover { border-color: var(--project-timeline-dependency-active); }
+.lp-project-timeline__bar > button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.lp-project-timeline__bar[data-open-start] > button { border-bottom-left-radius: 0; border-left-style: dashed; border-top-left-radius: 0; }
+.lp-project-timeline__bar[data-open-end] > button { border-bottom-right-radius: 0; border-right-style: dashed; border-top-right-radius: 0; }
+.lp-project-timeline__bar[data-dragging] > button { box-shadow: var(--project-timeline-drag-shadow); cursor: grabbing; }
+.lp-project-timeline__handle { bottom: 0; cursor: ew-resize; position: absolute; top: 0; width: 8px; z-index: 2; }
+.lp-project-timeline__handle.is-start { left: -2px; }
+.lp-project-timeline__handle.is-end { right: -2px; }
+.lp-project-timeline__handle:hover { background: color-mix(in srgb, var(--accent-primary) 35%, transparent); border-radius: 3px; }
+.lp-project-timeline__link-handle { background: var(--bg-panel); border: 1.5px solid var(--project-timeline-dependency-active); border-radius: 50%; cursor: crosshair; height: 8px; opacity: 0; position: absolute; top: 7px; transition: opacity .1s ease-out; width: 8px; z-index: 3; }
+.lp-project-timeline__link-handle.is-start { left: -14px; }
+.lp-project-timeline__link-handle.is-end { right: -14px; }
+.lp-project-timeline__row:hover .lp-project-timeline__link-handle, .lp-project-timeline__body[data-linking] .lp-project-timeline__link-handle { opacity: 1; }
+.lp-project-timeline__link-handle:hover { background: var(--project-timeline-dependency-active); }
+
+.lp-project-timeline__milestone { background: transparent; border: 0; color: var(--project-timeline-milestone); cursor: pointer; height: 14px; padding: 0; position: absolute; top: 11px; transform: translateX(-50%); width: 14px; z-index: 3; }
+.lp-project-timeline__milestone svg { display: block; height: 14px; width: 14px; }
+.lp-project-timeline__milestone path { fill: var(--bg-panel); stroke: currentColor; stroke-width: 1.4; }
+.lp-project-timeline__milestone[data-completed] { color: var(--project-timeline-milestone-done); }
+.lp-project-timeline__milestone[data-completed] path { fill: currentColor; }
+.lp-project-timeline__milestone[data-dragging] { cursor: grabbing; }
+.lp-project-timeline__milestone:hover path { stroke-width: 2; }
+.lp-project-timeline__milestone:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; border-radius: 3px; }
+.lp-project-timeline__tooltip { background: var(--theme-menu-bg); border: .5px solid var(--theme-border); border-radius: 8px; box-shadow: var(--theme-shadow-popover); color: var(--theme-text-secondary); display: grid; font-size: 12px; gap: 2px; padding: 6px 8px; z-index: 50; }
+.lp-project-timeline__tooltip strong { color: var(--theme-text-primary); font-weight: 500; }
+
+.lp-project-timeline__add-dates { background: transparent; border: 0; cursor: crosshair; inset: 0; padding: 0; position: absolute; text-align: left; }
+.lp-project-timeline__add-dates em { color: var(--theme-text-tertiary); font-size: 12px; display: inline-block; font-style: normal; left: calc(var(--timeline-label-width) + 12px); opacity: 0; position: sticky; transition: opacity .1s ease-out; }
+.lp-project-timeline__row:hover .lp-project-timeline__add-dates em, .lp-project-timeline__add-dates:focus-visible em { opacity: 1; }
+.lp-project-timeline__add-dates:hover { background: var(--theme-surface-hover); }
+.lp-project-timeline__add-dates:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.lp-project-timeline__ghost { background: var(--project-timeline-bar-bg); border: .5px dashed var(--project-timeline-bar-border); border-radius: 6px; height: 24px; position: absolute; top: 6px; }
+
+.lp-project-timeline__links { left: var(--timeline-label-width); overflow: visible; pointer-events: none; position: absolute; top: 0; z-index: 1; }
+.lp-project-timeline__link { fill: none; stroke: var(--project-timeline-dependency); stroke-width: 1.25; }
+.lp-project-timeline__link.is-active { stroke: var(--project-timeline-dependency-active); stroke-width: 1.75; }
+.lp-project-timeline__link.is-conflict { stroke: var(--project-timeline-dependency-conflict); }
+.lp-project-timeline__link.is-draft { stroke: var(--project-timeline-dependency-active); stroke-dasharray: 4 3; }
+.lp-project-timeline__arrow { fill: var(--project-timeline-dependency); }
+.lp-project-timeline__arrow.is-conflict { fill: var(--project-timeline-dependency-conflict); }

@@ -357,8 +357,14 @@ export interface Issue {
   autoClosed?: boolean;
   templateId?: UUID;
   parentId?: UUID;
-  recurrence?: "daily" | "weekly" | "monthly";
+  /** Preset (daily, weekdays, weekly, biweekly, monthly, yearly) or RRULE subset; see lib/recurrence. */
+  recurrence?: string;
+  /** Team-local midnight of the next occurrence. */
   nextOccurrenceAt?: string;
+  /** First issue of the recurring series this issue belongs to. */
+  recurrenceSeriesId?: UUID;
+  /** Occurrence date (YYYY-MM-DD) this issue was generated for. */
+  recurrenceOccurrence?: string;
   /** Triage snooze: hidden from the triage queue until this time. */
   snoozedUntil?: string;
   /** Explicit shares (user / team / workspace grants) for private-team issues. */
@@ -2278,7 +2284,9 @@ export interface IssueUpdateInput {
   labelIds?: string[];
   subscriberIds?: string[];
   archived?: boolean;
-  recurrence?: "" | "daily" | "weekly" | "monthly";
+  /** "" stops recurring. */
+  recurrence?: string;
+  /** First occurrence date (YYYY-MM-DD or RFC3339). */
   nextOccurrenceAt?: string;
   /** RFC3339 time, or "" to clear. */
   snoozedUntil?: string;

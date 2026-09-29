@@ -14,6 +14,13 @@ describe('issue activity projection', () => {
     expect(describeIssueActivity(event({}))).toBeNull()
   })
 
+  it('describes recurring schedule automation', () => {
+    expect(describeIssueActivity(event({ automation: 'recurring', recurringFrom: 'DEV-12', state: 'Todo' }, 'issue.created'))).toBe('created the issue from the recurring schedule of DEV-12')
+    expect(describeIssueActivity(event({ recurrence: '', automation: 'recurring', recurringNext: 'DEV-13' }))).toBe('moved the recurring schedule to DEV-13')
+    expect(describeIssueActivity(event({ recurrence: '' }))).toBe('stopped the recurring schedule')
+    expect(describeIssueActivity(event({ recurrence: 'weekdays', nextOccurrenceAt: '2026-10-01T00:00:00Z' }))).toBe('changed the recurring schedule')
+  })
+
   it('shows a meaningful change even when the same event also contains document snapshots', () => {
     const text = describeIssueActivity(event({ description: 'updated', descriptionBefore: 'Old description', stateBefore: 'Todo', stateBeforeId: 'internal-1', stateBeforeType: 'unstarted', state: 'In progress', stateId: 'internal-2', stateType: 'started' }))
     expect(text).toBe('moved from Todo to In progress')

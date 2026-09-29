@@ -1,0 +1,187 @@
+.flow-cycle-graph {
+  --cycle-graph-scope: var(--data-vis-neutral);
+  --cycle-graph-started: var(--data-vis-3);
+  --cycle-graph-completed: var(--data-vis-1);
+  --cycle-graph-target: var(--theme-text-tertiary);
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+}
+.flow-cycle-graph__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+.flow-cycle-graph__date {
+  color: var(--theme-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.flow-cycle-graph__measure {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--theme-control);
+}
+.flow-cycle-graph__measure button {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.flow-cycle-graph__measure button[aria-checked="true"] {
+  background: var(--theme-control-active);
+  color: var(--theme-text-primary);
+}
+.flow-cycle-graph__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.flow-cycle-graph__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.flow-cycle-graph__legend-item i {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--cycle-graph-scope);
+}
+.flow-cycle-graph__legend-item.is-started i { background: var(--cycle-graph-started); }
+.flow-cycle-graph__legend-item.is-completed i,
+.flow-cycle-graph__legend-item.is-projected i { background: var(--cycle-graph-completed); }
+.flow-cycle-graph__legend-item.is-target i { background: var(--cycle-graph-target); }
+.flow-cycle-graph__legend-item.is-projected i { opacity: .5; }
+.flow-cycle-graph__legend-item strong {
+  color: var(--theme-text-primary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.flow-cycle-graph__legend-item em {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.flow-cycle-graph__plot {
+  position: relative;
+  height: 150px;
+  border-radius: 4px;
+  outline: none;
+  touch-action: pan-y;
+}
+.flow-cycle-graph.is-compact .flow-cycle-graph__plot { height: 110px; }
+.flow-cycle-graph__plot:focus-visible { box-shadow: 0 0 0 1px var(--selection-border); }
+.flow-cycle-graph__plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.flow-cycle-graph__weekend-line { stroke: var(--theme-soft-overlay); stroke-width: 3; }
+.flow-cycle-graph__axis { stroke: var(--theme-border-strong); vector-effect: non-scaling-stroke; }
+.flow-cycle-graph__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.flow-cycle-graph__line.is-scope { stroke: var(--cycle-graph-scope); stroke-width: 1.5; }
+.flow-cycle-graph__line.is-started { stroke: var(--cycle-graph-started); }
+.flow-cycle-graph__line.is-completed { stroke: var(--cycle-graph-completed); }
+.flow-cycle-graph__line.is-target { stroke: var(--cycle-graph-target); stroke-width: 1; stroke-dasharray: 2 4; }
+.flow-cycle-graph__line.is-projected { stroke: var(--cycle-graph-completed); stroke-dasharray: 4 4; opacity: .6; }
+.flow-cycle-graph__today,
+.flow-cycle-graph__cursor {
+  stroke: var(--theme-border-strong);
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.flow-cycle-graph__cursor { stroke: var(--theme-text-tertiary); stroke-dasharray: none; }
+.flow-cycle-graph__dot {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border: 1.5px solid var(--theme-background);
+  border-radius: 50%;
+  background: var(--cycle-graph-scope);
+  pointer-events: none;
+}
+.flow-cycle-graph__dot.is-started { background: var(--cycle-graph-started); }
+.flow-cycle-graph__dot.is-completed { background: var(--cycle-graph-completed); }
+.flow-cycle-graph__axis-labels {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  color: var(--theme-text-tertiary);
+  font-size: 11px;
+}
+.flow-cycle-graph__axis-labels .is-today {
+  position: absolute;
+  transform: translateX(-50%);
+  color: var(--theme-text-secondary);
+}
+
+/* Cycle list: real sparkline for the active cycle. */
+.flow-cycle-sparkline path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.flow-cycle-sparkline .scope { stroke: var(--data-vis-neutral); stroke-width: 1.5; }
+.flow-cycle-sparkline .started { stroke: var(--data-vis-3); stroke-width: 1.5; }
+.flow-cycle-sparkline .completed { stroke: var(--data-vis-1); stroke-width: 2; }
+.flow-cycle-sparkline .baseline { stroke: var(--theme-border-strong); stroke-width: 1; }
+
+/* Cycle details sidebar progress + breakdown. */
+.cycle-progress-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.cycle-progress-stats > div { display: grid; gap: 2px; min-width: 0; }
+.cycle-progress-stats small { color: var(--theme-text-secondary); font-size: 11px; }
+.cycle-progress-stats strong { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.cycle-progress-stats em { color: var(--theme-text-tertiary); font-size: 11px; font-style: normal; font-variant-numeric: tabular-nums; }
+.cycle-breakdown-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 14px 0 6px;
+}
+.cycle-breakdown-tabs button {
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cycle-breakdown-tabs button[aria-selected="true"] { background: var(--theme-control-active); color: var(--theme-text-primary); }
+.cycle-breakdown-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 12px;
+}
+.cycle-breakdown-row > span:first-child {
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cycle-breakdown-row > span:last-child { color: var(--theme-text-secondary); font-variant-numeric: tabular-nums; }
+.cycle-breakdown-empty { color: var(--theme-text-tertiary); font-size: 12px; }

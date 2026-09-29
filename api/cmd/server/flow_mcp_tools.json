@@ -560,7 +560,7 @@
         "patch": { "type": "array", "items": { "description": "One of replace, insert_before, insert_after, prepend, append, replace_range patch objects, same shape as save_initiative.patch." } },
         "priority": { "type": "integer", "minimum": 0, "maximum": 4 },
         "project": { "type": ["string", "null"] },
-        "recurrence": { "type": ["string", "null"], "enum": ["daily", "weekly", "monthly", null], "description": "Repeat the issue on this schedule; null stops it recurring" },
+        "recurrence": { "type": ["string", "null"], "maxLength": 120, "description": "Repeat the issue on this schedule; null or \"\" stops it recurring. Presets: daily, weekdays, weekly, biweekly, monthly, yearly (weekly/monthly/yearly repeat on today's weekday/day). Or an RRULE subset: FREQ=DAILY|WEEKLY|MONTHLY|YEARLY with optional INTERVAL=n (1-99), BYDAY=MO,WE (weekly), BYMONTHDAY=n or -1 for last day (monthly/yearly), BYDAY=2TU or -1FR (Nth/last weekday of month), BYMONTH=1-12 (yearly). Example: FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR. Each occurrence creates a new issue due that day and moves the schedule to it." },
         "relatedTo": { "type": "array", "items": { "type": "string" } },
         "removeBlockedBy": { "type": "array", "items": { "type": "string" } },
         "removeBlocks": { "type": "array", "items": { "type": "string" } },

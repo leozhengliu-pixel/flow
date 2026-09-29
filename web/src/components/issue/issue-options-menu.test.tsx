@@ -102,6 +102,22 @@ describe('issue action menu', () => {
     expect(actions.configureRecurring).toHaveBeenCalledOnce()
   })
 
+  it('edits the recurring schedule in place and can stop it', async () => {
+    const user = userEvent.setup()
+    const actions = {addLink:vi.fn(),addCustomerRequest:vi.fn(),addDocument:vi.fn(),linkReview:vi.fn(),unlinkReview:vi.fn(),toggleRelease:vi.fn(),createRelated:vi.fn(),convert:vi.fn(),setRecurring:vi.fn().mockResolvedValue(undefined),toggleFavorite:vi.fn(),remind:vi.fn(),runLoop:vi.fn(),restoreDescription:vi.fn()} satisfies IssueOptionsActions
+    const issue = makeIssue({recurrence:'FREQ=WEEKLY;BYDAY=MO,FR',nextOccurrenceAt:'2099-01-02'})
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({customers:[],reviews:[],releases:[]})} actions={actions} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.hover(screen.getByRole('option',{name:'Convert to'}))
+    const child = await screen.findByRole('dialog',{name:'Convert to'})
+    expect(within(child).getByRole('option',{name:'Stop recurring'})).toBeInTheDocument()
+    await user.click(within(child).getByRole('option',{name:'Recurring issue…'}))
+    const dialog = await screen.findByRole('dialog',{name:'Recurring issue'})
+    expect(within(dialog).getByText('Weekly on Mon, Fri')).toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button',{name:'Save'}))
+    expect(actions.setRecurring).toHaveBeenCalledWith('FREQ=WEEKLY;BYDAY=MO,FR','2099-01-02')
+  })
+
   it('prefills a copy and waits for confirmation before creating it', async () => {
     const user = userEvent.setup(); const {actions,issue} = setup()
     await user.click(screen.getByRole('button',{name:'Issue options'}))
