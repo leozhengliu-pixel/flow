@@ -27,7 +27,7 @@ func triageAITestContext() triageAIContext {
 	return triageAIContext{
 		Issue: domain.Issue{ID: "i_new", Identifier: "FLO-9", Title: "Project overview spacing differs from Compare Test", Team: team, Creator: creator, Labels: []domain.IssueLabel{existing}},
 		Candidates: []domain.Issue{
-			{ID: "i_1", Identifier: "FLO-1", Title: "Connect your tools", Team: team, Assignee: &owner},
+			{ID: "i_1", Identifier: "FLO-1", Title: "Connect your tools", Team: team, Assignee: &owner, Labels: []domain.IssueLabel{bug}},
 			{ID: "i_2", Identifier: "FLO-2", Title: "Import your data", Team: team},
 		},
 		Scores:   map[string]float64{"i_1": 0.4},
@@ -69,6 +69,24 @@ func TestParseTriageAIReplyDropsUnknownTargets(t *testing.T) {
 	}
 	if _, err := parseTriageAIReply("no json here", &input); err == nil {
 		t.Fatal("expected an error for a non-JSON reply")
+	}
+}
+
+func TestParseTriageAIReplyNeedsEvidenceForLabelsAndCreator(t *testing.T) {
+	input := triageAITestContext()
+	feature := domain.IssueLabel{ID: "l_feature", Name: "Feature"}
+	input.Labels = append(input.Labels, triageAILabel{Label: feature, Uses: 0})
+	// A label that merely fits the issue, with no similar issue carrying it, is dropped.
+	plan, err := parseTriageAIReply(`{"labels":[{"name":"Feature","reasons":["Requests a new capability"]}]}`, &input)
+	if err != nil || len(plan.Picks) != 0 {
+		t.Fatalf("picks=%v err=%v", plan.Picks, err)
+	}
+	// The creator is a fair assignee when they lead the suggested project.
+	creator := input.Issue.Creator
+	input.Projects[0].Lead = &creator
+	plan, err = parseTriageAIReply(`{"project":{"name":"Compare Test","reasons":["Named in the issue"]},"assignee":{"name":"Casey Creator","reasons":["Leads Compare Test"]}}`, &input)
+	if err != nil || len(plan.Picks) != 2 || plan.Picks[1].Kind != "assignee" || plan.Picks[1].TargetID != creator.ID {
+		t.Fatalf("picks=%v err=%v", plan.Picks, err)
 	}
 }
 
