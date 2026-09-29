@@ -22,10 +22,17 @@ export function titleSimilarity(left: string, right: string) {
   return shared / (x.size + y.size - shared)
 }
 
+/** Occurrences of one recurring issue share a title by design; they are not duplicates. */
+function sameRecurringSeries(issue: Issue, candidate: Issue) {
+  const series = (item: Issue) => item.recurrenceSeriesId ?? (item.recurrence ? item.id : undefined)
+  const left = series(issue), right = series(candidate)
+  return Boolean((left && (left === right || left === candidate.id)) || (right && right === issue.id))
+}
+
 export function similarIssues(issue: Issue, issues: Issue[], limit = 3, threshold = 0.4) {
   const linked = new Set([issue.id, issue.parentId, ...issue.subIssueIds, ...issue.relations.map(relation => relation.relatedIssueId)])
   return issues
-    .filter(candidate => !linked.has(candidate.id) && !candidate.archivedAt && candidate.team.id === issue.team.id && candidate.state.type !== 'canceled')
+    .filter(candidate => !linked.has(candidate.id) && !candidate.archivedAt && candidate.team.id === issue.team.id && candidate.state.type !== 'canceled' && !sameRecurringSeries(issue, candidate))
     .map(candidate => ({ candidate, score: titleSimilarity(issue.title, candidate.title) }))
     .filter(item => item.score >= threshold)
     .sort((left, right) => right.score - left.score)
@@ -41,7 +48,7 @@ export function SimilarIssues({ issue, issues, workspaceKey, onOpen, onMarkDupli
     const controller = new AbortController()
     setServerFailed(false)
     fetchSimilarIssues(issue.id, controller.signal, workspaceKey)
-      .then(response => setServer({ id: issue.id, matches: response.results.slice(0, 3).map(result => ({ candidate: result.issue, score: result.score, duplicate: result.possibleDuplicate })) }))
+      .then(response => setServer({ id: issue.id, matches: response.results.filter(result => !sameRecurringSeries(issue, result.issue)).slice(0, 3).map(result => ({ candidate: result.issue, score: result.score, duplicate: result.possibleDuplicate })) }))
       .catch(() => { if (!controller.signal.aborted) setServerFailed(true) })
     return () => controller.abort()
   }, [issue.id, issue.title, workspaceKey])
