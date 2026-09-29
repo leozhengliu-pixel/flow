@@ -4429,3 +4429,30 @@ Object.assign(zhCN, {
   "Copied to clipboard": "已复制到剪贴板",
   "Could not copy to clipboard": "无法复制到剪贴板",
 });
+
+// Triage issue page header actions and the Triage Intelligence card.
+Object.assign(zhCN, {
+  Accept: "接受",
+  "Accepted issues move to": "接受的事项将移至",
+  "Finding suggestions…": "正在查找建议…",
+  "No suggestions found": "未找到建议",
+  "Run again": "重新运行",
+  "Show thinking…": "查看思考过程…",
+  "Dismiss all suggestions": "忽略所有建议",
+  "Triage Intelligence options": "智能分流选项",
+  "Triage Intelligence thinking": "智能分流思考过程",
+  "No reasoning is available for this run.": "本次运行没有可用的推理说明。",
+  "Duplicate of": "重复于",
+  "Related to": "相关于",
+  Suggestions: "建议",
+  "Why this project was suggested": "为什么建议此项目",
+  "Why this assignee was suggested": "为什么建议此负责人",
+  "Why this label was suggested": "为什么建议此标签",
+  "Why this team was suggested": "为什么建议此团队",
+  "Accept project suggestion": "接受项目建议",
+  "Accept user suggestion": "接受用户建议",
+  "Accept label suggestion": "接受标签建议",
+  "Accept team suggestion": "接受团队建议",
+  "The workspace context points to this value.": "工作区上下文指向此值。",
+  "Dismiss suggestion": "忽略建议",
+});

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
 import { Building2, Clock3, Layers3 } from 'lucide-react'
 import type { ActivityEvent, ProjectSummary, User, WorkspaceMember, WorkflowState } from '@/types/flow'
-import { NoAssigneeIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
+import { NoAssigneeIcon, PriorityIcon, StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
+import { TRIAGE_STATUS } from '@/components/triage/triage-model'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
 import { AssigneeHoverPreview, PropertyShortcutTooltip, StatusHoverPreview } from '@/components/property/issue-property-hover'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -10,19 +11,21 @@ import { PersonIdentityDetails } from '@/components/property/person-info'
 import { personDisplayName, personSearchText } from '@/lib/people'
 import { displayUserName, useUserPreferences } from '@/lib/runtime-preferences'
 
-export function StatusPicker({ value, states, onChange, hoverHistory }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string } }) {
+/** `triage` shows Linear's orange "Triage" status for an issue still in the team's triage queue. */
+export function StatusPicker({ value, states, onChange, hoverHistory, triage = false }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string }; triage?: boolean }) {
+  const displayName = triage ? TRIAGE_STATUS.name : value.name
   const options = [...states].sort((left,right)=>(left.position??0)-(right.position??0)).map((state, index) => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, shortcut: String(index + 1) }))
   return <div className="core-property-picker"><PropertyMenu
     label="Status"
-    value={value.name}
+    value={displayName}
     selectedId={value.id}
     options={options}
     searchPlaceholder="Change status…"
     searchShortcut="S"
-    ariaLabel={`Change status. Current status is ${value.name}`}
+    ariaLabel={`Change status. Current status is ${displayName}`}
     triggerClassName="core-property-trigger"
-    trigger={<><StatusIcon state={value}/><span>{value.name}</span></>}
-    hoverContent={hoverHistory?<StatusHoverPreview state={value} activities={hoverHistory.activities} issueCreatedAt={hoverHistory.issueCreatedAt}/>:undefined}
+    trigger={triage ? <><WorkflowStatusGlyph state={TRIAGE_STATUS}/><span>{displayName}</span></> : <><StatusIcon state={value}/><span>{value.name}</span></>}
+    hoverContent={!triage&&hoverHistory?<StatusHoverPreview state={value} activities={hoverHistory.activities} issueCreatedAt={hoverHistory.issueCreatedAt}/>:undefined}
     hoverClassName="property-rich-hover"
     onChange={onChange}
   /></div>

@@ -52,18 +52,40 @@ func generateAndAppendIssueSuggestions(data *domain.Bootstrap, issue *domain.Iss
 	if !triageIntelligenceEnabled(data.WorkspaceSettings) || !isTriageIssue(data, issue) {
 		return
 	}
+	storeTriageSuggestions(data, issue, generateIssueSuggestions(data, issue, now), now, triageSourceHeuristic, "")
+}
+
+// storeTriageSuggestions replaces the issue's suggestions with generated ones.
+// Dismissed suggestions are retained and never re-suggested; "auto" actions
+// are applied immediately and recorded as accepted.
+func storeTriageSuggestions(data *domain.Bootstrap, issue *domain.Issue, generated []domain.IssueSuggestion, now time.Time, source, thinking string) []domain.IssueSuggestion {
 	dismissed := slices.DeleteFunc(slices.Clone(data.IssueSuggestions), func(item domain.IssueSuggestion) bool { return item.IssueID != issue.ID || item.State != "dismissed" })
+	dismissedTargets := map[string]bool{}
+	for _, item := range dismissed {
+		dismissedTargets[issueSuggestionTargetKey(item)] = true
+	}
 	data.IssueSuggestions = slicesDeleteIssueSuggestions(data.IssueSuggestions, issue.ID, "")
 	data.IssueSuggestions = append(data.IssueSuggestions, dismissed...)
-	suggestions := generateIssueSuggestions(data, issue, now)
-	for index := range suggestions {
-		if applyTriageSuggestionAction(data, issue, &suggestions[index], now) {
-			suggestions[index].State = "accepted"
-			suggestions[index].StateChangedAt = now
+	suggestions := make([]domain.IssueSuggestion, 0, len(generated))
+	for _, suggestion := range generated {
+		if dismissedTargets[issueSuggestionTargetKey(suggestion)] {
+			continue
 		}
+		if applyTriageSuggestionAction(data, issue, &suggestion, now) {
+			suggestion.State = "accepted"
+			suggestion.StateChangedAt = now
+		}
+		suggestions = append(suggestions, suggestion)
 	}
 	data.IssueSuggestions = append(data.IssueSuggestions, suggestions...)
 	issue.SuggestionsGeneratedAt = &now
+	issue.SuggestionsSource = source
+	issue.SuggestionsThinking = thinking
+	return suggestions
+}
+
+func issueSuggestionTargetKey(item domain.IssueSuggestion) string {
+	return item.Type + "\x00" + firstNonEmpty(item.SuggestedIssueID, item.SuggestedProjectID, item.SuggestedUserID, item.SuggestedLabelID, item.SuggestedTeamID)
 }
 
 func (s *server) generateTriageIntelligenceForIssue(ctx context.Context, workspace, issueID string) (domain.Issue, error) {
@@ -96,6 +118,20 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	}
 	metadata, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) {
+		return nil, store.ErrNoMutation
+	}
+	if s.agent.Enabled {
+		// Like Linear, model-backed suggestions are generated in the background:
+		// the issue stays pending (no suggestionsGeneratedAt) until the run
+		// writes its results, so the request never waits on the model.
+		actor.WorkspaceKey = firstNonEmpty(metadata.Workspace.URLKey, actor.WorkspaceKey)
+		for _, issueID := range issueIDs {
+			issue, readErr := s.store.AuthorizedIssueRecord(ctx, query, issueID)
+			if readErr != nil || !isTriageIssue(&metadata, &issue) || issue.SuggestionsGeneratedAt != nil {
+				continue
+			}
+			s.startTriageIntelligenceRun(ctx, actor, issueID)
+		}
 		return nil, store.ErrNoMutation
 	}
 	candidateSets := map[string][]domain.Issue{}
@@ -195,6 +231,7 @@ func generateIssueSuggestions(data *domain.Bootstrap, issue *domain.Issue, now t
 			"rank":    rank,
 			"score":   score,
 			"reasons": reasons,
+			"source":  triageSourceHeuristic,
 		}
 		suggestion := domain.IssueSuggestion{
 			ID:             fmt.Sprintf("issue_suggestion_%d_%d", now.UnixNano(), rank),
@@ -363,8 +400,6 @@ func previewIssueSuggestions(data *domain.Bootstrap, text, teamID string) []tria
 		best := candidates[0]
 		if best.issue.Assignee != nil {
 			add("assignee", best.issue.Assignee.ID)
-		} else if best.issue.Creator.ID != "" {
-			add("assignee", best.issue.Creator.ID)
 		}
 		if best.issue.Project != nil {
 			add("project", best.issue.Project.ID)
@@ -450,26 +485,17 @@ func inferAssignee(data *domain.Bootstrap, issue *domain.Issue, candidates []tri
 			id := candidate.issue.Assignee.ID
 			scores[id] += candidate.score
 			reasons[id] = append(reasons[id], fmt.Sprintf("Assigned to related issue %s.", identifierOrTitle(&candidate.issue)))
-		} else if candidate.issue.Creator.ID != "" {
-			id := candidate.issue.Creator.ID
-			scores[id] += candidate.score * 0.7
-			reasons[id] = append(reasons[id], fmt.Sprintf("Created related issue %s.", identifierOrTitle(&candidate.issue)))
 		}
 	}
 	for index := range data.Projects {
 		project := &data.Projects[index]
-		if project.Lead != nil && project.Lead.ID != "" {
-			scores[project.Lead.ID] += 0.08
-			if project.ID == issueProjectID(issue) {
-				scores[project.Lead.ID] += 0.2
-				reasons[project.Lead.ID] = append(reasons[project.Lead.ID], "Leads the issue's project.")
-			}
+		if project.Lead != nil && project.Lead.ID != "" && project.ID == issueProjectID(issue) {
+			scores[project.Lead.ID] += 0.28
+			reasons[project.Lead.ID] = append(reasons[project.Lead.ID], "Leads the issue's project.")
 		}
 	}
-	if issue.Creator.ID != "" {
-		scores[issue.Creator.ID] += 0.42
-		reasons[issue.Creator.ID] = append(reasons[issue.Creator.ID], "Created this request and is already involved in the workspace.")
-	}
+	// Conservative like Linear: creating the issue (or a related one) is not
+	// evidence of ownership, so creators get no assignee bonus.
 	var bestID string
 	var bestScore float64
 	for id, score := range scores {
@@ -894,6 +920,14 @@ func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
+		// Self-heal a pending issue whose background run was lost (e.g. a
+		// restart): clients poll this endpoint while suggestions are pending.
+		// Only issues untouched for longer than a full run qualify.
+		if s.agent.Enabled && issue.SuggestionsGeneratedAt == nil && time.Since(issue.UpdatedAt) > s.triageIntelligenceTimeout()+30*time.Second && triageIntelligenceEnabled(metadata.WorkspaceSettings) && isTriageIssue(&metadata, &issue) {
+			runActor := actor
+			runActor.WorkspaceKey = firstNonEmpty(metadata.Workspace.URLKey, actor.WorkspaceKey)
+			s.startTriageIntelligenceRun(r.Context(), runActor, issue.ID)
+		}
 		data.IssueSuggestions = slices.DeleteFunc(metadata.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 			if item.IssueID != issue.ID {
 				return true
@@ -917,12 +951,18 @@ func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 		"issueId":                issue.ID,
 		"suggestionsGeneratedAt": issue.SuggestionsGeneratedAt,
 		"suggestions":            activeIssueSuggestions(&data, issue.ID),
+		// pending: generation has not finished yet (the model runs in the
+		// background after the issue enters triage).
+		"pending":  issue.SuggestionsGeneratedAt == nil,
+		"source":   issue.SuggestionsSource,
+		"thinking": issue.SuggestionsThinking,
 	})
 }
 
+// refreshIssueSuggestions is "Run again": it regenerates synchronously (with
+// the model when the Agent is configured) and returns the fresh suggestions.
 func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var updated []domain.IssueSuggestion
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: authUser(r)}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		actor.APIKey = key
@@ -932,62 +972,10 @@ func (s *server) refreshIssueSuggestions(w http.ResponseWriter, r *http.Request)
 			actor.User = metadata.Viewer
 		}
 	}
-	query, queryErr := s.mcpIssueQuery(r.Context(), actor)
-	if queryErr != nil {
-		respondMutation(w, queryErr, http.StatusOK, updated)
-		return
+	_, updated, err := s.runTriageIntelligence(r.Context(), actor, id, triageRunOptions{useAI: true, bumpVersion: true, eventType: "issue.suggestions_refreshed"})
+	if updated == nil {
+		updated = []domain.IssueSuggestion{}
 	}
-	issue, readErr := s.store.AuthorizedIssueRecord(r.Context(), query, id)
-	if readErr != nil {
-		respondMutation(w, readErr, http.StatusOK, updated)
-		return
-	}
-	metadata, ok := s.store.WorkspaceMetadata(workspaceKey(r))
-	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) || !isTriageIssue(&metadata, &issue) {
-		respondMutation(w, fmt.Errorf("%w: Triage Intelligence is disabled or issue is not in triage", errInvalid), http.StatusOK, updated)
-		return
-	}
-	candidates, candidateErr := s.triageCandidateIssues(r.Context(), &issue, query)
-	if candidateErr != nil {
-		respondMutation(w, candidateErr, http.StatusOK, updated)
-		return
-	}
-	err := s.store.MutateWorkspace(store.WithIssueRecordMutations(r.Context(), id), workspaceKey(r), "issue.suggestions_refreshed", id, nil, func(data *domain.Bootstrap) error {
-		issue, err := issueByID(data, id)
-		if err != nil {
-			return err
-		}
-		if !triageIntelligenceEnabled(data.WorkspaceSettings) {
-			return fmt.Errorf("%w: Triage Intelligence is disabled", errInvalid)
-		}
-		if !isTriageIssue(data, issue) {
-			return fmt.Errorf("%w: issue is not in triage", errInvalid)
-		}
-		now := time.Now().UTC()
-		data.IssueSuggestions = slicesDeleteIssueSuggestions(data.IssueSuggestions, issue.ID, "")
-		data.Issues = append(data.Issues, candidates...)
-		issue, err = issueByID(data, id)
-		if err != nil {
-			return err
-		}
-		generated := generateIssueSuggestions(data, issue, now)
-		for index := range generated {
-			if applyTriageSuggestionAction(data, issue, &generated[index], now) {
-				generated[index].State = "accepted"
-				generated[index].StateChangedAt = now
-			}
-		}
-		data.IssueSuggestions = append(data.IssueSuggestions, generated...)
-		issue.SuggestionsGeneratedAt = &now
-		issue.UpdatedAt = now
-		issue.Version++
-		// issueByID returns a pointer into data.Issues. Apply the bookkeeping
-		// fields before replacing the scoped issue slice, otherwise those writes
-		// land on an abandoned backing array and are not persisted.
-		data.Issues = []domain.Issue{*issue}
-		updated = generated
-		return nil
-	})
 	respondMutation(w, err, http.StatusOK, updated)
 }
 

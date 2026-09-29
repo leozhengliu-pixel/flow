@@ -22,9 +22,11 @@ interface IssueHeaderProps {
   onNavigateIssue?: (issue: Issue) => void; onNavigateRoot?: () => void
   returnPath?: string
   onUpdate: (input: IssueUpdateInput) => Promise<void>; onDelete: () => Promise<void>; onRelation: (type: IssueRelationType) => void
+  /** Linear's Accept / Decline / duplicate / snooze controls, shown while the issue is in Triage. */
+  triageActions?: React.ReactNode
 }
 
-export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onClose, onNavigate, onNavigateRoot, returnPath, onUpdate, onDelete, onRelation }: IssueHeaderProps) {
+export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onClose, onNavigate, onNavigateRoot, returnPath, onUpdate, onDelete, onRelation, triageActions }: IssueHeaderProps) {
   const [working,setWorking]=useState(false)
   const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
@@ -41,6 +43,7 @@ export function IssueHeader({ issue, states, presence = [], saveState, onRetrySa
     <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {presence.length>0&&<div className="issue-presence" aria-label={`${presence.length} other ${presence.length===1?'person':'people'} viewing`}><span className="issue-presence-dot"/>{presence.slice(0,3).map(item=><span className="issue-presence-avatar" title={`${item.user.displayName} is viewing`} key={item.clientId}>{initials(item.user.displayName)}</span>)}</div>}
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
+    {triageActions}
     <div className="issue-command-strip">
       <CommandButton label="Copy issue URL" shortcut="⌘ ⇧ ," onClick={()=>copyText(location.href,'Issue URL copied to clipboard')}><FlowUrlIcon/></CommandButton>
       <CommandButton label="Copy issue ID" shortcut="⌘ ." onClick={()=>copyText(issue.identifier,'Issue ID copied to clipboard')}><FlowIssueIdIcon/></CommandButton>

@@ -347,3 +347,20 @@
 .flow-triage-actions__search [role=option],.flow-triage-actions__presets button{height:30px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--text);text-align:left;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .flow-triage-actions__search [aria-selected=true],.flow-triage-actions__search [role=option]:hover,.flow-triage-actions__presets button:hover{background:var(--bg-active)}
 .flow-triage-actions__presets small{color:var(--issue-muted);font-size:12px}
+.flow-triage-actions__confirm.is-primary{background:var(--accent-primary);color:var(--on-accent)}
+.flow-triage-actions__confirm:disabled{opacity:.5;cursor:not-allowed}
+.flow-triage-actions__priority{display:flex}
+.flow-fast-triage-accept__submit kbd{min-width:16px;height:16px;display:grid;place-items:center;border-radius:4px;background:var(--theme-soft-overlay);color:inherit;font:500 10px/1 inherit;opacity:.8}
+
+/* Issue page header: Accept / Decline text buttons, then duplicate and snooze icon buttons (Linear). */
+.issue-triage-header-actions{margin-left:auto;display:flex;align-items:center;gap:4px;padding-left:8px}
+.issue-triage-header-actions+.issue-command-strip{margin-left:8px}
+.issue-triage-header-button{height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border:.5px solid var(--border);border-radius:9999px;background:transparent;color:var(--issue-fg);font-size:12px;font-weight:500;white-space:nowrap;cursor:pointer}
+.issue-triage-header-button svg{flex:none;color:var(--issue-muted)}
+.issue-triage-header-button.is-icon{width:28px;padding:0;justify-content:center;border-color:transparent}
+.issue-triage-header-button:hover,.issue-triage-header-button[data-state=open]{background:var(--bg-active)}
+.issue-triage-header-button:hover svg,.issue-triage-header-button[data-state=open] svg{color:var(--issue-fg)}
+.issue-triage-header-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px}
+.issue-triage-embedded-actions{margin:4px 0 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--issue-muted);font-size:13px}
+.issue-triage-embedded-actions .issue-triage-header-actions{margin-left:0;padding-left:0}
+@media(max-width:800px){.issue-triage-header-button:not(.is-icon) span{display:none}.issue-triage-header-button:not(.is-icon){width:28px;padding:0;justify-content:center}}

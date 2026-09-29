@@ -15,6 +15,7 @@ import type { BootstrapData, Issue, Team } from '@/types/flow'
 import { FastTriageAcceptEditor } from './fast-triage-accept-editor'
 import { TriageActions } from './triage-actions'
 import { isSnoozed } from './triage-model'
+import { useTriageShortcuts } from './use-triage-shortcuts'
 import { TriageEmptyPage, TriageNotSelectedPage } from './triage-not-selected-page'
 import './triage.css'
 
@@ -38,7 +39,7 @@ const ROW_PROPERTIES = new Set<MyIssuesProperty>(['id', 'priority', 'created'])
 
 /**
  * Triage on the shared list row and filter engine, with Accept / Decline / Mark as duplicate / Snooze
- * (keyboard 1 / 3 / 2 / H like Linear).
+ * (keyboard 1 Accept / 2 Decline / 3 or M M Duplicate / H Snooze, like Linear).
  */
 export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePageProps) {
   const { t } = useI18n()
@@ -70,16 +71,17 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
     }
   }
 
+  useTriageShortcuts(Boolean(selected), next => {
+    if (next === 'accept') document.querySelector<HTMLButtonElement>('.flow-fast-triage-accept__submit')?.click()
+    else setAction(next)
+  })
+
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target
       if (!selected || event.metaKey || event.ctrlKey || event.altKey || (target instanceof Element && target.closest('input,textarea,[contenteditable=true],[role=textbox],[role=dialog]'))) return
       const key = event.key.toLowerCase()
-      if (key === '1') { event.preventDefault(); document.querySelector<HTMLButtonElement>('.flow-fast-triage-accept__submit')?.click() }
-      else if (key === '2') { event.preventDefault(); setAction('duplicate') }
-      else if (key === '3') { event.preventDefault(); setAction('decline') }
-      else if (key === 'h') { event.preventDefault(); setAction('snooze') }
-      else if (key === 'j' || key === 'arrowdown' || key === 'k' || key === 'arrowup') {
+      if (key === 'j' || key === 'arrowdown' || key === 'k' || key === 'arrowup') {
         event.preventDefault()
         const index = visible.findIndex(issue => issue.id === selected.id)
         const next = visible[index + (key === 'j' || key === 'arrowdown' ? 1 : -1)]

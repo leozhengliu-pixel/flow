@@ -5,7 +5,8 @@ import { createComment, updateIssue } from '@/lib/api'
 import { PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
 import { TriageIntelligenceSuggestions } from '@/components/issue/triage-intelligence-suggestions'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData, Issue, Team, WorkflowState } from '@/types/flow'
+import type { BootstrapData, Issue, Team } from '@/types/flow'
+import { resolveAcceptState, teamStates, TRIAGE_SHORTCUTS } from './triage-model'
 import './triage.css'
 
 export type FastTriageAcceptEditorProps = {
@@ -33,10 +34,7 @@ export function FastTriageAcceptEditor({
   const { t } = useI18n()
   const teamSettings = data.teamSettings?.[team.id]
   const requirePriority = Boolean(teamSettings?.triageRequirePriority)
-  const states = useMemo(() => {
-    const scoped = data.states.filter(state => state.teamId === team.id || !state.teamId)
-    return [...scoped].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-  }, [data.states, team.id])
+  const states = useMemo(() => teamStates(data.states, team.id), [data.states, team.id])
   const defaultAcceptState = useMemo(() => resolveAcceptState(states, teamSettings?.defaultStateId), [states, teamSettings?.defaultStateId])
   const [priority, setPriority] = useState(issue.priority)
   const [stateId, setStateId] = useState(defaultAcceptState?.id ?? issue.state.id)
@@ -117,6 +115,8 @@ export function FastTriageAcceptEditor({
           data={data}
           onIssueUpdated={onIssueUpdated}
           maxSuggestions={3}
+          inTriage
+          variant="compact"
           isVisibleInTriageAccept
         />
       </div>
@@ -138,24 +138,14 @@ export function FastTriageAcceptEditor({
           type="button"
           className="flow-fast-triage-accept__submit"
           disabled={!canAccept}
+          aria-keyshortcuts={TRIAGE_SHORTCUTS.accept}
           onClick={() => void accept()}
         >
           {busy ? <LoaderCircle className="spin" size={14} /> : null}
           {t('Accept issue')}
+          <kbd>{TRIAGE_SHORTCUTS.accept}</kbd>
         </button>
       </footer>
     </section>
-  )
-}
-
-function resolveAcceptState(states: WorkflowState[], defaultStateId?: string): WorkflowState | undefined {
-  if (defaultStateId) {
-    const configured = states.find(state => state.id === defaultStateId && state.type !== 'backlog')
-    if (configured) return configured
-  }
-  return (
-    states.find(state => state.type === 'unstarted') ??
-    states.find(state => state.type === 'started') ??
-    states.find(state => state.type !== 'backlog')
   )
 }
