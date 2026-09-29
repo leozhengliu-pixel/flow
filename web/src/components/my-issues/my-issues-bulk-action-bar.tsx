@@ -9,6 +9,7 @@ import styles from './my-issues-bulk-action-bar.module.css'
 import { PersonHover } from '@/components/property/person-info'
 import { usePeopleDirectory } from '@/components/property/people-context'
 import { directoryPerson, personMatchesQuery, personSearchText } from '@/lib/people'
+import { useRegisterCommandContext } from '@/components/command/command-context'
 
 export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs' | 'archive' | 'delete'
 export interface MyIssuesBulkActionOption { id: string; label: string; color?: string }
@@ -46,6 +47,8 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   const [agentIssues, setAgentIssues] = useState<MyIssuesRowData[]>([])
   const [agentOpen, setAgentOpen] = useState(false)
   useEffect(() => { if (!selectedIssues.length) setOpen(false) }, [selectedIssues.length])
+  // ⌘K acts on the selection too (Linear): it lists issue actions for these rows first.
+  useRegisterCommandContext(selectedIssues.length ? { kind: 'issues', source: 'selection', issues: selectedIssues.map(issue => ({ id: issue.id, identifier: issue.identifier, title: issue.title })) } : undefined)
   useEffect(() => { if (!open) setPendingAction(undefined) }, [open])
   if (!selectedIssues.length) return null
   const count = selectedIssues.length

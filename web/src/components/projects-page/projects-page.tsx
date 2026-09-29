@@ -1,7 +1,7 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
-import type { Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectMilestone, ProjectRelation, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
 import { currentProjectMilestone, milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
@@ -22,6 +22,7 @@ import { projectLabelOptions } from '@/components/property/project-label-menu-mo
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 import { listProjectRecords } from '@/lib/api'
+import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
 
 export type ProjectMutationInput = {
   templateId?: string
@@ -70,6 +71,8 @@ export type ProjectsPageProps = {
   labels?: IssueLabel[]
   labelGroups?: LabelGroup[]
   issues?: Issue[]
+  /** Project relations (blocks / blocked by) for timeline dependency connectors. */
+  projectRelations?: ProjectRelation[]
   loading?: boolean
   error?: string | null
   onCreateProject?: (input: ProjectCreateInput) => Promise<Project>
@@ -78,6 +81,7 @@ export type ProjectsPageProps = {
   onOpenProjectIssues?: (project: Project) => void
   onRetry?: () => void
   onUpdateProject?: (projectId: string, input: ProjectMutationInput) => Promise<Project>
+  onUpdateProjectMilestone?: (projectId: string, milestoneId: string, input: { targetDate?: string }) => Promise<ProjectMilestone>
   onOpenSidebar?: () => void
   onSetDisplayDefault?: (display: ProjectsDisplaySettings) => Promise<void>
   projectDisplayDefault?: Record<string, unknown>
@@ -145,6 +149,8 @@ export function ProjectsPage({
   onOpenProjectIssues,
   onRetry,
   onUpdateProject,
+  onUpdateProjectMilestone,
+  projectRelations,
   onToggleProjectFavorite,
   onSetProjectSubscriptionEvents,
   onCreateProjectReminder,
@@ -258,7 +264,35 @@ export function ProjectsPage({
     labelGroups: projectLabelGroups,
     teams: new Map(teams.map(item => [item.id, item])),
   }), [initiatives, projectLabelGroups, projectLabels, teams])
-  const items = useMemo(() => scopedProjects.map(project => toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues)), [itemIndexes, issues, projectHref, projectUpdates, scopedProjects])
+  const blockedByIds = useMemo(() => {
+    const map = new Map<string, string[]>()
+    for (const edge of projectDependencyEdges(projectCollection, projectRelations)) map.set(edge.blockedId, [...(map.get(edge.blockedId) ?? []), edge.blockerId])
+    return map
+  }, [projectCollection, projectRelations])
+  const milestoneProgress = useMemo(() => milestoneProgressIndex(issues), [issues])
+  const items = useMemo(() => scopedProjects.map(project => ({
+    ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues),
+    milestones: (project.milestones ?? []).map(milestone => ({ id: milestone.id, name: milestone.name, targetDate: milestone.targetDate, progress: milestoneProgress(project.id, milestone.id) })),
+    blockedByIds: blockedByIds.get(project.id),
+  })), [blockedByIds, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects])
+  // With the project-list projection the app store holds no projects, so the directory page
+  // (pagedProjects) must absorb timeline edits itself or bars snap back until the next fetch.
+  const syncPagedProject = useCallback((project: Project) => setPagedProjects(current => current.map(item => item.id === project.id ? project : item)), [])
+  const updateTimelineProject = useCallback(async (projectId: string, input: ProjectMutationInput) => {
+    if (!onUpdateProject) return
+    const project = await onUpdateProject(projectId, input)
+    if (project) syncPagedProject(project)
+  }, [onUpdateProject, syncPagedProject])
+  const updateTimelineMilestone = useCallback(async (projectId: string, milestoneId: string, input: { targetDate: string }) => {
+    if (!onUpdateProjectMilestone) return
+    const milestone = await onUpdateProjectMilestone(projectId, milestoneId, input)
+    if (milestone) setPagedProjects(current => current.map(item => item.id === projectId ? { ...item, milestones: (item.milestones ?? []).map(entry => entry.id === milestoneId ? milestone : entry) } : item))
+  }, [onUpdateProjectMilestone])
+  const createProjectDependency = useCallback(async (blockerId: string, blockedId: string) => {
+    const blocked = projectCollection.find(project => project.id === blockedId)
+    if (!blocked) return
+    await updateTimelineProject(blockedId, { dependencyRelations: dependencyRelationsWithBlocker(blockedId, blockerId, projectRelations, blocked.dependencyIds) })
+  }, [projectCollection, projectRelations, updateTimelineProject])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
   const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
@@ -554,7 +588,9 @@ export function ProjectsPage({
         }}
         onPropertyChange={updateProperty}
         onRetry={onRetry}
-        onUpdateProject={onUpdateProject ? async (projectId, input) => { await onUpdateProject(projectId, input) } : undefined}
+        onUpdateProject={onUpdateProject ? updateTimelineProject : undefined}
+        onUpdateMilestone={onUpdateProjectMilestone ? updateTimelineMilestone : undefined}
+        onCreateProjectDependency={onUpdateProject ? createProjectDependency : undefined}
         propertyOptions={propertyOptions}
         labelGroupProperties={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
         projectMenu={onToggleProjectFavorite && onSetProjectSubscriptionEvents && onCreateProjectReminder ? {
@@ -728,6 +764,23 @@ function formatDay(value: string) {
 
 function uniqueStatuses(items: ProjectStatus[]) { return items.filter((item, index) => items.findIndex(candidate => candidate.id === item.id) === index) }
 
+/** Issue-based milestone progress, indexed once instead of scanning every issue per milestone. */
+function milestoneProgressIndex(issues: Issue[]) {
+  const counts = new Map<string, { done: number; total: number }>()
+  for (const issue of issues) {
+    if (!issue.project?.id || !issue.projectMilestoneId || issue.archivedAt) continue
+    const key = `${issue.project.id}:${issue.projectMilestoneId}`
+    const entry = counts.get(key) ?? { done: 0, total: 0 }
+    entry.total += 1
+    if (issue.state.type === 'completed' || issue.state.type === 'canceled') entry.done += 1
+    counts.set(key, entry)
+  }
+  return (projectId: string, milestoneId: string) => {
+    const entry = counts.get(`${projectId}:${milestoneId}`)
+    return entry?.total ? Math.round(entry.done / entry.total * 100) : 0
+  }
+}
+
 function parseProjectDisplayDefault(value: Record<string, unknown> | undefined): ProjectsDisplaySettings | undefined {
   if (!value || !Array.isArray(value.properties)) return undefined
   const layout = value.layout === 'board' || value.layout === 'timeline' ? value.layout : 'list'
@@ -741,6 +794,7 @@ function parseProjectDisplayDefault(value: Record<string, unknown> | undefined):
     showClosed: typeof value.showClosed === 'string' ? value.showClosed : DEFAULT_PROJECTS_DISPLAY.showClosed,
     showEmptyGroups: typeof value.showEmptyGroups === 'boolean' ? value.showEmptyGroups : DEFAULT_PROJECTS_DISPLAY.showEmptyGroups,
     subGrouping: typeof value.subGrouping === 'string' ? value.subGrouping : DEFAULT_PROJECTS_DISPLAY.subGrouping,
+    timelineZoom: isTimelineZoom(value.timelineZoom) ? value.timelineZoom : undefined,
   }
 }
 

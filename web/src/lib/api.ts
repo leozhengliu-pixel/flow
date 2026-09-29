@@ -2289,7 +2289,7 @@ export async function createIssue(input: {
   dueDate?: string;
   labelIds?: string[];
   templateId?: string;
-  recurrence?: "" | "daily" | "weekly" | "monthly";
+  recurrence?: string;
   nextOccurrenceAt?: string;
 }): Promise<Issue> {
   return request(import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/issue-records' : '/api/issues', {
@@ -2342,6 +2342,33 @@ export type CycleCapacity = {
 };
 export function getCycleCapacity(id: string): Promise<CycleCapacity> {
   return request(`/api/cycles/${id}/capacity`);
+}
+export type CycleGraphTotals = {
+  scope: number;
+  started: number;
+  completed: number;
+  scopePoints: number;
+  startedPoints: number;
+  completedPoints: number;
+};
+/** One cycle day; values are the state at the end of the day in the team timezone. */
+export type CycleGraphDay = CycleGraphTotals & { date: string; future?: boolean };
+export type CycleGraphBreakdownRow = CycleGraphTotals & { id: string };
+export type CycleGraphData = {
+  cycleId: string;
+  timezone: string;
+  startDate: string;
+  endDate: string;
+  /** Set while the cycle is in progress. */
+  today?: string;
+  /** Whether the team uses estimates, so a points view is meaningful. */
+  estimates: boolean;
+  days: CycleGraphDay[];
+  summary: CycleGraphTotals & { added: number; removed: number; addedPoints: number; removedPoints: number };
+  breakdown: { assignees: CycleGraphBreakdownRow[]; labels: CycleGraphBreakdownRow[]; projects: CycleGraphBreakdownRow[] };
+};
+export function getCycleGraph(id: string): Promise<CycleGraphData> {
+  return request(`/api/cycles/${id}/graph`);
 }
 export function updateCycleCapacity(
   id: string,

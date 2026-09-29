@@ -43,6 +43,7 @@ import "./project-detail-page.css";
 import { ProjectSlackDialog } from './project-slack-dialog';
 import { FlowTooltip } from "@/components/ui/tooltip";
 import { useI18n } from "@/i18n/i18n";
+import { useRegisterCommandContext } from "@/components/command/command-context";
 import {
   PROJECT_PICKER_SEQUENCES,
   PROJECT_SEQUENCE_TIMEOUT,
@@ -77,6 +78,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     onToggleFavorite,
     savedView,
   } = props;
+  useRegisterCommandContext({ kind: "project", project, onUpdate: (input) => onUpdate(project.id, input) });
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(
     `flow:project:${project.id}:details`,
     true,

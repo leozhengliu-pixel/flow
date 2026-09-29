@@ -454,6 +454,8 @@ type Issue struct {
 	ParentID               *string             `json:"parentId,omitempty"`
 	Recurrence             string              `json:"recurrence,omitempty"`
 	NextOccurrenceAt       *time.Time          `json:"nextOccurrenceAt,omitempty"`
+	RecurrenceSeriesID     string              `json:"recurrenceSeriesId,omitempty"`
+	RecurrenceOccurrence   string              `json:"recurrenceOccurrence,omitempty"`
 	SnoozedUntil           *time.Time          `json:"snoozedUntil,omitempty"`
 	SubscriberIDs          []string            `json:"subscriberIds"`
 	Reactions              map[string][]string `json:"reactions"`

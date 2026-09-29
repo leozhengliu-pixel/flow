@@ -6,6 +6,7 @@ import {
   Plus, Search, SquareDot, UserRound,
 } from 'lucide-react'
 
+import { Check, ChevronRight, Minus } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
@@ -14,7 +15,11 @@ import { ActionRegistry } from '@/lib/action-registry'
 import { sortActionGroups } from '@/lib/action-groups'
 import { useSelectedModels } from '@/lib/selected-models-store'
 import { useAllowedActionGroups } from '@/hooks/use-action-groups-for-selection'
-import type { SearchResult } from '@/types/flow'
+import { useI18n } from '@/i18n/i18n'
+import type { BootstrapData, SearchResult } from '@/types/flow'
+import { useCommandContext } from './command-context'
+import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
+import './command-menu.css'
 
 type CommandAction = {
   id: string
@@ -46,6 +51,8 @@ export function CommandMenu({
   onNavigateAgent,
   onNavigateReviews,
   onOpenResult,
+  data,
+  ...contextHandlers
 }: {
   open: boolean
   onOpenChange: (value: boolean) => void
@@ -66,14 +73,24 @@ export function CommandMenu({
   onNavigateAgent: () => void
   onNavigateReviews?: () => void
   onOpenResult: (result: SearchResult) => void
-}) {
+  /** Workspace data for context actions (issue page, peek pane, selection). */
+  data?: BootstrapData
+} & ContextCommandHandlers) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
+  const [pages, setPages] = useState<CommandPage[]>([])
+  const page = pages.at(-1)
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const location = useLocation()
   const selectedModels = useSelectedModels()
   const allowedActionGroups = useAllowedActionGroups()
   const closeAnd = (work: () => void) => () => { onOpenChange(false); work() }
+  const context = useCommandContext()
+  const chip = contextChip(context, t)
+  const contextCommands = useContextCommands({ context, data, page, query, handlers: contextHandlers, close: () => onOpenChange(false), t })
+  const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
+  const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
   const actions: CommandAction[] = [
     { id: 'create-issue', group: 'Issues', label: 'Create new issue...', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
     { id: 'create-project', group: 'Projects', label: 'Create new project...', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
@@ -97,10 +114,11 @@ export function CommandMenu({
   // surfaces dispatch through the same action path.
   const registry = useRef(new ActionRegistry()).current
   actions.forEach(action => registry.register(action))
+  contextCommands.actions.forEach(action => registry.register({ ...action, group: contextCommands.heading, run: () => { if (action.page) openPage(action.page); else void action.run?.() } }))
 
   useEffect(() => {
-    if (!open) { setQuery(''); setResults([]); return }
-    if (!query.trim()) { setResults([]); setLoading(false); return }
+    if (!open) { setQuery(''); setResults([]); setPages([]); return }
+    if (page || !query.trim()) { setResults([]); setLoading(false); return }
     let active = true
     const controller = new AbortController()
     setLoading(true)
@@ -111,7 +129,7 @@ export function CommandMenu({
         .finally(() => { if (active) setLoading(false) })
     }, 140)
     return () => { active = false; window.clearTimeout(timer); controller.abort() }
-  }, [open, query])
+  }, [open, page, query])
 
   const groupIds = [...new Set(actions.map(action => action.group))]
   const groups = useMemo(
@@ -125,23 +143,57 @@ export function CommandMenu({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groupIds.join("|"), allowedActionGroups, location.pathname, selectedModels],
   )
+  // The context vanished (selection cleared, issue closed): nested pages no longer apply.
+  useEffect(() => { if (!context) setPages([]) }, [context])
+  const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Backspace' && !query && pages.length) { event.preventDefault(); back(); return }
+    if (event.key === 'Tab' && !page) { event.preventDefault(); closeAnd(onNavigateAgent)() }
+  }
+  const selectOption = (option: PageOption) => {
+    if (option.page) { openPage(option.page); return }
+    void option.select?.()
+  }
+  const searchResults = !loading && query && results.length > 0 && <Command.Group heading="Search results">
+    {results.map(result => <Command.Item key={`${result.type}-${result.id}`} value={`${result.identifier ?? ''} ${result.title} ${result.subtitle ?? ''}`} onSelect={closeAnd(() => onOpenResult(result))}>
+      <ResourceIcon result={result}/>
+      <span className="command-result-copy">{result.identifier && <small>{result.identifier}</small>}<span>{result.title}</span></span>
+      <small>{result.type}</small>
+    </Command.Item>)}
+  </Command.Group>
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()}>
+    <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (pages.length) { event.preventDefault(); back() } }}>
       <DialogTitle className="sr-only">Command menu</DialogTitle>
       <Command shouldFilter loop>
+        {(chip || page) && <div className="command-context" aria-label={t('Command context')}>
+          {chip && <span className="command-context-chip" data-i18n-ignore={chip.entity || undefined} title={chip.label}>{chip.label}</span>}
+          {pages.map((item, index) => <span key={`${item.id}-${index}`} className="command-context-page"><ChevronRight aria-hidden="true" size={12}/><span>{t(item.label)}</span></span>)}
+        </div>}
         <div className="command-input">
-          <Command.Input aria-label="Command menu" placeholder="Type a command or search..." autoFocus value={query} onValueChange={setQuery} onKeyDown={event=>{if(event.key==='Tab'){event.preventDefault();closeAnd(onNavigateAgent)()}}}/>
-          <button type="button" onClick={closeAnd(onNavigateAgent)}><span>Ask Flow</span><kbd>Tab</kbd></button>
+          <Command.Input aria-label="Command menu" placeholder={page ? t(page.label) : t('Type a command or search...')} autoFocus value={query} onValueChange={setQuery} onKeyDown={onInputKeyDown}/>
+          {!page && <button type="button" onClick={closeAnd(onNavigateAgent)}><span>Ask Flow</span><kbd>Tab</kbd></button>}
         </div>
-        <Command.List>
+        {page ? <Command.List>
+          <Command.Group heading={t(page.label)}>
+            {contextCommands.options.map(option => <Command.Item key={option.id || 'none'} value={`${option.label} ${option.keywords ?? ''}`} forceMount={option.forceMount} onSelect={() => selectOption(option)}>
+              {option.checked !== undefined && <span className="command-checkbox" data-checked={option.checked === true ? 'true' : option.checked === 'mixed' ? 'mixed' : 'false'} aria-hidden="true">{option.checked === true ? <Check size={11}/> : option.checked === 'mixed' ? <Minus size={11}/> : null}</span>}
+              {option.icon && <span className="command-item-icon">{option.icon}</span>}
+              <span className="command-option-label" data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>
+              {option.detail && <small className="command-option-detail" data-i18n-ignore>{option.detail}</small>}
+              {option.current && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
+              {option.page && <ChevronRight className="command-option-current" size={14}/>}
+            </Command.Item>)}
+          </Command.Group>
+          <Command.Empty>{t('No results found.')}</Command.Empty>
+        </Command.List> : <Command.List>
           {loading && <div className="command-loading">Searching...</div>}
-          {!loading && query && results.length > 0 && <Command.Group heading="Search results">
-            {results.map(result => <Command.Item key={`${result.type}-${result.id}`} value={`${result.identifier ?? ''} ${result.title} ${result.subtitle ?? ''}`} onSelect={closeAnd(() => onOpenResult(result))}>
-              <ResourceIcon result={result}/>
-              <span className="command-result-copy">{result.identifier && <small>{result.identifier}</small>}<span>{result.title}</span></span>
-              <small>{result.type}</small>
+          {contextCommands.actions.length > 0 && <Command.Group heading={t(contextCommands.heading)}>
+            {contextCommands.actions.map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
+              <span className="command-item-icon">{action.icon}</span>
+              <span>{t(action.label)}</span>
+              {action.shortcut && <span className="command-shortcut">{action.shortcut.map((part, index) => <kbd key={index}>{part}</kbd>)}</span>}
             </Command.Item>)}
           </Command.Group>}
+          {searchResults}
           {groups.map(group => <Command.Group key={group} heading={group}>
             {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
@@ -150,7 +202,7 @@ export function CommandMenu({
             </Command.Item>)}
           </Command.Group>)}
           <Command.Empty>{loading ? 'Searching...' : 'No results found.'}</Command.Empty>
-        </Command.List>
+        </Command.List>}
       </Command>
     </DialogContent>
   </Dialog>

@@ -1218,19 +1218,6 @@
 .lp-project-board__hidden-row:hover { background: var(--theme-control); }
 :root[data-theme="light"] .lp-project-board__hidden-row:hover { background: lch(99.2 .5 282); }
 
-.lp-project-timeline { color: var(--theme-text-primary); min-width: 900px; padding-bottom: 24px; }
-.lp-project-timeline > header { align-items: center; border-bottom: .5px solid var(--theme-control-hover); color: #77777c; display: grid; font-size: 12px; grid-template-columns: 190px 1fr; height: 40px; position: sticky; top: 0; z-index: 4; }
-.lp-project-timeline > header > span { padding-left: 16px; }
-.lp-project-timeline > header > div { display: grid; grid-template-columns: repeat(6, 1fr); height: 100%; }
-.lp-project-timeline > header > div > span { border-left: .5px solid var(--theme-control-hover); padding: 12px 8px; }
-.lp-project-timeline__body > section { border-bottom: .5px solid var(--theme-control); display: grid; grid-template-columns: 190px 1fr; min-height: 56px; }
-.lp-project-timeline__body h2 { align-items: center; border-right: .5px solid var(--theme-control-hover); color: var(--theme-text-primary); display: flex; font-size: 12px; font-weight: 500; gap: 7px; margin: 0; padding: 0 16px; }
-.lp-project-timeline__body h2 small { color: #77777c; font-size: 12px; font-weight: 400; }
-.lp-project-timeline__tracks { display: grid; gap: 4px; padding: 8px 0; }
-.lp-project-timeline__tracks > button { background: #2d3f62; border: .5px solid #5578ad; border-radius: 4px; color: #e7edf8; cursor: grab; font-size: 12px; height: 26px; justify-self: start; margin-left: calc(var(--timeline-start) + var(--timeline-drag-offset, 0%)); overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; transition: margin-left 120ms ease-out, box-shadow 120ms ease-out; user-select: none; white-space: nowrap; width: var(--timeline-width); }
-.lp-project-timeline__tracks > button[data-dragging=true] { cursor: grabbing; box-shadow: 0 4px 12px rgb(0 0 0 / 24%); }
-.lp-project-timeline__tracks > button:hover { background: #394f78; }
-.lp-project-timeline__tracks > button:focus-visible { box-shadow: 0 0 0 2px #90c0f7; outline: 0; }
 
 .lp-project-state { height: 100%; min-height: 300px; }
 .lp-project-state--loading { display: grid; gap: 2px; padding: 32px 8px; }
@@ -1909,24 +1896,5 @@
 .lp-projects-display__footer button:hover{background:var(--theme-surface-active);color:var(--theme-text-primary)}
 
 /* LS-0609 Timeline honesty — Add dates empty, Today chrome, resize handles */
-.lp-project-timeline__toolbar { align-items: center; display: flex; gap: 8px; justify-content: flex-end; padding: 0 12px 8px; }
-.lp-project-timeline__today { background: var(--theme-surface-1, transparent); border: .5px solid var(--theme-border-strong, rgb(255 255 255 / 12%)); border-radius: 6px; color: var(--theme-text-primary); cursor: pointer; font-size: 12px; height: 28px; padding: 0 10px; }
-.lp-project-timeline__today:hover { background: var(--theme-surface-hover, rgb(255 255 255 / 6%)); }
-.lp-project-timeline__scroller { overflow: auto; position: relative; }
-.lp-project-timeline__today-line { bottom: 0; border-left: 1px dashed #5e6ad2; pointer-events: none; position: absolute; top: 40px; z-index: 3; }
-.lp-project-timeline__add-dates { align-items: center; background: transparent; border: .5px dashed var(--theme-border-strong, rgb(255 255 255 / 16%)); border-radius: 4px; color: var(--theme-text-secondary, #8a8f98); cursor: pointer; display: inline-flex; font-size: 12px; gap: 8px; height: 26px; justify-self: start; margin-left: 8px; padding: 0 8px; }
-.lp-project-timeline__add-dates em { color: var(--theme-accent, #5e6ad2); font-style: normal; font-weight: 500; }
-.lp-project-timeline__add-dates:hover { background: var(--theme-surface-hover, rgb(255 255 255 / 4%)); color: var(--theme-text-primary); }
-.lp-project-timeline__bar { display: grid; height: 26px; justify-self: start; margin-left: calc(var(--timeline-start) + var(--timeline-drag-offset, 0%) + var(--timeline-resize-start, 0%)); position: relative; width: calc(var(--timeline-width) - var(--timeline-resize-start, 0%) + var(--timeline-resize-end, 0%)); }
-.lp-project-timeline__bar > button { background: #2d3f62; border: .5px solid #5578ad; border-radius: 4px; color: #e7edf8; cursor: grab; font-size: 12px; height: 26px; overflow: hidden; padding: 0 8px; text-align: left; text-overflow: ellipsis; user-select: none; white-space: nowrap; width: 100%; }
-.lp-project-timeline__bar[data-dragging=true] > button { cursor: grabbing; box-shadow: 0 4px 12px rgb(0 0 0 / 24%); }
-.lp-project-timeline__bar > button:hover { background: #394f78; }
-.lp-project-timeline__handle { background: transparent; bottom: 0; cursor: ew-resize; position: absolute; top: 0; width: 8px; z-index: 2; }
-.lp-project-timeline__handle.is-start { left: -2px; }
-.lp-project-timeline__handle.is-end { right: -2px; }
-.lp-project-timeline__handle:hover { background: rgb(144 192 247 / 35%); }
-:root[data-theme="light"] .lp-project-timeline__add-dates { border-color: rgb(0 0 0 / 16%); color: #6b6f76; }
-:root[data-theme="light"] .lp-project-timeline__bar > button { background: #d7e4f7; border-color: #8eadd9; color: #1a2b4a; }
-:root[data-theme="light"] .lp-project-timeline__bar > button:hover { background: #c8d9f2; }
 
 .lp-projects-empty-icon{color:var(--theme-text-secondary);margin-bottom:8px}

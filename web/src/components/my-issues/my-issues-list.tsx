@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
@@ -193,6 +193,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
     return [...parent, header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
   }), [collapsedGroupIds, groups, nestedSubIssues])
+  useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
@@ -243,6 +244,28 @@ export function MyIssuesGroupHeader({ collapsed, createIssueLabel, group, onCrea
   </header>
 }
 
+/** Linear's X: toggle selection of the row under the pointer (or the focused row); Shift+X extends a range. */
+function useSelectHoveredRowWithX(entries: MyIssuesListEntry[], selectedIds: ReadonlySet<string>, onSelect: MyIssuesListProps['onSelectIssue']) {
+  const latest = useRef({ entries, selectedIds, onSelect })
+  latest.current = { entries, selectedIds, onSelect }
+  useEffect(() => {
+    const keydown = (event: globalThis.KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'x' || event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], [role="menu"]')) return
+      const { entries, selectedIds, onSelect } = latest.current
+      if (!onSelect) return
+      const row = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('[data-issue-row-id]') ?? document.querySelector<HTMLElement>('[data-issue-row-id]:hover')
+      const id = row?.dataset.issueRowId
+      if (!id || !entries.some(entry => entry.kind === 'issue' && entry.issue.id === id)) return
+      event.preventDefault()
+      onSelect(id, !selectedIds.has(id), event.shiftKey)
+    }
+    document.addEventListener('keydown', keydown)
+    return () => document.removeEventListener('keydown', keydown)
+  }, [])
+}
+
 export function MyIssuesRow({ issue, active = false, selected = false, displayProperties = DEFAULT_PROPERTIES, nestedLines=EMPTY_LINES, showSubIssueProgress=true, propertyOptions = EMPTY_OPTIONS, mutationError, onContextAction, onOpen, onPropertyChange, onRetryMutation, onSelect }: {
   issue: MyIssuesRowData; active?: boolean; selected?: boolean; displayProperties?: ReadonlySet<MyIssuesProperty>; nestedLines?:readonly boolean[]; showSubIssueProgress?:boolean; propertyOptions?: MyIssuesRowPropertyOptions; mutationError?: string
   onContextAction?: (issue: MyIssuesRowData, action: MyIssuesContextAction) => void; onOpen?: (issue: MyIssuesRowData) => void
@@ -260,7 +283,7 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
-      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
+      <a className={styles.row} style={{'--row-columns':columns,'--nested-depth':nestedDepth} as CSSProperties} data-issue-row-id={issue.id} data-selected={selected} data-active={active || undefined} aria-current={active || undefined} data-nested={nestedDepth>0} href={issue.href} aria-label={rowAriaLabel(issue)} onClick={click} onKeyDown={keydown}>
         {nestedDepth>0&&<NestedIssueGuide lines={nestedLines}/>}
         <span aria-hidden="true"/><IssueCheckbox checked={selected} onChange={(checked, range) => onSelect?.(issue.id, checked, range)}/>
         {displayProperties.has('priority') && <RowCommandPicker

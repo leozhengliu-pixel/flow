@@ -134,6 +134,7 @@ func main() {
 	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
 	go s.runApplicationAgentWorker(shutdownSignal)
+	go s.runRecurringIssueScheduler(shutdownSignal)
 	go func() {
 		<-shutdownSignal.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -708,6 +709,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/teams/{id}/labels/{labelId}", s.deleteTeamLabel)
 	mux.HandleFunc("PATCH /api/cycles/{id}", s.updateCycle)
 	mux.HandleFunc("GET /api/cycles/{id}/capacity", s.getCycleCapacity)
+	mux.HandleFunc("GET /api/cycles/{id}/graph", s.getCycleGraph)
 	mux.HandleFunc("PUT /api/cycles/{id}/capacity", s.updateCycleCapacity)
 	mux.HandleFunc("POST /api/cycles/{id}/start", s.startCycle)
 	mux.HandleFunc("POST /api/cycles/{id}/complete", s.completeCycle)
@@ -2404,7 +2406,7 @@ func transitionToCycle(data *domain.Bootstrap, target *domain.Cycle, now time.Ti
 			if settings.AutoMigrate && issue.CycleID != nil && *issue.CycleID == previous.ID && issue.State.Type != "completed" && issue.State.Type != "canceled" && issue.State.Type != "backlog" {
 				issue.CycleID = stringPointer(target.ID)
 				issue.UpdatedAt = now
-				appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"cycle": target.ID})
+				appendActivity(data, issue.ID, "issue.updated", data.Viewer, map[string]string{"cycle": target.ID, "cycleBefore": previous.ID})
 			}
 		}
 	}
@@ -2673,7 +2675,11 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Issues = append([]domain.Issue{created}, append(children, data.Issues...)...)
 		applyTriggeredWorkflows(data, "issueCreated", "issue", created.ID)
-		appendActivity(data, created.ID, "issue.created", data.Viewer, map[string]string{"stateId": created.State.ID, "state": created.State.Name})
+		createdMetadata := map[string]string{"stateId": created.State.ID, "state": created.State.Name}
+		if created.CycleID != nil {
+			createdMetadata["initialCycle"] = *created.CycleID
+		}
+		appendActivity(data, created.ID, "issue.created", data.Viewer, createdMetadata)
 		for _, child := range children {
 			appendActivity(data, child.ID, "issue.created", data.Viewer, map[string]string{"stateId": child.State.ID, "state": child.State.Name})
 		}
@@ -4933,6 +4939,8 @@ func applyNotificationUpdate(notification *domain.Notification, input domain.Not
 }
 
 func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.IssueUpdateInput) (map[string]string, error) {
+	// Cycle graphs replay membership history, so every cycle change records its previous cycle.
+	cycleBeforeUpdate := optionalID(issue.CycleID)
 	triageSettings := teamSettings(data, issue.Team.ID)
 	if input.StateID != nil && issue.State.Type == "backlog" && issue.TriagedAt == nil && triageSettings.TriageEnabled && triageSettings.TriageRequirePriority && slices.ContainsFunc(data.Issues, func(existing domain.Issue) bool { return existing.ID == issue.ID }) {
 		priority := issue.Priority
@@ -5214,26 +5222,8 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		issue.SLAType = *input.SLAType
 	}
-	if input.Recurrence != nil {
-		value := strings.TrimSpace(*input.Recurrence)
-		if value != "" && !slices.Contains([]string{"daily", "weekly", "monthly"}, value) {
-			return nil, fmt.Errorf("%w: unknown recurrence", errInvalid)
-		}
-		issue.Recurrence = value
-		changes["recurrence"] = value
-	}
-	if input.NextOccurrenceAt != nil {
-		if strings.TrimSpace(*input.NextOccurrenceAt) == "" {
-			issue.NextOccurrenceAt = nil
-		} else {
-			parsed, err := time.Parse(time.RFC3339, *input.NextOccurrenceAt)
-			if err != nil {
-				return nil, fmt.Errorf("%w: invalid next occurrence", errInvalid)
-			}
-			parsed = parsed.UTC()
-			issue.NextOccurrenceAt = &parsed
-		}
-		changes["nextOccurrenceAt"] = *input.NextOccurrenceAt
+	if err := applyRecurrenceUpdate(data, issue, input.Recurrence, input.NextOccurrenceAt, time.Now().UTC(), changes); err != nil {
+		return nil, err
 	}
 	if input.SnoozedUntil != nil {
 		if strings.TrimSpace(*input.SnoozedUntil) == "" {
@@ -5300,6 +5290,10 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 	}
 	if len(changes) > 0 {
 		applyCycleAutomation(data, issue)
+	}
+	if cycle := optionalID(issue.CycleID); cycle != cycleBeforeUpdate {
+		changes["cycle"] = cycle
+		changes["cycleBefore"] = cycleBeforeUpdate
 	}
 	return changes, nil
 }

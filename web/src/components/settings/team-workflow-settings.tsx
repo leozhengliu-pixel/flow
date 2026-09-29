@@ -22,8 +22,11 @@ import {
   Trash2,
   WandSparkles,
   X,
+  Repeat2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { RecurrenceDialog } from "@/components/issue/recurrence-picker";
+import { RECURRENCE_PRESETS, describeRecurrence, recurrenceDate } from "@/lib/recurrence";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';
 import { DELETE_TEAM_DESCRIPTION } from '@/lib/team-deletion';
@@ -1275,10 +1278,26 @@ function RecurringIssuesSettings({
   subPath?: string;
   onNavigateSubPath?: (subPath?: string) => void;
 }) {
-  const { formatDate, t } = useI18n();
+  const { formatDate, locale, t } = useI18n();
   const issues = data.issues.filter(
     (issue) => issue.team.id === team.id && issue.recurrence,
   );
+  const timeZone = data.teamSettings?.[team.id]?.timezone;
+  const [editingId, setEditingId] = useState("");
+  const editing = issues.find((issue) => issue.id === editingId);
+  const saveSchedule = async (issueId: string, recurrence: string, start?: string) => {
+    try {
+      await updateIssue(issueId, { recurrence, ...(recurrence && start ? { nextOccurrenceAt: start } : {}) });
+      setEditingId("");
+      await onReload();
+    } catch (error) {
+      toast.error(message(error));
+    }
+  };
+  const presetOptions = RECURRENCE_PRESETS.map((value) => ({
+    value,
+    label: describeRecurrence(value, { t, locale }),
+  }));
   const sourceId = new URLSearchParams(window.location.search).get('fromIssue');
   const source = data.issues.find(issue => issue.id === sourceId && issue.team.id === team.id);
   const [creatingLocal, setCreatingLocal] = useState(Boolean(source));
@@ -1294,9 +1313,7 @@ function RecurringIssuesSettings({
     const url = new URL(window.location.href);
     if (url.searchParams.has('fromIssue')) { url.searchParams.delete('fromIssue'); window.history.replaceState(window.history.state, '', url) }
   };
-  const [cadence, setCadence] = useState<"daily" | "weekly" | "monthly">(
-    "weekly",
-  );
+  const [cadence, setCadence] = useState<string>("weekly");
   const create = async () => {
     if (!title.trim()) return;
     try {
@@ -1346,10 +1363,7 @@ function RecurringIssuesSettings({
               label="Cadence"
               value={cadence}
               onChange={(value) => setCadence(value as typeof cadence)}
-              options={["daily", "weekly", "monthly"].map((value) => ({
-                value,
-                label: titleCase(value),
-              }))}
+              options={presetOptions}
             />
             <button
               type="button"
@@ -1374,32 +1388,37 @@ function RecurringIssuesSettings({
               {issue.identifier} {issue.title}
             </strong>
               <small>
-                {titleCase(issue.recurrence ?? "")}
+                {describeRecurrence(issue.recurrence, { t, locale, anchor: issue.nextOccurrenceAt ? recurrenceDate(issue.nextOccurrenceAt, timeZone) : undefined })}
                 {issue.nextOccurrenceAt
-                  ? ` · ${t("Next")} ${formatDate(issue.nextOccurrenceAt)}`
+                  ? ` · ${t("Next")}: ${formatDate(recurrenceDate(issue.nextOccurrenceAt, timeZone).toISOString(), { month: "short", day: "numeric", year: "numeric" })}`
                   : ""}
               </small>
             </span>
-            <SettingsSelect
-              label="Change recurrence cadence"
-              value={issue.recurrence ?? "daily"}
-              onChange={(value) =>
-                void updateIssue(issue.id, {
-                  recurrence: value as "daily" | "weekly" | "monthly",
-                }).then(onReload)
-              }
-              options={["daily", "weekly", "monthly"].map((value) => ({
-                value,
-                label: titleCase(value),
-              }))}
-            />
+            <button
+              type="button"
+              className="settings-action"
+              aria-label={`${t("Edit schedule")} ${issue.identifier}`}
+              onClick={() => setEditingId(issue.id)}
+            >
+              <Repeat2 size={13} />
+              {t("Edit schedule")}
+            </button>
           </div>
         ))}
+        <RecurrenceDialog
+          open={Boolean(editing)}
+          onOpenChange={(open) => !open && setEditingId("")}
+          value={editing?.recurrence}
+          nextOccurrenceAt={editing?.nextOccurrenceAt}
+          timeZone={timeZone}
+          onSave={(recurrence, start) => editing && saveSchedule(editing.id, recurrence, start)}
+          onStop={() => editing && saveSchedule(editing.id, "")}
+        />
         {!issues.length && !creating && (
           <TeamEmpty
             icon={<Circle size={22} />}
             title="No recurring issues"
-            description="Create issues that repeat on a daily, weekly, or monthly schedule."
+            description="Create issues that repeat daily, on weekdays, weekly, monthly, or yearly."
           />
         )}
       </div>

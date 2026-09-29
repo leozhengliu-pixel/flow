@@ -3,6 +3,7 @@ import type { ProjectStatus } from '@/types/flow'
 import type { ProjectDataGroup, ProjectPageItem, ProjectProperty, ProjectsDataViewProps, ProjectSortColumn } from './projects-data-view'
 import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
 import { ClientStorage } from '@/lib/client-storage'
+import { isTimelineZoom, normalizeTimelineZoom, type TimelineZoom } from './project-timeline-model'
 import {
   relevanceInputFromPageItem,
   sortProjectsByRelevance,
@@ -74,7 +75,7 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
   const statuses = useMemo(() => projectStatusesForLayout(projectStatuses, state.display.layout), [projectStatuses, state.display.layout])
   const grouped = useMemo(() => groupProjectsForView(projects, state, statuses, relevanceViewer), [projects, relevanceViewer, state, statuses])
 
-  const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'grouping' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort'> = {
+  const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'grouping' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort' | 'timelineZoom' | 'onTimelineZoomChange'> = {
     groups: grouped,
     layout: state.display.layout,
     grouping: state.display.grouping,
@@ -84,6 +85,8 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
     selectedIds: state.selectedIds,
     sort: state.sort,
     visibleProperties: state.display.properties,
+    timelineZoom: normalizeTimelineZoom(state.display.timelineZoom),
+    onTimelineZoomChange: (timelineZoom: TimelineZoom) => setState(current => ({ ...current, display: { ...current.display, timelineZoom } })),
   }
 
   return {
@@ -118,9 +121,11 @@ function readStoredDisplay(key: string): ProjectsDisplaySettings | null {
     logError: false,
   })
   if (!value || typeof value !== 'object' || !Array.isArray(value.properties)) return null
+  const { timelineZoom, ...rest } = value
   return {
     ...defaultDisplay(),
-    ...value,
+    ...rest,
+    ...(isTimelineZoom(timelineZoom) ? { timelineZoom } : {}),
     properties: value.properties.filter((item: unknown): item is string => typeof item === 'string'),
   }
 }

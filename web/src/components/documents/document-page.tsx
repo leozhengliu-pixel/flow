@@ -28,9 +28,11 @@ import { addSubscription, createDocumentComment, deleteDocument, deleteDocumentC
 import type { BootstrapData, DocumentPermission, FlowDocument, User } from '@/types/flow'
 
 import './document-page.css'
+import { useRegisterCommandContext } from '@/components/command/command-context'
 
 export function DocumentPage({ data, document, onReload, onBack, origin }: { origin?: {label:string;entity?:boolean}; data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void }) {
   const {t}=useI18n()
+  useRegisterCommandContext({kind:'document',document})
   const [title,setTitle]=useState(document.title)
   const editorState=document.contentData?JSON.stringify(document.contentData):document.contentState
   const [body,setBody]=useState({value:document.content,state:editorState})

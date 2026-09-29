@@ -8,7 +8,7 @@ export function describeIssueActivity(event: ActivityEvent, context?: ActivityCo
   const phrase = (template: string, values: Record<string, string> = {}) => t(template).replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? '')
   const person = (id: string) => context?.users.find(user => user.id === id)?.displayName
   const project = (id: string) => context?.projects.find(project => project.id === id)?.name
-  if (event.type === 'issue.created') return t('created the issue')
+  if (event.type === 'issue.created') return m.recurringFrom ? phrase('created the issue from the recurring schedule of {issue}', { issue: m.recurringFrom }) : t('created the issue')
   if (event.type === 'issue.updated') {
     const changes: string[] = []
     if (m.state) changes.push(m.stateBefore ? phrase('moved from {from} to {to}', { from: t(m.stateBefore), to: t(m.state) }) : phrase('moved to {state}', { state: t(m.state) }))
@@ -37,7 +37,9 @@ export function describeIssueActivity(event: ActivityEvent, context?: ActivityCo
       changes.push(!m.parent ? t('removed the parent issue') : parent ? phrase('set the parent issue to {issue}', { issue: parent.identifier }) : t('changed the parent issue'))
     }
     if ('archived' in m) changes.push(t(m.archived === 'true' ? 'archived the issue' : 'restored the issue'))
-    if ('recurrence' in m || 'nextOccurrenceAt' in m) changes.push(t('changed the recurring schedule'))
+    if (m.recurringNext) changes.push(phrase('moved the recurring schedule to {issue}', { issue: m.recurringNext }))
+    else if ('recurrence' in m && !m.recurrence) changes.push(t('stopped the recurring schedule'))
+    else if ('recurrence' in m || 'nextOccurrenceAt' in m) changes.push(t('changed the recurring schedule'))
     // Document snapshots, subscribers, ordering, and before-values are audit metadata.
     // They do not produce standalone entries in the visible issue activity feed.
     return changes.length ? changes.join(phrase(', ')) : null
