@@ -994,6 +994,11 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 	}
 	if entity != "" {
 		fmt.Fprintf(&prompt, "\nTriggering %s:\n%s\n", trigger.EntityType, entity)
+		if trigger.EntityType == "issue" {
+			// Flow has no Triage status: without this the model "accepts" issues by
+			// moving them to Todo even when told to leave them in triage.
+			prompt.WriteString("\nTriage in Flow: an issue is in its team's triage queue while it has a Backlog-type status and has not been accepted. Changing its status to any other status accepts it out of triage. To leave an issue in triage, do not change its status.\n")
+		}
 		if !loop.AllowChangesOutsideTrigger {
 			fmt.Fprintf(&prompt, "\nOnly change the triggering %s; changes to anything else will be refused.\n", trigger.EntityType)
 		}
