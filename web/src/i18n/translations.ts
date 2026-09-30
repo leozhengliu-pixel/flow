@@ -790,6 +790,9 @@ export const zhCN: Record<string, string> = {
   "Restore default": "恢复默认",
   "Find members…": "查找成员…",
   "No matching members": "没有匹配的成员",
+  "Find teams": "查找团队",
+  "Find teams…": "查找团队…",
+  "No matching teams": "没有匹配的团队",
   "Order by Joined": "按加入日期排序",
   "Customize sidebar": "自定义侧边栏",
   "Organize issues with workspace labels and label groups.":
