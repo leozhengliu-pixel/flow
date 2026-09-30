@@ -625,3 +625,45 @@ func TestMCPMarkdownDocument(t *testing.T) {
 		t.Fatalf("empty document: %v", empty)
 	}
 }
+
+// save_team's `members` only adds people: listing the current owner among the
+// members must not demote them (it used to fail with "a team needs at least
+// one owner", or silently demote when the team had several owners). Owner
+// changes are explicit via `owners`/`removeOwners`.
+func TestMCPSaveTeamMembersKeepOwnersAndOwnerChangesAreExplicit(t *testing.T) {
+	f := newMCPContractFixture(t)
+	teamID := mcpObject(t, f, "save_team", map[string]any{"name": "Delivery", "key": "DLV"})["id"].(string)
+	workspaceID := f.repository.Bootstrap().Workspace.ID
+	role := func(userID string) string {
+		t.Helper()
+		membership, member, err := f.repository.TeamMembership(t.Context(), workspaceID, teamID, userID)
+		if err != nil || !member {
+			return ""
+		}
+		return membership.Role
+	}
+	receipt := mcpObject(t, f, "save_team", map[string]any{"id": "DLV", "members": []string{"me", "Test member"}})
+	if role("usr_admin") != "owner" || role("usr_member") != "member" {
+		t.Fatalf("roles after adding members: admin=%q member=%q", role("usr_admin"), role("usr_member"))
+	}
+	if added, _ := receipt["addedMembers"].([]any); len(added) != 1 || added[0] != "usr_member" {
+		t.Fatalf("addedMembers should list only newly added people: %v", receipt["addedMembers"])
+	}
+	// Listing everyone again is a no-op, even with two owners.
+	mcpObject(t, f, "save_team", map[string]any{"id": "DLV", "owners": []string{"Test member"}})
+	mcpObject(t, f, "save_team", map[string]any{"id": "DLV", "members": []string{"me", "Test member"}})
+	if role("usr_admin") != "owner" || role("usr_member") != "owner" {
+		t.Fatalf("members re-listed demoted an owner: admin=%q member=%q", role("usr_admin"), role("usr_member"))
+	}
+	// Hand-over: promote first, then demote, in one call.
+	mcpObject(t, f, "save_team", map[string]any{"id": "DLV", "removeOwners": []string{"me"}})
+	if role("usr_admin") != "member" || role("usr_member") != "owner" {
+		t.Fatalf("removeOwners: admin=%q member=%q", role("usr_admin"), role("usr_member"))
+	}
+	if message := mcpToolError(t, f, "save_team", map[string]any{"id": "DLV", "removeOwners": []string{"Test member"}}); !strings.Contains(message, "owner") {
+		t.Fatalf("removing the last owner should explain why: %s", message)
+	}
+	if message := mcpToolError(t, f, "save_team", map[string]any{"name": "Delivery 2", "key": "DLV"}); !strings.Contains(message, "already exists") {
+		t.Fatalf("duplicate key should say so: %s", message)
+	}
+}

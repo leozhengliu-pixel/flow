@@ -736,7 +736,11 @@ func (s *server) createTeamPinnedResource(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var item domain.TeamPinnedResource
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "team.resource_pinned", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	var pinnedIssue *string
+	if input.ResourceType == "issue" {
+		pinnedIssue = &input.ResourceID
+	}
+	err := s.store.MutateWorkspace(withIssueScope(r.Context(), pinnedIssue), workspaceKey(r), "team.resource_pinned", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
 		if input.Title == "" || input.ResourceType == "" {
 			return errInvalid
 		}

@@ -136,6 +136,10 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
 }
 
 export function ProjectDescriptionHistoryDialog({ onOpenChange, open, project }: { onOpenChange: (open: boolean) => void; open: boolean; project: Project }) {
-  const revisions = project.descriptionRevisions ?? []
+  return <DescriptionHistoryDialog onOpenChange={onOpenChange} open={open} revisions={project.descriptionRevisions ?? []}/>
+}
+
+/** Shared description history dialog (projects and milestones). */
+export function DescriptionHistoryDialog({ onOpenChange, open, revisions }: { onOpenChange: (open: boolean) => void; open: boolean; revisions: Project['descriptionRevisions'] }) {
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-description-history"><header><Dialog.Title>Description history</Dialog.Title><Dialog.Close aria-label="Close description history">×</Dialog.Close></header><div className="project-description-history__list">{revisions.length ? revisions.map(revision => <article key={revision.id}><header><strong data-i18n-ignore>{revision.author.displayName}</strong><time>{formatDistanceToNowStrict(new Date(revision.createdAt), { addSuffix: true })}</time></header><p data-i18n-ignore>{revision.description || 'No description'}</p><small>{format(new Date(revision.createdAt), 'PPpp')}</small></article>) : <div className="project-description-history__empty"><History size={20}/><strong>No earlier description versions</strong><span>Previous descriptions will appear here after an edit.</span></div>}</div></Dialog.Content></Dialog.Portal></Dialog.Root>
 }

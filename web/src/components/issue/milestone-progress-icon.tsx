@@ -46,7 +46,7 @@ export function MilestoneProgressIcon({
   return (
     <svg aria-hidden={label ? undefined : true} aria-label={label} className={`${classes} is-progress${overdue ? ' is-overdue' : ''}`} fill="none" focusable="false" height={size} viewBox="0 0 16 16" width={size}>
       <path className="is-track" d={MILESTONE_SHAPE_PATH} pathLength={MILESTONE_PATH_LENGTH} />
-      <path className="is-value" d={MILESTONE_SHAPE_PATH} pathLength={MILESTONE_PATH_LENGTH} strokeDasharray={`${length} ${MILESTONE_PATH_LENGTH - length}`} />
+      {(clamped > 0 || overdue) && <path className="is-value" d={MILESTONE_SHAPE_PATH} pathLength={MILESTONE_PATH_LENGTH} strokeDasharray={`${length} ${MILESTONE_PATH_LENGTH - length}`} />}
     </svg>
   )
 }

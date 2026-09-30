@@ -16,7 +16,6 @@ import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'
 import { DocumentGlyph } from '@/components/documents/document-icon'
-import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useI18n } from '@/i18n/i18n'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
 import type { BootstrapData, CustomerRequest, Issue, Project, ProjectResource, Team } from '@/types/flow'
@@ -25,15 +24,18 @@ import { PRIORITY_LABELS } from './project-detail-types'
 import { ProjectLabelControl } from '@/components/property/project-label-control'
 import { DetailLabelControl } from '@/components/property/detail-label-control'
 import { EmbeddedCustomerNeedForm } from '@/components/customer/embedded-customer-need-form'
-import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
+import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember, projectMilestoneLink } from './project-detail-helpers'
 import { ProjectPropertiesMenu } from './project-properties-menu'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { RichComment } from '@/components/activity/rich-comment'
 import { projectShortcutLabels, useProjectPickerOpen, type ProjectPickerRequest } from './project-detail-shortcuts'
+import { ProjectMilestoneMenu } from './project-milestone-menu'
+import { DescriptionHistoryDialog } from './project-header-menus'
+import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void }) {
+export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onMoveMilestone, onConvertMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -95,42 +97,37 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     <section className="project-overview__milestones" id="project-overview-milestones">
       {(project.milestones?.length ?? 0) > 0 && <h3>Milestones</h3>}
-      <AnimatedMilestones items={project.milestones ?? []}>{milestone => <OverviewMilestone totals={issueSummary ? issueSummary.milestones[milestone.id] ?? {total:0, completed:0} : undefined} issues={projectIssues.filter(issue => issue.projectMilestoneId === milestone.id)} milestone={milestone} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdate={input => onUpdateMilestone(project.id, milestone.id, input)}/>}</AnimatedMilestones>
+      <AnimatedMilestones items={project.milestones ?? []}>{milestone => <OverviewMilestone totals={issueSummary ? issueSummary.milestones[milestone.id] ?? {total:0, completed:0} : undefined} issues={projectIssues.filter(issue => issue.projectMilestoneId === milestone.id)} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdate={input => onUpdateMilestone(project.id, milestone.id, input)} projects={projects.filter(item => item.id !== project.id && !item.archivedAt)}/>}</AnimatedMilestones>
       {creatingMilestone && <OverviewMilestoneCreator
         onCancel={() => setCreatingMilestone(false)}
         onCreate={async input => { await onCreateMilestone(project.id, input); setCreatingMilestone(false) }}
       />}
-      {!creatingMilestone && <button className="project-overview__milestone-link" type="button" onClick={() => setCreatingMilestone(true)}><Diamond size={15}/>Milestone</button>}
+      {!creatingMilestone && <button className="project-overview__milestone-link" type="button" onClick={() => setCreatingMilestone(true)}><Plus size={16}/>Milestone</button>}
     </section>
   </div></TooltipProvider>
 }
 
-function OverviewMilestone({ totals, issues, milestone, onDelete, onOpenIssues, onUpdate }: { totals?: { total: number; completed: number }; issues: Issue[]; milestone: Props['project']['milestones'][number]; onDelete: () => Promise<void>; onOpenIssues: () => void; onUpdate: (input: { name?: string; description?: string; targetDate?: string }) => Promise<unknown> }) {
+function OverviewMilestone({ totals, issues, milestone, onConvert, onDelete, onMove, onOpenIssues, onUpdate, projects }: { totals?: { total: number; completed: number }; issues: Issue[]; milestone: Props['project']['milestones'][number]; onConvert: () => Promise<void>; onDelete: () => Promise<void>; onMove: (targetProjectId: string) => Promise<void>; onOpenIssues: () => void; onUpdate: (input: { name?: string; description?: string; targetDate?: string }) => Promise<unknown>; projects: Project[] }) {
   const { formatDate, locale } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const count = totals?.total ?? issues.length
   const completed = totals?.completed ?? issues.filter(issue => issue.state.type === 'completed').length
   const progress = count ? Math.round(completed / count * 100) : 0
-  const link = `${location.origin}${location.pathname.replace(/\/overview$/, '/issues')}?projectMilestoneId=${encodeURIComponent(milestone.id)}`
-  const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(message))
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const link = projectMilestoneLink(milestone.id)
   return <article className="project-overview__milestone" data-expanded={expanded} id={`milestone-${milestone.id}`}>
     <header>
       <span className="project-overview__milestone-mark"><MilestoneProgressIcon className="project-overview__milestone-progress" overdue={isMilestoneDateOverdue(milestone.targetDate)} progress={progress}/></span>
       {editingName
         ? <ProjectEditableText autoFocus ariaLabel="Milestone name" className="project-overview__milestone-name" placeholder="Milestone name" value={milestone.name} onCommit={name => onUpdate({ name }).then(() => undefined)} onDone={() => setEditingName(false)}/>
         : <button aria-label={`Rename ${milestone.name}`} className="project-overview__milestone-title" data-i18n-ignore onClick={() => setEditingName(true)} type="button">{milestone.name}</button>}
-      <button aria-expanded={expanded} aria-label={expanded ? 'Collapse' : 'Expand'} className="project-overview__milestone-collapse" onClick={() => setExpanded(value => !value)} type="button"><ChevronRight size={16}/></button>
+      <button aria-expanded={expanded} aria-label={expanded ? 'Collapse' : 'Expand'} className="project-overview__milestone-collapse" onClick={() => setExpanded(value => !value)} type="button"><DisclosureTriangle open={expanded}/></button>
       <span className="project-overview__milestone-spacer"/>
       <ProjectDatePicker buttonClassName={milestone.targetDate ? 'project-overview__milestone-date' : 'project-overview__milestone-date is-unset'} label="Target date" onChange={targetDate => void onUpdate({ targetDate })} value={milestone.targetDate}><span>{milestone.targetDate ? locale === 'en-US' ? format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d') : formatDate(`${milestone.targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : <span className="project-overview__milestone-date-placeholder">Set target date</span>}</span></ProjectDatePicker>
-      <span aria-hidden="true" className={milestone.targetDate ? 'project-overview__milestone-dot' : 'project-overview__milestone-dot is-unset'}>·</span>
+      {milestone.targetDate && <span aria-hidden="true" className="project-overview__milestone-dot">·</span>}
       <a aria-label="Open issues" className="project-overview__milestone-issues" href={link} onClick={event => { event.preventDefault(); onOpenIssues() }}>{count} {count === 1 ? 'issue' : 'issues'}<span>·</span>{progress}%</a>
-      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open menu" className="project-overview__milestone-menu-trigger" type="button"><MoreHorizontal size={12}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu project-overview__milestone-menu" sideOffset={4}>
-        <DropdownMenu.Item onSelect={() => copy(link, 'Milestone link copied')}><Link2 size={14}/><span>Copy link</span></DropdownMenu.Item>
-        <DropdownMenu.Item onSelect={() => copy(`[${milestone.name}](${link})`, 'Milestone name and link copied')}><Link2 size={14}/><span>Copy name as link</span></DropdownMenu.Item>
-        <DropdownMenu.Separator/>
-        <DropdownMenu.Item className="is-danger" onSelect={() => { void confirmAction(`Delete “${milestone.name}”?`,{confirmLabel:'Delete milestone'}).then(confirmed=>{if(confirmed)return onDelete()}) }}><Trash2 size={14}/><span>Delete…</span></DropdownMenu.Item>
-      </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+      <ProjectMilestoneMenu count={count} milestone={milestone} onConvert={onConvert} onDelete={onDelete} onEdit={() => { setExpanded(true); requestAnimationFrame(() => setEditingName(true)) }} onMove={onMove} onShowHistory={() => setHistoryOpen(true)} projects={projects} trigger={<button aria-label="Open menu" className="project-overview__milestone-menu-trigger" type="button"><MoreHorizontal size={12}/></button>} variant="overview"/>
     </header>
     {expanded && <ProjectEditableText
       ariaLabel="Milestone description"
@@ -140,6 +137,7 @@ function OverviewMilestone({ totals, issues, milestone, onDelete, onOpenIssues, 
       value={milestone.description ?? ''}
       onCommit={description => onUpdate({ description }).then(() => undefined)}
     />}
+    <DescriptionHistoryDialog onOpenChange={setHistoryOpen} open={historyOpen} revisions={[]}/>
   </article>
 }
 
@@ -181,7 +179,9 @@ function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, t
       <DropdownMenu.Item onSelect={() => setDialog({ mode: 'edit', resource })}><Link2 size={14}/><span>Edit</span></DropdownMenu.Item>
       <DropdownMenu.Separator/><DropdownMenu.Item className="is-danger" onSelect={() => setDeleteResource(resource)}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item>
     </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>})}
-    <DropdownMenu.Root onOpenChange={setMenuOpen} open={menuOpen}><FlowTooltip disabled={menuOpen} label={t('Add document or link')}><DropdownMenu.Trigger asChild><button className="project-overview__inline-add project-resource-add" type="button"><Plus size={16}/>Add document or link…</button></DropdownMenu.Trigger></FlowTooltip><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__resource-menu" sideOffset={4}><DropdownMenu.Label className="sr-only">Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createDocument()}><FileText size={16}/><span>Create new document…</span></DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({ mode: 'create' })}><Link2 size={16}/><span>Add a link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <DropdownMenu.Root onOpenChange={setMenuOpen} open={menuOpen}><FlowTooltip disabled={menuOpen} label={t('Add document or link')}><DropdownMenu.Trigger asChild>{resources.length
+      ? <button aria-label="Add document or link…" className="project-overview__inline-add project-resource-add is-icon" type="button"><Plus size={16}/></button>
+      : <button className="project-overview__inline-add project-resource-add" type="button"><Plus size={16}/>Add document or link…</button>}</DropdownMenu.Trigger></FlowTooltip><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__resource-menu" sideOffset={4}><DropdownMenu.Label className="sr-only">Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createDocument()}><FileText size={16}/><span>Create new document…</span></DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({ mode: 'create' })}><Link2 size={16}/><span>Add a link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
   </div><ProjectResourceDialog key={dialog?.resource?.id ?? dialog?.mode ?? 'closed'} onOpenChange={open => { if (!open) setDialog(undefined) }} open={Boolean(dialog)} resource={dialog?.resource} onSubmit={async input => { if (dialog?.resource) await onUpdate(dialog.resource.id, input); else await onCreate({ type: 'link', url: input.url!, title: input.title }); setDialog(undefined) }}/>
   <Dialog.Root onOpenChange={open => { if (!open) setDeleteResource(undefined) }} open={Boolean(deleteResource)}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby="project-resource-delete-description" className="project-detail-page__form-dialog"><Dialog.Title>{`Delete “${deleteResource?.title ?? ''}”?`}</Dialog.Title><Dialog.Description id="project-resource-delete-description">This resource will be removed from the project.</Dialog.Description><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-danger" onClick={() => { if (!deleteResource) return; void onDelete(deleteResource.id).then(() => setDeleteResource(undefined)) }} type="button">Delete</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
   </section>

@@ -1,3 +1,4 @@
+import { trackUserSettingsWrite } from './user-settings-overrides';
 import type {
   AccountBootstrap,
   ThreadSubscription,
@@ -589,7 +590,17 @@ export async function updateUserSettings(input: Partial<UserSettings>, workspace
   const init = jsonRequest("PATCH", input);
   const headers = new Headers(init.headers);
   if (workspaceKey) headers.set('X-Workspace-Key', workspaceKey);
-  const settings = await request<UserSettings>("/api/account/settings", {...init,headers});
+  // Keep the new values applied while the save is in flight, so a workspace
+  // refresh carrying the old settings can't revert them.
+  const write = trackUserSettingsWrite(workspaceKey, input);
+  let settings: UserSettings;
+  try {
+    settings = await request<UserSettings>("/api/account/settings", {...init,headers});
+  } catch (error) {
+    write.failed();
+    throw error;
+  }
+  write.succeeded();
   window.dispatchEvent(new CustomEvent('flow:user-settings-updated', {detail:{workspaceKey,settings}}));
   return settings;
 }
@@ -1426,6 +1437,9 @@ export function restoreDocumentRevision(
   return request(`/api/documents/${id}/restore/${revisionId}`, {
     method: "POST",
   });
+}
+export function listDocumentComments(id: string): Promise<Comment[]> {
+  return request(`/api/documents/${encodeURIComponent(id)}/comments`);
 }
 export function createDocumentComment(
   id: string,

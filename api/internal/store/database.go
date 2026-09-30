@@ -273,6 +273,10 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := s.backfillAllProjectProgress(context.Background()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return s, nil
 }
 

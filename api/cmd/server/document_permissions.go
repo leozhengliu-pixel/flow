@@ -156,7 +156,11 @@ func (s *server) listDocumentComments(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "document not found")
 		return
 	}
-	comments := slices.Clone(data.Comments[document.ID])
+	comments, _, err := s.store.IssueContent(r.Context(), data.Workspace.URLKey, document.ID)
+	if err != nil {
+		issueRecordsError(w, err)
+		return
+	}
 	if comments == nil {
 		comments = []domain.Comment{}
 	}

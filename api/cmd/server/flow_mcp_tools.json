@@ -991,8 +991,10 @@
         "triageEnabled": {"type": "boolean", "description": "Turn the team's triage inbox on or off"},
         "cyclesEnabled": {"type": "boolean", "description": "Turn cycles on or off"},
         "cycleDurationWeeks": {"type": "integer", "minimum": 1, "maximum": 8, "description": "Cycle length in weeks"},
-        "members": {"type": "array", "items": {"type": "string"}, "description": "Users to add as team members (name, email, ID, or \"me\")"},
+        "members": {"type": "array", "items": {"type": "string"}, "description": "Users to add as team members (name, email, ID, or \"me\"). People already on the team, including owners, are left unchanged."},
         "removeMembers": {"type": "array", "items": {"type": "string"}, "description": "Users to remove from the team (update only)"},
+        "owners": {"type": "array", "items": {"type": "string"}, "description": "Users to make team owners (added to the team if needed)"},
+        "removeOwners": {"type": "array", "items": {"type": "string"}, "description": "Owners to change back to regular members (update only). The team must keep at least one owner."},
         "states": {"type": "array", "items": {"type": "object", "required": ["name", "type"], "properties": {"name": {"type": "string"}, "type": {"type": "string", "enum": ["backlog", "unstarted", "started", "completed", "canceled"]}, "color": {"type": "string"}, "description": {"type": "string"}}}, "description": "Workflow states to add to the team"},
         "labels": {"type": "array", "items": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}, "color": {"type": "string"}, "description": {"type": "string"}}}, "description": "Team issue labels to create"}
       }
