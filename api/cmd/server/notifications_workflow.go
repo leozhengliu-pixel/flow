@@ -205,7 +205,13 @@ func (s *server) retryNotificationDelivery(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
-	data, snapshotErr := s.store.NotificationDeliverySnapshot(ctx, key, []string{"pending"}, time.Now().UTC())
+	snapshot := s.store.NotificationDeliverySnapshot
+	if s.mailer == nil {
+		// Without a mailer deliveries are only marked pending-disabled; the
+		// workspace metadata used to render emails is not needed.
+		snapshot = s.store.NotificationDeliveries
+	}
+	data, snapshotErr := snapshot(ctx, key, []string{"pending"}, time.Now().UTC())
 	if snapshotErr != nil {
 		return
 	}
@@ -368,7 +374,14 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID, stateID := r.PathValue("id"), r.PathValue("stateId")
 	var updated domain.WorkflowState
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_state.updated", stateID, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	if workflowStateEditMetadataOnly(s.store, workspaceKey(r), teamID, input) {
+		// Issues resolve their status display data on read; with no type
+		// change, no materialization and no inheriting sub-team, the write
+		// touches no issue record.
+		ctx = store.WithMutationScope(ctx, store.MutationScope{})
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "workflow_state.updated", stateID, input, func(data *domain.Bootstrap) error {
 		if teamSettings(data, teamID).InheritWorkflowStatuses {
 			return fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
 		}
@@ -540,7 +553,7 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 	}
 	teamID := r.PathValue("id")
 	var persistedTeamMembers []domain.TeamMember
-	if current, ok := s.store.WorkspaceMetadata(workspaceKey(r)); ok {
+	if current, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r)); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), current.Workspace.ID)
 	}
 	var updated domain.TeamSettings
@@ -1437,6 +1450,26 @@ func inheritParentTeamConfiguration(data *domain.Bootstrap, teamID, parentID str
 	remapInheritedWorkflowIssues(data, teamID)
 	ensureSubtreeLabelUniqueness(data, teamID)
 	syncInheritedCycles(data, teamID)
+}
+
+// workflowStateEditMetadataOnly reports whether a status edit leaves every
+// issue record unchanged: the team already owns its statuses (no
+// materialization remap), the type is unchanged (it is an indexed issue
+// column) and no sub-team inherits the statuses (no name-based remap).
+func workflowStateEditMetadataOnly(repository *store.SQLiteStore, workspace, teamID string, input domain.WorkflowStateMutationInput) bool {
+	if input.Type != nil {
+		return false
+	}
+	data, ok := repository.WorkspaceMetadataFields(workspace, "teams", "states", "teamSettings")
+	if !ok || !slices.ContainsFunc(data.States, func(state domain.WorkflowState) bool { return state.TeamID == teamID }) {
+		return false
+	}
+	for _, id := range append([]string{teamID}, teamDescendantIDs(&data, teamID)...) {
+		if settings := data.TeamSettings[id]; settings.InheritWorkflowStatuses && settings.ParentTeamID != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func remapInheritedWorkflowIssues(data *domain.Bootstrap, rootTeamID string) {
