@@ -1378,19 +1378,21 @@
 }
 .workspace-team-joined {
   width: max-content;
-  height: 20px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 5px;
-  border: 0.5px solid var(--theme-control-hover);
-  border-radius: 4px;
-  color: var(--theme-text-tertiary);
+  gap: 2px;
+  padding: 1px 3px;
+  border: 0.5px solid var(--theme-border);
+  border-radius: 3px;
+  color: var(--theme-text-secondary);
   background: var(--theme-surface-1);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 14.5px;
 }
 .workspace-team-joined svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 .workspace-team-members {
   height: 27px;
