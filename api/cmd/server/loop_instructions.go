@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -308,6 +309,54 @@ func loopTextMentions(data *domain.Bootstrap, node map[string]any) []any {
 
 func isWordByte(value byte) bool {
 	return value == '_' || value == '-' || value >= '0' && value <= '9' || value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
+}
+
+// loopReferencedIssues looks up, through the identifier index and the
+// requester's issue access, the issues the markdown refers to by identifier or
+// link. Loop mutations run on workspace metadata without the issue collection,
+// so mentions resolve against this short list instead.
+func (s *server) loopReferencedIssues(r *http.Request, markdowns ...string) []domain.Issue {
+	identifiers := []string{}
+	seen := map[string]bool{}
+	add := func(value string) {
+		value = strings.ToUpper(strings.TrimSpace(value))
+		if value != "" && !seen[value] && len(identifiers) < 50 {
+			seen[value] = true
+			identifiers = append(identifiers, value)
+		}
+	}
+	for _, markdown := range markdowns {
+		for _, match := range loopIssueIdentifier.FindAllString(markdown, -1) {
+			add(match)
+		}
+		for _, match := range loopEntityPath.FindAllStringSubmatch(markdown, -1) {
+			if match[1] == "issue" {
+				add(match[2])
+			}
+		}
+	}
+	if len(identifiers) == 0 {
+		return nil
+	}
+	_, query, err := s.issueRecordsQuery(r)
+	if err != nil {
+		return nil
+	}
+	issues := []domain.Issue{}
+	for _, identifier := range identifiers {
+		if issue, err := s.store.AuthorizedIssueRecord(r.Context(), query, identifier); err == nil && strings.EqualFold(issue.Identifier, identifier) {
+			issues = append(issues, issue)
+		}
+	}
+	return issues
+}
+
+// loopMarkdownDocumentWithIssues is loopMarkdownDocument with the issue
+// collection replaced by the issues loopReferencedIssues found.
+func loopMarkdownDocumentWithIssues(data *domain.Bootstrap, markdown string, issues []domain.Issue) map[string]any {
+	view := *data
+	view.Issues = issues
+	return loopMarkdownDocument(&view, markdown)
 }
 
 func loopIssueByIdentifier(data *domain.Bootstrap, identifier string) *domain.Issue {

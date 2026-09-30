@@ -33,6 +33,8 @@ export function useDeferredHydratedConversation<T extends { id: string }>(
     }
   }, [conversation])
 
+  // A conversation that is already complete renders as-is, so streamed updates never lag a commit behind.
+  if (!conversation?.persisted) return conversation
   if (hydrated?.id === conversation?.id) return hydrated
   return conversation
 }

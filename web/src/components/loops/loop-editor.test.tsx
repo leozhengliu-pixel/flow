@@ -29,11 +29,11 @@ const draft: Loop = {
   createdAt: '2026-09-29T00:00:00Z', updatedAt: '2026-09-29T00:00:00Z',
 }
 
-function renderEditor(loop: Loop = draft) {
+function renderEditor(loop: Loop = draft, onReload: (changed?: Loop) => Promise<void> = vi.fn().mockResolvedValue(undefined)) {
   api.getLoop.mockResolvedValue(loop)
   const onNavigate = vi.fn()
   const data = makeBootstrap({ loops: [loop], drafts: [], favorites: [], integrationConnections: [], workspaceSettings: { ...makeBootstrap().workspaceSettings, trustedSourcesMode: 'none', trustedSourcesAllowlist: [] } })
-  const view = render(<I18nProvider><LoopEditor data={data} draftId={loop.status === 'draft' ? loop.id : undefined} loopId={loop.status === 'draft' ? undefined : loop.id} onNavigate={onNavigate} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+  const view = render(<I18nProvider><LoopEditor data={data} draftId={loop.status === 'draft' ? loop.id : undefined} loopId={loop.status === 'draft' ? undefined : loop.id} onNavigate={onNavigate} onOpenSidebar={vi.fn()} onReload={onReload}/></I18nProvider>)
   return { onNavigate, view }
 }
 
@@ -108,6 +108,15 @@ describe('LoopEditor', () => {
     await user.click(screen.getByRole('button', { name: 'Create loop' }))
     await waitFor(() => expect(api.updateLoop).toHaveBeenCalledWith('loop-9', expect.objectContaining({ status: 'published', enabled: true, name: 'Triage agent', teamId: 'team-1' })))
     expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-9')
+  })
+
+  it('opens the saved loop without waiting for the loops refresh', async () => {
+    const user = userEvent.setup()
+    const onReload = vi.fn(() => new Promise<void>(() => undefined))
+    const { onNavigate } = renderEditor({ ...draft, templateId: undefined }, onReload)
+    await user.click(screen.getByRole('button', { name: 'Create loop' }))
+    await waitFor(() => expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-9'))
+    expect(onReload).toHaveBeenCalledWith(expect.objectContaining({ id: 'loop-9', status: 'published' }))
   })
 
   it('opens the loop builder for a template draft, sends the first message and applies save_loop edits', async () => {

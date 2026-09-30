@@ -52,7 +52,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return true
 	case "api_key.created", "api_key.secret_rotated", "api_key.revoked", "account.profile_updated", "workspace_member.identity_cascaded":
 		return true
-	case "agent.session_created", "agent.message_created", "agent.message_updated", "agent.message_completed", "agent.session_updated", "agent.session_deleted", "agent.skill_created", "agent.skill_updated", "agent.skill_deleted":
+	case "agent.session_created", "agent.message_created", "agent.message_updated", "agent.message_completed", "agent.session_updated", "agent.session_titled", "agent.session_deleted", "agent.skill_created", "agent.skill_updated", "agent.skill_deleted":
 		return true
 	case "project.updated", "project.resource_created", "project.resource_updated", "project.resource_deleted", "project.milestone_created", "project.milestone_updated", "project.milestones_reordered", "notification_preferences.updated":
 		return true

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronRight, Info, LoaderCircle, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, Link2, LoaderCircle, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -9,18 +9,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
-import { TeamIcon } from "@/components/issue/issue-icons";
-import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { AgentWorkGroup } from "@/components/agent/agent-work-group";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
 import { toast } from "sonner";
 import { getLoopRun, listLoopRuns, rateLoopRun } from "@/lib/api";
-import { editLoopPath, loopPath, loopRunPath, loopsPath, teamLoopsPath } from "@/lib/app-routes";
+import { editLoopPath, loopPath, loopRunPath, loopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, LoopRun } from "@/types/flow";
-import { runParts, useLoopRecord } from "./loop-data";
+import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
+import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
-import { dayLabel, loopTeam, runDuration, runTriggerLabel } from "./loop-model";
+import { dayLabel, runDuration, runTriggerLabel } from "./loop-model";
 
 const POLL_MS = 1500;
 /** Loop runs never wait for approvals in the transcript. */
@@ -129,7 +128,6 @@ export function LoopRunPage({
         </div>
       </main>
     );
-  const team = loop ? loopTeam(data, loop) : undefined;
   const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
   const feedback = selected?.viewerRating ?? undefined;
   const rate = async (value: "up" | "down") => {
@@ -156,54 +154,20 @@ export function LoopRunPage({
         <button className="loops-mobile-menu" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar}>
           <Settings2 />
         </button>
-        <nav className="loops-breadcrumb" aria-label={t("Breadcrumb")}>
-          {team ? (
-            <a
-              href={teamLoopsPath(workspace, team.key)}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(teamLoopsPath(workspace, team.key));
-              }}
-            >
-              <TeamIcon team={team} size={14} />
-              <span data-i18n-ignore>{team.name}</span>
-            </a>
-          ) : (
-            <span className="loops-breadcrumb-scope">
-              <ViewGlyph color="currentColor" icon="Team" />
-              {t("Workspace")}
-            </span>
-          )}
-          <span aria-hidden="true">›</span>
-          <a
-            href={loopsPath(workspace)}
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate(loopsPath(workspace));
-            }}
-          >
-            {t("Loops")}
-          </a>
-          <span aria-hidden="true">›</span>
-          <a
-            href={loopPath(workspace, loopId)}
-            data-i18n-ignore
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate(loopPath(workspace, loopId));
-            }}
-          >
-            {loop?.name || t("Loop")}
-          </a>
-          <span aria-hidden="true">›</span>
-          <h2>{t("Run history")}</h2>
-        </nav>
+        <LoopBreadcrumb data={data} loop={loop} loopId={loopId} current={t("Run history")} onNavigate={onNavigate} />
+        {loop && (
+          <div className="loops-topbar-actions">
+            <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
+              <Link2 size={14} />
+            </button>
+          </div>
+        )}
       </header>
       <div className="loops-run-layout">
         <aside className="loops-run-list" aria-label={t("Runs")}>
           <div className="loops-run-list-toolbar">
             <label className="loops-search">
-              <Search size={14} />
+              <Search size={16} />
               <input aria-label={t("Search runs…")} placeholder={t("Search runs…")} value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
             <DropdownMenu>
@@ -271,8 +235,8 @@ export function LoopRunPage({
                 <h1>
                   {t(dayLabel(selected.startedAt))} {t("at")} {started?.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                 </h1>
-                <button className="loops-secondary-button" onClick={() => onNavigate(editLoopPath(workspace, loopId))}>
-                  <Pencil size={13} />
+                <button className="loops-run-edit" onClick={() => onNavigate(editLoopPath(workspace, loopId))}>
+                  <Pencil size={14} />
                   {t("Edit loop")}
                 </button>
               </header>
@@ -301,15 +265,15 @@ export function LoopRunPage({
                 </p>
               ))}
               {loop && (
-                <details className="loops-card loops-run-instructions" open={instructionsOpen} onToggle={(event) => setInstructionsOpen(event.currentTarget.open)}>
-                  <summary>
-                    <ChevronRight size={14} />
-                    {t("Instructions")}
-                  </summary>
-                  <div className="loops-instructions-text" data-i18n-ignore>
+                <section className={`loops-run-instructions${instructionsOpen ? "" : " is-collapsed"}`} aria-label={t("Instructions")}>
+                  <h3>{t("Instructions")}</h3>
+                  <div className={`loops-instructions-text${instructionsOpen ? "" : " is-collapsed"}`} data-i18n-ignore>
                     <LoopInstructionsEditor readOnly ariaLabel={t("Instructions")} data={data} value={loop.instructions} valueData={loop.instructionsData} onNavigate={onNavigate} />
                   </div>
-                </details>
+                  <button className="loops-expand-button is-small" type="button" aria-expanded={instructionsOpen} onClick={() => setInstructionsOpen((value) => !value)}>
+                    {t(instructionsOpen ? "Collapse" : "Expand")}
+                  </button>
+                </section>
               )}
               {parts.length > 0 && (
                 <AgentWorkGroup

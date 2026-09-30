@@ -895,16 +895,17 @@ func (scope *loopScope) teamKeyAllowed(key string) bool {
 }
 
 func (s *server) issueByIdentifier(ctx context.Context, workspace, identifier string) (domain.Issue, error) {
-	data, ok := s.store.WorkspaceMetadata(workspace)
-	if !ok {
+	// Workspace metadata carries no issues; the identifier index is exact and
+	// identifiers are stored upper case.
+	identifier = strings.ToUpper(strings.TrimSpace(identifier))
+	if identifier == "" {
 		return domain.Issue{}, errNotFound
 	}
-	for _, issue := range data.Issues {
-		if strings.EqualFold(issue.Identifier, identifier) {
-			return issue, nil
-		}
+	issue, err := s.store.IssueRecord(ctx, workspace, identifier)
+	if err != nil || !strings.EqualFold(issue.Identifier, identifier) {
+		return domain.Issue{}, errNotFound
 	}
-	return domain.Issue{}, errNotFound
+	return issue, nil
 }
 
 func (s *server) loopEntityContext(ctx context.Context, workspace string, data domain.Bootstrap, trigger loopTrigger) string {
