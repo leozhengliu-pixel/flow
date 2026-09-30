@@ -17,6 +17,7 @@ import {
   deleteAgentSession,
   fetchAgentStatus,
   getAgentSession,
+  stopAgentSession,
   resolveAgentApproval,
   updateAgentSession,
 } from "@/lib/api";
@@ -45,6 +46,7 @@ import styles from "./agent-page.module.css";
 import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
+import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
 import { AgentElicitation } from './agent-elicitation';
 import {
   asPersistedConversation,
@@ -86,6 +88,16 @@ export function AgentPage({
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | undefined>(undefined);
+  // Chats already re-read from the server since this page opened.
+  const hydratedIdsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useLiveAgentSessionsVersion();
   const historyRequested = new URLSearchParams(window.location.search).get("history") === "1";
   const agentDraftKey = `flow:agent-draft:${data.workspace.id}`;
   const restoredAgentDraft = useRef(readAgentDraft(agentDraftKey));
@@ -118,19 +130,45 @@ export function AgentPage({
         : sessions.find((item) => item.id === activeStreamId),
     [activeStreamId, chatSlug, sessions],
   );
+  // A reply still streaming from an earlier visit to this page.
+  const live = busy ? undefined : liveAgentSession(chatSlug ?? activeStreamId);
   const deferredConversation = useMemo(() => {
     if (!currentSummary) return currentSummary;
-    if ((currentSummary.messages?.length ?? 0) > 0) return currentSummary;
+    // Opening a chat re-reads it from the server once, so a reply that
+    // finished while the page was away (or in another tab) shows up.
+    if (hydratedIdsRef.current.has(currentSummary.id)) return currentSummary;
     return asPersistedConversation(currentSummary, async (id) => {
       const full = await getAgentSession(id);
+      hydratedIdsRef.current.add(id);
       setSessions((list) =>
         list.map((item) => (item.id === full.id ? full : item)),
       );
       return full;
     });
   }, [currentSummary]);
-  const current = useDeferredHydratedConversation(deferredConversation) ?? undefined;
-  const shown = pending ?? current;
+  const hydratedCurrent = useDeferredHydratedConversation(deferredConversation) ?? undefined;
+  const current = live ?? hydratedCurrent;
+  // The last message is still waiting for its reply on the server (the page
+  // that asked was closed or reloaded): poll just this chat until it lands.
+  const awaitingReply = Boolean(!busy && !live && current && current.messages.at(-1)?.role === "user" && Date.now() - Date.parse(current.messages.at(-1)?.createdAt ?? "") < 10 * 60_000);
+  useEffect(() => {
+    if (!awaitingReply || !current) return;
+    const id = current.id;
+    let active = true;
+    const timer = window.setInterval(() => {
+      void getAgentSession(id).then((latest) => {
+        if (!active || latest.messages.at(-1)?.role !== "assistant") return;
+        setSessions((list) => list.map((item) => (item.id === latest.id ? latest : item)));
+        onSessionChange(latest.id, latest);
+      }).catch(() => undefined);
+    }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [awaitingReply, current?.id]);
+  const replyRunning = busy || Boolean(live) || awaitingReply;
+  const shown = pending ?? (awaitingReply && current ? withReplyPlaceholder(current) : current);
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
@@ -173,7 +211,7 @@ export function AgentPage({
   };
   const send = async (message = input) => {
     message = message.trim();
-    if (!message || busy || !status?.enabled) return;
+    if (!message || replyRunning || !status?.enabled) return;
     setBusy(true);
     setError(undefined);
     // Linear shows the sent message and its working state at once; the stream replaces this copy when it starts.
@@ -192,16 +230,19 @@ export function AgentPage({
           streamed = applyAgentStreamEvent(streamed, event);
           if (!streamed) return;
           const next = streamed;
+          if (event.type === "session.completed") clearLiveAgentSession(next.id);
+          else setLiveAgentSession(next);
           setPending(undefined);
           setSessions((list) => [next, ...list.filter((item) => item.id !== next.id)]);
           if (event.type === "session.started") {
             started = true;
             setActiveStreamId(next.id);
-            onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+            if (mountedRef.current) onNavigate(agentPath(data.workspace.urlKey, next.slugId));
           }
           if (event.type === "session.completed") {
             onSessionChange(next.id, next);
-            onNavigate(agentPath(data.workspace.urlKey, next.slugId));
+            // Don't pull someone back to the chat if they've left the page.
+            if (mountedRef.current) onNavigate(agentPath(data.workspace.urlKey, next.slugId));
             if (next.messages.length <= 2) refreshTitle(next);
           }
       };
@@ -235,6 +276,7 @@ export function AgentPage({
           : t("Flow Agent is unavailable"),
       );
     } finally {
+      clearLiveAgentSession(streamed?.id);
 	  streamAbortRef.current = undefined;
       setBusy(false);
       requestAnimationFrame(() => editorRef.current?.focus());
@@ -481,7 +523,7 @@ export function AgentPage({
       <section className={`${styles.body}${shown ? ` ${styles.hasConversation}` : ""}`}>
         {shown ? (
           <Conversation
-            busy={busy}
+            busy={replyRunning}
             data={data}
             onSuggestion={status?.enabled ? (message) => void send(message) : undefined}
             draftProject={data.projects.find((project) => shown.projectIds?.includes(project.id))}
@@ -537,7 +579,7 @@ export function AgentPage({
               className={styles.editor}
               ariaLabel={t("Send a message to Flow AI")}
               data={data}
-              disabled={busy}
+              disabled={replyRunning}
               placeholder={shown ? t("Reply…") : t("Ask Flow…")}
               value={input}
               onChange={(value, next) => { setInput(value); setMentions(next); }}
@@ -625,11 +667,15 @@ export function AgentPage({
               }}
               type="file"
             />
-            {busy ? <button
+            {replyRunning ? <button
               aria-label={t("Stop generating")}
               className={styles.sendButton}
               data-state="working"
-              onClick={() => streamAbortRef.current?.abort()}
+              onClick={() => {
+                // The reply runs on the server even without this page, so stop it there too.
+                if (current) void stopAgentSession(current.id).catch(() => undefined);
+                streamAbortRef.current?.abort();
+              }}
               type="button"
             ><AgentStopIcon /></button> : <button
               aria-label={t("Submit comment")}
@@ -901,4 +947,10 @@ function dataURL(file: File) {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+/** Shows the working indicator under a message whose reply is still on its way. */
+function withReplyPlaceholder(session: AgentSession): AgentSession {
+  const last = session.messages.at(-1);
+  return { ...session, messages: [...session.messages, { id: `awaiting-reply-${last?.id ?? session.id}`, role: "assistant", content: "", parts: [], createdAt: last?.createdAt ?? session.updatedAt }] };
 }

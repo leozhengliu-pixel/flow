@@ -1047,6 +1047,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/stop": {
+      "post": {
+        "operationId": "post_agent_sessions_id_stop",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/stop",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/sessions/stream": {
       "post": {
         "operationId": "post_agent_sessions_stream",

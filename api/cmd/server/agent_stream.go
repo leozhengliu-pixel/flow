@@ -251,13 +251,16 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
-	if len(session.LoopIDs) > 0 {
-		// Publishing a loop navigates the page to the loop, which drops this
-		// stream; like Linear, the builder still finishes its reply.
-		r = r.WithContext(context.WithoutCancel(r.Context()))
-		if writer != nil {
-			writer.lenient = true
-		}
+	// Like Linear, a reply keeps going when the page that asked goes away
+	// (navigating, reloading, closing the tab) and is saved when it finishes;
+	// only an explicit stop (POST …/stop) ends it early.
+	runCtx, cancelRun := context.WithCancel(context.WithoutCancel(r.Context()))
+	defer cancelRun()
+	release := s.registerAgentRun(session.ID, cancelRun)
+	defer release()
+	r = r.WithContext(runCtx)
+	if writer != nil {
+		writer.lenient = true
 	}
 	contextData, err := s.agentIssueContext(r, session.IssueIDs)
 	if err != nil {
@@ -824,7 +827,8 @@ func agentProviderHistory(session domain.AgentSession, system string) []agentPro
 
 func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSession, message domain.AgentMessage) (domain.AgentSession, error) {
 	var completed domain.AgentSession
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_completed", session.ID, nil, func(data *domain.Bootstrap) error {
+	// A stopped run still saves what it produced.
+	err := s.store.MutateWorkspace(context.WithoutCancel(r.Context()), workspaceKey(r), "agent.message_completed", session.ID, nil, func(data *domain.Bootstrap) error {
 		current, err := ownedAgentSession(data, session.ID)
 		if err != nil {
 			return err
@@ -844,10 +848,14 @@ func (s *server) persistAgentFailure(r *http.Request, session domain.AgentSessio
 			parts[index].Status = "error"
 		}
 	}
-	parts = append(parts, domain.AgentMessagePart{ID: messageID + "_error", Type: "error", Text: cause.Error(), Status: "error"})
-	if strings.TrimSpace(text) != "" || len(parts) > 1 {
-		_, _ = s.persistAgentCompletion(r, session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(text), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
+	reason := cause.Error()
+	if errors.Is(cause, context.Canceled) {
+		reason = "Generation stopped"
 	}
+	parts = append(parts, domain.AgentMessagePart{ID: messageID + "_error", Type: "error", Text: reason, Status: "error"})
+	// Always save the failed reply (with its error) so the question never
+	// looks like it's still waiting for an answer when the chat is reopened.
+	_, _ = s.persistAgentCompletion(r, session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(text), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
 	return domain.AgentSession{}, cause
 }
 
@@ -921,4 +929,35 @@ func (s *server) agentWriteAccessNote() string {
 		return ""
 	}
 	return "\nWrite access: this Flow server has Agent write actions turned off, so you can only read. When asked to create, change, or delete anything, say that write actions are disabled for Flow Agent on this server (an admin enables them with FLOW_AGENT_WRITE_TOOLS=true), then offer the exact values you would use.\n"
+}
+
+// registerAgentRun records a running reply so it can be stopped explicitly;
+// the returned func unregisters it.
+func (s *server) registerAgentRun(sessionID string, cancel context.CancelFunc) func() {
+	token := new(int)
+	s.agentRuns.Store(sessionID, agentRun{cancel: cancel, token: token})
+	return func() {
+		if current, ok := s.agentRuns.Load(sessionID); ok && current.(agentRun).token == token {
+			s.agentRuns.Delete(sessionID)
+		}
+	}
+}
+
+type agentRun struct {
+	cancel context.CancelFunc
+	token  *int
+}
+
+// stopAgentSession ends the reply running for the viewer's chat, if any.
+func (s *server) stopAgentSession(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	data := s.workspaceData(r)
+	if _, err := ownedAgentSession(&data, id); err != nil {
+		respondMutation(w, err, http.StatusNoContent, nil)
+		return
+	}
+	if run, ok := s.agentRuns.Load(id); ok {
+		run.(agentRun).cancel()
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

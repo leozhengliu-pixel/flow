@@ -7,7 +7,7 @@ import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
   createAgentSession: vi.fn(), createAgentSessionMessage: vi.fn(), deleteAgentSession: vi.fn(),
-  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
+  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), stopAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
 }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn(), streamAgentSessionMessageEdit: vi.fn() }))
 vi.mock('@/lib/api', () => api)
@@ -15,6 +15,7 @@ vi.mock('@/lib/agent-stream', () => streams)
 
 import { AgentPage } from './agent-page'
 import { applyAgentStreamEvent } from './agent-stream-state'
+import { clearLiveAgentSession, setLiveAgentSession } from './agent-live-sessions'
 
 describe('agent page composer', () => {
   beforeEach(() => {
@@ -22,6 +23,7 @@ describe('agent page composer', () => {
     Object.values(streams).forEach(mock => mock.mockReset())
     api.fetchAgentStatus.mockResolvedValue({ enabled: false, model: '' })
     api.getAgentSession.mockRejectedValue(new Error('not stubbed'))
+    api.stopAgentSession.mockResolvedValue(undefined)
   })
 
   it('accepts draft input even when the Agent backend is not configured', async () => {
@@ -123,7 +125,7 @@ describe('agent page composer', () => {
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Think first')
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
-    expect(await screen.findByText('Thinking…')).toBeVisible()
+    await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
     await user.click(screen.getByRole('button', { name: 'Stop generating' }))
   })
 
@@ -133,6 +135,43 @@ describe('agent page composer', () => {
     const text = applyAgentStreamEvent(started, { type: 'text.delta', messageId: 'message', delta: 'Hello', part: { id: 'text', type: 'text', text: 'Hello', status: 'running' } })!
     const finished = applyAgentStreamEvent(text, { type: 'text.delta', messageId: 'message', delta: ' world', part: { id: 'text', type: 'text', text: 'Hello world', status: 'completed' } })!
     expect(finished.messages[0]).toMatchObject({ content: 'Hello world', parts: [{ id: 'text', text: 'Hello world' }] })
+  })
+
+  it('shows a reply that finished while the page was away when the chat is reopened', async () => {
+    const asked = { id: 'q', role: 'user' as const, content: 'Summarize the project', createdAt: '2026-08-31T00:00:00Z' }
+    const stale: AgentSession = { id: 'session-away', slugId: 'away', userId: 'user-1', title: 'Summary', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [asked], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
+    api.getAgentSession.mockResolvedValue({ ...stale, messages: [asked, { id: 'a', role: 'assistant', content: 'The project is on track.', createdAt: '2026-08-31T00:01:00Z' }] })
+    render(<I18nProvider><AgentPage chatSlug="away" data={makeBootstrap({ agentSessions: [stale], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    await waitFor(() => expect(screen.getByText('The project is on track.')).toBeVisible())
+    expect(api.getAgentSession).toHaveBeenCalledWith('session-away')
+  })
+
+  it('keeps showing a reply that is still streaming when the chat is reopened, and stops it on the server', async () => {
+    api.stopAgentSession.mockResolvedValue(undefined)
+    const liveSession: AgentSession = { id: 'session-live', slugId: 'live', userId: 'user-1', title: 'Live', favorite: false, location: 'page', issueIds: [], skillIds: [], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
+      messages: [{ id: 'q', role: 'user', content: 'Explain cycles', createdAt: '2026-08-31T00:00:00Z' }, { id: 'a', role: 'assistant', content: '', createdAt: '2026-08-31T00:00:01Z', parts: [{ id: 't', type: 'text', text: 'Cycles are time boxes', status: 'running' }] }] }
+    setLiveAgentSession(liveSession)
+    try {
+      // The workspace copy predates the reply.
+      render(<I18nProvider><AgentPage chatSlug="live" data={makeBootstrap({ agentSessions: [{ ...liveSession, messages: liveSession.messages.slice(0, 1) }], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      expect(await screen.findByText(/Cycles are time boxes/)).toBeVisible()
+      await userEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+      expect(api.stopAgentSession).toHaveBeenCalledWith('session-live')
+    } finally {
+      clearLiveAgentSession('session-live')
+    }
+  })
+
+  it('shows a working state for a question still waiting on the server and picks up the reply', async () => {
+    const asked = { id: 'q', role: 'user' as const, content: 'Any blockers?', createdAt: new Date().toISOString() }
+    const waiting: AgentSession = { id: 'session-wait', slugId: 'wait', userId: 'user-1', title: 'Blockers', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [asked], createdAt: asked.createdAt, updatedAt: asked.createdAt }
+    api.getAgentSession.mockResolvedValue(waiting)
+    const onSessionChange = vi.fn()
+    render(<I18nProvider><AgentPage chatSlug="wait" data={makeBootstrap({ agentSessions: [waiting], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={onSessionChange}/></I18nProvider>)
+    await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
+    api.getAgentSession.mockResolvedValue({ ...waiting, messages: [asked, { id: 'a', role: 'assistant', content: 'No blockers.', createdAt: new Date().toISOString() }] })
+    await waitFor(() => expect(screen.getByText('No blockers.')).toBeVisible(), { timeout: 4000 })
+    expect(onSessionChange).toHaveBeenCalledWith('session-wait', expect.objectContaining({ id: 'session-wait' }))
   })
 
   it('renders persisted reasoning, tool, text, and error parts', async () => {
