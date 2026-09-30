@@ -277,7 +277,9 @@ describe('personal settings workflows', () => {
     const user = userEvent.setup()
     const input = props('account-security')
     const key = { id: 'key-existing', name: 'CI key', scopes: null, teamIds: null, creatorId: viewer.id, prefix: 'flow_api_test', createdAt: '2026-09-01T00:00:00.000Z' }
-    input.data = { ...input.data, apiKeys: [key] } as never
+    // OAuth access tokens (MCP sign-ins) are not personal keys.
+    const oauthToken = { id: 'oauth_token_1', name: 'MCP OAuth token', scopes: ['read'], teamIds: [], creatorId: viewer.id, prefix: 'flow_oauth_test', oauthClientId: 'mcp-client', createdAt: '2026-09-02T00:00:00.000Z' }
+    input.data = { ...input.data, apiKeys: [key, oauthToken] } as never
     input.onEditAPIKey = vi.fn()
     render(<MemoryRouter><I18nProvider><PersonalSettings {...input}/></I18nProvider></MemoryRouter>)
 

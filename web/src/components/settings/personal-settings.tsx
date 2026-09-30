@@ -1762,7 +1762,8 @@ function SecurityOverview({
     );
   const visibleOther = showAllSessions ? other : other.slice(0, 5);
   const apiKeys = (data.apiKeys ?? []).filter(
-    (item) => item.creatorId === data.viewer.id && !item.revokedAt,
+    // OAuth access tokens belong to Authorized applications, not here.
+    (item) => item.creatorId === data.viewer.id && !item.revokedAt && !item.oauthClientId,
   );
   const canCreateAPIKey = roleSatisfiesSecurityPermission(
     data.viewerRole,
