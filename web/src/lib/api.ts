@@ -2560,8 +2560,16 @@ export function rateLoopRun(id: string, runId: string, rating: "up" | "down" | n
   );
 }
 /** Replies on a finished run; the loop's agent answers in the background (poll the run). */
-export function replyToLoopRun(id: string, runId: string, body: string): Promise<LoopRun> {
-  return request(`/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/replies`, jsonRequest("POST", { body }));
+export function replyToLoopRun(
+  id: string,
+  runId: string,
+  body: string,
+  options: { skillIds?: string[]; attachments?: import("@/types/flow").AgentFileAttachment[] } = {},
+): Promise<LoopRun> {
+  const payload: Record<string, unknown> = { body };
+  if (options.skillIds?.length) payload.skillIds = options.skillIds;
+  if (options.attachments?.length) payload.attachments = options.attachments;
+  return request(`/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/replies`, jsonRequest("POST", payload));
 }
 /** The workspace audit log (admins), for refreshing the audit log page without a bootstrap reload. */
 export function listAuditLog(): Promise<import("@/types/flow").AuditLogEntry[]> {

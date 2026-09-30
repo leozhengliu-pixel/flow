@@ -32,9 +32,11 @@ const completed: LoopRun = {
 const failed: LoopRun = { id: 'run-2', loopId: 'loop-1', status: 'failed', trigger: 'schedule', triggerLabel: 'Scheduled run', error: 'AI credits are not set up', startedAt: new Date(now.getTime() - 86400000).toISOString(), finishedAt: new Date(now.getTime() - 86399000).toISOString() }
 const running: LoopRun = { id: 'run-3', loopId: 'loop-1', status: 'running', trigger: 'manual', triggerLabel: 'Manual run', steps: [{ order: 0, title: 'Reviewing issues', at: now.toISOString() }], startedAt: now.toISOString() }
 
+const skill = { id: 'skill-1', userId: viewer.id, name: 'Terse answers', instructions: 'One sentence.', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' }
+
 function renderPage(runId?: string) {
   const onNavigate = vi.fn()
-  render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [loop] })} loopId="loop-1" runId={runId} onNavigate={onNavigate} onOpenSidebar={vi.fn()}/></I18nProvider>)
+  render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [loop], agentSkills: [skill] })} loopId="loop-1" runId={runId} onNavigate={onNavigate} onOpenSidebar={vi.fn()}/></I18nProvider>)
   return { onNavigate }
 }
 
@@ -157,9 +159,47 @@ describe('LoopRunPage', () => {
     const box = await screen.findByRole('textbox', { name: 'Reply…' })
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
     await user.type(box, 'Which bugs?{Enter}')
-    await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', 'Which bugs?'))
+    await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', 'Which bugs?', { skillIds: [], attachments: [] }))
     expect(await screen.findByText('Which bugs?')).toBeVisible()
     expect(screen.getByText('A')).toBeVisible()
     expect(box).toHaveValue('')
+  })
+
+  it('sends the selected skills and attached files with a reply, like the Agent composer', async () => {
+    const user = userEvent.setup()
+    const reply = { id: 'reply-1', userId: viewer.id, body: 'Check this', status: 'running' as const, attachments: [{ name: 'notes.md', contentType: 'text/markdown', size: 12 }], createdAt: now.toISOString() }
+    api.replyToLoopRun.mockResolvedValue({ ...completed, replies: [reply] })
+    const { onNavigate } = renderPage('run-1')
+    const box = await screen.findByRole('textbox', { name: 'Reply…' })
+    const footer = box.closest('form')!.querySelector('.loops-run-composer-actions')!
+    // Linear's layout: Skills on the left, attach then send on the right.
+    expect([...footer.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Skills', 'Attach images, files, or videos', 'Send message'])
+
+    await user.click(screen.getByRole('button', { name: 'Skills' }))
+    await user.click(await screen.findByRole('option', { name: /Terse answers/ }))
+    await user.click(screen.getByRole('option', { name: /Create skill/ }))
+    expect(onNavigate).toHaveBeenLastCalledWith('/workspace/settings/skill/new')
+    await user.keyboard('{Escape}')
+
+    const input = box.closest('form')!.querySelector<HTMLInputElement>('input[type="file"]')!
+    expect(input).toHaveAttribute('accept', expect.stringContaining('image/*'))
+    expect(input.multiple).toBe(true)
+    const big = new File(['x'], 'huge.png', { type: 'image/png' })
+    Object.defineProperty(big, 'size', { value: 3 * 1024 * 1024 })
+    await user.upload(input, [new File(['# Escalations'], 'notes.md', { type: 'text/markdown' }), new File(['%PDF'], 'deck.pdf', { type: 'application/pdf' }), big])
+    expect(screen.getByText('notes.md')).toBeVisible()
+    expect(screen.queryByText('huge.png')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Remove attachment deck.pdf' }))
+    expect(screen.queryByText('deck.pdf')).not.toBeInTheDocument()
+
+    await user.type(box, 'Check this{Enter}')
+    await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', 'Check this', {
+      skillIds: ['skill-1'],
+      attachments: [{ name: 'notes.md', contentType: 'text/markdown', size: 13, content: '# Escalations' }],
+    }))
+    // The sent reply lists its files; the composer is cleared.
+    expect(await screen.findByRole('list', { name: 'Attachments' })).toHaveTextContent('notes.md')
+    expect(box).toHaveValue('')
+    expect(box.closest('form')!.querySelector('.loops-run-composer-attachments')).toBeNull()
   })
 })

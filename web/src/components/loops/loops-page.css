@@ -821,9 +821,21 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-reply-message p { min-width: 0; margin: 1px 0 0; color: var(--theme-text-primary); font-size: 14px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Linear's "Reply…" composer pinned under the run. */
 .loops-run-composer { flex: none; display: flex; flex-direction: column; gap: 8px; margin: 0 16px 8px; padding: 12px; border-radius: 10px; background: var(--theme-surface-1); box-shadow: var(--shadow), 0 0 0 0.5px var(--theme-border); }
-.loops-run-composer textarea { min-height: 40px; max-height: 200px; resize: none; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 450 14px/20px var(--font); }
+.loops-run-composer textarea { min-height: 48px; max-height: 200px; resize: none; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 450 14px/20px var(--font); }
 .loops-run-composer textarea::placeholder { color: var(--theme-text-tertiary); }
-.loops-run-composer-actions { display: flex; justify-content: flex-end; }
+/* Linear's composer footer: Skills pill on the left, attach + send on the right. */
+.loops-run-composer-actions { height: 24px; display: grid; grid-template-columns: auto minmax(0, 1fr) 24px 24px; align-items: center; gap: 8px; }
+.loops-run-composer-actions svg { width: 14px; height: 14px; flex: none; }
+.loops-run-composer-actions .loops-run-skills > svg:last-child { width: 8px; height: 9px; }
+.loops-run-attach { width: 24px; height: 24px; display: grid; place-items: center; padding: 0 2px; border: 0.5px solid transparent; border-radius: 9999px; background: transparent; color: var(--theme-text-primary); cursor: pointer; transition: background-color 0.15s, color 0.15s; }
+.loops-run-attach:hover { background: var(--theme-surface-hover); }
+.loops-run-composer-attachments { display: flex; flex-wrap: wrap; gap: 5px; }
+.loops-run-composer-attachments > span { max-width: 220px; height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 8px; border: 0.5px solid var(--theme-border); border-radius: 6px; background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.loops-run-composer-attachments b { overflow: hidden; font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.loops-run-composer-attachments svg { width: 11px; height: 11px; }
+.loops-run-reply-attachments { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 0 32px; padding: 0; list-style: none; }
+.loops-run-reply-attachments li { max-width: 220px; height: 22px; display: flex; align-items: center; gap: 4px; overflow: hidden; padding: 0 8px; border: 0.5px solid var(--theme-border); border-radius: 6px; background: var(--theme-surface-hover); color: var(--theme-text-secondary); font-size: 11px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.loops-run-reply-attachments svg { flex: none; }
 .loops-run-send { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0.5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); color: var(--theme-text-primary); cursor: pointer; }
 .loops-run-send:disabled { color: var(--theme-text-tertiary); cursor: default; }
 .loops-run-send:not(:disabled):hover { background: var(--theme-surface-hover); }

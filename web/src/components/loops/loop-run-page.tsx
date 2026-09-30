@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Link2, LoaderCircle, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Link2, LoaderCircle, Paperclip, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -11,6 +11,10 @@ import {
 import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { AgentWorkGroup } from "@/components/agent/agent-work-group";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
+import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileAttachment } from "@/components/agent/agent-attachments";
+import { AgentAttachIcon } from "@/components/agent/agent-icons";
+import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
+import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { toast } from "sonner";
 import { getLoopRun, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
 import { UserAvatar } from "@/components/ui/user-avatar";
@@ -355,7 +359,7 @@ export function LoopRunPage({
             </div>
           )}
           </div>
-          {selected && <RunReplyComposer key={selected.id} loopId={loopId} run={selected} busy={selected.status === "running" || replying} onReplied={applyRun} />}
+          {selected && <RunReplyComposer key={selected.id} data={data} loopId={loopId} run={selected} busy={selected.status === "running" || replying} onNavigate={onNavigate} onReplied={applyRun} />}
         </section>
       </div>
     </main>
@@ -373,6 +377,16 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
         <UserAvatar avatarUrl={author?.avatarUrl} className="avatar loops-avatar" name={author ? author.displayName || author.name : t("Unknown user")} />
         <p data-i18n-ignore>{reply.body}</p>
       </div>
+      {(reply.attachments ?? []).length > 0 && (
+        <ul className="loops-run-reply-attachments" aria-label={t("Attachments")}>
+          {reply.attachments?.map((file, index) => (
+            <li key={`${file.name}-${index}`} data-i18n-ignore>
+              <Paperclip size={12} />
+              {file.name}
+            </li>
+          ))}
+        </ul>
+      )}
       {parts.length > 0 && (
         <AgentWorkGroup
           className="loops-run-work"
@@ -397,18 +411,37 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
   );
 }
 
-/** Linear's "Reply…" composer under the run: continues the run's agent conversation. */
-function RunReplyComposer({ loopId, run, busy, onReplied }: { loopId: string; run: LoopRun; busy: boolean; onReplied: (run: LoopRun) => void }) {
+/** Linear's "Reply…" composer under the run: continues the run's agent conversation, with skills and attachments like the Agent page. */
+function RunReplyComposer({
+  data,
+  loopId,
+  run,
+  busy,
+  onNavigate,
+  onReplied,
+}: {
+  data: BootstrapData;
+  loopId: string;
+  run: LoopRun;
+  busy: boolean;
+  onNavigate: (path: string) => void;
+  onReplied: (run: LoopRun) => void;
+}) {
   const { t } = useI18n();
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [skillIds, setSkillIds] = useState<string[]>([]);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
   const canSend = Boolean(body.trim()) && !busy && !sending;
   const send = async () => {
     if (!canSend) return;
     setSending(true);
     try {
-      onReplied(await replyToLoopRun(loopId, run.id, body.trim()));
+      const files = await Promise.all(attachments.map(agentFileAttachment));
+      onReplied(await replyToLoopRun(loopId, run.id, body.trim(), { skillIds, attachments: files }));
       setBody("");
+      setAttachments([]);
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : t("Could not send reply"));
     } finally {
@@ -423,6 +456,19 @@ function RunReplyComposer({ loopId, run, busy, onReplied }: { loopId: string; ru
         void send();
       }}
     >
+      {attachments.length > 0 && (
+        <div className="loops-run-composer-attachments">
+          {attachments.map((file, index) => (
+            <span key={`${file.name}-${file.lastModified}-${index}`}>
+              <b data-i18n-ignore>{file.name}</b>
+              <AttachmentRemoveButton
+                label={`${t("Remove attachment")} ${file.name}`}
+                onClick={() => setAttachments((items) => items.filter((_, itemIndex) => itemIndex !== index))}
+              />
+            </span>
+          ))}
+        </div>
+      )}
       <textarea
         aria-label={t("Reply…")}
         placeholder={t(busy ? "The agent is working…" : "Reply…")}
@@ -437,6 +483,23 @@ function RunReplyComposer({ loopId, run, busy, onReplied }: { loopId: string; ru
         }}
       />
       <div className="loops-run-composer-actions">
+        <AgentSkillsPicker className="loops-run-skills" data={data} selectedIds={skillIds} onChange={setSkillIds} onNavigate={onNavigate} />
+        <span />
+        <button type="button" className="loops-run-attach" aria-label={t("Attach images, files, or videos")} onClick={() => fileInput.current?.click()}>
+          <AgentAttachIcon />
+        </button>
+        <input
+          ref={fileInput}
+          accept={AGENT_ATTACHMENT_ACCEPT}
+          hidden
+          multiple
+          type="file"
+          onChange={(event) => {
+            const files = event.target.files;
+            setAttachments((items) => addAgentAttachments(items, files));
+            event.target.value = "";
+          }}
+        />
         <button type="submit" className="loops-run-send" aria-label={t("Send message")} title={t("Send message")} disabled={!canSend}>
           {sending ? <LoaderCircle size={14} className="loops-run-status is-running" /> : <ArrowUp size={14} />}
         </button>
