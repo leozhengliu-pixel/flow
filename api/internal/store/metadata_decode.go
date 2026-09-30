@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 
 	"flow/api/internal/domain"
 )
@@ -40,6 +42,21 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 	if err != nil {
 		return data, err
 	}
+	// Array collections hold most records (hundreds of thousands in large
+	// tenants); decode them in parallel into preallocated slices. Rows arrive
+	// ordered by field and collection order.
+	arrays := map[string][]json.RawMessage{}
+	for _, record := range recordRows {
+		if target, ok := fields[record.Field]; ok && header.Collections[record.Field] == "array" {
+			if target.Kind() != reflect.Slice {
+				return data, fmt.Errorf("invalid array field %s", record.Field)
+			}
+			arrays[record.Field] = append(arrays[record.Field], record.Data)
+		}
+	}
+	if err := decodeArrayFields(fields, arrays); err != nil {
+		return data, err
+	}
 	for _, record := range recordRows {
 		field, key, value := record.Field, record.Key, record.Data
 		target, ok := fields[field]
@@ -48,14 +65,7 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 		}
 		switch header.Collections[field] {
 		case "array":
-			if target.Kind() != reflect.Slice {
-				return data, fmt.Errorf("invalid array field %s", field)
-			}
-			item := reflect.New(target.Type().Elem())
-			if err := json.Unmarshal(value, item.Interface()); err != nil {
-				return data, err
-			}
-			target.Set(reflect.Append(target, item.Elem()))
+			// Decoded above.
 		case "map":
 			if target.Type() == reflect.TypeFor[json.RawMessage]() {
 				object := rawObjects[field]
@@ -186,4 +196,61 @@ func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace stri
 	}
 	s.fillMetadataRecordsCache(ctx, workspace, result)
 	return result, nil
+}
+
+// decodeArrayFields decodes each array field's records into a new slice
+// (appended to any value the root document held), spreading the work over
+// the available CPUs.
+func decodeArrayFields(fields map[string]reflect.Value, arrays map[string][]json.RawMessage) error {
+	type job struct {
+		items  []json.RawMessage
+		target reflect.Value
+		offset int
+	}
+	jobs := []job{}
+	for field, items := range arrays {
+		target := fields[field]
+		base := target.Len()
+		grown := reflect.MakeSlice(target.Type(), base+len(items), base+len(items))
+		reflect.Copy(grown, target)
+		target.Set(grown)
+		const chunk = 2048
+		for start := 0; start < len(items); start += chunk {
+			jobs = append(jobs, job{items: items[start:min(start+chunk, len(items))], target: grown, offset: base + start})
+		}
+	}
+	if len(jobs) == 0 {
+		return nil
+	}
+	workers := min(runtime.GOMAXPROCS(0), len(jobs))
+	next := make(chan job)
+	errs := make(chan error, workers)
+	var wait sync.WaitGroup
+	for range workers {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			for work := range next {
+				for index, raw := range work.items {
+					if err := json.Unmarshal(raw, work.target.Index(work.offset+index).Addr().Interface()); err != nil {
+						errs <- err
+						for range next {
+						}
+						return
+					}
+				}
+			}
+		}()
+	}
+	for _, work := range jobs {
+		next <- work
+	}
+	close(next)
+	wait.Wait()
+	select {
+	case err := <-errs:
+		return err
+	default:
+		return nil
+	}
 }

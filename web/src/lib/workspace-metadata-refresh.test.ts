@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { applyRealtimePatch } from '@/store/apply-realtime-patch'
-import { completed, makeBootstrap, makeIssue, project } from '@/test/fixtures'
+import { completed, label, makeBootstrap, makeIssue, project, started } from '@/test/fixtures'
 import type { BootstrapData, Notification, Release } from '@/types/flow'
 
-import { archiveProjectUpdateReminders, mergeRefreshedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries } from './workspace-metadata-refresh'
+import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, syncIssueReferences, teamIssueScope } from './workspace-metadata-refresh'
 
 describe('metadata-only realtime events', () => {
   it('covers project, release, document and other metadata edits', () => {
@@ -74,5 +74,49 @@ describe('project realtime helpers', () => {
     expect(syncIssueProjectSummaries(unchanged, project)).toBe(unchanged)
     const patched = applyRealtimePatch(makeBootstrap({ issues: [issue] }), { id: 'e1', type: 'project.updated', aggregateId: project.id, createdAt: '', payload: { entity: { ...project, icon: 'Rocket' } } } as never)
     expect(patched.handled && patched.data.issues[0].project?.icon).toBe('Rocket')
+  })
+})
+
+describe('targeted refresh helpers', () => {
+  const team = makeIssue().team
+  const other = { id: 'team-2', key: 'OPS', name: 'Ops', color: '#000' } as BootstrapData['teams'][number]
+
+  it('syncs team, state and label copies and drops issues of teams that disappeared', () => {
+    const kept = makeIssue()
+    const hidden = makeIssue({ id: 'issue-2', identifier: 'OPS-1', team: other })
+    const current = makeBootstrap({ teams: [team, other], issues: [kept, hidden] })
+    const next = makeBootstrap({
+      teams: [{ ...team, name: 'Renamed', key: 'REN' }],
+      states: [{ ...started, name: 'Doing' }],
+      labels: [],
+      issues: [],
+    })
+    const [issue, ...rest] = syncIssueReferences(current.issues, current, { ...next, labels: [{ ...label, id: 'other' }] })
+    expect(rest).toHaveLength(0)
+    expect(issue.team).toMatchObject({ name: 'Renamed', key: 'REN' })
+    expect(issue.state.name).toBe('Doing')
+    expect(issue.labels).toEqual([])
+    const unchanged = syncIssueReferences(current.issues, current, current)
+    expect(unchanged).toBe(current.issues)
+  })
+
+  it('updates a label copy on every issue that carries it', () => {
+    const data = makeBootstrap()
+    const updated = applyLabelUpdate(data, { ...label, name: 'Renamed', archivedAt: '2026-09-01T00:00:00.000Z' })
+    expect(updated.labels[0]).toMatchObject({ name: 'Renamed', archivedAt: '2026-09-01T00:00:00.000Z' })
+    expect(updated.issues[0].labels[0]).toMatchObject({ name: 'Renamed' })
+  })
+
+  it('adds, replaces and removes the issues a scoped query owns', () => {
+    const inTeam = makeIssue({ id: 'a', version: 1 })
+    const gone = makeIssue({ id: 'b' })
+    const elsewhere = makeIssue({ id: 'c', team: other })
+    const data = makeBootstrap({ issues: [inTeam, gone, elsewhere] })
+    const scope = teamIssueScope(team.id)
+    expect(scope.filter).toEqual({ field: 'team', operator: 'in', values: [team.id] })
+    const merged = mergeScopedIssues(data, [{ ...inTeam, title: 'Fresh', version: 2 }, makeIssue({ id: 'new' })], scope.owns)
+    expect(merged.issues.map(issue => issue.id)).toEqual(['a', 'c', 'new'])
+    expect(merged.issues[0].title).toBe('Fresh')
+    expect(mergeScopedIssues(data, [])).toBe(data)
   })
 })

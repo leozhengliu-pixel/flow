@@ -19,7 +19,7 @@ import './workspace-operations.css'
 
 export type OperationsView = 'drafts'|'releases'|'asks'
 
-export function WorkspaceOperationsPage({ data, view, pipelineSlug, releaseSlug, pipelineTab, releaseTab, onOpenSidebar, onReload, onNavigate, onResumeDraft }: { data: BootstrapData; view: OperationsView; pipelineSlug?: string; releaseSlug?: string; pipelineTab?: ReleasePipelineTab; releaseTab?: ReleaseRouteTab; onOpenSidebar: () => void; onReload: () => Promise<void>; onNavigate: (path: string) => void; onResumeDraft: (draft: Draft) => void }) {
+export function WorkspaceOperationsPage({ data, view, pipelineSlug, releaseSlug, pipelineTab, releaseTab, onOpenSidebar, onReload, onNavigate, onResumeDraft }: { data: BootstrapData; view: OperationsView; pipelineSlug?: string; releaseSlug?: string; pipelineTab?: ReleasePipelineTab; releaseTab?: ReleaseRouteTab; onOpenSidebar: () => void; onReload: (issueIds?: string[]) => Promise<void>; onNavigate: (path: string) => void; onResumeDraft: (draft: Draft) => void }) {
   const [createOpen, setCreateOpen] = useState(false)
   const [askDecision, setAskDecision] = useState<{ ask: Ask; decision: 'approved'|'rejected' }>()
   const [askSurface, setAskSurface] = useState<'configuration'|'intake'>('configuration')
@@ -30,7 +30,7 @@ export function WorkspaceOperationsPage({ data, view, pipelineSlug, releaseSlug,
       <CreateAskDialog data={data} onClose={() => setCreateOpen(false)} onCreated={async () => { setCreateOpen(false); await onReload() }}/>
     )}
     {askDecision && (
-      <AskDecisionDialog value={askDecision} onClose={() => setAskDecision(undefined)} onSubmit={async note => { await decideAsk(askDecision.ask.id, askDecision.decision, note); setAskDecision(undefined); await onReload() }}/>
+      <AskDecisionDialog value={askDecision} onClose={() => setAskDecision(undefined)} onSubmit={async note => { const decided = await decideAsk(askDecision.ask.id, askDecision.decision, note); setAskDecision(undefined); await onReload(decided?.issueId ? [decided.issueId] : undefined) }}/>
     )}
   </>
   if (view === 'drafts') return <DraftsPage data={data} onOpenSidebar={onOpenSidebar} onReload={onReload} onNavigate={onNavigate} onResume={onResumeDraft}/>

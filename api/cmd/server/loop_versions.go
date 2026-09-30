@@ -221,6 +221,9 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		if loop.Status == "draft" {
 			return fmt.Errorf("%w: only created loops have published versions", errConflict)
 		}
+		if err := s.checkLoopEditor(data, *loop); err != nil {
+			return err
+		}
 		var source *domain.LoopVersion
 		for _, version := range presentLoopVersions(data, *loop) {
 			if version.ID == versionID {
@@ -258,7 +261,7 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Only created loops have published versions")
 		return
 	}
-	respondMutation(w, err, http.StatusOK, presentLoop(runs, restored))
+	respondLoopMutation(w, err, http.StatusOK, presentLoop(runs, restored))
 }
 
 type loopRunFeedbackInput struct {

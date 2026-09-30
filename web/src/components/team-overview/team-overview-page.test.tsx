@@ -28,7 +28,7 @@ vi.mock('@/lib/api', async importOriginal => ({
 
 import { TeamOverviewPage } from './team-overview-page'
 
-function renderPage(view: "overview" | "documents" | "loops" | "members", overrides: Partial<BootstrapData> = {}) {
+function renderPage(view: "overview" | "documents" | "loops" | "members", overrides: Partial<BootstrapData> = {}, onReload = vi.fn().mockResolvedValue(undefined)) {
   const data = makeBootstrap({
     documents: [],
     favorites: [],
@@ -46,7 +46,7 @@ function renderPage(view: "overview" | "documents" | "loops" | "members", overri
         data={data}
         onNavigate={vi.fn()}
         onOpenSidebar={vi.fn()}
-        onReload={vi.fn().mockResolvedValue(undefined)}
+        onReload={onReload}
         team={data.teams[0]}
         view={view}
       />
@@ -195,6 +195,16 @@ describe('team overview', () => {
     await user.clear(input); await user.type(input, 'Changed'); await user.keyboard('{Escape}');
     expect(api.updateTeamResourceSection).not.toHaveBeenCalled();
     expect(screen.getByText('Plans')).toBeVisible();
+  });
+
+  it('refetches only the team resources after a section edit, not the workspace', async () => {
+    const user = userEvent.setup(), onReload = vi.fn().mockResolvedValue(undefined);
+    renderPage("overview", {}, onReload);
+    await waitFor(() => expect(api.fetchTeamResources).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole('button', { name: 'Add section' }));
+    await user.type(screen.getByRole('textbox', { name: 'Section name' }), 'Plans{Enter}');
+    await waitFor(() => expect(api.fetchTeamResources).toHaveBeenCalledTimes(2));
+    expect(onReload).not.toHaveBeenCalled();
   });
 
   it('commits a new section on blur only once', async () => {

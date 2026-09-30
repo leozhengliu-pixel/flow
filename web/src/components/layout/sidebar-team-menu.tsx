@@ -40,7 +40,7 @@ function teamLeaveDisabledReason(data: BootstrapData, team: Team) {
   return undefined
 }
 
-export function SidebarTeamMenu({ data, team, onReload, children }: { data: BootstrapData; team: Team; onReload?: () => Promise<void>; children: ReactNode }) {
+export function SidebarTeamMenu({ data, team, onReload, children }: { data: BootstrapData; team: Team; onReload?: (teamId?: string) => Promise<void>; children: ReactNode }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false), [query, setQuery] = useState(''), [pending, setPending] = useState(false), [leaving, setLeaving] = useState(false)
   const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 800)
@@ -81,7 +81,7 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
     const confirmed = await confirmAction(t('Leave this team?'), { description: `${team.name}. ${t(team.private ? 'You will need an invitation to rejoin this private team.' : 'You can rejoin from the Teams page.')}`, confirmLabel: t('Leave team'), danger: true })
     if (!confirmed) return
     setLeaving(true)
-    try { await setTeamMembership(data.workspace.urlKey, team.id, data.viewer.id, false); await onReload?.(); toast.success(t('You left the team')) }
+    try { await setTeamMembership(data.workspace.urlKey, team.id, data.viewer.id, false); await onReload?.(team.id); toast.success(t('You left the team')) }
     catch (error) { toast.error(t('Could not update team membership'), { description: error instanceof Error ? error.message : undefined }) }
     finally { setLeaving(false) }
   }

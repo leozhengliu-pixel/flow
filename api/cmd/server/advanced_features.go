@@ -1272,7 +1272,7 @@ func (s *server) decideAsk(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var updated domain.Ask
 	createdIssueID := ""
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "ask.decided", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(issueCreationScope(r.Context(), nil), workspaceKey(r), "ask.decided", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Asks, func(item domain.Ask) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -1347,7 +1347,7 @@ func createIssueFromAsk(data *domain.Bootstrap, ask domain.Ask, now time.Time) (
 		}
 		state = &states[0]
 	}
-	number := nextIssueNumber(data.Issues)
+	number := max(data.NextIssueNumber, nextIssueNumber(data.Issues))
 	issue := domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: ask.Title, Description: description, Priority: priority, PriorityLabel: priorityLabel(priority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *state, Assignee: &data.Viewer, Creator: ask.Requester, Labels: []domain.IssueLabel{}, SubscriberIDs: []string{ask.Requester.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
 	update := domain.IssueUpdateInput{}
 	if assigneeID != "" {
@@ -1521,7 +1521,7 @@ func (s *server) createProjectTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.ProjectTemplate
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "project_template.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(projectTemplateScope(r.Context(), input.IssueIDs, ""), workspaceKey(r), "project_template.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.ProjectTemplate{ID: fmt.Sprintf("project_template_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Color: "#5e6ad2", TeamIDs: []string{}, LabelIDs: []string{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
 		if err := applyProjectTemplateInput(data, &created, input); err != nil {
@@ -1541,7 +1541,7 @@ func (s *server) updateProjectTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.ProjectTemplate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_template.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectTemplateScope(r.Context(), input.IssueIDs, ""), workspaceKey(r), "project_template.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -1613,7 +1613,7 @@ func (s *server) createSLARule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.SLARule
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "sla_rule.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(slaRuleScope(r.Context(), "", input), workspaceKey(r), "sla_rule.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.SLARule{ID: fmt.Sprintf("sla_rule_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), TeamIDs: []string{}, Filters: map[string]any{}, TargetMinutes: 1440, PauseStatuses: []string{}, Enabled: true, CreatedAt: now, UpdatedAt: now}
 		if err := applySLARuleInput(data, &created, input); err != nil {
@@ -1636,7 +1636,7 @@ func (s *server) updateSLARule(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.SLARule
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "sla_rule.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(slaRuleScope(r.Context(), id, input), workspaceKey(r), "sla_rule.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.SLARules, func(item domain.SLARule) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -2398,7 +2398,7 @@ func setDocumentSubscription(data *domain.Bootstrap, kind, id, userID string, su
 func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var restored any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "trash.restored", id, nil, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(trashRestoreScope(r.Context(), id), workspaceKey(r), "trash.restored", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3159,7 +3159,8 @@ func csvText(value string) string {
 }
 
 func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
-	data, ok := s.store.WorkspaceMetadata(key)
+	// Page loads run this check; read only what it inspects.
+	data, ok := s.store.WorkspaceMetadataFields(key, "settings", "issueSlas", "slaRules", "trash", "projects", "projectUpdates")
 	if !ok {
 		return
 	}
@@ -3195,16 +3196,18 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 	if !needsMutation {
 		return
 	}
-	mutationCtx := ctx
-	if !slaEnabled(&data) {
-		// Without SLAs the job only touches project updates, the projects'
-		// reminder notifications and the trash: load just those records.
-		resources := make([]string, 0, len(data.Projects))
-		for _, project := range data.Projects {
-			resources = append(resources, project.ID)
+	// The job touches project updates, the projects' reminder notifications,
+	// the trash and — with SLAs on — the issues applySLARules can change.
+	mutationCtx := store.WithMutationScope(ctx, store.MutationScope{Resolve: func(current domain.Bootstrap) store.MutationScope {
+		scope := store.MutationScope{}
+		if slaEnabled(&current) {
+			scope = slaIssueScope(current, current.SLARules)
 		}
-		mutationCtx = store.WithMutationScope(ctx, store.MutationScope{Resources: resources})
-	}
+		for _, project := range current.Projects {
+			scope.Resources = append(scope.Resources, project.ID)
+		}
+		return scope
+	}})
 	_ = s.store.MutateWorkspace(mutationCtx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
 		// The trigger above can stay true when a reminder cannot be
 		// delivered (for example the recipient's inbox is off). Skip the

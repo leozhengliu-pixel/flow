@@ -209,6 +209,7 @@ func (s *SQLiteStore) ensureIssueRecords(ctx context.Context) error {
 		"issue_records_project_idx ON issue_records(workspace_key,project_id,archived,sort_order,id)",
 		"issue_records_assignee_idx ON issue_records(workspace_key,assignee_id,archived,sort_order,id)",
 		"issue_records_parent_idx ON issue_records(workspace_key,parent_id,id)",
+		"issue_records_cycle_idx ON issue_records(workspace_key,cycle_id,id)",
 		"issue_records_updated_idx ON issue_records(workspace_key,updated_at,id)",
 		"issue_records_created_idx ON issue_records(workspace_key,archived,created_at,id)",
 		"issue_records_priority_idx ON issue_records(workspace_key,archived,priority,id)",

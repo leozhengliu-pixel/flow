@@ -491,7 +491,7 @@ export function ProjectCreationAgent({
             type="file"
           />
           <button
-            aria-label={busy ? t("Stop generating") : t("Submit comment")}
+            aria-label={busy ? t("Stop responding") : t("Submit comment")}
             disabled={!input.trim() && !busy}
             onClick={() => {
               if (busy) abortRef.current?.abort();

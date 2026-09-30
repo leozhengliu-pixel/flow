@@ -26,7 +26,7 @@ const tabs: ArchiveTabDefinition[] = [
   { id: 'recently-deleted-releases', label: 'Recently deleted releases', title: 'Recently deleted releases', empty: 'No recently deleted releases', resource: 'release' },
 ]
 
-export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,onReload}:{data:BootstrapData;team:Team;tab:TeamArchiveTab;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;onReload:()=>Promise<void>}){
+export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,onReload}:{data:BootstrapData;team:Team;tab:TeamArchiveTab;onNavigate:(path:string)=>void;onOpenSidebar:()=>void;/** Refreshes metadata; `issueIds` names restored issues to refetch. */onReload:(issueIds?:string[])=>Promise<void>}){
   const{t,formatDate}=useI18n()
   const[filterOpen,setFilterOpen]=useState(false)
   const[filters,setFilters]=useState<MyIssuesAppliedFilter[]>([])
@@ -67,7 +67,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
     const label=ISSUE_FILTER_LABELS[field]
     if(label)setFilters(current=>toggleFilterOption(current,field,label,option))
   }
-  const restoreTrash=async(item:TrashEntry)=>{await restoreTrashEntry(item.id);await onReload()}
+  const restoreTrash=async(item:TrashEntry)=>{await restoreTrashEntry(item.id);await onReload(item.resourceType==='issue'?[item.resourceId]:undefined)}
   const purge=async(item:TrashEntry)=>{await purgeTrashEntry(item.id);await onReload()}
   const date=(value:string)=>formatDate(value,{month:'short',day:'numeric',year:'numeric'})
 
@@ -92,7 +92,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
     </div>
     {tab.id==='issues'&&filters.length>0&&<div className="archive-applied-filters"><MyIssuesFilterBar filters={filters} filterOptions={filter=>explorerFilterOptions(filter.field,issueOptions)} onAdd={()=>setFilterOpen(true)} onClear={()=>setFilters([])} onOperatorChange={(id,operator)=>setFilters(current=>updateFilterOperator(current,id,operator))} onRemove={id=>setFilters(current=>current.filter(filter=>filter.id!==id))} onValuesChange={(id,options)=>setFilters(current=>updateFilterValues(current,id,options))}/></div>}
     {count>0&&<div className="archive-list" ref={listRef}>
-      {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload()}}/>)}
+      {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload([item.id])}}/>)}
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}
       {trash.map(item=><ArchiveRow icon={archiveIcon(item.resourceType)} key={item.id} title={<span data-i18n-ignore>{item.title}</span>} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)} onPurge={()=>purge(item)}/>)}

@@ -90,6 +90,8 @@ it('requires leave confirmation, refreshes on success and reports server rejecti
     if (!decision) expect(mocks.membership).not.toHaveBeenCalled()
   }
   await waitFor(() => expect(reload).toHaveBeenCalledOnce())
+  // The left team is named so only its issues are refetched, not the workspace.
+  expect(reload).toHaveBeenCalledWith('team-1')
   mocks.membership.mockRejectedValue(new Error('The last owner cannot leave'))
   await user.click(screen.getByRole('button', { name: 'Team menu' }))
   await user.click(screen.getByRole('menuitem', { name: 'Leave team…' }))

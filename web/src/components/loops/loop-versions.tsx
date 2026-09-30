@@ -69,7 +69,7 @@ function VersionDefinition({ data, version, loop, onNavigate }: { data: Bootstra
       </p>
       <section className="loops-card is-trigger" aria-label={t("Trigger")}>
         <h3>{t("Trigger")}</h3>
-        <LoopTriggerEditor data={data} triggerType={definition.triggerType} config={definition.triggerConfig ?? {}} readOnly />
+        <LoopTriggerEditor data={data} level={definition.level} triggerType={definition.triggerType} config={definition.triggerConfig ?? {}} readOnly />
       </section>
       <section className="loops-card is-instructions" aria-label={t("Instructions")}>
         <h3>{t("Instructions")}</h3>

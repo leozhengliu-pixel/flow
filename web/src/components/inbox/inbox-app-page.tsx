@@ -526,11 +526,11 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: isInitiative ? 'project' as const : 'generic' as const,
-        identifier: notification.type === 'initiativeReminder' ? 'Reminder' : notification.type === 'pulseSummary' ? 'pulseSummary' : genericNotificationTitle(notification),
-        title: initiative?.name || genericNotificationTitle(notification),
+        identifier: notification.type === 'initiativeReminder' || notification.type === 'documentReminder' ? 'Reminder' : notification.type === 'pulseSummary' ? 'pulseSummary' : genericNotificationTitle(notification),
+        title: initiative?.name || (notification.sourceType === 'document' ? data.documents?.find(item => item.id === notification.sourceId)?.title : undefined) || genericNotificationTitle(notification),
         body: notification.type === 'pulseSummary'
           ? `${notification.occurrenceCount} project and initiative updates`
-          : notification.type === 'initiativeReminder'
+          : notification.type === 'initiativeReminder' || notification.type === 'documentReminder'
             ? `${notification.actor.displayName} set a reminder`
             : /initiativeUpdate/i.test(notification.type)
               ? `${notification.actor.displayName} shared an initiative update`

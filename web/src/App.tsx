@@ -116,6 +116,7 @@ import {
   fetchPagedBootstrap,
   listDocumentComments,
   listIssueRecords,
+  listReviews,
 } from "@/lib/api";
 import type {
   AccountBootstrap,
@@ -144,6 +145,7 @@ import type {
   ProjectUpdate,
   SavedView,
   SavedViewMutationInput,
+  Team,
   Workspace,
   WorkspaceMutationInput,
   SearchResult,
@@ -189,6 +191,7 @@ import { createIssueShortcutContext } from "@/lib/create-issue-shortcut";
 import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
 import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
+import { useI18n } from "@/i18n/i18n";
 import {
   agentPath,
   newAgentSkillPath,
@@ -290,7 +293,8 @@ import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
-import { archiveProjectUpdateReminders, mergeRefreshedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries } from '@/lib/workspace-metadata-refresh'
+import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
+import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
 
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
 
@@ -340,6 +344,60 @@ function App() {
     }
     return next;
   }, []);
+  // Refetch only the issues an action can have rewritten. Paged workspaces
+  // hold query windows, so their queries are invalidated instead; a full
+  // collection pages through the scope and drops owned issues that left it.
+  const refreshIssueScope = useCallback(async (workspaceKey: string, scope: IssueRefreshScope) => {
+    const loaded = dataRef.current;
+    if (loaded?.workspace.urlKey !== workspaceKey) return;
+    if (loaded.issueCollectionPaged) {
+      window.dispatchEvent(new CustomEvent(ISSUE_QUERY_INVALIDATED, { detail: { workspaceKey, force: true } }));
+      return;
+    }
+    const viewerId = loaded.viewer.id, items: Issue[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await listIssueRecords({ filter: scope.filter, archived: 'all', limit: 500, cursor }, undefined, workspaceKey);
+      items.push(...page.items);
+      cursor = page.hasMore ? page.nextCursor : undefined;
+    } while (cursor);
+    setData(current => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId ? mergeScopedIssues(current, items, scope.owns) : current);
+  }, []);
+  // Targeted refresh after a workspace action: the metadata projection (never
+  // the issue collection) plus, when the action can move issues, just those.
+  const refreshWorkspace = useCallback(async (workspaceKey: string, issues?: IssueRefreshScope) => {
+    await reloadWorkspaceMetadata(workspaceKey);
+    if (issues) await refreshIssueScope(workspaceKey, issues);
+  }, [reloadWorkspaceMetadata, refreshIssueScope]);
+  // Refetch specific issues (e.g. those linked to a merged review).
+  const refreshIssuesById = useCallback(async (workspaceKey: string, ids: string[]) => {
+    const viewerId = dataRef.current?.viewer.id;
+    for (let start = 0; start < ids.length; start += 500) {
+      const chunk = ids.slice(start, start + 500);
+      const page = await listIssueRecords({ filter: { field: 'id', operator: 'in', values: chunk }, archived: 'all', limit: chunk.length }, undefined, workspaceKey);
+      setData(current => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId
+        ? current.issueCollectionPaged ? deriveResourceCounts({ ...current, issues: mergeIssueRecords(current.issues, page.items) }) : mergeScopedIssues(current, page.items)
+        : current);
+    }
+  }, []);
+  // Review actions change `data.reviews` and, when a pull request merges or
+  // closes, the issues it links: refetch the reviews list and those issues.
+  const reloadReviews = useCallback(async (workspaceKey: string) => {
+    const reviews = await listReviews();
+    const previous = new Map((dataRef.current?.reviews ?? []).map(review => [review.id, review]));
+    const changedIssueIds = [...new Set(reviews.filter(review => previous.get(review.id)?.status !== review.status).flatMap(review => review.issueIds ?? []))];
+    setData(current => current?.workspace.urlKey === workspaceKey ? { ...current, reviews } : current);
+    if (changedIssueIds.length) await refreshIssuesById(workspaceKey, changedIssueIds);
+  }, [refreshIssuesById]);
+  const reloadTeamMetadata = useCallback(async (workspaceKey: string) => { await reloadWorkspaceMetadata(workspaceKey); }, [reloadWorkspaceMetadata]);
+  // Joining or leaving a team can reveal or hide that team's issues.
+  const reloadTeamMembership = useCallback(async (workspaceKey: string, teamRef?: string) => {
+    const match = (team: Team) => Boolean(teamRef) && (team.id === teamRef || team.key.toLowerCase() === teamRef!.toLowerCase());
+    const before = dataRef.current?.teams.find(match);
+    const next = await reloadWorkspaceMetadata(workspaceKey);
+    const teamId = before?.id ?? next.teams.find(match)?.id;
+    if (teamId) await refreshIssueScope(workspaceKey, teamIssueScope(teamId));
+  }, [reloadWorkspaceMetadata, refreshIssueScope]);
   // Loop changes only touch `data.loops`: refetch the small loops list instead
   // of the whole workspace bootstrap (which carries every issue).
   // A saved loop is applied synchronously so the page navigated to next (e.g.
@@ -445,10 +503,13 @@ function App() {
   const loadedWorkspaceKey = data?.workspace.urlKey;
   const projectListProjection = isProjectListRoute(route);
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
+  const { t: translateTitle } = useI18n();
   useEffect(() => {
-    const info = routeInfo(route, data);
+    // Search sets its own title (it includes the query).
+    if (route.kind === "search") return;
+    const info = routeInfo(route, data, translateTitle);
     applyDocumentTitle(info, data?.workspace.name);
-  }, [route, data]);
+  }, [route, data, translateTitle]);
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
     const warmDetails = () => {
@@ -3286,13 +3347,26 @@ function App() {
     );
     return cycle;
   };
+  // Starting or completing a cycle transitions the team's cycles and rolls
+  // unfinished issues forward: refresh the metadata, then refetch only the
+  // issues of the cycles whose status changed.
+  const refreshCycleTransition = async (teamId: string) => {
+    if (!data) return;
+    const workspaceKey = data.workspace.urlKey;
+    const before = new Map((dataRef.current?.cycles ?? []).filter((item) => item.teamId === teamId).map((item) => [item.id, item.status]));
+    const next = await reloadWorkspaceMetadata(workspaceKey);
+    const changed = next.cycles.filter((item) => item.teamId === teamId && before.get(item.id) !== item.status).map((item) => item.id);
+    if (!changed.length) return;
+    const cycleIds = new Set(changed);
+    await refreshIssueScope(workspaceKey, { filter: { field: "cycle", operator: "in", values: changed }, owns: (issue) => Boolean(issue.cycleId && cycleIds.has(issue.cycleId)) });
+  };
   const startCycle = async (cycle: Cycle) => {
     await run(() => startCycleRequest(cycle.id), "Could not start cycle");
-    await refreshActivity();
+    await refreshCycleTransition(cycle.teamId);
   };
   const finishCycle = async (cycle: Cycle) => {
     await run(() => completeCycleRequest(cycle.id), "Could not complete cycle");
-    await refreshActivity();
+    await refreshCycleTransition(cycle.teamId);
   };
   const changeCycleSettings = async (
     teamId: string,
@@ -3565,9 +3639,10 @@ function App() {
     );
   };
   const renderIssuePreview = (issue: Issue, onClose: () => void) => {
-    const refresh = async () => {
-      const next = await fetchBootstrap(data!.workspace.urlKey);
-      acceptBootstrap(next);
+    // Relations change just the two linked issues: refetch those records.
+    const refresh = async (relatedIssueId?: string) => {
+      const issues = await Promise.all([issue.id, relatedIssueId].filter((id): id is string => Boolean(id)).map(id => fetchIssueRecord(id)));
+      issues.forEach(replaceIssue);
     };
     return (
       <IssueDetails
@@ -3658,14 +3733,14 @@ function App() {
             () => createRelation(issue.id, type, relatedIssueId),
             "Could not add relation",
           );
-          await refresh();
+          await refresh(relatedIssueId);
         }}
         onDeleteRelation={async (relationId) => {
           await run(
             () => deleteRelation(issue.id, relationId),
             "Could not remove relation",
           );
-          await refresh();
+          await refresh(issue.relations?.find((relation) => relation.id === relationId)?.relatedIssueId);
         }}
         onUpload={async (file, options) => {
           const attachment = await run(
@@ -3735,7 +3810,7 @@ function App() {
     toast.success("Workspace scheduled for deletion", {
       description: "You can cancel from Settings → Workspace → Danger zone.",
     });
-    acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
+    await reloadWorkspaceMetadata(data.workspace.urlKey);
   };
   const addTeam = async (input: {
     name: string;
@@ -3752,7 +3827,8 @@ function App() {
       () => createTeam(data.workspace.urlKey, input),
       "Could not create team",
     );
-    acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
+    // A new team has no issues yet: its states, labels and settings are metadata.
+    await reloadWorkspaceMetadata(data.workspace.urlKey);
   };
   const addCustomer = async (
     input: CustomerMutationInput & { name: string },
@@ -4457,7 +4533,11 @@ function App() {
           onWorkspaceDelete={removeWorkspace}
           onSettingsUpdate={updateWorkspaceSettings}
           onReload={async () => {
-            acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
+            // Settings edit metadata; label, state and team copies on loaded
+            // issues are re-synced from it. Team settings (workflow states,
+            // key, members) can rewrite or reveal that team's issues too.
+            const team = route.teamKey ? data.teams.find((item) => item.key.toLowerCase() === route.teamKey!.toLowerCase()) : undefined;
+            await refreshWorkspace(data.workspace.urlKey, team ? teamIssueScope(team.id) : undefined);
           }}
         />
       </Suspense></PeopleProvider>
@@ -4647,7 +4727,7 @@ function App() {
   return withStore(
     <PeopleProvider users={data.users} workspaceName={data.workspace.name} members={data.members} teams={data.teams} teamMembers={data.teamMembers} projects={data.projects}><ActiveTeamProvider><div className="app">
       <Sidebar
-        onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))}
+        onReload={(teamId) => reloadTeamMembership(data.workspace.urlKey, teamId)}
         account={account}
         data={data}
         page={page}
@@ -4718,7 +4798,7 @@ function App() {
             route.kind === "team-members") && (
             <TeamOverviewPage
               data={data}
-              onLoopsReload={() => reloadLoops(data.workspace.urlKey, data.viewer.id)}
+              onLoopsReload={changed => reloadLoops(data.workspace.urlKey, data.viewer.id, changed)}
               team={data.teams.find(
                 (team) =>
                   team.key.toLowerCase() === route.teamKey.toLowerCase(),
@@ -4734,9 +4814,8 @@ function App() {
               }
               onNavigate={navigateTo}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onReload={async () =>
-                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-              }
+              onReload={() => reloadTeamMetadata(data.workspace.urlKey)}
+              onMembershipReload={() => reloadTeamMembership(data.workspace.urlKey, route.teamKey)}
             />
           )}
         {(page === "loops" || (page === "team-overview" && route.kind === "team-loops")) && !loopsEnabled && (
@@ -4799,8 +4878,11 @@ function App() {
                 : undefined
             }
             onNavigate={navigateTo}
-            onReload={async () => {
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
+            onReload={async (issue) => {
+              // Triage hands back the issue it settled; the other pages
+              // (automations, diary, meetings, updates, labels) edit metadata.
+              if (issue) replaceIssue(issue);
+              else await reloadWorkspaceMetadata(data.workspace.urlKey);
             }}
             onCreateIssue={() => openCreateIssue()}
           />
@@ -4815,11 +4897,6 @@ function App() {
               creating={route.creating}
               widgetId={route.widgetId}
               data={data}
-              dashboardsHref={
-                route.teamKey
-                  ? teamDashboardsPath(data.workspace.urlKey, route.teamKey)
-                  : dashboardsPath(data.workspace.urlKey)
-              }
               onNavigate={(dashboardId) =>
                 navigateTo(
                   dashboardId
@@ -4827,17 +4904,6 @@ function App() {
                     : route.teamKey
                       ? teamDashboardsPath(data.workspace.urlKey, route.teamKey)
                       : dashboardsPath(data.workspace.urlKey),
-                )
-              }
-              onOpenResource={(resource) =>
-                navigateTo(
-                  route.teamKey
-                    ? teamViewsPath(
-                        data.workspace.urlKey,
-                        route.teamKey,
-                        resource,
-                      )
-                    : workspaceViewsPath(data.workspace.urlKey, resource),
                 )
               }
               onOpenSidebar={() => setMobileSidebarOpen(true)}
@@ -4864,15 +4930,6 @@ function App() {
                     widgetId,
                   ),
                 )
-              }
-              resourceHref={(resource) =>
-                route.teamKey
-                  ? teamViewsPath(
-                      data.workspace.urlKey,
-                      route.teamKey,
-                      resource,
-                    )
-                  : workspaceViewsPath(data.workspace.urlKey, resource)
               }
               teamKey={route.teamKey}
             />
@@ -4917,9 +4974,7 @@ function App() {
               }
               tab={route.kind === "review" ? route.tab : undefined}
               onNavigate={navigateTo}
-              onReload={async () =>
-                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-              }
+              onReload={() => reloadReviews(data.workspace.urlKey)}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
           )}
@@ -4955,11 +5010,10 @@ function App() {
             }
             releaseTab={route.kind === "release" ? route.tab : undefined}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
-            onReload={async () => {
-              // Deciding an ask can create issues; release and draft edits
-              // only change workspace metadata.
-              if (route.kind === "asks") acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
-              else await reloadWorkspaceMetadata(data.workspace.urlKey);
+            onReload={async (issueIds) => {
+              // Approving an ask creates its issue (refetched by id); release,
+              // draft and other ask edits only change workspace metadata.
+              await Promise.all([reloadWorkspaceMetadata(data.workspace.urlKey), issueIds?.length ? refreshIssuesById(data.workspace.urlKey, issueIds) : undefined]);
             }}
             onNavigate={(path) => navigateTo(path)}
             onResumeDraft={(draft: Draft) => {
@@ -4990,9 +5044,9 @@ function App() {
               tab={route.tab}
               onNavigate={navigateTo}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
-              onReload={async () =>
-                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-              }
+              onReload={async (issueIds) => {
+                await Promise.all([reloadWorkspaceMetadata(data.workspace.urlKey), issueIds?.length ? refreshIssuesById(data.workspace.urlKey, issueIds) : undefined]);
+              }}
             />
           )}
         {page === "document-detail" && selectedDocument && (
@@ -5040,9 +5094,11 @@ function App() {
             data={data}
             customer={selectedCustomer}
             onBack={() => navigateTo(navigationReturnPath(location.state, data.workspace.urlKey, customersPath(data.workspace.urlKey)))}
-            onReload={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
+            onReload={async (issueIds) => {
+              // Customer data is metadata; requests that created or linked an
+              // issue refetch just that issue (its customer count changed).
+              await Promise.all([reloadWorkspaceMetadata(data.workspace.urlKey), issueIds?.length ? refreshIssuesById(data.workspace.urlKey, issueIds) : undefined]);
+            }}
             onOpenResource={(type, id) => {
               if (type === "issue") {
                 const issue = data.issues.find((item) => item.id === id);
@@ -5134,9 +5190,7 @@ function App() {
             onOpenCustomer={(customer) =>
               navigateTo(customerPath(data.workspace.urlKey, customer))
             }
-            onReload={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
+            onReload={(teamId) => reloadTeamMembership(data.workspace.urlKey, teamId)}
           />
         )}
         {route.kind === "member-profile" &&
@@ -5243,7 +5297,7 @@ function App() {
             onUpdateSettings={(input) =>
               changeCycleSettings(cycleTeam.id, input)
             }
-            onReload={refreshActivity}
+            onReload={() => reloadTeamMetadata(data.workspace.urlKey)}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
           />
         )}
@@ -5266,7 +5320,7 @@ function App() {
               renderIssuePreview={renderIssuePreview}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onCreateIssue={(context) => openCreateIssue({ ...context, teamId: cycleTeam.id, cycleId: selectedCycle.id })}
-              onReload={refreshActivity}
+              onReload={() => reloadTeamMetadata(data.workspace.urlKey)}
               onNavigate={navigateTo}
             />
           )}
@@ -5335,11 +5389,11 @@ function App() {
               onDelete={removeInitiative}
               onCreateReminder={addInitiativeReminder}
               onSetDefault={async (initiativeDisplay) => {
-                await updateWorkspaceSettings({
+                const settings = await updateWorkspaceSettings({
                   ...(data.settings ?? {}),
                   initiativeDisplay,
                 });
-                await load();
+                setData((current) => current ? { ...current, settings: settings as BootstrapData["settings"] } : current);
               }}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
@@ -5429,7 +5483,11 @@ function App() {
             activeTab={route.kind === "inbox" && route.tab ? route.tab : "all"}
             onTabChange={(tab) => navigateTo(inboxPath(data.workspace.urlKey, tab === "all" ? undefined : tab))}
             presence={realtime.presence}
-            onReload={load}
+            onReload={async () => {
+              // Pull request previews edit reviews; everything else in the
+              // inbox arrives with the workspace metadata.
+              await Promise.all([reloadWorkspaceMetadata(data.workspace.urlKey), reloadReviews(data.workspace.urlKey)]);
+            }}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenSettings={() => navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"))}
             onOpenIssue={openIssue}
@@ -5495,7 +5553,7 @@ function App() {
               resourceHeader={{
                 icon: <span aria-hidden="true" className="label-page-toolbar__icon" style={{ background: label.color }} />,
                 title: <span data-i18n-ignore>{label.name}</span>,
-                actions: <LabelActions data={data} label={label} onReload={async () => acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))} />,
+                actions: <LabelActions data={data} label={label} onLabelUpdated={(updated) => setData((current) => current ? applyLabelUpdate(current, updated) : current)} />,
               }}
               scopeFilter={(issue) => issue.labels.some((item) => item.id === label.id)}
               scopeConditions={[{ field: "labels", values: [label.id] }]}
@@ -5864,18 +5922,6 @@ function App() {
                         resource,
                       )
                     : workspaceViewsPath(data.workspace.urlKey, resource)
-                }
-                dashboardsHref={
-                  viewsTeam
-                    ? teamDashboardsPath(data.workspace.urlKey, viewsTeam.key)
-                    : dashboardsPath(data.workspace.urlKey)
-                }
-                onOpenDashboards={() =>
-                  navigateTo(
-                    viewsTeam
-                      ? teamDashboardsPath(data.workspace.urlKey, viewsTeam.key)
-                      : dashboardsPath(data.workspace.urlKey),
-                  )
                 }
                 onUpdate={changeSavedView}
                 onToggleFavorite={toggleSavedViewFavorite}

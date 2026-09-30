@@ -16,6 +16,7 @@ import {
   Folder,
   FolderOpen,
   Keyboard,
+  LayoutDashboard,
   MessageCircle,
   MessageCircleQuestion,
   MoreHorizontal,
@@ -184,7 +185,7 @@ export function Sidebar({
   onSwitchWorkspace: (workspace: Workspace) => void;
   onCreateWorkspace: () => void;
   onLogout: () => Promise<void>;
-  onReload?: () => Promise<void>;
+  onReload?: (teamId?: string) => Promise<void>;
 }) {
   const layout = useSidebarLayout(open, onOpenChange);
   const currentLocation = useLocation();
@@ -505,6 +506,7 @@ export function Sidebar({
     projects: null,
     documents: null,
     views: null,
+    dashboards: null,
     members: null,
     customers: null,
     teams: null,
@@ -546,6 +548,15 @@ export function Sidebar({
           icon={<FlowIcon name="CustomView" />}
           label="Views"
           to={workspaceViewsPath(workspaceSlug)}
+          onClick={close}
+        />
+      ),
+    dashboards:
+      data.viewerRole === "guest" || !featureEnabled("dashboards") ? null : (
+        <Nav
+          icon={<LayoutDashboard />}
+          label="Dashboards"
+          to={dashboardsPath(workspaceSlug)}
           onClick={close}
         />
       ),
@@ -1487,7 +1498,7 @@ function TeamNavigation({
   onNavigate,
 }: {
   data: BootstrapData;
-  onReload?: () => Promise<void>;
+  onReload?: (teamId?: string) => Promise<void>;
   team: Team;
   workspaceSlug: string;
   page: PageId | "not-found";
@@ -1638,6 +1649,11 @@ function MoreMenu({
       label: "Views",
       icon: <FlowIcon name="CustomView" />,
       to: workspaceViewsPath(workspaceSlug),
+    },
+    dashboards: {
+      label: "Dashboards",
+      icon: <LayoutDashboard />,
+      to: dashboardsPath(workspaceSlug),
     },
     members: {
       label: "Members",
@@ -1885,6 +1901,7 @@ export function SidebarCustomization({
     projects: ["", <></>],
     documents: ["", <></>],
     views: ["", <></>],
+    dashboards: ["", <></>],
     members: ["", <></>],
     customers: ["", <></>],
     teams: ["", <></>],
@@ -1896,6 +1913,7 @@ export function SidebarCustomization({
     projects: ["Projects", <FlowIcon key="projects" name="Project" />],
     documents: ["Documents", <BookOpen key="documents" />],
     views: ["Views", <FlowIcon key="views" name="CustomView" />],
+    dashboards: ["Dashboards", <LayoutDashboard key="dashboards" />],
     members: ["Members", <SidebarMembersIcon key="members" />],
     customers: ["Customers", <CustomersIcon key="customers" />],
     teams: ["Teams", <FlowIcon key="teams" name="Team" />],

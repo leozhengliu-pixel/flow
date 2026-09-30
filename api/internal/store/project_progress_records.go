@@ -345,11 +345,9 @@ func (s *SQLiteStore) persistIssueProjectProgress(ctx context.Context, tx *sqlTx
 	if err != nil || !changed {
 		return nil, err
 	}
-	raw, err := s.encodeWorkspaceMetadata(next)
-	if err != nil {
-		return nil, err
-	}
-	if err := writeWorkspaceMetadata(ctx, tx, workspace, next.Workspace.ID, raw); err != nil {
+	// Only the projects changed: write their records, not the whole
+	// workspace metadata (a full rewrite takes seconds at ~200k records).
+	if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspace, stored, next); err != nil {
 		return nil, err
 	}
 	return &next, nil
@@ -369,6 +367,7 @@ func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
 			s.mu.Unlock()
 			continue
 		}
+		before := data
 		data.Projects = slices.Clone(data.Projects)
 		states := progressStates(data)
 		changed := false
@@ -384,7 +383,9 @@ func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
 			changed = rebuilt || changed
 		}
 		if err == nil && changed {
-			if err = s.persistWorkspace(ctx, workspace, data, nil); err == nil {
+			// Only projects changed: write them as a metadata delta rather
+			// than re-encoding and comparing every metadata record.
+			if err = s.persistWorkspaceFrom(ctx, workspace, &before, data, nil); err == nil {
 				s.workspaces[workspace] = data
 			}
 		}

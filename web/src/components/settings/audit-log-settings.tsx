@@ -1,7 +1,8 @@
 import { Filter, MoreHorizontal, Search, ShieldCheck, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { BootstrapData } from "@/types/flow";
+import type { AuditLogEntry, BootstrapData } from "@/types/flow";
+import { listAuditLog } from "@/lib/api";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 import { AuditLogStreaming } from "./audit-log-streaming";
 import { Toggle } from "@/components/ui/toggle";
@@ -12,15 +13,39 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+/**
+ * The audit log as the server has it now. Partial reloads (e.g. a loop change
+ * refetches only `/api/loops`) leave `data.auditLog` behind, so the page
+ * refetches the log when it opens and whenever loops change.
+ */
+function useAuditLog(data: BootstrapData) {
+  const [fetched, setFetched] = useState<AuditLogEntry[]>();
+  const admin = ["admin", "owner"].includes(data.viewerRole);
+  useEffect(() => {
+    if (!admin) return;
+    let active = true;
+    listAuditLog()
+      .then((entries) => {
+        if (active && Array.isArray(entries)) setFetched(entries);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [admin, data.auditLog, data.loops]);
+  return fetched ?? data.auditLog;
+}
+
 export function AuditLogSettings({ data }: { data: BootstrapData }) {
   const [query, setQuery] = useState(""),
     [hideSessions, setHideSessions] = useState(false),
     [eventType, setEventType] = useState("all");
+  const auditLog = useAuditLog(data);
   const eventTypes = useMemo(
-    () => [...new Set(data.auditLog.map((item) => item.action))].sort(),
-    [data.auditLog],
+    () => [...new Set(auditLog.map((item) => item.action))].sort(),
+    [auditLog],
   );
-  const rows = data.auditLog
+  const rows = auditLog
     .filter(
       (item) => !hideSessions || !item.action.toLowerCase().includes("session"),
     )

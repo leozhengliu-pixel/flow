@@ -107,7 +107,7 @@ func (s *server) restoreDeletedTeam(w http.ResponseWriter, r *http.Request) {
 
 // purgeExpiredTeams permanently deletes teams whose restoration window ended.
 func (s *server) purgeExpiredTeams(ctx context.Context, workspaceKey string, now time.Time) error {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey)
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey, "teams")
 	if !ok {
 		return nil
 	}

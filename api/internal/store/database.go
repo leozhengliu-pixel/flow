@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -150,132 +151,62 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
 	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
-	if err := s.migrate(context.Background()); err != nil {
-		db.Close()
-		return nil, err
+	// Startup runs schema checks, loads workspace metadata and applies
+	// idempotent data migrations. Stage timings are logged for slow opens.
+	stages := []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"migrate", s.migrate},
+		{"ensureIssueRecords", s.ensureIssueRecords},
+		{"ensureAttachmentIndex", s.ensureAttachmentIndex},
+		{"ensureIssueListProjection", s.ensureIssueListProjection},
+		{"ensureIssueSearchIndex", s.ensureIssueSearchIndex},
+		{"ensureContentRecords", s.ensureContentRecords},
+		{"ensureIssueStats", s.ensureIssueStats},
+		{"ensureSCIMSchema", s.ensureSCIMSchema},
+		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
+		{"ensureApplicationAgents", s.ensureApplicationAgents},
+		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
+		{"ensureMetadataSearchIndex", s.ensureMetadataSearchIndex},
+		{"ensureAPIKeyLookup", s.ensureAPIKeyLookup},
+		{"ensureCustomerFilterIndex", s.ensureCustomerFilterIndex},
+		{"ensureTeamDefaultFavorites", s.ensureTeamDefaultFavorites},
+		{"loadOrSeed", s.loadOrSeed},
+		{"seedWorkspaceOwners", func(ctx context.Context) error {
+			if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {
+				return s.ensureAuthTestFixture(ctx)
+			}
+			return s.ensureSeedWorkspaceOwners(ctx)
+		}},
+		{"migrateIssueCollections", s.migrateIssueCollections},
+		{"migrateWorkspaceMetadataRecords", s.migrateWorkspaceMetadataRecords},
+		{"migrateContentIndexes", s.migrateContentIndexes},
+		{"migrateIssueStats", s.migrateIssueStats},
+		{"migrateIssueSequences", s.migrateIssueSequences},
+		{"migrateIssueAttributes", s.migrateIssueAttributes},
+		{"migrateAttachmentIndex", s.migrateAttachmentIndex},
+		{"migrateIssueListProjection", s.migrateIssueListProjection},
+		{"migrateIssueSearchIndex", s.migrateIssueSearchIndex},
+		{"migrateMetadataSearchIndex", s.migrateMetadataSearchIndex},
+		{"migrateAPIKeyLookup", s.migrateAPIKeyLookup},
+		{"migrateCustomerFilterIndex", s.migrateCustomerFilterIndex},
+		{"backfillAllProjectProgress", s.backfillAllProjectProgress},
 	}
-	if err := s.ensureIssueRecords(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureAttachmentIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureIssueListProjection(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureIssueSearchIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureContentRecords(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureIssueStats(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	// Keep the SCIM token table available for databases created before SCIM
-	// support. It is idempotent and does not alter the versioned base schema.
-	if err := s.ensureSCIMSchema(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureWorkspaceMetadataRecords(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureApplicationAgents(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureAuditStreamSecrets(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureMetadataSearchIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureAPIKeyLookup(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureCustomerFilterIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.ensureTeamDefaultFavorites(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.loadOrSeed(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {
-		if err := s.ensureAuthTestFixture(context.Background()); err != nil {
+	opened := time.Now()
+	timings := make([]string, 0, len(stages))
+	for _, stage := range stages {
+		began := time.Now()
+		if err := stage.run(context.Background()); err != nil {
 			db.Close()
 			return nil, err
 		}
-	} else if err := s.ensureSeedWorkspaceOwners(context.Background()); err != nil {
-		db.Close()
-		return nil, err
+		if elapsed := time.Since(began); elapsed >= 50*time.Millisecond {
+			timings = append(timings, fmt.Sprintf("%s=%dms", stage.name, elapsed.Milliseconds()))
+		}
 	}
-	if err := s.migrateIssueCollections(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateWorkspaceMetadataRecords(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateContentIndexes(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateIssueStats(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateIssueSequences(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateIssueAttributes(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateAttachmentIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateIssueListProjection(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateIssueSearchIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateMetadataSearchIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateAPIKeyLookup(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.migrateCustomerFilterIndex(context.Background()); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := s.backfillAllProjectProgress(context.Background()); err != nil {
-		db.Close()
-		return nil, err
+	if total := time.Since(opened); total >= time.Second {
+		slog.Info("workspace store opened", "driver", driver, "total_ms", total.Milliseconds(), "stages", strings.Join(timings, " "))
 	}
 	return s, nil
 }

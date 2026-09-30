@@ -93,6 +93,7 @@ import type {
   TeamResourceSection,
 } from "@/types/flow";
 
+import { resourceDisplayTitle, resourceLinkName } from "@/components/project-detail/project-resource-link-name";
 import "./team-overview-page.css";
 import './team-documents.css';
 
@@ -105,6 +106,7 @@ export function TeamOverviewPage({
   onNavigate,
   onOpenSidebar,
   onReload,
+  onMembershipReload,
   onLoopsReload,
 }: {
   data: BootstrapData;
@@ -112,9 +114,12 @@ export function TeamOverviewPage({
   view: View;
   onNavigate: (path: string) => void;
   onOpenSidebar: () => void;
+  /** Refreshes workspace metadata after a team, document or settings edit. */
   onReload: () => Promise<void>;
+  /** Refreshes after a membership change, which can change the team's visible issues (defaults to onReload). */
+  onMembershipReload?: () => Promise<void>;
   /** Refreshes only the workspace's loops after a loop change (defaults to onReload). */
-  onLoopsReload?: () => Promise<void>;
+  onLoopsReload?: (changed?: import("@/types/flow").Loop) => Promise<void>;
 }) {
   const {t}=useI18n();
   const loopsEnabled = workspaceFeatureEnabled(
@@ -208,10 +213,8 @@ export function TeamOverviewPage({
       })),
     [resources, sections, team.id],
   );
-  const reloadResources = async () => {
-    await load();
-    await onReload();
-  };
+  // Pinned resources and sections come from the team resources endpoint.
+  const reloadResources = load;
   const newDocument = async () => {
     if (creatingDocument.current) return;
     creatingDocument.current = true;
@@ -244,7 +247,7 @@ export function TeamOverviewPage({
         resourceId: document.id,
         title: document.title,
       });
-      await reloadResources();
+      await Promise.all([reloadResources(), onReload()]);
       onNavigate(documentPath(data.workspace.urlKey, document));
     } catch (error) {
       toast.error(
@@ -634,7 +637,7 @@ export function TeamOverviewPage({
           data={data}
           onAdd={() => setMembersOpen(true)}
           onNavigate={onNavigate}
-          onReload={onReload}
+          onReload={onMembershipReload ?? onReload}
           team={team}
         />
       )}
@@ -656,7 +659,7 @@ export function TeamOverviewPage({
           onClose={() => setMembersOpen(false)}
           onSaved={async () => {
             setMembersOpen(false);
-            await onReload();
+            await (onMembershipReload ?? onReload)();
           }}
         />
       )}
@@ -974,7 +977,7 @@ function ResourceSection({
               else if (item.url) window.open(item.url, "_blank", "noopener");
             }}
           >
-            {item.title}
+            {resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' })}
           </button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
@@ -1135,7 +1138,7 @@ function AddLinkDialog({
       await pinTeamResource(team.id, {
         sectionId,
         resourceType: "link",
-        title: title.trim() || normalized,
+        title: title.trim() || resourceLinkName(normalized),
         url: normalized,
       });
       await onSaved();

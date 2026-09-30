@@ -521,7 +521,9 @@ func cascadeLabel(data *domain.Bootstrap, label domain.IssueLabel) {
 func (s *server) moveWorkspaceLabelToTeams(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	moved := []domain.IssueLabel{}
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "label.moved_to_teams", id, func(data *domain.Bootstrap) (string, error) {
+	// Only issues carrying the label change.
+	ctx := store.WithMutationScope(r.Context(), store.MutationScope{LabelIssues: []string{id}})
+	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "label.moved_to_teams", id, func(data *domain.Bootstrap) (string, error) {
 		index := slices.IndexFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && labelScopeIsWorkspace(label.Scope) })
 		if index < 0 {
 			return "", errNotFound
@@ -2243,10 +2245,12 @@ type documentTemplateInput struct {
 
 func applyDocumentTemplateInput(data *domain.Bootstrap, item *domain.DocumentTemplate, input documentTemplateInput) error {
 	if input.TeamID != nil {
-		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == *input.TeamID }) {
+		// An empty team ID scopes the template to the whole workspace.
+		teamID := strings.TrimSpace(*input.TeamID)
+		if teamID != "" && !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
 			return errInvalid
 		}
-		item.TeamID = *input.TeamID
+		item.TeamID = teamID
 	}
 	if input.Name != nil {
 		if strings.TrimSpace(*input.Name) == "" {
@@ -2278,8 +2282,8 @@ func applyDocumentTemplateInput(data *domain.Bootstrap, item *domain.DocumentTem
 
 func (s *server) createDocumentTemplate(w http.ResponseWriter, r *http.Request) {
 	var input documentTemplateInput
-	if !decodeJSON(w, r, &input) || input.Name == nil || input.TeamID == nil {
-		writeError(w, http.StatusBadRequest, "name and teamId are required")
+	if !decodeJSON(w, r, &input) || input.Name == nil {
+		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
 	actor := requestActor(s, r)

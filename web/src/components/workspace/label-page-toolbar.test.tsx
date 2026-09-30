@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
-import { filterLabelItems, LabelPageToolbar, triageOptionAvailable } from './label-page-toolbar'
+import { filterLabelItems, LabelActions, LabelPageToolbar, triageOptionAvailable } from './label-page-toolbar'
+import * as api from '@/lib/api'
 import type { BootstrapData, IssueLabel } from '@/types/flow'
 
 vi.mock('@/lib/favorites', () => ({
@@ -81,5 +83,17 @@ describe('filterLabelItems / triageOptionAvailable', () => {
   it('detects triage availability', () => {
     expect(triageOptionAvailable(data(true))).toBe(true)
     expect(triageOptionAvailable(data(false))).toBe(false)
+  })
+})
+
+describe('LabelActions', () => {
+  it('applies the archived label from the response instead of reloading the workspace', async () => {
+    const user = userEvent.setup(), onReload = vi.fn(), onLabelUpdated = vi.fn()
+    vi.mocked(api.updateWorkspaceLabel).mockResolvedValue({ ...label, archivedAt: '2026-09-01T00:00:00.000Z' })
+    render(<I18nProvider><LabelActions data={data()} label={label} onReload={onReload} onLabelUpdated={onLabelUpdated} /></I18nProvider>)
+    await user.click(screen.getByLabelText('Label options'))
+    await user.click(screen.getByRole('menuitem', { name: 'Archive' }))
+    await waitFor(() => expect(onLabelUpdated).toHaveBeenCalledWith(expect.objectContaining({ id: 'l1', archivedAt: '2026-09-01T00:00:00.000Z' })))
+    expect(onReload).not.toHaveBeenCalled()
   })
 })
