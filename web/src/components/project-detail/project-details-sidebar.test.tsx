@@ -82,7 +82,9 @@ describe('project progress data', () => {
     expect(result.series[0].data.map(point => point.y)).toEqual([0, 3, 6, 6])
     expect(result.series[2].data.map(point => point.y)).toEqual([0, 3, 6])
     expect(result.series[1].data.map(point => point.y)).toEqual([0, 6, 12])
-    expect(result.series[3].data.every(point => point.y === 0)).toBe(true)
+    // With no local issues the target follows the latest persisted scope, and the axis fits every series.
+    expect(result.series[3].data.every(point => point.y === 6)).toBe(true)
+    expect(result.yMax).toBe(12)
   })
 
   it('uses estimate points for target and engaged progress', () => {

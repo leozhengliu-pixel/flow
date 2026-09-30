@@ -562,7 +562,7 @@ function ProgressChart({ issues, persistedHistory, progress, start, target }: { 
       useMesh={false}
       width={359}
       xScale={{ type: 'time', format: 'native', precision: 'day', min: chart.startDate, max: chart.endDate }}
-      yScale={{ type: 'linear', stacked: false, min: 0, max: Math.max(1, chart.totalEstimate) }}
+      yScale={{ type: 'linear', stacked: false, min: 0, max: chart.yMax }}
       height={200}
     />
   </div>
