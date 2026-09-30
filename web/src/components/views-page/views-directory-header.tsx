@@ -44,7 +44,7 @@ export function ViewsDirectoryHeader({
       </button>
     </header>
     <div className={styles.toolbar}>
-      <nav aria-label={t('View resources')} className={styles.tabs}>
+      {tabs.length > 0 && <nav aria-label={t('View resources')} className={styles.tabs}>
         {tabs.map(tab => <a
           aria-current={activeResource === tab.resource ? 'page' : undefined}
           className="ui-pill"
@@ -56,7 +56,7 @@ export function ViewsDirectoryHeader({
             if (activeResource !== tab.resource) tab.onSelect?.()
           }}
         >{t(tab.label)}</a>)}
-      </nav>
+      </nav>}
       {toolbarEnd && <div className={styles.toolbarEnd}>{toolbarEnd}</div>}
     </div>
   </>

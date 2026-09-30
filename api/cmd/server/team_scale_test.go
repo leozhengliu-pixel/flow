@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"slices"
 	"sort"
 	"strconv"
@@ -29,10 +30,14 @@ import (
 //	FLOW_SCALE_TEST=1 go test ./cmd/server -run TestTeamMutationsAtScale -v -timeout 60m
 //
 // FLOW_SCALE_DATABASE_DRIVER (sqlite|mysql|postgres) and FLOW_SCALE_DATABASE_URL
-// select an external database. THE EXTERNAL DATABASE IS WIPED unless
-// FLOW_SCALE_REUSE=1 finds an already seeded fixture. FLOW_SCALE_ISSUES,
-// FLOW_SCALE_METADATA and FLOW_SCALE_REPEAT override the sizes; FLOW_SCALE_AUTH=0
-// runs the auth-disabled (development) handlers instead of signed-in ones.
+// select an external database; FLOW_SCALE_SQLITE_PATH keeps a SQLite fixture.
+// THE EXTERNAL DATABASE IS WIPED unless FLOW_SCALE_REUSE=1 finds an already
+// seeded fixture. FLOW_SCALE_ISSUES, FLOW_SCALE_METADATA, FLOW_SCALE_REPEAT and
+// FLOW_SCALE_CASCADE_REPEAT override the sizes; FLOW_SCALE_AUTH=0 runs the
+// auth-disabled (development) handlers instead of signed-in ones;
+// FLOW_SCALE_LOG_EACH=1 logs every request as it completes;
+// FLOW_SCALE_OPEN_ONLY=1 only times opening the store (FLOW_SCALE_OPEN_PROFILE
+// writes a CPU profile of it).
 func TestTeamMutationsAtScale(t *testing.T) {
 	if os.Getenv("FLOW_SCALE_TEST") != "1" {
 		t.Skip("set FLOW_SCALE_TEST=1 to run the team mutation timing test")
@@ -44,7 +49,10 @@ func TestTeamMutationsAtScale(t *testing.T) {
 	url := os.Getenv("FLOW_SCALE_DATABASE_URL")
 	config := store.DatabaseConfig{Driver: driver, URL: url, FixtureProfile: "test", FixturePassword: "test-password"}
 	if driver == "sqlite" {
-		config.Path = filepath.Join(t.TempDir(), "flow.db")
+		config.Path = os.Getenv("FLOW_SCALE_SQLITE_PATH")
+		if config.Path == "" {
+			config.Path = filepath.Join(t.TempDir(), "flow.db")
+		}
 		config.MaxOpenConns = 1
 		url = config.Path
 	} else if url == "" {
@@ -81,18 +89,35 @@ func TestTeamMutationsAtScale(t *testing.T) {
 		t.Logf("seeded %s fixture in %s", driver, time.Since(started).Round(time.Millisecond))
 	}
 	opened := time.Now()
+	if profile := os.Getenv("FLOW_SCALE_OPEN_PROFILE"); profile != "" {
+		file, err := os.Create(profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := pprof.StartCPUProfile(file); err != nil {
+			t.Fatal(err)
+		}
+	}
 	repository, err := store.OpenDatabase(config)
+	if os.Getenv("FLOW_SCALE_OPEN_PROFILE") != "" {
+		pprof.StopCPUProfile()
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer repository.Close()
+	if os.Getenv("FLOW_SCALE_OPEN_ONLY") == "1" {
+		t.Logf("opened store in %s", time.Since(opened).Round(time.Millisecond))
+		return
+	}
 	if loaded, ok := repository.WorkspaceMetadataFields("test-workspace", "users", "teams", "issueSlas", "slaEvents", "subscriptions", "auditLog", "favorites", "integrationDeliveries", "trash"); ok {
 		t.Logf("opened store in %s; in memory: %d users, %d teams, %d SLAs, %d SLA events, %d subscriptions, %d audit, %d favorites, %d deliveries, %d trash", time.Since(opened).Round(time.Millisecond), len(loaded.Users), len(loaded.Teams), len(loaded.IssueSLAs), len(loaded.SLAEvents), len(loaded.Subscriptions), len(loaded.AuditLog), len(loaded.Favorites), len(loaded.IntegrationDeliveries), len(loaded.Trash))
 	}
 	if auth {
 		t.Setenv("FLOW_DEV_AUTH_TOKENS", "true")
 	}
-	api := httptest.NewServer(newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: !auth}))
+	srv := &server{store: repository, uploadPath: t.TempDir(), authDisabled: !auth}
+	api := httptest.NewServer(newHandler(srv))
 	defer api.Close()
 	client := authClient(t)
 	if auth {
@@ -124,6 +149,9 @@ func TestTeamMutationsAtScale(t *testing.T) {
 			order = append(order, label)
 		}
 		samples[label] = append(samples[label], elapsed)
+		if os.Getenv("FLOW_SCALE_LOG_EACH") == "1" {
+			t.Logf("%s %s %s: %d ms", label, method, path, elapsed.Milliseconds())
+		}
 		if len(want) > 0 && !slices.Contains(want, response.StatusCode) || len(want) == 0 && response.StatusCode >= 300 {
 			t.Errorf("%s: status %d: %.300s", label, response.StatusCode, raw)
 			return map[string]any{}
@@ -165,6 +193,7 @@ func TestTeamMutationsAtScale(t *testing.T) {
 	}
 	if !seeded {
 		timed("member remove (40 issues)", http.MethodPut, ws+"/teams/team_scale_1/members/usr_scale_250", map[string]any{"member": false}, http.StatusNoContent)
+		timed("member remove (600 issues)", http.MethodPut, ws+"/teams/team_scale_1/members/usr_scale_251", map[string]any{"member": false}, http.StatusNoContent)
 	}
 	if !seeded {
 		var assigned, subscribed int
@@ -176,6 +205,15 @@ func TestTeamMutationsAtScale(t *testing.T) {
 		}
 		if assigned != 0 || subscribed != 0 {
 			t.Errorf("member removal left %d assignments and %d subscriptions", assigned, subscribed)
+		}
+		if err := db.QueryRow(`SELECT COUNT(*) FROM issue_records WHERE workspace_key='test-workspace' AND team_id='team_scale_1' AND assignee_id='usr_scale_251'`).Scan(&assigned); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.QueryRow(`SELECT COUNT(*) FROM issue_subscriber_records WHERE workspace_key='test-workspace' AND user_id='usr_scale_251'`).Scan(&subscribed); err != nil {
+			t.Fatal(err)
+		}
+		if assigned != 0 || subscribed != 0 {
+			t.Errorf("batched member removal left %d assignments and %d subscriptions", assigned, subscribed)
 		}
 	}
 	for _, teamID := range created {
@@ -231,12 +269,24 @@ func TestTeamMutationsAtScale(t *testing.T) {
 		timed("legacy issue title", http.MethodPatch, "/api/issues/scale_"+strconv.Itoa(20+i), map[string]any{"title": "Legacy renamed " + n})
 		timed("legacy issue comment", http.MethodPost, "/api/issues/scale_"+strconv.Itoa(20+i)+"/comments", map[string]any{"body": "Legacy comment"})
 	}
+	runIssueCascadeScaleRoutes(t, srv, repository, timed, scaleEnvInt("FLOW_SCALE_CASCADE_REPEAT", repeat), suffix)
 	initiative := timed("initiative create", http.MethodPost, "/api/initiatives", map[string]any{"name": "Scale initiative"})
 	timed("initiative update", http.MethodPatch, "/api/initiatives/"+id(initiative), map[string]any{"summary": "Scale summary"})
 	issue := timed("issue-record create", http.MethodPost, "/api/issue-records", map[string]any{"title": "Scale created issue", "teamId": "team_test"})
 	timed("issue-record priority", http.MethodPatch, "/api/issue-records/"+id(issue), map[string]any{"priority": 1})
 	timed("GET issue-records/bootstrap", http.MethodGet, "/api/issue-records/bootstrap", nil)
 
+	extra := []string{}
+	for label := range scaleExtraSamples {
+		extra = append(extra, label)
+	}
+	sort.Strings(extra)
+	for _, label := range extra {
+		if _, known := samples[label]; !known {
+			order = append(order, label)
+		}
+		samples[label] = append(samples[label], scaleExtraSamples[label]...)
+	}
 	var summary strings.Builder
 	fmt.Fprintf(&summary, "\n  %-28s %5s %10s %10s %10s", "operation", "n", "p50 ms", "p95 ms", "max ms")
 	for _, label := range order {
@@ -545,8 +595,12 @@ func seedTeamScaleFixture(t *testing.T, db scaleDB, issueCount, metadataCount in
 	subscriberSQL := &scaleInserter{t: t, db: db, prefix: `INSERT INTO issue_subscriber_records(workspace_key,issue_id,user_id)`, columns: 3}
 	// usr_scale_250 is a member of team_scale_1 with 20 assigned and 20
 	// subscribed issues there, for the member-removal cleanup case.
-	if _, err := db.Exec(`INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, workspaceID, "team_scale_1", "usr_scale_250", "member", stamp); err != nil {
-		t.Fatal(err)
+	// usr_scale_251 has 300 assigned and 300 subscribed issues there, for the
+	// batched member-removal case.
+	for _, user := range []string{"usr_scale_250", "usr_scale_251"} {
+		if _, err := db.Exec(`INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, workspaceID, "team_scale_1", user, "member", stamp); err != nil {
+			t.Fatal(err)
+		}
 	}
 	for n := 1; n <= issueCount; n++ {
 		issueID := fmt.Sprintf("scale_%d", n)
@@ -576,6 +630,14 @@ func seedTeamScaleFixture(t *testing.T, db scaleDB, issueCount, metadataCount in
 			} else {
 				issue["subscriberIds"] = []string{"usr_admin", "usr_scale_250"}
 				subscriberSQL.add(workspace, issueID, "usr_scale_250")
+			}
+		} else if offset >= 100 && offset < 700 {
+			if offset < 400 {
+				assignee = []byte("usr_scale_251")
+				issue["assignee"] = map[string]any{"id": "usr_scale_251", "name": "Scale user 251", "displayName": "scale251", "email": "scale251@example.test", "active": true}
+			} else {
+				issue["subscriberIds"] = []string{"usr_admin", "usr_scale_251"}
+				subscriberSQL.add(workspace, issueID, "usr_scale_251")
 			}
 		}
 		raw, _ := json.Marshal(issue)

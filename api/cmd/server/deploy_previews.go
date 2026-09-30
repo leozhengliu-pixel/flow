@@ -137,7 +137,11 @@ func (s *server) applyDeploymentWebhook(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	matched := 0
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "code_review.preview", eventID, map[string]any{"provider": provider, "ref": event.Ref, "environment": event.Preview.Environment, "state": event.Preview.State}, func(data *domain.Bootstrap) error {
+	// Previews only touch matching reviews and add activities to their issues.
+	ctx := reviewActivityScope(r.Context(), func(review domain.CodeReview) bool {
+		return review.Provider == provider && review.HeadBranch == event.Ref
+	})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "code_review.preview", eventID, map[string]any{"provider": provider, "ref": event.Ref, "environment": event.Preview.Environment, "state": event.Preview.State}, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
 		for index := range data.Reviews {
 			review := &data.Reviews[index]
@@ -181,7 +185,10 @@ func (s *server) putReviewPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.CodeReview
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "code_review.preview", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+	ctx := reviewActivityScope(r.Context(), func(review domain.CodeReview) bool {
+		return review.ID == r.PathValue("id") || review.SlugID == r.PathValue("id")
+	})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "code_review.preview", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool { return item.ID == r.PathValue("id") || item.SlugID == r.PathValue("id") })
 		if index < 0 {
 			return errNotFound

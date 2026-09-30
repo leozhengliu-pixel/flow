@@ -4161,6 +4161,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/documents/{id}/reminders": {
+      "post": {
+        "operationId": "post_documents_id_reminders",
+        "tags": [
+          "documents"
+        ],
+        "summary": "POST /api/documents/{id}/reminders",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/documents/{id}/restore/{revisionId}": {
       "post": {
         "operationId": "post_documents_id_restore_revisionId",
@@ -9350,6 +9380,44 @@
           "loops"
         ],
         "summary": "POST /api/loops/{id}/runs/{runId}/feedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/loops/{id}/runs/{runId}/replies": {
+      "post": {
+        "operationId": "post_loops_id_runs_runId_replies",
+        "tags": [
+          "loops"
+        ],
+        "summary": "POST /api/loops/{id}/runs/{runId}/replies",
         "parameters": [
           {
             "name": "id",
@@ -14930,6 +14998,26 @@
           "workspace"
         ],
         "summary": "PATCH /api/workspace/agent-guidance",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/workspace/audit-log": {
+      "get": {
+        "operationId": "get_workspace_audit_log",
+        "tags": [
+          "workspace"
+        ],
+        "summary": "GET /api/workspace/audit-log",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

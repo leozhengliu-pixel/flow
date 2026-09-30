@@ -204,6 +204,18 @@ describe('workspace teams directory', () => {
     expect(screen.getByText('ENG')).toBeInTheDocument()
   })
 
+  it('hides the default Name sort arrow until hover and keeps it once an order is chosen', async () => {
+    const user = userEvent.setup()
+    renderTeams()
+    const header = document.querySelector('.workspace-team-columns') as HTMLElement
+    const name = within(header).getByRole('button', { name: 'Order by Name' })
+    expect(name).not.toHaveClass('is-sorted')
+    await user.click(name)
+    expect(within(header).getByRole('button', { name: 'Order by Name, sorted descending' })).toHaveClass('is-sorted')
+    await user.click(within(header).getByRole('button', { name: 'Order by Name, sorted descending' }))
+    expect(within(header).getByRole('button', { name: 'Order by Name, sorted ascending' })).toHaveClass('is-sorted')
+  })
+
   it('filters teams by name or key from the search field', async () => {
     const user = userEvent.setup()
     renderTeams()

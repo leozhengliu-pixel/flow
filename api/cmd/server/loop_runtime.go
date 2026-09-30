@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 const (
@@ -351,9 +352,30 @@ type loopRunRecorder struct {
 	s         *server
 	workspace string
 	run       domain.LoopRun
-	order     int
-	lastSave  time.Time
-	dirty     bool
+	// reply, when set, receives the steps, tool calls and output instead of
+	// the run: the agent is answering a reply on the run page.
+	reply    *domain.LoopRunReply
+	order    int
+	lastSave time.Time
+	dirty    bool
+}
+
+// parts is where the agent's steps, tool calls and output are recorded.
+func (rec *loopRunRecorder) parts() (*[]domain.LoopRunStep, *[]domain.LoopRunToolCall, *string) {
+	if rec.reply != nil {
+		return &rec.reply.Steps, &rec.reply.ToolCalls, &rec.reply.Output
+	}
+	return &rec.run.Steps, &rec.run.ToolCalls, &rec.run.Output
+}
+
+func (rec *loopRunRecorder) output() string {
+	_, _, output := rec.parts()
+	return *output
+}
+
+func (rec *loopRunRecorder) toolCount() int {
+	_, calls, _ := rec.parts()
+	return len(*calls)
 }
 
 func (rec *loopRunRecorder) nextOrder() int {
@@ -368,6 +390,10 @@ func (rec *loopRunRecorder) save(force bool) {
 		return
 	}
 	rec.lastSave, rec.dirty = time.Now(), false
+	if rec.reply != nil {
+		rec.saveReply()
+		return
+	}
 	snapshot := rec.run
 	snapshot.Steps = slices.Clone(rec.run.Steps)
 	snapshot.ToolCalls = slices.Clone(rec.run.ToolCalls)
@@ -393,21 +419,24 @@ func (rec *loopRunRecorder) addStep(title, message string) {
 	if title == "" {
 		return
 	}
-	rec.run.Steps = append(rec.run.Steps, domain.LoopRunStep{Order: rec.nextOrder(), Title: title, Message: strings.TrimSpace(message), At: time.Now().UTC()})
+	steps, _, _ := rec.parts()
+	*steps = append(*steps, domain.LoopRunStep{Order: rec.nextOrder(), Title: title, Message: strings.TrimSpace(message), At: time.Now().UTC()})
 	rec.save(true)
 }
 
 func (rec *loopRunRecorder) startTool(call domain.AgentToolCall) int {
 	now := time.Now().UTC()
 	args := loopToolArgs(call)
-	rec.run.ToolCalls = append(rec.run.ToolCalls, domain.LoopRunToolCall{Order: rec.nextOrder(), ID: call.ID, Name: call.Name, Label: loopToolLabel(call.Name, args), Args: loopToolArgsSummary(args), Status: "running", StartedAt: &now})
+	_, calls, _ := rec.parts()
+	*calls = append(*calls, domain.LoopRunToolCall{Order: rec.nextOrder(), ID: call.ID, Name: call.Name, Label: loopToolLabel(call.Name, args), Args: loopToolArgsSummary(args), Status: "running", StartedAt: &now})
 	rec.save(true)
-	return len(rec.run.ToolCalls) - 1
+	return len(*calls) - 1
 }
 
 func (rec *loopRunRecorder) finishTool(index int, status string, callErr error) {
 	now := time.Now().UTC()
-	record := &rec.run.ToolCalls[index]
+	_, calls, _ := rec.parts()
+	record := &(*calls)[index]
 	record.Status, record.FinishedAt = status, &now
 	if callErr != nil {
 		record.Error = callErr.Error()
@@ -415,9 +444,16 @@ func (rec *loopRunRecorder) finishTool(index int, status string, callErr error) 
 	rec.save(true)
 }
 
+// setOutput records streamed text and persists it on the throttle.
 func (rec *loopRunRecorder) setOutput(text string) {
-	rec.run.Output = text
+	rec.setOutputNow(text)
 	rec.save(false)
+}
+
+// setOutputNow records the output without writing it.
+func (rec *loopRunRecorder) setOutputNow(text string) {
+	_, _, output := rec.parts()
+	*output = text
 }
 
 func (s *server) finishLoopRun(workspace string, run domain.LoopRun, runErr error) {
@@ -487,7 +523,9 @@ func (s *server) loopRunRequest(ctx context.Context, workspace string, owner dom
 
 const loopSummaryPrompt = "You have used all tool calls available to this run. Do not call any more tools. Reply now with the short summary of what you did, including links to the issues you changed, and note anything you could not finish."
 
-func (s *server) executeLoopRun(ctx context.Context, workspace string, loop domain.Loop, trigger loopTrigger, rec *loopRunRecorder) error {
+// executeLoopRun runs the loop's agent. history continues an earlier run: the
+// run's answer and the replies that followed it.
+func (s *server) executeLoopRun(ctx context.Context, workspace string, loop domain.Loop, trigger loopTrigger, rec *loopRunRecorder, history ...agentProviderMessage) error {
 	metadata, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return errNotFound
@@ -529,6 +567,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop))},
 		{Role: "user", Content: "Run this loop now and follow its instructions."},
 	}
+	messages = append(messages, history...)
 	output := ""
 	turnText := &strings.Builder{}
 	emit := func(event agentProviderEvent) error {
@@ -549,7 +588,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			turn, err = s.requestAgentTurn(request.Context(), messages, emit)
 		}
 		if err != nil {
-			rec.run.Output = strings.TrimSpace(output)
+			rec.setOutputNow(strings.TrimSpace(output))
 			return err
 		}
 		// Some gateways print report_progress as JSON text; keep it as steps instead.
@@ -564,8 +603,8 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		}
 		if len(turn.ToolCalls) == 0 {
 			output += turn.Text
-			rec.run.Output = strings.TrimSpace(output)
-			if rec.run.Output == "" && len(rec.run.ToolCalls) == 0 {
+			rec.setOutputNow(strings.TrimSpace(output))
+			if rec.output() == "" && rec.toolCount() == 0 {
 				return fmt.Errorf("Flow Agent returned an empty response")
 			}
 			return nil
@@ -1031,7 +1070,7 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 
 // runDueLoops starts scheduled loops whose next run time has passed.
 func (s *server) runDueLoops(workspace string, now time.Time) {
-	data, ok := s.store.WorkspaceMetadata(workspace)
+	data, ok := s.store.WorkspaceMetadataFields(workspace, "loops")
 	if !ok {
 		return
 	}
@@ -1056,7 +1095,9 @@ func (s *server) runDueLoops(workspace string, now time.Time) {
 }
 
 func (s *server) setLoopNextRun(workspace, loopID string, next time.Time) {
-	err := s.store.MutateWorkspace(context.Background(), workspace, "loop.scheduled", loopID, nil, func(data *domain.Bootstrap) error {
+	// Scheduling only stamps the loop; copy just the loop catalog.
+	ctx := store.WithMetadataFields(context.Background(), "loops")
+	err := s.store.MutateWorkspace(ctx, workspace, "loop.scheduled", loopID, nil, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, loopID)
 		if loop == nil {
 			return errNotFound

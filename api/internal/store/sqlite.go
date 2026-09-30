@@ -1351,7 +1351,13 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			traceStart(ctx, "full")
 		}
 		stored := current
-		current = cloneBootstrap(current)
+		fields, fieldScoped := metadataFieldsFromContext(ctx)
+		fieldScoped = fieldScoped && metadataOnly
+		if fieldScoped {
+			current = metadataFieldSnapshot(stored, fields)
+		} else {
+			current = cloneBootstrap(current)
+		}
 		traceMark(ctx, "clone")
 		if current.Issues == nil && !metadataOnly {
 			issues, err := s.readIssueRecords(ctx, workspaceKey)
@@ -1370,7 +1376,11 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// discards them; only webhook before/after comparison needs a second copy.
 		next := current
 		if webhookEnabled {
-			next = cloneBootstrap(current)
+			if fieldScoped {
+				next = metadataFieldSnapshot(current, fields)
+			} else {
+				next = cloneBootstrap(current)
+			}
 		}
 		refreshDisplayReferences(&next)
 		refreshIssueReferences(&next)
@@ -1383,7 +1393,9 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 				// then restore the snapshot value before persistence.
 				next.ViewerRole = role
 			}
-			if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
+			if fieldScoped && !slices.Contains(fields, "users") {
+				// Users are not part of this mutation's snapshot.
+			} else if index := slices.IndexFunc(next.Users, func(user domain.User) bool { return user.ID == actor.ID }); index >= 0 {
 				next.Users[index] = actor
 			} else {
 				next.Users = append(next.Users, actor)
@@ -1394,6 +1406,12 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		traceMark(ctx, "mutate")
 		if err != nil {
 			return err
+		}
+		if fieldScoped {
+			// Unlisted fields were hidden from the callback; keep the stored
+			// (shared, unchanged) values so the delta skips them.
+			restoreUnlistedMetadata(&current, stored, fields)
+			restoreUnlistedMetadata(&next, stored, fields)
 		}
 		previousValues := json.RawMessage(nil)
 		if webhookEnabled {

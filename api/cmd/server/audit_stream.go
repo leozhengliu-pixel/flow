@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 const (
@@ -193,7 +194,7 @@ func (s *server) streamAuditLog(ctx context.Context, workspace string, now time.
 	if hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks"); !ok || auditStreamWebhook(&hooks) < 0 {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadata(workspace)
+	data, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks", "auditLog")
 	if !ok {
 		return
 	}
@@ -320,7 +321,9 @@ func (s *server) recordAuditStreamRetry(workspace, webhookID string, attempts in
 }
 
 func (s *server) mutateAuditStream(workspace, webhookID string, apply func(*domain.Webhook)) {
-	err := s.store.MutateWorkspace(context.Background(), workspace, "webhook.audit_stream_progress", webhookID, nil, func(data *domain.Bootstrap) error {
+	// Progress only stamps the streaming webhook.
+	ctx := store.WithMetadataFields(context.Background(), "webhooks")
+	err := s.store.MutateWorkspace(ctx, workspace, "webhook.audit_stream_progress", webhookID, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == webhookID && item.AuditLog })
 		if index < 0 {
 			return errNotFound

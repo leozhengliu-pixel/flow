@@ -751,13 +751,16 @@ type ProjectResource struct {
 }
 
 type ProjectMilestone struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"projectId"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	TargetDate  *string   `json:"targetDate,omitempty"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          string  `json:"id"`
+	ProjectID   string  `json:"projectId"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	TargetDate  *string `json:"targetDate,omitempty"`
+	// DescriptionRevisions holds earlier descriptions, newest first, for the
+	// milestone's "Show description history" dialog.
+	DescriptionRevisions []ProjectDescriptionRevision `json:"descriptionRevisions,omitempty"`
+	CreatedAt            time.Time                    `json:"createdAt"`
+	UpdatedAt            time.Time                    `json:"updatedAt"`
 }
 
 // ProjectUpdate mirrors the update stream shown on a Flow project. Updates
@@ -879,6 +882,7 @@ type Loop struct {
 	CodeAccess                 string           `json:"codeAccess"` // disabled | read | readWrite
 	Enabled                    bool             `json:"enabled"`
 	OwnerID                    string           `json:"ownerId,omitempty"`
+	EditPolicy                 string           `json:"editPolicy,omitempty"` // "Who can edit": all (default) | teamOwners | owner
 	TrustedSourceKeys          []string         `json:"trustedSourceKeys,omitempty"`
 	Creator                    User             `json:"creator"`
 	LastRunAt                  *time.Time       `json:"lastRunAt,omitempty"`
@@ -971,12 +975,28 @@ type LoopRun struct {
 	VersionID        string            `json:"versionId,omitempty"`
 	Version          int               `json:"version,omitempty"`
 	Feedback         []LoopRunFeedback `json:"feedback,omitempty"`
+	// Replies continue the run's agent conversation from the run page.
+	Replies []LoopRunReply `json:"replies,omitempty"`
 	// Viewer fields are computed per request and never stored.
 	ViewerRating   *string                `json:"viewerRating"`
 	ViewerComment  string                 `json:"viewerComment,omitempty"`
 	FeedbackCounts *LoopRunFeedbackCounts `json:"feedbackCounts,omitempty"`
 	StartedAt      time.Time              `json:"startedAt"`
 	FinishedAt     *time.Time             `json:"finishedAt,omitempty"`
+}
+
+// LoopRunReply is a follow-up message on a run and the agent's answer to it.
+type LoopRunReply struct {
+	ID         string            `json:"id"`
+	UserID     string            `json:"userId"`
+	Body       string            `json:"body"`
+	Status     string            `json:"status"` // running | completed | failed
+	Output     string            `json:"output,omitempty"`
+	Steps      []LoopRunStep     `json:"steps,omitempty"`
+	ToolCalls  []LoopRunToolCall `json:"toolCalls,omitempty"`
+	Error      string            `json:"error,omitempty"`
+	CreatedAt  time.Time         `json:"createdAt"`
+	FinishedAt *time.Time        `json:"finishedAt,omitempty"`
 }
 
 // LoopRunStep is a progress note (report_progress) the agent made during a run.

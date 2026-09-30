@@ -308,6 +308,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/workspaces/{workspaceKey}/teams/{teamId}", s.updateTeam)
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/teams/{teamId}", s.deleteTeam)
 	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/deleted-teams", s.listDeletedTeams)
+	mux.HandleFunc("GET /api/workspace/audit-log", s.listAuditLog)
 	mux.HandleFunc("GET /api/workspace/audit-log-stream", s.getAuditStream)
 	mux.HandleFunc("POST /api/workspace/audit-log-stream", s.createAuditStream)
 	mux.HandleFunc("PATCH /api/workspace/audit-log-stream", s.updateAuditStream)
@@ -338,6 +339,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/documents", s.createDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", s.updateDocument)
 	mux.HandleFunc("DELETE /api/documents/{id}", s.deleteDocument)
+	mux.HandleFunc("POST /api/documents/{id}/reminders", s.createDocumentReminder)
 	mux.HandleFunc("GET /api/documents/{id}/permissions", s.listDocumentPermissions)
 	mux.HandleFunc("PUT /api/documents/{id}/permissions", s.replaceDocumentPermissions)
 	mux.HandleFunc("PATCH /api/documents/{id}/permissions/{permissionId}", s.updateDocumentPermission)
@@ -386,6 +388,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/loops/{id}/versions/{versionId}", s.getLoopVersion)
 	mux.HandleFunc("POST /api/loops/{id}/versions/{versionId}/restore", s.restoreLoopVersion)
 	mux.HandleFunc("POST /api/loops/{id}/runs/{runId}/feedback", s.setLoopRunFeedback)
+	mux.HandleFunc("POST /api/loops/{id}/runs/{runId}/replies", s.replyLoopRun)
 	mux.HandleFunc("GET /api/project-templates", s.listProjectTemplates)
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
@@ -1124,7 +1127,7 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	data.ProjectTemplates = slices.DeleteFunc(data.ProjectTemplates, func(item domain.ProjectTemplate) bool {
 		return len(item.TeamIDs) > 0 && !slices.ContainsFunc(item.TeamIDs, allowed)
 	})
-	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return !allowed(item.TeamID) })
+	data.DocumentTemplates = slices.DeleteFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.TeamID != "" && !allowed(item.TeamID) })
 	data.Documents = slices.DeleteFunc(data.Documents, func(item domain.Document) bool { return !slices.ContainsFunc(item.TeamIDs, allowed) })
 	for id := range data.Comments {
 		if !visibleIssue(id) && !visibleProject(id) && !slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id }) {
@@ -2182,7 +2185,8 @@ func (s *server) getSharedView(w http.ResponseWriter, r *http.Request) {
 // be disabled first so no active schedule is left pointing at deleted data.
 func (s *server) deleteTeamCycles(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.team_cycles_deleted", teamID, nil, func(data *domain.Bootstrap) error {
+	ctx := cycleIssueScope(r.Context(), true, func(domain.Bootstrap) []string { return []string{teamID} })
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "cycle.team_cycles_deleted", teamID, nil, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
 			return errNotFound
 		}
@@ -2215,7 +2219,7 @@ func (s *server) updateCycleSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID := r.PathValue("id")
 	var updated domain.CycleSettings
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(cycleIssueScope(r.Context(), false, teamAndDescendants(teamID)), workspaceKey(r), "cycle.settings_updated", teamID, input, func(data *domain.Bootstrap) error {
 		if !slices.ContainsFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }) {
 			return errNotFound
 		}
@@ -2379,7 +2383,7 @@ func (s *server) updateCycle(w http.ResponseWriter, r *http.Request) {
 func (s *server) startCycle(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var started domain.Cycle
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.started", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(cycleIssueScope(r.Context(), false, cycleTeam(id)), workspaceKey(r), "cycle.started", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		cycle, err := cycleByID(data, id)
 		if err != nil {
 			return err
@@ -2399,7 +2403,7 @@ func (s *server) startCycle(w http.ResponseWriter, r *http.Request) {
 func (s *server) completeCycle(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var completed domain.Cycle
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "cycle.completed", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(cycleIssueScope(r.Context(), false, cycleTeam(id)), workspaceKey(r), "cycle.completed", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		cycle, err := cycleByID(data, id)
 		if err != nil {
 			return err
@@ -2746,7 +2750,12 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		}
 		input.TeamIDs = []string{projected.Teams[0].ID}
 	}
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "project.created", input, func(data *domain.Bootstrap) (string, error) {
+	ctx := r.Context()
+	if input.TemplateID != "" {
+		// Only the template's issues move into the new project.
+		ctx = projectTemplateScope(ctx, nil, input.TemplateID)
+	}
+	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.created", input, func(data *domain.Bootstrap) (string, error) {
 		if input.TemplateID != "" {
 			index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID })
 			if index < 0 {
@@ -2910,7 +2919,7 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(projectIssueScope(r.Context(), id), workspaceKey(r), "project.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3095,6 +3104,9 @@ func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request
 			resourceURL = strings.TrimSpace(*input.URL)
 		}
 		title := resourceURL
+		if resourceType == "link" {
+			title = resourceLinkName(resourceURL)
+		}
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
@@ -3491,6 +3503,9 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 			return errInvalid
 		}
 		title := strings.TrimSpace(*input.URL)
+		if resourceType == "link" {
+			title = resourceLinkName(title)
+		}
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
@@ -3627,7 +3642,10 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 			milestone.TargetDate = optionalString(*input.TargetDate)
 		}
 		if input.Description != nil {
-			milestone.Description = strings.TrimSpace(*input.Description)
+			if next := strings.TrimSpace(*input.Description); next != milestone.Description {
+				milestone.DescriptionRevisions = append([]domain.ProjectDescriptionRevision{{ID: fmt.Sprintf("milestone_description_revision_%d", time.Now().UnixNano()), ProjectID: projectID, Description: milestone.Description, Author: data.Viewer, CreatedAt: time.Now().UTC()}}, milestone.DescriptionRevisions...)
+				milestone.Description = next
+			}
 		}
 		milestone.UpdatedAt = time.Now().UTC()
 		project.UpdatedAt = milestone.UpdatedAt
@@ -3677,8 +3695,8 @@ func (s *server) reorderProjectMilestones(w http.ResponseWriter, r *http.Request
 
 func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) {
 	projectID, milestoneID := r.PathValue("id"), r.PathValue("milestoneId")
-	// Only the project's issues can reference its milestones.
-	ctx := store.WithMutationScope(r.Context(), store.MutationScope{ProjectIssues: []string{projectID}, IssueContains: milestoneID, IssueFilter: func(issue domain.Issue) bool {
+	// Only issues carrying the milestone (a sparse indexed attribute) change.
+	ctx := store.WithMutationScope(r.Context(), store.MutationScope{IssueAttributes: []store.IssueColumnScope{{Column: "projectMilestoneId", Values: []string{milestoneID}}}, IssueFilter: func(issue domain.Issue) bool {
 		return issue.ProjectMilestoneID != nil && *issue.ProjectMilestoneID == milestoneID
 	}})
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.milestone_deleted", projectID, map[string]string{"id": milestoneID}, func(data *domain.Bootstrap) error {

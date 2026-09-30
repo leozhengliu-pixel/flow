@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"flow/api/internal/domain"
@@ -10,32 +11,60 @@ import (
 )
 
 func (s *server) maintainTeamSettings(ctx context.Context, key string, now time.Time) error {
-	metadata, ok := s.store.WorkspaceMetadata(key)
+	metadata, ok := s.store.WorkspaceMetadataFields(key, "teams", "teamSettings")
 	if !ok {
 		return nil
 	}
+	// Teams sharing a mode and age limit are checked together, five per
+	// indexed query (the page limit keeps up to 100 candidates per team), so
+	// an idle sweep costs a fifth of the per-team queries.
+	type sweep struct {
+		mode   string
+		months int
+	}
+	groups := map[sweep][]string{}
+	order := []sweep{}
 	for _, team := range metadata.Teams {
 		settings := metadata.TeamSettings[team.ID]
 		for _, mode := range []string{"stale", "archive"} {
 			months := settings.AutoArchiveMonths
-			status := store.IssueFilter{Field: "statusType", Values: []string{"completed", "canceled"}}
 			if mode == "stale" {
 				if !settings.AutoCloseStale {
 					continue
 				}
 				months = settings.StaleMonths
-				status.Operator = "isNot"
 			}
 			if months <= 0 {
 				continue
 			}
-			cutoff := now.AddDate(0, -months, 0)
-			query := store.IssueRecordQuery{Workspace: key, TeamIDs: []string{team.ID}, Limit: 100, Sort: "updatedAt", Direction: "asc", Filter: store.IssueFilter{And: []store.IssueFilter{status, {Field: "updatedAt", Operator: "before", Values: []string{cutoff.Format(time.RFC3339)}}}}}
+			key := sweep{mode, months}
+			if _, known := groups[key]; !known {
+				order = append(order, key)
+			}
+			groups[key] = append(groups[key], team.ID)
+		}
+	}
+	for _, group := range order {
+		mode, teamIDs := group.mode, groups[group]
+		status := store.IssueFilter{Field: "statusType", Values: []string{"completed", "canceled"}}
+		if mode == "stale" {
+			status.Operator = "isNot"
+		}
+		cutoff := now.AddDate(0, -group.months, 0)
+		for start := 0; start < len(teamIDs); start += 5 {
+			batch := teamIDs[start:min(start+5, len(teamIDs))]
+			query := store.IssueRecordQuery{Workspace: key, TeamIDs: batch, Limit: 100 * len(batch), Sort: "updatedAt", Direction: "asc", Filter: store.IssueFilter{And: []store.IssueFilter{status, {Field: "updatedAt", Operator: "before", Values: []string{cutoff.Format(time.RFC3339)}}}}}
 			page, err := s.store.QueryIssueRecords(ctx, query)
 			if err != nil {
 				return err
 			}
+			perTeam := map[string]int{}
 			for _, candidate := range page.Items {
+				team := domain.Team{ID: candidate.Team.ID}
+				if perTeam[team.ID]++; perTeam[team.ID] > 100 || !slices.Contains(batch, team.ID) {
+					continue
+				}
+				settings := metadata.TeamSettings[team.ID]
 				_, err := s.store.UpdateIssueRecord(ctx, key, candidate.ID, &candidate.Version, store.IssueMutationScope{IncludeFamily: mode == "stale", Payload: map[string]string{"automation": mode}}, func(data *domain.Bootstrap, issue *domain.Issue) error {
 					if issue.ArchivedAt != nil || !issue.UpdatedAt.Before(cutoff) {
 						return store.ErrNoMutation

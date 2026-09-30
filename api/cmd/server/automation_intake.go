@@ -757,7 +757,7 @@ func (s *server) startWorkflowScheduler() {
 			}
 			now := time.Now().UTC()
 			for _, key := range s.store.WorkspaceKeys() {
-				data, ok := s.store.WorkspaceMetadata(key)
+				data, ok := s.store.WorkspaceMetadataFields(key, "workflowDefinitions", "workflowRuns")
 				if !ok {
 					continue
 				}
@@ -990,7 +990,17 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 	if metadata, ok := s.store.WorkspaceMetadata(key); ok && (metadata.WorkspaceSettings.ReduceSupportPersonalInfo || metadata.WorkspaceSettings.HIPAACompliance) {
 		input.From = ""
 	}
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), key, "email_intake.received", input, func(data *domain.Bootstrap) (string, error) {
+	// Only a redelivered message's issue is read; the new issue is created.
+	ctx := issueCreationScope(r.Context(), func(data domain.Bootstrap) store.MutationScope {
+		scope := store.MutationScope{}
+		for _, message := range data.EmailIntakeMessages {
+			if message.MessageID == input.MessageID {
+				scope.IssueIDs = append(scope.IssueIDs, message.IssueID)
+			}
+		}
+		return scope
+	})
+	err := s.store.MutateWorkspaceWithAggregate(ctx, key, "email_intake.received", input, func(data *domain.Bootstrap) (string, error) {
 		if existing := slices.IndexFunc(data.EmailIntakeMessages, func(item domain.EmailIntakeMessage) bool { return item.MessageID == input.MessageID }); existing >= 0 {
 			if issue, e := issueByID(data, data.EmailIntakeMessages[existing].IssueID); e == nil {
 				created = *issue
@@ -1024,7 +1034,7 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 			return "", errInvalid
 		}
 		now := time.Now().UTC()
-		number := nextIssueNumber(data.Issues)
+		number := max(data.NextIssueNumber, nextIssueNumber(data.Issues))
 		description := strings.TrimSpace(input.Text)
 		if len(input.Attachments) > 0 {
 			description += "\n\nAttachments:\n- " + strings.Join(input.Attachments, "\n- ")

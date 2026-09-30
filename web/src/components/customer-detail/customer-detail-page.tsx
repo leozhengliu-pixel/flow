@@ -50,7 +50,8 @@ export function CustomerDetailPage({
   data: BootstrapData;
   customer: Customer;
   onBack: () => void;
-  onReload: () => Promise<void>;
+  /** Refreshes customer metadata; `issueIds` names issues whose requests changed. */
+  onReload: (issueIds?: string[]) => Promise<void>;
   onOpenResource: (type: "issue" | "project", id: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -196,7 +197,7 @@ export function CustomerDetailPage({
                       onSelect={() =>
                         void updateCustomer(customer.id, {
                           status: value.name,
-                        }).then(onReload)
+                        }).then(() => onReload())
                       }
                     >
                       <span
@@ -233,9 +234,7 @@ export function CustomerDetailPage({
               >
                 <DropdownMenu.Item
                   onSelect={() =>
-                    void updateCustomer(customer.id, { tier: "" }).then(
-                      onReload,
-                    )
+                    void updateCustomer(customer.id, { tier: "" }).then(() => onReload())
                   }
                 >
                   No tier{!customer.tier && <Check size={13} />}
@@ -248,7 +247,7 @@ export function CustomerDetailPage({
                       onSelect={() =>
                         void updateCustomer(customer.id, {
                           tier: value.name,
-                        }).then(onReload)
+                        }).then(() => onReload())
                       }
                     >
                       <span
@@ -304,9 +303,9 @@ export function CustomerDetailPage({
             data={data}
             customer={customer}
             onCancel={() => setAdding(false)}
-            onCreated={async () => {
+            onCreated={async (issueId) => {
               setAdding(false);
-              await onReload();
+              await onReload(issueId ? [issueId] : undefined);
             }}
           />
         )}
@@ -386,7 +385,7 @@ function CustomerRequestRow({
   data: BootstrapData;
   request: CustomerRequest;
   onOpenResource: (type: "issue" | "project", id: string) => void;
-  onReload: () => Promise<void>;
+  onReload: (issueIds?: string[]) => Promise<void>;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const issue = data.issues.find((item) => item.id === request.issueId);
@@ -438,7 +437,7 @@ function CustomerRequestRow({
                     void deleteCustomerRequestAttachment(
                       request.id,
                       attachment.id,
-                    ).then(onReload)
+                    ).then(() => onReload())
                   }
                 >
                   <Trash2 size={11} />
@@ -468,7 +467,7 @@ function CustomerRequestRow({
             </DropdownMenu.Item>
             <DropdownMenu.Item
               onSelect={() =>
-                void archiveCustomerNeed(request.id, !request.archivedAt).then(onReload)
+                void archiveCustomerNeed(request.id, !request.archivedAt).then(() => onReload(request.issueId ? [request.issueId] : undefined))
               }
             >
               <Archive size={14} />
@@ -478,7 +477,7 @@ function CustomerRequestRow({
             <DropdownMenu.Item
               className="danger"
               onSelect={() =>
-                void deleteCustomerRequest(request.id).then(onReload)
+                void deleteCustomerRequest(request.id).then(() => onReload(request.issueId ? [request.issueId] : undefined))
               }
             >
               <Trash2 size={14} />
@@ -500,7 +499,7 @@ function CustomerRequestComposer({
   data: BootstrapData;
   customer: Customer;
   onCancel: () => void;
-  onCreated: () => Promise<void>;
+  onCreated: (issueId?: string) => Promise<void>;
 }) {
   const [body, setBody] = useState("");
   const [target, setTarget] = useState("new");
@@ -532,7 +531,7 @@ function CustomerRequestComposer({
       await Promise.all(
         files.map((file) => uploadCustomerRequestAttachment(request.id, file)),
       );
-      await onCreated();
+      await onCreated(issueId);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not add request",

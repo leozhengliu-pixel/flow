@@ -805,11 +805,15 @@ type metadataRecordChange struct {
 	raw    json.RawMessage
 }
 
+// writeMetadataRecordChanges applies changes inside tx and records each
+// upsert's collection order in changes, so the hot cache can mirror it.
 func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string, changes []metadataRecordChange) error {
 	upserts := make([]metadataRecordChange, 0, len(changes))
-	for _, change := range changes {
+	positions := make([]int, 0, len(changes))
+	for index, change := range changes {
 		if !change.drop {
 			upserts = append(upserts, change)
+			positions = append(positions, index)
 			continue
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, change.field, change.key); err != nil {
@@ -819,7 +823,13 @@ func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string
 			return err
 		}
 	}
-	return writeMetadataRecordUpserts(ctx, tx, workspace, upserts)
+	if err := writeMetadataRecordUpserts(ctx, tx, workspace, upserts); err != nil {
+		return err
+	}
+	for index, position := range positions {
+		changes[position].order = upserts[index].order
+	}
+	return nil
 }
 
 func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string, upserts []metadataRecordChange) error {

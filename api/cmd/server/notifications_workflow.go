@@ -325,7 +325,7 @@ func (s *server) createWorkflowState(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID := r.PathValue("id")
 	var created domain.WorkflowState
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "workflow_state.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(workflowIssueScope(r.Context(), teamID), workspaceKey(r), "workflow_state.created", input, func(data *domain.Bootstrap) (string, error) {
 		if !teamExists(data, teamID) || !validWorkflowType(*input.Type) {
 			return "", errInvalid
 		}
@@ -380,6 +380,8 @@ func (s *server) updateWorkflowState(w http.ResponseWriter, r *http.Request) {
 		// change, no materialization and no inheriting sub-team, the write
 		// touches no issue record.
 		ctx = store.WithMutationScope(ctx, store.MutationScope{})
+	} else {
+		ctx = workflowIssueScope(ctx, teamID, stateID, teamID+"_"+stateID)
 	}
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "workflow_state.updated", stateID, input, func(data *domain.Bootstrap) error {
 		if teamSettings(data, teamID).InheritWorkflowStatuses {
@@ -503,7 +505,7 @@ func (s *server) reorderWorkflowStates(w http.ResponseWriter, r *http.Request) {
 	}
 	teamID := r.PathValue("id")
 	var updated []domain.WorkflowState
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workflow_states.reordered", teamID, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(workflowIssueScope(r.Context(), teamID), workspaceKey(r), "workflow_states.reordered", teamID, input, func(data *domain.Bootstrap) error {
 		if teamSettings(data, teamID).InheritWorkflowStatuses {
 			return fmt.Errorf("%w: issue statuses are inherited from the parent team", errInvalid)
 		}
@@ -1824,7 +1826,7 @@ func applyCycleAutomation(data *domain.Bootstrap, issue *domain.Issue) {
 }
 
 func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
-	data, ok := s.store.WorkspaceMetadata(key)
+	data, ok := s.store.WorkspaceMetadataFields(key, "teams", "cycleSettings", "cycles")
 	if !ok {
 		return
 	}
@@ -1844,6 +1846,17 @@ func (s *server) maintainCycleSchedule(ctx context.Context, key string) {
 	if !needed {
 		return
 	}
+	// Only transitions out of an ended current cycle migrate issues.
+	ctx = cycleIssueScope(ctx, false, func(data domain.Bootstrap) []string {
+		teams := []string{}
+		for _, team := range data.Teams {
+			settings := data.CycleSettings[team.ID]
+			if current := currentCycle(&data, team.ID); settings.Enabled && settings.AutoCreate && current != nil && current.EndsAt.Before(now) {
+				teams = append(teams, team.ID)
+			}
+		}
+		return teams
+	})
 	_ = s.store.MutateWorkspace(ctx, key, "cycles.automatically_maintained", "cycles", nil, func(next *domain.Bootstrap) error {
 		for _, team := range next.Teams {
 			settings := next.CycleSettings[team.ID]
