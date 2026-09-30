@@ -30,7 +30,7 @@ import type { BootstrapData, DocumentPermission, FlowDocument, User } from '@/ty
 import './document-page.css'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 
-export function DocumentPage({ data, document, onReload, onBack, origin }: { origin?: {label:string;entity?:boolean}; data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void }) {
+export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled }: { origin?: {label:string;entity?:boolean}; data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void; /** Open the history dialog on arrival (e.g. from a project resource menu). */ openHistoryRequest?: boolean; onHistoryRequestHandled?: () => void }) {
   const {t}=useI18n()
   useRegisterCommandContext({kind:'document',document})
   const [title,setTitle]=useState(document.title)
@@ -74,6 +74,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin }: { ori
   const lastEditedAt=lastRevision?.createdAt??document.updatedAt
   const submitComment=async(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>{await createDocumentComment(document.id,{body,bodyData,parentId});setReplyTo(undefined);await onReload()}
   const openHistory=async()=>{await onReload();setSelectedRevisionId(document.revisions[0]?.id??'');setHighlightHistory(true);setHistoryOpen(true)}
+  const historyRequestHandled=useRef(false)
+  useEffect(()=>{if(!openHistoryRequest){historyRequestHandled.current=false;return}if(historyRequestHandled.current)return;historyRequestHandled.current=true;setSelectedRevisionId(document.revisions[0]?.id??'');setHighlightHistory(true);setHistoryOpen(true);onHistoryRequestHandled?.()},[openHistoryRequest,document.revisions,onHistoryRequestHandled])
   const restoreRevision=async()=>{if(!selectedRevision||selectedRevisionCurrent)return;const restored=await restoreDocumentRevision(document.id,selectedRevision.id);setTitle(restored.title);setBody({value:restored.content,state:restored.contentData?JSON.stringify(restored.contentData):restored.contentState});setEditorVersion(value=>value+1);setHistoryOpen(false);await onReload();toast.success('Content has been restored.')}
   const toggleProject=async(id:string)=>{const next=document.projectIds.includes(id)?document.projectIds.filter(value=>value!==id):[...document.projectIds,id];await updateDocument(document.id,{projectIds:next});await onReload()}
   const copyDocumentURL=async()=>{if(copyBusy)return;setCopyBusy(true);try{await navigator.clipboard.writeText(new URL(documentPath(data.workspace.urlKey,document),location.origin).href);toast.success(t('Copied document link to clipboard'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not copy document link'))}finally{setCopyBusy(false)}}
