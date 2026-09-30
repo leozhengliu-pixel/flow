@@ -50,7 +50,7 @@ export function PriorityInboxSettings({
             Enable Priority inbox
           </button>
         ) : (
-          <span className="flow-inbox-priority-settings__count">{enabledCount} active</span>
+          <span className="flow-inbox-priority-settings__count">{`${enabledCount} active`}</span>
         )}
       </header>
 

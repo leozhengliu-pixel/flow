@@ -46,3 +46,4 @@
 .team-member-setting>button[aria-checked=true]{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
 :root[data-theme="light"] .settings-segmented button.active{background:var(--theme-surface-2);color:var(--text)}
 :root[data-theme="light"] .team-settings-section-title h3,:root[data-theme="light"] .team-settings-header h1{color:var(--theme-text-primary)}
+.team-settings-section-title+.settings-section-description{margin-top:-9px}

@@ -1540,6 +1540,7 @@ function WorkflowSettings({
         ))}
       </TeamSection>
       <TeamSection
+        description="Set different rules for target branches, e.g. when a PR is merged into a specified branch."
         title="Branch-specific rules"
         action={
           <button
@@ -1552,10 +1553,6 @@ function WorkflowSettings({
           </button>
         }
       >
-        <p className="settings-section-copy">
-          Set different rules for target branches, e.g. when a PR is merged into
-          a specified branch.
-        </p>
         {branches.map((item) => (
           <div key={item.id}>
           <div className="automation-rule-row">
@@ -1640,6 +1637,7 @@ function WorkflowSettings({
         </TeamSection>
       )}
       <TeamSection
+        description="Automatically update linked issues when a release is completed."
         title="Release automations"
         action={
           !addingRelease ? (
@@ -1653,9 +1651,6 @@ function WorkflowSettings({
           ) : undefined
         }
       >
-        <p className="settings-section-copy">
-          Automatically update linked issues when a release is completed.
-        </p>
         {settings.releaseAutomations.map((rule) => (
           <div className="automation-rule-row" key={rule.id}>
             <span>
@@ -1867,10 +1862,9 @@ function TriageSettings({
           onChange={(value) => save({ triageRequirePriority: value })}
         />
       </TeamSection>
-      <TeamSection title="Triage responsibility">
-        <p className="settings-section-copy">
-          Define how incoming issues and requests are handled in triage
-        </p>
+      <TeamSection
+        description="Define how incoming issues and requests are handled in triage"
+        title="Triage responsibility">
         <SelectRow
           title="Action"
           description="When a new issue is added to triage, take the following action"
@@ -1946,6 +1940,7 @@ function TriageSettings({
         </form>
       </TeamSection>
       <TeamSection
+        description="Use rules to automatically process and route triage issues"
         title="Triage rules"
         action={
           <button
@@ -1962,9 +1957,6 @@ function TriageSettings({
           </button>
         }
       >
-        <p className="settings-section-copy">
-          Use rules to automatically process and route triage issues
-        </p>
         <form
           className="workflow-rule-create"
           onSubmit={(event) => {
@@ -2045,12 +2037,9 @@ function TriageSettings({
           </span>
         </TeamRow>
       </TeamSection>
-      <TeamSection title="Triage Intelligence">
-        <p className="settings-section-copy">
-          Flow uses agentic AI to automatically find related issues and
-          duplicates, and infer properties like team, project, labels, and
-          assignee.
-        </p>
+      <TeamSection
+        description="Flow uses agentic AI to automatically find related issues and duplicates, and infer properties like team, project, labels, and assignee."
+        title="Triage Intelligence">
         <TeamRow title={data.workspaceSettings.featureFlags["triage-intelligence"] ? "Triage Intelligence is enabled in this workspace" : "Triage Intelligence is not enabled in this workspace"}>
           <span className="settings-static">
             {data.workspaceSettings.featureFlags["triage-intelligence"] ? "Enabled" : "View settings"}
