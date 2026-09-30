@@ -24,9 +24,9 @@ export function transformTextEmoticons(text:string) {
   const map: Record<string,string> = {':)':'🙂',':-)':'🙂',':(':'🙁',':-(':'🙁',';)':'😉',';-)':'😉',':D':'😃','<3':'❤️'}
   return text.replace(/(^|\s)(:-?\)|:-?\(|;-?\)|:D|<3)(?=\s|$)/g,(_,space,emoticon)=>space+map[emoticon])
 }
-export function displayUserName(user: Pick<User,'displayName'|'name'>) {
+export function displayUserName(user: Pick<User,'displayName'|'name'> & Partial<Pick<User,'username'>>) {
   const full = user.displayName || user.name
-  if (current.displayNames === 'Username') return user.name || full
+  if (current.displayNames === 'Username') return user.username || user.name || full
   if (current.displayNames === 'First name') return full.split(/\s+/)[0]
   return full
 }

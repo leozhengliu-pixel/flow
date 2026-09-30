@@ -1011,16 +1011,17 @@ function Preferences({
 
 function Profile({ data, onReload, onBack, p }: PersonalProps) {
   const current = data.userSettings[data.viewer.id];
+  const viewerUsername = data.viewer.username || current?.username || data.viewer.name;
   const [displayName, setDisplayName] = useState(data.viewer.displayName);
   const [username, setUsername] = useState(
-    current?.username || data.viewer.name,
+    viewerUsername,
   );
   const [jobTitle, setJobTitle] = useState(current?.jobTitle || "");
   const [busy, setBusy] = useState(false);
   const [leaveOpen, setLeaveOpen] = useState(false);
   const dirty =
     displayName !== data.viewer.displayName ||
-    username !== (current?.username || data.viewer.name) ||
+    username !== (viewerUsername) ||
     jobTitle !== (current?.jobTitle || "");
   const save = async () => {
     setBusy(true);
@@ -1109,7 +1110,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
             aria-label={p("Username")}
             placeholder={p("username")}
             value={username}
-            onChange={(e) => setUsername(e.target.value.replace(/\s+/g, ""))}
+            onChange={(e) => setUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
           />
         </PersonalRow>
       </PersonalSection>
@@ -1118,7 +1119,7 @@ function Profile({ data, onReload, onBack, p }: PersonalProps) {
           <Action
             onClick={() => {
               setDisplayName(data.viewer.displayName);
-              setUsername(current?.username || data.viewer.name);
+              setUsername(viewerUsername);
               setJobTitle(current?.jobTitle || "");
             }}
           >

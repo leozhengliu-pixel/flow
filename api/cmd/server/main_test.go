@@ -53,7 +53,7 @@ func TestDevelopmentMemberLifecycle(t *testing.T) {
 	}
 	target := bootstrap.Users[1]
 	updated := requestJSON[domain.WorkspaceMember](t, handler, http.MethodPatch, "/api/workspaces/test-workspace/members/"+target.ID, map[string]any{"role": "admin", "displayName": "Updated member", "username": "updated.member", "email": "updated.member@example.com"}, http.StatusOK)
-	if updated.Role != "admin" || updated.User.DisplayName != "Updated member" || updated.User.Name != "updated.member" || updated.User.Email != "updated.member@example.com" {
+	if updated.Role != "admin" || updated.User.DisplayName != "Updated member" || updated.User.Username != "updated.member" || updated.User.Email != "updated.member@example.com" {
 		t.Fatalf("member update failed: %#v", updated)
 	}
 	requestJSON[any](t, handler, http.MethodPut, "/api/workspaces/test-workspace/teams/"+bootstrap.Teams[0].ID+"/members/"+target.ID, map[string]any{"member": false, "role": "member"}, http.StatusNoContent)

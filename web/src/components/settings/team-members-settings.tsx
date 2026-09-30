@@ -11,6 +11,7 @@ import {
 import { PropertyMenu } from "@/components/property/property-menu";
 import { useI18n } from "@/i18n/i18n";
 import { setTeamMembership } from "@/lib/api";
+import { personUsername } from "@/lib/people";
 import type { BootstrapData, Team, WorkspaceMember } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 
@@ -88,7 +89,7 @@ export function TeamMembersSettings({
     const csv = [
       ["Name", "Username", "Email", "Role"].map(quote).join(","),
       ...rows.map(({ member, owner }) =>
-        [member.user.displayName, member.user.name, member.user.email, roleLabel(member, owner)].map(quote).join(","),
+        [member.user.displayName, personUsername(member.user), member.user.email, roleLabel(member, owner)].map(quote).join(","),
       ),
     ].join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
@@ -170,7 +171,7 @@ export function TeamMembersSettings({
                 <b className="settings-member-avatar">{initials(member.user.displayName)}</b>
                 <i>
                   <strong>{member.user.displayName}</strong>
-                  <small>{member.user.name}</small>
+                  <small data-i18n-ignore>{personUsername(member.user)}</small>
                 </i>
               </span>
               <span>{member.user.email}</span>
