@@ -111,6 +111,22 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 			key.TeamRestriction = "selected"
 			key.TeamIDs = slices.Clone(grant.TeamIDs)
 		}
+		// Access tokens live an hour and each exchange issues a new one, so
+		// drop expired OAuth token rows instead of letting them pile up. Live
+		// tokens stay: one authorization can back several client sessions.
+		kept := current.APIKeys[:0:0]
+		for _, existing := range current.APIKeys {
+			if existing.OAuthClientID != "" && existing.ExpiresAt != nil && !time.Now().UTC().Before(*existing.ExpiresAt) {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, workspace, existing.ID); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `DELETE FROM api_key_lookup WHERE workspace_key=? AND key_id=?`, workspace, existing.ID); err != nil {
+					return err
+				}
+				continue
+			}
+			kept = append(kept, existing)
+		}
 		keyRaw, err := json.Marshal(key)
 		if err != nil {
 			return err
@@ -153,7 +169,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		current.APIKeys = append([]domain.APIKey{key}, current.APIKeys...)
+		current.APIKeys = append([]domain.APIKey{key}, kept...)
 		s.workspaces[workspace] = current
 		return nil
 	}

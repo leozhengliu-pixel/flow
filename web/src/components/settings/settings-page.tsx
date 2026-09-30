@@ -3219,7 +3219,7 @@ function ApiPage({
   >(undefined);
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const apiPath = settingsPath(data.workspace.urlKey, "api");
-  const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt);
+  const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt && !item.oauthClientId);
   if (webhookId) {
     const webhook = webhookId === "new" ? null : data.webhooks.find((item) => item.id === webhookId);
     if (webhook === undefined)
@@ -3383,7 +3383,7 @@ function IssuedApiKeysPage({
   onReload: () => Promise<void>;
 }) {
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
-  const keys = (data.apiKeys ?? []).filter((item) => !item.revokedAt);
+  const keys = (data.apiKeys ?? []).filter((item) => !item.revokedAt && !item.oauthClientId);
   const creator = (id: string) => data.users.find((user) => user.id === id)?.displayName ?? "Unknown";
   return (
     <>
