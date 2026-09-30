@@ -39,6 +39,17 @@ func metadataReadRequest(r *http.Request) bool {
 			return true
 		}
 	}
+	// Dashboard and post writes validate against workspace metadata only;
+	// previews, results and exports still read issues, and meetings validate
+	// linked issue ids.
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		switch {
+		case p[1] == "dashboards" && (len(p) <= 3 || len(p) == 4 && (p[3] == "subscription" || p[3] == "share")):
+			return true
+		case p[1] == "posts" && len(p) <= 3:
+			return true
+		}
+	}
 	switch p[1] {
 	case "account", "workspace", "application-policies", "api-keys", "oauth", "notification-preferences", "push-subscriptions", "agent-skills", "agent", "exports":
 		return true

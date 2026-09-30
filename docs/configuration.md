@@ -17,6 +17,7 @@ structured logging.
 | --- | --- | --- |
 | `FLOW_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 | `FLOW_LOG_FORMAT` | `text` | `text` for human-readable logs or `json` for log collectors. |
+| `FLOW_SLOW_MUTATION_MS` | `500` | Log a `slow workspace mutation` warning with stage timings (lock wait, clone, load, mutate, persist, publish) when a workspace write, or the time it holds the workspace lock, exceeds this many milliseconds. `0` disables it. |
 
 Every HTTP request receives an `X-Request-ID` response header. Clients may send
 their own `X-Request-ID`; otherwise Flow generates one and includes it in the

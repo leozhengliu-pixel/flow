@@ -85,9 +85,12 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
+	traceStart(ctx, "scoped")
 	apply := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		traceLocked(ctx)
+		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
 			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
 			if err != nil {
@@ -183,8 +186,10 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		for _, project := range next.Projects {
 			startDates[project.ID] = optionalValue(project.StartDate)
 		}
+		traceMark(ctx, "load")
 		aggregateID, err := mutate(&next)
 		next.ViewerRole = originalViewerRole
+		traceMark(ctx, "mutate")
 		if err != nil {
 			return err
 		}
@@ -221,16 +226,13 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			}
 		}
 		metadata := collectionMetadata(next)
-		raw, err := s.encodeWorkspaceMetadata(metadata)
-		if err != nil {
-			return err
-		}
-		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, metadata, raw, &event); err != nil {
+		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, metadata, nil, &event); err != nil {
 			return err
 		}
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		traceMark(ctx, "persist")
 		s.dropMetadataCache(ctx, workspaceKey)
 		domain.RebuildTeamDirectory(&metadata)
 		s.workspaces[workspaceKey] = metadata

@@ -188,24 +188,76 @@ func writeWorkspaceMetadataRecords(ctx context.Context, tx *sqlTx, workspace str
 	if err != nil {
 		return nil, err
 	}
-	previous := map[metadataRecordKey]metadataRecord{}
-	rows, err := tx.QueryContext(ctx, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=?`, workspace)
+	if err := syncMetadataRecordSet(ctx, tx, workspace, refs, shapes, wanted, nil); err != nil {
+		return nil, err
+	}
+	root[metadataCollectionsKey], err = json.Marshal(shapes)
 	if err != nil {
 		return nil, err
 	}
+	return json.Marshal(root)
+}
+
+// syncMetadataRecordSet makes the stored records of fields (every field when
+// fields is nil) equal wanted, rewriting only rows whose order or data changed.
+func syncMetadataRecordSet(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted map[metadataRecordKey]metadataRecord, fields []string) error {
+	return syncMetadataRecords(ctx, tx, workspace, refs, shapes, wanted, fields, nil)
+}
+
+// syncMetadataRecords is syncMetadataRecordSet with an optional in-memory copy
+// of the stored records (known). With it only keys and orders are read from
+// the database: stored payloads are taken from known, and fetched only for
+// rows known does not have.
+func syncMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted map[metadataRecordKey]metadataRecord, fields []string, known map[metadataRecordKey]metadataRecord) error {
+	previous := map[metadataRecordKey]metadataRecord{}
+	columns := `field,record_key,collection_order,data`
+	if known != nil {
+		columns = `field,record_key,collection_order`
+	}
+	query, args := `SELECT `+columns+` FROM workspace_metadata_records WHERE workspace_key=?`, []any{workspace}
+	if fields != nil {
+		if len(fields) == 0 {
+			return nil
+		}
+		clause, fieldArgs := bindList("field", fields)
+		query += ` AND ` + clause
+		args = append(args, fieldArgs...)
+	}
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	missing := []metadataRecordKey{}
 	for rows.Next() {
 		var key metadataRecordKey
 		var value metadataRecord
-		if err := rows.Scan(&key.field, &key.key, &value.order, &value.data); err != nil {
+		if known != nil {
+			err = rows.Scan(&key.field, &key.key, &value.order)
+			if stored, ok := known[key]; ok {
+				value.data = stored.data
+			} else {
+				missing = append(missing, key)
+			}
+		} else {
+			err = rows.Scan(&key.field, &key.key, &value.order, &value.data)
+		}
+		if err != nil {
 			rows.Close()
-			return nil, err
+			return err
 		}
 		previous[key] = value
 	}
 	err = rows.Err()
 	rows.Close()
 	if err != nil {
-		return nil, err
+		return err
+	}
+	for _, key := range missing {
+		value := previous[key]
+		if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.field, key.key).Scan(&value.data); err != nil {
+			return err
+		}
+		previous[key] = value
 	}
 	groups := map[string][]metadataRecordKey{}
 	group := func(key metadataRecordKey, value metadataRecord) string {
@@ -247,72 +299,79 @@ func writeWorkspaceMetadataRecords(ctx context.Context, tx *sqlTx, workspace str
 	for key, value := range wanted {
 		old, exists := previous[key]
 		if !exists || old.order != value.order || !refs.equalDisplayData(old.data, value.data) {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key.field, key.key, value.order, []byte(value.data)); err != nil {
-				return nil, err
-			}
-			if key.field == "apiKeys" {
-				if err := upsertAPIKeyLookup(ctx, tx, workspace, key.key, apiKeyLookupHashFromRecord(value.data)); err != nil {
-					return nil, err
-				}
-			}
-			if key.field == "projects" {
-				var next, prior struct {
-					Comments []domain.Comment `json:"comments"`
-				}
-				if err := json.Unmarshal(value.data, &next); err != nil {
-					return nil, err
-				}
-				if len(old.data) > 0 {
-					if err := json.Unmarshal(old.data, &prior); err != nil {
-						return nil, err
-					}
-				}
-				seen := map[string]bool{}
-				for _, comment := range prior.Comments {
-					seen[comment.ID] = true
-				}
-				for _, comment := range next.Comments {
-					if !seen[comment.ID] {
-						raw, err := json.Marshal(comment)
-						if err != nil {
-							return nil, err
-						}
-						if err := syncApplicationMentions(ctx, tx, workspace, key.key, raw); err != nil {
-							return nil, err
-						}
-					}
-				}
-			}
-			if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
-				return nil, err
-			}
-			if err := syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
-				return nil, err
+			if err := writeMetadataRecordRow(ctx, tx, workspace, key, value, old.data); err != nil {
+				return err
 			}
 		}
 		delete(previous, key)
 	}
 	for key := range previous {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.field, key.key); err != nil {
-			return nil, err
+		if err := deleteMetadataRecordRow(ctx, tx, workspace, key); err != nil {
+			return err
 		}
-		if key.field == "apiKeys" {
-			if err := deleteAPIKeyLookup(ctx, tx, workspace, key.key); err != nil {
-				return nil, err
+	}
+	return nil
+}
+
+// writeMetadataRecordRow upserts one metadata record and its derived rows
+// (API key lookup, application mentions, customer filters, search index).
+// previous is the stored payload, when the record existed.
+func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, key metadataRecordKey, value metadataRecord, previous []byte) error {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,?,?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, key.field, key.key, value.order, []byte(value.data)); err != nil {
+		return err
+	}
+	if key.field == "apiKeys" {
+		if err := upsertAPIKeyLookup(ctx, tx, workspace, key.key, apiKeyLookupHashFromRecord(value.data)); err != nil {
+			return err
+		}
+	}
+	if key.field == "projects" {
+		var next, prior struct {
+			Comments []domain.Comment `json:"comments"`
+		}
+		if err := json.Unmarshal(value.data, &next); err != nil {
+			return err
+		}
+		if len(previous) > 0 {
+			if err := json.Unmarshal(previous, &prior); err != nil {
+				return err
 			}
 		}
-		if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, nil); err != nil {
-			return nil, err
+		seen := map[string]bool{}
+		for _, comment := range prior.Comments {
+			seen[comment.ID] = true
 		}
-		if err := syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, nil); err != nil {
-			return nil, err
+		for _, comment := range next.Comments {
+			if !seen[comment.ID] {
+				raw, err := json.Marshal(comment)
+				if err != nil {
+					return err
+				}
+				if err := syncApplicationMentions(ctx, tx, workspace, key.key, raw); err != nil {
+					return err
+				}
+			}
 		}
 	}
-	root[metadataCollectionsKey], err = json.Marshal(shapes)
-	if err != nil {
-		return nil, err
+	if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
+		return err
 	}
-	return json.Marshal(root)
+	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data)
+}
+
+func deleteMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, key metadataRecordKey) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND record_key=?`, workspace, key.field, key.key); err != nil {
+		return err
+	}
+	if key.field == "apiKeys" {
+		if err := deleteAPIKeyLookup(ctx, tx, workspace, key.key); err != nil {
+			return err
+		}
+	}
+	if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, nil); err != nil {
+		return err
+	}
+	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, nil)
 }
 
 type metadataReader interface {

@@ -1285,7 +1285,13 @@ func (s *SQLiteStore) MutateWithAggregate(ctx context.Context, eventType string,
 	return s.MutateWorkspaceWithAggregate(ctx, "", eventType, payload, mutate)
 }
 
-func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
+func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) (err error) {
+	ctx, trace := startMutationTrace(ctx)
+	defer func() { trace.report(workspaceKey, eventType, err) }()
+	return s.dispatchMutation(ctx, workspaceKey, eventType, payload, mutate)
+}
+
+func (s *SQLiteStore) dispatchMutation(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if eventType == "workspace_preferences.updated" && featureFlagsOnly(payload) {
 		return s.mutateFeatureFlags(ctx, workspaceKey, payload, mutate)
 	}
@@ -1324,19 +1330,29 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 	apply := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		traceLocked(ctx)
+		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
 			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
 			if err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
 			s.workspaces[workspaceKey] = latest
+			traceMark(ctx, "reload")
 		}
 		current, ok := s.workspaces[workspaceKey]
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
 		metadataOnly := metadataOnlyMutation(eventType, payload)
+		if metadataOnly {
+			traceStart(ctx, "metadata")
+		} else {
+			traceStart(ctx, "full")
+		}
+		stored := current
 		current = cloneBootstrap(current)
+		traceMark(ctx, "clone")
 		if current.Issues == nil && !metadataOnly {
 			issues, err := s.readIssueRecords(ctx, workspaceKey)
 			if err != nil {
@@ -1349,6 +1365,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 				return err
 			}
 		}
+		traceMark(ctx, "load")
 		// Freshly loaded collections are owned by this transaction. Rollback
 		// discards them; only webhook before/after comparison needs a second copy.
 		next := current
@@ -1374,6 +1391,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		}
 		aggregateID, err := mutate(&next)
 		next.ViewerRole = originalViewerRole
+		traceMark(ctx, "mutate")
 		if err != nil {
 			return err
 		}
@@ -1396,9 +1414,10 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		// realtime envelope with the post-mutation entity. Clients can apply a
 		// delta for common entities without downloading another full bootstrap.
 		realtimePayload = enrichRealtimePayload(payloadRaw, aggregateJSONValue(next, aggregateID), eventType)
-		if err := s.persistWorkspace(ctx, workspaceKey, next, &event); err != nil {
+		if err := s.persistWorkspaceFrom(ctx, workspaceKey, &stored, next, &event); err != nil {
 			return err
 		}
+		traceMark(ctx, "persist")
 		next = collectionMetadata(next)
 		domain.RebuildTeamDirectory(&next)
 		s.workspaces[workspaceKey] = next
@@ -1418,6 +1437,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		return err
 	}
 	s.publishMutation(ctx, workspaceKey, event, realtimePayload)
+	traceMark(ctx, "publish")
 	return nil
 }
 
@@ -1567,63 +1587,6 @@ func aggregateEntityByID(data domain.Bootstrap, id string) (any, bool) {
 	return nil, false
 }
 
-// Locate the entity in the typed snapshot before serializing. Walking it does
-// not allocate a second workspace-sized JSON/map representation.
-func findAggregateValue(value reflect.Value, id string) any {
-	if !value.IsValid() || id == "" {
-		return nil
-	}
-	for value.Kind() == reflect.Interface || value.Kind() == reflect.Pointer {
-		if value.IsNil() {
-			return nil
-		}
-		value = value.Elem()
-	}
-	switch value.Kind() {
-	case reflect.Struct:
-		if field := value.FieldByName("ID"); field.IsValid() && field.Kind() == reflect.String && field.String() == id {
-			return value.Interface()
-		}
-		for i := 0; i < value.NumField(); i++ {
-			if value.Type().Field(i).PkgPath != "" || value.Type().Field(i).Tag.Get("json") == "-" {
-				continue
-			}
-			if found := findAggregateValue(value.Field(i), id); found != nil {
-				return found
-			}
-		}
-	case reflect.Map:
-		if value.Type().Key().Kind() == reflect.String {
-			key := reflect.ValueOf("id").Convert(value.Type().Key())
-			field := value.MapIndex(key)
-			if field.IsValid() {
-				for field.Kind() == reflect.Interface {
-					field = field.Elem()
-				}
-				if field.IsValid() && field.Kind() == reflect.String && field.String() == id {
-					return value.Interface()
-				}
-			}
-		}
-		iter := value.MapRange()
-		for iter.Next() {
-			if found := findAggregateValue(iter.Value(), id); found != nil {
-				return found
-			}
-		}
-	case reflect.Slice, reflect.Array:
-		if value.Type().Elem().Kind() == reflect.Uint8 {
-			return nil
-		}
-		for i := 0; i < value.Len(); i++ {
-			if found := findAggregateValue(value.Index(i), id); found != nil {
-				return found
-			}
-		}
-	}
-	return nil
-}
-
 func findJSONObjectByID(value any, aggregateID string) any {
 	switch item := value.(type) {
 	case map[string]any:
@@ -1650,16 +1613,29 @@ func (s *SQLiteStore) persist(ctx context.Context, data domain.Bootstrap, event 
 }
 
 func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string, data domain.Bootstrap, event *domain.DomainEvent) error {
-	raw, err := s.encodeWorkspaceMetadata(data)
-	if err != nil {
-		return err
+	return s.persistWorkspaceFrom(ctx, workspaceKey, nil, data, event)
+}
+
+// persistWorkspaceFrom persists data. When before is the stored metadata
+// state, only the metadata fields that differ from it are encoded and written;
+// otherwise the whole metadata document is compared against the stored rows.
+func (s *SQLiteStore) persistWorkspaceFrom(ctx context.Context, workspaceKey string, before *domain.Bootstrap, data domain.Bootstrap, event *domain.DomainEvent) error {
+	if fullMutationsForced.Load() {
+		before = nil
+	}
+	var raw []byte
+	if before == nil {
+		var err error
+		if raw, err = s.encodeWorkspaceMetadata(data); err != nil {
+			return err
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, data, raw, event); err != nil {
+	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, before, data, raw, event); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1690,8 +1666,9 @@ func (s *SQLiteStore) encodeWorkspaceMetadata(data domain.Bootstrap) ([]byte, er
 
 // persistWorkspaceTx writes the metadata document, the non-nil record
 // collections and the domain event inside tx. A nil collection is left as
-// stored.
-func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, inputData domain.Bootstrap, raw []byte, event *domain.DomainEvent) error {
+// stored. With before (the stored metadata state) the metadata document is
+// written as a delta and raw is unused.
+func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, before *domain.Bootstrap, inputData domain.Bootstrap, raw []byte, event *domain.DomainEvent) error {
 	data := compactImportInputs(inputData)
 	issues := data.Issues
 	activities, comments := data.Activities, data.Comments
@@ -1751,7 +1728,11 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 			return err
 		}
 	}
-	if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
+	if before != nil {
+		if _, err := s.writeWorkspaceMetadataDelta(ctx, tx, workspaceKey, *before, data); err != nil {
+			return err
+		}
+	} else if err := writeWorkspaceMetadata(ctx, tx, workspaceKey, data.Workspace.ID, raw); err != nil {
 		return err
 	}
 	viewerRaw, _ := json.Marshal(s.viewer)

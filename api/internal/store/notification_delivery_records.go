@@ -9,11 +9,24 @@ import (
 	"flow/api/internal/domain"
 )
 
+// NotificationDeliveries returns the due deliveries with the given statuses
+// and only the workspace record, for callers that do not render them.
+func (s *SQLiteStore) NotificationDeliveries(ctx context.Context, workspace string, statuses []string, now time.Time) (domain.Bootstrap, error) {
+	return s.notificationDeliverySnapshot(ctx, workspace, statuses, now, false)
+}
+
 func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspace string, statuses []string, now time.Time) (domain.Bootstrap, error) {
-	data, ok := s.WorkspaceMetadata(workspace)
+	return s.notificationDeliverySnapshot(ctx, workspace, statuses, now, true)
+}
+
+func (s *SQLiteStore) notificationDeliverySnapshot(ctx context.Context, workspace string, statuses []string, now time.Time, full bool) (domain.Bootstrap, error) {
+	// The scheduler asks every few seconds and usually finds nothing due; only
+	// clone the workspace metadata when there is a delivery to process.
+	data, ok := s.WorkspaceSettingsMetadata(workspace)
 	if !ok {
 		return data, fmt.Errorf("workspace not found")
 	}
+	workspace = data.Workspace.URLKey
 	clause, args := bindList("status", statuses)
 	rows, err := s.db.QueryContext(ctx, `SELECT data FROM workspace_content_records WHERE workspace_key=? AND kind='delivery' AND `+clause+` AND (next_attempt_at='' OR next_attempt_at<=?) ORDER BY next_attempt_at,id LIMIT 1000`, append(append([]any{workspace}, args...), now.UTC().Format(issueRecordTimestamp))...)
 	if err != nil {
@@ -37,6 +50,14 @@ func (s *SQLiteStore) NotificationDeliverySnapshot(ctx context.Context, workspac
 		return data, err
 	}
 	rows.Close()
+	if len(data.NotificationDeliveries) == 0 || !full {
+		return data, nil
+	}
+	deliveries := data.NotificationDeliveries
+	if data, ok = s.WorkspaceMetadata(workspace); !ok {
+		return data, fmt.Errorf("workspace not found")
+	}
+	data.NotificationDeliveries = deliveries
 	seen := map[string]bool{}
 	for _, delivery := range data.NotificationDeliveries {
 		var raw []byte

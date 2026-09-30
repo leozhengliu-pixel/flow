@@ -31,6 +31,13 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 	if resourceType == "" {
 		return
 	}
+	// Runs synchronously after every mutation: check the (small) webhook list
+	// before cloning the workspace metadata.
+	if hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks"); !ok || !slices.ContainsFunc(hooks.Webhooks, func(webhook domain.Webhook) bool {
+		return !webhook.AuditLog && webhook.Enabled && webhook.URL != ""
+	}) {
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok || len(data.Webhooks) == 0 {
 		return

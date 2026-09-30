@@ -60,16 +60,18 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	progressChanged := false
+	traceStart(ctx, "issue_create")
 	err = func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		traceLocked(ctx)
+		defer traceUnlocked(ctx)
 		actor := metadata.Viewer
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return fmt.Errorf("workspace not found")
 		}
 		metadata = cloneBootstrap(collectionMetadata(current))
-		var encoded []byte
 		metadata.Viewer = actor
 		originalRole := metadata.ViewerRole
 		if _, ok := actorFromContext(ctx); ok {
@@ -147,7 +149,9 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 				return fmt.Errorf("issue family exceeds synchronous limit")
 			}
 		}
+		traceMark(ctx, "load")
 		id, err := mutate(&metadata)
+		traceMark(ctx, "mutate")
 		if err != nil {
 			return err
 		}
@@ -213,14 +217,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		metadata.ViewerRole = originalRole
 		metadata.Viewer = current.Viewer
 		metadata = collectionMetadata(metadata)
-		encoded, err = json.Marshal(metadata)
-		if err != nil {
-			return err
-		}
-		if len(encoded) > s.maxStateBytes {
-			return fmt.Errorf("workspace metadata exceeds %d bytes", s.maxStateBytes)
-		}
-		if err := writeWorkspaceMetadata(ctx, tx, workspace, metadata.Workspace.ID, encoded); err != nil {
+		if err := s.persistMetadataTx(ctx, tx, workspace, current, metadata); err != nil {
 			return err
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", time.Now().UnixNano()), Type: "issue.created", AggregateID: id, Payload: raw, CreatedAt: time.Now().UTC()}
@@ -231,6 +228,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		traceMark(ctx, "persist")
 		s.workspaces[workspace] = metadata
 		if progressChanged {
 			s.dropMetadataCache(ctx, workspace)

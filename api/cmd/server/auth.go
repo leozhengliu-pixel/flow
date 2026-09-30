@@ -2264,7 +2264,7 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(r.PathValue("workspaceKey"))
+	data, ok := s.store.WorkspaceSettingsMetadata(r.PathValue("workspaceKey"))
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return

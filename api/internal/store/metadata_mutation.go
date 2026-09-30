@@ -16,7 +16,12 @@ func metadataOnlyMutation(event string, payload any) bool {
 	if event == "team.created" || event == "team.settings_updated" {
 		return true
 	}
-	if event == "label.updated" && metadataFieldsOnly(payload, "name", "description", "color") {
+	if (event == "label.updated" || event == "issue_label.updated") && metadataFieldsOnly(payload, "name", "description", "color") {
+		return true
+	}
+	// Archiving a group cascades to its labels on issues; renames do not
+	// (issue label display data is resolved on read).
+	if event == "label_group.updated" && metadataFieldsOnly(payload, "name", "description", "color") {
 		return true
 	}
 	if event == "team.updated" && metadataFieldsOnly(payload, "name", "color", "icon") {
@@ -27,6 +32,17 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return ok && input.TemplateID == ""
 	}
 	switch event {
+	// Team deletion/restoration only stamps the team, detaches sub-teams and
+	// appends an audit entry; issue visibility follows the team's archivedAt at
+	// read time. Development-mode membership edits only touch member lists.
+	case "team.archived", "team.unarchived", "team_member.updated",
+		"workspace_member.username_updated", "workspace_member.updated", "workspace_member.suspended", "workspace_member.resumed", "workspace_member.removed":
+		return true
+	// Dashboards and posts live in workspace settings; asks only validate
+	// templates. None of these callbacks read issues or discussions (meetings
+	// validate linked issue ids, so they keep the full path).
+	case "dashboard.updated", "post.updated", "ask.created", "ask.updated":
+		return true
 	case "review.thread_resolved", "review.comment_deleted":
 		return true
 	case "integration.adapter_configured", "integration.ask_imported", "integration.job_updated", "integration.calendar_synced":
