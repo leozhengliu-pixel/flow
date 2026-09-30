@@ -1098,6 +1098,9 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       workspaceSlug,
       resource: third as ViewsResource,
     };
+  // Bare /views opens the issue views directory (canonicalized to /views/issues).
+  if (section === "views" && segments.length === 2)
+    return { kind: "workspace-views", workspaceSlug, resource: "issues" };
   if (section === "view" && third && fourth === "edit" && segments.length === 4)
     return {
       kind: "workspace-saved-view",
@@ -1177,6 +1180,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       teamKey: third,
       resource: fifth as ViewsResource,
     };
+  if (section === "team" && third && fourth === "views" && segments.length === 4)
+    return { kind: "team-views", workspaceSlug, teamKey: third, resource: "issues" };
   if (
     section === "team" &&
     third &&

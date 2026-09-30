@@ -197,7 +197,7 @@
   display: flex;
   flex: 0 0 44px;
   justify-content: flex-start;
-  padding: 0 7.5px 0 17.5px;
+  padding: 0 8.5px 0 18px;
 }
 .lp-projects__header > .lp-projects__icon-button:last-child { margin-left: auto; }
 .lp-projects__new-view-parent { color: var(--lp-text); font-size: 13px; font-weight: 500; }
@@ -209,18 +209,19 @@
   font-size: 13px;
   font-weight: 500;
   line-height: normal;
-  margin: 0;
+  /* Linear's title sits 1px below the centred line box (y15 in the 44px bar). */
+  margin: 1px 0 0;
 }
 .lp-projects .lp-projects__new-project { box-sizing: border-box; height: 28px; display: flex; align-items: center; gap: 6px; margin-left: auto; padding: 0 10px 0 8px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); font: 500 12px var(--font); white-space: nowrap; }
 .lp-projects__new-project:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 .lp-projects__new-project svg { width: 14px; height: 14px; flex: 0 0 14px; }
 .lp-projects__mobile-menu { display: none; }
 
+/* Linear's toolbar row has no divider; 43.5px keeps the column header on the 88px line under the 0.5px panel border. */
 .lp-projects__toolbar {
   align-items: center;
-  border-bottom: .5px solid var(--lp-border);
   display: flex;
-  flex: 0 0 44px;
+  flex: 0 0 43.5px;
   justify-content: space-between;
   min-width: 0;
   padding: 0 7.5px;
@@ -286,6 +287,10 @@
 :root .lp-projects__icon-button.is-active,
 :root .lp-projects__icon-button[data-state="open"] { background: var(--ui-pill-active-bg); color: var(--ui-pill-active-fg); }
 .lp-projects__add-view { color: #59595e; }
+/* Linear's add-view control is a ghost pill: no fill or ring until hovered. */
+:root .lp-projects__toolbar .lp-projects__add-view { --ui-pill-bg: transparent; --ui-pill-ring: transparent; --ui-pill-shadow: 0 0 transparent; margin-left: -1px; }
+/* The main panel already draws the 0.5px frame; a second border pushed every header control 0.5px down/right. */
+.main-panel > .lp-projects { border: 0; box-shadow: none; }
 .lp-projects__badge { background: #5e6ad2; border: 1.5px solid var(--lp-bg); border-radius: 50%; height: 6px; position: absolute; right: 2px; top: 2px; width: 6px; }
 
 .lp-projects__content { flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; }
@@ -592,7 +597,7 @@
   padding: 0 6px;
   white-space: nowrap;
 }
-.lp-project-table__header > div > span { white-space: nowrap; }
+.lp-project-table__header > div > span { color: var(--text-label); font-weight: 450; white-space: nowrap; }
 .lp-project-table__header button:hover,
 .lp-project-table__header button:focus-visible { background: var(--ui-pill-hover-bg); color: var(--theme-text-primary); outline: none; }
 .lp-project-table__header button.is-sorted { color: var(--theme-text-primary); }

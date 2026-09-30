@@ -151,9 +151,9 @@ export function WorkspaceDirectoryPage({
             ? t("Invite members")
             : kind === "customers"
               ? t("New customer")
-              : t("Create new team")
+              : t("New team")
         }
-        createVariant={kind === "members" ? "ghost" : "pill"}
+        createVariant={kind === "customers" ? "pill" : "ghost"}
         options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : undefined}
       />
       {kind === "members" && <MembersDirectory key={`${data.workspace.id}:${data.viewer.id}`} data={data} onOpen={onNavigateMember} onOpenTeam={onNavigateTeam} />}
@@ -278,6 +278,8 @@ function TeamsOptions({ onOpenSettings }: { onOpenSettings: () => void }) {
 type MemberStatusFilter = "admin" | "guest" | "member";
 type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation };
 const MEMBER_COLUMN_WIDTHS: Record<Exclude<MemberColumn, "teams">, string> = { status: "99px", joined: "94px" };
+/** Linear's Teams column is 71px; it only grows when a key (plus the "+N" chip) would otherwise truncate. */
+const MEMBER_TEAMS_MIN_WIDTH = 71;
 const MEMBER_ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
 function memberStatusFilter(role: WorkspaceMember["role"]): MemberStatusFilter | undefined {
@@ -318,13 +320,13 @@ function compareMemberEntries(left: MemberEntry, right: MemberEntry, ordering: M
   return byName;
 }
 
-/** Teams column fits the widest key (icon + key + "+N" chip) so keys never truncate into "D… +1". */
-function memberTeamsColumnWidth(longestKey: number) {
-  return `max(96px, calc(${Math.max(longestKey, 1)}ch + 76px))`;
+/** Teams column fits the widest key (icon + key, plus the "+N" chip when anyone has one) so keys never truncate into "D… +1". */
+function memberTeamsColumnWidth(longestKey: number, hasExtraTeams: boolean) {
+  return `max(${MEMBER_TEAMS_MIN_WIDTH}px, calc(${Math.max(longestKey, 1)}ch + ${hasExtraTeams ? 76 : 34}px))`;
 }
 
-function memberDirectoryColumns(columns: Set<MemberColumn>, longestTeamKey: number) {
-  const widths = memberColumnIds.filter(column => columns.has(column)).map(column => column === "teams" ? memberTeamsColumnWidth(longestTeamKey) : MEMBER_COLUMN_WIDTHS[column]);
+function memberDirectoryColumns(columns: Set<MemberColumn>, longestTeamKey: number, hasExtraTeams: boolean) {
+  const widths = memberColumnIds.filter(column => columns.has(column)).map(column => column === "teams" ? memberTeamsColumnWidth(longestTeamKey, hasExtraTeams) : MEMBER_COLUMN_WIDTHS[column]);
   return `minmax(160px, 1fr) ${widths.join(" ")} 85px`;
 }
 
@@ -349,6 +351,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     return result;
   }, [data.teamMembers, data.teams]);
   const longestTeamKey = useMemo(() => Math.max(0, ...[...teamsByUserId.values()].map(teams => teams[0]?.key.length ?? 0), ...data.invitations.flatMap(invitation => data.teams.filter(team => invitation.teamIds.includes(team.id)).slice(0, 1).map(team => team.key.length))), [data.invitations, data.teams, teamsByUserId]);
+  const hasExtraTeams = useMemo(() => [...teamsByUserId.values()].some(teams => teams.length > 1) || data.invitations.some(invitation => invitation.status === "pending" && invitation.teamIds.length > 1), [data.invitations, teamsByUserId]);
   const entries = useMemo<MemberEntry[]>(() => [
     ...data.members.map(member => ({ kind: "member" as const, member })),
     ...data.invitations.filter(invitation => invitation.status === "pending").map(invitation => ({ kind: "invitation" as const, invitation })),
@@ -529,7 +532,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       ) : (
         <div
           className={`workspace-directory__table workspace-members-table${visible.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
-          style={{ "--member-columns": memberDirectoryColumns(columns, longestTeamKey) } as React.CSSProperties}
+          style={{ "--member-columns": memberDirectoryColumns(columns, longestTeamKey, hasExtraTeams) } as React.CSSProperties}
         >
           <DirectoryRows header={<div className="workspace-members-columns">
             <DirectorySortHeader active={ordering === "name"} descending={descending} label="Name" onClick={() => changeSort("name")} />
@@ -951,6 +954,7 @@ function TeamsDirectory({
   const { descending, ordering } = preferences;
   const columns = new Set(preferences.columns);
   const [dateOpen, setDateOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const people = useMemo(() => indexTeamPeople(data.teamMembers), [data.teamMembers]);
   const setDescending = (update: boolean | ((value: boolean) => boolean)) => setPreferences(current => ({ ...current, descending: typeof update === 'function' ? update(current.descending) : update }));
   const setOrdering = (value: TeamOrdering) => setPreferences(current => ({ ...current, ordering: value, descending: value !== 'name' }));
@@ -996,9 +1000,13 @@ function TeamsDirectory({
     return metrics;
   }, [data.cycles, data.favorites, data.projects, data.subscriptions, data.teamMembers, data.teams, data.users, data.viewer.id]);
   const filtersActive = filters.advanced || ['members', 'owners', 'private', 'created'].some(field => filters[field as TeamFilterField].length);
-  const teams = useMemo(() => data.teams
-    .filter(team => matchesTeamFilters(team, filters, people))
-    .sort((left, right) => compareDirectoryTeams(left, right, ordering, descending)), [data.teams, descending, filters, ordering, people]);
+  const teams = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return data.teams
+      .filter(team => !needle || team.name.toLocaleLowerCase().includes(needle) || team.key.toLocaleLowerCase().includes(needle))
+      .filter(team => matchesTeamFilters(team, filters, people))
+      .sort((left, right) => compareDirectoryTeams(left, right, ordering, descending));
+  }, [data.teams, descending, filters, ordering, people, query]);
   const toggleColumn = (column: TeamColumn) =>
     setPreferences((current) => {
       const next = new Set(current.columns);
@@ -1007,6 +1015,9 @@ function TeamsDirectory({
       return { ...current, columns: [...next] };
     });
   const teamRows = useMemo(() => hierarchy.rows(teams, collapsedTeams), [hierarchy, teams, collapsedTeams]);
+  // Only reserve the expand-arrow slot when some team has sub-teams (Linear
+  // aligns team icons under the Name header otherwise).
+  const anyTeamHasChildren = teamRows.some(row => row.hasChildren);
   const counts = useMemo(() => {
     const result = { members: new Map<string, number>(), owners: new Map<string, number>() };
     for (const team of data.teams) {
@@ -1082,10 +1093,14 @@ function TeamsDirectory({
   return (
     <>
       <div className="workspace-directory__toolbar workspace-teams-toolbar">
-        <span>
-          {!filtersActive &&
-            `${teams.length} ${teams.length === 1 ? "team" : "teams"}`}
-        </span>
+        <ContentViewHeaderSearch
+          alwaysVisible
+          aria-label={t("Find teams")}
+          placeholder={t("Find teams…")}
+          value={query}
+          onChange={setQuery}
+          className="workspace-teams-cvh-search"
+        />
         <span />
         <DirectoryFilterMenu
           groups={filterGroups}
@@ -1107,6 +1122,7 @@ function TeamsDirectory({
           ]}
           properties={columns}
           propertyOptions={[
+            { id: "id", label: "ID" },
             { id: "membership", label: "Membership" },
             { id: "owners", label: "Owners" },
             { id: "projects", label: "Projects" },
@@ -1121,7 +1137,11 @@ function TeamsDirectory({
         <TeamFilterBar filters={filters} groups={filterGroups} onChange={setFilters} onChoice={changeFilter} onDate={() => setDateOpen(true)}/>
       )}
       <TeamDateFilterDialog open={dateOpen} value={filters.created[0]} onClose={() => setDateOpen(false)} onApply={value => { changeFilter('created', value, true); setDateOpen(false); }}/>
-      {teams.length === 0 ? (
+      {teams.length === 0 && query.trim() && !filtersActive ? (
+        <div className="workspace-members-empty" role="status">
+          <strong>{t("No matching teams")}</strong>
+        </div>
+      ) : teams.length === 0 ? (
         <DirectoryFilteredEmpty
           hiddenCount={data.teams.length}
           noun="teams"
@@ -1145,6 +1165,7 @@ function TeamsDirectory({
             >
               {t('Name')}{ordering === 'name' && (descending ? <ArrowDown /> : <ArrowUp />)}
             </button>
+            <span>{t('Description')}</span>
             {columns.has("membership") && <span>{t('Membership')}</span>}
             {columns.has("owners") && <span>Owners</span>}
             {columns.has("members") && <span>{t('Members')}</span>}
@@ -1159,6 +1180,7 @@ function TeamsDirectory({
             const owners = metric?.owners ?? [];
             const cycleCount = metric?.cycleCount ?? 0;
             const projectCount = metric?.projectCount ?? 0;
+            const description = data.teamSettings?.[team.id]?.description?.trim();
             return (
               <div
                 className="workspace-team-row"
@@ -1171,11 +1193,12 @@ function TeamsDirectory({
                 }}
               >
                 <div className="workspace-team-identity" style={{paddingInlineStart: depth * 18}} title={hierarchy.path(team.id)}>
-                  {hasChildren ? <button className="workspace-team-expand" aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name}`} aria-expanded={!collapsedTeams.has(team.id)} onKeyDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); setCollapsedTeams(current => {const next = new Set(current); if(next.has(team.id))next.delete(team.id);else next.add(team.id);return next;});}}><ChevronRight size={14} style={{transform: collapsedTeams.has(team.id) ? undefined : 'rotate(90deg)'}}/></button> : <span className="workspace-team-expand-placeholder"/>}
+                  {hasChildren ? <button className="workspace-team-expand" aria-label={`${collapsedTeams.has(team.id) ? 'Expand' : 'Collapse'} ${team.name}`} aria-expanded={!collapsedTeams.has(team.id)} onKeyDown={event => event.stopPropagation()} onClick={event => {event.stopPropagation(); setCollapsedTeams(current => {const next = new Set(current); if(next.has(team.id))next.delete(team.id);else next.add(team.id);return next;});}}><ChevronRight size={14} style={{transform: collapsedTeams.has(team.id) ? undefined : 'rotate(90deg)'}}/></button> : anyTeamHasChildren && <span className="workspace-team-expand-placeholder"/>}
                   <TeamGlyph team={team} />
                   <strong>{team.name}</strong>
-                  <small>{team.key}</small>
+                  {columns.has("id") && <small>{team.key}</small>}
                 </div>
+                <span className="workspace-team-description" title={description || undefined}>{description}</span>
                 {columns.has("membership") && (
                   viewerMembership?<span className="workspace-team-joined"><Check/>{t('Joined')}</span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(onReload)}}>{t('Join')}</button>
                 )}
@@ -1443,7 +1466,7 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 function teamColumns(columns: Set<TeamColumn>) {
-  const widths: Record<TeamColumn, string> = {
+  const widths: Record<Exclude<TeamColumn, "id">, string> = {
     membership: "96px",
     owners: "150px",
     projects: "153px",
@@ -1452,7 +1475,8 @@ function teamColumns(columns: Set<TeamColumn>) {
     updated: "105px",
     members: "126px",
   };
-  return `minmax(280px,1fr) ${(
+  // Linear splits the flexible space ~41/59 between Name and Description (x13 / x345 in a 1218px panel).
+  return `minmax(220px,327fr) minmax(0,463fr) ${(
     [
       "membership",
       "owners",
@@ -1461,7 +1485,7 @@ function teamColumns(columns: Set<TeamColumn>) {
       "projects",
       "created",
       "updated",
-    ] as TeamColumn[]
+    ] as Exclude<TeamColumn, "id">[]
   )
     .filter((column) => columns.has(column))
     .map((column) => widths[column])

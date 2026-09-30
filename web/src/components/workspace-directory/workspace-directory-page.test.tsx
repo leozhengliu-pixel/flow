@@ -107,7 +107,17 @@ describe('workspace members directory', () => {
     expect(more).toHaveClass('workspace-member-teams__more')
     expect(more).toHaveAttribute('title', 'DESIGN · Design, FLO · Flow, OPS · Operations')
     const table = document.querySelector('.workspace-members-table') as HTMLElement
-    expect(table.style.getPropertyValue('--member-columns')).toContain('max(96px, calc(6ch + 76px))')
+    expect(table.style.getPropertyValue('--member-columns')).toContain('max(71px, calc(6ch + 76px))')
+  })
+
+  it('keeps the Teams column at Linear\'s 71px when nobody needs a +N chip', () => {
+    const teams = [{ ...makeBootstrap().teams[0], id: 'team-1', key: 'OPS', name: 'Operations' }]
+    renderMembers(membersData({
+      teams,
+      teamMembers: [{ teamId: 'team-1', userId: viewer.id, role: 'member' as const, joinedAt: '' }],
+    } as Partial<BootstrapData>))
+    const table = document.querySelector('.workspace-members-table') as HTMLElement
+    expect(table.style.getPropertyValue('--member-columns')).toContain('max(71px, calc(3ch + 34px))')
   })
 
   it('persists display options that reorder rows and hide columns', async () => {
@@ -155,5 +165,62 @@ describe('workspace members directory', () => {
     renderMembers()
     await user.click(screen.getByRole('button', { name: 'Invite members' }))
     expect(await screen.findByRole('dialog', { name: 'Invite to your workspace' })).toBeInTheDocument()
+  })
+})
+
+describe('workspace teams directory', () => {
+  const teamsData = () => {
+    const base = makeBootstrap()
+    const teams = [
+      { ...base.teams[0], id: 'team-1', key: 'ENG', name: 'Engineering' },
+      { ...base.teams[0], id: 'team-2', key: 'DES', name: 'Design' },
+    ]
+    return makeBootstrap({
+      viewerRole: 'admin',
+      teams,
+      teamMembers: [{ teamId: 'team-1', userId: viewer.id, role: 'owner', joinedAt: '2026-01-02T10:00:00.000Z' }],
+      teamSettings: { 'team-1': { teamId: 'team-1', description: 'Builds the product' } },
+      customers: [], customerRequests: [], favorites: [], invitations: [], members: [],
+    } as unknown as Partial<BootstrapData>)
+  }
+  const renderTeams = (data = teamsData()) => {
+    const noop = vi.fn()
+    return render(<I18nProvider><MemoryRouter><WorkspaceDirectoryPage
+      kind="teams" data={data} onOpenSidebar={noop} onNavigateTeamMembers={noop} onNavigateMember={noop} onNavigateTeam={noop}
+      onNavigateTeamProjects={noop} onNavigateTeamCycles={noop} onNavigateTeamsSettings={noop} onNewTeam={noop}
+      onCreateCustomer={vi.fn()} onUpdateCustomer={vi.fn()} onDeleteCustomer={vi.fn()} onOpenCustomer={noop} onReload={vi.fn().mockResolvedValue(undefined)}
+    /></MemoryRouter></I18nProvider>)
+  }
+
+  it('uses Linear\'s header, search and default columns', () => {
+    renderTeams()
+    expect(screen.getByRole('button', { name: 'New team' })).toHaveClass('is-ghost')
+    expect(screen.getByRole('searchbox', { name: 'Find teams' })).toHaveAttribute('placeholder', 'Find teams…')
+    expect(screen.queryByText(/^\d+ teams?$/)).not.toBeInTheDocument()
+    const header = document.querySelector('.workspace-team-columns') as HTMLElement
+    expect(within(header).getByRole('button', { name: 'Order by Name' })).toBeInTheDocument()
+    expect([...header.querySelectorAll('span')].map(span => span.textContent).filter(Boolean)).toEqual(['Description', 'Membership', 'Members', 'Active projects'])
+    expect(screen.getByText('Builds the product')).toHaveClass('workspace-team-description')
+    expect(screen.getByText('ENG')).toBeInTheDocument()
+  })
+
+  it('filters teams by name or key from the search field', async () => {
+    const user = userEvent.setup()
+    renderTeams()
+    await user.type(screen.getByRole('searchbox', { name: 'Find teams' }), 'des')
+    expect(screen.getByText('Design', { selector: 'strong' })).toBeInTheDocument()
+    expect(screen.queryByText('Engineering', { selector: 'strong' })).not.toBeInTheDocument()
+    await user.clear(screen.getByRole('searchbox', { name: 'Find teams' }))
+    await user.type(screen.getByRole('searchbox', { name: 'Find teams' }), 'eng')
+    expect(screen.getByText('Engineering', { selector: 'strong' })).toBeInTheDocument()
+    expect(screen.queryByText('Design', { selector: 'strong' })).not.toBeInTheDocument()
+  })
+
+  it('migrates saved v1 column preferences to show the ID and drop the Cycle default', () => {
+    localStorage.setItem('flow:team-directory:workspace-1:' + viewer.id, JSON.stringify({ ordering: 'name', descending: false, columns: ['membership', 'members', 'cycle', 'projects'] }))
+    renderTeams()
+    const header = document.querySelector('.workspace-team-columns') as HTMLElement
+    expect(within(header).queryByText('Cycle')).not.toBeInTheDocument()
+    expect(screen.getByText('ENG')).toBeInTheDocument()
   })
 })

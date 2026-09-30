@@ -351,4 +351,10 @@ describe('settings aliases and deep links', () => {
     expect(parseAppRoute('/acme/settings/teams/ENG/recurring-issues/new')).toMatchObject({ teamSection: 'recurring-issues', teamSubPath: 'new' })
     expect(settingsPath('acme', 'team', 'ENG', 'templates', 'issue/new')).toBe('/acme/settings/teams/ENG/templates/issue/new')
   })
+
+  it('opens bare views directories on the issue views tab', () => {
+    expect(parseAppRoute('/acme/views')).toEqual({ kind: 'workspace-views', workspaceSlug: 'acme', resource: 'issues' })
+    expect(parseAppRoute('/acme/team/ENG/views')).toEqual({ kind: 'team-views', workspaceSlug: 'acme', teamKey: 'ENG', resource: 'issues' })
+    expect(parseAppRoute('/acme/views/projects')).toEqual({ kind: 'workspace-views', workspaceSlug: 'acme', resource: 'projects' })
+  })
 })
