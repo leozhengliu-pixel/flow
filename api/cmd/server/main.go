@@ -66,6 +66,7 @@ type server struct {
 	webSearch                      websearch.Provider // nil when no provider is configured
 	webFetcher                     *websearch.Fetcher
 	triageRuns                     sync.Map
+	agentRuns                      sync.Map
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
 	workspaceDefaultRegion         string
@@ -291,6 +292,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/agent/sessions/{id}/messages/{messageId}/stream", s.updateAgentSessionMessageStream)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/approvals/{approvalId}", s.resolveAgentApproval)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/elicitations/{elicitationId}", s.resolveAgentElicitation)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/stop", s.stopAgentSession)
 	mux.HandleFunc("GET /api/agent/skills", s.listAgentSkillsHTTP)
 	mux.HandleFunc("POST /api/agent/skills", s.createAgentSkill)
 	mux.HandleFunc("PATCH /api/agent/skills/{id}", s.updateAgentSkill)
@@ -6308,6 +6310,7 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 	}
 	w.WriteHeader(success)
 }
+
 // errTeamKeyTaken stays a 400 (errInvalid) but says what is wrong.
 var errTeamKeyTaken error = teamKeyTakenError{}
 

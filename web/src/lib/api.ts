@@ -2181,6 +2181,10 @@ export function getAgentSession(
 ): Promise<import("@/types/flow").AgentSession> {
   return request(`/api/agent/sessions/${encodeURIComponent(id)}`);
 }
+/** Stops the reply running for a chat (it keeps running on the server when the page goes away). */
+export function stopAgentSession(id: string): Promise<void> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });
+}
 export function createAgentSession(input: {
   message: string;
   issueIds?: string[];
