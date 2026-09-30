@@ -76,7 +76,7 @@ import type {
   OAuthAuthorization,
   Passkey,
 } from "@/types/flow";
-import { useI18n } from "@/i18n/i18n";
+import { translateToChinese, useI18n } from "@/i18n/i18n";
 import { resolveFirstDay } from "@/lib/runtime-preferences";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import {
@@ -587,7 +587,7 @@ const PERSONAL_ZH: Record<string, string> = {
 export function PersonalSettings(props: Props) {
   const { locale } = useI18n();
   const p = useCallback<PersonalTranslate>(
-    (source) => (locale === "zh-CN" ? (PERSONAL_ZH[source] ?? source) : source),
+    (source) => (locale === "zh-CN" ? (PERSONAL_ZH[source] ?? translateToChinese(source)) : source),
     [locale],
   );
   let content: ReactNode;

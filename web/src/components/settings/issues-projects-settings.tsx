@@ -3418,8 +3418,8 @@ export function SLASettings({
               label={t("Work week")}
               value={settings.workWeek === "sunThu" ? "sunThu" : "monFri"}
               options={[
-                { value: "monFri", label: "Mon-Fri" },
-                { value: "sunThu", label: "Sun-Thu" },
+                { value: "monFri", label: t("Mon-Fri") },
+                { value: "sunThu", label: t("Sun-Thu") },
               ]}
               onChange={(value) =>
                 run(() => updateSLASettings({ workWeek: value as "monFri" | "sunThu" }))

@@ -116,3 +116,7 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
 :root[data-theme="light"] .feature-integration-fallback{background:var(--theme-surface-2,#ececed)}
 .feature-status { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 0.5px solid var(--theme-border); border-radius: 9999px; color: var(--theme-text-secondary); font-size: 12px; white-space: nowrap; }
 .feature-status.is-on { color: var(--semantic-success); }
+/* A feature row that opens a sub-page (AI & Agents → Coding sessions), matching Linear's navigation rows. */
+.feature-row-link{width:100%;border:0;border-bottom:1px solid var(--theme-border);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.feature-row-link:hover,.feature-row-link:focus-visible{outline:0;background:var(--theme-surface-hover)}
+.feature-row-link>aside>svg{color:var(--theme-text-tertiary)}

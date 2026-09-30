@@ -101,8 +101,8 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   const setFeature = <K extends keyof FeatureSettings>(key: K, value: FeatureSettings[K]) =>
     save({ featureSettings: { [key]: value } });
 
-  if (page === "coding-sessions") return <CodingAgentSettingsPage data={data} settings={settings} onReload={onReload} onOpenEnvironments={() => onNavigateSettings?.("coding-environments")} />;
-  if (page === "coding-environments") return <CodingAgentSettingsPage data={data} settings={settings} mode="environments" onReload={onReload} />;
+  if (page === "coding-sessions") return <CodingAgentSettingsPage data={data} settings={settings} disabled={busy || !['admin','owner'].includes(data.viewerRole)} onReload={onReload} onToggleEnabled={value => setEnabled("coding-sessions", value)} onOpenEnvironments={() => onNavigateSettings?.("coding-environments")} />;
+  if (page === "coding-environments") return <CodingAgentSettingsPage data={data} settings={settings} mode="environments" disabled={busy || !["admin","owner"].includes(data.viewerRole)} onReload={onReload} />;
   if (page === "ai") return <AIPage data={data} onReload={onReload} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onOpenIntegration={onOpenIntegration} onNavigateSettings={onNavigateSettings}/>;
   if (page === "loops") return <LoopsFeatureSettings data={data} settings={settings} busy={busy || !['admin','owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onSaveWorkspace={save} onReload={onReload}/>;
   if (page === "initiatives") return <InitiativesFeatureSettings data={data} settings={settings} busy={busy} setEnabled={setEnabled} onScheduleChange={schedule => save({ featureSettings: { initiativeUpdateSchedule: initiativeScheduleValue(schedule.frequency), initiativeUpdateFrequencyWeeks: schedule.frequency, initiativeUpdateWeekday: schedule.weekday, initiativeUpdateHour: schedule.hour } })} onReload={onReload} onNavigateLabels={() => onNavigateSettings?.("initiative-labels")}/>;
@@ -169,7 +169,6 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
   const canEdit=['owner','admin'].includes(data.viewerRole)||settings.agentGuidancePermission==='members';
   const cards = [
     ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", Bot],
-    ["coding-sessions", "Coding sessions", "Assign or ask Flow to make code changes", Code2],
     ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", Radio],
   ] as const;
   const repositoryAccess: RepositoryAccessSettings = {
@@ -191,7 +190,9 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
   };
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
-      <FeatureCard>{cards.map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??["ai-agent","coding-sessions","loops"].includes(id)} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
+      <FeatureCard>{cards.slice(0,1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
+        <FeatureLinkRow icon={Code2} title="Coding sessions" description="Assign or ask Flow to make code changes" detail={(settings.featureFlags["coding-sessions"]??true)?"Enabled":"Disabled"} onClick={()=>onNavigateSettings?.("coding-sessions")}/>
+        {cards.slice(1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
         <FeatureRow icon={Code2} title={t("Require signed commits")} description={t("Users must upload a signing key before starting a coding session")}>
           <Toggle
             checked={settings.codingAgentSettings?.commitSigningEnabled === true}
@@ -227,16 +228,7 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
       onRepositoryAccessChange={(next) => setFeature('repositoryAccess', next)}
     />
     <TriageIntelligenceFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>
-    <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-guidance"><label>{t('Installed agents guidance')}<textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
-    <FeatureSection title="Coding sessions" description="Harness, model, and environment preferences for coding agents.">
-      <CodingAgentSettingsPage
-        data={data}
-        settings={settings}
-        disabled={busy}
-        onReload={onReload}
-        onOpenEnvironments={() => onNavigateSettings?.("coding-environments")}
-      />
-    </FeatureSection>
+    <FeatureSection title="Installed Agents" description="AI agents can work alongside you as teammates."><div className="settings-agent-guidance"><label><span>{t('Installed agents guidance')}</span><textarea aria-label={t('Installed agents guidance')} maxLength={8000} disabled={!canEdit||savingGuidance} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={!canEdit||savingGuidance||guidance===(settings.agentInstructions??'')} onClick={async()=>{setSavingGuidance(true);try{await updateWorkspaceAgentGuidance(guidance);await onReload()}catch(error){toast.error(message(error))}finally{setSavingGuidance(false)}}}>Save</FeatureButton></div></FeatureSection>
     <FeatureSection title="AI" description="Control AI assistance throughout Flow"><FeatureCard><FeatureRow icon={MessageSquare} title="Resolved thread summaries" description="Control AI summaries for resolved threads across Flow"><Toggle checked={settings.featureFlags["thread-summaries"]??true} disabled={busy} label="Resolved thread summaries" onChange={value=>setEnabled("thread-summaries",value)}/></FeatureRow></FeatureCard></FeatureSection>
   </FeatureShell>;
 }
@@ -269,7 +261,7 @@ function TriageIntelligenceFeatureSettings({settings,busy,setEnabled,setFeature}
     </div>
     <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
       <header><h3>{t("Workspace guidance")}</h3><p>{t("Optionally provide additional context and instructions for Triage Intelligence in this workspace.")}</p></header>
-      <FeatureCard><div className="settings-agent-guidance"><label>{t("Triage Intelligence guidance")}<textarea aria-label={t("Triage Intelligence guidance")} maxLength={8000} disabled={busy||!enabled} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={busy||!enabled||guidance===(config.workspaceGuidance??'')} onClick={()=>update("workspaceGuidance",guidance.trim())}>Save</FeatureButton></div></FeatureCard>
+      <div className="settings-agent-guidance"><label><span>{t("Triage Intelligence guidance")}</span><textarea aria-label={t("Triage Intelligence guidance")} maxLength={8000} disabled={busy||!enabled} value={guidance} onChange={event=>setGuidance(event.target.value)}/></label><FeatureButton primary disabled={busy||!enabled||guidance===(config.workspaceGuidance??'')} onClick={()=>update("workspaceGuidance",guidance.trim())}>Save</FeatureButton></div>
     </div>
   </FeatureSection>;
 }
@@ -451,6 +443,7 @@ function FeatureSection({title,description,children}:{title:string;description?:
 function FeatureCard({children}:{children:ReactNode}) {return <div className="feature-card">{children}</div>}
 function Toggle(props:ComponentProps<typeof BaseSettingsToggle>) {const {t}=useI18n();return <BaseSettingsToggle {...props} label={t(props.label)}/>}
 function FeatureRow({title,description,icon:Icon,badge,businessTitle,children}:{title:string;description?:string;icon?:LucideIcon;badge?:string;businessTitle?:boolean;children?:ReactNode}) { const {t}=useI18n();return <div className="feature-row">{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong data-i18n-ignore={businessTitle||undefined}>{businessTitle?title:t(title)}{badge&&<small>{t(badge)}</small>}</strong>{description&&<span>{t(description)}</span>}</div>{children&&<aside>{children}</aside>}</div> }
+function FeatureLinkRow({title,description,icon:Icon,detail,onClick}:{title:string;description?:string;icon?:LucideIcon;detail?:string;onClick:()=>void}) { const {t}=useI18n();return <button type="button" className="feature-row feature-row-link" onClick={onClick}>{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong>{t(title)}</strong>{description&&<span>{t(description)}</span>}</div><aside>{detail&&<span className="feature-state">{t(detail)}</span>}<ChevronRight size={15}/></aside></button> }
 function FeatureButton({children,primary,danger,...props}:React.ButtonHTMLAttributes<HTMLButtonElement>&{primary?:boolean;danger?:boolean}) {const {t}=useI18n();return <button {...props} className={`feature-button${primary?" primary":""}${danger?" danger":""}`}>{Children.map(children,child=>typeof child==="string"?t(child):child)}</button>}
 function FeatureSelect({label,value,options,onChange,disabled}:{label:string;value:string;options:{value:string;label:string;translate?:boolean}[];onChange:(value:string)=>void;disabled?:boolean}) {const {t}=useI18n();const selected=options.find(item=>item.value===value)??{value,label:value};const text=(item:{label:string;translate?:boolean})=>item.translate===false?item.label:t(item.label);return <DropdownMenu><DropdownMenuTrigger asChild><button type="button" role="combobox" aria-label={t(label)} disabled={disabled} className="feature-select"><span data-i18n-ignore={selected.translate===false?true:undefined}>{text(selected)}</span><ChevronDown size={13}/></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="feature-select-menu">{options.map(item=><DropdownMenuItem key={item.value} data-i18n-ignore={item.translate===false?true:undefined} onSelect={()=>onChange(item.value)}>{text(item)}{item.value===value&&<Check size={13}/>}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
 function FeatureEmpty({icon:Icon,title,action}:{icon:LucideIcon;title:string;action?:ReactNode}) {const {t}=useI18n();return <div className="feature-empty"><Icon size={24}/><h3>{t(title)}</h3>{action}</div>}

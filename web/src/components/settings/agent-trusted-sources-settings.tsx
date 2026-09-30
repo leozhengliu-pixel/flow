@@ -68,12 +68,12 @@ export function AgentTrustedSourcesSettings({
 
   return (
     <section
-      className="agent-trusted-sources-settings"
+      className="feature-section agent-trusted-sources-settings"
       data-testid="agent-trusted-sources-settings"
       aria-labelledby="agent-trusted-sources-title"
     >
       <header>
-        <h3 id="agent-trusted-sources-title">{t("Trusted sources")}</h3>
+        <h2 id="agent-trusted-sources-title">{t("Trusted sources")}</h2>
         <p>
           {t(
             "Choose which external sources agents and loops may treat as trusted when processing inbound content.",
@@ -82,6 +82,7 @@ export function AgentTrustedSourcesSettings({
       </header>
       <AutomationTrustedSourceEditor
         users={data.users}
+        hideHeader
         integrationServices={integrationServices}
         trustedSourcesMode={mode}
         trustedSourcesAllowlist={allowlist}
