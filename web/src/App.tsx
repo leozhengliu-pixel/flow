@@ -5000,6 +5000,8 @@ function App() {
             data={data}
             origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
             document={selectedDocument}
+            openHistoryRequest={new URLSearchParams(location.search).has("history")}
+            onHistoryRequestHandled={() => navigateTo({ pathname: location.pathname, search: "" }, { replace: true, state: location.state })}
             onReload={async () => {
               // Document comments are content records the metadata
               // projection omits; refresh just this document's thread.
@@ -6317,6 +6319,12 @@ function App() {
               onCreateResource={addProjectResource}
               onUpdateResource={changeProjectResource}
               onDeleteResource={removeProjectResource}
+              onOpenDocumentHistory={(document) =>
+                navigateTo(`${documentPath(data.workspace.urlKey, document)}?history=1`)
+              }
+              onReloadWorkspace={async () => {
+                await reloadWorkspaceMetadata(data.workspace.urlKey);
+              }}
               onCreateMilestone={addProjectMilestone}
               onUpdateMilestone={changeProjectMilestone}
               onDeleteMilestone={removeProjectMilestone}

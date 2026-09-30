@@ -124,6 +124,10 @@ export type ProjectDetailProps = {
     },
   ) => Promise<ProjectResource>;
   onDeleteResource: (projectId: string, resourceId: string) => Promise<void>;
+  /** Open a document resource's page with its history dialog showing. */
+  onOpenDocumentHistory?: (document: FlowDocument) => void;
+  /** Refetch workspace metadata after document mutations made from a resource menu. */
+  onReloadWorkspace?: () => Promise<void>;
   onCreateMilestone: (
     projectId: string,
     input: { name: string; description?: string; targetDate?: string },
