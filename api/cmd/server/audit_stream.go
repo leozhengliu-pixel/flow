@@ -190,6 +190,9 @@ func (s *server) deleteAuditStream(w http.ResponseWriter, r *http.Request) {
 // first. Each entry is retried with backoff; after the last attempt it is
 // recorded as a failure and skipped. A stream failing for a day is disabled.
 func (s *server) streamAuditLog(ctx context.Context, workspace string, now time.Time) {
+	if hooks, ok := s.store.WorkspaceMetadataFields(workspace, "webhooks"); !ok || auditStreamWebhook(&hooks) < 0 {
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return

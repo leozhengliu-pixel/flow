@@ -66,11 +66,16 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 		if cursors[user.ID].After(start) {
 			start = cursors[user.ID]
 		}
-		view, err := s.store.PagedWorkspaceMetadata(ctx, key, user.ID)
-		if err != nil {
-			continue
-		}
+		// The per-viewer projection clones the workspace; skip it when nothing
+		// was posted in the window at all (the visible count is then zero).
 		count := 0
+		view := metadata
+		var err error
+		if pulseUpdatesPosted(&metadata, start, end) {
+			if view, err = s.store.PagedWorkspaceMetadata(ctx, key, user.ID); err != nil {
+				continue
+			}
+		}
 		for _, project := range view.Projects {
 			if project.ArchivedAt != nil {
 				continue
@@ -128,4 +133,23 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 		}
 	}
 	return nil
+}
+
+func pulseUpdatesPosted(data *domain.Bootstrap, start, end time.Time) bool {
+	within := func(at time.Time) bool { return at.After(start) && !at.After(end) }
+	for _, updates := range data.ProjectUpdates {
+		for _, update := range updates {
+			if within(update.CreatedAt) {
+				return true
+			}
+		}
+	}
+	for _, updates := range data.InitiativeUpdates {
+		for _, update := range updates {
+			if within(update.CreatedAt) {
+				return true
+			}
+		}
+	}
+	return false
 }

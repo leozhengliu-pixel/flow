@@ -1519,7 +1519,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		input.Color = "#5E6AD2"
 	}
 	var persistedTeamMembers []domain.TeamMember
-	if data, ok := s.store.WorkspaceMetadata(workspaceKey); ok {
+	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	}
 	now := time.Now().UTC()
@@ -1605,7 +1605,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err == nil && !s.authDisabled {
-		data, _ := s.store.WorkspaceMetadata(workspaceKey)
+		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
 		err = s.store.SetTeamMembership(r.Context(), data.Workspace.ID, team.ID, authUser(r).ID, "owner", true)
 	}
 	respondMutation(w, err, http.StatusCreated, team)
@@ -1623,7 +1623,7 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var persistedTeamMembers []domain.TeamMember
-	if data, ok := s.store.WorkspaceMetadata(workspaceKey); ok {
+	if data, ok := s.store.WorkspaceSettingsMetadata(workspaceKey); ok {
 		persistedTeamMembers, _ = s.store.ListTeamMembers(r.Context(), data.Workspace.ID)
 	}
 	var updated domain.Team
@@ -1750,7 +1750,8 @@ func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) err
 		return err
 	})
 	if err == nil {
-		data, _ := s.store.BootstrapFor(workspaceKey)
+		// Only the workspace id is needed; BootstrapFor would load every issue.
+		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
 		err = s.store.DeleteTeamMemberships(ctx, data.Workspace.ID, teamID)
 	}
 	return err

@@ -90,7 +90,7 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 		s.streamAuditLog(ctx, key, now)
 		s.dispatchNotificationEmails(ctx, key)
 		s.dispatchNotificationDigests(ctx, key, now)
-		data, ok := s.store.WorkspaceMetadata(key)
+		data, ok := s.store.WorkspaceMetadataFields(key, "integrationDeliveries")
 		if !ok {
 			continue
 		}
@@ -112,7 +112,7 @@ func (s *server) prepareDueNotificationDeliveries(ctx context.Context, key strin
 	if s.mailer != nil {
 		statuses = append(statuses, "pending-disabled")
 	}
-	snapshot, err := s.store.NotificationDeliverySnapshot(ctx, key, statuses, now)
+	snapshot, err := s.store.NotificationDeliveries(ctx, key, statuses, now)
 	if err != nil {
 		return err
 	}

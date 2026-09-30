@@ -93,9 +93,12 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	var deletedIssues bool
 	var deletedProjectRefs bool
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
+	traceStart(ctx, "team")
 	apply := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		traceLocked(ctx)
+		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
 			latest, err := s.loadWorkspaceState(ctx, workspaceKey)
 			if err != nil {
@@ -127,6 +130,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 			}
 		}
 		aggregateID, err := mutate(&next)
+		traceMark(ctx, "mutate")
 		next.ViewerRole = originalViewerRole
 		next.Viewer = originalViewer
 		if aggregateID == "" {
@@ -182,6 +186,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 				return err
 			}
 		}
+		traceMark(ctx, "persist")
 		noteTeamMutationIndexes(eventType, aggregateID, &snap, &next)
 		if snap.deletion != nil {
 			deletedIssues = snap.deletion.removedIssues > 0

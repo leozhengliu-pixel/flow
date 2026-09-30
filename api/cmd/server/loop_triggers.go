@@ -527,6 +527,11 @@ func loopEventEntityName(data domain.Bootstrap, event loopEvent) string {
 
 // dispatchLoopTriggers starts entity-triggered loops that match a domain event.
 func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent) {
+	// Runs synchronously after every mutation; most workspaces have no event
+	// loops, so check the loop list before cloning the workspace metadata.
+	if loops, ok := s.store.WorkspaceMetadataFields(workspace, "loops"); !ok || !slices.ContainsFunc(loops.Loops, func(loop domain.Loop) bool { return loopLive(loop) && loop.TriggerType != "schedule" }) {
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok || !slices.ContainsFunc(data.Loops, func(loop domain.Loop) bool { return loopLive(loop) && loop.TriggerType != "schedule" }) {
 		return

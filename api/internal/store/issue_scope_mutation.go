@@ -60,9 +60,12 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 	}
 	progressChanged := false
 	needsFamily := eventType == "issue.deleted" || eventType == "issue.batch_updated" && (batch.Update.StateID != nil || batch.Update.ParentID != nil)
+	traceStart(ctx, "issue")
 	err := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		traceLocked(ctx)
+		defer traceUnlocked(ctx)
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return fmt.Errorf("workspace not found")
@@ -225,7 +228,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		}
 		refreshDisplayReferences(&data)
 		refreshIssueReferences(&data)
+		traceMark(ctx, "load")
 		aggregate, err := mutate(&data)
+		traceMark(ctx, "mutate")
 		if err != nil {
 			return err
 		}
@@ -305,14 +310,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		data.ViewerRole = originalRole
 		data.Viewer = current.Viewer
 		data = collectionMetadata(data)
-		encoded, err := json.Marshal(data)
-		if err != nil {
-			return err
-		}
-		if len(encoded) > s.maxStateBytes {
-			return fmt.Errorf("workspace metadata exceeds %d bytes", s.maxStateBytes)
-		}
-		if err := writeWorkspaceMetadata(ctx, tx, workspace, data.Workspace.ID, encoded); err != nil {
+		// Issue writes rarely touch metadata; persist only the fields the
+		// callback changed instead of re-encoding every metadata record.
+		if err := s.persistMetadataTx(ctx, tx, workspace, current, data); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,created_at) VALUES(?,?,?,?,?)`, event.ID, event.Type, aggregate, payloadRaw, event.CreatedAt.Format(time.RFC3339Nano)); err != nil {
@@ -321,6 +321,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		if err := tx.Commit(); err != nil {
 			return err
 		}
+		traceMark(ctx, "persist")
 		s.workspaces[workspace] = data
 		if progressChanged {
 			s.dropMetadataCache(ctx, workspace)

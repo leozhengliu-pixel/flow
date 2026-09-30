@@ -44,6 +44,9 @@ func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEve
 	if !strings.HasPrefix(event.Type, "issue.") && event.Type != "comment.created" && event.Type != "project.update_created" {
 		return
 	}
+	if connections, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections"); !ok || slackBotToken(connections) == "" {
+		return
+	}
 	data, ok := s.store.WorkspaceMetadata(workspace)
 	if !ok {
 		return

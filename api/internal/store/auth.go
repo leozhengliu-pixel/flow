@@ -1299,9 +1299,12 @@ func ensureAnotherTeamOwner(ctx context.Context, tx *sqlTx, workspaceID, teamID,
 
 // cleanupTeamMemberData removes assignments and subscriptions that are no
 // longer valid after a member leaves a team. Explicit issue shares remain
-// intact so a private issue can still be shared intentionally.
+// intact so a private issue can still be shared intentionally. Only the
+// team's issues assigned to or subscribed by the member are loaded (through
+// the assignee column and subscriber index), never the whole workspace.
 func (s *SQLiteStore) cleanupTeamMemberData(ctx context.Context, workspaceKey, teamID, userID string) error {
-	return s.MutateWorkspace(ctx, workspaceKey, "team_member.cleaned_up", teamID, map[string]string{"userId": userID}, func(data *domain.Bootstrap) error {
+	payload := map[string]string{"userId": userID}
+	cleanup := func(data *domain.Bootstrap) error {
 		for index := range data.Issues {
 			if data.Issues[index].Team.ID != teamID {
 				continue
@@ -1312,7 +1315,65 @@ func (s *SQLiteStore) cleanupTeamMemberData(ctx context.Context, workspaceKey, t
 			data.Issues[index].SubscriberIDs = slices.DeleteFunc(data.Issues[index].SubscriberIDs, func(id string) bool { return id == userID })
 		}
 		return nil
-	})
+	}
+	if fullMutationsForced.Load() {
+		return s.MutateWorkspace(ctx, workspaceKey, "team_member.cleaned_up", teamID, payload, cleanup)
+	}
+	ids, err := s.teamMemberIssueIDs(ctx, workspaceKey, teamID, userID)
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		return s.recordMetadataEvent(ctx, workspaceKey, "team_member.cleaned_up", teamID, payload)
+	}
+	const chunk = 500
+	for start := 0; start < len(ids); start += chunk {
+		scope := WithIssueRecordMutations(ctx, ids[start:min(start+chunk, len(ids))]...)
+		if err := s.MutateWorkspace(scope, workspaceKey, "team_member.cleaned_up", teamID, payload, cleanup); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// teamMemberIssueIDs lists the team's issues assigned to or subscribed by the
+// user, using indexed columns only: the assignee index, then the user's
+// subscriber index rows narrowed to the team by primary key.
+func (s *SQLiteStore) teamMemberIssueIDs(ctx context.Context, workspaceKey, teamID, userID string) ([]string, error) {
+	collect := func(query string, args ...any) ([]string, error) {
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		ids := []string{}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return nil, err
+			}
+			ids = append(ids, id)
+		}
+		return ids, rows.Err()
+	}
+	ids, err := collect(`SELECT id FROM issue_records WHERE workspace_key=? AND assignee_id=? AND team_id=?`, workspaceKey, userID, teamID)
+	if err != nil {
+		return nil, err
+	}
+	subscribed, err := collect(`SELECT issue_id FROM issue_subscriber_records WHERE workspace_key=? AND user_id=?`, workspaceKey, userID)
+	if err != nil {
+		return nil, err
+	}
+	for start := 0; start < len(subscribed); start += 500 {
+		clause, args := bindList("id", subscribed[start:min(start+500, len(subscribed))])
+		inTeam, err := collect(`SELECT id FROM issue_records WHERE workspace_key=? AND team_id=? AND `+clause, append([]any{workspaceKey, teamID}, args...)...)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, inTeam...)
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids), nil
 }
 
 func (s *SQLiteStore) DeleteTeamMemberships(ctx context.Context, workspaceID, teamID string) error {

@@ -63,6 +63,7 @@ type mutationScriptResult struct {
 	state             map[string]string
 	automated         bool
 	remindersArchived int
+	cleaned           bool
 }
 
 func runMutationScript(t *testing.T, forceFull bool) mutationScriptResult {
