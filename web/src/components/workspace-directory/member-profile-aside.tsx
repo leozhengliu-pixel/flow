@@ -7,6 +7,7 @@ import { AppLink } from '@/components/ui/app-link'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { settingsPath, teamHomePath } from '@/lib/app-routes'
+import { personUsername } from '@/lib/people'
 import type { BootstrapData, User } from '@/types/flow'
 
 import { memberIsOnline, memberJoinedAt, memberTeams, relativeTimeAgo } from './member-profile-model'
@@ -45,7 +46,7 @@ export function MemberProfileAside({ data, user, timeZone }: { data: BootstrapDa
       <UserAvatar className="member-profile-aside__avatar" avatarUrl={user.avatarUrl} name={user.displayName}/>
       <div className="member-profile-aside__identity-text">
         <h2 data-i18n-ignore>{user.displayName}</h2>
-        <p><span data-i18n-ignore>{user.name}</span>{online && <> <span aria-hidden>⋅</span> Online <i className="member-profile-aside__online" aria-hidden/></>}</p>
+        <p><span data-i18n-ignore>{personUsername(user)}</span>{online && <> <span aria-hidden>⋅</span> Online <i className="member-profile-aside__online" aria-hidden/></>}</p>
       </div>
       {self && <DropdownMenu.Root modal={false}>
         <DropdownMenu.Trigger asChild>

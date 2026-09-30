@@ -15,6 +15,7 @@ import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
 import { canManageTeamSettings } from '@/lib/settings-permissions';
+import { personUsername } from '@/lib/people';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
 import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
 import {
@@ -2352,7 +2353,7 @@ function MembersPageV2({
                 setIdentityTarget({
                   member: single,
                   field: "username",
-                  value: single.user.name,
+                  value: personUsername(single.user),
                 })
               }
             >
@@ -2477,7 +2478,7 @@ function MembersPageV2({
             >
               <strong data-i18n-ignore>{member.user.displayName}</strong>
             </AppLink>
-            <small data-i18n-ignore>{member.user.name}</small>
+            <small data-i18n-ignore>{personUsername(member.user)}</small>
           </i>
         </span>
         <span data-i18n-ignore>{app ? "" : member.user.email}</span>

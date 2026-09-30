@@ -1920,6 +1920,36 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := r.PathValue("userId")
+	// A username is the workspace handle kept in the member's account settings,
+	// validated like a self-service change; the account name stays as it is.
+	username := ""
+	if input.Username != "" {
+		username = normalizeUsernameInput(input.Username)
+		if !validUsername(username) {
+			writeError(w, http.StatusBadRequest, "Usernames can only contain lowercase letters, numbers, periods, underscores and hyphens")
+			return
+		}
+		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.username_updated", userID, map[string]string{"username": username}, func(workspace *domain.Bootstrap) error {
+			if !slices.ContainsFunc(bootstrapUsers(workspace), func(user domain.User) bool { return user.ID == userID }) {
+				return errNotFound
+			}
+			if usernameTaken(*workspace, userID, username) {
+				return errUsernameTaken
+			}
+			if workspace.UserSettings == nil {
+				workspace.UserSettings = map[string]domain.UserSettings{}
+			}
+			settings := workspace.UserSettings[userID]
+			settings.UserID, settings.Username, settings.UpdatedAt = userID, username, time.Now().UTC()
+			workspace.UserSettings[userID] = settings
+			return nil
+		})
+		if err != nil {
+			respondMutation(w, err, http.StatusOK, nil)
+			return
+		}
+		input.Username = ""
+	}
 	if s.authDisabled {
 		var updated domain.WorkspaceMember
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.updated", userID, input, func(workspace *domain.Bootstrap) error {
@@ -1957,6 +1987,9 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 			updated = *member
 			return nil
 		})
+		if username != "" {
+			updated.User.Username = username
+		}
 		respondMutation(w, err, http.StatusOK, updated)
 		return
 	}
@@ -1993,6 +2026,9 @@ func (s *server) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 	for _, member := range members {
 		if member.User.ID == userID {
 			_ = s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "workspace_member.identity_cascaded", userID, nil, func(workspace *domain.Bootstrap) error { cascadeUserIdentity(workspace, member.User); return nil })
+			if username != "" {
+				member.User.Username = username
+			}
 			writeJSON(w, http.StatusOK, member)
 			return
 		}
