@@ -3,12 +3,10 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import {
   AlertCircle,
-  Check,
   Copy,
   MoreHorizontal,
   PanelTop,
   Plus,
-  Search,
   Star,
   Trash2,
   X,
@@ -22,14 +20,13 @@ import {
   updateAgentSession,
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
-import { agentPath, newAgentSkillPath } from "@/lib/app-routes";
+import { agentPath } from "@/lib/app-routes";
 import type { AgentMessage, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
   AgentAttachIcon,
   AgentChevronDownIcon,
-  AgentSkillsIcon,
   AgentStopIcon,
   AgentSubmitIcon,
 } from "./agent-icons";
@@ -45,6 +42,8 @@ import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts
 import styles from "./agent-page.module.css";
 import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
+import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
+import { AgentSkillsPicker } from './agent-skills-picker'
 import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
 import { AgentElicitation } from './agent-elicitation';
@@ -75,7 +74,6 @@ export function AgentPage({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string>(),
     [historyOpen, setHistoryOpen] = useState(false),
-    [skillsOpen, setSkillsOpen] = useState(false),
     [mentions, setMentions] = useState<AgentMention[]>([]),
     [selectedSkills, setSelectedSkills] = useState<string[]>([]),
     [deleteTarget, setDeleteTarget] = useState<AgentSession>(),
@@ -328,34 +326,6 @@ export function AgentPage({
       .filter((session): session is AgentSession => Boolean(session))),
     [historyCommand.filteredOptions, sessions],
   );
-  const skillOptions = useMemo(
-    () => [
-      ...(data.agentSkills ?? []).map((item) => ({
-        id: item.id,
-        label: item.name,
-      })),
-      { id: "__create__", label: t("Create skill") },
-    ],
-    [data.agentSkills, t],
-  );
-  const skillCommand = usePropertyCommand({
-    closeOnSelect: false,
-    open: skillsOpen,
-    options: skillOptions,
-    selectedIds: selectedSkills,
-    onOpenChange: setSkillsOpen,
-    onSelect: (option) => {
-      if (option.id === "__create__") {
-        onNavigate(newAgentSkillPath(data.workspace.urlKey));
-        return;
-      }
-      setSelectedSkills((ids) =>
-        ids.includes(option.id)
-          ? ids.filter((id) => id !== option.id)
-          : [...ids, option.id],
-      );
-    },
-  });
   const newChat = () => {
     setHistoryOpen(false);
     setActiveStreamId(undefined);
@@ -587,64 +557,7 @@ export function AgentPage({
             />
           </div>
           <footer>
-            <Popover.Root open={skillsOpen} onOpenChange={setSkillsOpen}>
-              <Popover.Trigger asChild>
-                <button
-                  aria-expanded={skillsOpen}
-                  aria-label={t("Skills")}
-                  className={styles.skillsButton}
-                  type="button"
-                >
-                  <AgentSkillsIcon />
-                  <span>{t("Skills")}</span>
-                  <AgentChevronDownIcon />
-                </button>
-              </Popover.Trigger>
-              <Popover.Portal>
-                <Popover.Content data-flow-motion="floating"
-                  align="start"
-                  className={styles.skillsMenu}
-                  side="bottom"
-                  sideOffset={4}
-                  onKeyDown={skillCommand.onKeyDown}
-                >
-                  <div className={styles.menuSearch}>
-                    <Search />
-                    <input
-                      ref={skillCommand.inputRef}
-                      autoFocus
-                      aria-label={t("Search skills…")}
-                      placeholder={t("Search skills…")}
-                      value={skillCommand.query}
-                      onChange={(event) =>
-                        skillCommand.onQueryChange(event.target.value)
-                      }
-                    />
-                  </div>
-                  <div role="listbox">
-                    {skillCommand.filteredOptions.map((option) => (
-                      <button
-                        aria-selected={skillCommand.activeId === option.id}
-                        key={option.id}
-                        onMouseMove={() => skillCommand.setActiveId(option.id)}
-                        onClick={() => skillCommand.choose(option)}
-                        role="option"
-                        type="button"
-                      >
-                        {option.id === "__create__" ? (
-                          <Plus />
-                        ) : (
-                          <AgentSkillsIcon />
-                        )}
-                        <span data-i18n-ignore>{option.label}</span>
-                        {option.id !== "__create__" &&
-                          skillCommand.isSelected(option.id) && <Check />}
-                      </button>
-                    ))}
-                  </div>
-                </Popover.Content>
-              </Popover.Portal>
-            </Popover.Root>
+            <AgentSkillsPicker data={data} selectedIds={selectedSkills} onChange={setSelectedSkills} onNavigate={onNavigate} />
             <span />
             <button
               aria-label={t("Attach images, files, or videos")}
@@ -655,14 +568,12 @@ export function AgentPage({
             </button>
             <input
               ref={fileInputRef}
-              accept="image/*,video/*,text/*,application/json,application/xml,application/javascript,application/x-yaml,application/yaml,application/pdf,application/rtf,application/vnd.oasis.opendocument.text,application/msword,application/vnd.apple.keynote,application/vnd.apple.pages,application/vnd.ms-powerpoint,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.md,.markdown,.mdx,.csv"
+              accept={AGENT_ATTACHMENT_ACCEPT}
               className={styles.fileInput}
               multiple
               onChange={(event) => {
-                const files = [...(event.target.files ?? [])].filter(
-                  (file) => file.size <= 2 * 1024 * 1024,
-                );
-                setAttachments((items) => [...items, ...files].slice(0, 8));
+                const files = event.target.files;
+                setAttachments((items) => addAgentAttachments(items, files));
                 event.target.value = "";
               }}
               type="file"
@@ -925,28 +836,6 @@ function markdown(session: AgentSession) {
 
 function writeInputToEditor(editorRef: RefObject<HTMLDivElement | null>, value: string) {
   if (editorRef.current && editorRef.current.textContent !== value) editorRef.current.textContent = value;
-}
-
-async function agentFileContext(file: File) {
-  if (
-    file.type.startsWith("text/") ||
-    /\.(md|markdown|mdx|csv|json|xml|ya?ml)$/i.test(file.name)
-  ) {
-    return `Attached file ${file.name}:\n${await file.text()}`;
-  }
-  if (file.type.startsWith("image/")) {
-    return `Attached image ${file.name} (${file.type}, ${file.size} bytes): ${await dataURL(file)}`;
-  }
-  return `Attached file ${file.name} (${file.type || "application/octet-stream"}, ${file.size} bytes).`;
-}
-
-function dataURL(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }
 
 /** Shows the working indicator under a message whose reply is still on its way. */

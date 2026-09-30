@@ -123,3 +123,54 @@ func TestAuditLogListsLoopChanges(t *testing.T) {
 		t.Fatalf("audit log = %#v", entries)
 	}
 }
+
+func TestLoopRunReplyAppliesSkillsAndAttachments(t *testing.T) {
+	provider := &fakeLoopProvider{replies: []string{"Posted the weekly summary.", "Checked the runbook."}}
+	_, handler := newLoopTestServer(t, provider)
+	skill := requestJSON[domain.PersonalAgentSkill](t, handler, http.MethodPost, "/api/agent/skills", map[string]any{"name": "Terse", "instructions": "Answer in one sentence and cite the runbook."}, http.StatusCreated)
+	loop := requestJSON[domain.Loop](t, handler, http.MethodPost, "/api/loops", map[string]any{"name": "Weekly summary", "instructions": "Summarize open bugs.", "status": "published"}, http.StatusCreated)
+	started := requestJSON[domain.LoopRun](t, handler, http.MethodPost, "/api/loops/"+loop.ID+"/runs", nil, http.StatusAccepted)
+	waitForLoopRun(t, handler, loop.ID)
+	path := "/api/loops/" + loop.ID + "/runs/" + started.ID + "/replies"
+
+	// Unknown skills and oversized or too many files are refused before the agent starts.
+	requestJSON[any](t, handler, http.MethodPost, path, map[string]any{"body": "Hi", "skillIds": []string{"agent_skill_missing"}}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPost, path, map[string]any{"body": "Hi", "attachments": []map[string]any{{"name": "big.txt", "contentType": "text/plain", "size": 3 << 20}}}, http.StatusBadRequest)
+	many := make([]map[string]any, 9)
+	for index := range many {
+		many[index] = map[string]any{"name": "note.txt", "contentType": "text/plain", "size": 1, "content": "x"}
+	}
+	requestJSON[any](t, handler, http.MethodPost, path, map[string]any{"body": "Hi", "attachments": many}, http.StatusBadRequest)
+
+	pixel := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+	accepted := requestJSON[domain.LoopRun](t, handler, http.MethodPost, path, map[string]any{
+		"body":     "Does this match the runbook?",
+		"skillIds": []string{skill.ID},
+		"attachments": []map[string]any{
+			{"name": "runbook.md", "contentType": "text/markdown", "size": 24, "content": "Escalate P1 bugs to Sam."},
+			{"name": "chart.png", "contentType": "image/png", "size": 68, "content": "data:image/png;base64," + pixel},
+			{"name": "deck.pdf", "contentType": "application/pdf", "size": 1024},
+		},
+	}, http.StatusAccepted)
+	reply := accepted.Replies[0]
+	if len(reply.SkillIDs) != 1 || reply.SkillIDs[0] != skill.ID || len(reply.Attachments) != 3 || reply.Attachments[1].Name != "chart.png" {
+		t.Fatalf("accepted reply = %#v", reply)
+	}
+	run := waitForLoopReply(t, handler, loop.ID, started.ID, 1)
+	if run.Replies[0].Status != "completed" || len(run.Replies[0].Attachments) != 3 {
+		t.Fatalf("reply = %#v", run.Replies[0])
+	}
+
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	last := provider.inputs[len(provider.inputs)-1]
+	for _, want := range []string{"Active skills", "Terse: Answer in one sentence and cite the runbook.", "Does this match the runbook?", "Attached file runbook.md", "Escalate P1 bugs to Sam.", "Attached image chart.png", pixel, "Attached file deck.pdf (application/pdf, 1024 bytes)."} {
+		if !strings.Contains(last, want) {
+			t.Fatalf("reply prompt is missing %q: %s", want, last)
+		}
+	}
+	// The run itself had no skills.
+	if strings.Contains(provider.inputs[0], "Active skills") {
+		t.Fatalf("the run's own prompt has reply skills: %s", provider.inputs[0])
+	}
+}

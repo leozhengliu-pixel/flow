@@ -354,7 +354,9 @@ type loopRunRecorder struct {
 	run       domain.LoopRun
 	// reply, when set, receives the steps, tool calls and output instead of
 	// the run: the agent is answering a reply on the run page.
-	reply    *domain.LoopRunReply
+	reply *domain.LoopRunReply
+	// skills are the replier's skills, added to the system prompt for the answer.
+	skills   []domain.PersonalAgentSkill
 	order    int
 	lastSave time.Time
 	dirty    bool
@@ -564,7 +566,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 
 	entity := s.loopEntityContext(ctx, workspace, data, trigger)
 	messages := []agentProviderMessage{
-		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop))},
+		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop)) + loopReplySkillsPrompt(rec.skills)},
 		{Role: "user", Content: "Run this loop now and follow its instructions."},
 	}
 	messages = append(messages, history...)
