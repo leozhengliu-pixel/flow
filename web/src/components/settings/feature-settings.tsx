@@ -193,28 +193,7 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
       <FeatureCard>{cards.slice(0,1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
         <FeatureLinkRow icon={Code2} title="Coding sessions" description="Assign or ask Flow to make code changes" detail={(settings.featureFlags["coding-sessions"]??true)?"Enabled":"Disabled"} onClick={()=>onNavigateSettings?.("coding-sessions")}/>
         {cards.slice(1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
-        <FeatureRow icon={Code2} title={t("Require signed commits")} description={t("Users must upload a signing key before starting a coding session")}>
-          <Toggle
-            checked={settings.codingAgentSettings?.commitSigningEnabled === true}
-            disabled={busy}
-            label={t("Require signed commits")}
-            onChange={(value) => {
-              void (async () => {
-                try {
-                  await updateWorkspacePreferences({
-                    codingAgentSettings: {
-                      ...(settings.codingAgentSettings ?? {}),
-                      commitSigningEnabled: value,
-                    },
-                  }, data.workspace.urlKey);
-                  await onReload();
-                } catch (error) {
-                  toast.error(message(error));
-                }
-              })();
-            }}
-          />
-        </FeatureRow>
+        {/* Like Linear, "Require signed commits" lives on the Coding sessions page (and Account → Code & reviews), not here. */}
       </FeatureCard>
     </FeatureSection>
     <CodeIntelligenceSettingsSection
@@ -337,14 +316,15 @@ function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleCha
 function DocumentsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
   const { t } = useI18n();
   const [editing,setEditing]=useState<DocumentTemplate|null|undefined>();
-  const templates=data.documentTemplates.filter(item=>!item.teamId||data.teams.some(team=>team.id===item.teamId));
+  // Workspace templates have no team; team templates live in each team's settings.
+  const templates=data.documentTemplates.filter(item=>!item.teamId);
   return <FeatureShell title="Documents"><FeatureSection title="Templates" description="These templates are available when creating documents for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.">
     {templates.length ? (
       <FeatureCard>{templates.map(item => <FeatureRow key={item.id} icon={FileText} title={item.name} businessTitle description={item.description||"Document template"}><FeatureButton aria-label={`${t("Edit")}: ${item.name}`} onClick={()=>setEditing(item)}>Edit</FeatureButton></FeatureRow>)}</FeatureCard>
     ) : (
-      <FeatureEmpty icon={FileText} title="No document templates" action={<FeatureButton disabled={!data.teams.length} onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton>}/>
+      <FeatureEmpty icon={FileText} title="No document templates" action={<FeatureButton onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton>}/>
     )}
-    {templates.length>0&&<div className="feature-section-action"><FeatureButton disabled={!data.teams.length} onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton></div>}
+    {templates.length>0&&<div className="feature-section-action"><FeatureButton onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton></div>}
     {editing!==undefined&&<DocumentTemplateDialog data={data} template={editing} onClose={()=>setEditing(undefined)} onReload={onReload}/>}
   </FeatureSection></FeatureShell>;
 }
@@ -352,7 +332,7 @@ function DocumentsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<
 function DocumentTemplateDialog({data,template,onClose,onReload}:{data:BootstrapData;template:DocumentTemplate|null;onClose:()=>void;onReload:()=>Promise<void>}) {
   const { t } = useI18n();
   const [name,setName]=useState(template?.name??""); const [content,setContent]=useState(template?.content??""); const [busy,setBusy]=useState(false);
-  const save=async()=>{setBusy(true);try{if(template)await updateDocumentTemplate(template.id,{name,content});else await createDocumentTemplate({teamId:data.teams[0].id,name,content});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};
+  const save=async()=>{setBusy(true);try{if(template)await updateDocumentTemplate(template.id,{name,content});else await createDocumentTemplate({teamId:"",name,content});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};
   const remove=async()=>{if(!template)return;setBusy(true);try{await deleteDocumentTemplate(template.id);await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};
   return <FeatureDialog open onClose={onClose} title={template?"Edit document template":"New document template"}><label>{t("Template name")}<input autoFocus aria-label={t("Template name")} value={name} onChange={event=>setName(event.target.value)}/></label><label>{t("Document template content")}<textarea aria-label={t("Document template content")} placeholder={t("Click here to start writing…")} value={content} onChange={event=>setContent(event.target.value)}/></label><FeatureDialogFooter>{template&&<FeatureButton danger disabled={busy} onClick={()=>void remove()}>Delete</FeatureButton>}<span/><FeatureButton disabled={busy} onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>{template?"Save":"Create"}</FeatureButton></FeatureDialogFooter></FeatureDialog>;
 }

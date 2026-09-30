@@ -90,39 +90,44 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			lock = " FOR UPDATE"
 		}
 		loaded := map[string]domain.Issue{}
-		pending := slices.Clone(ids)
-		for len(pending) > 0 {
-			id := pending[0]
-			pending = pending[1:]
-			if _, seen := loaded[id]; seen {
-				continue
-			}
-			if len(loaded) >= 1000 {
-				return fmt.Errorf("issue mutation scope exceeds 1000 records")
-			}
-			var raw []byte
-			if err := tx.QueryRowContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND id=?`+lock, workspace, id).Scan(&raw); err != nil {
-				if errors.Is(err, sql.ErrNoRows) {
+		stored := map[string][]byte{}
+		// Load the named records (and, for family-aware events, their parents
+		// and related issues) in batched id lookups rather than one round trip
+		// per record.
+		records, err := s.loadIssueRecordsByID(ctx, tx, workspace, ids, true)
+		if err != nil {
+			return err
+		}
+		for id, record := range records {
+			loaded[id], stored[id] = record.issue, record.raw
+		}
+		if needsFamily {
+			related := []string{}
+			for _, id := range ids {
+				issue, ok := loaded[id]
+				if !ok {
 					continue
 				}
-				return err
-			}
-			var issue domain.Issue
-			if err := json.Unmarshal(raw, &issue); err != nil {
-				return err
-			}
-			normalizeIssueRecord(&issue)
-			loaded[id] = issue
-			if needsFamily && slices.Contains(ids, id) {
 				if issue.ParentID != nil {
-					pending = append(pending, *issue.ParentID)
+					related = append(related, *issue.ParentID)
 				}
 				if eventType == "issue.deleted" {
 					for _, relation := range issue.Relations {
-						pending = append(pending, relation.RelatedIssueID)
+						related = append(related, relation.RelatedIssueID)
 					}
 				}
 			}
+			related = slices.DeleteFunc(related, func(id string) bool { _, seen := loaded[id]; return seen })
+			records, err := s.loadIssueRecordsByID(ctx, tx, workspace, related, true)
+			if err != nil {
+				return err
+			}
+			for id, record := range records {
+				loaded[id], stored[id] = record.issue, record.raw
+			}
+		}
+		if len(loaded) > 1000 {
+			return fmt.Errorf("issue mutation scope exceeds 1000 records")
 		}
 		if needsFamily {
 			parentIDs := slices.Clone(ids)
@@ -237,9 +242,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 		remaining := map[string]bool{}
 		for _, issue := range data.Issues {
 			remaining[issue.ID] = true
-			if err := s.writeIssueRecord(ctx, tx, workspace, issue, data); err != nil {
-				return err
-			}
+		}
+		if _, err := s.writeIssueRecordBatch(ctx, tx, workspace, data.Issues, data, stored); err != nil {
+			return err
 		}
 		removed := 0
 		for id, issue := range loaded {

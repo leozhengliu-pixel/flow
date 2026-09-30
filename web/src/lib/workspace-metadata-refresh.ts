@@ -1,5 +1,5 @@
 import { deriveResourceCounts } from '@/lib/resource-counts'
-import type { BootstrapData, Issue, Project, RealtimeEvent } from '@/types/flow'
+import type { BootstrapData, Issue, IssueLabel, Project, RealtimeEvent } from '@/types/flow'
 
 // Server mutations for these events never create, delete or rewrite issue,
 // comment or activity records: they only change workspace metadata (projects,
@@ -34,7 +34,7 @@ export function metadataOnlyRealtimeEvent(event: Pick<RealtimeEvent, 'type'>): b
  */
 export function mergeWorkspaceMetadata(current: BootstrapData, next: BootstrapData): BootstrapData {
   const projects = new Map(next.projects.map(project => [project.id, project]))
-  const issues = current.issues.map(issue => {
+  const issues = syncIssueReferences(current.issues, current, next).map(issue => {
     if (!issue.project) return issue
     const project = projects.get(issue.project.id)
     if (!project) return issue
@@ -104,4 +104,71 @@ export function syncIssueProjectSummaries(issues: Issue[], project: Pick<Project
     return { ...issue, project: { ...summary, name: project.name, icon: project.icon, color: project.color } }
   })
   return changed ? next : issues
+}
+
+/**
+ * Keep issues' embedded team, workflow state and label copies in step with
+ * refreshed metadata: renamed or recoloured records are copied in, deleted
+ * labels are dropped, and issues of a team that disappeared from the
+ * metadata (deleted, or a private team the viewer left) are removed.
+ */
+export function syncIssueReferences(issues: Issue[], current: Pick<BootstrapData, 'teams'>, next: Pick<BootstrapData, 'teams' | 'states' | 'labels'>): Issue[] {
+  const teams = new Map(next.teams.map(team => [team.id, team]))
+  const states = new Map(next.states.map(state => [state.id, state]))
+  const labels = new Map(next.labels.map(label => [label.id, label]))
+  const removedTeams = new Set(next.teams.length ? current.teams.filter(team => !teams.has(team.id)).map(team => team.id) : [])
+  let changed = false
+  const synced: Issue[] = []
+  for (const issue of issues) {
+    if (removedTeams.has(issue.team.id)) { changed = true; continue }
+    const team = teams.get(issue.team.id)
+    const state = states.get(issue.state.id)
+    const teamChanged = Boolean(team && (team.name !== issue.team.name || team.key !== issue.team.key || team.icon !== issue.team.icon || team.color !== issue.team.color))
+    const stateChanged = Boolean(state && (state.name !== issue.state.name || state.color !== issue.state.color || state.type !== issue.state.type))
+    let labelsChanged = false
+    const issueLabels = next.labels.length ? issue.labels.flatMap(label => {
+      const fresh = labels.get(label.id)
+      if (!fresh) { labelsChanged = true; return [] }
+      if (fresh.name !== label.name || fresh.color !== label.color || fresh.archivedAt !== label.archivedAt) { labelsChanged = true; return [{ ...label, name: fresh.name, color: fresh.color, archivedAt: fresh.archivedAt }] }
+      return [label]
+    }) : issue.labels
+    if (!teamChanged && !stateChanged && !labelsChanged) { synced.push(issue); continue }
+    changed = true
+    synced.push({ ...issue, team: teamChanged ? { ...issue.team, ...team } : issue.team, state: stateChanged ? { ...issue.state, ...state } : issue.state, labels: labelsChanged ? issueLabels : issue.labels })
+  }
+  return changed ? synced : issues
+}
+
+/** Replace one label's copy on every issue that carries it. */
+export function applyLabelUpdate(current: BootstrapData, label: IssueLabel): BootstrapData {
+  return {
+    ...current,
+    labels: current.labels.map(item => item.id === label.id ? { ...item, ...label } : item),
+    issues: current.issues.map(issue => issue.labels.some(item => item.id === label.id)
+      ? { ...issue, labels: issue.labels.map(item => item.id === label.id ? { ...item, name: label.name, color: label.color, archivedAt: label.archivedAt } : item) }
+      : issue),
+  }
+}
+
+/**
+ * Merge the complete result of an issue query into a full issue collection:
+ * returned issues are added or replaced, and loaded issues the query owns
+ * (`owns`) that it no longer returns are removed.
+ */
+export function mergeScopedIssues(current: BootstrapData, refreshed: Issue[], owns?: (issue: Issue) => boolean): BootstrapData {
+  const returned = new Set(refreshed.map(issue => issue.id))
+  const kept = owns ? current.issues.filter(issue => returned.has(issue.id) || !owns(issue)) : current.issues
+  const base = kept.length === current.issues.length ? current : { ...current, issues: kept }
+  const merged = mergeRefreshedIssues(base, refreshed)
+  const known = new Set(merged.issues.map(issue => issue.id))
+  const added = refreshed.filter(issue => !known.has(issue.id))
+  if (added.length) return deriveResourceCounts({ ...merged, issues: [...merged.issues, ...added] })
+  return merged === base && base !== current ? deriveResourceCounts(base) : merged
+}
+
+/** Issues an action may have rewritten: a record query plus the loaded issues it owns. */
+export type IssueRefreshScope = { filter: Record<string, unknown>; owns?: (issue: Issue) => boolean }
+
+export function teamIssueScope(teamId: string): IssueRefreshScope {
+  return { filter: { field: 'team', operator: 'in', values: [teamId] }, owns: issue => issue.team.id === teamId }
 }

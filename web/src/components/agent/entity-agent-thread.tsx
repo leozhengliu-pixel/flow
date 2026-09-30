@@ -334,7 +334,7 @@ export function EntityAgentThread({
           {footerStart}
           {error ? <span role="alert">{error}</span> : <span />}
           {loading ? (
-            <button aria-label={t('Stop generating')} onClick={onStop} type="button">
+            <button aria-label={t('Stop responding')} onClick={onStop} type="button">
               <X />
             </button>
           ) : (

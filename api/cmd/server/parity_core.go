@@ -740,6 +740,9 @@ func (s *server) createTeamPinnedResource(w http.ResponseWriter, r *http.Request
 	if input.ResourceType == "issue" {
 		pinnedIssue = &input.ResourceID
 	}
+	if input.ResourceType == "link" && input.URL != "" && (strings.TrimSpace(input.Title) == "" || strings.TrimSpace(input.Title) == strings.TrimSpace(input.URL)) {
+		input.Title = resourceLinkName(input.URL)
+	}
 	err := s.store.MutateWorkspace(withIssueScope(r.Context(), pinnedIssue), workspaceKey(r), "team.resource_pinned", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
 		if input.Title == "" || input.ResourceType == "" {
 			return errInvalid

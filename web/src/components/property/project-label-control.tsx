@@ -30,7 +30,7 @@ export function ProjectLabelControl({ labels, labelGroups, selectedIds, onChange
   return <div className={`project-label-control${sidebar ? ' is-sidebar' : ''}`}>
     {selected.map(chip)}
     <div className="project-label-last">
-      <PropertyMenu kind="project-labels" label="Labels" multiple options={options} selectedIds={selectedIds} onChange={toggle} onCreate={create} open={open} onOpenChange={onOpenChange} tooltip={addTooltip} tooltipShortcut={addTooltipShortcut} side={sidebar ? 'left' : 'bottom'} triggerRole="button" ariaLabel="Add label" triggerClassName={`project-label-add${sidebar && selected.length ? ' is-icon' : ''}`} trigger={sidebar && !selected.length ? <><LabelIcon size={16}/><span>Add label</span></> : sidebar ? <Plus size={16}/> : <span>Add label…</span>}/>
+      <PropertyMenu kind="project-labels" label="Labels" multiple options={options} selectedIds={selectedIds} onChange={toggle} onCreate={create} open={open} onOpenChange={onOpenChange} tooltip={addTooltip} tooltipShortcut={addTooltipShortcut} side={sidebar ? 'left' : 'bottom'} triggerRole="button" ariaLabel="Add label" triggerClassName={`project-label-add${selected.length ? ' is-icon' : ''}${selected.length && !sidebar ? ' is-overview' : ''}`} trigger={sidebar && !selected.length ? <><LabelIcon size={16}/><span>Add label</span></> : selected.length ? <Plus size={16}/> : <span>Add label…</span>}/>
     </div>
   </div>
 }

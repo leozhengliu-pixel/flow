@@ -94,7 +94,7 @@ export function LabelPageToolbar({
 
 
 /** Favorite + options for a label page; also used as the header actions of the label issue view. */
-export function LabelActions({ data, label, onReload, onArchived }: { data: BootstrapData; label: IssueLabel; onReload?: () => Promise<void> | void; onArchived?: () => void }) {
+export function LabelActions({ data, label, onReload, onLabelUpdated, onArchived }: { data: BootstrapData; label: IssueLabel; onReload?: () => Promise<void> | void; /** Applies the updated label in place of a reload. */ onLabelUpdated?: (label: IssueLabel) => void; onArchived?: () => void }) {
   const { t } = useI18n()
   const favorite = Boolean(findFavorite(data.favorites, data.viewer.id, 'label', label.id) || label.favorite)
   const showArchived = Boolean(label.archivedAt)
@@ -102,14 +102,10 @@ export function LabelActions({ data, label, onReload, onArchived }: { data: Boot
     const next = showArchived ? '' : new Date().toISOString()
     const teamId = label.scope && label.scope !== 'Workspace' ? label.scope : undefined
     const archivedAt = next // '' clears archive on REST
-    if (teamId && data.teams.some((team) => team.id === teamId || team.key === teamId)) {
-      const team = data.teams.find((item) => item.id === teamId || item.key === teamId)
-      if (team) await updateTeamLabel(team.id, label.id, { archivedAt })
-      else await updateWorkspaceLabel(label.id, { archivedAt })
-    } else {
-      await updateWorkspaceLabel(label.id, { archivedAt })
-    }
-    await onReload?.()
+    const team = teamId ? data.teams.find((item) => item.id === teamId || item.key === teamId) : undefined
+    const updated = team ? await updateTeamLabel(team.id, label.id, { archivedAt }) : await updateWorkspaceLabel(label.id, { archivedAt })
+    if (onLabelUpdated) onLabelUpdated({ ...label, ...updated, archivedAt: updated.archivedAt || undefined })
+    else await onReload?.()
     if (!showArchived) onArchived?.()
   }
 

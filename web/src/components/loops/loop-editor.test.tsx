@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
   fetchAgentStatus: vi.fn(),
   listAgentSessions: vi.fn(),
   getLoopConfig: vi.fn(),
+  listLoopVersions: vi.fn(),
 }))
 const stream = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
@@ -57,7 +58,7 @@ describe('LoopEditor', () => {
     expect(within(heading as HTMLElement).getByRole('button', { name: 'Loop level' })).toHaveTextContent('Test team')
     expect(heading.querySelector('h3')).toBeNull()
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toHaveTextContent('Loops›New loop')
-    expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('An issueis in triage')
+    expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('An issue is in triage')
     expect(screen.getByRole('button', { name: 'Compose with Agent' })).toBeVisible()
     expect(await screen.findByRole('textbox', { name: 'Instructions' })).toHaveTextContent('Route incoming issues.')
     expect(screen.getByText('No connectors added')).toBeVisible()
@@ -76,6 +77,18 @@ describe('LoopEditor', () => {
     expect(screen.getByRole('button', { name: 'Create loop' })).toBeEnabled()
     // No agent panel for a scratch draft until asked.
     expect(screen.queryByRole('complementary', { name: 'Loop agent' })).toBeNull()
+  })
+
+  it('shows Published versions instead of Cancel when editing a created loop, like Linear', async () => {
+    const user = userEvent.setup()
+    api.listLoopVersions.mockResolvedValue([])
+    renderEditor({ ...draft, status: 'published', enabled: true, version: 1 })
+    const versions = await screen.findByRole('button', { name: 'Published versions' })
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeVisible()
+    await user.click(versions)
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Published versions')
+    expect(api.listLoopVersions).toHaveBeenCalledWith('loop-9')
   })
 
   it('keeps the web search toggle but explains when web search is not configured', async () => {

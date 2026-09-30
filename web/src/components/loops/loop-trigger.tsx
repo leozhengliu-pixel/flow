@@ -1,11 +1,12 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { CalendarClock, ChevronDown, CircleDot, FileText, MessageSquare, Plus, Tag, UserRound, X } from "lucide-react";
+import { CalendarClock, ChevronDown, CircleDot, FileText, MessageSquare, Plus, Tag, UserRound, UsersRound, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -136,7 +137,7 @@ const FILTER_FIELDS: { id: LoopFilterField; label: string }[] = [
   { id: "team", label: "Team" },
 ];
 
-/** Trigger card body: type menu followed by the Linear sentence. `readOnly` renders the loop page summary. */
+/** Trigger card body: Linear's single trigger dropdown ("An issue is in triage ▾"), then the team scope, schedule row or issue filters. `readOnly` renders the loop page summary. */
 export function LoopTriggerEditor({
   data,
   triggerType,
@@ -153,56 +154,129 @@ export function LoopTriggerEditor({
   /** Team loops already belong to one team, so the sentence has no "in [teams]" scope (Linear: "An issue is in triage"). */
   level?: "workspace" | "team";
 }) {
+  const { t } = useI18n();
   const change: TriggerChange = (type, next) => onChange?.(type, next);
   const set = (patch: Config) => change(triggerType, { ...config, ...patch });
   if (triggerType === "schedule")
     return (
       <div className={`loops-trigger-sentence${readOnly ? " is-readonly" : ""}`} data-trigger="schedule">
-        <TriggerTypeMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
+        <TriggerMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
         <ScheduleSentence config={config} onChange={set} readOnly={readOnly} />
       </div>
     );
+  const teamScoped = level === "team" || triggerType === "team";
   return (
     <div className="loops-trigger-event">
       <div className={`loops-trigger-sentence${readOnly ? " is-readonly" : ""}`} data-trigger={triggerType}>
-        <TriggerTypeMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
-        <EventSentence data={data} triggerType={triggerType} config={config} onChange={set} readOnly={readOnly} teamScoped={level === "team"} />
+        <TriggerMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
+        {!teamScoped && (
+          <>
+            <span className="loops-sentence-text">{t("in")}</span>
+            <TeamScope data={data} config={config} onChange={set} readOnly={readOnly} />
+          </>
+        )}
       </div>
       {triggerType === "issue" && <IssueFilters data={data} config={config} onChange={set} readOnly={readOnly} />}
     </div>
   );
 }
 
-function TriggerTypeMenu({ data, triggerType, config, onChange, readOnly }: { data: TriggerData; triggerType: LoopTriggerType; config: Config; onChange: TriggerChange; readOnly: boolean }) {
+/** Issue property events: "changes" when any value matches, "is set to {value}" for one value. */
+const PROPERTY_SENTENCES: Record<(typeof PROPERTY_EVENTS)[number]["id"], [string, string]> = {
+  status: ["An issue's status changes", "An issue's status is set to {value}"],
+  priority: ["An issue's priority changes", "An issue's priority is set to {value}"],
+  assignee: ["An issue's assignee changes", "An issue's assignee is set to {value}"],
+  agent: ["An issue's agent changes", "An issue's agent is set to {value}"],
+  project: ["An issue's project changes", "An issue's project is set to {value}"],
+  team: ["An issue's team changes", "An issue's team is set to {value}"],
+  labels: ["A label is added to an issue", "Label {value} is added to an issue"],
+};
+
+const ISSUE_SENTENCES: Record<string, string> = {
+  created: "An issue is created",
+  updated: "An issue is updated",
+  triage: "An issue is in triage",
+  comment: "An issue gets a new comment",
+  customerRequest: "An issue gets a new customer request",
+};
+
+const ENTITY_SENTENCES: Record<Exclude<LoopTriggerType, "schedule" | "issue">, Record<string, string>> = {
+  project: { created: "A project is created", updated: "A project is updated", status: "A project's status changes", update: "A project gets a new update" },
+  initiative: { created: "An initiative is created", updated: "An initiative is updated", status: "An initiative's status changes", update: "An initiative gets a new update" },
+  release: { created: "A release is created", updated: "A release is updated", status: "A release's status changes" },
+  team: { created: "A team is created", updated: "A team is updated" },
+  cycle: { created: "A cycle is created", updated: "A cycle is updated", started: "A cycle starts", completed: "A cycle is completed" },
+};
+
+/** The trigger as one sentence ("An issue is in triage", "An issue's status is set to Done"); entity names stay untranslated. */
+function TriggerSentence({ data, triggerType, config }: { data: TriggerData; triggerType: LoopTriggerType; config: Config }) {
+  const { t } = useI18n();
+  if (triggerType === "schedule") return <>{t("Schedule")}</>;
+  const event = loopEvent(config);
+  if (triggerType !== "issue") {
+    const sentence = ENTITY_SENTENCES[triggerType]?.[event];
+    return <>{sentence ? t(sentence) : `${t(ENTITY_NAMES[triggerType])} · ${t(ENTITY_EVENTS[triggerType]?.find((item) => item.id === event)?.label ?? event)}`}</>;
+  }
+  const property = PROPERTY_EVENTS.find((item) => item.id === event);
+  if (!property) return <>{t(ISSUE_SENTENCES[event] ?? "An issue changes")}</>;
+  const value = eventValue(config);
+  const [anyValue, oneValue] = PROPERTY_SENTENCES[property.id];
+  if (value === undefined || value === ANY) return <>{t(anyValue)}</>;
+  const current = valueLabel(data, property.id, value, property.any);
+  const [before, after = ""] = t(oneValue).split("{value}");
+  return (
+    <>
+      {before}
+      <span className="loops-sentence-value" data-i18n-ignore={current.entity || undefined}>
+        {current.entity ? current.label : t(current.label)}
+      </span>
+      {after}
+    </>
+  );
+}
+
+function triggerIcon(triggerType: LoopTriggerType, event: string) {
+  if (triggerType === "schedule") return <CalendarClock size={14} />;
+  if (triggerType === "issue") return event === "triage" ? <TriageGlyph /> : <CircleDot size={14} />;
+  if (triggerType === "project") return <ProjectIcon size={14} />;
+  if (triggerType === "team") return <UsersRound size={14} />;
+  return <FileText size={14} />;
+}
+
+/** Linear's trigger picker: one dropdown labelled with the whole trigger; Issue ▸ Status ▸ Done… picks event and value together. */
+function TriggerMenu({ data, triggerType, config, onChange, readOnly }: { data: TriggerData; triggerType: LoopTriggerType; config: Config; onChange: TriggerChange; readOnly: boolean }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
   const event = loopEvent(config);
-  const subject = triggerType === "issue" && event === "triage" ? "An issue" : ENTITY_NAMES[triggerType];
-  const icon = triggerType === "schedule" ? <CalendarClock size={14} /> : triggerType === "issue" ? event === "triage" ? <TriageGlyph /> : <CircleDot size={14} /> : <FileText size={14} />;
   // Linear's loop page reads the trigger as plain text: "[icon] An issue is in triage".
   if (readOnly)
     return (
       <span className="loops-sentence-subject">
-        {icon}
-        {t(subject)}
+        {triggerIcon(triggerType, event)}
+        <span>
+          <TriggerSentence data={data} triggerType={triggerType} config={config} />
+        </span>
       </span>
     );
   const keep = triggerType === "issue" ? { teamIds: config.teamIds, filters: config.filters } : { teamIds: config.teamIds };
   const chooseIssue = (nextEvent: string, value?: string | null) =>
     onChange("issue", { ...keep, event: nextEvent, ...(value === undefined ? {} : { value }) });
   const matches = (label: string) => !query.trim() || t(label).toLowerCase().includes(query.trim().toLowerCase()) || label.toLowerCase().includes(query.trim().toLowerCase());
+  const entityTypes = triggerType === "cycle" ? (["project", "initiative", "release", "team", "cycle"] as const) : (["project", "initiative", "release", "team"] as const);
   return (
     <DropdownMenu onOpenChange={(open) => !open && setQuery("")}>
-      <DropdownMenuTrigger className="loops-sentence-token is-subject is-button" aria-label={t("Trigger type")}>
-        {icon}
-        {t(subject)}
-        <ChevronDown size={12} />
+      <DropdownMenuTrigger className="loops-trigger-button" aria-label={t("Trigger")}>
+        <span className="loops-trigger-button-label">
+          <TriggerSentence data={data} triggerType={triggerType} config={config} />
+        </span>
+        <ChevronDown size={14} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="loops-menu">
+      <DropdownMenuContent align="start" className="loops-menu loops-trigger-menu">
         <DropdownMenuItem onSelect={() => onChange("schedule", triggerType === "schedule" ? config : defaultScheduleConfig())}>
           <CalendarClock size={14} />
           {t("Schedule")}
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <CircleDot size={14} />
@@ -221,7 +295,9 @@ function TriggerTypeMenu({ data, triggerType, config, onChange, readOnly }: { da
               />
             </div>
             {matches("Created") && <DropdownMenuItem onSelect={() => chooseIssue("created")}>{t("Created")}</DropdownMenuItem>}
+            {matches("Is in triage") && <DropdownMenuItem onSelect={() => chooseIssue("triage")}>{t("Is in triage")}</DropdownMenuItem>}
             {matches("Property updated") && <DropdownMenuItem onSelect={() => chooseIssue("updated")}>{t("Property updated")}</DropdownMenuItem>}
+            {!query.trim() && <DropdownMenuSeparator />}
             {PROPERTY_EVENTS.filter((item) => matches(item.label)).map((item) => (
               <DropdownMenuSub key={item.id}>
                 <DropdownMenuSubTrigger>{t(item.label)}</DropdownMenuSubTrigger>
@@ -259,10 +335,10 @@ function TriggerTypeMenu({ data, triggerType, config, onChange, readOnly }: { da
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         {/* Linear has no Cycle trigger; loops that already use one keep it so they stay editable. */}
-        {(triggerType === "cycle" ? (["project", "initiative", "release", "team", "cycle"] as const) : (["project", "initiative", "release", "team"] as const)).map((type) => (
+        {entityTypes.map((type) => (
           <DropdownMenuSub key={type}>
             <DropdownMenuSubTrigger>
-              <FileText size={14} />
+              {triggerIcon(type, "")}
               {t(ENTITY_NAMES[type])}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="loops-menu">
@@ -273,131 +349,6 @@ function TriggerTypeMenu({ data, triggerType, config, onChange, readOnly }: { da
               ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function EventSentence({ data, triggerType, config, onChange, readOnly, teamScoped }: { data: TriggerData; triggerType: LoopTriggerType; config: Config; onChange: (patch: Config) => void; readOnly: boolean; teamScoped: boolean }) {
-  const { t } = useI18n();
-  const event = loopEvent(config);
-  const teams = teamScoped ? null : (
-    <>
-      <span className="loops-sentence-text">{t("in")}</span>
-      <TeamScope data={data} config={config} onChange={onChange} readOnly={readOnly} />
-    </>
-  );
-  if (triggerType !== "issue") {
-    const found = ENTITY_EVENTS[triggerType as keyof typeof ENTITY_EVENTS]?.find((item) => item.id === event);
-    const phrase: Record<string, string> = {
-      created: "is created",
-      updated: "is updated",
-      status: "status changes",
-      update: "gets a new update",
-      started: "starts",
-      completed: "is completed",
-    };
-    return (
-      <>
-        <span className="loops-sentence-text">{t(phrase[event] ?? found?.label ?? event)}</span>
-        {triggerType !== "team" && teams}
-      </>
-    );
-  }
-  const property = PROPERTY_EVENTS.find((item) => item.id === event);
-  if (property) {
-    const current = valueLabel(data, property.id, eventValue(config), property.any);
-    return (
-      <>
-        <PropertySwitch event={property.id} onChange={(next) => onChange({ event: next, value: ANY })} readOnly={readOnly} />
-        <span className="loops-sentence-text">{t("to")}</span>
-        <ValueMenu
-          ariaLabel={t(property.label)}
-          anyLabel={property.any}
-          current={current}
-          options={valueOptions(data, property.id)}
-          readOnly={readOnly}
-          onSelect={(id) => onChange({ value: id === ANY ? ANY : id === NONE ? null : id })}
-        />
-        {teams}
-      </>
-    );
-  }
-  const phrase: Record<string, string> = {
-    created: "is created",
-    updated: "is updated",
-    triage: "is in triage",
-    comment: "gets a new comment",
-    customerRequest: "gets a new customer request",
-  };
-  return (
-    <>
-      <span className="loops-sentence-text">{t(phrase[event] ?? "changes")}</span>
-      {teams}
-    </>
-  );
-}
-
-/** "status is set ▾" — switches which property the event watches. */
-function PropertySwitch({ event, onChange, readOnly }: { event: string; onChange: (event: string) => void; readOnly: boolean }) {
-  const { t } = useI18n();
-  const current = PROPERTY_EVENTS.find((item) => item.id === event)!;
-  const text = `${t(current.subject)} ${t(event === "labels" ? "is added" : "is set")}`;
-  if (readOnly) return <span className="loops-sentence-text">{text}</span>;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="loops-sentence-token is-plain" aria-label={t("Property")}>
-        {text}
-        <ChevronDown size={12} />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="loops-menu">
-        {PROPERTY_EVENTS.map((item) => (
-          <DropdownMenuItem key={item.id} onSelect={() => onChange(item.id)}>
-            {t(item.subject)} {t(item.id === "labels" ? "is added" : "is set")}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-function ValueMenu({
-  ariaLabel,
-  anyLabel,
-  current,
-  options,
-  onSelect,
-  readOnly,
-}: {
-  ariaLabel: string;
-  anyLabel?: string;
-  current: { label: string; entity: boolean; icon?: ReactNode };
-  options: ValueOption[];
-  onSelect: (id: string) => void;
-  readOnly: boolean;
-}) {
-  const { t } = useI18n();
-  const content = (
-    <>
-      {current.icon}
-      <span data-i18n-ignore={current.entity || undefined}>{current.entity ? current.label : t(current.label)}</span>
-    </>
-  );
-  if (readOnly) return <span className="loops-sentence-token">{content}</span>;
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="loops-sentence-token is-button" aria-label={ariaLabel}>
-        {content}
-        <ChevronDown size={12} />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="loops-menu loops-value-menu">
-        {anyLabel && <DropdownMenuItem onSelect={() => onSelect(ANY)}>{t(anyLabel)}</DropdownMenuItem>}
-        {options.map((option) => (
-          <DropdownMenuItem key={option.id} onSelect={() => onSelect(option.id)}>
-            {option.icon}
-            <span data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>
-          </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

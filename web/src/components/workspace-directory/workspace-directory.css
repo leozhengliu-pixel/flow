@@ -1335,6 +1335,16 @@
   width: 12px;
   height: 12px;
 }
+/* Linear: a column's sort arrow fades in on hover and stays only once an order is chosen. */
+.workspace-team-columns button svg {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.workspace-team-columns button:hover svg,
+.workspace-team-columns button:focus-visible svg,
+.workspace-team-columns button.is-sorted svg {
+  opacity: 1;
+}
 .workspace-team-row {
   height: 48px;
   border-radius: 8px;

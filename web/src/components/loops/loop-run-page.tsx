@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Info, Link2, LoaderCircle, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Link2, LoaderCircle, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -12,10 +12,11 @@ import { DisplayIcon, FilterIcon } from "@/components/ui/view-action-icons";
 import { AgentWorkGroup } from "@/components/agent/agent-work-group";
 import { AgentAnswerText } from "@/components/agent/agent-answer";
 import { toast } from "sonner";
-import { getLoopRun, listLoopRuns, rateLoopRun } from "@/lib/api";
+import { getLoopRun, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { editLoopPath, loopPath, loopRunPath, loopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
-import type { BootstrapData, LoopRun } from "@/types/flow";
+import type { BootstrapData, LoopRun, LoopRunReply } from "@/types/flow";
 import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
@@ -90,8 +91,9 @@ export function LoopRunPage({
     // Runs refresh on their own poll; only re-fetch when the selection changes.
   }, [activeId, loopId]);
 
-  // Poll the selected run and the list while anything is still running.
-  const running = selected?.status === "running" || Boolean(runs?.some((item) => item.status === "running"));
+  // Poll the selected run and the list while anything is still running (a run, or the agent answering a reply).
+  const replying = Boolean(selected?.replies?.some((reply) => reply.status === "running"));
+  const running = selected?.status === "running" || replying || Boolean(runs?.some((item) => item.status === "running"));
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
@@ -117,6 +119,42 @@ export function LoopRunPage({
     });
   }, [query, runs, statusFilters, triggerFilters]);
 
+  // Linear's ↓/↑: the next (older) and previous (newer) run in the visible list.
+  const position = filtered.findIndex((run) => run.id === activeId);
+  const nextRun = position >= 0 ? filtered[position + 1] : undefined;
+  const previousRun = position > 0 ? filtered[position - 1] : undefined;
+  const goToRun = useCallback((run: LoopRun | undefined) => run && onNavigate(loopRunPath(workspace, loopId, run.id)), [loopId, onNavigate, workspace]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='menu'], [role='dialog']")) return;
+      const key = event.key.toLowerCase();
+      if (key === "j" && nextRun) {
+        event.preventDefault();
+        goToRun(nextRun);
+      } else if (key === "k" && previousRun) {
+        event.preventDefault();
+        goToRun(previousRun);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goToRun, nextRun, previousRun]);
+
+  // A new reply scrolls the conversation to its end, like a chat.
+  const scroller = useRef<HTMLDivElement>(null);
+  const replyCount = selected?.replies?.length ?? 0;
+  useEffect(() => {
+    if (!replyCount || !scroller.current) return;
+    scroller.current.scrollTop = scroller.current.scrollHeight;
+  }, [replyCount]);
+
+  const applyRun = (run: LoopRun) => {
+    setSelected((current) => (current?.id === run.id ? run : current));
+    setRuns((current) => current?.map((item) => (item.id === run.id ? run : item)));
+  };
+
   if (missing)
     return (
       <main className="main-panel loops-page" aria-label={t("Loop not found")}>
@@ -134,10 +172,7 @@ export function LoopRunPage({
     if (!selected) return;
     const previous = selected;
     const next = feedback === value ? null : value;
-    const apply = (run: LoopRun) => {
-      setSelected((current) => (current?.id === run.id ? run : current));
-      setRuns((current) => current?.map((item) => (item.id === run.id ? run : item)));
-    };
+    const apply = applyRun;
     apply({ ...selected, viewerRating: next });
     try {
       apply(await rateLoopRun(loopId, selected.id, next));
@@ -160,6 +195,14 @@ export function LoopRunPage({
             <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
               <Link2 size={14} />
             </button>
+            <div className="loops-run-nav" role="group" aria-label={t("Runs")}>
+              <button type="button" aria-label={t("Go to next run")} title={t(nextRun ? "Go to next run" : "No next run")} disabled={!nextRun} onClick={() => goToRun(nextRun)}>
+                <ArrowDown size={14} />
+              </button>
+              <button type="button" aria-label={t("Go to previous run")} title={t(previousRun ? "Go to previous run" : "No previous run")} disabled={!previousRun} onClick={() => goToRun(previousRun)}>
+                <ArrowUp size={14} />
+              </button>
+            </div>
           </div>
         )}
       </header>
@@ -227,6 +270,7 @@ export function LoopRunPage({
           )}
         </aside>
         <section className="loops-run-detail" aria-label={t("Run")}>
+          <div className="loops-run-scroll" ref={scroller}>
           {!selected ? (
             runs !== undefined && <p className="loops-run-list-empty">{t(runs.length ? "Select a run" : "This loop has not run yet.")}</p>
           ) : (
@@ -305,10 +349,98 @@ export function LoopRunPage({
                   </button>
                 </div>
               )}
+              {(selected.replies ?? []).map((reply) => (
+                <RunReply key={reply.id} data={data} reply={reply} />
+              ))}
             </div>
           )}
+          </div>
+          {selected && <RunReplyComposer key={selected.id} loopId={loopId} run={selected} busy={selected.status === "running" || replying} onReplied={applyRun} />}
         </section>
       </div>
     </main>
+  );
+}
+
+/** A reply on the run and the agent's answer to it. */
+function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply }) {
+  const { t } = useI18n();
+  const author = data.users.find((user) => user.id === reply.userId);
+  const parts = runParts(reply);
+  return (
+    <div className="loops-run-reply">
+      <div className="loops-run-reply-message">
+        <UserAvatar avatarUrl={author?.avatarUrl} className="avatar loops-avatar" name={author ? author.displayName || author.name : t("Unknown user")} />
+        <p data-i18n-ignore>{reply.body}</p>
+      </div>
+      {parts.length > 0 && (
+        <AgentWorkGroup
+          className="loops-run-work"
+          message={{ durationMs: reply.finishedAt ? Math.max(1000, Date.parse(reply.finishedAt) - Date.parse(reply.createdAt)) : undefined }}
+          parts={parts}
+          running={reply.status === "running"}
+          onToolApproval={ignoreApproval}
+        />
+      )}
+      {reply.status === "running" && parts.length === 0 && !reply.output && <p className="loops-run-working">{t("Working…")}</p>}
+      {reply.output && <AgentAnswerText className="loops-run-answer" data={data} markdown={reply.output} />}
+      {reply.status === "failed" && (
+        <div className="loops-run-error" role="alert">
+          <XCircle size={16} />
+          <div>
+            <strong>{t("The agent couldn't reply")}</strong>
+            {reply.error && <p data-i18n-ignore>{reply.error}</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Linear's "Reply…" composer under the run: continues the run's agent conversation. */
+function RunReplyComposer({ loopId, run, busy, onReplied }: { loopId: string; run: LoopRun; busy: boolean; onReplied: (run: LoopRun) => void }) {
+  const { t } = useI18n();
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const canSend = Boolean(body.trim()) && !busy && !sending;
+  const send = async () => {
+    if (!canSend) return;
+    setSending(true);
+    try {
+      onReplied(await replyToLoopRun(loopId, run.id, body.trim()));
+      setBody("");
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : t("Could not send reply"));
+    } finally {
+      setSending(false);
+    }
+  };
+  return (
+    <form
+      className="loops-run-composer"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void send();
+      }}
+    >
+      <textarea
+        aria-label={t("Reply…")}
+        placeholder={t(busy ? "The agent is working…" : "Reply…")}
+        value={body}
+        rows={2}
+        onChange={(event) => setBody(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void send();
+          }
+        }}
+      />
+      <div className="loops-run-composer-actions">
+        <button type="submit" className="loops-run-send" aria-label={t("Send message")} title={t("Send message")} disabled={!canSend}>
+          {sending ? <LoaderCircle size={14} className="loops-run-status is-running" /> : <ArrowUp size={14} />}
+        </button>
+      </div>
+    </form>
   );
 }

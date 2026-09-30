@@ -19,20 +19,24 @@ function renderTrigger(props: Partial<Parameters<typeof LoopTriggerEditor>[0]> =
 }
 
 describe('LoopTriggerEditor', () => {
-  it('renders a status event as Linear’s sentence', () => {
+  it('shows the whole trigger in one dropdown like Linear', () => {
     const { view } = renderTrigger()
     const sentence = view.container.querySelector('.loops-trigger-sentence')!
-    expect(sentence).toHaveTextContent('Issue')
-    expect(sentence).toHaveTextContent('status is set')
-    expect(sentence).toHaveTextContent('to')
-    expect(within(sentence as HTMLElement).getByRole('button', { name: 'Status' })).toHaveTextContent('Any status')
+    expect(within(sentence as HTMLElement).getByRole('button', { name: 'Trigger' })).toHaveTextContent("An issue's status changes")
+    expect(within(sentence as HTMLElement).queryByRole('button', { name: 'Status' })).toBeNull()
     expect(within(sentence as HTMLElement).getByRole('button', { name: 'Teams' })).toHaveTextContent('Select teams…')
+    view.unmount()
+    const valued = renderTrigger({ config: { event: 'status', value: 'Done' } })
+    expect(screen.getByRole('button', { name: 'Trigger' })).toHaveTextContent("An issue's status is set to Done")
+    valued.view.unmount()
+    renderTrigger({ config: { event: 'labels', value: 'label-1' } })
+    expect(screen.getByRole('button', { name: 'Trigger' })).toHaveTextContent(/^Label .+ is added to an issue$/)
   })
 
   it('drops the team scope for team loops (Linear: "An issue is in triage") and keeps the picker for workspace loops', () => {
     const team = renderTrigger({ level: 'team', config: { event: 'triage' } })
     const sentence = team.view.container.querySelector('.loops-trigger-sentence')!
-    expect(sentence.textContent).toBe('An issueis in triage')
+    expect(sentence.textContent).toBe('An issue is in triage')
     expect(within(sentence as HTMLElement).queryByRole('button', { name: 'Teams' })).toBeNull()
     team.view.unmount()
     const readOnly = renderTrigger({ level: 'team', readOnly: true, config: { event: 'status' } })
@@ -40,15 +44,14 @@ describe('LoopTriggerEditor', () => {
     readOnly.view.unmount()
     const workspace = renderTrigger({ level: 'workspace', config: { event: 'triage' } })
     const scoped = workspace.view.container.querySelector('.loops-trigger-sentence')!
-    expect(scoped).toHaveTextContent('is in triagein')
+    expect(scoped).toHaveTextContent('An issue is in triagein')
     expect(within(scoped as HTMLElement).getByRole('button', { name: 'Teams' })).toHaveTextContent('Select teams…')
   })
 
   it('renders the triage template trigger with its filter chip', () => {
     const { view } = renderTrigger({ config: { event: 'triage', filters: [{ field: 'assignee', operator: 'is', value: null }] } })
     const sentence = view.container.querySelector('.loops-trigger-sentence')!
-    expect(sentence).toHaveTextContent('An issue')
-    expect(sentence).toHaveTextContent('is in triage')
+    expect(sentence).toHaveTextContent('An issue is in triage')
     const chip = view.container.querySelector('.loops-filter-chip-row')!
     expect(chip).toHaveTextContent('Assignee')
     expect(chip).toHaveTextContent('is')
@@ -68,14 +71,15 @@ describe('LoopTriggerEditor', () => {
   it('picks Issue ▸ Status ▸ Triage from the trigger type menu', async () => {
     const user = userEvent.setup()
     const { onChange } = renderTrigger({ triggerType: 'schedule', config: { startDate: '2026-09-29', interval: 1, unit: 'day', time: '07:00' } })
-    await user.click(screen.getByRole('button', { name: 'Trigger type' }))
+    expect(screen.getByRole('button', { name: 'Trigger' })).toHaveTextContent('Schedule')
+    await user.click(screen.getByRole('button', { name: 'Trigger' }))
     const menu = await screen.findByRole('menu')
     expect(within(menu).getByRole('menuitem', { name: 'Schedule' })).toBeVisible()
     for (const name of ['Project', 'Initiative', 'Release', 'Team']) expect(within(menu).getByRole('menuitem', { name })).toBeVisible()
     await user.click(within(menu).getByRole('menuitem', { name: 'Issue' }))
     await user.keyboard('{ArrowRight}')
     expect(await screen.findByPlaceholderText('Filter…')).toBeVisible()
-    for (const name of ['Created', 'Property updated', 'Priority', 'Assignee', 'Agent', 'Labels', 'New comment', 'New customer request']) expect(screen.getByRole('menuitem', { name })).toBeVisible()
+    for (const name of ['Created', 'Is in triage', 'Property updated', 'Priority', 'Assignee', 'Agent', 'Labels', 'New comment', 'New customer request']) expect(screen.getByRole('menuitem', { name })).toBeVisible()
     screen.getByRole('menuitem', { name: 'Status' }).focus()
     await user.keyboard('{ArrowRight}')
     expect(await screen.findByText('Set to…')).toBeVisible()
@@ -103,7 +107,7 @@ describe('LoopTriggerEditor', () => {
   it('keeps Cycle out of the trigger menu for new loops', async () => {
     const user = userEvent.setup()
     renderTrigger({ triggerType: 'schedule', config: { startDate: '2026-09-29', interval: 1, unit: 'day', time: '07:00' } })
-    await user.click(screen.getByRole('button', { name: 'Trigger type' }))
+    await user.click(screen.getByRole('button', { name: 'Trigger' }))
     const menu = await screen.findByRole('menu')
     expect(within(menu).queryByRole('menuitem', { name: 'Cycle' })).toBeNull()
   })
@@ -112,9 +116,8 @@ describe('LoopTriggerEditor', () => {
     const user = userEvent.setup()
     const { onChange, view } = renderTrigger({ triggerType: 'cycle', config: { event: 'started', teamIds: ['team-1'] } })
     const sentence = view.container.querySelector('.loops-trigger-sentence')!
-    expect(sentence).toHaveTextContent('Cycle')
-    expect(sentence).toHaveTextContent('starts')
-    await user.click(screen.getByRole('button', { name: 'Trigger type' }))
+    expect(sentence).toHaveTextContent('A cycle starts')
+    await user.click(screen.getByRole('button', { name: 'Trigger' }))
     const menu = await screen.findByRole('menu')
     await user.click(within(menu).getByRole('menuitem', { name: 'Cycle' }))
     await user.keyboard('{ArrowRight}')
@@ -125,12 +128,12 @@ describe('LoopTriggerEditor', () => {
 
   it('renders a read-only cycle trigger', () => {
     const { view } = renderTrigger({ readOnly: true, onChange: undefined, triggerType: 'cycle', config: { event: 'completed' } })
-    expect(view.container.querySelector('.loops-trigger-sentence')).toHaveTextContent('Cycleis completed')
+    expect(view.container.querySelector('.loops-trigger-sentence')).toHaveTextContent('A cycle is completedinAll teams')
   })
 
   it('renders a read-only summary for the loop page', () => {
     const { view } = renderTrigger({ readOnly: true, onChange: undefined, config: { event: 'status', value: 'Done', teamIds: ['team-1'] } })
-    expect(view.container.querySelector('.loops-trigger-sentence')).toHaveTextContent('Issuestatus is settoDoneinTest team')
+    expect(view.container.querySelector('.loops-trigger-sentence')).toHaveTextContent("An issue's status is set to DoneinTest team")
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

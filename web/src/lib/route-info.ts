@@ -35,6 +35,8 @@ export type RouteInfoData = Pick<
 export function routeInfo(
   route: AppRoute,
   data?: Partial<RouteInfoData> | null,
+  /** Translates UI labels (the app's i18n `t`); record names are never translated. */
+  t: (source: string) => string = (source) => source,
 ): RouteInfo {
   const workspaceName = data?.workspace?.name || data?.workspace?.urlKey || "Flow";
 
@@ -42,8 +44,8 @@ export function routeInfo(
     const unread = data?.notifications?.filter((item) => !item.readAt).length ?? 0;
     const suffix = unread > 0 ? ` (${unread > 99 ? "99+" : unread})` : "";
     return {
-      title: `Inbox${suffix}`,
-      pinnedTitle: "Inbox",
+      title: `${t("Inbox")}${suffix}`,
+      pinnedTitle: t("Inbox"),
       icon: "inbox",
     };
   }
@@ -61,8 +63,8 @@ export function routeInfo(
               : String(route.view);
     const isDefault = route.view === "assigned";
     return {
-      title: isDefault ? "My issues" : `My issues › ${viewLabel}`,
-      pinnedTitle: isDefault ? "My issues" : viewLabel,
+      title: isDefault ? t("My issues") : `${t("My issues")} › ${t(viewLabel)}`,
+      pinnedTitle: isDefault ? t("My issues") : t(viewLabel),
       icon: "my-issues",
     };
   }
@@ -83,7 +85,7 @@ export function routeInfo(
         icon: "issue",
       };
     }
-    return { title: "Issue", pinnedTitle: "Issue", icon: "issue" };
+    return { title: t("Issue"), pinnedTitle: t("Issue"), icon: "issue" };
   }
 
   if (route.kind === "project") {
@@ -97,7 +99,7 @@ export function routeInfo(
     if (project) {
       const tab =
         route.tab && route.tab !== "overview"
-          ? ` › ${capitalize(route.tab)}`
+          ? ` › ${t(capitalize(route.tab))}`
           : "";
       return {
         title: `${project.name}${tab}`,
@@ -105,22 +107,22 @@ export function routeInfo(
         icon: "project",
       };
     }
-    return { title: "Project", pinnedTitle: "Project", icon: "project" };
+    return { title: t("Project"), pinnedTitle: t("Project"), icon: "project" };
   }
 
   if (route.kind === "settings") {
     if (route.page === "shortcuts") {
-      return { title: "Not found", pinnedTitle: "Not found", icon: "settings" };
+      return { title: t("Not found"), pinnedTitle: t("Not found"), icon: "settings" };
     }
     if (BILLING_SETTINGS.has(route.page)) {
-      return { title: "Settings", pinnedTitle: "Settings", icon: "settings" };
+      return { title: t("Settings"), pinnedTitle: t("Settings"), icon: "settings" };
     }
     if (route.page === "team" && route.teamKey) {
       const team = data?.teams?.find(
         (item) => item.key.toLowerCase() === route.teamKey?.toLowerCase(),
       );
       const section = route.teamSection
-        ? ` › ${teamSectionLabel(route.teamSection)}`
+        ? ` › ${t(teamSectionLabel(route.teamSection))}`
         : "";
       return {
         title: `${team?.name || route.teamKey}${section}`,
@@ -128,9 +130,11 @@ export function routeInfo(
         icon: "settings",
       };
     }
-    const label =
+    const label = t(
       SETTINGS_TITLE.get(route.page as SettingsPageId) ||
-      settingsFallbackLabel(route.page);
+        SETTINGS_EXTRA_TITLES[route.page] ||
+        settingsFallbackLabel(route.page),
+    );
     return {
       title: label,
       pinnedTitle: label,
@@ -143,7 +147,20 @@ export function routeInfo(
   }
 
   if (route.kind === "not-found") {
-    return { title: "Not found", pinnedTitle: "Not found" };
+    return { title: t("Not found"), pinnedTitle: t("Not found") };
+  }
+
+  const team =
+    "teamKey" in route && typeof route.teamKey === "string"
+      ? data?.teams?.find((item) => item.key.toLowerCase() === (route.teamKey as string).toLowerCase())
+      : undefined;
+  if ((route.kind === "team-overview" || route.kind === "team-issues") && team) {
+    return { title: team.name, pinnedTitle: team.name };
+  }
+  const pageTitle = PAGE_TITLES[route.kind];
+  if (pageTitle) {
+    const title = team ? `${team.name} › ${t(pageTitle)}` : t(pageTitle);
+    return { title, pinnedTitle: t(pageTitle) };
   }
 
   return {
@@ -163,15 +180,55 @@ function capitalize(value: string) {
 }
 
 function teamSectionLabel(section: string) {
-  return section
-    .split("-")
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ");
+  const label = section.replace(/^ai-/, "AI-").replace(/-/g, " ");
+  return label[0]?.toUpperCase() + label.slice(1);
 }
 
+/** Settings pages that are not in the settings search index. */
+const SETTINGS_EXTRA_TITLES: Record<string, string> = {
+  loops: "Loops",
+  "coding-sessions": "Coding sessions",
+  "coding-environments": "Coding environments",
+};
+
+/** Page names for the browser tab, like Linear's (the page name only). */
+const PAGE_TITLES: Partial<Record<AppRoute["kind"], string>> = {
+  agent: "Agent",
+  asks: "Asks",
+  automations: "Automations",
+  "automation-new": "Automations",
+  "automation-detail": "Automations",
+  "automation-runs": "Automations",
+  dashboards: "Dashboards",
+  diary: "Diary",
+  documents: "Documents",
+  drafts: "Drafts",
+  initiatives: "Initiatives",
+  loops: "Loops",
+  meetings: "Meetings",
+  "new-team": "Create a new team",
+  projects: "Projects",
+  pulse: "Pulse",
+  releases: "Releases",
+  reviews: "Reviews",
+  "team-archive": "Archive",
+  "team-cycles": "Cycles",
+  "team-documents": "Documents",
+  "team-initiatives": "Initiatives",
+  "team-loops": "Loops",
+  "team-members": "Members",
+  "team-projects": "Projects",
+  "team-triage": "Triage",
+  "team-updates": "Updates",
+  "team-views": "Views",
+  "workspace-customers": "Customers",
+  "workspace-issues": "Issues",
+  "workspace-members": "Members",
+  "workspace-teams": "Teams",
+  "workspace-views": "Views",
+};
+
 function settingsFallbackLabel(page: string) {
-  return page
-    .split("-")
-    .map((part) => part[0]?.toUpperCase() + part.slice(1))
-    .join(" ");
+  const label = page.replace(/-/g, " ");
+  return label ? label[0].toUpperCase() + label.slice(1) : label;
 }

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { ArrowDown, ArrowUp, Search, Settings2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { ArrowDown, ArrowUp, Check, Search, Settings2, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -15,7 +15,7 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { loopPath, newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopTriggerType, Team } from "@/types/flow";
-import { LoopActionsMenu } from "./loop-actions";
+import { LoopActionsMenu, LoopBulkActionsMenu } from "./loop-actions";
 import { LoopCreateDialog, LoopCreateHub } from "./loop-create-hub";
 import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { loopOwner, useLoops } from "./loop-data";
@@ -134,13 +134,81 @@ export function LoopList({
     return result;
   }, [data.teams, grouped, loops]);
 
+  // Linear's row selection: checkboxes, shift-click ranges, ⌘A, X on the hovered row, Escape to clear.
+  const [selected, setSelected] = useState<string[]>([]);
+  const anchor = useRef<string | undefined>(undefined);
+  const hovered = useRef<string | undefined>(undefined);
+  const rowIds = useMemo(
+    () => groups.flatMap((group) => (grouped && collapsed.includes(group.key) ? [] : group.loops.map((loop) => loop.id))),
+    [collapsed, grouped, groups],
+  );
+  useEffect(() => {
+    // Rows hidden by filters or collapsed groups leave the selection.
+    setSelected((current) => {
+      const next = current.filter((id) => rowIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [rowIds]);
+  const toggleSelect = useCallback(
+    (id: string, range: boolean) => {
+      // Read the anchor now: the updater may run after it moves to `id`.
+      const from = anchor.current ? rowIds.indexOf(anchor.current) : -1;
+      const to = rowIds.indexOf(id);
+      setSelected((current) => {
+        if (range && from >= 0 && to >= 0) {
+          const span = rowIds.slice(Math.min(from, to), Math.max(from, to) + 1);
+          return [...new Set([...current, ...span])];
+        }
+        return current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      });
+      anchor.current = id;
+    },
+    [rowIds],
+  );
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true'], [role='menu'], [role='dialog']")) return;
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === "a" && rowIds.length) {
+        event.preventDefault();
+        setSelected(rowIds);
+        return;
+      }
+      if (event.key === "Escape" && selected.length) {
+        event.preventDefault();
+        setSelected([]);
+        anchor.current = undefined;
+        return;
+      }
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.toLowerCase() === "x" && hovered.current) {
+        event.preventDefault();
+        toggleSelect(hovered.current, event.shiftKey);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rowIds, selected.length, toggleSelect]);
+  const selectedLoops = useMemo(() => allLoops.filter((loop) => selected.includes(loop.id)), [allLoops, selected]);
+
   const replace = (next: Loop) => {
     setLoops(allLoops.map((loop) => (loop.id === next.id ? next : loop)));
     void onReload(next).catch(() => undefined);
   };
-  const drop = (id: string) => {
-    setLoops(allLoops.filter((loop) => loop.id !== id));
+  const replaceMany = (changed: Loop[]) => {
+    const byId = new Map(changed.map((loop) => [loop.id, loop]));
+    setLoops(allLoops.map((loop) => byId.get(loop.id) ?? loop));
     void onReload().catch(() => undefined);
+  };
+  const drop = (id: string) => dropMany([id]);
+  const dropMany = (ids: string[]) => {
+    setLoops(allLoops.filter((loop) => !ids.includes(loop.id)));
+    setSelected((current) => current.filter((id) => !ids.includes(id)));
+    void onReload().catch(() => undefined);
+  };
+  // Duplicate opens the copy's draft; it is in the list (and the app's loops) right away.
+  const added = (copy: Loop) => {
+    setLoops([copy, ...allLoops.filter((loop) => loop.id !== copy.id)]);
+    void onReload(copy).catch(() => undefined);
   };
   const open = (loop: Loop) =>
     onNavigate(isLoopDraft(loop) ? `${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(loop.id)}` : loopPath(data.workspace.urlKey, loop.id));
@@ -253,7 +321,7 @@ export function LoopList({
       ) : loops.length === 0 && filtering ? (
         <LoopsFilteredEmpty hiddenCount={visible.length - loops.length} onClear={clearFilters} />
       ) : (
-        <div className="loops-table" role="table" aria-label={t("Loops")} style={{ ["--loops-columns" as string]: gridTemplate }}>
+        <div className={`loops-table${selected.length ? " has-selection" : ""}`} role="table" aria-label={t("Loops")} aria-multiselectable="true" style={{ ["--loops-columns" as string]: gridTemplate }}>
           <div className="loops-table-head" role="row">
             <button role="columnheader" className={sort.key === "name" ? "is-sorted" : undefined} onClick={() => sortBy("name")}>
               {t("Name")}
@@ -295,7 +363,26 @@ export function LoopList({
                   </div>
                 )}
                 {!(grouped && collapsed.includes(group.key)) && group.loops.map((loop) => (
-                  <LoopRow key={loop.id} data={data} loop={loop} columns={shown.map((column) => column.id)} onOpen={() => open(loop)} onNavigate={onNavigate} onChanged={replace} onDeleted={() => drop(loop.id)} />
+                  <LoopRow
+                    key={loop.id}
+                    data={data}
+                    loop={loop}
+                    columns={shown.map((column) => column.id)}
+                    selected={selected.includes(loop.id)}
+                    selection={selected.length > 1 && selected.includes(loop.id) ? selectedLoops : undefined}
+                    onToggleSelect={(range) => toggleSelect(loop.id, range)}
+                    onHover={(inside) => {
+                      if (inside) hovered.current = loop.id;
+                      else if (hovered.current === loop.id) hovered.current = undefined;
+                    }}
+                    onOpen={() => open(loop)}
+                    onNavigate={onNavigate}
+                    onChanged={replace}
+                    onChangedMany={replaceMany}
+                    onDeleted={() => drop(loop.id)}
+                    onDeletedMany={dropMany}
+                    onDuplicated={added}
+                  />
                 ))}
               </div>
             ) : null,
@@ -319,18 +406,33 @@ function LoopRow({
   data,
   loop,
   columns,
+  selected,
+  selection,
+  onToggleSelect,
+  onHover,
   onOpen,
   onNavigate,
   onChanged,
+  onChangedMany,
   onDeleted,
+  onDeletedMany,
+  onDuplicated,
 }: {
   data: BootstrapData;
   loop: Loop;
   columns: Column[];
+  selected: boolean;
+  /** Set when this row is part of a multi-row selection: the menu acts on all of it. */
+  selection?: Loop[];
+  onToggleSelect: (range: boolean) => void;
+  onHover: (inside: boolean) => void;
   onOpen: () => void;
   onNavigate: (path: string) => void;
   onChanged: (loop: Loop) => void;
+  onChangedMany: (loops: Loop[]) => void;
   onDeleted: () => void;
+  onDeletedMany: (ids: string[]) => void;
+  onDuplicated: (copy: Loop) => void;
 }) {
   const { t } = useI18n();
   const owner = loopOwner(data, loop);
@@ -346,8 +448,41 @@ function LoopRow({
     setMenuAt(event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : { x: rect.left + 46, y: rect.bottom });
   };
   return (
-    <div className={`loops-table-row${!draft && !loop.enabled ? " is-disabled" : ""}${menuAt ? " is-menu-open" : ""}`} role="row" onContextMenu={openMenu}>
-      <button className="loops-row-link" onClick={onOpen} aria-label={loop.name || t("Untitled loop")} />
+    <div
+      className={`loops-table-row${!draft && !loop.enabled ? " is-disabled" : ""}${menuAt ? " is-menu-open" : ""}${selected ? " is-selected" : ""}`}
+      role="row"
+      aria-selected={selected}
+      onContextMenu={openMenu}
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+    >
+      <button
+        className="loops-row-link"
+        onClick={(event) => {
+          // Shift/⌘-click selects like Linear instead of opening the loop.
+          if (event.shiftKey || event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            onToggleSelect(event.shiftKey);
+            return;
+          }
+          onOpen();
+        }}
+        aria-label={loop.name || t("Untitled loop")}
+      />
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={selected}
+        aria-label={t("Select loop")}
+        title={t("Select loop")}
+        className="loops-row-check"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleSelect(event.shiftKey);
+        }}
+      >
+        {selected && <Check size={10} strokeWidth={3} />}
+      </button>
       <span className="loops-cell-name" role="cell">
         <span className="loops-row-title">
           <span className="loops-row-icon" style={{ color: loopIconColor(loop) }}>
@@ -379,7 +514,18 @@ function LoopRow({
           </span>
         ),
       )}
-      {menuAt && (
+      {menuAt && selection && (
+        <LoopBulkActionsMenu
+          data={data}
+          loops={selection}
+          open
+          onOpenChange={(next) => !next && setMenuAt(undefined)}
+          onChanged={onChangedMany}
+          onDeleted={onDeletedMany}
+          trigger={<span className="loops-row-menu-anchor" aria-hidden="true" style={{ left: menuAt.x, top: menuAt.y }} />}
+        />
+      )}
+      {menuAt && !selection && (
         <LoopActionsMenu
           align="start"
           data={data}
@@ -389,6 +535,7 @@ function LoopRow({
           onNavigate={onNavigate}
           onChanged={onChanged}
           onDeleted={onDeleted}
+          onDuplicated={onDuplicated}
           trigger={<span className="loops-row-menu-anchor" aria-hidden="true" style={{ left: menuAt.x, top: menuAt.y }} />}
         />
       )}

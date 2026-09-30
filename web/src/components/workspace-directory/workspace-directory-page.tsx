@@ -121,7 +121,8 @@ export function WorkspaceDirectoryPage({
   ) => Promise<void>;
   onDeleteCustomer: (customer: Customer) => Promise<void>;
   onOpenCustomer: (customer: Customer) => void;
-  onReload: () => Promise<void>;
+  /** Refreshes workspace metadata; a team id also refetches that team's issues (membership changed). */
+  onReload: (teamId?: string) => Promise<void>;
 }) {
   const {t}=useI18n();
   const [inviteOpen, setInviteOpen] = useState(inviteOnOpen);
@@ -186,7 +187,7 @@ export function WorkspaceDirectoryPage({
         workspace={data.workspace}
         teams={data.teams}
         onClose={() => setInviteOpen(false)}
-        onInvited={onReload}
+        onInvited={() => onReload()}
       />}
       <CustomerDialog
         currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
@@ -945,7 +946,8 @@ function TeamsDirectory({
   onOpen: (team: Team) => void;
   onProjects: (team: Team) => void;
   onCycles: (team: Team) => void;
-  onReload: () => Promise<void>;
+  /** Refreshes workspace metadata; a team id also refetches that team's issues (membership changed). */
+  onReload: (teamId?: string) => Promise<void>;
 }) {
   const {t}=useI18n();
   const { filters, setFilters, preferences, setPreferences } = useTeamDirectoryControls(data.workspace.id, data.viewer.id);
@@ -958,6 +960,8 @@ function TeamsDirectory({
   const people = useMemo(() => indexTeamPeople(data.teamMembers), [data.teamMembers]);
   const setDescending = (update: boolean | ((value: boolean) => boolean)) => setPreferences(current => ({ ...current, descending: typeof update === 'function' ? update(current.descending) : update }));
   const setOrdering = (value: TeamOrdering) => setPreferences(current => ({ ...current, ordering: value, descending: value !== 'name' }));
+  const [nameSortChosen, setNameSortChosen] = useState(false);
+  const nameSorted = ordering === "name" && (nameSortChosen || descending);
   const teamMetrics = useMemo(() => {
     const usersById = new Map(data.users.map(user => [user.id, user]));
     const metrics = new Map(data.teams.map(team => [team.id, {
@@ -1156,14 +1160,17 @@ function TeamsDirectory({
         >
       <DirectoryRows header={<div className="workspace-team-columns">
             <button
-              aria-label="Order by Name"
+              aria-label={nameSorted ? `Order by Name, sorted ${descending ? "descending" : "ascending"}` : "Order by Name"}
+              className={nameSorted ? "is-sorted" : undefined}
               type="button"
               onClick={() => {
+                setNameSortChosen(true);
                 if (ordering === "name") setDescending((value) => !value);
                 else { setOrdering("name"); setDescending(false); }
               }}
             >
-              {t('Name')}{ordering === 'name' && (descending ? <ArrowDown /> : <ArrowUp />)}
+              {/* Like Linear, the default A–Z order shows its arrow only on hover; a chosen order keeps it. */}
+              {t('Name')}{ordering === 'name' ? (descending ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" />) : <ArrowDown aria-hidden="true" />}
             </button>
             <span>{t('Description')}</span>
             {columns.has("membership") && <span>{t('Membership')}</span>}
@@ -1171,7 +1178,7 @@ function TeamsDirectory({
             {columns.has("members") && <span>{t('Members')}</span>}
             {columns.has("cycle") && <span>{t('Cycle')}</span>}
             {columns.has("projects") && <span>{t('Active projects')}</span>}
-            {(['created', 'updated'] as const).map(field => columns.has(field) && <button key={field} aria-label={`Order by ${field === 'created' ? 'Created' : 'Updated'}`} type="button" onClick={() => { if (ordering === field) setDescending(value => !value); else setOrdering(field); }}>{field === 'created' ? 'Created' : 'Updated'}{ordering === field && (descending ? <ArrowDown/> : <ArrowUp/>)}</button>)}
+            {(['created', 'updated'] as const).map(field => columns.has(field) && <button key={field} aria-label={`Order by ${field === 'created' ? 'Created' : 'Updated'}`} className={ordering === field ? "is-sorted" : undefined} type="button" onClick={() => { if (ordering === field) setDescending(value => !value); else setOrdering(field); }}>{field === 'created' ? 'Created' : 'Updated'}{ordering === field && (descending ? <ArrowUp aria-hidden="true"/> : <ArrowDown aria-hidden="true"/>)}</button>)}
             <span />
           </div>} items={teamRows} itemKey={row => row.team.id} render={({team, depth, hasChildren}) => {
             const metric = teamMetrics.get(team.id);
@@ -1200,7 +1207,7 @@ function TeamsDirectory({
                 </div>
                 <span className="workspace-team-description" title={description || undefined}>{description}</span>
                 {columns.has("membership") && (
-                  viewerMembership?<span className="workspace-team-joined"><Check/>{t('Joined')}</span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(onReload)}}>{t('Join')}</button>
+                  viewerMembership?<span className="workspace-team-joined"><Check/>{t('Joined')}</span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(()=>onReload(team.id))}}>{t('Join')}</button>
                 )}
                 {columns.has("owners") && (
                   <span className="workspace-team-owner">

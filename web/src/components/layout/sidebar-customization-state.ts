@@ -11,6 +11,7 @@ export type SidebarEntry =
   | "projects"
   | "documents"
   | "views"
+  | "dashboards"
   | "members"
   | "customers"
   | "teams"
@@ -28,6 +29,7 @@ const SIDEBAR_ENTRY_FEATURES: Partial<Record<SidebarEntry, string>> = {
   customers: "customer-requests",
   releases: "releases",
   loops: "loops",
+  dashboards: "dashboards",
   pulse: "pulse",
   agent: "ai",
 };
@@ -54,7 +56,7 @@ const defaultPersonalOrder: SidebarEntry[] = [
 ];
 const defaultWorkspaceOrder: SidebarEntry[] = [
   "members", "initiatives", "projects", "teams", "views",
-  "releases", "loops", "customers",
+  "dashboards", "releases", "loops", "customers",
 ];
 const defaultPreferences: SidebarPreferences = {
   inbox: "always", reviews: "always", myIssues: "always", pulse: "always",
@@ -62,6 +64,8 @@ const defaultPreferences: SidebarPreferences = {
   projects: "always", documents: "always", views: "always",
   members: "always", customers: "never", teams: "always",
   releases: "always", loops: "always",
+  // Like Linear, Dashboards is its own page reached from the More menu.
+  dashboards: "never",
 };
 
 export function useSidebarCustomizationState() {

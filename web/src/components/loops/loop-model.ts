@@ -1,4 +1,4 @@
-import type { BootstrapData, Loop, LoopTriggerType, Team } from "@/types/flow";
+import type { BootstrapData, Loop, LoopEditPolicy, LoopTriggerType, Team } from "@/types/flow";
 
 /** Issue events a loop can react to (see docs/verification/loops-api-contract.md). */
 export type LoopIssueEvent =
@@ -279,3 +279,12 @@ export const LOOP_PERMISSION_COPY = {
   codeAccessLink: "configured repositories",
   externalSync: "Changes sync through integrations and may be visible outside your workspace",
 } as const;
+
+export const LOOP_EDIT_POLICIES: LoopEditPolicy[] = ["all", "teamOwners", "owner"];
+
+/** Linear's "Who can edit this loop" options; workspace loops have no team, so their owners are the workspace admins. */
+export function loopEditPolicyLabel(policy: LoopEditPolicy | undefined, teamLoop: boolean) {
+  if (policy === "owner") return "Only loop owner";
+  if (policy === "teamOwners") return teamLoop ? "Team owners" : "Workspace admins";
+  return teamLoop ? "All team members" : "All workspace members";
+}

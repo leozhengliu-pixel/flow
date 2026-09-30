@@ -51,7 +51,7 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 				return err
 			}
 			err = func() error {
-				rows, err := tx.QueryContext(ctx, `SELECT id,data,list_data FROM issue_records WHERE workspace_key=? AND id>? ORDER BY id LIMIT 64`, workspace, last)
+				rows, err := tx.QueryContext(ctx, `SELECT id,data,list_data FROM issue_records WHERE workspace_key=? AND id>? ORDER BY id LIMIT 256`, workspace, last)
 				if err != nil {
 					return err
 				}
@@ -73,6 +73,10 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 				if err != nil {
 					return err
 				}
+				// One CASE update per batch instead of a round trip per record.
+				ids := []string{}
+				cases := []string{}
+				args := []any{}
 				for _, item := range batch {
 					last = item.id
 					if len(item.list) > 0 {
@@ -86,11 +90,22 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 					if err != nil {
 						return err
 					}
-					if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET list_data=? WHERE workspace_key=? AND id=?`, raw, workspace, item.id); err != nil {
+					ids = append(ids, item.id)
+					if s.dialect == "postgres" {
+						cases = append(cases, "WHEN ? THEN CAST(? AS BYTEA)")
+					} else {
+						cases = append(cases, "WHEN ? THEN ?")
+					}
+					args = append(args, item.id, raw)
+				}
+				if len(ids) > 0 {
+					clause, idArgs := bindList("id", ids)
+					args = append(append(args, workspace), idArgs...)
+					if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET list_data=CASE id `+strings.Join(cases, " ")+` END WHERE workspace_key=? AND `+clause, args...); err != nil {
 						return err
 					}
 				}
-				if len(batch) < 64 {
+				if len(batch) < 256 {
 					done = 1
 				}
 				_, err = tx.ExecContext(ctx, `UPDATE issue_list_migrations SET last_id=?,complete=? WHERE workspace_key=?`, last, done, workspace)

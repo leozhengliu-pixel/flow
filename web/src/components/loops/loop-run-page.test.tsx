@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   getLoopRun: vi.fn(),
   listLoopRuns: vi.fn(),
   rateLoopRun: vi.fn(),
+  replyToLoopRun: vi.fn(),
 }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
@@ -132,5 +133,33 @@ describe('LoopRunPage', () => {
     expect(screen.getByRole('note')).toHaveTextContent('no web search provider is configured')
     await user.click(link)
     expect(onNavigate).toHaveBeenCalledWith('/workspace/loop/loop-1?versions=1')
+  })
+
+  it('moves to the next and previous run with ↓/↑ like Linear', async () => {
+    const user = userEvent.setup()
+    const { onNavigate } = renderPage('run-1')
+    expect(await screen.findByRole('button', { name: /Scheduled run/ })).toBeVisible()
+    const next = screen.getByRole('button', { name: 'Go to next run' })
+    await waitFor(() => expect(next).toBeEnabled())
+    expect(screen.getByRole('button', { name: 'Go to previous run' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Go to previous run' })).toHaveAttribute('title', 'No previous run')
+    await user.click(next)
+    expect(onNavigate).toHaveBeenLastCalledWith('/workspace/loop/loop-1/run/run-2')
+    await user.keyboard('j')
+    expect(onNavigate).toHaveBeenLastCalledWith('/workspace/loop/loop-1/run/run-2')
+  })
+
+  it('replies to a run and shows the agent answer', async () => {
+    const user = userEvent.setup()
+    const reply = { id: 'reply-1', userId: viewer.id, body: 'Which bugs?', status: 'completed' as const, output: 'Bugs **A** and B.', createdAt: now.toISOString(), finishedAt: now.toISOString() }
+    api.replyToLoopRun.mockResolvedValue({ ...completed, replies: [reply] })
+    renderPage('run-1')
+    const box = await screen.findByRole('textbox', { name: 'Reply…' })
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled()
+    await user.type(box, 'Which bugs?{Enter}')
+    await waitFor(() => expect(api.replyToLoopRun).toHaveBeenCalledWith('loop-1', 'run-1', 'Which bugs?'))
+    expect(await screen.findByText('Which bugs?')).toBeVisible()
+    expect(screen.getByText('A')).toBeVisible()
+    expect(box).toHaveValue('')
   })
 })

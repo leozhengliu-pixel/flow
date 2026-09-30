@@ -7,6 +7,7 @@ import type { FlowDocument, ProjectResource } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
   createDocument: vi.fn(),
+  createDocumentReminder: vi.fn(),
   createDocumentTemplate: vi.fn(),
   deleteDocument: vi.fn(),
   updateDocument: vi.fn(),
@@ -27,6 +28,7 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
+const REMIND_GLYPH = 'svg'
 const labelsOf = (menu: HTMLElement) => within(menu).getAllByRole('menuitem').map(item => item.querySelector('.project-menu-label')?.textContent)
 const glyphsOf = (menu: HTMLElement) => within(menu).getAllByRole('menuitem').map(item => item.querySelector('svg[data-action-glyph]')?.getAttribute('data-action-glyph') ?? item.querySelector('svg')?.tagName)
 
@@ -95,18 +97,34 @@ it('matches Linear’s document resource menu: items, order, glyphs and shortcut
   await user.click(screen.getByRole('button', { name: 'Notes actions' }))
   const menu = await screen.findByRole('menu')
   expect(menu).toHaveAttribute('data-kind', 'document')
-  expect(labelsOf(menu)).toEqual(['Move to', 'Pin to team', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Show document history', 'Delete'])
-  expect(glyphsOf(menu)).toEqual(['moveTo', 'pin', 'duplicate', 'newTemplate', 'pencil', 'svg', 'copy', 'documentHistory', 'delete'])
+  expect(labelsOf(menu)).toEqual(['Move to', 'Pin to team', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete'])
+  expect(glyphsOf(menu)).toEqual(['moveTo', 'pin', 'duplicate', 'newTemplate', 'pencil', 'svg', 'copy', REMIND_GLYPH, 'documentHistory', 'delete'])
   expect(within(menu).getAllByRole('separator')).toHaveLength(2)
-  // No document reminders exist in Flow, so Linear's "Remind me" row is omitted.
-  expect(within(menu).queryByText('Remind me')).toBeNull()
   const shortcut = (name: RegExp) => [...within(menu).getByRole('menuitem', { name }).querySelectorAll('.project-menu-shortcut kbd')].map(key => key.textContent).join(' ')
   expect(shortcut(/Move to/)).toBe('⇧ P')
   expect(shortcut(/Rename/)).toBe('⇧ R')
   expect(shortcut(/Favorite/)).toBe('⌥ F')
+  expect(shortcut(/Remind me/)).toBe('⇧ H')
 })
 
-it('wires the document actions to the document APIs and reloads', async () => {
+it('sets a document reminder from Linear’s Remind me submenu', async () => {
+  const user = userEvent.setup()
+  setup('document')
+  await user.click(screen.getByRole('button', { name: 'Notes actions' }))
+  within(await screen.findByRole('menu')).getByRole('menuitem', { name: /Remind me/ }).focus()
+  await user.keyboard('{ArrowRight}')
+  const submenu = (await screen.findAllByRole('menu')).at(-1)!
+  expect(within(submenu).getAllByRole('option').map(option => option.textContent)).toEqual([
+    expect.stringContaining('An hour from now'), expect.stringContaining('Tomorrow'), expect.stringContaining('Next week'), expect.stringContaining('A month from now'), 'Custom…',
+  ])
+  await user.click(within(submenu).getByRole('option', { name: /Tomorrow/ }))
+  await waitFor(() => expect(api.createDocumentReminder).toHaveBeenCalledWith('doc-1', expect.any(String)))
+  const remindAt = new Date(api.createDocumentReminder.mock.calls[0][1] as string)
+  expect(remindAt.getHours()).toBe(9)
+  expect(remindAt.getTime()).toBeGreaterThan(Date.now())
+})
+
+it('wires the document actions to the document APIs and reloads', { timeout: 20_000 }, async () => {
   const user = userEvent.setup()
   const writeText = vi.fn().mockResolvedValue(undefined)
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
@@ -140,8 +158,12 @@ it('wires the document actions to the document APIs and reloads', async () => {
   await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith('doc-1', { teamIds: ['team-b'], projectIds: [] }))
 
   const template = await openSub(/New template from document/)
+  // Linear offers a workspace-wide template first, then each team.
+  expect(within(template).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Workspace', 'Alpha', 'Beta'])
   await user.click(within(template).getByRole('menuitem', { name: /Alpha/ }))
   await waitFor(() => expect(api.createDocumentTemplate).toHaveBeenCalledWith(expect.objectContaining({ teamId: 'team-a', name: 'Notes', content: '# Notes' })))
+  await user.click(within(await openSub(/New template from document/)).getByRole('menuitem', { name: 'Workspace' }))
+  await waitFor(() => expect(api.createDocumentTemplate).toHaveBeenCalledWith(expect.objectContaining({ teamId: '', name: 'Notes' })))
 
   const copy = await openSub(/^Copy/)
   expect(within(copy).getAllByRole('menuitem').map(item => item.querySelector('.project-menu-label')?.textContent)).toEqual(['Copy URL', 'Copy title', 'Copy title as link', 'Copy content as Markdown'])

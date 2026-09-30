@@ -1392,6 +1392,7 @@ type DocumentTemplateMutation = Partial<
     | "contentData"
   >
 >;
+/** `teamId: ""` creates a workspace-wide template. */
 export function createDocumentTemplate(
   input: DocumentTemplateMutation & { teamId: string; name: string },
 ): Promise<DocumentTemplate> {
@@ -2504,6 +2505,7 @@ export type LoopMutation = Partial<
     | "enabled"
     | "ownerId"
     | "trustedSourceKeys"
+    | "editPolicy"
   >
 >;
 export function listLoops(workspaceKey?: string): Promise<Loop[]> {
@@ -2556,6 +2558,14 @@ export function rateLoopRun(id: string, runId: string, rating: "up" | "down" | n
     `/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/feedback`,
     jsonRequest("POST", comment === undefined ? { rating } : { rating, comment }),
   );
+}
+/** Replies on a finished run; the loop's agent answers in the background (poll the run). */
+export function replyToLoopRun(id: string, runId: string, body: string): Promise<LoopRun> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/replies`, jsonRequest("POST", { body }));
+}
+/** The workspace audit log (admins), for refreshing the audit log page without a bootstrap reload. */
+export function listAuditLog(): Promise<import("@/types/flow").AuditLogEntry[]> {
+  return request("/api/workspace/audit-log");
 }
 /** Uploads a file for the "Ask Flow to build the loop" prompt (sent as `attachmentIds` on create). */
 export function uploadLoopAttachment(file: File): Promise<LoopAttachment> {
@@ -3168,6 +3178,15 @@ export function createProjectReminder(
     jsonRequest("POST", { remindAt }),
   );
 }
+export function createDocumentReminder(
+  documentId: string,
+  remindAt: string,
+): Promise<Notification> {
+  return request(
+    `/api/documents/${documentId}/reminders`,
+    jsonRequest("POST", { remindAt }),
+  );
+}
 export function createProjectResource(
   projectId: string,
   input: { type?: "link" | "document"; title?: string; url: string },
@@ -3635,9 +3654,10 @@ export function deleteSavedView(viewId: string): Promise<void> {
 }
 
 export function fetchDashboards(cursor = ""): Promise<CursorPage<Dashboard>> {
-  return request(
+  // An empty workspace serializes `items` as null.
+  return request<CursorPage<Dashboard>>(
     `/api/dashboards${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
-  );
+  ).then((page) => ({ ...page, items: page.items ?? [] }));
 }
 export function createDashboard(
   input: Pick<Dashboard, "name" | "visibility"> &

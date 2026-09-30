@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +82,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.CodeReview
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(codeReviewScope(r.Context(), provider, eventID, event), workspaceKey(r), "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
 		if existing := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
 			return slices.ContainsFunc(item.Events, func(reviewEvent domain.ReviewEvent) bool { return reviewEvent.ID == eventID })
 		}); existing >= 0 {
@@ -197,7 +198,9 @@ func (s *server) slackWebhook(w http.ResponseWriter, r *http.Request) {
 		eventID = strings.TrimSpace(r.Header.Get("X-Slack-Request-Timestamp")) + ":" + fmt.Sprintf("%x", sha256.Sum256(body))
 	}
 	now := time.Now().UTC()
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "slack.webhook", eventID, map[string]string{"eventType": event.Event.Type}, func(data *domain.Bootstrap) error {
+	// Slack deliveries only read and add notifications keyed by the event id.
+	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{eventID}})
+	err = s.store.MutateWorkspace(scope, workspaceKey(r), "slack.webhook", eventID, map[string]string{"eventType": event.Event.Type}, func(data *domain.Bootstrap) error {
 		for i := range data.IntegrationConnections {
 			if data.IntegrationConnections[i].Provider == "slack" {
 				data.IntegrationConnections[i].LastWebhookAt = &now

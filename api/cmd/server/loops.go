@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -38,10 +39,59 @@ type loopInput struct {
 	CodeAccess                 *string         `json:"codeAccess,omitempty"`
 	Enabled                    *bool           `json:"enabled,omitempty"`
 	OwnerID                    *string         `json:"ownerId,omitempty"`
+	EditPolicy                 *string         `json:"editPolicy,omitempty"`
 	TrustedSourceKeys          *[]string       `json:"trustedSourceKeys,omitempty"`
 }
 
 var loopTriggerTypes = []string{"schedule", "issue", "project", "initiative", "release", "team", "cycle"}
+
+// loopEditPolicies are Linear's "Who can edit this loop" options.
+var loopEditPolicies = []string{"all", "teamOwners", "owner"}
+
+// errLoopEditForbidden rejects changes from members the loop's "Who can edit"
+// policy leaves out.
+var errLoopEditForbidden = errors.New("you don't have permission to edit this loop")
+
+// canEditLoop applies the loop's "Who can edit" policy. Workspace admins and
+// the loop owner can always edit; "teamOwners" admits the owners of the loop's
+// team (only admins for workspace loops); "owner" admits nobody else.
+func canEditLoop(data *domain.Bootstrap, loop domain.Loop, userID string) bool {
+	if workspaceAdminRole(data.ViewerRole) {
+		return true
+	}
+	owner := loop.OwnerID
+	if owner == "" {
+		owner = loop.Creator.ID
+	}
+	if userID != "" && userID == owner {
+		return true
+	}
+	switch loop.EditPolicy {
+	case "owner":
+		return false
+	case "teamOwners":
+		return loop.Level == "team" && loop.TeamID != "" && teamRoleForUser(data, loop.TeamID, userID) == "owner"
+	}
+	return true
+}
+
+// checkLoopEditor is canEditLoop for the request's viewer; local development
+// without authentication edits everything.
+func (s *server) checkLoopEditor(data *domain.Bootstrap, loop domain.Loop) error {
+	if s.authDisabled || canEditLoop(data, loop, data.Viewer.ID) {
+		return nil
+	}
+	return errLoopEditForbidden
+}
+
+// respondLoopMutation is respondMutation with the "Who can edit" refusal spelled out.
+func respondLoopMutation(w http.ResponseWriter, err error, success int, value any) {
+	if errors.Is(err, errLoopEditForbidden) {
+		writeError(w, http.StatusForbidden, "Only the people this loop's \"Who can edit\" setting allows can change it")
+		return
+	}
+	respondMutation(w, err, success, value)
+}
 
 func validateLoopInput(input loopInput) error {
 	if input.TriggerType != nil && !slices.Contains(loopTriggerTypes, *input.TriggerType) {
@@ -58,6 +108,9 @@ func validateLoopInput(input loopInput) error {
 	}
 	if input.CodeAccess != nil && !slices.Contains([]string{"disabled", "read", "readWrite"}, *input.CodeAccess) {
 		return fmt.Errorf("codeAccess must be disabled, read, or readWrite")
+	}
+	if input.EditPolicy != nil && !slices.Contains(loopEditPolicies, *input.EditPolicy) {
+		return fmt.Errorf("editPolicy must be all, teamOwners, or owner")
 	}
 	if input.TemplateID != nil && *input.TemplateID != "" && loopTemplateByID(*input.TemplateID) == nil {
 		return fmt.Errorf("unknown loop template")
@@ -162,6 +215,12 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 	}
 	if input.TrustedSourceKeys != nil {
 		loop.TrustedSourceKeys = slices.Clone(*input.TrustedSourceKeys)
+	}
+	if input.EditPolicy != nil {
+		loop.EditPolicy = *input.EditPolicy
+		if loop.EditPolicy == "all" {
+			loop.EditPolicy = ""
+		}
 	}
 }
 
@@ -382,6 +441,9 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		if loop == nil {
 			return errNotFound
 		}
+		if err := s.checkLoopEditor(data, *loop); err != nil {
+			return err
+		}
 		wasDraft := loop.Status == "draft"
 		if !wasDraft && input.Status != nil && *input.Status == "draft" {
 			return fmt.Errorf("%w: a created loop cannot go back to draft", errInvalid)
@@ -435,7 +497,7 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 	if err == nil && describe {
 		s.describeLoopAsync(workspaceKey(r), updated)
 	}
-	respondMutation(w, err, http.StatusOK, presentLoop(runs, updated))
+	respondLoopMutation(w, err, http.StatusOK, presentLoop(runs, updated))
 }
 
 // duplicateLoop copies a loop into a new draft ("⋯ › Duplicate").
@@ -476,6 +538,9 @@ func (s *server) deleteLoop(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := data.Loops[index]
+		if err := s.checkLoopEditor(data, item); err != nil {
+			return err
+		}
 		if err := appendTrash(data, "loop", item.ID, item.Name, item); err != nil {
 			return err
 		}
@@ -484,7 +549,7 @@ func (s *server) deleteLoop(w http.ResponseWriter, r *http.Request) {
 		data.LoopVersions = slices.DeleteFunc(data.LoopVersions, func(version domain.LoopVersion) bool { return version.LoopID == id })
 		return nil
 	})
-	respondMutation(w, err, http.StatusNoContent, nil)
+	respondLoopMutation(w, err, http.StatusNoContent, nil)
 }
 
 // fallbackLoopDescription is the first sentence of the instructions, used

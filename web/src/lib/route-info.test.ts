@@ -77,3 +77,17 @@ describe("routeInfo", () => {
     ).title).toBe("Not found");
   });
 });
+
+describe("routeInfo titles", () => {
+  it("names settings and workspace pages in the viewer's language", async () => {
+    const { translateToChinese } = await import("@/i18n/i18n");
+    const zh = (route: Parameters<typeof routeInfo>[0]) => routeInfo(route, data, translateToChinese).title;
+    expect(zh({ kind: "settings", workspaceSlug: "acme", page: "coding-sessions" })).toBe("编码会话");
+    expect(zh({ kind: "settings", workspaceSlug: "acme", page: "account-security" })).toBe(translateToChinese("Security & access"));
+    expect(zh({ kind: "workspace-teams", workspaceSlug: "acme" })).toBe(translateToChinese("Teams"));
+    expect(zh({ kind: "inbox", workspaceSlug: "acme" })).toBe(`${translateToChinese("Inbox")} (1)`);
+    // English keeps Linear's sentence-case page names.
+    expect(routeInfo({ kind: "settings", workspaceSlug: "acme", page: "coding-sessions" }, data).title).toBe("Coding sessions");
+    expect(routeInfo({ kind: "team-cycles", workspaceSlug: "acme", teamKey: "ACM" }, data).title).toBe("Acme Team › Cycles");
+  });
+});

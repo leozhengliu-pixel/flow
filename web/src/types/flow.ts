@@ -282,6 +282,7 @@ export interface FlowDocument {
 }
 export interface DocumentTemplate {
   id: UUID;
+  /** Empty for a workspace-wide template. */
   teamId: UUID;
   name: string;
   description?: string;
@@ -780,6 +781,8 @@ export interface ProjectMilestone {
   name: string;
   description: string;
   targetDate?: string;
+  /** Earlier descriptions, newest first. */
+  descriptionRevisions?: ProjectDescriptionRevision[];
   createdAt: string;
   updatedAt: string;
 }
@@ -877,6 +880,7 @@ export interface Ask {
 }
 export type LoopTriggerType = "schedule" | "issue" | "project" | "initiative" | "release" | "team" | "cycle";
 export type LoopCodeAccess = "disabled" | "read" | "readWrite";
+export type LoopEditPolicy = "all" | "teamOwners" | "owner";
 export interface Loop {
   id: UUID;
   /** May be empty while the loop is a draft. */
@@ -905,6 +909,8 @@ export interface Loop {
   codeAccess?: LoopCodeAccess;
   enabled: boolean;
   ownerId?: UUID;
+  /** "Who can edit": everyone who can see the loop (default), the team's owners, or only the loop owner. Workspace admins always can. */
+  editPolicy?: LoopEditPolicy;
   trustedSourceKeys?: string[];
   creator: User;
   lastRunAt?: string;
@@ -1040,6 +1046,20 @@ export interface LoopRun {
   viewerRating?: "up" | "down" | null;
   viewerComment?: string;
   feedbackCounts?: { up: number; down: number };
+  /** Follow-up messages from the run page and the agent's answers. */
+  replies?: LoopRunReply[];
+}
+export interface LoopRunReply {
+  id: string;
+  userId: UUID;
+  body: string;
+  status: "running" | "completed" | "failed";
+  output?: string;
+  steps?: LoopRun["steps"];
+  toolCalls?: LoopRun["toolCalls"];
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
 }
 export interface TemplateMilestone {
   id: UUID;

@@ -29,26 +29,30 @@ export function cycleStats(cycle: Cycle, issues: Issue[]): CycleStats {
   }
 }
 
+// Cycle boundaries are calendar days stored as UTC midnights; format and count
+// them in UTC so the viewer's timezone never shifts a cycle by a day.
 export function formatCycleRange(cycle: Cycle, compact = false) {
-  const formatter = new Intl.DateTimeFormat('en-US', compact ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })
+  const formatter = new Intl.DateTimeFormat('en-US', compact ? { month: 'short', day: 'numeric', timeZone: 'UTC' } : { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
   return `${formatter.format(new Date(cycle.startsAt))} – ${formatter.format(new Date(cycle.endsAt))}`
 }
 
 export function formatCycleDay(value: string) {
   const date = new Date(value)
-  return { month: new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date), day: date.getUTCDate() }
+  return { month: new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(date), day: date.getUTCDate() }
 }
 
+/** Weekdays from the viewer's today through the cycle's last calendar day, inclusive. */
 export function weekdaysLeft(cycle: Cycle) {
-  const cursor = new Date()
+  const now = new Date()
   const end = new Date(cycle.endsAt)
+  const cursor = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()))
+  const last = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate())
   let days = 0
-  cursor.setHours(0, 0, 0, 0)
-  while (cursor <= end) {
-    if (cursor.getDay() !== 0 && cursor.getDay() !== 6) days++
-    cursor.setDate(cursor.getDate() + 1)
+  while (cursor.getTime() <= last) {
+    if (cursor.getUTCDay() !== 0 && cursor.getUTCDay() !== 6) days++
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
-  return Math.max(0, days)
+  return days
 }
 
 export function cycleStatusLabel(status: Cycle['status']) {

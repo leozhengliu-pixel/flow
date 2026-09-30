@@ -70,7 +70,7 @@ describe('Agent chat panel streaming', () => {
     await waitFor(() => expect(input).toBeEnabled())
     await user.type(input, 'Long task')
     await user.click(screen.getByRole('button', { name: 'Send message' }))
-    await user.click(await screen.findByRole('button', { name: 'Stop generating' }))
+    await user.click(await screen.findByRole('button', { name: 'Stop responding' }))
     expect(signal?.aborted).toBe(true)
   })
 

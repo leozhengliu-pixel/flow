@@ -100,7 +100,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     <section className="project-overview__milestones" id="project-overview-milestones">
       {(project.milestones?.length ?? 0) > 0 && <h3>Milestones</h3>}
-      <AnimatedMilestones items={project.milestones ?? []}>{milestone => <OverviewMilestone totals={issueSummary ? issueSummary.milestones[milestone.id] ?? {total:0, completed:0} : undefined} issues={projectIssues.filter(issue => issue.projectMilestoneId === milestone.id)} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success('Milestone converted to project') }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success('Milestone moved') }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdate={input => onUpdateMilestone(project.id, milestone.id, input)} projects={projects.filter(item => item.id !== project.id && !item.archivedAt)}/>}</AnimatedMilestones>
+      <AnimatedMilestones items={project.milestones ?? []}>{milestone => <OverviewMilestone totals={issueSummary ? issueSummary.milestones[milestone.id] ?? {total:0, completed:0} : undefined} issues={projectIssues.filter(issue => issue.projectMilestoneId === milestone.id)} milestone={milestone} onConvert={async () => { await onConvertMilestone(project.id, milestone.id); toast.success(t('Milestone converted to project')) }} onDelete={() => onDeleteMilestone(project.id, milestone.id)} onMove={async targetProjectId => { await onMoveMilestone(project.id, milestone.id, targetProjectId); toast.success(t('Milestone moved')) }} onOpenIssues={() => onOpenMilestoneIssues(milestone.id)} onUpdate={input => onUpdateMilestone(project.id, milestone.id, input)} projects={projects.filter(item => item.id !== project.id && !item.archivedAt)}/>}</AnimatedMilestones>
       {creatingMilestone && <OverviewMilestoneCreator
         onCancel={() => setCreatingMilestone(false)}
         onCreate={async input => { await onCreateMilestone(project.id, input); setCreatingMilestone(false) }}
@@ -140,7 +140,7 @@ function OverviewMilestone({ totals, issues, milestone, onConvert, onDelete, onM
       value={milestone.description ?? ''}
       onCommit={description => onUpdate({ description }).then(() => undefined)}
     />}
-    <DescriptionHistoryDialog onOpenChange={setHistoryOpen} open={historyOpen} revisions={[]}/>
+    <DescriptionHistoryDialog onOpenChange={setHistoryOpen} open={historyOpen} revisions={milestone.descriptionRevisions ?? []}/>
   </article>
 }
 
@@ -186,10 +186,11 @@ function ResourceSection({ data, documents, onCreate, onDelete, onOpenDocumentHi
 }
 
 function ProjectResourceDialog({ onOpenChange, onSubmit, open, resource }: { onOpenChange: (open: boolean) => void; onSubmit: (input: { title?: string; url?: string }) => Promise<void>; open: boolean; resource?: ProjectResource }) {
+  const { t } = useI18n()
   const [url, setUrl] = useState(resource?.url ?? '')
   const [title, setTitle] = useState(resource?.title ?? '')
   const [saving, setSaving] = useState(false)
-  return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-detail-page__form-dialog"><Dialog.Title>{resource ? 'Edit project link' : 'Add link to project'}</Dialog.Title><label>URL<input autoFocus onChange={event => setUrl(event.target.value)} placeholder="https://…" value={url}/></label><label>Title <small>(optional)</small><input onChange={event => setTitle(event.target.value)} value={title}/></label><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!url.trim() || saving} onClick={() => { setSaving(true); void onSubmit({ url: url.trim(), title: title.trim() }).catch(error => toast.error('Could not save link', { description: error instanceof Error ? error.message : undefined })).finally(() => setSaving(false)) }} type="button">{saving ? 'Saving…' : resource ? 'Save' : 'Add link'}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
+  return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-detail-page__form-dialog"><Dialog.Title>{resource ? 'Edit project link' : 'Add link to project'}</Dialog.Title><label>URL<input autoFocus onChange={event => setUrl(event.target.value)} placeholder="https://…" value={url}/></label><label>Title <small>(optional)</small><input onChange={event => setTitle(event.target.value)} value={title}/></label><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!url.trim() || saving} onClick={() => { setSaving(true); void onSubmit({ url: url.trim(), title: title.trim() }).catch(error => toast.error(t('Could not save link'), { description: error instanceof Error ? error.message : undefined })).finally(() => setSaving(false)) }} type="button">{saving ? 'Saving…' : resource ? 'Save' : 'Add link'}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 function StringInputDialog({ label, onOpenChange, onSubmit, open }: { label: string; onOpenChange: (open: boolean) => void; onSubmit: (value: string) => void; open: boolean }) {

@@ -57,6 +57,8 @@
 .project-label-last { max-width: 100%; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .project-label-add { height: 28px; max-width: 100%; display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; border: 0; border-radius: 9999px; background: transparent; color: var(--theme-text-secondary); font-size: 13px; font-weight: 500; white-space: nowrap; }
 .project-label-add.is-icon { width: 25px; height: 25px; flex: 0 0 25px; padding: 0; justify-content: center; }
+/* Linear's overview Labels row ends in a 28px round "+" rather than "Add label…". */
+.project-label-add.is-icon.is-overview { width: 28px; height: 28px; flex-basis: 28px; }
 .project-label-add:hover,
 .project-label-add[aria-expanded=true] { background: var(--theme-surface-hover); }
 .project-label-chip:focus-visible,
@@ -79,3 +81,5 @@
 :root[data-theme="light"] .project-label-add:hover,
 :root[data-theme="light"] .project-label-add[aria-expanded=true] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 :root[data-theme="light"] .project-label-add { color: var(--theme-text-secondary); }
+/* Overview chips use Linear's measured light-theme border and text colours. */
+:root[data-theme="light"] .project-overview .project-label-chip:not(:hover):not([aria-expanded=true]) { border-color: var(--project-overview-label-chip-border); color: var(--project-overview-label-chip-text); }

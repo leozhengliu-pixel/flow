@@ -163,7 +163,7 @@ export async function copyText(text: string, message: string) {
 }
 
 /** Steps and tool calls in their shared order, as agent work-group parts. */
-export function runParts(run: LoopRun): AgentMessagePart[] {
+export function runParts(run: Pick<LoopRun, "steps" | "toolCalls">): AgentMessagePart[] {
   const steps = (run.steps ?? []).map((step, index) => ({
     order: step.order ?? index,
     part: { id: `step-${step.order ?? index}`, type: "step", title: step.title, text: step.message, status: "completed" } as AgentMessagePart,

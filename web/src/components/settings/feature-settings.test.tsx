@@ -206,6 +206,8 @@ it('gates Code Intelligence behind GitHub code access and shows repository polic
   expect(screen.getByText('Needs code access via GitHub integration')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Enable code access' })).toBeVisible()
   expect(screen.queryByRole('checkbox', { name: 'Enable Code Intelligence' })).not.toBeInTheDocument()
+  // Like Linear, signed commits are configured on the Coding sessions page, not the AI overview.
+  expect(screen.queryByText('Require signed commits')).not.toBeInTheDocument()
 
   const withAccess = makeBootstrap({
     workspaceSettings: initial,

@@ -668,7 +668,7 @@ export function AgentPage({
               type="file"
             />
             {replyRunning ? <button
-              aria-label={t("Stop generating")}
+              aria-label={t("Stop responding")}
               className={styles.sendButton}
               data-state="working"
               onClick={() => {

@@ -71,7 +71,7 @@ describe('LoopDetail', () => {
   it('shows the trigger without a team scope for team loops', () => {
     renderDetail({ ...baseLoop, triggerConfig: { event: 'triage' } })
     const trigger = screen.getByRole('region', { name: 'Trigger' })
-    expect(trigger).toHaveTextContent('An issueis in triage')
+    expect(trigger).toHaveTextContent('An issue is in triage')
     expect(trigger).not.toHaveTextContent('All teams')
   })
 
@@ -84,7 +84,7 @@ describe('LoopDetail', () => {
     expect(screen.getByRole('checkbox', { name: 'Enabled' })).toBeChecked()
     expect(screen.getByText(/Owned by/)).toBeVisible()
     expect(screen.getByRole('button', { name: /Run history/ })).toHaveTextContent('Ran 3 times over the last 30 days')
-    expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('An issueis in triage')
+    expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('An issue is in triage')
     expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('No assignee')
     expect(screen.getByRole('region', { name: 'Instructions' })).toHaveTextContent('Route every issue.')
     // Linear lists the loop's permissions read-only under the instructions.

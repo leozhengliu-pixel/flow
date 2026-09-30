@@ -6,6 +6,7 @@ import { confirmAction } from '@/components/ui/action-dialog-service'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import type { Project, ProjectMilestone } from '@/types/flow'
+import { useI18n } from '@/i18n/i18n'
 import { ProjectMenuSearch } from './project-menu-primitives'
 import { projectMilestoneLink } from './project-detail-helpers'
 
@@ -37,10 +38,11 @@ export function ProjectMilestoneMenu({ count, milestone, onConvert, onDelete, on
   trigger: ReactNode
   variant: 'sidebar'|'overview'
 }) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const shows = (label: string) => !query || label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
   const link = projectMilestoneLink(milestone.id)
-  const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(message))
+  const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(t(message)))
   const remove = () => { void confirmAction(`Delete “${milestone.name}”?`, { confirmLabel: 'Delete milestone' }).then(confirmed => { if (confirmed) return onDelete() }) }
   const groups: Action[][] = [[
     ...(variant === 'sidebar' && count > 0 && onOpenIssues ? [{ key: 'open', label: 'Open milestone issues', node: <MilestoneMenuItem icon={<MilestoneMenuIcon name="issues"/>} label="Open milestone issues" onSelect={onOpenIssues}/> }] : []),
@@ -53,10 +55,10 @@ export function ProjectMilestoneMenu({ count, milestone, onConvert, onDelete, on
     </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub> },
     ...(variant === 'overview' && onShowHistory ? [{ key: 'history', label: 'Show description history', node: <MilestoneMenuItem icon={<IssueActionGlyph label="Show description history" fallback={<MilestoneMenuIcon name="edit"/>}/>} label="Show description history" onSelect={onShowHistory}/> }] : []),
   ], [
-    { key: 'move', label: 'Move milestone to', node: <DropdownMenu.Sub><MilestoneSubTrigger icon="milestone" label="Move milestone to"/><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-move-menu" collisionPadding={8} sideOffset={-2}>
+    // Linear keeps the row but opens nothing when there is no other project to move to.
+    { key: 'move', label: 'Move milestone to', node: <DropdownMenu.Sub><MilestoneSubTrigger icon="milestone" label="Move milestone to"/>{projects.length > 0 && <DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-move-menu" collisionPadding={8} sideOffset={-2}>
       {projects.map(project => <MilestoneMenuItem icon={<ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/>} key={project.id} label={project.name} i18nIgnore onSelect={() => void onMove(project.id)}/>)}
-      {!projects.length && <DropdownMenu.Label>No other projects</DropdownMenu.Label>}
-    </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub> },
+    </DropdownMenu.SubContent></DropdownMenu.Portal>}</DropdownMenu.Sub> },
     { key: 'convert', label: 'Convert to project', node: <MilestoneMenuItem icon={<ViewGlyph color="var(--text-label)" icon="Project"/>} label="Convert to project" onSelect={() => void onConvert()}/> },
   ], [
     { key: 'delete', label: 'Delete', node: <MilestoneMenuItem end="⌘ ⌫" icon={<MilestoneMenuIcon name="trash"/>} label="Delete" onSelect={remove}/> },

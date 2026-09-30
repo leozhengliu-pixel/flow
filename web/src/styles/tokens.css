@@ -4,6 +4,7 @@
 :root[data-theme="light"]{--action-menu-text:lch(20% 1 282);--action-menu-active-text:lch(10% 0 282);--action-menu-muted:lch(40% 1 282);--action-menu-active-bg:lch(95% 0 282)}
 :root{--project-dependency-icon:lch(80% 80 29 / 1)}
 :root{--milestone-progress-icon:lch(80% 90 85)}
+:root[data-theme="light"]{--project-overview-label-chip-border:lch(88.49% 0 282);--project-overview-label-chip-text:lch(19.588% 1.25 282)}
 :root{--review-code-size:12px}
 :root{--code-light-bg:#fff;--code-light-fg:#24292f;--code-light-keyword:#cf222e;--code-light-string:#0a3069;--code-light-comment:#6e7781;--code-light-number:#0550ae;--code-dark-bg:#0d1117;--code-dark-fg:#c9d1d9;--code-dark-keyword:#ff7b72;--code-dark-string:#a5d6ff;--code-dark-comment:#8b949e;--code-dark-number:#79c0ff}
 :root[data-theme="light"]{--project-dependency-icon:lch(52% 72 29)}

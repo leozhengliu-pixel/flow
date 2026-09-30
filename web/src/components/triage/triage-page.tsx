@@ -22,7 +22,8 @@ import './triage.css'
 export type TriagePageProps = {
   data: BootstrapData
   team: Team
-  onReload?: () => Promise<void> | void
+  /** Called after an issue leaves triage, with its updated record. */
+  onReload?: (issue?: Issue) => Promise<void> | void
   onCreateIssue?: () => void
 }
 
@@ -67,7 +68,7 @@ export function TriagePage({ data, team, onReload, onCreateIssue }: TriagePagePr
     if (leaves) {
       const index = visible.findIndex(issue => issue.id === next.id)
       setSelectedId(visible[index + 1]?.id ?? visible[index - 1]?.id ?? null)
-      void onReload?.()
+      void onReload?.(next)
     }
   }
 

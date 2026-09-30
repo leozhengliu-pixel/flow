@@ -344,8 +344,9 @@ func (s *SQLiteStore) hydrateContentRecords(ctx context.Context, workspace strin
 			return err
 		}
 		data.Notifications = []domain.Notification{}
-		for _, items := range values {
-			data.Notifications = append(data.Notifications, items...)
+		// Group order follows resource ids so reads are deterministic.
+		for _, key := range sortedKeys(values) {
+			data.Notifications = append(data.Notifications, values[key]...)
 		}
 	}
 	if data.NotificationDeliveries == nil {
@@ -354,8 +355,8 @@ func (s *SQLiteStore) hydrateContentRecords(ctx context.Context, workspace strin
 			return err
 		}
 		data.NotificationDeliveries = []domain.NotificationDelivery{}
-		for _, items := range values {
-			data.NotificationDeliveries = append(data.NotificationDeliveries, items...)
+		for _, key := range sortedKeys(values) {
+			data.NotificationDeliveries = append(data.NotificationDeliveries, values[key]...)
 		}
 	}
 	return nil

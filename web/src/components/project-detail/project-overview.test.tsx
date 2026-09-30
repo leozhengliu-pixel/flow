@@ -161,7 +161,7 @@ describe('project overview workflow', () => {
     const other = { ...project, id: 'project-other', name: 'Other project' }
     const onMoveMilestone = vi.fn().mockResolvedValue(undefined)
     const onConvertMilestone = vi.fn().mockResolvedValue(other)
-    const milestone = { id: 'milestone-alpha', projectId: project.id, name: 'Alpha', description: '', createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z' }
+    const milestone = { id: 'milestone-alpha', projectId: project.id, name: 'Alpha', description: '', createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z', descriptionRevisions: [{ id: 'rev-1', projectId: project.id, description: 'Earlier milestone scope', author: data.viewer, createdAt: '2026-09-28T00:00:00.000Z' }] }
     const props = {
       project: { ...project, milestones: [milestone], resources: [{ id: 'resource-1', type: 'link', title: 'Spec', url: 'https://example.com/spec', createdAt: '2026-09-27T00:00:00.000Z' }], customers: [] },
       projects: [project, other], initiatives: [], documents: [], projectStatuses: [project.status], projectUpdates: [], users: data.users, teams: data.teams,
@@ -185,5 +185,11 @@ describe('project overview workflow', () => {
     expect(await screen.findByRole('textbox', { name: 'Milestone name' })).toHaveValue('Alpha')
     expect(screen.getByRole('textbox', { name: 'Milestone name' })).toHaveFocus()
     expect(screen.getByRole('textbox', { name: 'Milestone description' })).toBeInTheDocument()
+
+    // Show description history lists the milestone's earlier descriptions.
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Show description history' }))
+    const history = await screen.findByRole('dialog', { name: 'Description history' })
+    expect(within(history).getByText('Earlier milestone scope')).toBeInTheDocument()
   })
 })

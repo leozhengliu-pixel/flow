@@ -97,14 +97,14 @@ describe('agent page composer', () => {
     expect(within(conversation).getByText('Plan the launch')).toBeVisible()
     expect(within(conversation).getByText('Thinking…')).toBeVisible()
     expect(editor).toHaveTextContent('')
-    expect(screen.getByRole('button', { name: 'Stop generating' })).toHaveAttribute('data-state', 'working')
+    expect(screen.getByRole('button', { name: 'Stop responding' })).toHaveAttribute('data-state', 'working')
     // When the stream starts, the server's copy replaces the optimistic one without duplicating it.
     const session: AgentSession = { id: 'session-2', slugId: 'launch', userId: 'user-1', title: 'Plan the launch', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [{ id: 'user-message', role: 'user', content: 'Plan the launch', createdAt: '2026-08-31T00:00:00Z' }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
     act(() => release({ type: 'session.started', session, messageId: 'assistant-message' }))
     await waitFor(() => expect(document.querySelector('[data-message-id="user-message"]')).not.toBeNull())
     expect(within(screen.getByRole('group', { name: 'Agent conversation' })).getAllByText('Plan the launch')).toHaveLength(1)
     expect(screen.getByText('Thinking…')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Stop generating' }))
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
   })
 
   it('keeps the quiet send button for an empty composer', async () => {
@@ -126,7 +126,7 @@ describe('agent page composer', () => {
     await user.type(editor, 'Think first')
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
     await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
-    await user.click(screen.getByRole('button', { name: 'Stop generating' }))
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
   })
 
   it('reduces incremental stream events into one assistant message', () => {
@@ -155,7 +155,7 @@ describe('agent page composer', () => {
       // The workspace copy predates the reply.
       render(<I18nProvider><AgentPage chatSlug="live" data={makeBootstrap({ agentSessions: [{ ...liveSession, messages: liveSession.messages.slice(0, 1) }], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
       expect(await screen.findByText(/Cycles are time boxes/)).toBeVisible()
-      await userEvent.click(screen.getByRole('button', { name: 'Stop generating' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Stop responding' }))
       expect(api.stopAgentSession).toHaveBeenCalledWith('session-live')
     } finally {
       clearLiveAgentSession('session-live')

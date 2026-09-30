@@ -83,6 +83,7 @@ func ProjectListProjection(project domain.Project) domain.Project {
 	project.Milestones = slices.Clone(project.Milestones)
 	for index := range project.Milestones {
 		project.Milestones[index].Description = ""
+		project.Milestones[index].DescriptionRevisions = nil
 	}
 	return project
 }

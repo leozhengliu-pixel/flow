@@ -10,14 +10,12 @@ import { ViewsPage } from './views-page'
 function renderViews(dashboards: boolean, resource: 'issues' | 'projects' = 'issues') {
   const data = makeBootstrap({ workspaceSettings: { featureFlags: { dashboards } } as unknown as BootstrapData['workspaceSettings'] })
   return render(<I18nProvider><ViewsPage
-    dashboardsHref="/workspace/dashboards"
     data={data}
     onCreate={vi.fn()}
     onDelete={vi.fn()}
     onDuplicate={vi.fn()}
     onEdit={vi.fn()}
     onOpen={vi.fn()}
-    onOpenDashboards={vi.fn()}
     onResourceChange={vi.fn()}
     onSetSubscriptionEvents={vi.fn()}
     onToggleFavorite={vi.fn()}
@@ -31,16 +29,13 @@ function renderViews(dashboards: boolean, resource: 'issues' | 'projects' = 'iss
 }
 
 describe('ViewsPage directory tabs', () => {
-  it('uses the shared Issues, Projects, and Dashboards navigation when enabled', () => {
+  it('shows only the Issues and Projects tabs and no find field, like Linear', () => {
     renderViews(true)
     expect(screen.getByRole('link', { name: 'Issues' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Projects' })).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Dashboards' })).toHaveAttribute('href', '/workspace/dashboards')
-  })
-
-  it('hides dashboards when the workspace feature is disabled', () => {
-    renderViews(false)
+    // Dashboards is its own page (sidebar More menu), not a Views tab.
     expect(screen.queryByRole('link', { name: 'Dashboards' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument()
   })
 
   it('labels the empty state for the selected resource', () => {

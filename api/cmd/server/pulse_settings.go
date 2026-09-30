@@ -39,8 +39,14 @@ func pulseCursors(data *domain.Bootstrap) map[string]time.Time {
 }
 
 func (s *server) preparePulseSummaries(ctx context.Context, key string, now time.Time) error {
-	metadata, ok := s.store.WorkspaceMetadata(key)
+	// Each tick reads only the fields the schedule check needs; the
+	// per-viewer projection is built only for users with posted updates.
+	metadata, ok := s.store.WorkspaceMetadataFields(key, "workspaceSettings")
 	if !ok || !workspaceFeatureEnabled(metadata.WorkspaceSettings, "pulse") {
+		return nil
+	}
+	metadata, ok = s.store.WorkspaceMetadataFields(key, "workspaceSettings", "settings", "users", "userSettings", "teamMembers", "teamSettings", "projectUpdates", "initiativeUpdates")
+	if !ok {
 		return nil
 	}
 	cursors := pulseCursors(&metadata)
@@ -93,7 +99,8 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 				}
 			}
 		}
-		err = s.store.MutateWorkspace(ctx, key, "pulse.summary_scheduled", user.ID, nil, func(data *domain.Bootstrap) error {
+		pulseCtx := store.WithMetadataFields(ctx, "settings", "workspaceSettings", "userSettings", "notificationPreferences", "pushSubscriptions")
+		err = s.store.MutateWorkspace(pulseCtx, key, "pulse.summary_scheduled", user.ID, nil, func(data *domain.Bootstrap) error {
 			current := pulseCursors(data)
 			if !workspaceFeatureEnabled(data.WorkspaceSettings, "pulse") || !current[user.ID].Before(end) {
 				return store.ErrNoMutation

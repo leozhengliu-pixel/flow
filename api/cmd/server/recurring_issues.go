@@ -92,7 +92,7 @@ func (s *server) createRecurringOccurrence(ctx context.Context, key, sourceID st
 	var created *domain.Issue
 	var source domain.Issue
 	payload := map[string]string{"automation": "recurring", "sourceIssueId": sourceID}
-	err := s.store.MutateWorkspaceWithAggregate(ctx, key, "issue.created", payload, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(recurringIssueScope(ctx, sourceID), key, "issue.created", payload, func(data *domain.Bootstrap) (string, error) {
 		issue, updated, err := generateRecurringOccurrence(data, sourceID, now)
 		if err != nil {
 			return "", err

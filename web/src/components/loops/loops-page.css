@@ -6,7 +6,8 @@
 .loops-run-page {
   position: relative;
   min-width: 0;
-  height: calc(100% - 16px);
+  /* Like Linear (and .main-panel), the panel stops above the bottom Agent bar. */
+  height: calc(100% - 44px);
   margin: 8px 8px 8px 0;
   display: flex;
   flex-direction: column;
@@ -81,6 +82,9 @@
 .loops-topbar-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
 .loops-access-note { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; color: var(--theme-text-primary); font: 500 12px var(--font); white-space: nowrap; }
 .loops-access-note svg { width: 14px; height: 14px; flex: none; }
+.loops-access-note.is-button { border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.loops-access-note.is-button:hover,
+.loops-access-note.is-button[data-state='open'] { background: var(--bg-hover); }
 .loops-mobile-menu { display: none; }
 
 /* Buttons */
@@ -347,6 +351,16 @@
 .loops-cell-owner .loops-avatar { width: 18px; height: 18px; flex-basis: 18px; font-size: 9px; }
 .loops-cell-owner > span:last-child { overflow: hidden; text-overflow: ellipsis; }
 .loops-row-menu-anchor { position: fixed; width: 0; height: 0; pointer-events: none; }
+/* Linear's selection checkbox sits in the 28px slot left of the row icon; it shows on hover and while anything is selected. */
+.loops-row-check { position: absolute; z-index: 2; top: 13px; left: 23px; width: 14px; height: 14px; display: grid; place-items: center; padding: 0; border: 1px solid var(--checkbox-border, var(--theme-border-strong)); border-radius: 3px; background: var(--bg-panel); color: var(--on-accent); opacity: 0; cursor: pointer; transition: opacity var(--quick) var(--ease); }
+.loops-table-row:hover .loops-row-check,
+.loops-row-check:focus-visible,
+.loops-table.has-selection .loops-row-check { opacity: 1; }
+.loops-row-check:focus-visible { outline: 1px solid var(--selection-border); outline-offset: 1px; }
+.loops-row-check[aria-checked='true'] { border-color: var(--selection-border); background: var(--selection-fill); }
+.loops-table-row.is-selected::before { background: var(--theme-selected); }
+.loops-table-row.is-selected:hover::before { background: var(--theme-selected-hover); }
+.loops-menu-check { margin-left: auto; color: var(--theme-text-primary); }
 .loops-table-empty { margin: 32px 46px; color: var(--theme-text-secondary); font-size: 13px; }
 
 /* "No loops matching the filters" (same art and notice as Linear's filtered lists). */
@@ -552,6 +566,9 @@ a.loops-entity-chip:focus-visible { background: var(--theme-surface-hover); outl
 .loops-permission-row .select-control { min-width: 132px; height: 28px; }
 .loops-permissions .automation-trusted-editor { margin: 10px 0 0; padding-top: 10px; border-top: 0.5px solid var(--theme-border); }
 .loops-editor-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 32px 0 24px; }
+.loops-editor-footer.is-published { justify-content: space-between; align-items: center; padding-inline: 1px; }
+.loops-versions-button { height: 28px; margin-left: -10px; padding: 0 10px; border: 0.5px solid transparent; border-radius: 8px; background: transparent; color: var(--theme-text-primary); font: 500 12px var(--font); cursor: pointer; }
+.loops-versions-button:hover { background: var(--bg-hover); }
 
 /* Trigger sentence */
 .loops-trigger-event { display: flex; flex-direction: column; gap: 8px; }
@@ -577,6 +594,12 @@ a.loops-entity-chip:focus-visible { background: var(--theme-surface-hover); outl
 .loops-trigger-sentence.is-readonly { gap: 4px; color: var(--theme-text-primary); font-weight: 450; line-height: 20px; }
 .loops-trigger-sentence.is-readonly .loops-sentence-text { color: var(--theme-text-primary); }
 .loops-trigger-sentence.is-readonly .loops-sentence-token { height: 20px; padding: 0; border: 0; background: transparent; font: 450 13px var(--font); }
+/* Linear's trigger dropdown: one chip labelled with the whole trigger. */
+.loops-trigger-button { position: relative; box-sizing: border-box; max-width: 100%; height: 26px; display: inline-flex; align-items: center; padding: 0 28px 0 10px; border: 0.5px solid var(--theme-border-strong); border-radius: 8px; background: var(--theme-surface-1, var(--bg-panel)); color: var(--theme-text-primary); font: 500 13px var(--font); white-space: nowrap; cursor: pointer; }
+.loops-trigger-button:hover,
+.loops-trigger-button[data-state='open'] { background: var(--theme-surface-hover); }
+.loops-trigger-button-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.loops-trigger-button > svg { position: absolute; right: 9px; width: 12px; height: 12px; color: var(--theme-text-secondary); }
 .loops-sentence-subject { display: inline-flex; align-items: center; gap: 6px; color: var(--theme-text-primary); white-space: nowrap; }
 .loops-sentence-subject svg { width: 14px; height: 14px; flex: none; color: var(--theme-text-secondary); }
 .loops-sentence-token.is-plain { padding: 0 4px; border-color: transparent; background: transparent; color: var(--theme-text-secondary); font-weight: 450; font-size: 13px; cursor: pointer; }
@@ -783,7 +806,27 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-status.is-completed { color: var(--semantic-success); }
 .loops-run-status.is-failed { color: var(--priority-high); }
 .loops-run-status.is-running { color: var(--accent-primary); animation: spin 1s linear infinite; }
-.loops-run-detail { min-width: 0; flex: 1; overflow: auto; }
+.loops-run-detail { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.loops-run-scroll { min-height: 0; flex: 1; overflow: auto; }
+/* Linear's ↓/↑ run navigation: two half-pill buttons in one group. */
+.loops-run-nav { display: inline-flex; align-items: center; gap: 1px; margin-left: 4px; }
+.loops-run-nav button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; background: var(--bg-hover); color: var(--theme-text-primary); cursor: pointer; }
+.loops-run-nav button:first-child { border-radius: 9999px 0 0 9999px; }
+.loops-run-nav button:last-child { border-radius: 0 9999px 9999px 0; }
+.loops-run-nav button:hover:not(:disabled) { background: var(--bg-active); }
+.loops-run-nav button:disabled { color: var(--theme-text-tertiary); cursor: default; }
+.loops-run-reply { display: grid; gap: 12px; margin-top: 20px; }
+.loops-run-reply-message { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg-hover); }
+.loops-run-reply-message .loops-avatar { width: 20px; height: 20px; flex: 0 0 20px; font-size: 9px; }
+.loops-run-reply-message p { min-width: 0; margin: 1px 0 0; color: var(--theme-text-primary); font-size: 14px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Linear's "Reply…" composer pinned under the run. */
+.loops-run-composer { flex: none; display: flex; flex-direction: column; gap: 8px; margin: 0 16px 8px; padding: 12px; border-radius: 10px; background: var(--theme-surface-1); box-shadow: var(--shadow), 0 0 0 0.5px var(--theme-border); }
+.loops-run-composer textarea { min-height: 40px; max-height: 200px; resize: none; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 450 14px/20px var(--font); }
+.loops-run-composer textarea::placeholder { color: var(--theme-text-tertiary); }
+.loops-run-composer-actions { display: flex; justify-content: flex-end; }
+.loops-run-send { width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0.5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); color: var(--theme-text-primary); cursor: pointer; }
+.loops-run-send:disabled { color: var(--theme-text-tertiary); cursor: default; }
+.loops-run-send:not(:disabled):hover { background: var(--theme-surface-hover); }
 .loops-run-body { box-sizing: border-box; width: 100%; max-width: 1040px; padding: 16px 24px 48px; }
 .loops-run-header { min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .loops-run-header h1 { margin: 0; color: var(--theme-text-primary); font: 600 15px/23px var(--font); }
@@ -841,6 +884,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
   .loops-table-row { grid-template-columns: minmax(0, 1fr); padding-right: 16px; padding-left: 20px; }
   .loops-table-head > :not(:first-child),
   .loops-table-row > [role='cell']:not(.loops-cell-name) { display: none; }
+  .loops-row-check { display: none; }
   .loops-search.is-inline { width: auto; flex: 1; }
   .loops-editor-scroll,
   .loops-detail-scroll { padding: 24px 16px 48px; }

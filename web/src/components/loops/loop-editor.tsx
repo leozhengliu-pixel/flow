@@ -24,6 +24,7 @@ import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { activeTeams, copyText, loopBuilderFirstMessage, loopUrl, markLoopAgentHandoff, takeLoopAgentAutostart, useLoopConfig } from "./loop-data";
 import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, defaultScheduleConfig, instructionsPlaceholder, isLoopDraft, loopTeamId } from "./loop-model";
 import { LoopTriggerEditor } from "./loop-trigger";
+import { LoopVersionsDialog } from "./loop-versions";
 
 const DEFAULT_COLOR = "#d9b84b";
 
@@ -202,6 +203,7 @@ function LoopEditorForm({
   const [agentOpen, setAgentOpen] = useState(() => draft && (Boolean(autoMessage) || agentDraft));
   // Bumped when the loop builder rewrites the draft so the rich editor reloads its content.
   const [instructionsRevision, setInstructionsRevision] = useState(0);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const publishing = useRef(false);
   const loopConfig = useLoopConfig();
 
@@ -533,10 +535,17 @@ function LoopEditorForm({
             </div>
           </section>
 
-          <footer className="loops-editor-footer">
-            <button className="loops-ghost-button" type="button" onClick={() => void cancel()}>
-              {t("Cancel")}
-            </button>
+          {/* Linear: "Published versions" on the left and Publish on the right, no Cancel (the breadcrumb leaves the editor). */}
+          <footer className={`loops-editor-footer${draft ? "" : " is-published"}`}>
+            {draft ? (
+              <button className="loops-ghost-button" type="button" onClick={() => void cancel()}>
+                {t("Cancel")}
+              </button>
+            ) : (
+              <button className="loops-versions-button" type="button" onClick={() => setVersionsOpen(true)}>
+                {t("Published versions")}
+              </button>
+            )}
             <button className="loops-primary-button" type="button" disabled={!canSubmit} onClick={() => void submit()}>
               {saving ? t("Saving…") : draft ? t("Create loop") : t("Publish")}
             </button>
@@ -563,6 +572,23 @@ function LoopEditorForm({
           />
         )}
       </div>
+      {!draft && (
+        <LoopVersionsDialog
+          data={data}
+          loop={loop}
+          open={versionsOpen}
+          onOpenChange={setVersionsOpen}
+          onNavigate={onNavigate}
+          onRestored={(next) => {
+            // The restored version replaces what is being edited.
+            onLoopChange(next);
+            setForm(formOf(next));
+            setInstructionsRevision((value) => value + 1);
+            setDirty(false);
+            void onReload(next).catch(() => undefined);
+          }}
+        />
+      )}
     </main>
   );
 }

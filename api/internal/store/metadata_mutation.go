@@ -1,9 +1,13 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
-	"flow/api/internal/domain"
+	"reflect"
+	"slices"
 	"strings"
+
+	"flow/api/internal/domain"
 )
 
 // Keep this allowlist explicit: these callbacks never inspect or modify issue
@@ -16,12 +20,12 @@ func metadataOnlyMutation(event string, payload any) bool {
 	if event == "team.created" || event == "team.settings_updated" {
 		return true
 	}
-	if (event == "label.updated" || event == "issue_label.updated") && metadataFieldsOnly(payload, "name", "description", "color") {
-		return true
-	}
-	// Archiving a group cascades to its labels on issues; renames do not
-	// (issue label display data is resolved on read).
-	if event == "label_group.updated" && metadataFieldsOnly(payload, "name", "description", "color") {
+	// Label and label group edits (including archiving, regrouping and
+	// resource changes) only copy the label onto the issues that carry it.
+	// Issue label display data is resolved from the catalog on read and such
+	// copies are never persisted (see issueReferences.equalOwned), so these
+	// writes change no issue record.
+	if event == "label.updated" || event == "issue_label.updated" || event == "label_group.updated" {
 		return true
 	}
 	if event == "team.updated" && metadataFieldsOnly(payload, "name", "color", "icon") {
@@ -52,6 +56,9 @@ func metadataOnlyMutation(event string, payload any) bool {
 		// this event without replacing or hydrating existing content records.
 		return true
 	case "application_policy.updated":
+		return true
+	// Audit log streaming only advances the streaming webhook's cursor.
+	case "webhook.audit_stream_progress":
 		return true
 	case "workspace.agent_guidance_updated":
 		return true
@@ -111,7 +118,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 		"customer_taxonomy.created", "customer_taxonomy.updated", "customer_taxonomy.deleted":
 		return true
 	case "issue_template.created", "issue_template.updated", "issue_template.deleted", "issue_label.created",
-		"team.resource_updated", "team.resource_deleted", "team.resource_section_updated", "team.resource_section_deleted":
+		"team.resource_updated", "team.resource_deleted", "team.resource_section_created", "team.resource_section_updated", "team.resource_section_deleted":
 		return true
 	// Settings, integration, auth and delivery bookkeeping. Several of these
 	// run from background workers or on every sign-in (webhook delivery
@@ -174,4 +181,50 @@ func metadataFieldsOnly(payload any, allowed ...string) bool {
 		found = true
 	}
 	return found
+}
+
+type metadataFieldsKey struct{}
+
+// WithMetadataFields declares the only workspace metadata fields (JSON
+// names) a metadata-only mutation's callback reads or changes. The store then
+// copies just those fields for the callback instead of the whole metadata
+// snapshot; the others read as empty and are persisted unchanged. Background
+// jobs that write small settings at high volume use it. Viewer and workspace
+// identity are always present.
+func WithMetadataFields(ctx context.Context, fields ...string) context.Context {
+	return context.WithValue(ctx, metadataFieldsKey{}, fields)
+}
+
+func metadataFieldsFromContext(ctx context.Context) ([]string, bool) {
+	if fullMutationsForced.Load() {
+		return nil, false
+	}
+	fields, ok := ctx.Value(metadataFieldsKey{}).([]string)
+	return fields, ok && len(fields) > 0
+}
+
+// metadataFieldSnapshot copies the listed metadata fields of data (and its
+// workspace and viewer identity); every other field is left empty.
+func metadataFieldSnapshot(data domain.Bootstrap, fields []string) domain.Bootstrap {
+	result := domain.Bootstrap{Workspace: data.Workspace, Viewer: data.Viewer, ViewerRole: data.ViewerRole, NextIssueNumber: data.NextIssueNumber}
+	source, target := reflect.ValueOf(&data).Elem(), reflect.ValueOf(&result).Elem()
+	for _, field := range persistedMetadataFields() {
+		if slices.Contains(fields, field.name) {
+			target.Field(field.index).Set(source.Field(field.index))
+		}
+	}
+	result = cloneBootstrap(result)
+	result.NextIssueNumber = data.NextIssueNumber
+	return result
+}
+
+// restoreUnlistedMetadata puts stored's values back into every metadata
+// field outside fields (including the workspace record).
+func restoreUnlistedMetadata(data *domain.Bootstrap, stored domain.Bootstrap, fields []string) {
+	source, target := reflect.ValueOf(&stored).Elem(), reflect.ValueOf(data).Elem()
+	for _, field := range persistedMetadataFields() {
+		if !slices.Contains(fields, field.name) {
+			target.Field(field.index).Set(source.Field(field.index))
+		}
+	}
 }

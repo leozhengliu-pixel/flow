@@ -38,8 +38,6 @@ import styles from "./views-page.module.css";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { FlowPlusIcon, ViewsDirectoryHeader } from "./views-directory-header";
-import { ContentViewHeaderInlineSearch } from "@/components/content-view/content-view-header-search";
-import { useInlineFilter } from "@/lib/inline-filter";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
 
@@ -66,8 +64,6 @@ export type ViewsPageProps = {
   onOpenSidebar?: () => void;
   onResourceChange: (resource: ViewsResource) => void;
   resourceHref: (resource: ViewsResource) => string;
-  dashboardsHref: string;
-  onOpenDashboards: () => void;
   onUpdate: (
     viewId: string,
     input: SavedViewMutationInput,
@@ -92,8 +88,6 @@ export function ViewsPage({
   onOpenSidebar,
   onResourceChange,
   resourceHref,
-  dashboardsHref,
-  onOpenDashboards,
   onUpdate,
   onToggleFavorite,
   onToggleScopeFavorite,
@@ -116,8 +110,6 @@ export function ViewsPage({
   const [properties, setProperties] = useState<Set<DisplayProperty>>(
     () => new Set(readProperties(`${storageKey}:properties`)),
   );
-  const inlineFilter = useInlineFilter(`${storageKey}:inline`);
-  const [viewQuery, setViewQuery] = useState(inlineFilter.lastSearchTerm);
   const teamFavorite =
     scope.kind === "team" &&
     data.favorites.some(
@@ -137,17 +129,8 @@ export function ViewsPage({
       ),
     [data.viewer, direction, ordering, usersById, views],
   );
-  const filteredViews = useMemo(() => {
-    const needle = viewQuery.trim().toLocaleLowerCase();
-    if (!needle) return orderedViews;
-    return orderedViews.filter((view) => {
-      const owner = usersById.get(view.ownerId ?? "");
-      return [view.name, view.description ?? "", owner?.displayName ?? "", owner?.name ?? ""]
-        .join(" ")
-        .toLocaleLowerCase()
-        .includes(needle);
-    });
-  }, [orderedViews, usersById, viewQuery]);
+  // Like Linear, the directory has no find field: every view is listed.
+  const filteredViews = orderedViews;
 
   const groups = useMemo(
     () =>
@@ -359,31 +342,10 @@ export function ViewsPage({
             href: resourceHref("projects"),
             onSelect: () => onResourceChange("projects"),
           },
-          ...(data.workspaceSettings.featureFlags.dashboards !== false
-            ? [
-                {
-                  resource: "dashboards" as const,
-                  label: "Dashboards",
-                  href: dashboardsHref,
-                  onSelect: onOpenDashboards,
-                },
-              ]
-            : []),
         ]}
         title="Views"
         toolbarEnd={
           <>
-            <ContentViewHeaderInlineSearch
-              inlineFilter={inlineFilter}
-              alwaysShowOnDesktop
-              placeholder={t("Find a view…")}
-              value={viewQuery}
-              onChange={(value) => {
-                setViewQuery(value);
-                inlineFilter.setTerm(value);
-              }}
-              maxWidth={180}
-            />
             <ViewsDisplayMenu
             direction={direction}
             ordering={ordering}
@@ -408,16 +370,9 @@ export function ViewsPage({
         increaseViewportBy={{ top: 180, bottom: 480 }}
         itemContent={(_index, entry) => entry.kind === "group" ? renderGroupHeader(entry.group) : renderView(entry.view)}
       /> : <section
-        className={`${styles.content} ${!orderedViews.length || viewQuery.trim() ? styles.contentEmpty : ""}`}
+        className={`${styles.content} ${styles.contentEmpty}`}
       >
-        {!orderedViews.length ? (
-          <ViewsEmptyState onCreate={onCreate} resource={resource} />
-        ) : viewQuery.trim() ? (
-          <div className={styles.emptySearch} role="status">
-            <strong>{t("No matching views")}</strong>
-            <p>{t("Try another search term.")}</p>
-          </div>
-        ) : null}
+        <ViewsEmptyState onCreate={onCreate} resource={resource} />
       </section>}
     </div>
   );

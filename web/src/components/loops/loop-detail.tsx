@@ -2,20 +2,20 @@ import { useEffect, useState } from "react";
 import { ChevronRight, History, Link2, MoreHorizontal, Pencil, Play, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { Toggle } from "@/components/ui/toggle";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { TeamIcon } from "@/components/issue/issue-icons";
-import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { getLoop, runLoopNow, updateLoop } from "@/lib/api";
 import { editLoopPath, loopPath, loopRunPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
-import type { BootstrapData, Loop, LoopTriggerType } from "@/types/flow";
-import { LoopActionsMenu } from "./loop-actions";
+import type { BootstrapData, Loop, LoopEditPolicy, LoopTriggerType } from "@/types/flow";
+import { LoopActionsMenu, LoopEditPolicyIcon, LoopEditPolicyItems } from "./loop-actions";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { copyText, loopOwner, loopUrl, takeLoopAgentHandoff, useLoopRecord } from "./loop-data";
 import { LoopAgentPanel } from "./loop-agent-panel";
 import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
-import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, isLoopDraft, loopTeam, relativeTime } from "./loop-model";
+import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, isLoopDraft, loopEditPolicyLabel, loopTeam, relativeTime } from "./loop-model";
 import { LoopCommandPicker, RunLoopOnPicker, type PickerItem } from "./loop-pickers";
 import { LoopTriggerEditor } from "./loop-trigger";
 import { LoopVersionsDialog } from "./loop-versions";
@@ -134,6 +134,16 @@ export function LoopDetail({
       toast.error(error instanceof Error ? error.message : t("Could not update loop"));
     }
   };
+  const changeEditPolicy = async (editPolicy: LoopEditPolicy) => {
+    try {
+      const next = await updateLoop(loop.id, { editPolicy });
+      setLoop(next);
+      void onReload(next).catch(() => undefined);
+      toast.success(t("Edit access updated"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not update loop"));
+    }
+  };
   const runs = loop.runCount30d ?? 0;
   const longInstructions = loop.instructions.split("\n").length > 6 || loop.instructions.length > 480;
   return (
@@ -158,6 +168,7 @@ export function LoopDetail({
               void onReload(next).catch(() => undefined);
             }}
             onDeleted={() => void onReload().catch(() => undefined)}
+            onDuplicated={(copy) => void onReload(copy).catch(() => undefined)}
             onRun={run}
             onShowVersions={() => setVersionsOpen(true)}
             trigger={
@@ -169,10 +180,15 @@ export function LoopDetail({
           }
         />
         <div className="loops-topbar-actions">
-          <span className="loops-access-note">
-            <ViewGlyph color="currentColor" icon="Team" />
-            {t(team ? "All team members can edit" : "All workspace members can edit")}
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="loops-access-note is-button" aria-label={t("Who can edit")}>
+              <LoopEditPolicyIcon policy={loop.editPolicy} />
+              {t(`${loopEditPolicyLabel(loop.editPolicy, Boolean(team))} can edit`)}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="loops-menu">
+              <LoopEditPolicyItems current={loop.editPolicy ?? "all"} teamLoop={Boolean(team)} onSelect={(policy) => void changeEditPolicy(policy)} />
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
             <Link2 size={14} />
           </button>
