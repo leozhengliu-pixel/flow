@@ -242,12 +242,14 @@
 .project-resource-tip span { overflow: hidden; color: var(--theme-text-secondary); font-size: 11px; font-weight: 450; text-overflow: ellipsis; white-space: nowrap; }
 .project-overview__resources > .project-overview__row-content { row-gap: 0; }
 .project-overview__resource a > svg:first-child { color: var(--text); }
-.project-overview__resource a .project-resource-external { width: 0; flex: 0 0 0; opacity: 0; margin-left: -4px; transition: width 150ms, flex-basis 150ms, opacity 150ms; }
-.project-overview__resource:hover a .project-resource-external,
-.project-overview__resource:focus-within a .project-resource-external { width: 14px; flex-basis: 14px; opacity: 1; margin-left: 0; }
+/* Linear: link resources always end in a small tertiary ↗, tucked 3px closer. */
+.project-overview__resource a .project-resource-external { flex: 0 0 16px; margin-left: -3px; color: var(--theme-text-tertiary); }
+.project-resource-link-icon { display: inline-grid; flex: 0 0 16px; place-items: center; width: 16px; height: 16px; color: var(--theme-text-secondary); }
+.project-resource-link-icon svg { width: 16px; height: 16px; }
+/* The hover menu button sits on the pill's end; the title fades out under it. */
+.project-overview__resource:is(:hover, :focus-within) a .project-resource-title { -webkit-mask-image: linear-gradient(to right, black calc(100% - 22px), transparent calc(100% - 10px)); mask-image: linear-gradient(to right, black calc(100% - 22px), transparent calc(100% - 10px)); }
+.project-overview__resource:is(:hover, :focus-within) a .project-resource-external { visibility: hidden; }
 .project-overview__resource:focus-within > button { opacity: 1; }
-.project-overview__resource > button { position:static;width:0;flex:0 0 0;overflow:hidden;padding:0; }
-.project-overview__resource:hover > button,.project-overview__resource:focus-within > button { width:24px;flex-basis:24px; }
 .project-overview__inline-add.project-resource-add { gap: 6px; padding: 0 8px 0 6px; border-radius: 9999px; color: var(--pd-faint); font-size: 13px; font-weight: 450; }
 /* With resources present Linear keeps only a 28px round "+" after the chips. */
 .project-overview__inline-add.project-resource-add.is-icon { width: 28px; justify-content: center; padding: 0; }
@@ -653,7 +655,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
   background: lch(92.44% .5 282);
 }
 :root[data-theme="light"] .project-overview__resource:hover > button {
-  background: lch(92.44% .5 282);
+  background: lch(88.8% .54 282);
 }
 :root[data-theme="light"] .project-detail-page__tab { background: var(--theme-surface-1); color: var(--theme-text-secondary); }
 :root[data-theme="light"] .project-detail-page__tab:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
