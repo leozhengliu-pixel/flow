@@ -190,3 +190,37 @@ func TestOAuthExchangeAuthenticatesWithoutLookupTriggers(t *testing.T) {
 		t.Fatalf("authenticated the wrong credential: %+v", result.Key)
 	}
 }
+
+// Each exchange issues a fresh access token; expired OAuth token rows are
+// dropped instead of accumulating as one "MCP OAuth token" per refresh, while
+// live tokens (other sessions of the same authorization) are kept.
+func TestOAuthExchangePrunesExpiredAccessTokens(t *testing.T) {
+	repo, grant := oauthExchangeFixture(t)
+	past, future := time.Now().UTC().Add(-time.Minute), time.Now().UTC().Add(time.Hour)
+	if err := repo.MutateWorkspace(t.Context(), grant.WorkspaceKey, "api_key.created", "seed", nil, func(next *domain.Bootstrap) error {
+		next.APIKeys = append(next.APIKeys,
+			domain.APIKey{ID: "expired-oauth", SecretHash: "expired-hash", OAuthClientID: grant.ClientID, AuthorizationID: grant.AuthorizationID, ExpiresAt: &past},
+			domain.APIKey{ID: "personal-expired", SecretHash: "personal-hash", ExpiresAt: &past},
+			domain.APIKey{ID: "live-oauth", SecretHash: "live-hash", OAuthClientID: grant.ClientID, AuthorizationID: grant.AuthorizationID, ExpiresAt: &future},
+			domain.APIKey{ID: "older-live-oauth", SecretHash: "older-hash", OAuthClientID: grant.ClientID, AuthorizationID: grant.AuthorizationID, ExpiresAt: &future},
+			domain.APIKey{ID: "other-app-oauth", SecretHash: "other-hash", OAuthClientID: "other-client", AuthorizationID: "other-grant", ExpiresAt: &future},
+		)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "new-refresh", domain.APIKey{ID: "new-access", SecretHash: "new-hash", ExpiresAt: &future}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, key := range repo.Bootstrap().APIKeys {
+		ids[key.ID] = true
+	}
+	if ids["expired-oauth"] || !ids["personal-expired"] || !ids["live-oauth"] || !ids["older-live-oauth"] || !ids["other-app-oauth"] || !ids["new-access"] {
+		t.Fatalf("api keys after exchange = %v", ids)
+	}
+	var count int
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records WHERE field='apiKeys' AND record_key='expired-oauth'`).Scan(&count); err != nil || count != 0 {
+		t.Fatalf("expired token row still stored: count=%d err=%v", count, err)
+	}
+}
