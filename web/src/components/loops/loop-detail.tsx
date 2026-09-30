@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
-import { ChevronRight, Link2, MoreHorizontal, Pencil, Play, Settings2 } from "lucide-react";
+import { ChevronRight, History, Link2, MoreHorizontal, Pencil, Play, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { Toggle } from "@/components/ui/toggle";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { getLoop, runLoopNow, updateLoop } from "@/lib/api";
-import { editLoopPath, loopPath, loopRunPath, loopsPath, newLoopPath, teamLoopsPath } from "@/lib/app-routes";
+import { editLoopPath, loopPath, loopRunPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopTriggerType } from "@/types/flow";
 import { LoopActionsMenu } from "./loop-actions";
+import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { copyText, loopOwner, loopUrl, takeLoopAgentHandoff, useLoopRecord } from "./loop-data";
 import { LoopAgentPanel } from "./loop-agent-panel";
 import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
-import { configStrings, isLoopDraft, loopTeam, relativeTime } from "./loop-model";
+import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, isLoopDraft, loopTeam, relativeTime } from "./loop-model";
 import { LoopCommandPicker, RunLoopOnPicker, type PickerItem } from "./loop-pickers";
 import { LoopTriggerEditor } from "./loop-trigger";
 import { LoopVersionsDialog } from "./loop-versions";
@@ -94,7 +95,7 @@ export function LoopDetail({
   loopId: string;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
-  onReload: () => Promise<void>;
+  onReload: (changed?: Loop) => Promise<void>;
 }) {
   const { t } = useI18n();
   const { loop, setLoop, missing } = useLoopRecord(data, loopId);
@@ -125,8 +126,9 @@ export function LoopDetail({
   const toggle = async (enabled: boolean) => {
     setLoop({ ...loop, enabled });
     try {
-      setLoop(await updateLoop(loop.id, { enabled }));
-      void onReload().catch(() => undefined);
+      const next = await updateLoop(loop.id, { enabled });
+      setLoop(next);
+      void onReload(next).catch(() => undefined);
     } catch (error) {
       setLoop(loop);
       toast.error(error instanceof Error ? error.message : t("Could not update loop"));
@@ -140,36 +142,12 @@ export function LoopDetail({
         <button className="loops-mobile-menu" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar}>
           <Settings2 />
         </button>
-        <nav className="loops-breadcrumb" aria-label={t("Breadcrumb")}>
-          {team ? (
-            <a
-              href={teamLoopsPath(workspace, team.key)}
-              onClick={(event) => {
-                event.preventDefault();
-                onNavigate(teamLoopsPath(workspace, team.key));
-              }}
-            >
-              <TeamIcon team={team} size={14} />
-              <span data-i18n-ignore>{team.name}</span>
-            </a>
-          ) : (
-            <span className="loops-breadcrumb-scope">
-              <ViewGlyph color="currentColor" icon="Team" />
-              {t("Workspace")}
-            </span>
-          )}
-          <span aria-hidden="true">›</span>
-          <a
-            href={loopsPath(workspace)}
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate(loopsPath(workspace));
-            }}
-          >
-            {t("Loops")}
-          </a>
-          <span aria-hidden="true">›</span>
-          <h2 data-i18n-ignore>{loop.name || t("Untitled loop")}</h2>
+        <LoopBreadcrumb
+          data={data}
+          loop={loop}
+          loopId={loop.id}
+          onNavigate={onNavigate}
+          actions={
           <LoopActionsMenu
             align="start"
             data={data}
@@ -177,7 +155,7 @@ export function LoopDetail({
             onNavigate={onNavigate}
             onChanged={(next) => {
               setLoop(next);
-              void onReload().catch(() => undefined);
+              void onReload(next).catch(() => undefined);
             }}
             onDeleted={() => void onReload().catch(() => undefined)}
             onRun={run}
@@ -188,9 +166,13 @@ export function LoopDetail({
               </button>
             }
           />
-        </nav>
+          }
+        />
         <div className="loops-topbar-actions">
-          <span className="loops-access-note">{t(team ? "All team members can edit" : "All workspace members can edit")}</span>
+          <span className="loops-access-note">
+            <ViewGlyph color="currentColor" icon="Team" />
+            {t(team ? "All team members can edit" : "All workspace members can edit")}
+          </span>
           <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
             <Link2 size={14} />
           </button>
@@ -200,17 +182,19 @@ export function LoopDetail({
       <div className="loops-detail-scroll">
         <div className="loops-detail">
           <div className="loops-detail-actions">
-            <button className="loops-secondary-button" onClick={() => onNavigate(editLoopPath(workspace, loop.id))}>
-              <Pencil size={13} />
+            <button className="loops-detail-button" onClick={() => onNavigate(editLoopPath(workspace, loop.id))}>
+              <Pencil size={14} />
               {t("Edit")}
             </button>
-            <button className="loops-primary-button" disabled={!loop.enabled || busy} title={loop.enabled ? undefined : t("Enable the loop to run it")} onClick={run}>
-              <Play size={13} />
-              {t("Run now")}
-            </button>
+            {loop.enabled && (
+              <button className="loops-detail-button is-primary" disabled={busy} onClick={run}>
+                <Play size={14} />
+                {t("Run now")}
+              </button>
+            )}
           </div>
           <div className="loops-detail-icon" style={{ color: loopIconColor(loop) }}>
-            <LoopIcon source={loop} size={20} />
+            <LoopIcon source={loop} size={16} />
           </div>
           <h1 className="loops-detail-title" data-i18n-ignore>
             {loop.name || t("Untitled loop")}
@@ -222,28 +206,41 @@ export function LoopDetail({
           )}
           <div className="loops-detail-meta">
             <label className="loops-enabled">
-              <Toggle checked={loop.enabled} label={t("Enabled")} onChange={(checked) => void toggle(checked)} />
               <span>{t("Enabled")}</span>
+              <Toggle checked={loop.enabled} label={t("Enabled")} onChange={(checked) => void toggle(checked)} />
             </label>
             {owner && (
               <span className="loops-detail-owner">
                 {t("Owned by")}
-                <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} />
-                <span data-i18n-ignore>{owner.displayName || owner.name}</span>
+                <span className="loops-detail-owner-chip">
+                  <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} />
+                  <span data-i18n-ignore>{owner.displayName || owner.name}</span>
+                </span>
               </span>
             )}
+            <span className="loops-detail-dot" aria-hidden="true">
+              ·
+            </span>
             <span className="loops-detail-updated" title={new Date(loop.updatedAt).toLocaleString()}>
               {t("Last update")} {relativeTime(loop.updatedAt, undefined, t)}
             </span>
             {loop.version !== undefined && (
-              <button className="loops-detail-version" type="button" onClick={() => setVersionsOpen(true)}>
-                {t("Version {version}").replace("{version}", String(loop.version))}
-              </button>
+              <>
+                <span className="loops-detail-dot" aria-hidden="true">
+                  ·
+                </span>
+                <button className="loops-detail-version" type="button" onClick={() => setVersionsOpen(true)}>
+                  {t("Version {version}").replace("{version}", String(loop.version))}
+                </button>
+              </>
             )}
           </div>
 
           <button className="loops-card loops-run-summary" onClick={() => onNavigate(loopRunPath(workspace, loop.id))}>
-            <span>
+            <span className="loops-run-summary-icon" aria-hidden="true">
+              <History size={16} />
+            </span>
+            <span className="loops-run-summary-copy">
               <strong>{t("Run history")}</strong>
               <small>
                 {t("Ran")} {runs} {t(runs === 1 ? "time over the last 30 days" : "times over the last 30 days")}
@@ -252,28 +249,32 @@ export function LoopDetail({
             <ChevronRight size={16} />
           </button>
 
-          <section className="loops-card is-trigger" aria-label={t("Trigger")}>
-            <h3>{t("Trigger")}</h3>
-            <LoopTriggerEditor data={data} level={loop.level} triggerType={loop.triggerType} config={loop.triggerConfig ?? {}} readOnly />
+          <section className="loops-section" aria-label={t("Trigger")}>
+            <h3 className="loops-section-title">{t("Trigger")}</h3>
+            <div className="loops-card is-trigger">
+              <LoopTriggerEditor data={data} level={loop.level} triggerType={loop.triggerType} config={loop.triggerConfig ?? {}} readOnly />
+            </div>
           </section>
 
-          <section className="loops-card is-instructions" aria-label={t("Instructions")}>
-            <div className="loops-card-heading">
-              <h3>{t("Instructions")}</h3>
+          <section className="loops-section" aria-label={t("Instructions")}>
+            <h3 className="loops-section-title">{t("Instructions")}</h3>
+            <div className={`loops-card is-instructions${expanded || !longInstructions ? "" : " is-collapsed"}`}>
+              <div className={`loops-instructions-text${expanded || !longInstructions ? "" : " is-collapsed"}`} data-i18n-ignore>
+                {loop.instructions ? (
+                  <LoopInstructionsEditor readOnly ariaLabel={t("Instructions")} data={data} value={loop.instructions} valueData={loop.instructionsData} onNavigate={onNavigate} />
+                ) : (
+                  <span className="loops-muted">{t("No instructions")}</span>
+                )}
+              </div>
               {longInstructions && (
-                <button className="loops-compose-button" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+                <button className="loops-expand-button" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
                   {t(expanded ? "Collapse" : "Expand")}
                 </button>
               )}
             </div>
-            <div className={`loops-instructions-text${expanded || !longInstructions ? "" : " is-collapsed"}`} data-i18n-ignore>
-              {loop.instructions ? (
-                <LoopInstructionsEditor readOnly ariaLabel={t("Instructions")} data={data} value={loop.instructions} valueData={loop.instructionsData} onNavigate={onNavigate} />
-              ) : (
-                <span className="loops-muted">{t("No instructions")}</span>
-              )}
-            </div>
           </section>
+
+          <LoopPermissionsSummary data={data} loop={loop} onNavigate={onNavigate} />
         </div>
       </div>
       {agentOpen && (
@@ -305,9 +306,74 @@ export function LoopDetail({
         }}
         onRestored={(next) => {
           setLoop(next);
-          void onReload().catch(() => undefined);
+          void onReload(next).catch(() => undefined);
         }}
       />
     </main>
+  );
+}
+
+/** Linear shows the loop's permissions read-only under the instructions. */
+function LoopPermissionsSummary({ data, loop, onNavigate }: { data: BootstrapData; loop: Loop; onNavigate: (path: string) => void }) {
+  const { t } = useI18n();
+  const workspace = data.workspace.urlKey;
+  const teamIds = configStrings(loop.triggerConfig, "teamIds");
+  const entity = ENTITY_NAMES[loop.triggerType].toLowerCase();
+  const code = loop.codeAccess ?? "disabled";
+  const noop = () => undefined;
+  return (
+    <section className="loops-section" aria-label={t("Permissions")}>
+      <h3 className="loops-section-title">{t("Permissions")}</h3>
+      <div className="loops-card loops-permissions is-readonly">
+        <div className="loops-permission-row">
+          <span>
+            <strong>{t("Team access")}</strong>
+            <small>{t(LOOP_PERMISSION_COPY.teamAccess)}</small>
+          </span>
+          <span className="loops-permission-value">{loop.teamAccess === "selected" && teamIds.length ? t(`${teamIds.length} teams`) : t("All public teams")}</span>
+        </div>
+        {loop.triggerType !== "schedule" && (
+          <div className="loops-permission-row">
+            <span>
+              <strong>{t(`Allow changes outside triggering ${entity}`)}</strong>
+              <small>{t(LOOP_PERMISSION_COPY.outsideTrigger)}</small>
+            </span>
+            <Toggle disabled size="regular" checked={loop.allowChangesOutsideTrigger} label={t(`Allow changes outside triggering ${entity}`)} onChange={noop} />
+          </div>
+        )}
+        <div className="loops-permission-row">
+          <span>
+            <strong>{t("Web search")}</strong>
+            <small>{t(LOOP_PERMISSION_COPY.webSearch)}</small>
+          </span>
+          <Toggle disabled size="regular" checked={loop.webSearch ?? false} label={t("Web search")} onChange={noop} />
+        </div>
+        <div className="loops-permission-row">
+          <span>
+            <strong>{t("Access code")}</strong>
+            <small>
+              {t(LOOP_PERMISSION_COPY.codeAccess)}{" "}
+              <a
+                href={`/${workspace}/settings/loops`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onNavigate(`/${workspace}/settings/loops`);
+                }}
+              >
+                {t(LOOP_PERMISSION_COPY.codeAccessLink)}
+              </a>
+            </small>
+          </span>
+          <span className="loops-permission-value">{t(code === "readWrite" ? "Read & write" : code === "read" ? "Read" : "Disabled")}</span>
+        </div>
+        <div className="loops-permission-row">
+          <span>
+            <strong>{t("Allow changes to externally synced issues and comments")}</strong>
+            <small>{t(LOOP_PERMISSION_COPY.externalSync)}</small>
+          </span>
+          <Toggle disabled size="regular" checked={loop.allowExternalSync} label={t("Allow changes to externally synced issues and comments")} onChange={noop} />
+        </div>
+      </div>
+    </section>
   );
 }

@@ -28,7 +28,7 @@ export function LoopCreateHub({
 }: {
   data: Pick<BootstrapData, "teams" | "workspace">;
   onNavigate: (path: string) => void;
-  onReload?: () => Promise<void>;
+  onReload?: (changed?: Loop) => Promise<void>;
   variant?: "inline" | "dialog";
   onCreated?: () => void;
 }) {
@@ -75,7 +75,7 @@ export function LoopCreateHub({
       if (entry.kind === "prompt") setAttachments([]);
       onCreated?.();
       // The editor fetches the draft itself; refresh lists in the background.
-      void onReload?.().catch(() => undefined);
+      void onReload?.(loop).catch(() => undefined);
       onNavigate(`${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(loop.id)}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not create loop"));
@@ -164,19 +164,22 @@ export function LoopCreateHub({
             ? Array.from({ length: 4 }, (_, index) => <div aria-hidden="true" className="loops-template-card is-loading" key={index} />)
             : templates.map((item) => (
                 <button className="loops-template-card" key={item.id} type="button" onClick={() => setEntry({ kind: "template", template: item })}>
-                  <span className="loops-template-icon" style={{ color: loopIconColor({ templateId: item.id, icon: item.icon, color: item.color, template: true }) }}>
-                    <LoopIcon source={{ templateId: item.id, icon: item.icon, color: item.color, template: true }} size={14} />
-                  </span>
-                  <strong data-i18n-ignore>{item.name}</strong>
-                  <span className="loops-template-description" data-i18n-ignore>
-                    {item.description}
+                  {/* Linear: an inset panel with the icon, name and description; the trigger → action footer sits below it. */}
+                  <span className="loops-template-main">
+                    <span className="loops-template-icon" style={{ color: loopIconColor({ templateId: item.id, icon: item.icon, color: item.color, template: true }) }}>
+                      <LoopIcon source={{ templateId: item.id, icon: item.icon, color: item.color, template: true }} size={14} />
+                    </span>
+                    <strong data-i18n-ignore>{item.name}</strong>
+                    <span className="loops-template-description" data-i18n-ignore>
+                      {item.description}
+                    </span>
                   </span>
                   <span className="loops-template-footer">
-                    <span className="loops-template-trigger">
+                    <span className="loops-template-trigger" title={t(item.triggerLabel)}>
                       <LoopGlyph icon={item.triggerIcon || item.triggerLabel} size={14} />
-                      <span>{t(item.triggerLabel)}</span>
+                      <span className="sr-only">{t(item.triggerLabel)}</span>
                     </span>
-                    <ArrowRight aria-hidden="true" size={12} />
+                    <ArrowRight aria-hidden="true" size={14} />
                     <span className="loops-template-action">
                       <LoopGlyph icon={item.actionIcon || item.actionLabel} size={14} />
                       <span data-i18n-ignore>{item.actionLabel}</span>
@@ -210,7 +213,7 @@ export function LoopCreateDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onNavigate: (path: string) => void;
-  onReload?: () => Promise<void>;
+  onReload?: (changed?: Loop) => Promise<void>;
 }) {
   const { t } = useI18n();
   return (

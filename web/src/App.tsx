@@ -132,6 +132,7 @@ import type {
   IssueLabel,
   IssueRelationType,
   IssueUpdateInput,
+  Loop,
   Project,
   ProjectRelation,
   ThreadSubscriptionState,
@@ -158,7 +159,9 @@ import {
   workspaceBootstrapPhase,
   writeNavigationCache,
 } from "@/lib/navigation-cache";
-import { fetchWorkspacePreferences } from '@/lib/api';
+import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
+import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
+import type { AgentSession } from "@/types/flow";
 import { navigationReturnPath, navigationLabel, projectsListOriginPath, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
   IssueOptionsActions,
@@ -307,6 +310,46 @@ function App() {
       return merged;
     });
   },[]);
+  // Loop changes only touch `data.loops`: refetch the small loops list instead
+  // of the whole workspace bootstrap (which carries every issue).
+  // A saved loop is applied synchronously so the page navigated to next (e.g.
+  // the published loop's detail) never sees its stale draft copy.
+  const reloadLoops = useCallback(async (workspaceKey: string, viewerId: string, changed?: Loop) => {
+    if (changed?.id) {
+      setData(current => {
+        if (current?.workspace.urlKey !== workspaceKey || current.viewer.id !== viewerId) return current;
+        const loops = current.loops ?? [];
+        return { ...current, loops: loops.some(loop => loop.id === changed.id) ? loops.map(loop => loop.id === changed.id ? changed : loop) : [changed, ...loops] };
+      });
+    }
+    const loops = await listLoops(workspaceKey);
+    if (!Array.isArray(loops)) return;
+    setData(current => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId ? { ...current, loops } : current);
+  }, []);
+  // Agent chats and skills are the viewer's own small records: refresh just the
+  // changed chat (or the skill list) instead of the whole workspace bootstrap.
+  const reloadAgentRecords = useCallback(async (workspaceKey: string, viewerId: string, event: { type: string; aggregateId?: string }) => {
+    const applies = (current: BootstrapData | null) => current?.workspace.urlKey === workspaceKey && current.viewer.id === viewerId;
+    if (event.type.startsWith('agent.skill_')) {
+      const agentSkills = await listAgentSkills();
+      if (Array.isArray(agentSkills)) setData(current => applies(current) ? { ...current!, agentSkills } : current);
+      return;
+    }
+    // Activities are not shown from bootstrap data; nothing to refresh.
+    if (!event.type.startsWith('agent.session_') && !event.type.startsWith('agent.message_')) return;
+    const id = event.aggregateId;
+    if (!id) {
+      const agentSessions = await listAgentSessions();
+      if (Array.isArray(agentSessions)) setData(current => applies(current) ? { ...current!, agentSessions } : current);
+      return;
+    }
+    let session: AgentSession | undefined;
+    if (event.type !== 'agent.session_deleted') {
+      try { session = await getAgentSession(id); }
+      catch (error) { if (!(error instanceof ApiError && [403, 404].includes(error.status))) throw error; }
+    }
+    setData(current => applies(current) ? withAgentSession(current!, id, session) : current);
+  }, []);
   const bootstrapRequest = useRef<{ key: string; promise: Promise<BootstrapData>; controller: AbortController } | null>(null);
   useEffect(() => () => bootstrapRequest.current?.controller.abort(), []);
   const loadedBootstrapRequestKey = useRef('');
@@ -954,6 +997,14 @@ function App() {
       if (event.type === 'workspace_preferences.updated') {
         const settings = await fetchWorkspacePreferences(workspace);
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, workspaceSettings: settings } : current);
+        return;
+      }
+      if (event.type.startsWith('loop.')) {
+        await reloadLoops(workspace, viewerId);
+        return;
+      }
+      if (event.type.startsWith('agent.')) {
+        await reloadAgentRecords(workspace, viewerId, event);
         return;
       }
       const entity = event.payload?.entity;
@@ -4607,6 +4658,7 @@ function App() {
             route.kind === "team-members") && (
             <TeamOverviewPage
               data={data}
+              onLoopsReload={() => reloadLoops(data.workspace.urlKey, data.viewer.id)}
               team={data.teams.find(
                 (team) =>
                   team.key.toLowerCase() === route.teamKey.toLowerCase(),
@@ -4772,8 +4824,8 @@ function App() {
             data={data}
             onNavigate={navigateTo}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
-            onReload={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
+            onSessionChange={(id, session) =>
+              setData(current => current?.workspace.id === data.workspace.id && current.viewer.id === data.viewer.id ? withAgentSession(current, id, session) : current)
             }
           />
         )}
@@ -4789,9 +4841,7 @@ function App() {
               editing={route.kind === "loop-editor"}
               onOpenSidebar={() => setMobileSidebarOpen(true)}
               onNavigate={path => navigateTo(route.kind === 'loop-editor' && path === loopsPath(data.workspace.urlKey) ? navigationReturnPath(location.state, data.workspace.urlKey, path) : path)}
-              onReload={async () =>
-                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-              }
+              onReload={changed => reloadLoops(data.workspace.urlKey, data.viewer.id, changed)}
             />
           )}
         {page === "reviews" &&
@@ -6703,6 +6753,13 @@ function IssueDetails(
       activities={props.data.activities[props.issue.id] || []}
     />
   );
+}
+/** Replaces (or adds) one agent chat in the workspace data; no session removes it. */
+function withAgentSession(data: BootstrapData, id: string, session?: AgentSession): BootstrapData {
+  const sessions = data.agentSessions ?? [];
+  const agentSessions = !session ? sessions.filter(item => item.id !== id)
+    : sessions.some(item => item.id === id) ? sessions.map(item => item.id === id ? session : item) : [...sessions, session];
+  return { ...data, agentSessions };
 }
 function isEditableTarget(target: EventTarget | null) {
   return (

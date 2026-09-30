@@ -82,6 +82,22 @@ export function AgentSubmitIcon({ size = 16, ...props }: IconProps) {
   );
 }
 
+/** Rounded square shown in the send button while the agent works (stop). */
+export function AgentStopIcon({ size = 16, ...props }: IconProps) {
+  return (
+    <svg
+      {...props}
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      fill="currentColor"
+    >
+      <rect x="4.5" y="4.5" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 export function AgentWriteIcon({ size = 16, ...props }: IconProps) {
   return (
     <svg

@@ -157,14 +157,14 @@ export function LoopTriggerEditor({
   const set = (patch: Config) => change(triggerType, { ...config, ...patch });
   if (triggerType === "schedule")
     return (
-      <div className="loops-trigger-sentence" data-trigger="schedule">
+      <div className={`loops-trigger-sentence${readOnly ? " is-readonly" : ""}`} data-trigger="schedule">
         <TriggerTypeMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
         <ScheduleSentence config={config} onChange={set} readOnly={readOnly} />
       </div>
     );
   return (
     <div className="loops-trigger-event">
-      <div className="loops-trigger-sentence" data-trigger={triggerType}>
+      <div className={`loops-trigger-sentence${readOnly ? " is-readonly" : ""}`} data-trigger={triggerType}>
         <TriggerTypeMenu data={data} triggerType={triggerType} config={config} onChange={change} readOnly={readOnly} />
         <EventSentence data={data} triggerType={triggerType} config={config} onChange={set} readOnly={readOnly} teamScoped={level === "team"} />
       </div>
@@ -178,10 +178,11 @@ function TriggerTypeMenu({ data, triggerType, config, onChange, readOnly }: { da
   const [query, setQuery] = useState("");
   const event = loopEvent(config);
   const subject = triggerType === "issue" && event === "triage" ? "An issue" : ENTITY_NAMES[triggerType];
-  const icon = triggerType === "schedule" ? <CalendarClock size={14} /> : triggerType === "issue" ? <CircleDot size={14} /> : <FileText size={14} />;
+  const icon = triggerType === "schedule" ? <CalendarClock size={14} /> : triggerType === "issue" ? event === "triage" ? <TriageGlyph /> : <CircleDot size={14} /> : <FileText size={14} />;
+  // Linear's loop page reads the trigger as plain text: "[icon] An issue is in triage".
   if (readOnly)
     return (
-      <span className="loops-sentence-token is-subject">
+      <span className="loops-sentence-subject">
         {icon}
         {t(subject)}
       </span>
@@ -450,6 +451,9 @@ function IssueFilters({ data, config, onChange, readOnly }: { data: TriggerData;
   if (readOnly && !filters.length) return null;
   return (
     <div className="loops-trigger-filters">
+      <svg className="loops-filter-connector" viewBox="0 0 14 14" aria-hidden="true">
+        <path d="M3.5 0v6.5a3 3 0 0 0 3 3H14" fill="none" stroke="currentColor" />
+      </svg>
       {filters.map((filter, index) => {
         const field = FILTER_FIELDS.find((item) => item.id === filter.field);
         const current = valueLabel(data, filter.field, filter.value, "");
@@ -498,9 +502,8 @@ function IssueFilters({ data, config, onChange, readOnly }: { data: TriggerData;
       })}
       {!readOnly && (
         <DropdownMenu>
-          <DropdownMenuTrigger className="loops-add-filter" aria-label={t("Add filter")}>
-            <Plus size={13} />
-            {t("Add filter")}
+          <DropdownMenuTrigger className="loops-add-filter" aria-label={t("Add filter")} title={t("Add filter")}>
+            <Plus size={14} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="loops-menu">
             {FILTER_FIELDS.map((field) => (

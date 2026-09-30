@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, MoreHorizontal, Search, Settings2 } from "lucide-react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { ArrowDown, ArrowUp, Search, Settings2, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -19,10 +19,13 @@ import { LoopActionsMenu } from "./loop-actions";
 import { LoopCreateDialog, LoopCreateHub } from "./loop-create-hub";
 import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { loopOwner, useLoops } from "./loop-data";
-import { ENTITY_NAMES, isLoopDraft, loopTeamId, relativeTime, triggerSummary } from "./loop-model";
+import { ENTITY_NAMES, compactAge, isLoopDraft, loopTeamId, triggerSummary } from "./loop-model";
 
 type SortKey = "name" | "trigger" | "owner" | "runs" | "lastRun";
 type Column = Exclude<SortKey, "name">;
+/** Linear's column widths; runs and last executed are right-aligned. */
+const COLUMN_WIDTH: Record<Column, string> = { trigger: "100px", owner: "140px", runs: "80px", lastRun: "120px" };
+const END_COLUMNS: Column[] = ["runs", "lastRun"];
 const COLUMNS: { id: Column; label: string }[] = [
   { id: "trigger", label: "Trigger" },
   { id: "owner", label: "Owner" },
@@ -45,7 +48,7 @@ export function LoopList({
   teamId?: string;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
-  onReload: () => Promise<void>;
+  onReload: (changed?: Loop) => Promise<void>;
   /** `/loops/new` without a draft opens the hub dialog. */
   createOpen?: boolean;
 }) {
@@ -59,6 +62,7 @@ export function LoopList({
   const [typeFilters, setTypeFilters] = useState<LoopTriggerType[]>([]);
   const [hidden, setHidden] = useState<Column[]>([]);
   const [grouped, setGrouped] = useState(true);
+  const [collapsed, setCollapsed] = useState<string[]>([]);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "name", desc: false });
   const [createOpen, setCreateOpen] = useState(Boolean(createOpenProp));
   useEffect(() => {
@@ -130,7 +134,10 @@ export function LoopList({
     return result;
   }, [data.teams, grouped, loops]);
 
-  const replace = (next: Loop) => setLoops(allLoops.map((loop) => (loop.id === next.id ? next : loop)));
+  const replace = (next: Loop) => {
+    setLoops(allLoops.map((loop) => (loop.id === next.id ? next : loop)));
+    void onReload(next).catch(() => undefined);
+  };
   const drop = (id: string) => {
     setLoops(allLoops.filter((loop) => loop.id !== id));
     void onReload().catch(() => undefined);
@@ -142,7 +149,13 @@ export function LoopList({
   const shown = COLUMNS.filter((column) => !hidden.includes(column.id));
   const empty = visible.length === 0;
   const Container = embedded ? "div" : "main";
-  const gridTemplate = `minmax(0,1fr) ${shown.map((column) => (column.id === "trigger" ? "150px" : column.id === "owner" ? "170px" : column.id === "runs" ? "96px" : "124px")).join(" ")} 32px`;
+  const gridTemplate = ["minmax(0,1fr)", ...shown.map((column) => COLUMN_WIDTH[column.id])].join(" ");
+  const filtering = Boolean(query.trim() || statusFilters.length || typeFilters.length);
+  const clearFilters = () => {
+    setQuery("");
+    setStatusFilters([]);
+    setTypeFilters([]);
+  };
 
   return (
     <Container className={embedded ? "loops-embedded" : "main-panel loops-page"} aria-label={t("Loops")} role={embedded ? "region" : undefined}>
@@ -173,14 +186,22 @@ export function LoopList({
                 </button>
               ))}
             </div>
+            {/* The team page's Loops tab has no search field in Linear. */}
+            {!embedded && (
             <label className="loops-search is-inline">
-              <Search size={14} />
+              <Search size={16} />
               <input type="search" aria-label={t("Find loops…")} placeholder={t("Find loops…")} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === "Escape" && setQuery("")} />
+              {query && (
+                <button type="button" className="loops-search-clear" aria-label={t("Clear search")} onClick={() => setQuery("")}>
+                  <X size={12} />
+                </button>
+              )}
             </label>
+            )}
           </div>
           <div className="loops-toolbar-right">
             {embedded && (
-              <button className="loops-new-button" onClick={() => setCreateOpen(true)}>
+              <button className="loops-new-button is-filled" onClick={() => setCreateOpen(true)}>
                 <PlusIcon />
                 {t("New loop")}
               </button>
@@ -229,6 +250,8 @@ export function LoopList({
         <div className="loops-hub-scroll">
           <LoopCreateHub data={data} onNavigate={onNavigate} onReload={onReload} />
         </div>
+      ) : loops.length === 0 && filtering ? (
+        <LoopsFilteredEmpty hiddenCount={visible.length - loops.length} onClear={clearFilters} />
       ) : (
         <div className="loops-table" role="table" aria-label={t("Loops")} style={{ ["--loops-columns" as string]: gridTemplate }}>
           <div className="loops-table-head" role="row">
@@ -236,13 +259,17 @@ export function LoopList({
               {t("Name")}
               {sort.key === "name" && (sort.desc ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
             </button>
-            {shown.map((column) => (
-              <button key={column.id} role="columnheader" className={sort.key === column.id ? "is-sorted" : undefined} onClick={() => sortBy(column.id)}>
-                {t(column.label)}
-                {sort.key === column.id && (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
-              </button>
-            ))}
-            <span role="columnheader" aria-label={t("Actions")} />
+            {shown.map((column) => {
+              const end = END_COLUMNS.includes(column.id);
+              const arrow = sort.key === column.id && (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />);
+              return (
+                <button key={column.id} role="columnheader" className={[sort.key === column.id ? "is-sorted" : "", end ? "is-end" : ""].filter(Boolean).join(" ") || undefined} onClick={() => sortBy(column.id)}>
+                  {end && arrow}
+                  {t(column.label)}
+                  {!end && arrow}
+                </button>
+              );
+            })}
           </div>
           {loops.length === 0 && <p className="loops-table-empty">{t(tab === "mine" && !query && !statusFilters.length && !typeFilters.length ? "You don't own any loops yet." : "No loops match.")}</p>}
           {groups.map((group) =>
@@ -250,17 +277,24 @@ export function LoopList({
               <div className="loops-group" role="rowgroup" key={group.key}>
                 {grouped && (
                   <div className="loops-group-row" role="row">
-                    <span className="loops-group-title">
+                    <button
+                      type="button"
+                      className="loops-group-title"
+                      aria-expanded={!collapsed.includes(group.key)}
+                      onClick={() => setCollapsed((current) => toggle(current, group.key))}
+                    >
+                      <svg className="loops-group-chevron" viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M4.5 6.25h7L8 10.25z" fill="currentColor" />
+                      </svg>
                       {group.team ? <TeamIcon team={group.team} size={14} /> : <ViewGlyph color="currentColor" icon="Team" />}
                       <strong data-i18n-ignore={group.team ? true : undefined}>{group.team ? group.team.name : t("Workspace")}</strong>
-                      <span className="loops-group-count">{group.loops.length}</span>
-                    </span>
+                    </button>
                     <button className="loops-group-add" aria-label={t("New loop")} onClick={() => setCreateOpen(true)}>
                       <PlusIcon />
                     </button>
                   </div>
                 )}
-                {group.loops.map((loop) => (
+                {!(grouped && collapsed.includes(group.key)) && group.loops.map((loop) => (
                   <LoopRow key={loop.id} data={data} loop={loop} columns={shown.map((column) => column.id)} onOpen={() => open(loop)} onNavigate={onNavigate} onChanged={replace} onDeleted={() => drop(loop.id)} />
                 ))}
               </div>
@@ -301,21 +335,29 @@ function LoopRow({
   const { t } = useI18n();
   const owner = loopOwner(data, loop);
   const draft = isLoopDraft(loop);
+  // Linear has no ⋯ button on list rows; the loop menu opens where the row is right-clicked.
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number }>();
+  const openMenu = (event: MouseEvent<HTMLElement>) => {
+    // Events from the portalled menu bubble through React; only the row itself opens it.
+    if (!event.currentTarget.contains(event.target as Node)) return;
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    // The keyboard context-menu key reports no pointer position; anchor it to the row instead.
+    setMenuAt(event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : { x: rect.left + 46, y: rect.bottom });
+  };
   return (
-    <div className={`loops-table-row${!draft && !loop.enabled ? " is-disabled" : ""}`} role="row">
+    <div className={`loops-table-row${!draft && !loop.enabled ? " is-disabled" : ""}${menuAt ? " is-menu-open" : ""}`} role="row" onContextMenu={openMenu}>
       <button className="loops-row-link" onClick={onOpen} aria-label={loop.name || t("Untitled loop")} />
       <span className="loops-cell-name" role="cell">
-        <span className="loops-row-icon" style={{ color: loopIconColor(loop) }}>
-          <LoopIcon source={loop} size={16} />
+        <span className="loops-row-title">
+          <span className="loops-row-icon" style={{ color: loopIconColor(loop) }}>
+            <LoopIcon source={loop} size={16} />
+          </span>
+          <strong data-i18n-ignore={loop.name ? true : undefined}>{loop.name || t("Untitled loop")}</strong>
+          {draft && <span className="loops-badge">{t("Draft")}</span>}
+          {!draft && !loop.enabled && <span className="loops-badge">{t("Disabled")}</span>}
         </span>
-        <span className="loops-row-copy">
-          <strong data-i18n-ignore={loop.name ? true : undefined}>
-            {loop.name || t("Untitled loop")}
-            {draft && <span className="loops-badge">{t("Draft")}</span>}
-            {!draft && !loop.enabled && <span className="loops-badge">{t("Disabled")}</span>}
-          </strong>
-          {loop.description && <small data-i18n-ignore>{loop.description}</small>}
-        </span>
+        {loop.description && <small data-i18n-ignore>{loop.description}</small>}
       </span>
       {columns.map((column) =>
         column === "trigger" ? (
@@ -328,29 +370,50 @@ function LoopRow({
             <span data-i18n-ignore>{owner?.displayName || owner?.name}</span>
           </span>
         ) : column === "runs" ? (
-          <span key={column} role="cell" className="loops-cell-muted is-number">
+          <span key={column} role="cell" className="loops-cell-muted is-number is-end">
             {draft ? "–" : (loop.runCount30d ?? 0)}
           </span>
         ) : (
-          <span key={column} role="cell" className="loops-cell-muted" title={loop.lastRunAt ? new Date(loop.lastRunAt).toLocaleString() : undefined}>
-            {loop.lastRunAt ? relativeTime(loop.lastRunAt, undefined, t) : t("Never")}
+          <span key={column} role="cell" className="loops-cell-muted is-end" title={loop.lastRunAt ? new Date(loop.lastRunAt).toLocaleString() : undefined}>
+            {loop.lastRunAt ? compactAge(loop.lastRunAt) : t("Never")}
           </span>
         ),
       )}
-      <span role="cell" className="loops-cell-actions">
+      {menuAt && (
         <LoopActionsMenu
+          align="start"
           data={data}
           loop={loop}
+          open
+          onOpenChange={(next) => !next && setMenuAt(undefined)}
           onNavigate={onNavigate}
           onChanged={onChanged}
           onDeleted={onDeleted}
-          trigger={
-            <button className="loops-row-menu" aria-label={t("Open actions")}>
-              <MoreHorizontal size={16} />
-            </button>
-          }
+          trigger={<span className="loops-row-menu-anchor" aria-hidden="true" style={{ left: menuAt.x, top: menuAt.y }} />}
         />
-      </span>
+      )}
+    </div>
+  );
+}
+
+/** Linear's "No loops matching the filters" state with the hidden count and Clear Filters. */
+function LoopsFilteredEmpty({ hiddenCount, onClear }: { hiddenCount: number; onClear: () => void }) {
+  const { t } = useI18n();
+  return (
+    <div className="loops-filtered-empty">
+      <img alt="" aria-hidden="true" className="loops-filtered-empty-art" src="/flow-filter-empty.svg" />
+      <h2>{t("No loops matching the filters")}</h2>
+      <div className="loops-filtered-empty-notice">
+        <span>
+          <strong>{t(hiddenCount === 1 ? "{count} loop" : "{count} loops").replace("{count}", String(hiddenCount))}</strong> <small>{t("hidden by filters")}</small>
+        </span>
+        <button type="button" onClick={onClear}>
+          {t("Clear Filters")}
+        </button>
+        <button type="button" aria-label={t("Clear filters")} onClick={onClear}>
+          <X size={12} />
+        </button>
+      </div>
     </div>
   );
 }

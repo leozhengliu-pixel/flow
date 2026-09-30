@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRightLeft, Copy, GitCommitVertical, History, Link2, Play, Power, PowerOff, Star, Trash2, UserRound } from "lucide-react";
+import { ArrowRightLeft, Copy, GitCommitVertical, History, Link2, Pencil, Play, Power, PowerOff, Star, Trash2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -16,14 +16,14 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { deleteLoop, duplicateLoop, updateLoop } from "@/lib/api";
-import { loopPath, loopRunPath, loopsPath, newLoopPath } from "@/lib/app-routes";
+import { editLoopPath, loopPath, loopRunPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import { findFavorite, toggleFavoriteFor } from "@/lib/favorites";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop } from "@/types/flow";
 import { isLoopDraft, loopTeamId } from "./loop-model";
 import { activeTeams, copyText, loopUrl } from "./loop-data";
 
-/** Linear's loop ⋯ menu: Run loop on… · Disable · Duplicate · Move ▸ · Change owner ▸ · Favorite · Copy ▸ · Show run history · Show published versions · Delete. */
+/** Linear's loop menu (⋯ and right-click): Run · Disable │ Edit · Duplicate · Move ▸ · Change owner ▸ │ Favorite · Copy ▸ │ Show run history · Show published versions │ Delete. */
 export function LoopActionsMenu({
   data,
   loop,
@@ -34,6 +34,8 @@ export function LoopActionsMenu({
   onRun,
   onShowVersions,
   align = "end",
+  open,
+  onOpenChange,
 }: {
   data: BootstrapData;
   loop: Loop;
@@ -46,6 +48,9 @@ export function LoopActionsMenu({
   /** Opens the versions view in place; without it the menu opens the loop page with `?versions=1`. */
   onShowVersions?: () => void;
   align?: "start" | "end";
+  /** Controlled open state, for the list's right-click menu. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { t } = useI18n();
   const workspace = data.workspace.urlKey;
@@ -86,7 +91,7 @@ export function LoopActionsMenu({
   };
   const people = data.users.filter((user) => user.active !== false && !user.app);
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="loops-menu loops-actions-menu">
         {!draft && onRun && (
@@ -107,11 +112,17 @@ export function LoopActionsMenu({
             {t("Continue editing")}
           </DropdownMenuItem>
         )}
+        <DropdownMenuSeparator />
+        {!draft && (
+          <DropdownMenuItem onSelect={() => onNavigate(editLoopPath(workspace, loop.id))}>
+            <Pencil size={14} />
+            {t("Edit")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem onSelect={() => void duplicate()}>
           <Copy size={14} />
           {t("Duplicate")}
         </DropdownMenuItem>
-        <DropdownMenuSeparator />
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>
             <ArrowRightLeft size={14} />
@@ -144,6 +155,7 @@ export function LoopActionsMenu({
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuSeparator />
         {!draft && (
           <DropdownMenuItem
             onSelect={() =>
@@ -167,6 +179,7 @@ export function LoopActionsMenu({
             <DropdownMenuItem onSelect={() => void copyText(loop.id, t("ID copied"))}>{t("Copy ID")}</DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        {!draft && <DropdownMenuSeparator />}
         {!draft && (
           <DropdownMenuItem onSelect={() => onNavigate(loopRunPath(workspace, loop.id))}>
             <History size={14} />
@@ -180,7 +193,7 @@ export function LoopActionsMenu({
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="is-danger" onSelect={() => void remove()}>
+        <DropdownMenuItem onSelect={() => void remove()}>
           <Trash2 size={14} />
           {t("Delete")}
         </DropdownMenuItem>

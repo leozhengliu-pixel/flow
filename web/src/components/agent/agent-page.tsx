@@ -29,6 +29,7 @@ import {
   AgentAttachIcon,
   AgentChevronDownIcon,
   AgentSkillsIcon,
+  AgentStopIcon,
   AgentSubmitIcon,
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
@@ -56,13 +57,14 @@ export function AgentPage({
   data,
   onNavigate,
   onOpenSidebar,
-  onReload,
+  onSessionChange,
 }: {
   chatSlug?: string;
   data: BootstrapData;
   onNavigate: (href: string) => void;
   onOpenSidebar: () => void;
-  onReload: () => Promise<void>;
+  /** Saves a chat the page changed into the workspace data (no session removes it), without reloading the workspace. */
+  onSessionChange: (id: string, session?: AgentSession) => void;
 }) {
   const { t } = useI18n();
   const [sessions, setSessions] = useState(data.agentSessions ?? []),
@@ -78,6 +80,8 @@ export function AgentPage({
     [editingId, setEditingId] = useState<string>(),
     [approvalBusy, setApprovalBusy] = useState<string>(),
     [activeStreamId, setActiveStreamId] = useState<string>(),
+    // The message just sent, shown with a working indicator until the server's stream catches up.
+    [pending, setPending] = useState<AgentSession>(),
     [attachments, setAttachments] = useState<File[]>([]);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -126,6 +130,7 @@ export function AgentPage({
     });
   }, [currentSummary]);
   const current = useDeferredHydratedConversation(deferredConversation) ?? undefined;
+  const shown = pending ?? current;
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
@@ -143,20 +148,37 @@ export function AgentPage({
     if (editorRef.current && editorRef.current.textContent !== value)
       editorRef.current.textContent = value;
   };
-  const commitSession = (next: AgentSession) => {
+  const saveSession = (next: AgentSession) => {
     setSessions((list) => [
       next,
       ...list.filter((item) => item.id !== next.id),
     ]);
+    onSessionChange(next.id, next);
+  };
+  const commitSession = (next: AgentSession) => {
+    saveSession(next);
     setSelectedSkills(next.skillIds);
     onNavigate(agentPath(data.workspace.urlKey, next.slugId));
-    void onReload();
+  };
+  // The generated title can land after the reply: re-read just this chat (never the whole workspace) until it does.
+  const refreshTitle = (sent: AgentSession) => {
+    let attempt = 0;
+    const poll = () => void Promise.resolve().then(() => getAgentSession(sent.id)).then((latest) => {
+      if (latest.title !== sent.title) {
+        setSessions((list) => list.map((item) => (item.id === latest.id ? { ...item, title: latest.title } : item)));
+        onSessionChange(latest.id, latest);
+      } else if (++attempt < titleRetryDelays.length) window.setTimeout(poll, titleRetryDelays[attempt]);
+    }).catch(() => undefined);
+    window.setTimeout(poll, titleRetryDelays[0]);
   };
   const send = async (message = input) => {
     message = message.trim();
     if (!message || busy || !status?.enabled) return;
     setBusy(true);
     setError(undefined);
+    // Linear shows the sent message and its working state at once; the stream replaces this copy when it starts.
+    setPending(optimisticAgentTurn(current, message, editingId, mentions));
+    let streamed = current, started = false;
     try {
       const attachmentContext = await Promise.all(
         attachments.map(agentFileContext),
@@ -166,21 +188,21 @@ export function AgentPage({
         : message;
       const controller = new AbortController();
       streamAbortRef.current = controller;
-      let streamed = current;
       const onEvent = (event: AgentStreamEvent) => {
           streamed = applyAgentStreamEvent(streamed, event);
           if (!streamed) return;
           const next = streamed;
+          setPending(undefined);
           setSessions((list) => [next, ...list.filter((item) => item.id !== next.id)]);
           if (event.type === "session.started") {
+            started = true;
             setActiveStreamId(next.id);
             onNavigate(agentPath(data.workspace.urlKey, next.slugId));
           }
           if (event.type === "session.completed") {
+            onSessionChange(next.id, next);
             onNavigate(agentPath(data.workspace.urlKey, next.slugId));
-            void onReload();
-            // The generated chat title can land after the reply; pick it up without a manual refresh.
-            if (next.messages.length <= 2) for (const delay of [8000, 25000]) window.setTimeout(() => void onReload(), delay);
+            if (next.messages.length <= 2) refreshTitle(next);
           }
       };
       const mentioned = {
@@ -200,10 +222,11 @@ export function AgentPage({
       clearAgentDraft(agentDraftKey);
       setEditingId(undefined);
     } catch (reason) {
+      setPending(undefined);
       writeInput(message);
       if (reason instanceof DOMException && reason.name === "AbortError") {
-        setSessions(list => list.map(markAgentSessionStopped));
-        void onReload();
+        // Keep the stopped chat (the server already saved the message) in the workspace data too.
+        if (started && streamed) saveSession(markAgentSessionStopped(streamed));
         return;
       }
       setError(
@@ -318,8 +341,8 @@ export function AgentPage({
               className={styles.switcher}
               type="button"
             >
-              <h2 data-i18n-ignore={Boolean(current) || undefined}>
-                {current?.title ?? t("New chat")}
+              <h2 data-i18n-ignore={Boolean(shown) || undefined}>
+                {shown?.title ?? t("New chat")}
               </h2>
               <AgentChevronDownIcon />
             </button>
@@ -445,11 +468,8 @@ export function AgentPage({
           onClick={() =>
             void updateAgentSession(current.id, {
               location: "toolbar",
-            }).then(async (next) => {
-              setSessions((list) =>
-                list.map((item) => (item.id === next.id ? next : item)),
-              );
-              await onReload();
+            }).then((next) => {
+              saveSession(next);
               newChat();
             })
           }
@@ -458,15 +478,15 @@ export function AgentPage({
           <PanelTop />
         </button>}
       </header>
-      <section className={`${styles.body}${current ? ` ${styles.hasConversation}` : ""}`}>
-        {current ? (
+      <section className={`${styles.body}${shown ? ` ${styles.hasConversation}` : ""}`}>
+        {shown ? (
           <Conversation
             busy={busy}
             data={data}
             onSuggestion={status?.enabled ? (message) => void send(message) : undefined}
-            draftProject={data.projects.find((project) => current.projectIds?.includes(project.id))}
-            draftContext={data.projects.find((project) => current.projectIds?.includes(project.id))?.name ?? current.title}
-            session={current}
+            draftProject={data.projects.find((project) => shown.projectIds?.includes(project.id))}
+            draftContext={data.projects.find((project) => shown.projectIds?.includes(project.id))?.name ?? shown.title}
+            session={shown}
             editingId={editingId}
             onRetry={(message) => void send(message)}
             onToolApproval={decideToolApproval}
@@ -493,7 +513,7 @@ export function AgentPage({
             </button>
           </div>
         )}
-        <div className={`${styles.composer}${current ? ` ${styles.conversationComposer}` : ""}`}>
+        <div className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}>
           {attachments.length > 0 && (
             <div className={styles.attachments}>
               {attachments.map((file, index) => (
@@ -518,7 +538,7 @@ export function AgentPage({
               ariaLabel={t("Send a message to Flow AI")}
               data={data}
               disabled={busy}
-              placeholder={current ? t("Reply…") : t("Ask Flow…")}
+              placeholder={shown ? t("Reply…") : t("Ask Flow…")}
               value={input}
               onChange={(value, next) => { setInput(value); setMentions(next); }}
               onSubmit={() => void send()}
@@ -605,8 +625,17 @@ export function AgentPage({
               }}
               type="file"
             />
-            {busy ? <button aria-label={t("Stop generating")} onClick={() => streamAbortRef.current?.abort()} type="button"><X /></button> : <button
+            {busy ? <button
+              aria-label={t("Stop generating")}
+              className={styles.sendButton}
+              data-state="working"
+              onClick={() => streamAbortRef.current?.abort()}
+              type="button"
+            ><AgentStopIcon /></button> : <button
               aria-label={t("Submit comment")}
+              className={styles.sendButton}
+              // Like Linear, an empty composer keeps the quiet send button (hover included); text turns it accent.
+              data-state={!status?.enabled ? "unavailable" : input.trim() ? "ready" : "empty"}
               disabled={!input.trim() || !status?.enabled}
               onClick={() => void send()}
               type="button"
@@ -635,6 +664,7 @@ export function AgentPage({
                     setSessions((list) =>
                       list.filter((item) => item.id !== deleteTarget.id),
                     );
+                    onSessionChange(deleteTarget.id);
                     setDeleteTarget(undefined);
                     newChat();
                   })
@@ -783,6 +813,27 @@ function AgentMessageText({ content, data, draftContext, draftProject, onSuggest
     {draftCard}
     {onSuggestion && <AgentSuggestionChips onSelect={onSuggestion} suggestions={answer.suggestions}/>}
   </>;
+}
+
+/** Retry schedule (ms) for picking up a chat title generated after the reply. */
+const titleRetryDelays = [1500, 5000, 12000, 25000];
+
+/**
+ * The conversation as it looks the moment a message is sent: the user's message (replacing the edited one and
+ * everything after it) followed by an empty assistant reply, which renders as the working indicator.
+ */
+function optimisticAgentTurn(session: AgentSession | undefined, message: string, editingId?: string, mentions: AgentMention[] = []): AgentSession {
+  const now = new Date().toISOString();
+  const earlier = session?.messages ?? [];
+  const kept = editingId && earlier.some((item) => item.id === editingId) ? earlier.slice(0, earlier.findIndex((item) => item.id === editingId)) : earlier;
+  const stamp = Date.now();
+  const messages: AgentMessage[] = [
+    ...kept,
+    { id: `pending-user-${stamp}`, role: "user", content: message, mentions: mentions.length ? mentions.map(({ type, id, label }) => ({ type, id, label })) : undefined, createdAt: now },
+    { id: `pending-reply-${stamp}`, role: "assistant", content: "", parts: [], createdAt: now },
+  ];
+  if (session) return { ...session, messages, updatedAt: now };
+  return { id: `pending-${stamp}`, slugId: "", userId: "", title: message.split("\n")[0].slice(0, 80), favorite: false, location: "page", issueIds: [], skillIds: [], messages, createdAt: now, updatedAt: now };
 }
 
 function lastUserMessage(messages: AgentMessage[], before: number) {

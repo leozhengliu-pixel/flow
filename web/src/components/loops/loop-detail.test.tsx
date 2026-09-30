@@ -87,6 +87,10 @@ describe('LoopDetail', () => {
     expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('An issueis in triage')
     expect(screen.getByRole('region', { name: 'Trigger' })).toHaveTextContent('No assignee')
     expect(screen.getByRole('region', { name: 'Instructions' })).toHaveTextContent('Route every issue.')
+    // Linear lists the loop's permissions read-only under the instructions.
+    const permissions = screen.getByRole('region', { name: 'Permissions' })
+    expect(permissions).toHaveTextContent('All public teams')
+    expect(within(permissions).getByRole('checkbox', { name: 'Web search' })).toBeDisabled()
   })
 
   it('runs an event loop on a picked issue and opens the run page', async () => {

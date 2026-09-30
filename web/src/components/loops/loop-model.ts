@@ -220,6 +220,21 @@ export function relativeTime(value: string | undefined, now = Date.now(), t: Tra
   return t(date.toLocaleDateString("en-US", sameYear ? { month: "short", day: "numeric" } : { month: "short", day: "numeric", year: "numeric" }));
 }
 
+/** Linear's compact list age: "4m", "15h", "3d", "2mo", "1y". */
+export function compactAge(value: string | undefined, now = Date.now()) {
+  if (!value) return "";
+  const time = Date.parse(value);
+  if (!Number.isFinite(time)) return "";
+  const minutes = Math.max(0, Math.floor((now - time) / 60_000));
+  if (minutes < 60) return `${Math.max(1, minutes)}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d`;
+  if (days < 365) return `${Math.floor(days / 30)}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
+
 /** "Today", "Yesterday" or "Sep 12" for run lists. */
 export function dayLabel(value: string, now = new Date()) {
   const date = new Date(value);
@@ -254,3 +269,13 @@ export function instructionsPlaceholder(triggerType: LoopTriggerType) {
   const entity = ENTITY_NAMES[triggerType].toLowerCase();
   return `For example, review the ${entity}'s changes, check for blockers, and suggest next steps…`;
 }
+
+/** Linear's permission row copy, shared by the loop page (read-only) and the editor. */
+export const LOOP_PERMISSION_COPY = {
+  teamAccess: "Choose which team's data are available to this loop",
+  outsideTrigger: "Allow this loop to modify data beyond the item that triggered it",
+  webSearch: "Allow this loop to search the public web for current information and cite sources",
+  codeAccess: "Allow this loop to read or write code and pull requests from",
+  codeAccessLink: "configured repositories",
+  externalSync: "Changes sync through integrations and may be visible outside your workspace",
+} as const;

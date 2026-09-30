@@ -290,6 +290,17 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 	}
 	var created domain.Loop
 	var runs []domain.LoopRun
+	var referenced []domain.Issue
+	if len(input.InstructionsData) == 0 {
+		markdowns := []string{}
+		if input.Instructions != nil {
+			markdowns = append(markdowns, *input.Instructions)
+		}
+		if input.TemplateID != nil && *input.TemplateID != "" {
+			markdowns = append(markdowns, loopTemplateByID(*input.TemplateID).Instructions)
+		}
+		referenced = s.loopReferencedIssues(r, markdowns...)
+	}
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "loop.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		created = domain.Loop{ID: fmt.Sprintf("loop_%d", now.UnixNano()), Status: "draft", Icon: "Automation", Color: "#d9b84b", Level: "workspace", TriggerType: "schedule", TriggerConfig: defaultLoopTriggerConfig("schedule", now), ConnectorIDs: []string{}, TeamAccess: "allPublic", AllowChangesOutsideTrigger: true, CodeAccess: "disabled", OwnerID: data.Viewer.ID, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
@@ -307,7 +318,7 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		publish := input.Status != nil && *input.Status == "published"
 		applyLoopInput(&created, input)
 		if len(input.InstructionsData) == 0 && strings.TrimSpace(created.Instructions) != "" {
-			created.InstructionsData = loopMarkdownDocument(data, created.Instructions)
+			created.InstructionsData = loopMarkdownDocumentWithIssues(data, created.Instructions, referenced)
 		}
 		if publish && input.Enabled == nil {
 			created.Enabled = true
@@ -362,6 +373,10 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 	var updated domain.Loop
 	var runs []domain.LoopRun
 	describe := false
+	var referenced []domain.Issue
+	if input.Instructions != nil && len(input.InstructionsData) == 0 {
+		referenced = s.loopReferencedIssues(r, *input.Instructions)
+	}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "loop.updated", id, input, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, id)
 		if loop == nil {
@@ -379,7 +394,7 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		if input.Instructions != nil && len(input.InstructionsData) == 0 {
 			next.InstructionsData = nil
 			if strings.TrimSpace(next.Instructions) != "" {
-				next.InstructionsData = loopMarkdownDocument(data, next.Instructions)
+				next.InstructionsData = loopMarkdownDocumentWithIssues(data, next.Instructions, referenced)
 			}
 		}
 		if input.Status != nil {

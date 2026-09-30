@@ -54,7 +54,10 @@ describe('LoopList', () => {
     expect(triage).toHaveTextContent('Triage')
     expect(triage).toHaveTextContent('Viewer')
     expect(triage).toHaveTextContent('4')
-    expect(triage).toHaveTextContent('2h ago')
+    // Linear's compact age in the right-aligned "Last executed" column.
+    expect(within(triage).getAllByRole('cell').at(-1)).toHaveTextContent(/^2h$/)
+    // No ⋯ button on rows: the loop menu opens on right-click.
+    expect(within(triage).queryByRole('button', { name: 'Open actions' })).toBeNull()
     // The viewer's own draft is listed and marked; other people's drafts stay private.
     expect(screen.getByText('Draft')).toBeVisible()
     expect(screen.queryByText('Someone else draft')).toBeNull()
@@ -80,6 +83,34 @@ describe('LoopList', () => {
     await user.type(search, 'weekly')
     expect(screen.getByText('Weekly wrap')).toBeVisible()
     expect(screen.queryByText('Triage agent')).toBeNull()
+  })
+
+  it('opens the loop menu on right-click and collapses groups', async () => {
+    const user = userEvent.setup()
+    renderList()
+    const groups = screen.getAllByRole('rowgroup')
+    const triage = within(groups[1]).getAllByRole('row')[1]
+    await user.pointer({ keys: '[MouseRight]', target: triage })
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'Edit' })).toBeVisible()
+    expect(within(menu).getByRole('menuitem', { name: 'Show run history' })).toBeVisible()
+    await user.keyboard('{Escape}')
+    const toggle = within(groups[1]).getByRole('button', { name: /Test team/ })
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Triage agent')).toBeNull()
+  })
+
+  it('shows the filtered empty state with Clear Filters', async () => {
+    const user = userEvent.setup()
+    renderList()
+    await user.type(screen.getByRole('searchbox', { name: 'Find loops…' }), 'zzz')
+    expect(screen.getByRole('heading', { name: 'No loops matching the filters' })).toBeVisible()
+    expect(screen.getByText('3 loops')).toBeVisible()
+    expect(screen.queryByRole('table')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Clear Filters' }))
+    expect(screen.getByRole('table', { name: 'Loops' })).toBeVisible()
   })
 
   it('shows the creation hub inline when there are no loops', async () => {

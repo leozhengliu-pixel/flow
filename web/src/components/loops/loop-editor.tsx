@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Plus, Settings2, Sparkles, X } from "lucide-react";
+import { ChevronDown, Link2, Plus, Settings2, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -18,10 +18,11 @@ import { loopPath, loopsPath, newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopCodeAccess, LoopTriggerType } from "@/types/flow";
 import { LoopAgentPanel } from "./loop-agent-panel";
+import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
-import { activeTeams, loopBuilderFirstMessage, markLoopAgentHandoff, takeLoopAgentAutostart, useLoopConfig } from "./loop-data";
-import { ENTITY_NAMES, configStrings, defaultScheduleConfig, instructionsPlaceholder, isLoopDraft, loopTeamId } from "./loop-model";
+import { activeTeams, copyText, loopBuilderFirstMessage, loopUrl, markLoopAgentHandoff, takeLoopAgentAutostart, useLoopConfig } from "./loop-data";
+import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, defaultScheduleConfig, instructionsPlaceholder, isLoopDraft, loopTeamId } from "./loop-model";
 import { LoopTriggerEditor } from "./loop-trigger";
 
 const DEFAULT_COLOR = "#d9b84b";
@@ -121,7 +122,7 @@ export function LoopEditor({
   loopId?: string;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
-  onReload: () => Promise<void>;
+  onReload: (changed?: Loop) => Promise<void>;
 }) {
   const { t } = useI18n();
   const legacyDraft = draftId ? data.drafts.find((item) => item.id === draftId && item.type === "loop") : undefined;
@@ -188,7 +189,7 @@ function LoopEditorForm({
   refetch: () => Promise<Loop | undefined>;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
-  onReload: () => Promise<void>;
+  onReload: (changed?: Loop) => Promise<void>;
 }) {
   const { t } = useI18n();
   const draft = isLoopDraft(loop);
@@ -233,7 +234,9 @@ function LoopEditorForm({
 
   const finish = async (next: Loop) => {
     onLoopChange(next);
-    await onReload().catch(() => undefined);
+    // The saved loop replaces its cached copy synchronously; the loops list
+    // refreshes in the background so navigation never waits on it.
+    void onReload(next).catch(() => undefined);
     onNavigate(loopPath(workspace, next.id));
   };
 
@@ -277,23 +280,30 @@ function LoopEditorForm({
         <button className="loops-mobile-menu" aria-label={t("Open sidebar")} data-sidebar-trigger onClick={onOpenSidebar}>
           <Settings2 />
         </button>
-        <nav className="loops-breadcrumb" aria-label={t("Breadcrumb")}>
-          <a
-            href={loopsPath(workspace)}
-            onClick={(event) => {
-              event.preventDefault();
-              onNavigate(loopsPath(workspace));
-            }}
-          >
-            {t("Loops")}
-          </a>
-          <span aria-hidden="true">›</span>
-          {draft ? (
+        {draft ? (
+          <nav className="loops-breadcrumb" aria-label={t("Breadcrumb")}>
+            <a
+              href={loopsPath(workspace)}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(loopsPath(workspace));
+              }}
+            >
+              {t("Loops")}
+            </a>
+            <span aria-hidden="true">›</span>
             <h2>{t("New loop")}</h2>
-          ) : (
-            <h2 data-i18n-ignore={loop.name ? true : undefined}>{loop.name || t("Untitled loop")}</h2>
-          )}
-        </nav>
+          </nav>
+        ) : (
+          <>
+            <LoopBreadcrumb data={data} loop={loop} loopId={loop.id} current={t("Edit")} onNavigate={onNavigate} />
+            <div className="loops-topbar-actions">
+              <button className="loops-icon-button is-plain" aria-label={t("Copy link")} title={t("Copy link")} onClick={() => void copyText(loopUrl(workspace, loop), t("Link copied"))}>
+                <Link2 size={14} />
+              </button>
+            </div>
+          </>
+        )}
       </header>
       <div className="loops-editor-body">
         <div className="loops-editor-scroll">
@@ -308,6 +318,8 @@ function LoopEditorForm({
               triggerClassName="loops-icon-picker"
             />
             <input aria-label={t("Loop name")} className="loops-name-input" value={form.name} onChange={(event) => update({ name: event.target.value })} placeholder={t("Loop name")} />
+            {/* Linear picks the location while creating; published loops move from the loop menu. */}
+            {draft && (
             <DropdownMenu>
               <DropdownMenuTrigger className="loops-level-button" aria-label={t("Loop level")}>
                 {levelTeam ? <TeamIcon team={levelTeam} size={14} /> : <ViewGlyph color="currentColor" icon="Team" />}
@@ -329,21 +341,25 @@ function LoopEditorForm({
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            )}
           </div>
 
-          <section className="loops-card is-trigger" aria-label={t("Trigger")}>
-            <h3>{t("Trigger")}</h3>
-            <LoopTriggerEditor data={data} level={form.level} triggerType={form.triggerType} config={form.triggerConfig} onChange={(triggerType, triggerConfig) => update({ triggerType, triggerConfig })} />
+          <section className="loops-section" aria-label={t("Trigger")}>
+            <h3 className="loops-section-title">{t("Trigger")}</h3>
+            <div className="loops-card is-trigger">
+              <LoopTriggerEditor data={data} level={form.level} triggerType={form.triggerType} config={form.triggerConfig} onChange={(triggerType, triggerConfig) => update({ triggerType, triggerConfig })} />
+            </div>
           </section>
 
-          <section className="loops-card is-instructions" aria-label={t("Instructions")}>
-            <div className="loops-card-heading">
-              <h3>{t("Instructions")}</h3>
+          <section className="loops-section" aria-label={t("Instructions")}>
+            <div className="loops-section-heading">
+              <h3 className="loops-section-title">{t("Instructions")}</h3>
               <button className="loops-compose-button" type="button" onClick={() => setAgentOpen(true)}>
-                <Sparkles size={13} />
+                <Sparkles size={14} />
                 {t(agentDraft ? "Configure with Agent" : "Compose with Agent")}
               </button>
             </div>
+            <div className="loops-card is-instructions">
             <LoopInstructionsEditor
               key={instructionsRevision}
               ariaLabel={t("Instructions")}
@@ -353,11 +369,30 @@ function LoopEditorForm({
               placeholder={t(instructionsPlaceholder(form.triggerType))}
               onChange={(instructions, instructionsData) => update({ instructions, instructionsData })}
             />
+            </div>
           </section>
 
-          <section className="loops-card is-connectors" aria-label={t("Connectors")}>
-            <div className="loops-card-heading">
-              <h3>{t("Connectors")}</h3>
+          <section className="loops-section" aria-label={t("Connectors")}>
+            <h3 className="loops-section-title">{t("Connectors")}</h3>
+            <div className="loops-card is-connectors">
+            <div className="loops-connectors-row">
+            {form.connectorIds.length ? (
+              <div className="loops-connector-list">
+                {form.connectorIds.map((connectorId) => {
+                  const item = data.integrationConnections.find((connection) => connection.id === connectorId);
+                  return (
+                    <span key={connectorId}>
+                      <span data-i18n-ignore>{item?.name ?? connectorId}</span>
+                      <button type="button" aria-label={t("Remove connector")} onClick={() => update({ connectorIds: form.connectorIds.filter((value) => value !== connectorId) })}>
+                        <X size={12} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="loops-no-connectors">{t("No connectors added")}</p>
+            )}
               <DropdownMenu>
                 <DropdownMenuTrigger className="loops-add-connector">
                   <Plus size={14} />
@@ -380,31 +415,16 @@ function LoopEditorForm({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            {form.connectorIds.length ? (
-              <div className="loops-connector-list">
-                {form.connectorIds.map((connectorId) => {
-                  const item = data.integrationConnections.find((connection) => connection.id === connectorId);
-                  return (
-                    <span key={connectorId}>
-                      <span data-i18n-ignore>{item?.name ?? connectorId}</span>
-                      <button type="button" aria-label={t("Remove connector")} onClick={() => update({ connectorIds: form.connectorIds.filter((value) => value !== connectorId) })}>
-                        <X size={12} />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="loops-no-connectors">{t("No connectors added")}</p>
-            )}
+            </div>
           </section>
 
-          <section className="loops-card loops-permissions" aria-label={t("Permissions")}>
-            <h3>{t("Permissions")}</h3>
+          <section className="loops-section" aria-label={t("Permissions")}>
+            <h3 className="loops-section-title">{t("Permissions")}</h3>
+            <div className="loops-card loops-permissions">
             <div className="loops-permission-row">
               <span>
                 <strong>{t("Team access")}</strong>
-                <small>{t("Choose which team's data are available to this loop")}</small>
+                <small>{t(LOOP_PERMISSION_COPY.teamAccess)}</small>
               </span>
               <DropdownMenu>
                 <DropdownMenuTrigger className="loops-select-button" aria-label={t("Team access")}>
@@ -437,15 +457,15 @@ function LoopEditorForm({
               <div className="loops-permission-row">
                 <span>
                   <strong>{t(`Allow changes outside triggering ${entity}`)}</strong>
-                  <small>{t("Allow this loop to modify data beyond the item that triggered it")}</small>
+                  <small>{t(LOOP_PERMISSION_COPY.outsideTrigger)}</small>
                 </span>
-                <Toggle checked={form.allowChangesOutsideTrigger} label={t(`Allow changes outside triggering ${entity}`)} onChange={(checked) => update({ allowChangesOutsideTrigger: checked })} />
+                <Toggle size="regular" checked={form.allowChangesOutsideTrigger} label={t(`Allow changes outside triggering ${entity}`)} onChange={(checked) => update({ allowChangesOutsideTrigger: checked })} />
               </div>
             )}
             <div className="loops-permission-row">
               <span>
                 <strong>{t("Web search")}</strong>
-                <small>{t("Allow this loop to search the web for context")}</small>
+                <small>{t(LOOP_PERMISSION_COPY.webSearch)}</small>
                 {loopConfig && !loopConfig.webSearchAvailable && (
                   <small className="loops-permission-hint" role="note">
                     {t("Web search isn't configured for this workspace.")}{" "}
@@ -461,13 +481,13 @@ function LoopEditorForm({
                   </small>
                 )}
               </span>
-              <Toggle checked={form.webSearch} label={t("Web search")} onChange={(checked) => update({ webSearch: checked })} />
+              <Toggle size="regular" checked={form.webSearch} label={t("Web search")} onChange={(checked) => update({ webSearch: checked })} />
             </div>
             <div className="loops-permission-row">
               <span>
                 <strong>{t("Access code")}</strong>
                 <small>
-                  {t("Coding sessions can be enabled for Loops in")}{" "}
+                  {t(LOOP_PERMISSION_COPY.codeAccess)}{" "}
                   <a
                     href={`/${workspace}/settings/loops`}
                     onClick={(event) => {
@@ -475,7 +495,7 @@ function LoopEditorForm({
                       onNavigate(`/${workspace}/settings/loops`);
                     }}
                   >
-                    {t("Loops settings")}
+                    {t(LOOP_PERMISSION_COPY.codeAccessLink)}
                   </a>
                 </small>
               </span>
@@ -494,9 +514,9 @@ function LoopEditorForm({
             <div className="loops-permission-row">
               <span>
                 <strong>{t("Allow changes to externally synced issues and comments")}</strong>
-                <small>{t("Changes to issues and comments synced from Slack, GitHub or other integrations are sent back to the source")}</small>
+                <small>{t(LOOP_PERMISSION_COPY.externalSync)}</small>
               </span>
-              <Toggle checked={form.allowExternalSync} label={t("Allow changes to externally synced issues and comments")} onChange={(checked) => update({ allowExternalSync: checked })} />
+              <Toggle size="regular" checked={form.allowExternalSync} label={t("Allow changes to externally synced issues and comments")} onChange={(checked) => update({ allowExternalSync: checked })} />
             </div>
             <p className="loops-permission-footnote">
               {t("Trusted sources for inbound content are managed in")}{" "}
@@ -510,6 +530,7 @@ function LoopEditorForm({
                 {t("Loops settings")}
               </a>
             </p>
+            </div>
           </section>
 
           <footer className="loops-editor-footer">
@@ -517,7 +538,7 @@ function LoopEditorForm({
               {t("Cancel")}
             </button>
             <button className="loops-primary-button" type="button" disabled={!canSubmit} onClick={() => void submit()}>
-              {saving ? t("Saving…") : draft ? t("Create loop") : t("Save")}
+              {saving ? t("Saving…") : draft ? t("Create loop") : t("Publish")}
             </button>
           </footer>
         </div>

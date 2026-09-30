@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
-import { formatScheduleDate, formatTime12, relativeTime, triggerSummary } from './loop-model'
+import { compactAge, formatScheduleDate, formatTime12, relativeTime, triggerSummary } from './loop-model'
 import { LoopTriggerEditor } from './loop-trigger'
 
 function renderTrigger(props: Partial<Parameters<typeof LoopTriggerEditor>[0]> = {}) {
@@ -156,5 +156,13 @@ describe('loop model', () => {
     expect(relativeTime('2026-09-29T11:59:30Z', now)).toBe('just now')
     expect(relativeTime('2026-09-29T11:00:00Z', now)).toBe('1h ago')
     expect(relativeTime('2026-09-28T11:00:00Z', now)).toBe('Yesterday')
+  })
+
+  it('formats Linear compact ages for the loops list', () => {
+    const now = Date.parse('2026-09-29T12:00:00Z')
+    expect(compactAge('2026-09-29T11:59:30Z', now)).toBe('1m')
+    expect(compactAge('2026-09-28T21:00:00Z', now)).toBe('15h')
+    expect(compactAge('2026-09-26T12:00:00Z', now)).toBe('3d')
+    expect(compactAge('2026-06-29T12:00:00Z', now)).toBe('3mo')
   })
 })
