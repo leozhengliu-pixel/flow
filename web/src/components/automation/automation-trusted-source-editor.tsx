@@ -30,6 +30,8 @@ type Props = {
   }) => void;
   /** Also persist keys referenced by this automation. */
   onPolicyKeysChange?: (keys: string[]) => void;
+  /** Hide the built-in title when the host already renders a section heading (workspace settings). */
+  hideHeader?: boolean;
 };
 
 export function AutomationTrustedSourceEditor({
@@ -41,6 +43,7 @@ export function AutomationTrustedSourceEditor({
   disabled,
   onAllowlistChange,
   onPolicyKeysChange,
+  hideHeader = false,
 }: Props) {
   const { t } = useI18n();
   const [options, setOptions] = useState<TrustedSourceEditorOption[]>([]);
@@ -118,7 +121,7 @@ export function AutomationTrustedSourceEditor({
       data-testid="automation-trusted-source-editor"
       aria-label={t("Trusted sources")}
     >
-      <header className="automation-trusted-editor-header">
+      {!hideHeader && <header className="automation-trusted-editor-header">
         <div>
           <h3>{t("Trusted sources")}</h3>
           <p>
@@ -128,7 +131,7 @@ export function AutomationTrustedSourceEditor({
           </p>
         </div>
         <Shield size={16} aria-hidden />
-      </header>
+      </header>}
 
       <div className="automation-trusted-mode">
         <button

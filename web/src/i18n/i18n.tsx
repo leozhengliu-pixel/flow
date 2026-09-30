@@ -80,6 +80,9 @@ export function translateToChinese(source: string): string {
 
   const patterns: Array<[RegExp, (...groups: string[]) => string]> = [
     [/^(\d+) issues?$/, count => `${count} 个事项`],
+    [/^(\d+) upcoming cycles?$/, count => `${count} 个后续周期`],
+    [/^(\d+) identity providers? configured$/, count => `已配置 ${count} 个身份提供商`],
+    [/^(\d+) active$/, count => `${count} 项已启用`],
     [/^(\d+) projects?$/, count => `${count} 个项目`],
     [/^(\d+) dependencies?$/, count => `${count} 个依赖项`],
     [/^(\d+) initiatives?$/, count => `${count} 个目标`],

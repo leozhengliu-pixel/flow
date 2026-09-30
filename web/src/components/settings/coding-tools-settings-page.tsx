@@ -50,8 +50,8 @@ export function CodingToolsSettingsPage({
       </SettingsPageTitle>
       <SettingsSection title={t('Tools')}>
         {CODING_TOOLS.map(tool => (
-          <SettingsRow key={tool.id} title={<span data-i18n-ignore>{tool.name}</span>} description={t(tool.description)}>
-            <SettingsToggle label={tool.name} checked={enabled.has(tool.id)} onChange={value => toggle(tool.id, value)} />
+          <SettingsRow key={tool.id} title={<span data-i18n-ignore>{t(tool.name)}</span>} description={t(tool.description)}>
+            <SettingsToggle label={t(tool.name)} checked={enabled.has(tool.id)} onChange={value => toggle(tool.id, value)} />
           </SettingsRow>
         ))}
       </SettingsSection>

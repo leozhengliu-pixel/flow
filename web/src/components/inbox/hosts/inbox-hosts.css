@@ -329,16 +329,29 @@
   max-width: 720px;
 }
 
+/* Section header text lines up with the settings page title (16px inside the card edge). */
 .flow-inbox-priority-settings > header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+  margin: 0 16px;
+}
+
+.flow-inbox-priority-settings > header > div {
+  min-width: 0;
+}
+
+.flow-inbox-priority-settings > header > button {
+  flex: none;
+  white-space: nowrap;
 }
 
 .flow-inbox-priority-settings h2 {
   margin: 0 0 4px;
-  font-size: 18px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 23px;
 }
 
 .flow-inbox-priority-settings header p,
@@ -351,7 +364,7 @@
 }
 
 .flow-inbox-priority-settings__hint {
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
 }
@@ -375,7 +388,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 12px 14px;
+  padding: 12px 16px;
   border-top: 1px solid var(--color-border-subtle, var(--theme-border));
 }
 

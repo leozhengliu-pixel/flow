@@ -9,6 +9,8 @@ import type {
   CodingAgentSettings,
   WorkspaceSettings,
 } from "@/types/flow";
+import { SettingsToggle } from "./settings-primitives";
+import "./feature-settings.css";
 import "./coding-agent-settings.css";
 
 type Props = {
@@ -18,6 +20,8 @@ type Props = {
   disabled?: boolean;
   onReload?: () => Promise<void>;
   onOpenEnvironments?: () => void;
+  /** Turns the coding-sessions feature flag on or off; the row is hidden without it. */
+  onToggleEnabled?: (value: boolean) => void;
 };
 
 const HARNESS_OPTIONS = [
@@ -51,6 +55,7 @@ export function CodingAgentSettingsPage({
   disabled,
   onReload,
   onOpenEnvironments,
+  onToggleEnabled,
 }: Props) {
   const { t } = useI18n();
   const workspaceSettings = settings ?? data.workspaceSettings;
@@ -88,21 +93,23 @@ export function CodingAgentSettingsPage({
     }
   };
 
+  const controlsDisabled = disabled || busy || !codingEnabled;
+
   if (mode === "environments") {
     return (
-      <section
-        className="coding-agent-settings"
+      <div
+        className="feature-settings coding-agent-settings"
         data-testid="coding-environment-settings"
       >
-        <header className="coding-agent-settings__header">
+        <header className="feature-header coding-agent-settings__header">
           <div>
-            <h2>{t("Environments")}</h2>
+            <h1>{t("Environments")}</h1>
             <p>{t("Create reusable environments for coding sessions.")}</p>
           </div>
           <button
             type="button"
             className="coding-agent-settings__action"
-            disabled={disabled || busy || !codingEnabled}
+            disabled={controlsDisabled}
             onClick={() => {
               void save({
                 ...draft,
@@ -124,7 +131,7 @@ export function CodingAgentSettingsPage({
             <li key={environment.id}>
               <EnvironmentEditor
                 environment={environment}
-                disabled={disabled || busy || !codingEnabled}
+                disabled={controlsDisabled}
                 onChange={(nextEnv) => {
                   void save({
                     ...draft,
@@ -152,117 +159,146 @@ export function CodingAgentSettingsPage({
             </li>
           )}
         </ul>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section
-      className="coding-agent-settings"
+    <div
+      className="feature-settings coding-agent-settings"
       data-testid="coding-agent-settings"
     >
-      <header className="coding-agent-settings__header">
-        <div>
-          <h2>{t("Coding sessions")}</h2>
-          <p>
-            {t(
-              "Let Flow Agent write code and open pull requests when assigned or asked to implement an issue.",
-            )}
-          </p>
-        </div>
+      <header className="feature-header">
+        <h1>{t("Coding sessions")}</h1>
+        <p>
+          {t(
+            "Let Flow Agent write code and open pull requests when assigned or asked to implement an issue.",
+          )}
+        </p>
       </header>
 
-      <div className="coding-agent-settings__card">
-        <label className="coding-agent-settings__row">
-          <span>
+      <div className="feature-card">
+        {onToggleEnabled && (
+          <div className="feature-row">
+            <div>
+              <strong>{t("Enable coding sessions")}</strong>
+              <span>{t("Assign or ask Flow to make code changes")}</span>
+            </div>
+            <aside>
+              <SettingsToggle
+                checked={codingEnabled}
+                disabled={disabled || busy}
+                label={t("Enable coding sessions")}
+                onChange={onToggleEnabled}
+              />
+            </aside>
+          </div>
+        )}
+        <label className="feature-row">
+          <div>
             <strong>{t("Agent")}</strong>
-            <small>{t("Default harness for coding sessions")}</small>
-          </span>
-          <select
-            aria-label={t("Agent")}
-            disabled={disabled || busy || !codingEnabled}
-            value={draft.harness ?? "auto"}
-            onChange={(event) =>
-              void save({
-                ...draft,
-                harness: event.target.value as CodingAgentSettings["harness"],
-              })
-            }
-          >
-            {HARNESS_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <span>{t("Default harness for coding sessions")}</span>
+          </div>
+          <aside>
+            <select
+              className="coding-agent-settings__select"
+              aria-label={t("Agent")}
+              disabled={controlsDisabled}
+              value={draft.harness ?? "auto"}
+              onChange={(event) =>
+                void save({
+                  ...draft,
+                  harness: event.target.value as CodingAgentSettings["harness"],
+                })
+              }
+            >
+              {HARNESS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.label)}
+                </option>
+              ))}
+            </select>
+          </aside>
         </label>
 
-        <label className="coding-agent-settings__row">
-          <span>
+        <label className="feature-row">
+          <div>
             <strong>{t("Model")}</strong>
-            <small>{t("Preferred model for coding sessions")}</small>
-          </span>
-          <select
-            aria-label={t("Model")}
-            disabled={disabled || busy || !codingEnabled}
-            value={draft.model ?? "auto"}
-            onChange={(event) =>
-              void save({ ...draft, model: event.target.value })
-            }
-          >
-            {MODEL_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.group}: {option.label}
-              </option>
-            ))}
-          </select>
+            <span>{t("Preferred model for coding sessions")}</span>
+          </div>
+          <aside>
+            <select
+              className="coding-agent-settings__select"
+              aria-label={t("Model")}
+              disabled={controlsDisabled}
+              value={draft.model ?? "auto"}
+              onChange={(event) =>
+                void save({ ...draft, model: event.target.value })
+              }
+            >
+              {MODEL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.group)}: {t(option.label)}
+                </option>
+              ))}
+            </select>
+          </aside>
         </label>
 
-        <label className="coding-agent-settings__row">
-          <span>
+        <div className="feature-row">
+          <div>
             <strong>{t("Require signed commits")}</strong>
-            <small>
+            <span>
               {t(
                 "Users must upload a signing key before starting a coding session",
               )}
-            </small>
-          </span>
-          <input
-            type="checkbox"
-            aria-label={t("Require signed commits")}
-            checked={Boolean(draft.commitSigningEnabled)}
-            disabled={disabled || busy || !codingEnabled}
-            onChange={(event) =>
-              void save({
-                ...draft,
-                commitSigningEnabled: event.target.checked,
-              })
-            }
-          />
-        </label>
-      </div>
-
-      <div className="coding-agent-settings__card">
-        <div className="coding-agent-settings__row">
-          <span>
-            <strong>{t("Environments")}</strong>
-            <small>
-              {environments.length
-                ? environments.length + " configured"
-                : t("No environments configured")}
-            </small>
-          </span>
-          <button
-            type="button"
-            className="coding-agent-settings__action"
-            disabled={disabled || !codingEnabled}
-            onClick={() => onOpenEnvironments?.()}
-          >
-            {t("Manage")}
-          </button>
+            </span>
+          </div>
+          <aside>
+            <SettingsToggle
+              checked={Boolean(draft.commitSigningEnabled)}
+              disabled={controlsDisabled}
+              label={t("Require signed commits")}
+              onChange={(value) =>
+                void save({ ...draft, commitSigningEnabled: value })
+              }
+            />
+          </aside>
         </div>
       </div>
-    </section>
+
+      <section className="feature-section">
+        <header>
+          <h2>{t("Environments")}</h2>
+          <p>{t("Create reusable environments for coding sessions.")}</p>
+        </header>
+        <div className="feature-card">
+          <div className="feature-row">
+            <div>
+              <strong>{t("Environments")}</strong>
+              <span>
+                {environments.length
+                  ? t("{count} configured").replace(
+                      "{count}",
+                      String(environments.length),
+                    )
+                  : t("No environments configured")}
+              </span>
+            </div>
+            <aside>
+              <button
+                type="button"
+                className="coding-agent-settings__action"
+                disabled={disabled || !codingEnabled}
+                onClick={() => onOpenEnvironments?.()}
+              >
+                {t("Manage")}
+              </button>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
