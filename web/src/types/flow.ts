@@ -771,6 +771,7 @@ export interface ProjectResource {
   title: string;
   url: string;
   pinnedTeamIds: UUID[];
+  creatorId?: UUID;
   createdAt: string;
 }
 export interface ProjectMilestone {

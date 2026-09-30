@@ -746,6 +746,7 @@ type ProjectResource struct {
 	Title         string    `json:"title"`
 	URL           string    `json:"url"`
 	PinnedTeamIDs []string  `json:"pinnedTeamIds"`
+	CreatorID     string    `json:"creatorId,omitempty"`
 	CreatedAt     time.Time `json:"createdAt"`
 }
 

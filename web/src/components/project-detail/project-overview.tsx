@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { AlignLeft, ArrowRight, Check, ChevronRight, Diamond, ExternalLink, FileText, Flag, Link2, MoreHorizontal, Plus, Trash2, X, Send } from 'lucide-react'
+import { AlignLeft, ArrowRight, Check, ChevronRight, Diamond, ExternalLink, FileText, Flag, Link2, MoreHorizontal, MoreVertical, Plus, Trash2, X, Send } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { PropertyMenu } from '@/components/property/property-menu'
@@ -28,6 +28,7 @@ import { EmbeddedCustomerNeedForm } from '@/components/customer/embedded-custome
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
 import { ProjectPropertiesMenu } from './project-properties-menu'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
+import { RichComment } from '@/components/activity/rich-comment'
 import { projectShortcutLabels, useProjectPickerOpen, type ProjectPickerRequest } from './project-detail-shortcuts'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
@@ -80,11 +81,11 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     {issueData?.workspaceSettings.featureFlags.initiatives !== false && selectedInitiatives.length > 0 && <InitiativeSection initiatives={initiatives} project={project} save={save}/>}
     {selectedLabelIds.length > 0 && <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save} onCreateLabel={onCreateLabel} open={labelsOpen} onOpenChange={setLabelsOpen}/>}
-    <ResourceSection documents={documents} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
+    <ResourceSection documents={documents} users={users} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
     {customersEnabled && (hasCustomerRequests || customerDialogOpen) && <ProjectCustomerNeedsSection issueData={issueData} project={project} save={save} adding={customerDialogOpen} onAddingChange={setCustomerDialogOpen}/>}
 
     <section className={`project-overview__latest${projectUpdates[0] ? '' : ' is-empty'}`}>
-      {projectUpdates[0] ? <button className="project-overview__latest-update" onClick={() => onTabChange('activity')} type="button"><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><p data-i18n-ignore>{projectUpdates[0].body}</p></div></button> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText size={14}/>Write first project update</button>}
+      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText size={14}/>Write first project update</button>}
     </section>
 
     <section className="project-overview__description" id="project-overview-description">
@@ -164,7 +165,7 @@ function InlineStringSection({ addLabel, items, onChange, onOpenChange: setOpen,
   </div><StringInputDialog label={addLabel} onOpenChange={setOpen} open={open} onSubmit={value => { onChange([...items, value]); setOpen(false) }}/></section>
 }
 
-function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, teams }: { documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
+function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, teams, users }: { documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; users: Props['users']; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'create'|'edit'; resource?: ProjectResource }>()
   const [deleteResource, setDeleteResource] = useState<ProjectResource>()
@@ -174,7 +175,7 @@ function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, t
     setMenuOpen(false)
   }
   return <section className="project-overview__row-section project-overview__resources"><h3>Resources</h3><div className="project-overview__row-content">
-    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; return <div className="project-overview__resource" key={resource.id}><a data-i18n-ignore href={resource.url} rel={resource.type === 'link' ? 'noreferrer' : undefined} target={resource.type === 'link' ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:resource.type === 'document' ? <FileText size={16}/> : <Link2 size={16}/>}<span>{resource.title}</span>{resource.type === 'link' && <ExternalLink className="project-resource-external" size={14}/>}</a><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${resource.title} actions`} data-i18n-ignore type="button"><MoreHorizontal size={13}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu" sideOffset={4}>
+    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; const creator = document ? document.creator?.displayName : users.find(user => user.id === resource.creatorId)?.displayName; const age = resourceAge(document?.updatedAt ?? resource.createdAt); return <div className="project-overview__resource" key={resource.id}><FlowTooltip align="start" contentClassName="flow-tooltip-content--title" label={<span className="project-resource-tip"><strong data-i18n-ignore>{resource.title}</strong>{(creator || age) && <span data-i18n-ignore>{[creator, age].filter(Boolean).join(' · ')}</span>}</span>}><a data-i18n-ignore href={resource.url} rel={resource.type === 'link' ? 'noreferrer' : undefined} target={resource.type === 'link' ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:resource.type === 'document' ? <FileText size={16}/> : <Link2 size={16}/>}<span>{resource.title}</span>{resource.type === 'link' && <ExternalLink className="project-resource-external" size={14}/>}</a></FlowTooltip><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${resource.title} actions`} data-i18n-ignore type="button"><MoreVertical size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu" sideOffset={4}>
       <DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(resource.url).then(() => toast.success('Resource link copied'))}><Link2 size={14}/><span>Copy link</span></DropdownMenu.Item>
       <DropdownMenu.Sub><DropdownMenu.SubTrigger><TeamIcon size={14}/><span>Pin to team</span><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="project-detail-page__menu" sideOffset={6}>{teams.map(team => <DropdownMenu.CheckboxItem checked={(resource.pinnedTeamIds ?? []).includes(team.id)} key={team.id} onCheckedChange={() => void onUpdate(resource.id, { pinnedTeamIds: toggleString(resource.pinnedTeamIds ?? [], team.id) })}><TeamIcon team={team} size={14}/><span data-i18n-ignore>{team.name}</span>{(resource.pinnedTeamIds ?? []).includes(team.id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Item onSelect={() => setDialog({ mode: 'edit', resource })}><Link2 size={14}/><span>Edit</span></DropdownMenu.Item>
@@ -373,3 +374,15 @@ function ProjectCustomerNeedsSection({ issueData, project, save, adding: control
   )
 }
 
+/** Linear's compact resource age: "3min", "5h", "2d", "4mo", "1y". */
+function resourceAge(value: string | undefined, now = Date.now()) {
+  const time = value ? Date.parse(value) : Number.NaN
+  if (!Number.isFinite(time)) return ''
+  const minutes = Math.max(1, Math.floor((now - time) / 60_000))
+  if (minutes < 60) return `${minutes}min`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d`
+  return days < 365 ? `${Math.floor(days / 30)}mo` : `${Math.floor(days / 365)}y`
+}

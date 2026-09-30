@@ -37,6 +37,8 @@ export interface FlowTooltipProps {
   align?: TooltipPrimitive.TooltipContentProps['align']
   /** Keeps the tooltip closed, e.g. while the control's own menu is open. */
   disabled?: boolean
+  /** Extra class on the tooltip surface, e.g. `flow-tooltip-content--title` for multi-line content. */
+  contentClassName?: string
   children: React.ReactElement
 }
 
@@ -48,14 +50,14 @@ export function TooltipShortcut({ value }: { value: React.ReactNode }) {
 }
 
 /** Convenience wrapper for icon buttons and compact controls. */
-export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false }: FlowTooltipProps) {
+export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false, contentClassName }: FlowTooltipProps) {
   const [open, setOpen] = React.useState(false)
   React.useEffect(() => { if (disabled) setOpen(false) }, [disabled])
   if (!label && !shortcut) return children
   return (
     <TooltipRoot open={open && !disabled} onOpenChange={next => setOpen(next && !disabled)}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent align={align} side={side}>
+      <TooltipContent align={align} className={contentClassName} side={side}>
         <span className="flow-tooltip-copy">{label}</span>
         {shortcut ? <kbd className="flow-tooltip-shortcut"><TooltipShortcut value={shortcut}/></kbd> : null}
       </TooltipContent>
