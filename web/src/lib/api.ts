@@ -2488,8 +2488,8 @@ export type LoopMutation = Partial<
     | "trustedSourceKeys"
   >
 >;
-export function listLoops(): Promise<Loop[]> {
-  return request("/api/loops");
+export function listLoops(workspaceKey?: string): Promise<Loop[]> {
+  return request("/api/loops", workspaceKey ? { headers: { "X-Workspace-Key": workspaceKey } } : undefined);
 }
 export function getLoop(id: string): Promise<Loop> {
   return request(`/api/loops/${encodeURIComponent(id)}`);

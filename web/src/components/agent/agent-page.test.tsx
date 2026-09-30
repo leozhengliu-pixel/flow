@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -7,7 +7,7 @@ import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
   createAgentSession: vi.fn(), createAgentSessionMessage: vi.fn(), deleteAgentSession: vi.fn(),
-  fetchAgentStatus: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
+  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
 }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn(), streamAgentSessionMessageEdit: vi.fn() }))
 vi.mock('@/lib/api', () => api)
@@ -21,11 +21,12 @@ describe('agent page composer', () => {
     Object.values(api).forEach(mock => mock.mockReset())
     Object.values(streams).forEach(mock => mock.mockReset())
     api.fetchAgentStatus.mockResolvedValue({ enabled: false, model: '' })
+    api.getAgentSession.mockRejectedValue(new Error('not stubbed'))
   })
 
   it('accepts draft input even when the Agent backend is not configured', async () => {
     const user = userEvent.setup()
-    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     const editor = await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })
     expect(editor).toHaveAttribute('contenteditable', 'true')
     expect(screen.queryByText('Flow Agent is not configured')).not.toBeInTheDocument()
@@ -38,7 +39,7 @@ describe('agent page composer', () => {
 
   it('keeps Agent empty state minimal without watermark or example cards', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
-    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     expect(await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveAttribute('data-placeholder', 'Ask Flow…')
     expect(screen.getByRole('button', { name: 'Skills' })).toBeVisible()
     expect(screen.queryByText('Get started with some examples')).not.toBeInTheDocument()
@@ -51,7 +52,7 @@ describe('agent page composer', () => {
   it('renders text, reasoning, and tool deltas while a session streams', async () => {
     const user = userEvent.setup()
     const navigate = vi.fn()
-    const reload = vi.fn().mockResolvedValue(undefined)
+    const sessionChange = vi.fn()
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
     streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
       const session: AgentSession = { id: 'session-1', slugId: 'streamed-chat', userId: 'user-1', title: 'Streamed chat', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [{ id: 'user-message', role: 'user', content: 'Hello', createdAt: '2026-08-31T00:00:00Z' }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
@@ -64,14 +65,50 @@ describe('agent page composer', () => {
       onEvent({ type: 'session.completed', session: completed })
       return completed
     })
-    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onReload={reload}/></I18nProvider>)
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={sessionChange}/></I18nProvider>)
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Hello')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeEnabled())
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/workspace/agent/streamed-chat'))
     expect(streams.streamNewAgentSession).toHaveBeenCalled()
-    expect(reload).toHaveBeenCalled()
+    // The finished chat is saved into the workspace data directly: no full workspace reload.
+    expect(sessionChange).toHaveBeenCalledWith('session-1', expect.objectContaining({ id: 'session-1', messages: expect.arrayContaining([expect.objectContaining({ content: 'No bugs found.' })]) }))
+  })
+
+  it('shows the sent message and a working state before the server answers', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    let release!: (event: unknown) => void
+    streams.streamNewAgentSession.mockImplementation((_input, onEvent, signal: AbortSignal) => new Promise((resolve, reject) => {
+      release = onEvent
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))
+      void resolve
+    }))
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+    await user.type(editor, 'Plan the launch')
+    expect(screen.getByRole('button', { name: 'Submit comment' })).toHaveAttribute('data-state', 'ready')
+    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    // Nothing has come back from the server yet.
+    const conversation = await screen.findByRole('group', { name: 'Agent conversation' })
+    expect(within(conversation).getByText('Plan the launch')).toBeVisible()
+    expect(within(conversation).getByText('Thinking…')).toBeVisible()
+    expect(editor).toHaveTextContent('')
+    expect(screen.getByRole('button', { name: 'Stop generating' })).toHaveAttribute('data-state', 'working')
+    // When the stream starts, the server's copy replaces the optimistic one without duplicating it.
+    const session: AgentSession = { id: 'session-2', slugId: 'launch', userId: 'user-1', title: 'Plan the launch', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [{ id: 'user-message', role: 'user', content: 'Plan the launch', createdAt: '2026-08-31T00:00:00Z' }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
+    act(() => release({ type: 'session.started', session, messageId: 'assistant-message' }))
+    await waitFor(() => expect(document.querySelector('[data-message-id="user-message"]')).not.toBeNull())
+    expect(within(screen.getByRole('group', { name: 'Agent conversation' })).getAllByText('Plan the launch')).toHaveLength(1)
+    expect(screen.getByText('Thinking…')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Stop generating' }))
+  })
+
+  it('keeps the quiet send button for an empty composer', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toHaveAttribute('data-state', 'empty'))
   })
 
   it('shows a thinking state before the provider sends its first delta', async () => {
@@ -82,7 +119,7 @@ describe('agent page composer', () => {
       return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))
     })
     const user = userEvent.setup()
-    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
     await user.type(editor, 'Think first')
     await user.click(screen.getByRole('button', { name: 'Submit comment' }))
@@ -108,7 +145,7 @@ describe('agent page composer', () => {
         { id: 'error', type: 'error', text: 'Partial warning', status: 'error' },
       ] }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
     }
-    render(<I18nProvider><AgentPage chatSlug="parts" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage chatSlug="parts" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await userEvent.click(screen.getByText('Work completed'))
     expect(screen.getByText('Looked at issues')).toBeVisible()
     expect(screen.getByText('Checked workspace state')).toBeVisible()
@@ -125,7 +162,7 @@ describe('agent page composer', () => {
       ], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:01Z',
     }
     const user = userEvent.setup()
-    render(<I18nProvider><AgentPage chatSlug="edit" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage chatSlug="edit" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: 'Edit message' }))
     expect(screen.getByText('Original answer')).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveTextContent('Original question')
@@ -139,7 +176,7 @@ describe('agent page composer', () => {
     }
     const navigate = vi.fn()
     const user = userEvent.setup()
-    render(<I18nProvider><AgentPage chatSlug="history" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage chatSlug="history" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={navigate} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: 'Switch agent chat' }))
     expect(screen.getByRole('group', { name: 'Today' })).toBeVisible()
     await user.hover(screen.getByRole('option', { name: 'New chat' }))
@@ -153,7 +190,7 @@ describe('agent page composer', () => {
       messages: [{ id: 'assistant', role: 'assistant', content: '## Plan\n\n1. **Build** the API\n2. `Verify` the UI', createdAt: '2026-08-31T00:00:00Z' }],
       createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
     }
-    render(<I18nProvider><AgentPage chatSlug="markdown" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage chatSlug="markdown" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     expect(await screen.findByRole('heading', { name: 'Plan' })).toBeVisible()
     expect(screen.getByRole('list')).toBeVisible()
     expect(screen.getByText('Build').tagName).toBe('STRONG')
@@ -172,7 +209,7 @@ describe('agent page composer', () => {
     }
     const data = makeBootstrap({ agentSessions: [session], agentSkills: [], issues: [makeIssue(), makeIssue({ id: 'issue-2', identifier: 'TST-2', number: 2, title: 'Second issue' })] })
     const user = userEvent.setup()
-    render(<I18nProvider><AgentPage chatSlug="chrome" data={data} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
+    render(<I18nProvider><AgentPage chatSlug="chrome" data={data} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await waitFor(() => expect(document.querySelectorAll('a[data-agent-entity="issue"]')).toHaveLength(2))
     expect(screen.getByText('TST-1?')).toBeVisible()
     expect(within(screen.getByRole('list', { name: 'Referenced issues' })).getAllByRole('link')).toHaveLength(2)

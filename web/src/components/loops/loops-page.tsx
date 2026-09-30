@@ -1,4 +1,4 @@
-import type { BootstrapData } from "@/types/flow";
+import type { BootstrapData, Loop } from "@/types/flow";
 import { LoopDetail } from "./loop-detail";
 import { LoopEditor } from "./loop-editor";
 import { LoopList } from "./loop-list";
@@ -16,7 +16,8 @@ type Props = {
   editing: boolean;
   onOpenSidebar: () => void;
   onNavigate: (path: string) => void;
-  onReload: () => Promise<void>;
+  /** Refreshes the workspace's loops; `changed` is applied locally first so the next page sees it at once. */
+  onReload: (changed?: Loop) => Promise<void>;
   teamId?: string;
 };
 

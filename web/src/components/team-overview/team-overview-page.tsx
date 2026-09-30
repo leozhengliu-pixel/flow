@@ -105,6 +105,7 @@ export function TeamOverviewPage({
   onNavigate,
   onOpenSidebar,
   onReload,
+  onLoopsReload,
 }: {
   data: BootstrapData;
   team: Team;
@@ -112,6 +113,8 @@ export function TeamOverviewPage({
   onNavigate: (path: string) => void;
   onOpenSidebar: () => void;
   onReload: () => Promise<void>;
+  /** Refreshes only the workspace's loops after a loop change (defaults to onReload). */
+  onLoopsReload?: () => Promise<void>;
 }) {
   const {t}=useI18n();
   const loopsEnabled = workspaceFeatureEnabled(
@@ -617,7 +620,7 @@ export function TeamOverviewPage({
             embedded
             onNavigate={onNavigate}
             onOpenSidebar={onOpenSidebar}
-            onReload={onReload}
+            onReload={onLoopsReload ?? onReload}
             teamId={team.id}
           />
         ) : (
