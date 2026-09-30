@@ -16,11 +16,14 @@ type User struct {
 	UserID           string     `json:"userId,omitempty"`
 	Name             string     `json:"name"`
 	DisplayName      string     `json:"displayName"`
-	JobTitle         string     `json:"jobTitle,omitempty"`
-	Email            string     `json:"email"`
-	AvatarURL        string     `json:"avatarUrl,omitempty"`
-	Active           bool       `json:"active"`
-	EmailVerified    bool       `json:"emailVerified"`
+	// Username is the workspace-unique handle (Linear's "username"), derived
+	// per request from account settings or the email local part.
+	Username      string `json:"username,omitempty"`
+	JobTitle      string `json:"jobTitle,omitempty"`
+	Email         string `json:"email"`
+	AvatarURL     string `json:"avatarUrl,omitempty"`
+	Active        bool   `json:"active"`
+	EmailVerified bool   `json:"emailVerified"`
 }
 
 // AuthIdentity binds a user to a stable identifier issued by an external provider.

@@ -11,6 +11,8 @@ export interface User {
   userId?: string;
   name: string;
   displayName: string;
+  /** Workspace-unique handle (Linear's username), e.g. "bcgroupdev". */
+  username?: string;
   jobTitle?: string;
   email: string;
   avatarUrl?: string;

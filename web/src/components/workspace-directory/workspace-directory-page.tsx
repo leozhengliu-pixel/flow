@@ -2,7 +2,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { formatCustomerRevenue } from '@/lib/customer-settings';
-import { personMatchesQuery, personSearchText } from '@/lib/people';
+import { personMatchesQuery, personSearchText, personUsername } from '@/lib/people';
 import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
 import { TeamDateFilterDialog, TeamFilterBar } from './team-directory-controls';
 import { useTeamDirectoryControls, type TeamColumn } from './use-team-directory-controls';
@@ -277,7 +277,7 @@ function TeamsOptions({ onOpenSettings }: { onOpenSettings: () => void }) {
 
 type MemberStatusFilter = "admin" | "guest" | "member";
 type MemberEntry = { kind: "member"; member: WorkspaceMember } | { kind: "invitation"; invitation: Invitation };
-const MEMBER_COLUMN_WIDTHS: Record<MemberColumn, string> = { status: "99px", joined: "94px", teams: "71px" };
+const MEMBER_COLUMN_WIDTHS: Record<Exclude<MemberColumn, "teams">, string> = { status: "99px", joined: "94px" };
 const MEMBER_ONLINE_WINDOW_MS = 5 * 60 * 1000;
 
 function memberStatusFilter(role: WorkspaceMember["role"]): MemberStatusFilter | undefined {
@@ -292,9 +292,15 @@ function memberEntryStatus(entry: MemberEntry) {
 }
 
 function memberStatusLabel(entry: MemberEntry) {
-  if (entry.kind === "invitation") return `${capitalize(entry.invitation.role)} (Invited)`;
+  if (entry.kind === "invitation") return "Invited";
   if (entry.member.user.app || entry.member.role === "app") return "Application";
+  if (entry.member.status === "suspended") return "Suspended";
   return capitalize(entry.member.role);
+}
+
+/** Linear shows every non-member status (Owner/Admin, Guest, Application, Invited, Suspended) as a badge. */
+function memberStatusIsBadge(entry: MemberEntry) {
+  return memberStatusLabel(entry) !== "Member";
 }
 
 function memberEntryName(entry: MemberEntry) {
@@ -312,8 +318,14 @@ function compareMemberEntries(left: MemberEntry, right: MemberEntry, ordering: M
   return byName;
 }
 
-function memberDirectoryColumns(columns: Set<MemberColumn>) {
-  return `minmax(160px, 1fr) ${memberColumnIds.filter(column => columns.has(column)).map(column => MEMBER_COLUMN_WIDTHS[column]).join(" ")} 85px`;
+/** Teams column fits the widest key (icon + key + "+N" chip) so keys never truncate into "D… +1". */
+function memberTeamsColumnWidth(longestKey: number) {
+  return `max(96px, calc(${Math.max(longestKey, 1)}ch + 76px))`;
+}
+
+function memberDirectoryColumns(columns: Set<MemberColumn>, longestTeamKey: number) {
+  const widths = memberColumnIds.filter(column => columns.has(column)).map(column => column === "teams" ? memberTeamsColumnWidth(longestTeamKey) : MEMBER_COLUMN_WIDTHS[column]);
+  return `minmax(160px, 1fr) ${widths.join(" ")} 85px`;
 }
 
 function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; onOpen: (user: User) => void; onOpenTeam:(team:Team)=>void }) {
@@ -336,6 +348,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
     }
     return result;
   }, [data.teamMembers, data.teams]);
+  const longestTeamKey = useMemo(() => Math.max(0, ...[...teamsByUserId.values()].map(teams => teams[0]?.key.length ?? 0), ...data.invitations.flatMap(invitation => data.teams.filter(team => invitation.teamIds.includes(team.id)).slice(0, 1).map(team => team.key.length))), [data.invitations, data.teams, teamsByUserId]);
   const entries = useMemo<MemberEntry[]>(() => [
     ...data.members.map(member => ({ kind: "member" as const, member })),
     ...data.invitations.filter(invitation => invitation.status === "pending").map(invitation => ({ kind: "invitation" as const, invitation })),
@@ -394,12 +407,15 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
   const longDate = (value: Date) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(value);
   const renderStatus = (entry: MemberEntry) => {
     const label = t(memberStatusLabel(entry));
-    const badge = entry.kind === "member" && !entry.member.user.app && (entry.member.role === "admin" || entry.member.role === "owner");
-    return <span className="workspace-member-status">{badge ? <span className="workspace-member-role">{label}</span> : label}</span>;
+    return <span className="workspace-member-status">{memberStatusIsBadge(entry) ? <span className="workspace-member-role">{label}</span> : label}</span>;
   };
-  const renderTeams = (teams: Team[], extra: number) => {
+  const renderTeams = (teams: Team[]) => {
     const team = teams[0];
-    return <div className="workspace-member-teams">{team ? <button type="button" aria-label={`Open team ${team.name}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(team) }}><TeamGlyph team={team} /><span>{team.key}</span>{extra > 0 ? <small>+{extra}</small> : null}</button> : null}</div>;
+    const extra = teams.length - 1;
+    return <div className="workspace-member-teams">{team ? <>
+      <button type="button" aria-label={`Open team ${team.name}`} title={team.name} onClick={(event) => { event.preventDefault(); event.stopPropagation(); onOpenTeam(team) }}><TeamGlyph team={team} /><span data-i18n-ignore>{team.key}</span></button>
+      {extra > 0 ? <span className="workspace-member-teams__more" data-i18n-ignore title={teams.map(item => `${item.key} · ${item.name}`).join(", ")}>+{extra}</span> : null}
+    </> : null}</div>;
   };
   const renderEntry = (entry: MemberEntry) => {
     if (entry.kind === "invitation") {
@@ -407,10 +423,10 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       const invitedTeams = data.teams.filter(item => invitation.teamIds.includes(item.id));
       const invited = new Date(invitation.createdAt);
       return <div className="workspace-directory-member-row is-invited">
-        <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong>{invitation.email}</strong><small>{invitation.email}</small></span></div>
+        <div className="workspace-member-identity"><span className="workspace-directory-avatar is-invited">{initials(invitation.email)}</span><span><strong data-i18n-ignore>{invitation.email}</strong></span></div>
         {columns.has("status") && renderStatus(entry)}
         {columns.has("joined") && <time className="workspace-member-date" dateTime={invitation.createdAt} title={`Invited ${dateTimeTitle(invited)}`}>{shortDate(invited)}</time>}
-        {columns.has("teams") && renderTeams(invitedTeams, invitedTeams.length - 1)}
+        {columns.has("teams") && renderTeams(invitedTeams)}
         <span className="workspace-member-last-seen" />
       </div>;
     }
@@ -425,10 +441,10 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       href={`/${encodeURIComponent(data.workspace.urlKey)}/profiles/${encodeURIComponent(user.name)}`}
       onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onOpen(user) }}
     >
-      <div className="workspace-member-identity"><DirectoryUserAvatar user={user} /><span><strong>{user.displayName}</strong><small>{user.name || user.email.split("@")[0]}</small></span></div>
+      <div className="workspace-member-identity"><DirectoryUserAvatar user={user} /><span><strong data-i18n-ignore>{user.displayName || user.name}</strong><small data-i18n-ignore>{personUsername(user)}</small></span></div>
       {columns.has("status") && renderStatus(entry)}
       {columns.has("joined") && <time className="workspace-member-date" dateTime={member.joinedAt} title={`Joined ${dateTimeTitle(joined)}`}>{shortDate(joined)}</time>}
-      {columns.has("teams") && renderTeams(teams, teams.length - 1)}
+      {columns.has("teams") && renderTeams(teams)}
       {online
         ? <span className="workspace-member-last-seen is-online"><i aria-hidden="true" />{t("Online")}</span>
         : member.status === "suspended"
@@ -513,7 +529,7 @@ function MembersDirectory({ data, onOpen, onOpenTeam }: { data: BootstrapData; o
       ) : (
         <div
           className={`workspace-directory__table workspace-members-table${visible.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
-          style={{ "--member-columns": memberDirectoryColumns(columns) } as React.CSSProperties}
+          style={{ "--member-columns": memberDirectoryColumns(columns, longestTeamKey) } as React.CSSProperties}
         >
           <DirectoryRows header={<div className="workspace-members-columns">
             <DirectorySortHeader active={ordering === "name"} descending={descending} label="Name" onClick={() => changeSort("name")} />

@@ -6,7 +6,9 @@ import { TeamIcon } from '@/components/issue/issue-icons';
 import { newTeamPath } from '@/lib/app-routes';
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
+  ArrowDown,
   ArrowDownWideNarrow,
+  ArrowUp,
   ArrowUpNarrowWide,
   CalendarDays,
   Check,
@@ -68,9 +70,11 @@ import {
 import { DisplayIcon } from "@/components/ui/view-action-icons";
 import { VirtualColumnList } from "@/components/ui/virtual-column-list";
 import {
+  DirectoryDisplayMenu,
   DirectoryFilterMenu,
   type DirectoryFilterGroup,
 } from "@/components/workspace-directory/directory-menus";
+import { personUsername } from "@/lib/people";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
@@ -1359,7 +1363,7 @@ function AddMembersDialog({
                           color={memberColor(index)}
                           name={user.displayName}
                         />
-                        <span className="team-members-candidate-copy"><strong data-i18n-ignore>{user.displayName}</strong><small data-i18n-ignore>{user.name}{user.email ? ` · ${user.email}` : ""}</small></span>
+                        <span className="team-members-candidate-copy"><strong data-i18n-ignore>{user.displayName}</strong><small data-i18n-ignore>{personUsername(user)}{user.email ? ` · ${user.email}` : ""}</small></span>
                         <small className="team-members-candidate-role">{t(workspaceMemberById.get(user.id)?.role === "admin" ? "Workspace admin" : "Member")}</small>
                       </DropdownMenu.CheckboxItem>
                     );
@@ -1389,7 +1393,7 @@ function AddMembersDialog({
   );
 }
 
-type TeamMemberVisibility = { owners: boolean; members: boolean; guests: boolean; invited: boolean };
+type TeamMemberVisibility = { owners: boolean; members: boolean; guests: boolean; applications: boolean; invited: boolean };
 type TeamMemberColumn = "email" | "role" | "subteams";
 type TeamMemberOrdering = "name" | "email" | "role";
 type TeamMemberDirectoryEntry = {
@@ -1445,17 +1449,18 @@ function TeamMembersDirectory({
   });
   const members = [...allMembers.filter(entry => {
       const workspaceRole = entry.workspaceMember?.role;
+      if (entry.user.app || workspaceRole === "app") return visibility.applications;
       if (entry.membership.role === "owner" || workspaceRole === "owner" || workspaceRole === "admin") return visibility.owners;
       return workspaceRole === "guest" ? visibility.guests : visibility.members;
     }), ...invitedMembers]
     .sort((left, right) => {
-      const leftValue = ordering === "name" ? left.user.displayName : ordering === "email" ? left.user.email : `${left.membership.role}-${left.workspaceMember?.role}`;
-      const rightValue = ordering === "name" ? right.user.displayName : ordering === "email" ? right.user.email : `${right.membership.role}-${right.workspaceMember?.role}`;
-      const result = leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" });
+      const leftValue = ordering === "name" ? left.user.displayName : ordering === "email" ? left.user.email : String(teamMemberRoleRank(left));
+      const rightValue = ordering === "name" ? right.user.displayName : ordering === "email" ? right.user.email : String(teamMemberRoleRank(right));
+      const result = leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" }) || left.user.displayName.localeCompare(right.user.displayName, undefined, { sensitivity: "base" });
       return descending ? -result : result;
     });
   const ownerCount = allMembers.filter((entry) => entry.membership.role === "owner").length;
-  const gridStyle = { gridTemplateColumns: `minmax(260px,1fr) ${columns.has("email") ? "minmax(190px,220px) " : ""}${columns.has("role") ? "140px " : ""}${hasSubteams && columns.has("subteams") ? "82px " : ""}28px` } as CSSProperties;
+  const gridStyle = { gridTemplateColumns: `minmax(260px,1fr) ${columns.has("email") ? "minmax(190px,220px) " : ""}${columns.has("role") ? "150px " : ""}${hasSubteams && columns.has("subteams") ? "82px " : ""}28px` } as CSSProperties;
   useEffect(() => persistTeamMemberDirectoryState(team.id, { ordering, descending, columns, visibility }), [columns, descending, ordering, team.id, visibility]);
   const changeOrder = (next: typeof ordering) => {
     if (next === ordering) setDescending((value) => !value);
@@ -1475,6 +1480,7 @@ function TeamMembersDirectory({
   };
   const removeMember = async (entry: (typeof members)[number]) => {
     const self = entry.user.id === data.viewer.id;
+    if (entry.membership.managed === true) return;
     const confirmed = await confirmAction(self ? t("Leave this team?") : t(`Remove ${entry.user.displayName} from this team?`), {
       confirmLabel: self ? t("Leave team") : t("Remove member"),
       danger: true,
@@ -1494,10 +1500,11 @@ function TeamMembersDirectory({
     else if (event.key === "End") scroller.scrollTop = scroller.scrollHeight;
     else scroller.scrollBy({ top: (event.key === "PageDown" ? 1 : -1) * scroller.clientHeight * .9, behavior: "smooth" });
   };
+  const sortHeader = (column: TeamMemberOrdering, label: string) => <button aria-label={ordering === column ? `Order by ${label}, sorted ${descending ? "descending" : "ascending"}` : `Order by ${label}`} aria-sort={ordering === column ? (descending ? "descending" : "ascending") : undefined} onClick={() => changeOrder(column)} type="button">{t(label)}{ordering === column && (descending ? <ArrowUp aria-hidden="true" data-direction="descending"/> : <ArrowDown aria-hidden="true" data-direction="ascending"/>)}</button>;
   const header = <header className="team-members-header" style={gridStyle}>
-    <button onClick={() => changeOrder("name")} type="button">{ordering === "name" ? (descending ? "Z-A" : "A-Z") : t("Name")}</button>
-    {columns.has("email") && <button onClick={() => changeOrder("email")} type="button">{t("Email")}{ordering === "email" && <span>{descending ? "↓" : "↑"}</span>}</button>}
-    {columns.has("role") && <button onClick={() => changeOrder("role")} type="button">{t("Role")}{ordering === "role" && <span>{descending ? "↓" : "↑"}</span>}</button>}
+    {sortHeader("name", "Name")}
+    {columns.has("email") && sortHeader("email", "Email")}
+    {columns.has("role") && sortHeader("role", "Role")}
     {hasSubteams && columns.has("subteams") && <span>{t("Sub-teams")}</span>}
     <span/>
   </header>;
@@ -1511,25 +1518,29 @@ function TeamMembersDirectory({
         const invited = Boolean(value.invitation);
         const managed = value.membership.managed === true;
         const lastOwner = value.membership.role === "owner" && ownerCount === 1;
-        const menuVisible = !invited && (canManage || value.user.id === data.viewer.id);
+        const self = value.user.id === data.viewer.id;
+        const menuVisible = !invited && (canManage || self);
+        const managedReason = managed ? t(value.membership.managedSource === "scim" ? "Managed by SCIM" : "Managed by your identity provider") : undefined;
+        const blockedReason = managedReason ?? (lastOwner ? t("A team needs at least one owner") : undefined);
+        const role = teamMemberRoleBadge(value);
         return <div aria-busy={busyUserId === value.user.id || undefined} className={`team-member-row${invited ? " is-invited" : ""}`} role="listitem" style={gridStyle}>
           {invited ? <span className="team-members-person">
             <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
-            <span><strong data-i18n-ignore>{value.user.displayName}</strong><small>{t("Invited")}</small></span>
+            <span><strong data-i18n-ignore>{value.user.displayName}</strong></span>
           </span> : <a className="team-members-person" href={profile} onClick={event => { event.preventDefault(); onNavigate(profile) }}>
             <UserAvatar avatarUrl={value.user.avatarUrl} color={memberColor(index)} name={value.user.displayName}/>
-            <span><strong data-i18n-ignore>{value.user.displayName}</strong><small data-i18n-ignore>{value.user.userId || value.user.name}</small></span>
+            <span><strong data-i18n-ignore>{value.user.displayName || value.user.name}</strong><small data-i18n-ignore>{personUsername(value.user)}</small></span>
           </a>}
           {columns.has("email") && <span className="team-members-email" data-i18n-ignore>{value.user.email}</span>}
-          {columns.has("role") && <span className="team-members-role"><span>{t(invited ? "Invited" : value.membership.role === "owner" ? "Team owner" : "Team member")}</span><small>{t(workspaceRoleLabel(value.workspaceMember?.role))}{managed ? ` · ${t(value.membership.managedSource === "scim" ? "SCIM managed" : "Managed")}` : ""}</small></span>}
+          {columns.has("role") && <span className="team-members-role" title={managedReason}>{role.badge ? <span className="team-members-role-badge">{t(role.label)}</span> : t(role.label)}</span>}
           {hasSubteams && columns.has("subteams") && <span className="team-member-subteams">{subteamCountByUser.get(value.user.id) || "—"}</span>}
           {menuVisible ? <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild><button aria-label={t("Open menu")} onClick={event => { event.preventDefault(); event.stopPropagation() }}><TeamMoreIcon/></button></DropdownMenu.Trigger>
             <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="team-home-menu" sideOffset={4}>
-              <DropdownMenu.Item onSelect={() => onNavigate(profile)}>{t("View profile")}</DropdownMenu.Item>
-              {canChangeOwners && <><DropdownMenu.Separator/><DropdownMenu.Item disabled={managed || busyUserId === value.user.id || lastOwner} title={managed ? t("Managed by SCIM") : lastOwner ? t("A team needs at least one owner") : undefined} onSelect={() => void changeMembership(value.user.id, true, value.membership.role === "owner" ? "member" : "owner")}>{t(value.membership.role === "owner" ? "Make team member" : "Make team owner")}</DropdownMenu.Item></>}
-              <DropdownMenu.Separator/>
-              <DropdownMenu.Item className="danger" disabled={managed || busyUserId === value.user.id || lastOwner} title={managed ? t("Managed by SCIM") : lastOwner ? t("A team needs at least one owner") : undefined} onSelect={() => void removeMember(value)}>{t(value.user.id === data.viewer.id ? "Leave team" : "Remove from team")}</DropdownMenu.Item>
+              {self ? <DropdownMenu.Item className="danger" disabled={Boolean(blockedReason) || busyUserId === value.user.id} title={blockedReason} onSelect={() => void removeMember(value)}>{t("Leave team…")}</DropdownMenu.Item> : <>
+                {canChangeOwners && <><DropdownMenu.Item disabled={managed || busyUserId === value.user.id || lastOwner} title={blockedReason} onSelect={() => void changeMembership(value.user.id, true, value.membership.role === "owner" ? "member" : "owner")}>{t(value.membership.role === "owner" ? "Remove team owner" : "Make team owner")}</DropdownMenu.Item><DropdownMenu.Separator/></>}
+                <DropdownMenu.Item className="danger" disabled={Boolean(blockedReason) || busyUserId === value.user.id} title={blockedReason} onSelect={() => void removeMember(value)}>{t("Remove from team…")}</DropdownMenu.Item>
+              </>}
             </DropdownMenu.Content></DropdownMenu.Portal>
           </DropdownMenu.Root>
           : <span/>}
@@ -1540,17 +1551,24 @@ function TeamMembersDirectory({
 
 function TeamMembersDisplayMenu({ columns, descending, hasSubteams, onColumn, onDirection, onOrdering, onVisibility, ordering, visibility }: { columns: Set<TeamMemberColumn>; descending: boolean; hasSubteams: boolean; onColumn: (column: TeamMemberColumn) => void; onDirection: () => void; onOrdering: (ordering: TeamMemberOrdering) => void; onVisibility: (key: keyof TeamMemberVisibility) => void; ordering: TeamMemberOrdering; visibility: TeamMemberVisibility }) {
   const { t } = useI18n();
-  const labels = { name: t("Name"), email: t("Email"), role: t("Role") };
-  const visibilityLabels: Record<keyof TeamMemberVisibility, string> = { owners: t("Show owners and admins"), members: t("Show members"), guests: t("Show guests"), invited: t("Show invited") };
-  return <Popover.Root><Popover.Trigger asChild><button aria-label={t("Display options")} className="team-members-display"><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="team-directory-display-menu team-members-display-menu" sideOffset={4}>
-    <div className="team-directory-order-row"><span>{t("Ordering")}</span><div><select aria-label={t("Ordering")} onChange={event => onOrdering(event.target.value as TeamMemberOrdering)} value={ordering}>{(Object.keys(labels) as TeamMemberOrdering[]).map(value => <option key={value} value={value}>{labels[value]}</option>)}</select><button aria-label={t("Direction")} onClick={onDirection} title={t(descending ? "Descending" : "Ascending")} type="button">{descending ? <ArrowDownWideNarrow/> : <ArrowUpNarrowWide/>}</button></div></div>
-    <div className="team-directory-visibility">{(Object.keys(visibilityLabels) as (keyof TeamMemberVisibility)[]).map(value => <label key={value}><span>{visibilityLabels[value]}</span><button aria-checked={visibility[value]} onClick={() => onVisibility(value)} role="switch" type="button"><i/></button></label>)}</div>
-    <div className="team-directory-properties"><span>{t("Display properties")}</span><div>{(["email", "role", ...(hasSubteams ? ["subteams" as const] : [])] as TeamMemberColumn[]).map(value => <button aria-pressed={columns.has(value)} key={value} onClick={() => onColumn(value)} type="button">{value === "subteams" ? t("Sub-teams") : labels[value]}</button>)}</div></div>
-  </Popover.Content></Popover.Portal></Popover.Root>;
+  const visibilityLabels: Record<keyof TeamMemberVisibility, string> = { owners: t("Show owners and admins"), members: t("Show members"), guests: t("Show guests"), applications: t("Show applications"), invited: t("Show invited") };
+  return <DirectoryDisplayMenu<TeamMemberColumn, TeamMemberOrdering>
+    className="is-compact team-members-display-menu"
+    descending={descending}
+    onDirection={onDirection}
+    onOrdering={onOrdering}
+    onProperty={onColumn}
+    ordering={ordering}
+    orderingOptions={[{ id: "name", label: t("Name") }, { id: "email", label: t("Email") }, { id: "role", label: t("Role") }]}
+    properties={columns}
+    propertyOptions={[{ id: "email", label: t("Email") }, { id: "role", label: t("Role") }, ...(hasSubteams ? [{ id: "subteams" as const, label: t("Sub-teams") }] : [])]}
+    toggles={(Object.keys(visibilityLabels) as (keyof TeamMemberVisibility)[]).map(key => ({ id: key, label: visibilityLabels[key], checked: visibility[key], onToggle: () => onVisibility(key) }))}
+    triggerClassName="team-members-display"
+  />;
 }
 
 function readTeamMemberDirectoryState(teamId: string) {
-  const fallback = { ordering: "name" as TeamMemberOrdering, descending: false, columns: new Set<TeamMemberColumn>(["email", "role", "subteams"]), visibility: { owners: true, members: true, guests: true, invited: true } };
+  const fallback = { ordering: "name" as TeamMemberOrdering, descending: false, columns: new Set<TeamMemberColumn>(["email", "role", "subteams"]), visibility: { owners: true, members: true, guests: true, applications: true, invited: true } };
   try {
     const saved = JSON.parse(localStorage.getItem(`flow:team:${teamId}:member-directory`) ?? "null") as { ordering?: TeamMemberOrdering; descending?: boolean; columns?: TeamMemberColumn[]; visibility?: Partial<TeamMemberVisibility> } | null;
     if (!saved) return fallback;
@@ -1561,11 +1579,20 @@ function persistTeamMemberDirectoryState(teamId: string, value: ReturnType<typeo
   try { localStorage.setItem(`flow:team:${teamId}:member-directory`, JSON.stringify({ ...value, columns: [...value.columns] })); } catch { /* Storage is optional. */ }
 }
 
-function workspaceRoleLabel(role: BootstrapData["viewerRole"] | undefined) {
-  if (role === "owner") return "Workspace owner";
-  if (role === "admin") return "Workspace admin";
-  if (role === "guest") return "Guest";
-  return "Workspace member";
+/** Linear's single role cell: workspace owner/admin and team owner are badges; the rest is plain text. */
+function teamMemberRoleBadge(entry: TeamMemberDirectoryEntry): { label: string; badge: boolean } {
+  const workspaceRole = entry.workspaceMember?.role;
+  if (entry.invitation) return { label: "Invited", badge: true };
+  if (entry.user.app || workspaceRole === "app") return { label: "Application", badge: false };
+  if (workspaceRole === "owner") return { label: "Workspace owner", badge: true };
+  if (workspaceRole === "admin") return { label: "Workspace admin", badge: true };
+  if (entry.membership.role === "owner") return { label: "Team owner", badge: true };
+  if (workspaceRole === "guest") return { label: "Guest", badge: false };
+  return { label: "Member", badge: false };
+}
+
+function teamMemberRoleRank(entry: TeamMemberDirectoryEntry) {
+  return ["Workspace owner", "Workspace admin", "Team owner", "Member", "Guest", "Application", "Invited"].indexOf(teamMemberRoleBadge(entry).label);
 }
 
 function TeamDocuments({

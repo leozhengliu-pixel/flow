@@ -8,7 +8,7 @@ import type { BootstrapData, User } from '@/types/flow'
 import { WorkspaceDirectoryPage } from './workspace-directory-page'
 import { memberDirectoryStorageKey } from './use-member-directory-preferences'
 
-const agent = { id: 'app-1', name: 'flow-agent', displayName: 'Flow Agent', email: 'agent@apps.example.test', active: true, app: true } as User
+const agent = { id: 'app-1', name: 'flow-agent', displayName: 'Flow Agent', username: 'flow-agent', email: 'agent@apps.example.test', active: true, app: true } as User
 
 function membersData(overrides: Partial<BootstrapData> = {}) {
   return makeBootstrap({
@@ -59,6 +59,55 @@ describe('workspace members directory', () => {
     expect(within(owner).getByRole('button', { name: 'Open team Test team' })).toHaveTextContent('TST')
     expect(owner.querySelector('time[title^="Joined Jan 2, "]')).toHaveTextContent('Jan 2')
     expect(within(rowFor('Teammate')).getByText('Member')).not.toHaveClass('workspace-member-role')
+  })
+
+  it('shows full name over username and Linear status badges', () => {
+    const skyler = { id: 'user-3', name: 'Skyler Anderson', displayName: 'Skyler Anderson', username: 'bcgroupdev', email: 'bcgroupdev@gmail.com', active: true } as User
+    const guest = { id: 'user-4', name: 'Gia Guest', displayName: 'Gia Guest', email: 'Gia.Guest@example.test', active: true } as User
+    const gone = { id: 'user-5', name: 'Sam Suspended', displayName: 'Sam Suspended', email: 'sam@example.test', active: true } as User
+    renderMembers(membersData({
+      users: [viewer, teammate, agent, skyler, guest, gone],
+      members: [
+        { user: viewer, role: 'owner', status: 'active', joinedAt: '2026-01-02T10:00:00.000Z' },
+        { user: teammate, role: 'admin', status: 'active', joinedAt: '2026-01-02T10:00:00.000Z' },
+        { user: agent, role: 'app', status: 'active', joinedAt: '2026-01-02T10:00:00.000Z' },
+        { user: skyler, role: 'member', status: 'active', joinedAt: '2026-01-02T10:00:00.000Z' },
+        { user: guest, role: 'guest', status: 'active', joinedAt: '2026-01-02T10:00:00.000Z' },
+        { user: gone, role: 'member', status: 'suspended', joinedAt: '2026-01-02T10:00:00.000Z' },
+      ],
+      invitations: [{ id: 'invite-1', workspaceId: 'workspace-1', email: 'new@example.test', role: 'member', teamIds: [], status: 'pending', inviterId: viewer.id, expiresAt: '', createdAt: '2026-01-02T10:00:00.000Z' }],
+    } as Partial<BootstrapData>))
+    const identity = (name: string) => rowFor(name).querySelector('.workspace-member-identity small')
+    expect(identity('Skyler Anderson')).toHaveTextContent(/^bcgroupdev$/)
+    expect(identity('Gia Guest')).toHaveTextContent(/^gia.guest$/)
+    const badge = (name: string, label: string) => within(rowFor(name)).getByText(label)
+    expect(badge('Viewer', 'Owner')).toHaveClass('workspace-member-role')
+    expect(badge('Teammate', 'Admin')).toHaveClass('workspace-member-role')
+    expect(badge('Flow Agent', 'Application')).toHaveClass('workspace-member-role')
+    expect(badge('Gia Guest', 'Guest')).toHaveClass('workspace-member-role')
+    expect(within(rowFor('Sam Suspended')).getAllByText('Suspended')[0]).toHaveClass('workspace-member-role')
+    expect(within(rowFor('new@example.test')).getByText('Invited')).toHaveClass('workspace-member-role')
+    expect(within(rowFor('new@example.test')).getAllByText('new@example.test')).toHaveLength(1)
+    expect(within(rowFor('Skyler Anderson')).getByText('Member')).not.toHaveClass('workspace-member-role')
+  })
+
+  it('shows team keys with a +N chip and sizes the Teams column to the longest key', () => {
+    const teams = [
+      { ...makeBootstrap().teams[0], id: 'team-1', key: 'DESIGN', name: 'Design' },
+      { ...makeBootstrap().teams[0], id: 'team-2', key: 'FLO', name: 'Flow' },
+      { ...makeBootstrap().teams[0], id: 'team-3', key: 'OPS', name: 'Operations' },
+    ]
+    renderMembers(membersData({
+      teams,
+      teamMembers: teams.map(team => ({ teamId: team.id, userId: viewer.id, role: 'member' as const, joinedAt: '' })),
+    } as Partial<BootstrapData>))
+    const teamsCell = rowFor('Viewer').querySelector('.workspace-member-teams') as HTMLElement
+    expect(within(teamsCell).getByRole('button', { name: 'Open team Design' })).toHaveTextContent(/^DESIGN$/)
+    const more = within(teamsCell).getByText('+2')
+    expect(more).toHaveClass('workspace-member-teams__more')
+    expect(more).toHaveAttribute('title', 'DESIGN · Design, FLO · Flow, OPS · Operations')
+    const table = document.querySelector('.workspace-members-table') as HTMLElement
+    expect(table.style.getPropertyValue('--member-columns')).toContain('max(96px, calc(6ch + 76px))')
   })
 
   it('persists display options that reorder rows and hide columns', async () => {

@@ -323,8 +323,112 @@ describe('team overview', () => {
     await user.click(screen.getByRole('button', { name: 'Email', pressed: true }))
     await user.click(screen.getByRole('button', { name: 'Display options' }))
     expect(screen.queryByRole('button', { name: 'Email' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'A-Z' }))
-    expect(screen.getByRole('button', { name: 'Z-A' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'A-Z' })).not.toBeInTheDocument()
+    const nameHeader = screen.getByRole('button', { name: 'Order by Name, sorted ascending' })
+    expect(nameHeader).toHaveTextContent(/^Name$/)
+    expect(nameHeader.querySelector('svg[data-direction="ascending"]')).not.toBeNull()
+    await user.click(nameHeader)
+    expect(screen.getByRole('button', { name: 'Order by Name, sorted descending' }).querySelector('svg[data-direction="descending"]')).not.toBeNull()
+    expect(globalThis.document.querySelector('.team-member-row strong')).toHaveTextContent('Person 099')
+  })
+
+  it('uses Linear\'s ordering control and Show applications toggle in display options', async () => {
+    const user = userEvent.setup()
+    const app = { ...viewer, id: 'app-user', name: 'flow-app', displayName: 'Flow App', email: 'bot@apps.example.test', app: true }
+    const guest = { ...viewer, id: 'guest-user', name: 'Guest Person', displayName: 'Guest Person', email: 'guest@example.test' }
+    renderPage('members', {
+      users: [viewer, app, guest],
+      members: [{ user: viewer, role: 'member', status: 'active', joinedAt: '' }, { user: app, role: 'app', status: 'active', joinedAt: '' }, { user: guest, role: 'guest', status: 'active', joinedAt: '' }],
+      teamMembers: [viewer, app, guest].map(person => ({ teamId: 'team-1', userId: person.id, role: person.id === viewer.id ? 'owner' as const : 'member' as const, joinedAt: '' })),
+    })
+    await user.click(screen.getByRole('button', { name: 'Display options' }))
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+    expect(screen.getByText('Ordering')).toBeVisible()
+    const direction = screen.getByRole('button', { name: 'Sort descending' })
+    const pill = screen.getByRole('button', { name: 'Choose ordering' })
+    expect(pill).toHaveTextContent('Name')
+    expect(direction.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const switches = [...globalThis.document.querySelectorAll('.workspace-directory-display-menu__toggles label')].map(item => item.textContent)
+    expect(switches).toEqual(['Show owners and admins', 'Show members', 'Show guests', 'Show applications', 'Show invited'])
+    expect(screen.getAllByRole('button', { pressed: true }).map(item => item.textContent)).toEqual(['Email', 'Role'])
+    await user.click(screen.getByRole('switch', { name: 'Show applications' }))
+    expect(screen.queryByText('Flow App')).not.toBeInTheDocument()
+    expect(screen.getByText('Guest Person')).toBeInTheDocument()
+    await user.click(pill)
+    const email = screen.getByRole('menuitem', { name: 'Email' })
+    expect(screen.getByRole('menuitem', { name: 'Name' }).querySelector('svg')).not.toBeNull()
+    expect(email.querySelector('svg')).toBeNull()
+    await user.click(email)
+    expect(screen.getByRole('button', { name: 'Order by Email, sorted ascending' })).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('flow:team:team-1:member-directory')!)).toMatchObject({ ordering: 'email', visibility: { applications: false } })
+  })
+
+  it('renders full name over username and a single Linear role badge per member', () => {
+    const users = [
+      { ...viewer, username: 'bcgroupdev', name: 'Skyler Anderson', displayName: 'Skyler Anderson', email: 'bcgroupdev@gmail.com' },
+      { ...viewer, id: 'admin-user', name: 'Ada Admin', displayName: 'Ada Admin', email: 'ada@example.test' },
+      { ...viewer, id: 'team-owner', name: 'Tom Owner', displayName: 'Tom Owner', email: 'tom@example.test' },
+      { ...viewer, id: 'plain', name: 'Pat Plain', displayName: 'Pat Plain', email: 'Pat.Plain+x@example.test' },
+      { ...viewer, id: 'guest', name: 'Gus Guest', displayName: 'Gus Guest', email: 'gus@example.test' },
+    ]
+    const roles = ['owner', 'admin', 'member', 'member', 'guest'] as const
+    renderPage('members', {
+      users,
+      members: users.map((user, index) => ({ user, role: roles[index], status: 'active' as const, joinedAt: '' })),
+      teamMembers: users.map(user => ({ teamId: 'team-1', userId: user.id, role: user.id === viewer.id || user.id === 'team-owner' ? 'owner' as const : 'member' as const, joinedAt: '' })),
+    })
+    const row = (name: string) => screen.getByText(name, { selector: 'strong' }).closest('.team-member-row') as HTMLElement
+    const skyler = row('Skyler Anderson')
+    expect(skyler.querySelector('.team-members-person small')).toHaveTextContent(/^bcgroupdev$/)
+    expect(within(skyler).getAllByText('Skyler Anderson')).toHaveLength(1)
+    expect(within(skyler).getByText('Workspace owner')).toHaveClass('team-members-role-badge')
+    expect(within(skyler).queryByText('Team owner')).not.toBeInTheDocument()
+    expect(within(row('Ada Admin')).getByText('Workspace admin')).toHaveClass('team-members-role-badge')
+    expect(within(row('Tom Owner')).getByText('Team owner')).toHaveClass('team-members-role-badge')
+    const plain = row('Pat Plain')
+    expect(plain.querySelector('.team-members-person small')).toHaveTextContent(/^pat.plainx$/)
+    expect(plain.querySelector('.team-members-role')).toHaveTextContent(/^Member$/)
+    expect(plain.querySelector('.team-members-role-badge')).toBeNull()
+    expect(row('Gus Guest').querySelector('.team-members-role')).toHaveTextContent(/^Guest$/)
+    expect(row('Gus Guest').querySelector('.team-members-role-badge')).toBeNull()
+  })
+
+  it('offers Linear\'s row menu for other members and reveals the trigger only on hover or focus', async () => {
+    const user = userEvent.setup()
+    const other = { ...viewer, id: 'other-user', name: 'Olive Other', displayName: 'Olive Other', email: 'olive@example.test' }
+    const managed = { ...viewer, id: 'managed-user', name: 'Mona Managed', displayName: 'Mona Managed', email: 'mona@example.test' }
+    renderPage('members', {
+      viewerRole: 'owner',
+      users: [viewer, other, managed],
+      members: [viewer, other, managed].map(person => ({ user: person, role: person.id === viewer.id ? 'owner' as const : 'member' as const, status: 'active' as const, joinedAt: '' })),
+      teamMembers: [
+        { teamId: 'team-1', userId: viewer.id, role: 'owner', joinedAt: '' },
+        { teamId: 'team-1', userId: other.id, role: 'member', joinedAt: '' },
+        { teamId: 'team-1', userId: managed.id, role: 'member', joinedAt: '', managed: true, managedSource: 'scim' },
+      ],
+    })
+    const row = (name: string) => screen.getByText(name, { selector: 'strong' }).closest('.team-member-row') as HTMLElement
+    await user.click(within(row('Olive Other')).getByRole('button', { name: 'Open menu' }))
+    const menu = screen.getByRole('menu')
+    expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Make team owner', 'Remove from team…'])
+    expect(within(menu).getByRole('separator')).toBeInTheDocument()
+    expect(within(menu).queryByRole('menuitem', { name: 'View profile' })).not.toBeInTheDocument()
+    confirm.mockResolvedValueOnce(true)
+    await user.click(within(menu).getByRole('menuitem', { name: 'Remove from team…' }))
+    await waitFor(() => expect(api.setTeamMembership).toHaveBeenCalledWith('workspace', 'team-1', 'other-user', false, 'member'))
+    await user.click(within(row('Mona Managed')).getByRole('button', { name: 'Open menu' }))
+    expect(screen.getByRole('menuitem', { name: 'Remove from team…' })).toHaveAttribute('data-disabled')
+    expect(screen.getByRole('menuitem', { name: 'Remove from team…' })).toHaveAttribute('title', 'Managed by SCIM')
+    await user.keyboard('{Escape}')
+    await user.click(within(row('Viewer')).getByRole('button', { name: 'Open menu' }))
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Leave team…'])
+    // jsdom loads no stylesheets; read the rule itself (Node APIs are untyped in this project).
+    const fs = (await import(/* @vite-ignore */ `node:${'fs'}`)) as { readFileSync: (path: string, encoding: 'utf8') => string }
+    const cwd = (globalThis as unknown as { process: { cwd: () => string } }).process.cwd()
+    const css = fs.readFileSync(`${cwd}/src/components/team-overview/team-overview-page.css`, 'utf8')
+    expect(css).toMatch(/\.team-member-row>button\{[^}]*opacity:0/)
+    expect(css).toContain('.team-member-row:hover>button,.team-member-row:focus-within>button,.team-member-row>button[data-state=open]{opacity:1}')
+    expect(css).toMatch(/\.team-member-row:hover,\.team-member-row:focus-within\{background:var\(--project-row-hover-bg\)\}/)
   })
 
   it('searches add-member candidates by employee id and can add a team owner', async () => {
@@ -348,9 +452,10 @@ describe('team overview', () => {
       members: [{ user: viewer, role: 'owner', status: 'active', joinedAt: '' }],
       invitations: [{ id: 'invite-team', workspaceId: 'workspace-1', email: 'invited@example.com', role: 'member', teamIds: ['team-1'], status: 'pending', inviterId: viewer.id, expiresAt: '', createdAt: '' }],
     })
-    expect(screen.getByText('Team owner')).toBeVisible()
-    expect(screen.getByText('Workspace owner')).toBeVisible()
+    expect(screen.queryByText('Team owner')).not.toBeInTheDocument()
+    expect(screen.getByText('Workspace owner')).toHaveClass('team-members-role-badge')
     expect(screen.getAllByText('invited@example.com')).toHaveLength(2)
+    expect(screen.getByText('Invited')).toHaveClass('team-members-role-badge')
     await user.click(screen.getByRole('button', { name: 'Display options' }))
     await user.click(screen.getByRole('switch', { name: 'Show invited' }))
     expect(screen.queryByText('invited@example.com')).not.toBeInTheDocument()
@@ -362,7 +467,7 @@ describe('team overview', () => {
     renderPage('members', { viewerRole: 'member', teamSettings: { 'team-1': settings }, members: [{ user: viewer, role: 'member', status: 'active', joinedAt: '' }], teamMembers: [{ teamId: 'team-1', userId: viewer.id, role: 'member', joinedAt: '' }] })
     expect(screen.queryByRole('button', { name: 'Add a member' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Open menu' }))
-    expect(screen.getByRole('menuitem', { name: 'Leave team' })).toBeVisible()
+    expect(screen.getByRole('menuitem', { name: 'Leave team…' })).toBeVisible()
     expect(screen.queryByRole('menuitem', { name: 'Make team owner' })).not.toBeInTheDocument()
   })
 })

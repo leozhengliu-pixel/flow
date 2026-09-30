@@ -3766,7 +3766,7 @@ function App() {
       canonicalize(membersPath(workspace), { replace: true });
     if (route.kind === "member-profile") {
       const user = data.users.find(
-        (item) => item.name === route.username || item.id === route.username,
+        (item) => item.name === route.username || item.username === route.username || item.id === route.username,
       );
       if (user) {
         const canonical = memberProfilePath(workspace, user.name, route.view);
@@ -5024,7 +5024,7 @@ function App() {
           (() => {
             const user = data.users.find(
               (item) =>
-                item.name === route.username || item.id === route.username,
+                item.name === route.username || item.username === route.username || item.id === route.username,
             );
             return user ? (
               <MemberProfilePage

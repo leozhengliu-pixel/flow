@@ -50,6 +50,15 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
+		if _, ok := patch["username"]; ok && input.Username != data.UserSettings[actor.ID].Username {
+			input.Username = normalizeUsernameInput(input.Username)
+			if input.Username != "" && !validUsername(input.Username) {
+				return errInvalid
+			}
+			if input.Username != "" && usernameTaken(*data, actor.ID, input.Username) {
+				return errUsernameTaken
+			}
+		}
 		input.UserID, input.UpdatedAt = actor.ID, time.Now().UTC()
 		if input.PulseSchedule == "" {
 			input.PulseSchedule = "default"
@@ -78,16 +87,27 @@ func (s *server) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	actor := requestActor(s, r)
+	input.Username = normalizeUsernameInput(input.Username)
+	if !validUsername(input.Username) {
+		writeError(w, http.StatusBadRequest, "Usernames can only contain lowercase letters, numbers, periods, underscores and hyphens")
+		return
+	}
+	if data, ok := s.store.BootstrapForContext(r.Context(), workspaceKey(r)); ok && usernameTaken(data, actor.ID, input.Username) {
+		writeError(w, http.StatusConflict, errUsernameTaken.Error())
+		return
+	}
 	user := actor
 	var err error
 	if !s.authDisabled {
-		user, err = s.store.UpdateProfile(r.Context(), actor.ID, input.DisplayName, input.Username, input.AvatarURL)
+		// The username lives in account settings; the account name (the profile
+		// URL key) is left as it is.
+		user, err = s.store.UpdateProfile(r.Context(), actor.ID, input.DisplayName, firstNonEmpty(actor.Name, input.Username), input.AvatarURL)
 		if err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
 		}
 	} else {
-		user.DisplayName, user.Name, user.AvatarURL = input.DisplayName, input.Username, input.AvatarURL
+		user.DisplayName, user.AvatarURL = input.DisplayName, input.AvatarURL
 	}
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "account.profile_updated", actor.ID, input, func(data *domain.Bootstrap) error {
 		if index := slices.IndexFunc(data.Users, func(item domain.User) bool { return item.ID == actor.ID }); index >= 0 {
@@ -96,11 +116,15 @@ func (s *server) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 		if data.Viewer.ID == actor.ID {
 			data.Viewer = user
 		}
+		if usernameTaken(*data, actor.ID, input.Username) {
+			return errUsernameTaken
+		}
 		settings := data.UserSettings[actor.ID]
-		settings.UserID, settings.JobTitle, settings.Username, settings.UpdatedAt = actor.ID, strings.TrimSpace(input.JobTitle), user.Name, time.Now().UTC()
+		settings.UserID, settings.JobTitle, settings.Username, settings.UpdatedAt = actor.ID, strings.TrimSpace(input.JobTitle), input.Username, time.Now().UTC()
 		data.UserSettings[actor.ID] = settings
 		return nil
 	})
+	user.Username = input.Username
 	respondMutation(w, err, http.StatusOK, user)
 }
 

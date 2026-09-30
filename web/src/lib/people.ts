@@ -3,7 +3,7 @@ import type { User } from '@/types/flow'
 export type PersonIdentity = Pick<User, 'id'> & Partial<Omit<User, 'id'>> & { label?: string }
 
 export function personSearchText(person: PersonIdentity) {
-  return [person.id, person.userId, person.name, person.displayName, person.label, person.email].filter(Boolean).join(' ')
+  return [person.id, person.userId, person.name, person.displayName, person.username, person.label, person.email].filter(Boolean).join(' ')
 }
 
 /** Business identity for display; the database key stays in relationship payloads. */
@@ -16,10 +16,20 @@ export function personDisplayName(person: PersonIdentity) {
   return [person.displayName, person.label, person.name].find(value => value && value !== person.id) || personIdentifier(person) || person.email || ''
 }
 
+/**
+ * Linear-style username shown under a person's full name ("bcgroupdev"). The API
+ * derives it (unique per workspace); older payloads fall back to the email's local part.
+ */
+export function personUsername(person: PersonIdentity) {
+  if (person.username) return person.username
+  const local = person.email?.split('@')[0] ?? ''
+  return local.toLowerCase().replace(/[^a-z0-9._-]/g, '').replace(/^[._-]+|[._-]+$/g, '')
+}
+
 export function personMatchesQuery(person: PersonIdentity, query: string) {
   const needle = query.trim().toLocaleLowerCase()
   if (!needle) return true
-  const fields = [person.id, person.userId, person.name, person.displayName, person.label, person.email].filter((field): field is string => Boolean(field))
+  const fields = [person.id, person.userId, person.name, person.displayName, person.username, person.label, person.email].filter((field): field is string => Boolean(field))
   if (fields.some(field => field.toLocaleLowerCase().includes(needle))) return true
   const compact = (value: string) => value.toLocaleLowerCase().replace(/[\s._-]+/g, '')
   const compactNeedle = compact(needle)

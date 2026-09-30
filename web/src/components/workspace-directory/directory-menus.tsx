@@ -280,6 +280,15 @@ export interface DirectoryOrderingOption<T extends string> {
   label: string;
 }
 
+export interface DirectoryDisplayToggle {
+  id: string;
+  label: string;
+  checked: boolean;
+  onToggle: () => void;
+}
+
+/** Linear's display options: "Ordering" row (direction button + pill dropdown), optional
+ * visibility switches, then Display properties chips. Shared by the workspace and team lists. */
 export function DirectoryDisplayMenu<
   TProperty extends string,
   TOrdering extends string,
@@ -293,6 +302,8 @@ export function DirectoryDisplayMenu<
   onDirection,
   onProperty,
   className = "",
+  toggles = [],
+  triggerClassName = "workspace-directory__icon-button",
 }: {
   ordering: TOrdering;
   orderingOptions: DirectoryOrderingOption<TOrdering>[];
@@ -303,6 +314,8 @@ export function DirectoryDisplayMenu<
   onDirection: () => void;
   onProperty: (property: TProperty) => void;
   className?: string;
+  toggles?: DirectoryDisplayToggle[];
+  triggerClassName?: string;
 }) {
   const activeOrdering =
     orderingOptions.find((option) => option.id === ordering)?.label ?? ordering;
@@ -311,7 +324,7 @@ export function DirectoryDisplayMenu<
       <Popover.Trigger asChild>
         <button
           aria-label="Display options"
-          className="workspace-directory__icon-button"
+          className={triggerClassName}
           type="button"
         >
           <FlowDisplayIcon />
@@ -365,6 +378,16 @@ export function DirectoryDisplayMenu<
               </DropdownMenu.Portal>
             </DropdownMenu.Root>
           </div>
+          {toggles.length > 0 && (
+            <div className="workspace-directory-display-menu__toggles">
+              {toggles.map((toggle) => (
+                <label key={toggle.id}>
+                  <span>{toggle.label}</span>
+                  <button aria-checked={toggle.checked} onClick={toggle.onToggle} role="switch" type="button"><i /></button>
+                </label>
+              ))}
+            </div>
+          )}
           <div className="workspace-directory-display-menu__properties">
             <h3>Display properties</h3>
             <div>
