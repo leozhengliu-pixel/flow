@@ -997,6 +997,18 @@ type LoopRunReply struct {
 	Error      string            `json:"error,omitempty"`
 	CreatedAt  time.Time         `json:"createdAt"`
 	FinishedAt *time.Time        `json:"finishedAt,omitempty"`
+	// SkillIDs are the replier's skills applied to the answer.
+	SkillIDs []string `json:"skillIds,omitempty"`
+	// Attachments describe the files sent with the reply; their contents
+	// went to the agent with that turn and are not kept.
+	Attachments []LoopRunReplyAttachment `json:"attachments,omitempty"`
+}
+
+// LoopRunReplyAttachment is a file sent with a run reply.
+type LoopRunReplyAttachment struct {
+	Name        string `json:"name"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
 }
 
 // LoopRunStep is a progress note (report_progress) the agent made during a run.

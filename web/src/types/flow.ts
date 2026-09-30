@@ -1049,10 +1049,21 @@ export interface LoopRun {
   /** Follow-up messages from the run page and the agent's answers. */
   replies?: LoopRunReply[];
 }
+/** A file attached to an agent message: text files as text, images as a data URL, anything else by name only. */
+export interface AgentFileAttachment {
+  name: string;
+  contentType: string;
+  size: number;
+  content?: string;
+}
 export interface LoopRunReply {
   id: string;
   userId: UUID;
   body: string;
+  /** The replier's skills applied to the answer. */
+  skillIds?: string[];
+  /** Files attached to the reply (their contents went to the agent, only these details are kept). */
+  attachments?: { name: string; contentType: string; size: number }[];
   status: "running" | "completed" | "failed";
   output?: string;
   steps?: LoopRun["steps"];
