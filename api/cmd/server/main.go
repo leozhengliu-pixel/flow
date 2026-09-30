@@ -3462,6 +3462,7 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	projectID := r.PathValue("id")
+	actor := requestActor(s, r)
 	var created domain.ProjectResource
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.resource_created", projectID, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
@@ -3479,7 +3480,7 @@ func (s *server) createProjectResource(w http.ResponseWriter, r *http.Request) {
 		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
 			title = strings.TrimSpace(*input.Title)
 		}
-		created = domain.ProjectResource{ID: fmt.Sprintf("project_resource_%d", time.Now().UnixNano()), ProjectID: projectID, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), PinnedTeamIDs: []string{}, CreatedAt: time.Now().UTC()}
+		created = domain.ProjectResource{ID: fmt.Sprintf("project_resource_%d", time.Now().UnixNano()), ProjectID: projectID, Type: resourceType, Title: title, URL: strings.TrimSpace(*input.URL), PinnedTeamIDs: []string{}, CreatorID: actor.ID, CreatedAt: time.Now().UTC()}
 		project.Resources = append(project.Resources, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
