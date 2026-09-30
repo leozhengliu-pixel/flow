@@ -30,7 +30,10 @@ export function shouldShowProgressGraph(project: Pick<Project, 'startDate' | 'sc
 export function buildProgressData(issues: Issue[], start?: string, target?: string, persisted?: PersistedProgressHistory) {
   const today = startOfDay(new Date())
   const scopedIssues = issues.filter(issue => !['canceled', 'duplicate', 'triage'].includes(issue.state.type))
-  const totalEstimate = scopedIssues.reduce((total, issue) => total + issueEstimate(issue), 0)
+  // In paged mode the project's issues may not be loaded here; the persisted
+  // scope history is then the only source of the current scope.
+  const localEstimate = scopedIssues.reduce((total, issue) => total + issueEstimate(issue), 0)
+  const totalEstimate = Math.max(localEstimate, latestHistoryValue(persisted?.scopeHistory ?? persisted?.issueCountHistory) ?? 0)
   const createdDates = scopedIssues.map(issue => startOfDay(new Date(issue.createdAt))).filter(date => !Number.isNaN(date.getTime()))
   const requestedStart = start ? startOfDay(new Date(`${start}T00:00:00`)) : createdDates[0]
   const startDate = requestedStart && !Number.isNaN(requestedStart.getTime()) ? requestedStart : today
@@ -78,15 +81,18 @@ export function buildProgressData(issues: Issue[], start?: string, target?: stri
   const startedData = startedHistory
     ? startedHistory.map(point => ({ x: point.x, y: point.y + (completedData.find(completedPoint => completedPoint.x.getTime() === point.x.getTime())?.y ?? 0) }))
     : finalActiveDays.map(date => ({ x: date, y: scopedIssues.filter(issue => isStarted(issue, date)).reduce((total, issue) => total + issueEstimate(issue), 0) }))
+  const series = [{ id: 'Scope' as const, data: scope }, { id: 'Started' as const, data: startedData }, { id: 'Completed' as const, data: completedData }, { id: 'Target' as const, data: targetData }]
   return {
     startDate,
     targetDate,
     endDate,
     currentDate,
+    /** Chart ceiling: every plotted value fits, whatever the local issues say. */
+    yMax: Math.max(1, totalEstimate, ...series.flatMap(item => item.data.map(point => point.y))),
     completedChanges: buildCompletionChanges(scopedIssues, startDate, currentDate),
     forecast: { completed: completedData.at(-1)?.y ?? 0, optimisticDate, pessimisticDate, total: totalEstimate } satisfies ProgressForecast,
     totalEstimate,
-    series: [{ id: 'Scope' as const, data: scope }, { id: 'Started' as const, data: startedData }, { id: 'Completed' as const, data: completedData }, { id: 'Target' as const, data: targetData }],
+    series,
   }
 }
 
@@ -95,6 +101,15 @@ function weeklyHistory(startDate: Date, currentDate: Date) {
   for (let date = startDate; date <= currentDate; date = addDays(date, 7)) dates.push(date)
   if (dates.at(-1)?.getTime() !== currentDate.getTime()) dates.push(currentDate)
   return dates
+}
+
+function latestHistoryValue(entries: ProjectProgressHistoryPoint[] | undefined) {
+  let latest: { time: number; value: number } | undefined
+  for (const entry of entries ?? []) {
+    const time = normalizedHistoryDate(entry.date)?.getTime()
+    if (time !== undefined && (!latest || time >= latest.time)) latest = { time, value: entry.value }
+  }
+  return latest?.value
 }
 
 function historyValues(entries: ProjectProgressHistoryPoint[] | undefined, startDate: Date, endDate: Date) {
