@@ -79,6 +79,15 @@ describe('DocumentPage edited details', () => {
     await waitFor(() => expect(screen.getByRole('dialog')).toBeVisible())
   })
 
+  it('opens the history dialog on arrival when a resource menu requests it', async () => {
+    const data = makeBootstrap({ comments: { [flowDocument.id]: [] }, documents: [flowDocument], favorites: [], subscriptions: [] })
+    const handled = vi.fn()
+    render(<I18nProvider><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)} openHistoryRequest onHistoryRequestHandled={handled}/></I18nProvider>)
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeVisible())
+    expect(screen.getByRole('dialog')).toHaveClass('document-history')
+    expect(handled).toHaveBeenCalledTimes(1)
+  })
+
   it('shows author names beside authored content, never beside an empty placeholder', async () => {
     const user = userEvent.setup()
     const authored = { ...flowDocument, id: 'document-2', slugId: 'document-two', content: 'Written content' }

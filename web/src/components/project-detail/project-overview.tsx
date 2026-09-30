@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { AlignLeft, ArrowRight, Check, ChevronRight, Diamond, FileText, Flag, Link2, MoreHorizontal, MoreVertical, Plus, Trash2, X, Send } from 'lucide-react'
+import { AlignLeft, ArrowRight, Diamond, FileText, Flag, Link2, MoreHorizontal, Plus, Trash2, X, Send } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { PropertyMenu } from '@/components/property/property-menu'
@@ -18,7 +18,7 @@ import { ProjectDatePicker } from '@/components/projects-page/project-target-dat
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { useI18n } from '@/i18n/i18n'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
-import type { BootstrapData, CustomerRequest, Issue, Project, ProjectResource, Team } from '@/types/flow'
+import type { BootstrapData, CustomerRequest, FlowDocument, Issue, Project, ProjectResource, Team } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { PRIORITY_LABELS } from './project-detail-types'
 import { ProjectLabelControl } from '@/components/property/project-label-control'
@@ -30,6 +30,7 @@ import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { RichComment } from '@/components/activity/rich-comment'
 import { ResourceExternalArrow, ResourceLinkIcon } from './project-resource-link'
 import { resourceDisplayTitle } from './project-resource-link-name'
+import { ProjectResourceMenu } from './project-resource-menu'
 import { projectShortcutLabels, useProjectPickerOpen, type ProjectPickerRequest } from './project-detail-shortcuts'
 import { ProjectMilestoneMenu } from './project-milestone-menu'
 import { DescriptionHistoryDialog } from './project-header-menus'
@@ -37,7 +38,7 @@ import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onMoveMilestone, onConvertMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void }) {
+export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onMoveMilestone, onConvertMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled, onOpenDocumentHistory, onReloadWorkspace }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -85,7 +86,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     {issueData?.workspaceSettings.featureFlags.initiatives !== false && selectedInitiatives.length > 0 && <InitiativeSection initiatives={initiatives} project={project} save={save}/>}
     {selectedLabelIds.length > 0 && <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save} onCreateLabel={onCreateLabel} open={labelsOpen} onOpenChange={setLabelsOpen}/>}
-    <ResourceSection documents={documents} users={users} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
+    <ResourceSection data={issueData} documents={documents} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReloadWorkspace} project={project} projects={projects} users={users} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
     {customersEnabled && (hasCustomerRequests || customerDialogOpen) && <ProjectCustomerNeedsSection issueData={issueData} project={project} save={save} adding={customerDialogOpen} onAddingChange={setCustomerDialogOpen}/>}
 
     <section className={`project-overview__latest${projectUpdates[0] ? '' : ' is-empty'}`}>
@@ -165,7 +166,7 @@ function InlineStringSection({ addLabel, items, onChange, onOpenChange: setOpen,
   </div><StringInputDialog label={addLabel} onOpenChange={setOpen} open={open} onSubmit={value => { onChange([...items, value]); setOpen(false) }}/></section>
 }
 
-function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, teams, users }: { documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; users: Props['users']; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
+function ResourceSection({ data, documents, onCreate, onDelete, onOpenDocumentHistory, onReload, onUpdate, project, projects, resources, teams, users }: { data?: BootstrapData; project?: Project; projects?: Project[]; onOpenDocumentHistory?: (document: FlowDocument) => void; onReload?: () => Promise<void>; documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; users: Props['users']; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'create'|'edit'; resource?: ProjectResource }>()
   const [deleteResource, setDeleteResource] = useState<ProjectResource>()
@@ -175,12 +176,7 @@ function ResourceSection({ documents, onCreate, onDelete, onUpdate, resources, t
     setMenuOpen(false)
   }
   return <section className="project-overview__row-section project-overview__resources"><h3>Resources</h3><div className="project-overview__row-content">
-    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; const creator = document ? document.creator?.displayName : users.find(user => user.id === resource.creatorId)?.displayName; const age = resourceAge(document?.updatedAt ?? resource.createdAt); const title = resourceDisplayTitle(resource); const link = resource.type === 'link'; return <div className="project-overview__resource" data-kind={resource.type} key={resource.id}><FlowTooltip align="start" contentClassName="flow-tooltip-content--title" label={<span className="project-resource-tip"><strong data-i18n-ignore>{title}</strong>{link ? <span data-i18n-ignore>{resource.url}</span> : (creator || age) && <span data-i18n-ignore>{[creator, age].filter(Boolean).join(' · ')}</span>}</span>}><a data-i18n-ignore href={resource.url} rel={link ? 'noreferrer' : undefined} target={link ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:link ? <ResourceLinkIcon url={resource.url}/> : <FileText size={16}/>}<span className="project-resource-title">{title}</span>{link && <ResourceExternalArrow/>}</a></FlowTooltip><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={`${resource.title} actions`} data-i18n-ignore type="button"><MoreVertical size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu" sideOffset={4}>
-      <DropdownMenu.Item onSelect={() => void navigator.clipboard.writeText(resource.url).then(() => toast.success('Resource link copied'))}><Link2 size={14}/><span>Copy link</span></DropdownMenu.Item>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger><TeamIcon size={14}/><span>Pin to team</span><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="project-detail-page__menu" sideOffset={6}>{teams.map(team => <DropdownMenu.CheckboxItem checked={(resource.pinnedTeamIds ?? []).includes(team.id)} key={team.id} onCheckedChange={() => void onUpdate(resource.id, { pinnedTeamIds: toggleString(resource.pinnedTeamIds ?? [], team.id) })}><TeamIcon team={team} size={14}/><span data-i18n-ignore>{team.name}</span>{(resource.pinnedTeamIds ?? []).includes(team.id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-      <DropdownMenu.Item onSelect={() => setDialog({ mode: 'edit', resource })}><Link2 size={14}/><span>Edit</span></DropdownMenu.Item>
-      <DropdownMenu.Separator/><DropdownMenu.Item className="is-danger" onSelect={() => setDeleteResource(resource)}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item>
-    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>})}
+    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; const creator = document ? document.creator?.displayName : users.find(user => user.id === resource.creatorId)?.displayName; const age = resourceAge(document?.updatedAt ?? resource.createdAt); const title = resourceDisplayTitle(resource); const link = resource.type === 'link'; return <div className="project-overview__resource" data-kind={resource.type} key={resource.id}><FlowTooltip align="start" contentClassName="flow-tooltip-content--title" label={<span className="project-resource-tip"><strong data-i18n-ignore>{title}</strong>{link ? <span data-i18n-ignore>{resource.url}</span> : (creator || age) && <span data-i18n-ignore>{[creator, age].filter(Boolean).join(' · ')}</span>}</span>}><a data-i18n-ignore href={resource.url} rel={link ? 'noreferrer' : undefined} target={link ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:link ? <ResourceLinkIcon url={resource.url}/> : <FileText size={16}/>}<span className="project-resource-title">{title}</span>{link && <ResourceExternalArrow/>}</a></FlowTooltip><ProjectResourceMenu data={data} document={document} onDeleteLink={() => setDeleteResource(resource)} onEditLink={() => setDialog({ mode: 'edit', resource })} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReload} onUpdate={onUpdate} project={project} projects={projects} resource={resource} teams={teams}/></div>})}
     <DropdownMenu.Root onOpenChange={setMenuOpen} open={menuOpen}><FlowTooltip disabled={menuOpen} label={t('Add document or link')}><DropdownMenu.Trigger asChild>{resources.length
       ? <button aria-label="Add document or link…" className="project-overview__inline-add project-resource-add is-icon" type="button"><Plus size={16}/></button>
       : <button className="project-overview__inline-add project-resource-add" type="button"><Plus size={16}/>Add document or link…</button>}</DropdownMenu.Trigger></FlowTooltip><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__resource-menu" sideOffset={4}><DropdownMenu.Label className="sr-only">Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createDocument()}><FileText size={16}/><span>Create new document…</span></DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({ mode: 'create' })}><Link2 size={16}/><span>Add a link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>

@@ -79,3 +79,14 @@
 :root[data-theme="light"] .project-menu-icon,:root[data-theme="light"] .project-menu-shortcut,:root[data-theme="light"] .project-action-menu__empty,:root[data-theme="light"] .project-action-menu.project-property-submenu .property-command-group,:root[data-theme="light"] .project-update-schedule header p,:root[data-theme="light"] .project-update-schedule__options small{color:var(--action-menu-muted)}
 :root[data-theme="light"] .project-update-schedule>footer button{border-color:var(--theme-border-strong);background:var(--theme-control)}
 :root[data-theme="light"] .project-update-schedule>footer .is-primary{background:var(--accent);color:var(--on-accent)}
+/* Project Resources pill "⋮" menus (Linear: link menu 174px, document menu 263px). */
+.project-action-menu.project-resource-action-menu{width:174px;min-width:174px;font-weight:400}
+.project-action-menu.project-resource-action-menu[data-kind=document]{width:263px;min-width:263px}
+.project-action-menu.project-resource-submenu{min-width:175px;font-weight:400}
+.project-action-menu.project-resource-copy-menu{width:266px;min-width:266px}
+.project-resource-menu__group{height:24px;display:flex;align-items:center;padding:4px 14px 0;color:var(--action-menu-muted);font-size:12px;font-weight:450}
+.project-resource-menu__team{display:flex;align-items:baseline;gap:6px}
+.project-resource-menu__team small{flex:none;color:var(--theme-text-tertiary);font-size:13px}
+.project-resource-menu__team-icon svg{width:14px;height:14px}
+.project-resource-menu__check{margin-left:2px;border-color:transparent}
+.project-action-menu [role=menuitemcheckbox][data-highlighted] .project-resource-menu__check,.project-resource-menu__check[data-checked]{border-color:var(--theme-text-tertiary)}
