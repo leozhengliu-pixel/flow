@@ -1,4 +1,5 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ProjectGlyph } from "@/components/views/project-glyph";
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog';
 import { SidebarTeamMenu } from './sidebar-team-menu';
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
@@ -1172,7 +1173,7 @@ function favoriteDescriptor(
       return {
         favorite,
         href: projectPath(workspaceSlug, project, "overview"),
-        icon: <FlowIcon name="Project" style={{ color: project.color }} />,
+        icon: <ProjectGlyph project={project} />,
         title: project.name,
       };
   }

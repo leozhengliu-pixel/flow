@@ -146,7 +146,9 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 	if err != nil {
 		return err
 	}
-	historyChanged := refreshProjectProgressHistories(&data, time.Now().UTC())
+	// Record-backed snapshots carry no issues; their progress histories are
+	// maintained by the issue write paths and must not be recomputed empty.
+	historyChanged := data.Issues != nil && refreshProjectProgressHistories(&data, time.Now().UTC())
 	if historyChanged {
 		if err := s.persistWorkspace(ctx, workspaceKey, data, nil); err != nil {
 			return err
@@ -1287,6 +1289,9 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 	if eventType == "workspace_preferences.updated" && featureFlagsOnly(payload) {
 		return s.mutateFeatureFlags(ctx, workspaceKey, payload, mutate)
 	}
+	if userSettingsRecordMutation(eventType, payload) {
+		return s.mutateUserSettingsRecord(ctx, workspaceKey, eventType, payload, mutate)
+	}
 	if standaloneFavoriteMutation(eventType, payload) {
 		return s.mutateStandaloneFavorite(ctx, workspaceKey, eventType, payload, mutate)
 	}
@@ -1299,6 +1304,15 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 	if UsesIssueRecordMutations(ctx) {
 		return s.mutateIssueScope(ctx, workspaceKey, eventType, payload, mutate)
 	}
+	if scope, ok := mutationScopeFromContext(ctx); ok {
+		return s.mutateScoped(ctx, workspaceKey, eventType, payload, scope, mutate)
+	}
+	return s.mutateFull(ctx, workspaceKey, eventType, payload, mutate)
+}
+
+// mutateFull runs a mutation against the workspace snapshot. Unless the event
+// is metadata-only it loads every issue and content record first.
+func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
 	if workspaceKey == "" {
 		s.mu.RLock()
 		workspaceKey = s.lastWorkspaceKey
@@ -1403,7 +1417,14 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		}
 		return err
 	}
-	s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
+	s.publishMutation(ctx, workspaceKey, event, realtimePayload)
+	return nil
+}
+
+// publishMutation fans a committed mutation out to the hot cache, webhooks
+// and realtime subscribers.
+func (s *SQLiteStore) publishMutation(ctx context.Context, workspaceKey string, event domain.DomainEvent, realtimePayload json.RawMessage) {
+	s.invalidateHotCache(ctx, workspaceKey, event.Type, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
 		sink(workspaceKey, event)
 	}
@@ -1414,7 +1435,6 @@ func (s *SQLiteStore) MutateWorkspaceWithAggregate(ctx context.Context, workspac
 		}
 		sink(workspaceKey, domain.RealtimeEvent{ID: event.ID, Type: event.Type, AggregateID: event.AggregateID, ActorID: actor.ID, ClientID: realtimeClientFromContext(ctx), Payload: realtimePayload, CreatedAt: event.CreatedAt})
 	}
-	return nil
 }
 
 // enrichRealtimePayload adds the post-mutation entity only to the transient
@@ -1630,8 +1650,49 @@ func (s *SQLiteStore) persist(ctx context.Context, data domain.Bootstrap, event 
 }
 
 func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string, data domain.Bootstrap, event *domain.DomainEvent) error {
-	inputData := data
+	raw, err := s.encodeWorkspaceMetadata(data)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, data, raw, event); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.dropMetadataCache(ctx, workspaceKey)
+	return nil
+}
+
+// encodeWorkspaceMetadata splits the persisted metadata document from the
+// record-backed collections it excludes.
+func (s *SQLiteStore) encodeWorkspaceMetadata(data domain.Bootstrap) ([]byte, error) {
 	data = compactImportInputs(data)
+	data.Issues = nil
+	data.Activities = nil
+	data.Comments = nil
+	data.Notifications = nil
+	data.NotificationDeliveries = nil
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > s.maxStateBytes {
+		return nil, fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
+	}
+	return raw, nil
+}
+
+// persistWorkspaceTx writes the metadata document, the non-nil record
+// collections and the domain event inside tx. A nil collection is left as
+// stored.
+func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspaceKey string, inputData domain.Bootstrap, raw []byte, event *domain.DomainEvent) error {
+	data := compactImportInputs(inputData)
 	issues := data.Issues
 	activities, comments := data.Activities, data.Comments
 	notifications := data.Notifications
@@ -1641,18 +1702,6 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 	data.Comments = nil
 	data.Notifications = nil
 	data.NotificationDeliveries = nil
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	if len(raw) > s.maxStateBytes {
-		return fmt.Errorf("workspace state exceeds %d bytes", s.maxStateBytes)
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
 	if err := writeImportInputs(ctx, tx, workspaceKey, inputData); err != nil {
 		return err
 	}
@@ -1717,10 +1766,6 @@ func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string,
 			return err
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	s.dropMetadataCache(ctx, workspaceKey)
 	return nil
 }
 

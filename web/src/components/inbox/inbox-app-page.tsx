@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { ProjectGlyph } from '@/components/views/project-glyph'
 
 import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Initiative, InitiativeUpdate, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, ProjectUpdate, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
-import { NoProjectIcon, PriorityIcon, ProjectIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
+import { NoProjectIcon, PriorityIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
 import { batchNotifications, updateInboxNotification } from '@/lib/api'
 import {
@@ -706,7 +707,7 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
     from: inboxActorOptions(candidates, data.users),
     project: [
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
-      ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectIcon size={15} style={{ color: project.color }} />, count: count('project', project.id), i18nIgnore: true })),
+      ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectGlyph project={project} size={15} />, count: count('project', project.id), i18nIgnore: true })),
     ],
     initiative: [
       { id: '__none__', label: 'No initiative', keywords: 'none empty', icon: <InitiativeGlyph />, count: count('initiative', '__none__') },

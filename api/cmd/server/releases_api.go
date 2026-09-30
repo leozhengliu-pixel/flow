@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type reorderInput struct {
@@ -385,7 +386,18 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 	}
 	var saved domain.Release
 	created := false
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "release.ci_event", pipelineID, input, func(data *domain.Bootstrap) error {
+	// A CI event can move an existing release to a released stage, which runs
+	// completion automations over that release's issues.
+	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
+		extra := store.MutationScope{}
+		for _, release := range data.Releases {
+			if release.PipelineID == pipelineID && input.Version != "" && release.Version == input.Version {
+				extra.IssueIDs = append(extra.IssueIDs, release.IssueIDs...)
+			}
+		}
+		return extra
+	}})
+	err := s.store.MutateWorkspace(ctx, workspaceKey, "release.ci_event", pipelineID, input, func(data *domain.Bootstrap) error {
 		pipeline := releasePipelineByID(data, pipelineID)
 		if pipeline == nil || pipeline.AccessKeyHash == "" {
 			return errNotFound

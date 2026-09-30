@@ -1524,7 +1524,7 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	team := domain.Team{ID: fmt.Sprintf("team_%d", now.UnixNano()), Name: input.Name, Key: input.Key, Color: input.Color, Icon: input.Icon, Private: input.Private, CreatedAt: &now, UpdatedAt: &now}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey, "team.created", team.ID, input, func(data *domain.Bootstrap) error {
 		if domain.TeamKeyTaken(data, team.Key, team.ID) {
-			return errInvalid
+			return errTeamKeyTaken
 		}
 		if input.ParentTeamID != "" && !teamExists(data, input.ParentTeamID) || input.CopyFromTeamID != "" && !teamExists(data, input.CopyFromTeamID) {
 			return errInvalid
@@ -1638,8 +1638,11 @@ func (s *server) updateTeam(w http.ResponseWriter, r *http.Request) {
 			}
 			if input.Key != nil {
 				key := strings.ToUpper(strings.TrimSpace(*input.Key))
-				if !teamIdentifierPattern.MatchString(key) || domain.TeamKeyTaken(data, key, teamID) {
+				if !teamIdentifierPattern.MatchString(key) {
 					return errInvalid
+				}
+				if domain.TeamKeyTaken(data, key, teamID) {
+					return errTeamKeyTaken
 				}
 				data.Teams[index].Key = key
 			}
@@ -2874,7 +2877,15 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Project
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.updated", id, input, func(data *domain.Bootstrap) error {
+	ctx := r.Context()
+	if input.UpdateSchedule != nil || input.StartDate != nil {
+		// Turning update reminders off archives the project's pending
+		// reminder notifications, and a new start date rebuilds the progress
+		// history from the project's issues; every other project edit is
+		// metadata-only.
+		ctx = store.WithMutationScope(ctx, store.MutationScope{Resources: []string{id}})
+	}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.updated", id, input, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return err
@@ -3663,7 +3674,11 @@ func (s *server) reorderProjectMilestones(w http.ResponseWriter, r *http.Request
 
 func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) {
 	projectID, milestoneID := r.PathValue("id"), r.PathValue("milestoneId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_deleted", projectID, map[string]string{"id": milestoneID}, func(data *domain.Bootstrap) error {
+	// Only the project's issues can reference its milestones.
+	ctx := store.WithMutationScope(r.Context(), store.MutationScope{ProjectIssues: []string{projectID}, IssueContains: milestoneID, IssueFilter: func(issue domain.Issue) bool {
+		return issue.ProjectMilestoneID != nil && *issue.ProjectMilestoneID == milestoneID
+	}})
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.milestone_deleted", projectID, map[string]string{"id": milestoneID}, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -3868,7 +3883,10 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var created domain.ProjectUpdate
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "project.update_created", input, func(data *domain.Bootstrap) (string, error) {
+	// Posting an update archives the project's pending update reminders,
+	// which are notifications owned by the project.
+	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{id}})
+	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.update_created", input, func(data *domain.Bootstrap) (string, error) {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return "", err
@@ -6290,6 +6308,14 @@ func respondMutation(w http.ResponseWriter, err error, success int, value any) {
 	}
 	w.WriteHeader(success)
 }
+// errTeamKeyTaken stays a 400 (errInvalid) but says what is wrong.
+var errTeamKeyTaken error = teamKeyTakenError{}
+
+type teamKeyTakenError struct{}
+
+func (teamKeyTakenError) Error() string { return "A team with this key already exists" }
+func (teamKeyTakenError) Unwrap() error { return errInvalid }
+
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }

@@ -92,7 +92,8 @@ func (s *server) updateAccountProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Usernames can only contain lowercase letters, numbers, periods, underscores and hyphens")
 		return
 	}
-	if data, ok := s.store.BootstrapForContext(r.Context(), workspaceKey(r)); ok && usernameTaken(data, actor.ID, input.Username) {
+	// Usernames live in workspace metadata; do not load every issue to check one.
+	if data, ok := s.store.WorkspaceMetadata(workspaceKey(r)); ok && usernameTaken(data, actor.ID, input.Username) {
 		writeError(w, http.StatusConflict, errUsernameTaken.Error())
 		return
 	}

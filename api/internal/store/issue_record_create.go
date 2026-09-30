@@ -59,6 +59,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 	}
 	var event domain.DomainEvent
 	var realtime json.RawMessage
+	progressChanged := false
 	err = func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -202,6 +203,13 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 				return err
 			}
 		}
+		before := make([]domain.Issue, 0, len(previous))
+		for _, issue := range previous {
+			before = append(before, issue)
+		}
+		if progressChanged, err = refreshIssueProjectProgress(ctx, tx, workspace, &metadata, before, metadata.Issues, time.Now().UTC()); err != nil {
+			return err
+		}
 		metadata.ViewerRole = originalRole
 		metadata.Viewer = current.Viewer
 		metadata = collectionMetadata(metadata)
@@ -224,6 +232,9 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			return err
 		}
 		s.workspaces[workspace] = metadata
+		if progressChanged {
+			s.dropMetadataCache(ctx, workspace)
+		}
 		return nil
 	}()
 	if errors.Is(err, ErrNoMutation) {

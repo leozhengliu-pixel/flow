@@ -1,3 +1,4 @@
+import { overlayUserSettings, USER_SETTINGS_OVERRIDES_EVENT } from "@/lib/user-settings-overrides";
 import {
   Suspense,
   lazy,
@@ -112,6 +113,9 @@ import {
   deleteInitiativeUpdateAttachment,
   uploadAttachment,
   ApiError,
+  fetchPagedBootstrap,
+  listDocumentComments,
+  listIssueRecords,
 } from "@/lib/api";
 import type {
   AccountBootstrap,
@@ -286,6 +290,7 @@ import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { archiveProjectUpdateReminders, mergeRefreshedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries } from '@/lib/workspace-metadata-refresh'
 
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
 
@@ -302,6 +307,8 @@ function App() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const sessionViewerRef=useRef(session?.user.id);
   sessionViewerRef.current=session?.user.id;
+  const dataRef=useRef(data);
+  dataRef.current=data;
   const acceptBootstrap = useCallback((next:BootstrapData)=>{
     if(next.viewer.id!==sessionViewerRef.current) return;
     setData(current=>{
@@ -310,6 +317,29 @@ function App() {
       return merged;
     });
   },[]);
+  // Metadata edits (projects, releases, documents, customers, drafts, ...)
+  // never rewrite issue records. Refresh the metadata projection and keep the
+  // loaded issues instead of downloading every issue again; only issues a
+  // release completion automation may have moved are refetched.
+  const reloadWorkspaceMetadata = useCallback(async (workspaceKey: string): Promise<BootstrapData> => {
+    const next = await fetchPagedBootstrap(workspaceKey);
+    if (next.viewer.id !== sessionViewerRef.current) return next;
+    const loaded = dataRef.current;
+    const releasedIssueIds = loaded?.workspace.urlKey === workspaceKey && !loaded.issueCollectionPaged ? newlyReleasedIssueIds(loaded, next) : [];
+    setData(current => {
+      if (current?.workspace.urlKey !== workspaceKey || current.viewer.id !== next.viewer.id) return current;
+      if (current.issueCollectionPaged) return mergeWorkspaceDirectory(current, next);
+      const merged = mergeWorkspaceMetadata(current, next);
+      writeNavigationCache(next.viewer.id, workspaceKey, merged);
+      return merged;
+    });
+    for (let start = 0; start < releasedIssueIds.length; start += 500) {
+      const ids = releasedIssueIds.slice(start, start + 500);
+      const page = await listIssueRecords({ filter: { field: 'id', operator: 'in', values: ids }, archived: 'all', limit: ids.length }, undefined, workspaceKey);
+      setData(current => current?.workspace.urlKey === workspaceKey && current.viewer.id === next.viewer.id ? mergeRefreshedIssues(current, page.items) : current);
+    }
+    return next;
+  }, []);
   // Loop changes only touch `data.loops`: refetch the small loops list instead
   // of the whole workspace bootstrap (which carries every issue).
   // A saved loop is applied synchronously so the page navigated to next (e.g.
@@ -473,10 +503,20 @@ function App() {
       .finally(() => setAuthReady(true));
   }, []);
   const themeSyncRef = useRef<string>("");
+  // Bumped when a pending settings write fails, so its old value re-applies.
+  const [settingsOverridesRevision, setSettingsOverridesRevision] = useState(0);
+  useEffect(() => {
+    const bump = () => setSettingsOverridesRevision((value) => value + 1);
+    window.addEventListener(USER_SETTINGS_OVERRIDES_EVENT, bump);
+    return () => window.removeEventListener(USER_SETTINGS_OVERRIDES_EVENT, bump);
+  }, []);
   useEffect(() => {
     if (!data) return;
-    const settings = data.userSettings[data.viewer.id];
-    if (!settings) return;
+    const serverSettings = data.userSettings[data.viewer.id];
+    if (!serverSettings) return;
+    // A refresh fetched before a preference save landed still carries the old
+    // values; newer local writes win until the server reflects them.
+    const settings = overlayUserSettings(data.workspace.urlKey, serverSettings);
     setRuntimePreferences(settings);
     setWorkspaceRuntimePreferences(data.workspaceSettings);
     const root = document.documentElement;
@@ -523,6 +563,7 @@ function App() {
     data?.viewer.id,
     data?.userSettings,
     data?.workspaceSettings,
+    settingsOverridesRevision,
   ]);
   const oauthPath = location.pathname === "/oauth/authorize";
   const connectPath =
@@ -1022,6 +1063,22 @@ function App() {
         });
         return;
       }
+      if (/^document\.comment_/.test(event.type) && event.aggregateId) {
+        const document = data.documents.find(item => item.id === event.aggregateId || item.slugId === event.aggregateId);
+        if (document) {
+          const comments = await listDocumentComments(document.id);
+          setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, comments: { ...current.comments, [document.id]: comments } } : current);
+          return;
+        }
+      }
+      if (!data.issueCollectionPaged && metadataOnlyRealtimeEvent(event)) {
+        await reloadWorkspaceMetadata(workspace);
+        const projectId = event.aggregateId;
+        if (event.type === 'project.update_created' && projectId) {
+          setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? archiveProjectUpdateReminders(current, projectId) : current);
+        }
+        return;
+      }
       const issue = event.payload?.issue ?? (
         entity && typeof entity === "object" && "identifier" in entity
           ? (entity as Issue)
@@ -1307,13 +1364,16 @@ function App() {
   };
   const refreshActivity = async (includeIssue = true) => {
     if (!data) return;
-    if (data.issueCollectionPaged && selectedIssue) {
+    // Refresh just the open issue's history (and, in paged workspaces, the
+    // issue): a workspace bootstrap would download every issue again. A full
+    // snapshot still reloads for actions that can change other issues too.
+    if (selectedIssue && (data.issueCollectionPaged || !includeIssue)) {
       const sequence=++historyRefreshSequence.current;
       const [issue,context] = await Promise.all([includeIssue ? fetchIssueRecord(selectedIssue.id) : Promise.resolve(undefined), fetchIssueHistory(selectedIssue.id)]);
       if(sequence!==historyRefreshSequence.current)return;
       setData(current => current?.workspace.id === data.workspace.id && current.viewer.id===data.viewer.id ? {
         ...current,
-        issues: issue ? mergeIssueRecords(current.issues,[issue]) : current.issues,
+        issues: issue ? (current.issueCollectionPaged ? mergeIssueRecords(current.issues,[issue]) : mergeRefreshedIssues(current,[issue]).issues) : current.issues,
         comments: { ...current.comments, [selectedIssue.id]: context.comments ?? [] },
         issueHistoryCursors: { ...current.issueHistoryCursors, [selectedIssue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
         activities: { ...current.activities, [selectedIssue.id]: context.activities ?? [] },
@@ -1957,6 +2017,7 @@ function App() {
             projects: current.projects.map((item) =>
               item.id === id ? project : item,
             ),
+            issues: syncIssueProjectSummaries(current.issues, project),
             projectRelations: relations
               ? mergeProjectRelations(current, id, relations)
               : current.projectRelations,
@@ -2713,8 +2774,7 @@ function App() {
           }),
         "Could not create document",
       );
-      const next = await fetchBootstrap(data?.workspace.urlKey);
-      acceptBootstrap(next);
+      const next = await reloadWorkspaceMetadata(data!.workspace.urlKey);
       const resource = next.projects
         .find((project) => project.id === projectId)
         ?.resources.find((item) => item.id === document.id);
@@ -4646,9 +4706,9 @@ function App() {
             search={location.search}
             onFiltersChange={search => navigateTo(`${documentsPath(data.workspace.urlKey)}${search ? `?${search}` : ''}`, { replace: true })}
             onNavigate={navigateTo}
-            onReload={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
+            onReload={async () => {
+              await reloadWorkspaceMetadata(data.workspace.urlKey);
+            }}
           />
         )}
         {page === "team-overview" &&
@@ -4895,9 +4955,12 @@ function App() {
             }
             releaseTab={route.kind === "release" ? route.tab : undefined}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
-            onReload={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
+            onReload={async () => {
+              // Deciding an ask can create issues; release and draft edits
+              // only change workspace metadata.
+              if (route.kind === "asks") acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
+              else await reloadWorkspaceMetadata(data.workspace.urlKey);
+            }}
             onNavigate={(path) => navigateTo(path)}
             onResumeDraft={(draft: Draft) => {
               // Keep local drafts addressable so the dialog only restores a
@@ -4937,9 +5000,13 @@ function App() {
             data={data}
             origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
             document={selectedDocument}
-            onReload={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
+            onReload={async () => {
+              // Document comments are content records the metadata
+              // projection omits; refresh just this document's thread.
+              const workspaceKey = data.workspace.urlKey, documentId = selectedDocument.id;
+              const [, comments] = await Promise.all([reloadWorkspaceMetadata(workspaceKey), listDocumentComments(documentId)]);
+              setData(current => current?.workspace.urlKey === workspaceKey ? { ...current, comments: { ...current.comments, [documentId]: comments } } : current);
+            }}
             onBack={() => {
               const source = navigationReturnPath(location.state, data.workspace.urlKey, '');
               if (source) { navigateTo(source); return; }
@@ -6417,7 +6484,7 @@ function App() {
                 () => createDocument({ title: "Untitled document" }),
                 "Could not create document",
               ).then(async (document) => {
-                acceptBootstrap(await fetchBootstrap(data.workspace.urlKey));
+                await reloadWorkspaceMetadata(data.workspace.urlKey);
                 navigateTo(documentPath(data.workspace.urlKey, document));
               })
             }
@@ -6496,12 +6563,12 @@ function App() {
             data={data}
             onCreate={addIssue}
             onCreateLabel={addIssueLabel}
-            onDraftSaved={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
-            onDraftDeleted={async () =>
-              acceptBootstrap(await fetchBootstrap(data.workspace.urlKey))
-            }
+            onDraftSaved={async () => {
+              await reloadWorkspaceMetadata(data.workspace.urlKey);
+            }}
+            onDraftDeleted={async () => {
+              await reloadWorkspaceMetadata(data.workspace.urlKey);
+            }}
             onUpload={async (issueId, file) => {
               const attachment = await run(
                 () => uploadAttachment(issueId, file),

@@ -48,6 +48,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	var result domain.Issue
 	var event domain.DomainEvent
 	var realtime json.RawMessage
+	var progressMetadata *domain.Bootstrap
 	err := func() error {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -233,6 +234,15 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 				return err
 			}
 		}
+		// Issue edits only touch issue records, except the progress history
+		// of the projects whose scope or completion they changed.
+		loadedIssues := make([]domain.Issue, 0, len(previous))
+		for _, issue := range previous {
+			loadedIssues = append(loadedIssues, issue)
+		}
+		if progressMetadata, err = s.persistIssueProjectProgress(ctx, tx, workspace, loadedIssues, metadata.Issues); err != nil {
+			return err
+		}
 		oldRaw, _ := json.Marshal(original)
 		newRaw, _ := json.Marshal(result)
 		var oldFields, newFields map[string]json.RawMessage
@@ -267,7 +277,14 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		realtime = enrichRealtimePayload(payload, result, event.Type)
-		return tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		if progressMetadata != nil {
+			s.workspaces[workspace] = *progressMetadata
+			s.dropMetadataCache(ctx, workspace)
+		}
+		return nil
 	}()
 	if errors.Is(err, ErrNoMutation) {
 		return result, nil
