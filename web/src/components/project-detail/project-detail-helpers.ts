@@ -37,3 +37,8 @@ export function inviteProjectMember() {
 export function initiativeStatusLabel(status: Initiative['status']) {
   return status === 'active' ? 'Active' : status === 'canceled' ? 'Canceled' : status.charAt(0).toUpperCase() + status.slice(1)
 }
+
+/** Link to the project's issues filtered to one milestone (what Linear copies for a milestone). */
+export function projectMilestoneLink(milestoneId: string) {
+  return `${location.origin}${location.pathname.replace(/\/(overview|activity|issues)$/, '/issues')}?projectMilestoneId=${encodeURIComponent(milestoneId)}`
+}

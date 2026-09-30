@@ -376,7 +376,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Document
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		title := "New document"
 		var template *domain.DocumentTemplate
@@ -457,7 +457,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Document
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -597,7 +597,7 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var created domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_created", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), "document.comment_created", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -635,7 +635,7 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 			eventType = "document.comment_unresolved"
 		}
 	}
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -672,7 +672,7 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) deleteDocumentComment(w http.ResponseWriter, r *http.Request) {
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), "document.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -704,7 +704,7 @@ func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Re
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), "document.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -744,7 +744,7 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.CustomerRequest
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "customer_request.created", input, func(data *domain.Bootstrap) (string, error) {
+	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "customer_request.created", input, func(data *domain.Bootstrap) (string, error) {
 		if !slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == input.CustomerID }) {
 			return "", errNotFound
 		}
@@ -795,7 +795,7 @@ func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.CustomerRequest
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer_request.updated", id, input, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "customer_request.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -1086,7 +1086,8 @@ func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Release
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "release.created", input, func(data *domain.Bootstrap) (string, error) {
+	ctx := releaseMutationScope(r.Context(), input, func(domain.Release) bool { return false })
+	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "release.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		if input.PipelineID != nil {
 			pipeline := releasePipelineByID(data, stringValue(input.PipelineID))
@@ -1125,7 +1126,8 @@ func (s *server) updateRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Release
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release.updated", id, input, func(data *domain.Bootstrap) error {
+	ctx := releaseMutationScope(r.Context(), input, func(release domain.Release) bool { return release.ID == id })
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "release.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Releases, func(item domain.Release) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
@@ -3193,7 +3195,26 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 	if !needsMutation {
 		return
 	}
-	_ = s.store.MutateWorkspace(ctx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
+	mutationCtx := ctx
+	if !slaEnabled(&data) {
+		// Without SLAs the job only touches project updates, the projects'
+		// reminder notifications and the trash: load just those records.
+		resources := make([]string, 0, len(data.Projects))
+		for _, project := range data.Projects {
+			resources = append(resources, project.ID)
+		}
+		mutationCtx = store.WithMutationScope(ctx, store.MutationScope{Resources: resources})
+	}
+	_ = s.store.MutateWorkspace(mutationCtx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
+		// The trigger above can stay true when a reminder cannot be
+		// delivered (for example the recipient's inbox is off). Skip the
+		// write and realtime event when nothing changed, so page loads do not
+		// keep rewriting the workspace and re-triggering each other.
+		fingerprint := func() []byte {
+			raw, _ := json.Marshal([]any{next.Projects, next.ProjectUpdates, next.Notifications, next.NotificationDeliveries, next.Trash, next.IssueSLAs, next.SLAEvents})
+			return raw
+		}
+		before := fingerprint()
 		for index := range next.Issues {
 			applySLARules(next, &next.Issues[index], now)
 		}
@@ -3231,6 +3252,9 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 			}
 		}
 		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
+		if bytes.Equal(before, fingerprint()) {
+			return store.ErrNoMutation
+		}
 		return nil
 	})
 }

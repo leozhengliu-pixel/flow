@@ -249,6 +249,8 @@
 .project-overview__resource > button { position:static;width:0;flex:0 0 0;overflow:hidden;padding:0; }
 .project-overview__resource:hover > button,.project-overview__resource:focus-within > button { width:24px;flex-basis:24px; }
 .project-overview__inline-add.project-resource-add { gap: 6px; padding: 0 8px 0 6px; border-radius: 9999px; color: var(--pd-faint); font-size: 13px; font-weight: 450; }
+/* With resources present Linear keeps only a 28px round "+" after the chips. */
+.project-overview__inline-add.project-resource-add.is-icon { width: 28px; justify-content: center; padding: 0; }
 .project-overview__inline-add.project-resource-add[data-state="open"] { background: var(--pd-control); color: var(--theme-text-primary); }
 .project-overview__resource-menu kbd { color: var(--theme-text-secondary); font: 500 11px/1 var(--font); border: 0; background: transparent; }
 .project-overview__latest { min-height: 66px; display: flex; align-items: center; margin: 16px -16px 38px; }
@@ -295,16 +297,21 @@
 .project-overview__milestone-name:hover { background: var(--theme-soft-overlay); }
 .project-overview__milestone-name:focus { background: var(--theme-soft-overlay); }
 .project-overview__milestone-collapse { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; margin-left: 4px; padding: 0; border: 0; background: transparent; color: var(--pd-label); }
-.project-overview__milestone-collapse svg { transition: transform 150ms ease; }
-.project-overview__milestone-collapse[aria-expanded=true] svg { transform: rotate(90deg); }
+.project-overview__milestone-collapse > svg { width: 16px; height: 16px; }
 .project-overview__milestone-spacer { min-width: 8px; flex: 1; }
 .project-overview__milestone-date { box-sizing: border-box; height: 28px; flex: none; display: inline-flex; align-items: center; border: .5px solid transparent; border-radius: 9999px; background: transparent; transition: border 150ms,background-color 150ms,color 150ms,opacity 150ms; padding: 0 6px; color: var(--pd-copy); font: 450 13px/normal inherit; }
 .project-overview__milestone .project-overview__milestone-date { color: var(--pd-copy); }
 .project-overview__milestone-date-placeholder { color: var(--pd-faint); }
 .project-overview__milestone-dot { margin: 0 2px; color: var(--pd-faint); }
 /* Linear only reveals "Set target date" on an undated milestone while its row is hovered or focused. */
-.project-overview__milestone > header:not(:hover):not(:focus-within) .project-overview__milestone-date.is-unset:not([data-state=open]),
-.project-overview__milestone > header:not(:hover):not(:focus-within):not(:has(.project-overview__milestone-date[data-state=open])) .project-overview__milestone-dot.is-unset { opacity: 0; }
+.project-overview__milestone > header:not(:hover):not(:focus-within):not(:has([data-state=open])) .project-overview__milestone-date.is-unset,
+.project-overview__milestone > header:not(:hover):not(:focus-within):not(:has([data-state=open])) .project-overview__milestone-menu-trigger { opacity: 0; }
+/* Linear paints the hovered milestone row with a rounded band that bleeds 2px (4px on the left) past the row. */
+.project-overview__milestone > header { position: relative; }
+.project-overview__milestone > header > * { position: relative; }
+.project-overview__milestone > header::before { position: absolute; inset: -2px -2px -2px -4px; border-radius: 8px; background: transparent; content: ""; pointer-events: none; }
+.project-overview__milestone > header:hover::before,
+.project-overview__milestone > header:has([data-state=open])::before { background: var(--project-row-hover-bg); }
 .project-overview__milestone-issues { box-sizing: border-box; height: 28px; flex: none; display: inline-flex; align-items: center; border: .5px solid transparent; border-radius: 9999px; background: transparent; transition: border 150ms,background-color 150ms,color 150ms,opacity 150ms; gap: 6px; padding: 0 6px; color: var(--pd-label); font-size: 13px; font-weight: 450; text-decoration: none; }
 .project-overview__milestone-menu-trigger { box-sizing: border-box; height: 28px; flex: none; display: inline-flex; align-items: center; border: .5px solid transparent; border-radius: 9999px; background: transparent; transition: border 150ms,background-color 150ms,color 150ms,opacity 150ms; width: 28px; justify-content: center; padding: 0 4px; color: var(--pd-faint); }
 .project-overview__milestone-date:hover { background: var(--pd-control); color: var(--pd-text); }
@@ -343,13 +350,13 @@
 .project-details-sidebar::-webkit-scrollbar { width: 0; height: 0; }
 .project-details-sidebar__section { margin-bottom: 8px; overflow: hidden; border: .5px solid var(--pd-card-border); border-radius: 10px; background: var(--pd-panel); box-shadow: var(--shadow); }
 .project-details-sidebar__section > header { height: 28px; display: flex; align-items: center; margin: 6px 10px 0; padding: 0; }
-.project-details-sidebar__section > header > button:first-child { min-width: 0; flex: 1; height: 100%; display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; color: var(--pd-label); font-size: 13px; font-weight: 500; line-height: 16px; text-align: left; }
+.project-details-sidebar__section > header > button:first-child { min-width: 0; flex: 1; height: 100%; display: flex; align-items: center; gap: 6px; padding: 0 0 0 2px; border: 0; background: transparent; color: var(--pd-label); font-size: 13px; font-weight: 500; line-height: 16px; text-align: left; }
 .project-details-sidebar__section > header > button:first-child svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--pd-label); }
 .project-details-sidebar__section > header > button:last-child:not(:first-child) { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 9999px; background: transparent; color: var(--pd-text); }
 .project-details-sidebar__section > header > button:last-child:not(:first-child) svg { width: 14px; height: 14px; }
 .project-details-sidebar__section > header > button:last-child:hover:not(:first-child) { background: var(--theme-control-hover); color: var(--theme-text-primary); }
 .project-details-sidebar__section.is-milestones > header { height: 40px; gap: 8px; margin: 0; padding: 0 12px 0 10px; }
-.project-details-sidebar__section.is-milestones > header > button:first-child { height: 28px; gap: 3px; margin-left: -6px; padding: 0 8px 0 6px; border-radius: 8px; }
+.project-details-sidebar__section.is-milestones > header > button:first-child { height: 28px; gap: 6px; margin-left: -6px; padding: 0 8px; border-radius: 8px; }
 .project-details-sidebar__section.is-milestones > header > button:last-child:not(:first-child) { width: 28px; height: 28px; flex: 0 0 28px; padding: 0 2px; border: 1px solid transparent; border-radius: 9999px; color: var(--pd-label); }
 .project-details-sidebar__section.is-milestones > header > button:last-child:not(:first-child) svg { width: 14px; height: 14px; fill: currentColor; }
 .project-details-sidebar__section.is-compact { min-height: 41px; }
@@ -460,8 +467,8 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-details-sidebar__milestone strong { min-width: 0; overflow: hidden; color: var(--pd-copy); text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 450; line-height: normal; }
 .project-details-sidebar__milestone-stats { height: 24px; display: flex; flex: none; align-items: center; gap: 4px; color: var(--pd-label); font-size: 12px; font-weight: 450; line-height: normal; }
 .project-details-sidebar__milestone-stats > span { white-space: nowrap; }
-.project-details-sidebar__milestone-stats > button { min-width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; }
-.project-details-sidebar__milestone-stats > button:hover { background: var(--project-property-hover); color: var(--pd-text); }
+.project-details-sidebar__milestone-stats > button { min-width: 24px; height: 24px; display: grid; place-items: center start; padding: 0; border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; }
+.project-details-sidebar__milestone-stats > button:hover { color: var(--pd-text); }
 .project-details-sidebar__milestone-see-issues { position: absolute; z-index: 2; top: 0; right: 0; box-sizing: border-box; width: 104px; height: 24px; display: flex; align-items: center; padding: 0 8px 0 35px; border: 0; border-radius: 0; opacity: 0; background: var(--theme-surface-active); color: var(--pd-text); font-size: 12px; font-weight: 450; line-height: normal; white-space: nowrap; pointer-events: none; transition: opacity 70ms ease; }
 .project-details-sidebar__milestone:hover .project-details-sidebar__milestone-see-issues { opacity: 1; pointer-events: auto; }
 .project-details-sidebar__milestone:focus-within .project-details-sidebar__milestone-see-issues { opacity: 1; pointer-events: auto; }
@@ -472,7 +479,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-details-sidebar__milestone-actions:hover { background: var(--project-property-hover); color: var(--pd-text); }
 .project-details-sidebar__milestone-actions[data-state=open] { background: var(--project-property-hover); color: var(--pd-text); }
 .project-details-sidebar__milestone-actions svg { width: 14px; height: 14px; fill: currentColor; }
-.project-milestone-menu { z-index: 1450; box-sizing: border-box; width: 197px; min-width: 197px; height: auto; overflow: visible; padding: 6px 0; border: 1px solid var(--theme-border-strong); border-radius: 12px; outline: 0; background: var(--theme-control); box-shadow: 0 6px 18px rgb(0 0 0 / 14%),0 3px 9px rgb(0 0 0 / 18%),0 1px 1px rgb(0 0 0 / 24%); color: var(--theme-text-primary); font-size: 13px; line-height: 16px; }
+.project-milestone-menu { z-index: 1450; box-sizing: border-box; width: 197px; min-width: 197px; height: auto; overflow: visible; padding: 6px 0; border: 1px solid var(--theme-border-strong); border-radius: 12px; outline: 0; background: var(--theme-control); box-shadow: 0 6px 18px rgb(0 0 0 / 14%),0 3px 9px rgb(0 0 0 / 18%),0 1px 1px rgb(0 0 0 / 24%); color: var(--action-menu-text); font-size: 13px; line-height: 16px; }
 .project-milestone-menu [role=menuitem] { position: relative; box-sizing: border-box; width: 100%; height: 32px; min-height: 32px; display: flex; align-items: center; gap: 8px; margin: 0; padding: 0 18px 0 14px; border-radius: 0; outline: 0; color: inherit; font-weight: 400; }
 .project-milestone-menu [role=menuitem] > *:not(.project-milestone-menu__item-background) { position: relative; z-index: 1; }
 .project-milestone-menu__item-background { position: absolute!important; z-index: 0!important; inset: 0 6px; border-radius: 8px; background: transparent; pointer-events: none; }
@@ -480,6 +487,8 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-milestone-menu [role=menuitem] > svg { width: 16px; height: 16px; flex: 0 0 16px; fill: currentColor; color: var(--text-label); }
 .project-milestone-menu [role=menuitem] > span:not(.project-milestone-menu__item-background) { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .project-milestone-menu [role=menuitem] > kbd { margin-left: auto; color: var(--text-label); font: 450 12px/normal inherit; white-space: nowrap; }
+/* Linear marks submenus with a 6px ▶ in a 16px slot, 18px from the row edge. */
+.project-milestone-menu [role=menuitem] > span.project-milestone-menu__submenu-arrow { width: 16px; min-width: 16px; flex: 0 0 16px; color: var(--theme-text-tertiary); font-size: 6px; line-height: normal; text-align: center; }
 .project-milestone-menu [role=separator] { box-sizing: border-box; width: 100%; height: 12px; margin: 0; border: 0; background: linear-gradient(transparent 5px,var(--theme-border) 5px,var(--theme-border) 6px,transparent 6px); }
 .project-milestone-menu [role=label] { height: 32px; display: flex; align-items: center; padding: 0 14px; color: var(--text-label); font-size: 13px; }
 .project-milestone-menu [role=menuitem].is-danger { color: lch(54% 62 35); }
@@ -713,7 +722,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
   border-color: lch(90.55% 0 282);
   background: var(--theme-surface-2);
   box-shadow: 0 6px 18px lch(0 0 0 / 2%),0 3px 9px lch(0 0 0 / 4%),0 1px 1px lch(0 0 0 / 4%);
-  color: var(--theme-text-primary);
+  color: var(--action-menu-text);
 }
 :root[data-theme="light"] .project-milestone-menu [role=menuitem][data-highlighted] .project-milestone-menu__item-background { background: lch(95% 0 282); }
 :root[data-theme="light"] .project-milestone-menu [role=separator] { background: linear-gradient(transparent 5px,lch(93% 0 282) 5px,lch(93% 0 282) 6px,transparent 6px); }
@@ -848,7 +857,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 
 .project-activity { --pd-activity-border: var(--theme-control-hover); --pd-composer-control: var(--bg-hover); width: min(786px,calc(100% - 32px)); min-height: 100%; margin: 0 auto; padding: 44.5px 0 72px; }
 :root[data-theme="light"] .project-activity { --pd-activity-border: var(--theme-surface-active); }
-.project-activity__composer { min-height: 253px; display: flex; flex-direction: column; overflow: hidden; border: .5px solid var(--pd-activity-border); border-radius: 10px; background: var(--theme-surface-1); }
+.project-activity__composer { min-height: 223px; display: flex; flex-direction: column; overflow: hidden; border: .5px solid var(--pd-activity-border); border-radius: 10px; background: var(--theme-surface-1); }
 .project-activity__composer[data-mode=comment] { min-height: 172px; }
 .project-activity__composer[data-mode=comment] > textarea { min-height: 74px; }
 .project-activity__composer[data-mode=comment] > footer { margin-top: 0; }
@@ -934,7 +943,7 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-activity__comment-action:hover,
 .project-activity__comment-action[data-state=open] { background: var(--theme-control-hover); color: var(--theme-text-primary); }
 .project-activity__comment-body,
-.project-activity__reply-body { color: var(--pd-text); font-size: 15px; line-height: 24px; font-weight: 450; }
+.project-activity__reply-body { color: var(--pd-copy); font-size: 15px; line-height: 24px; font-weight: 450; }
 .project-activity__reply-body { padding-left: 26px; }
 .project-activity__comment-body .ProseMirror,
 .project-activity__reply-body .ProseMirror { outline: 0; }
@@ -1190,3 +1199,9 @@ html:root body .property-command-surface.project-details-sidebar__property-menu.
 html:root body .property-command-surface.project-details-sidebar__property-menu.is-members:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 181px; }
 html:root body .property-command-surface.project-details-sidebar__property-menu.is-initiatives:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone) { min-width: 175px; }
 .project-activity__draft-health { display: inline-flex; }
+/* Linear's milestone progress tooltip: a 12px/500 heading over 11px lines, 6px/8px padding. */
+.flow-tooltip-content.project-milestone-stats-tip,
+html:root[data-theme="light"] body .flow-tooltip-content.project-milestone-stats-tip { height: auto; padding: 6px 8px; }
+.project-milestone-stats-tip__lines { display: flex; flex-direction: column; gap: 2px; }
+.project-milestone-stats-tip__lines strong { color: var(--text-label); font-size: 12px; font-weight: 500; line-height: 15px; margin-bottom: 3px; }
+.project-milestone-stats-tip__lines span { color: var(--action-menu-text); font-size: 11px; font-weight: 450; line-height: 17px; }

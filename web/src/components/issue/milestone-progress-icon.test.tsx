@@ -38,6 +38,11 @@ describe('milestone progress icon', () => {
     expect(zero).toHaveClass('is-progress', 'is-overdue')
     expect(zero?.querySelector('.is-value')).toHaveAttribute('stroke-dasharray', `${milestoneProgressLength(0)} ${31 - milestoneProgressLength(0)}`)
 
+    // A 0% milestone that is not overdue is only the 40% track in Linear (no progress tick).
+    const idle = render(<MilestoneProgressIcon progress={0} />).container.querySelector('svg')
+    expect(idle).toHaveClass('is-progress')
+    expect(idle?.querySelectorAll('path')).toHaveLength(1)
+
     const progress = render(<MilestoneProgressIcon overdue progress={81} />).container.querySelector('svg')
     expect(progress).toHaveClass('is-progress', 'is-overdue')
     expect(progress?.querySelector('.is-value')).toHaveAttribute('stroke-dasharray', `${milestoneProgressLength(81)} ${31 - milestoneProgressLength(81)}`)

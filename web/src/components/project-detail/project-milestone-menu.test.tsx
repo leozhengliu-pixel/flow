@@ -8,7 +8,7 @@ import { ProjectDetailsSidebar } from './project-details-sidebar'
 beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }) })
 afterEach(() => vi.unstubAllGlobals())
 
-function renderSidebar() {
+function renderSidebar(projectIssues: unknown[] = []) {
   const data = makeBootstrap()
   const current = { ...project, id: 'project-menu', lead: undefined, memberIds: [], initiatives: [], milestones: [{ id: 'milestone-alpha', projectId: 'project-menu', name: 'Alpha', description: '', createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z' }], createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z' } as typeof project
   render(<I18nProvider><ProjectDetailsSidebar
@@ -16,7 +16,7 @@ function renderSidebar() {
     onConvertMilestone={vi.fn()} onCreateMilestone={vi.fn()} onDeleteMilestone={vi.fn()} onMoveMilestone={vi.fn()}
     onOpenIssueFilter={vi.fn()} onOpenMilestoneIssues={vi.fn()} onReorderMilestones={vi.fn()} onTabChange={vi.fn()}
     onUpdate={vi.fn().mockResolvedValue(undefined)} onUpdateProject={vi.fn().mockResolvedValue(current)} onUpdateMilestone={vi.fn()}
-    project={current} projectIssues={[]} projectRelations={[]} projects={[current]} projectStatuses={[current.status]} projectUpdates={[]}
+    project={current} projectIssues={projectIssues as never} projectRelations={[]} projects={[current]} projectStatuses={[current.status]} projectUpdates={[]}
     teams={data.teams} users={data.users} viewer={data.viewer}
   /></I18nProvider>)
 }
@@ -29,8 +29,10 @@ it('matches Linear milestone actions with a type-to-filter search', async () => 
   const filter = within(menu).getByRole('textbox', { name: 'Filter milestone actions' })
   // Linear keeps the filter input visually hidden until you type.
   expect(filter.closest('.project-action-menu__search')).toHaveClass('is-hidden')
-  const labels = within(menu).getAllByRole('menuitem').map(item => item.textContent?.replace(/⌘ ⌫$/, ''))
-  expect(labels).toEqual(['Open milestone issues', 'Edit…', 'Set target date…', 'Copy', 'Move milestone to', 'Convert to project', 'Delete'])
+  const labels = within(menu).getAllByRole('menuitem').map(item => item.textContent?.replace(/⌘ ⌫$|▶$/, ''))
+  // Linear's menu for a milestone without issues has no "Open milestone issues" row.
+  expect(labels).toEqual(['Edit…', 'Set target date…', 'Copy', 'Move milestone to', 'Convert to project', 'Delete'])
+  expect(within(menu).getAllByRole('separator')).toHaveLength(2)
   expect(within(menu).getByRole('menuitem', { name: /Delete/ })).not.toHaveClass('is-danger')
   expect(menu).not.toHaveTextContent('No date')
   expect(menu).not.toHaveTextContent('Edit target date')
@@ -42,4 +44,13 @@ it('matches Linear milestone actions with a type-to-filter search', async () => 
   await user.type(filter, 'zzz')
   expect(within(menu).queryAllByRole('menuitem')).toHaveLength(0)
   expect(within(menu).getByText('No results')).toBeVisible()
+})
+
+it('offers Open milestone issues first once the milestone has issues', async () => {
+  const user = userEvent.setup()
+  const data = makeBootstrap()
+  renderSidebar([{ ...data.issues[0], projectId: 'project-menu', projectMilestoneId: 'milestone-alpha' }])
+  await user.click(screen.getByRole('button', { name: 'Alpha actions' }))
+  const menu = await screen.findByRole('menu')
+  expect(within(menu).getAllByRole('menuitem')[0]).toHaveTextContent('Open milestone issues')
 })

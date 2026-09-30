@@ -1,5 +1,6 @@
 import { mergeIssueRecords } from '@/lib/issue-detail-cache'
 import { deriveResourceCounts } from '@/lib/resource-counts'
+import { syncIssueProjectSummaries } from '@/lib/workspace-metadata-refresh'
 import type { BootstrapData, Issue, Project, RealtimeEvent } from '@/types/flow'
 
 export type RealtimePatchResult =
@@ -85,6 +86,7 @@ export function applyRealtimePatch(
       data: deriveResourceCounts({
         ...current,
         projects: upsertById(current.projects, entity),
+        issues: syncIssueProjectSummaries(current.issues, entity),
       }),
     }
   }

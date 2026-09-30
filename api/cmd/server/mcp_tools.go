@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"slices"
 	"sort"
@@ -16,7 +17,40 @@ import (
 	"flow/api/internal/store"
 )
 
+// callFlowTool runs a Flow tool for MCP clients and the built-in agent, and
+// logs failures (they don't go through an HTTP route of their own).
 func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	started := time.Now()
+	result, err := s.runFlowTool(ctx, actor, name, args)
+	if err != nil {
+		slog.WarnContext(ctx, "flow tool failed", "tool", name, "workspace", actor.WorkspaceKey, "actor", actor.User.ID, "args", mcpArgumentSummary(args), "duration_ms", time.Since(started).Milliseconds(), "error", err.Error())
+	}
+	return result, err
+}
+
+// mcpArgumentSummary lists the argument names with short, single-line values
+// so failures can be diagnosed without logging whole documents.
+func mcpArgumentSummary(args map[string]any) string {
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		if !strings.HasPrefix(key, "__") {
+			keys = append(keys, key)
+		}
+	}
+	slices.Sort(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		raw, _ := json.Marshal(args[key])
+		value := strings.Join(strings.Fields(string(raw)), " ")
+		if len(value) > 120 {
+			value = value[:117] + "..."
+		}
+		parts = append(parts, key+"="+value)
+	}
+	return strings.Join(parts, " ")
+}
+
+func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
 	data, err := s.mcpWorkspaceData(ctx, actor)
 	if err != nil {
 		return nil, err

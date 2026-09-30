@@ -12,8 +12,9 @@
 .project-action-menu[data-menu=Dependencies] :is([role=menuitem],[role=menuitemcheckbox]):is([data-highlighted],[data-state=open]) .project-menu-icon{color:var(--project-dependency-icon)}
 .project-menu-label{min-width:0;overflow:hidden;text-overflow:ellipsis;flex:1}
 .project-menu-chevron{display:grid;place-items:center;width:16px;height:16px;flex:0 0 16px;margin-left:auto;color:var(--theme-text-tertiary);font-size:6px}
-.project-menu-shortcut{display:flex;align-items:center;gap:2px;flex:none;margin-left:auto;color:var(--action-menu-muted);font:400 12px/normal var(--font);white-space:nowrap}
-.project-menu-shortcut kbd{display:grid;place-items:center;min-width:17px;height:17px;padding:2px;border:.5px solid var(--popover-border);border-radius:4px;background:var(--theme-surface-hover);font:400 11px/12px var(--font)}
+.project-menu-shortcut{display:flex;align-items:center;gap:3px;flex:none;margin-left:auto;color:var(--action-menu-muted);font:400 12px/normal var(--font);white-space:nowrap}
+/* Linear prints menu shortcuts as plain 11px glyphs 3px apart, without keycaps. */
+.project-menu-shortcut kbd{display:block;min-width:0;height:auto;padding:0;border:0;border-radius:0;background:transparent;color:inherit;font:400 11px/12px var(--font)}
 .project-action-submenu .project-menu-shortcut kbd{min-width:0;height:auto;padding:0;border:0;background:transparent;font-size:12px}
 .project-action-menu [role=separator]{position:relative;height:12px;margin:0;background:transparent}
 .project-action-menu [role=separator]::after{content:"";position:absolute;top:5.5px;left:0;right:0;border-top:.5px solid var(--theme-border-strong)}
@@ -76,6 +77,5 @@
 :root[data-theme="light"] .project-action-submenu,:root[data-theme="light"] .project-update-schedule{box-shadow:var(--shadow-dialog)}
 :root[data-theme="light"] .project-action-menu :is([role=menuitem],[role=menuitemcheckbox]),:root[data-theme="light"] .project-action-menu.project-property-submenu .property-command-options [role=option],:root[data-theme="light"] .project-update-schedule>footer button{color:var(--action-menu-text)}
 :root[data-theme="light"] .project-menu-icon,:root[data-theme="light"] .project-menu-shortcut,:root[data-theme="light"] .project-action-menu__empty,:root[data-theme="light"] .project-action-menu.project-property-submenu .property-command-group,:root[data-theme="light"] .project-update-schedule header p,:root[data-theme="light"] .project-update-schedule__options small{color:var(--action-menu-muted)}
-:root[data-theme="light"] .project-menu-shortcut kbd{border-color:var(--popover-border);background:var(--theme-surface-hover)}
 :root[data-theme="light"] .project-update-schedule>footer button{border-color:var(--theme-border-strong);background:var(--theme-control)}
 :root[data-theme="light"] .project-update-schedule>footer .is-primary{background:var(--accent);color:var(--on-accent)}

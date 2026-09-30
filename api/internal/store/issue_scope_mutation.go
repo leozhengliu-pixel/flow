@@ -58,6 +58,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			return err
 		}
 	}
+	progressChanged := false
 	needsFamily := eventType == "issue.deleted" || eventType == "issue.batch_updated" && (batch.Update.StateID != nil || batch.Update.ParentID != nil)
 	err := func() error {
 		s.mu.Lock()
@@ -286,6 +287,15 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 				return err
 			}
 		}
+		if progressEvent(eventType) {
+			before := make([]domain.Issue, 0, len(loaded))
+			for _, issue := range loaded {
+				before = append(before, issue)
+			}
+			if progressChanged, err = refreshIssueProjectProgress(ctx, tx, workspace, &data, before, data.Issues, time.Now().UTC()); err != nil {
+				return err
+			}
+		}
 		payloadRaw, err := json.Marshal(payload)
 		if err != nil {
 			return err
@@ -312,6 +322,9 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			return err
 		}
 		s.workspaces[workspace] = data
+		if progressChanged {
+			s.dropMetadataCache(ctx, workspace)
+		}
 		return nil
 	}()
 	if err != nil {

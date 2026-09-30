@@ -80,3 +80,13 @@ it('shows the sidebar favorite before the favorite request resolves', async () =
     createdAt: '2026-09-11T00:00:00Z',
   })
 })
+
+it('shows a favorited project with its chosen icon and colour, not the default cube', () => {
+  const data = makeBootstrap()
+  const project = { ...data.projects[0], icon: 'Starred', color: '#5e6ad2' }
+  const favorite = { id: 'favorite-icon', resourceType: 'project', resourceId: project.id, position: 0 } as unknown as Favorite
+  const { container } = render(<MemoryRouter><I18nProvider><FavoritesSection data={{ ...data, projects: [project, ...data.projects.slice(1)], favorites: [favorite] }} favorites={[favorite]} folders={[]} onCreateFolder={async () => undefined} onMoveFavorite={async () => undefined} onMoveFolder={async () => undefined} onNavigate={vi.fn()} onRemoveFavorite={vi.fn()} onRemoveFolder={async () => undefined} onRenameFolder={async () => undefined} workspaceSlug={data.workspace.urlKey}/></I18nProvider></MemoryRouter>)
+  const glyph = container.querySelector('.sidebar-favorite-icon svg')
+  expect(glyph?.querySelector('use')?.getAttribute('href')).toMatch(/#Starred$/)
+  expect(glyph).toHaveStyle({ color: '#5e6ad2' })
+})

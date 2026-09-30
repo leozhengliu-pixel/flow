@@ -133,6 +133,22 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 		}
 		removeMembers = append(removeMembers, user.ID)
 	}
+	owners := []string{}
+	for _, query := range stringsArg(args, "owners") {
+		user, err := mcpFindUser(data, query)
+		if err != nil {
+			return nil, err
+		}
+		owners = append(owners, user.ID)
+	}
+	removeOwners := []string{}
+	for _, query := range stringsArg(args, "removeOwners") {
+		user, err := mcpFindUser(data, query)
+		if err != nil {
+			return nil, err
+		}
+		removeOwners = append(removeOwners, user.ID)
+	}
 	var states []mcpTeamState
 	if raw, ok := args["states"]; ok {
 		if err := jsonClone(raw, &states); err != nil {
@@ -231,18 +247,53 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 			return nil, err
 		}
 	}
-	for _, change := range []struct {
-		ids    []string
-		member bool
-	}{{members, true}, {removeMembers, false}} {
-		for _, userID := range change.ids {
-			if creating && change.member && userID == actor.User.ID {
-				continue // the creator is already the team owner
+	// `members` adds people: anyone already on the team (owners included)
+	// keeps their role. Owner changes are explicit (`owners`/`removeOwners`),
+	// so listing the current owner among the members never demotes them.
+	roles := s.mcpTeamRoles(ctx, data, team.ID)
+	setMembership := func(userID string, member bool, role string) error {
+		path := "/api/workspaces/" + pathID(ws) + "/teams/" + pathID(team.ID) + "/members/" + pathID(userID)
+		_, err := s.invokeMCPRoute(ctx, actor, http.MethodPut, path, map[string]string{"workspaceKey": ws, "teamId": team.ID, "userId": userID}, map[string]any{"member": member, "role": role}, s.updateTeamMember)
+		if err == nil {
+			if member {
+				roles[userID] = role
+			} else {
+				delete(roles, userID)
 			}
-			path := "/api/workspaces/" + pathID(ws) + "/teams/" + pathID(team.ID) + "/members/" + pathID(userID)
-			if _, err := s.invokeMCPRoute(ctx, actor, http.MethodPut, path, map[string]string{"workspaceKey": ws, "teamId": team.ID, "userId": userID}, map[string]any{"member": change.member, "role": "member"}, s.updateTeamMember); err != nil {
-				return nil, err
-			}
+		}
+		return err
+	}
+	addedMembers := []string{}
+	for _, userID := range members {
+		if _, ok := roles[userID]; ok || creating && userID == actor.User.ID {
+			continue // already on the team (the creator is its owner)
+		}
+		if err := setMembership(userID, true, "member"); err != nil {
+			return nil, err
+		}
+		addedMembers = append(addedMembers, userID)
+	}
+	// Promote before demoting so a hand-over from one owner to another
+	// never leaves the team without an owner in between.
+	for _, userID := range owners {
+		if roles[userID] == "owner" || creating && userID == actor.User.ID {
+			continue
+		}
+		if err := setMembership(userID, true, "owner"); err != nil {
+			return nil, err
+		}
+	}
+	for _, userID := range removeOwners {
+		if roles[userID] != "owner" {
+			continue
+		}
+		if err := setMembership(userID, true, "member"); err != nil {
+			return nil, err
+		}
+	}
+	for _, userID := range removeMembers {
+		if err := setMembership(userID, false, "member"); err != nil {
+			return nil, err
 		}
 	}
 	createdStates := []any{}
@@ -279,8 +330,14 @@ func (s *server) saveMCPTeam(ctx context.Context, actor mcpActor, data domain.Bo
 	if len(settings) > 0 {
 		receipt["settings"] = settings
 	}
-	if len(members) > 0 {
-		receipt["addedMembers"] = members
+	if len(addedMembers) > 0 {
+		receipt["addedMembers"] = addedMembers
+	}
+	if len(owners) > 0 {
+		receipt["owners"] = owners
+	}
+	if len(removeOwners) > 0 {
+		receipt["removedOwners"] = removeOwners
 	}
 	if len(removeMembers) > 0 {
 		receipt["removedMembers"] = removeMembers
@@ -1773,4 +1830,23 @@ func mcpLoopTriggerValue(data domain.Bootstrap, field string, raw any) (any, err
 		return team.ID, nil
 	}
 	return value, nil
+}
+
+// mcpTeamRoles returns the current role of every member of the team, from the
+// persisted memberships (signed-in workspaces) or the workspace snapshot.
+func (s *server) mcpTeamRoles(ctx context.Context, data domain.Bootstrap, teamID string) map[string]string {
+	roles := map[string]string{}
+	for _, member := range data.TeamMembers {
+		if member.TeamID == teamID {
+			roles[member.UserID] = firstNonEmpty(member.Role, "member")
+		}
+	}
+	if persisted, err := s.store.ListTeamMembers(ctx, data.Workspace.ID); err == nil {
+		for _, member := range persisted {
+			if member.TeamID == teamID {
+				roles[member.UserID] = firstNonEmpty(member.Role, "member")
+			}
+		}
+	}
+	return roles
 }

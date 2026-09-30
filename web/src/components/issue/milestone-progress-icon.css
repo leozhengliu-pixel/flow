@@ -20,20 +20,22 @@
   stroke-linejoin: round;
   stroke-width: 2;
 }
-.milestone-progress-icon.is-empty.is-overdue path,
+/* Linear draws an in-progress milestone in yellow (lch 80 90 85, track at 40%) and only turns it red once overdue. */
 .milestone-progress-icon.is-progress path {
+  stroke: var(--milestone-progress-icon);
+}
+.milestone-progress-icon.is-empty.is-overdue path,
+.milestone-progress-icon.is-progress.is-overdue path {
   stroke: var(--project-dependency-icon);
 }
 .milestone-progress-icon.is-progress .is-track {
   fill: none;
-  opacity: .3;
-  stroke: var(--project-dependency-icon);
+  opacity: .4;
   stroke-linejoin: round;
   stroke-width: 2;
 }
 .milestone-progress-icon.is-progress .is-value {
   fill: none;
-  stroke: var(--project-dependency-icon);
   stroke-dashoffset: -1.1;
   stroke-linecap: round;
   stroke-width: 2;

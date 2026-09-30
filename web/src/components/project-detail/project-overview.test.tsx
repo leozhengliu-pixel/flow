@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -127,7 +127,8 @@ describe('project overview workflow', () => {
     expect(screen.getByText('Set target date')).toBeVisible()
     // Undated milestones reveal "Set target date" (and its separator) only on row hover / focus-within.
     expect(screen.getByText('Set target date').closest('button')).toHaveClass('project-overview__milestone-date', 'is-unset')
-    expect(document.querySelector('.project-overview__milestone-dot')).toHaveClass('is-unset')
+    // Linear shows no separator dot before the issue count while the milestone has no target date.
+    expect(document.querySelector('.project-overview__milestone-dot')).toBeNull()
     expect(screen.queryByRole('textbox', { name: 'Milestone name' })).toBeNull()
 
     await user.click(screen.getByRole('button', { name: 'Rename Alpha' }))
@@ -152,5 +153,37 @@ describe('project overview workflow', () => {
     await user.keyboard('{Escape}')
     await user.hover(screen.getByRole('button', { name: /Add document or link/ }))
     await waitFor(() => expect(screen.queryAllByRole('tooltip').some(tooltip => tooltip.textContent === 'Add document or link')).toBe(true), { timeout: 2000 })
+  })
+
+  it('uses Linear\'s overview milestone menu and an icon-only resource add button once resources exist', async () => {
+    const user = userEvent.setup()
+    const data = makeBootstrap()
+    const other = { ...project, id: 'project-other', name: 'Other project' }
+    const onMoveMilestone = vi.fn().mockResolvedValue(undefined)
+    const onConvertMilestone = vi.fn().mockResolvedValue(other)
+    const milestone = { id: 'milestone-alpha', projectId: project.id, name: 'Alpha', description: '', createdAt: '2026-09-27T00:00:00.000Z', updatedAt: '2026-09-27T00:00:00.000Z' }
+    const props = {
+      project: { ...project, milestones: [milestone], resources: [{ id: 'resource-1', type: 'link', title: 'Spec', url: 'https://example.com/spec', createdAt: '2026-09-27T00:00:00.000Z' }], customers: [] },
+      projects: [project, other], initiatives: [], documents: [], projectStatuses: [project.status], projectUpdates: [], users: data.users, teams: data.teams,
+      labels: [], labelGroups: [], projectIssues: [], save: vi.fn(), onTabChange: vi.fn(),
+      onCreateResource: vi.fn(), onUpdateResource: vi.fn(), onDeleteResource: vi.fn(),
+      onCreateMilestone: vi.fn(), onUpdateMilestone: vi.fn(), onDeleteMilestone: vi.fn(), onMoveMilestone, onConvertMilestone,
+    } as unknown as ComponentProps<typeof ProjectOverview>
+    render(<I18nProvider><ProjectOverview {...props}/></I18nProvider>)
+    const add = screen.getByRole('button', { name: 'Add document or link…' })
+    expect(add).toHaveClass('is-icon')
+    expect(add).not.toHaveTextContent('Add document or link…')
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getAllByRole('menuitem').map(item => item.textContent?.replace(/⌘ ⌫$|▶$/, ''))).toEqual(['Edit…', 'Copy', 'Show description history', 'Move milestone to', 'Convert to project', 'Delete'])
+    await user.click(within(menu).getByRole('menuitem', { name: 'Convert to project' }))
+    await waitFor(() => expect(onConvertMilestone).toHaveBeenCalledWith(project.id, 'milestone-alpha'))
+
+    await user.click(screen.getByRole('button', { name: 'Open menu' }))
+    await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Edit…' }))
+    expect(await screen.findByRole('textbox', { name: 'Milestone name' })).toHaveValue('Alpha')
+    expect(screen.getByRole('textbox', { name: 'Milestone name' })).toHaveFocus()
+    expect(screen.getByRole('textbox', { name: 'Milestone description' })).toBeInTheDocument()
   })
 })

@@ -1,10 +1,11 @@
 import { ActivitySidebarSection, type ActivitySidebarItem } from '@/components/panel/activity-sidebar-section'
 import { AppLink } from '@/components/ui/app-link'
+import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 import { Component, useId, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
-import { ArrowRight, Blocks, ChevronDown, ChevronRight, Flag, MoreHorizontal, OctagonMinus, Plus, X, Send, MessageSquare } from 'lucide-react'
+import { ArrowRight, Blocks, ChevronRight, Flag, MoreHorizontal, OctagonMinus, Plus, X, Send, MessageSquare } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { toast } from 'sonner'
 import { Avatar } from '@/components/issue/issue-row'
@@ -30,7 +31,7 @@ import { useI18n } from '@/i18n/i18n'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { projectShortcutLabels, useProjectPickerOpen, type ProjectPickerRequest } from './project-detail-shortcuts'
 import { formatProjectPropertyDate, initiativeStatusLabel, inviteProjectMember } from './project-detail-helpers'
-import { ProjectMenuSearch } from './project-menu-primitives'
+import { MilestoneMenuIcon, ProjectMilestoneMenu } from './project-milestone-menu'
 import { buildProgressData, shouldShowProgressGraph, type PersistedProgressHistory, type ProgressSeries } from './project-progress-data'
 
 export function ProjectDetailsSidebar({ featureFlags, issueSummary, availableIssueLabels, initiatives, integrationConnections, labelGroups, labels, onCreateLabel, onConvertMilestone, onCreateMilestone, onDeleteMilestone, onMoveMilestone, onOpenIssueFilter, onOpenMilestoneIssues, onReorderMilestones, onTabChange, onUpdate, onUpdateProject, onUpdateMilestone, project, projectIssues, projectRelations, projects, projectStatuses, projectUpdates, tab, teams, users, viewer, pickerRequest, onPickerRequestHandled }: {
@@ -83,7 +84,7 @@ export function ProjectDetailsSidebar({ featureFlags, issueSummary, availableIss
   const completed = issueSummary?.completed ?? projectIssues.filter(issue => issue.state.type === 'completed').length
   const issueLabels = (availableIssueLabels ?? labels).filter(label => issueSummary ? issueSummary.labels[label.id]?.total : projectIssues.some(issue => issue.labels.some(item => item.id === label.id))).sort((left, right) => left.name.localeCompare(right.name))
   const assignees = users.filter(user => issueSummary ? issueSummary.assignees[user.id]?.total : projectIssues.some(issue => issue.assignee?.id === user.id)).sort((left, right) => left.displayName.localeCompare(right.displayName))
-  const milestoneSummary = (id = '') => { const totals = issueSummary?.milestones[id]; return issueSummary ? { count: totals?.total ?? 0, progress: totals?.total ? Math.round(totals.completed / totals.total * 100) : 0 } : milestoneStats(projectIssues, id) }
+  const milestoneSummary = (id = ''): MilestoneStats => { const totals = issueSummary?.milestones[id]; return issueSummary ? { count: totals?.total ?? 0, completed: totals?.completed ?? 0, progress: totals?.total ? Math.round(totals.completed / totals.total * 100) : 0 } : milestoneStats(projectIssues, id) }
   const unassignedMilestoneStats = milestoneSummary()
   const events = useMemo(() => projectEvents(project, projectUpdates, viewer), [project, projectUpdates, viewer])
   const scopeCount = issueSummary?.total ?? projectIssues.length
@@ -270,56 +271,20 @@ function MilestoneRow({ disabled, dragging, dropEdge, milestone, onConvert, onDe
   onOpenIssues: () => void
   onUpdateDate: (targetDate: string) => Promise<ProjectMilestone>
   projects: Project[]
-  stats: { count: number; progress: number }
+  stats: MilestoneStats
 }) {
   const [dateDialogOpen, setDateDialogOpen] = useState(false)
-  const [menuQuery, setMenuQuery] = useState('')
-  const shows = (label: string) => !menuQuery || label.toLocaleLowerCase().includes(menuQuery.trim().toLocaleLowerCase())
-  const link = `${location.origin}${location.pathname.replace(/\/(overview|activity|issues)$/, '/issues')}`
-  const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(message))
-  return <div aria-disabled={disabled} aria-label={`${milestone.name} ${stats.progress}% of ${stats.count}`} className="project-details-sidebar__milestone" data-disabled={disabled || undefined} data-dragging={dragging || undefined} data-drop-edge={dropEdge} draggable={!disabled} onClick={event => { if (!disabled && !(event.target as HTMLElement).closest('button,[role=menuitem]')) onOpenIssues() }} onDragEnd={onDragEnd} onDragOver={onDragOver} onDragStart={onDragStart} onDrop={onDrop} role="button" tabIndex={disabled ? -1 : 0} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpenIssues() } }}>
+  // Linear explains the row's progress in a tooltip beside the sidebar.
+  return <FlowTooltip contentClassName="project-milestone-stats-tip" disabled={disabled || dragging} label={<span className="project-milestone-stats-tip__lines"><strong>{`${stats.progress}% progress`}</strong><span>{`${stats.count} issues total`}</span>{stats.started !== undefined && <span>{`${stats.started} issues started`}</span>}<span>{`${stats.completed} issues completed`}</span></span>} side="left"><div aria-disabled={disabled} aria-label={`${milestone.name} ${stats.progress}% of ${stats.count}`} className="project-details-sidebar__milestone" data-disabled={disabled || undefined} data-dragging={dragging || undefined} data-drop-edge={dropEdge} draggable={!disabled} onClick={event => { if (!disabled && !(event.target as HTMLElement).closest('button,[role=menuitem]')) onOpenIssues() }} onDragEnd={onDragEnd} onDragOver={onDragOver} onDragStart={onDragStart} onDrop={onDrop} role="button" tabIndex={disabled ? -1 : 0} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onOpenIssues() } }}>
     <div className="project-details-sidebar__milestone-summary"><MilestoneProgressIcon className="project-details-sidebar__milestone-icon" overdue={isMilestoneDateOverdue(milestone.targetDate)} progress={stats.progress}/><strong data-i18n-ignore>{milestone.name}</strong><span className="project-details-sidebar__milestone-stats"><span>{stats.progress}% of</span><button aria-label={`View ${stats.count} issues in ${milestone.name}`} onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">{stats.count}</button></span><button className="project-details-sidebar__milestone-see-issues" onClick={event => { event.stopPropagation(); onOpenIssues() }} tabIndex={-1} type="button">See issues</button></div>
     {milestone.targetDate && <ProjectDatePicker buttonClassName="project-details-sidebar__milestone-date" contentClassName="project-details-sidebar__date-menu" label="Target date" onChange={targetDate => void onUpdateDate(targetDate)} side="left" value={milestone.targetDate}><span>{format(new Date(`${milestone.targetDate}T00:00:00`), 'MMM d')}</span></ProjectDatePicker>}
-    <DropdownMenu.Root onOpenChange={open => { if (!open) setMenuQuery('') }}><DropdownMenu.Trigger asChild><button aria-label={`${milestone.name} actions`} className="project-details-sidebar__milestone-actions" onClick={event => event.stopPropagation()} type="button"><MilestoneMenuIcon name="more-horizontal"/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" alignOffset={-25} className="project-milestone-menu" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} sideOffset={4}>
-      <ProjectMenuSearch label="Filter milestone actions" query={menuQuery} onChange={setMenuQuery}/>
-      {shows('Open milestone issues') && <MilestoneMenuItem icon="issues" label="Open milestone issues" onSelect={onOpenIssues}/>}
-      {shows('Edit…') && <MilestoneMenuItem icon="edit" label="Edit…" onSelect={onEdit}/>}
-      {shows('Set target date…') && <MilestoneMenuItem icon="calendar" label="Set target date…" onSelect={() => setDateDialogOpen(true)}/>}
-      {shows('Copy') && <DropdownMenu.Sub><MilestoneSubTrigger icon="copy" label="Copy"/><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-copy-menu" collisionPadding={8} sideOffset={-2}>
-        <MilestoneMenuItem icon="link" label="Copy link" onSelect={() => copy(link, 'Milestone link copied')}/>
-        <MilestoneMenuItem end="⌘ C" icon="link-name" label="Copy name as link" onSelect={() => copy(`[${milestone.name}](${link})`, 'Milestone name and link copied')}/>
-        <MilestoneMenuItem icon="issues" label="Copy link to issues" onSelect={() => copy(link, 'Issues link copied')}/>
-      </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
-      {!menuQuery && <DropdownMenu.Separator/>}
-      {shows('Move milestone to') && <DropdownMenu.Sub><MilestoneSubTrigger icon="milestone" label="Move milestone to"/><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" alignOffset={-7} className="project-milestone-menu project-milestone-move-menu" collisionPadding={8} sideOffset={-2}>
-        {projects.map(project => <MilestoneMenuItem icon="project" key={project.id} label={project.name} onSelect={() => void onMove(project.id)}/>)}
-        {!projects.length && <DropdownMenu.Label>No other projects</DropdownMenu.Label>}
-      </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
-      {shows('Convert to project') && <MilestoneMenuItem icon="project" label="Convert to project" onSelect={() => void onConvert()}/>}
-      {!menuQuery && <DropdownMenu.Separator/>}
-      {shows('Delete') && <MilestoneMenuItem end="⌘ ⌫" icon="trash" label="Delete" onSelect={() => { void confirmAction(`Delete “${milestone.name}”?`,{confirmLabel:'Delete milestone'}).then(confirmed=>{if(confirmed)return onDelete()}) }}/>}
-      {menuQuery && !['Open milestone issues','Edit…','Set target date…','Copy','Move milestone to','Convert to project','Delete'].some(shows) && <div className="project-action-menu__empty">No results</div>}
-    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <ProjectMilestoneMenu count={stats.count} milestone={milestone} onConvert={onConvert} onDelete={onDelete} onEdit={onEdit} onMove={onMove} onOpenIssues={onOpenIssues} onSetTargetDate={() => setDateDialogOpen(true)} projects={projects} trigger={<button aria-label={`${milestone.name} actions`} className="project-details-sidebar__milestone-actions" onClick={event => event.stopPropagation()} type="button"><MilestoneMenuIcon name="more-horizontal"/></button>} variant="sidebar"/>
     <MilestoneDateDialog milestone={milestone} onOpenChange={setDateDialogOpen} onSubmit={onUpdateDate} open={dateDialogOpen}/>
-  </div>
-}
-
-type MilestoneMenuIconName = 'calendar'|'chevron-right'|'close'|'copy'|'edit'|'issues'|'link'|'link-name'|'milestone'|'more-horizontal'|'project'|'trash'
-
-function MilestoneMenuIcon({ name }: { name: MilestoneMenuIconName }) {
-  return <svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><use href={`#${name}`}/></svg>
-}
-
-function MilestoneMenuItem({ className = '', end, icon, label, onSelect }: { className?: string; end?: string; icon: MilestoneMenuIconName; label: string; onSelect: () => void }) {
-  return <DropdownMenu.Item className={className} onSelect={onSelect}><span className="project-milestone-menu__item-background"/><MilestoneMenuIcon name={icon}/><span>{label}</span>{end && <kbd>{end}</kbd>}</DropdownMenu.Item>
-}
-
-function MilestoneSubTrigger({ icon, label }: { icon: MilestoneMenuIconName; label: string }) {
-  return <DropdownMenu.SubTrigger><span className="project-milestone-menu__item-background"/><MilestoneMenuIcon name={icon}/><span>{label}</span><MilestoneMenuIcon name="chevron-right"/></DropdownMenu.SubTrigger>
+  </div></FlowTooltip>
 }
 
 function SidebarSection({ action, children, className = '', compact, onToggle, open, title }: { action?: ReactNode; children: ReactNode; className?: string; compact?: boolean; onToggle: () => void; open: boolean; title: string }) {
-  return <section className={`project-details-sidebar__section ${compact ? 'is-compact' : ''} ${className}`.trim()}><header><button aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${title.toLowerCase()} section`} onClick={onToggle} type="button"><span>{title}</span>{open ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}</button>{action}</header><AnimatedCollapse open={open}>{children}</AnimatedCollapse></section>
+  return <section className={`project-details-sidebar__section ${compact ? 'is-compact' : ''} ${className}`.trim()}><header><button aria-expanded={open} aria-label={`${open ? 'Collapse' : 'Expand'} ${title.toLowerCase()} section`} onClick={onToggle} type="button"><span>{title}</span><DisclosureTriangle open={open}/></button>{action}</header><AnimatedCollapse open={open}>{children}</AnimatedCollapse></section>
 }
 
 type ProjectDependencyDirection = 'blockedBy' | 'blocking'
@@ -711,7 +676,8 @@ function projectEvents(project: Project, updates: ProjectUpdate[], viewer: User)
 }
 
 const formatProjectDate = formatProjectPropertyDate
-function milestoneStats(issues: Issue[], milestoneId?: string) { const items = issues.filter(issue => (issue.projectMilestoneId ?? '') === (milestoneId ?? '')); const completed = items.filter(issue => issue.state.type === 'completed').length; return { count: items.length, progress: items.length ? Math.round(completed / items.length * 100) : 0 } }
+type MilestoneStats = { count: number; completed: number; progress: number; started?: number }
+function milestoneStats(issues: Issue[], milestoneId?: string): MilestoneStats { const items = issues.filter(issue => (issue.projectMilestoneId ?? '') === (milestoneId ?? '')); const completed = items.filter(issue => issue.state.type === 'completed').length; return { count: items.length, completed, started: items.filter(issue => issue.state.type === 'started').length, progress: items.length ? Math.round(completed / items.length * 100) : 0 } }
 function toggleId(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
 function uniqueById<T extends { id: string }>(values: T[]) { return [...new Map(values.map(value => [value.id, value])).values()] }
 import { AnimatedCollapse, AnimatedMilestones } from '@/components/ui/motion';
