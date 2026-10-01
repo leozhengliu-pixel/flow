@@ -32,6 +32,9 @@ func (s *SQLiteStore) ensureIssueListProjection(ctx context.Context) error {
 	return err
 }
 
+// issueListMigrationBatch rows are projected per transaction.
+const issueListMigrationBatch = 500
+
 func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 	for workspace := range s.workspaces {
 		if _, err := s.db.ExecContext(ctx, `INSERT INTO issue_list_migrations(workspace_key,last_id,complete) VALUES(?,'',0) ON CONFLICT DO NOTHING`, workspace); err != nil {
@@ -51,7 +54,7 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 				return err
 			}
 			err = func() error {
-				rows, err := tx.QueryContext(ctx, `SELECT id,data,list_data FROM issue_records WHERE workspace_key=? AND id>? ORDER BY id LIMIT 256`, workspace, last)
+				rows, err := tx.QueryContext(ctx, `SELECT id,data,list_data FROM issue_records WHERE workspace_key=? AND id>? ORDER BY id LIMIT ?`, workspace, last, issueListMigrationBatch)
 				if err != nil {
 					return err
 				}
@@ -98,14 +101,26 @@ func (s *SQLiteStore) migrateIssueListProjection(ctx context.Context) error {
 					}
 					args = append(args, item.id, raw)
 				}
-				if len(ids) > 0 {
+				if len(ids) > 0 && s.dialect == "mysql" {
+					// MySQL evaluates a CASE arm by arm with collation-aware
+					// comparisons, so a CASE update costs O(batch²); join the
+					// new values by primary key instead.
+					rows := make([]string, len(ids))
+					for i := range rows {
+						rows[i] = "SELECT ? AS id,? AS list_data"
+					}
+					args = append(args, workspace)
+					if _, err := tx.ExecContext(ctx, `UPDATE issue_records r JOIN (`+strings.Join(rows, " UNION ALL ")+`) v ON r.id=v.id SET r.list_data=v.list_data WHERE r.workspace_key=?`, args...); err != nil {
+						return err
+					}
+				} else if len(ids) > 0 {
 					clause, idArgs := bindList("id", ids)
 					args = append(append(args, workspace), idArgs...)
 					if _, err := tx.ExecContext(ctx, `UPDATE issue_records SET list_data=CASE id `+strings.Join(cases, " ")+` END WHERE workspace_key=? AND `+clause, args...); err != nil {
 						return err
 					}
 				}
-				if len(batch) < 256 {
+				if len(batch) < issueListMigrationBatch {
 					done = 1
 				}
 				_, err = tx.ExecContext(ctx, `UPDATE issue_list_migrations SET last_id=?,complete=? WHERE workspace_key=?`, last, done, workspace)

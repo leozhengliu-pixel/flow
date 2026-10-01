@@ -20,8 +20,8 @@ import (
 func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventType, id string, group bool, mutate func(*domain.Bootstrap) error) error {
 	var event domain.DomainEvent
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		if workspace == "" {
 			workspace = s.lastWorkspaceKey
 		}

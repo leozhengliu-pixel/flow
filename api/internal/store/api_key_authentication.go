@@ -184,8 +184,8 @@ func (s *SQLiteStore) writeAPIKeyUse(ctx context.Context, use apiKeyUse) error {
 			return err
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lockWorkspaceWrites()
+	defer s.unlockWorkspaceWrites()
 	data, ok := s.workspaces[use.workspace]
 	if !ok {
 		return nil

@@ -75,8 +75,8 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return ErrAuthForbidden

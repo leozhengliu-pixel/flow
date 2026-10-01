@@ -450,8 +450,8 @@ func (s *SQLiteStore) ImportIssues(ctx context.Context, workspace string, issues
 	if _, ok := s.WorkspaceMetadata(workspace); !ok {
 		return fmt.Errorf("workspace not found")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lockWorkspaceWrites()
+	defer s.unlockWorkspaceWrites()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

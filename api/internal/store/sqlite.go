@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -17,14 +18,24 @@ import (
 )
 
 type SQLiteStore struct {
-	db               *sqlDatabase
-	dialect          string
+	db      *sqlDatabase
+	dialect string
+	// mu guards the in-memory snapshots (workspaces, lastWorkspaceKey,
+	// viewer). writeMu serializes workspace writers; changing a snapshot
+	// requires both. Writers that edit the stored snapshot in place hold mu
+	// for the whole write (lockWorkspaceWrites). Writers that work on a private
+	// copy hold only writeMu while their transaction runs and take mu just to
+	// install the result (installWorkspace), so readers never wait on a
+	// database round trip.
 	mu               sync.RWMutex
+	writeMu          sync.Mutex
 	workspaces       map[string]domain.Bootstrap
 	lastWorkspaceKey string
 	viewer           domain.User
-	realtimeSink     func(string, domain.RealtimeEvent)
-	webhookSink      func(string, domain.DomainEvent)
+	// The sinks are read after every committed write; atomics keep that
+	// read from queueing behind a writer holding mu.
+	realtimeSink     atomic.Pointer[func(string, domain.RealtimeEvent)]
+	webhookSink      atomic.Pointer[func(string, domain.DomainEvent)]
 	coordinator      WorkspaceCoordinator
 	fixtureProfile   string
 	fixturePassword  string
@@ -38,6 +49,39 @@ type SQLiteStore struct {
 	apiKeyUseWorkers sync.WaitGroup
 	apiKeyUseClosed  bool
 	teamMembershipMu sync.Mutex
+}
+
+// lockWorkspaceWrites serializes the caller with other writers and excludes
+// readers until unlockWorkspaceWrites.
+func (s *SQLiteStore) lockWorkspaceWrites() {
+	s.writeMu.Lock()
+	s.mu.Lock()
+}
+
+func (s *SQLiteStore) unlockWorkspaceWrites() {
+	s.mu.Unlock()
+	s.writeMu.Unlock()
+}
+
+// storedWorkspace reads a workspace snapshot. Copy-on-write writers call it
+// while holding writeMu, so the snapshot cannot change until they install
+// their result.
+func (s *SQLiteStore) storedWorkspace(workspaceKey string) (domain.Bootstrap, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	data, ok := s.workspaces[workspaceKey]
+	return data, ok
+}
+
+// installWorkspace publishes a copy-on-write writer's committed snapshot.
+// The caller holds writeMu.
+func (s *SQLiteStore) installWorkspace(workspaceKey string, data domain.Bootstrap, last bool) {
+	s.mu.Lock()
+	s.workspaces[workspaceKey] = data
+	if last {
+		s.lastWorkspaceKey = workspaceKey
+	}
+	s.mu.Unlock()
 }
 
 // WorkspaceKeys returns a stable snapshot for background workers. Callers do
@@ -85,21 +129,23 @@ func (s *SQLiteStore) WorkerContext() context.Context {
 }
 
 func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
-	s.mu.Lock()
-	s.realtimeSink = sink
-	s.mu.Unlock()
+	if sink == nil {
+		s.realtimeSink.Store(nil)
+		return
+	}
+	s.realtimeSink.Store(&sink)
 }
 
 func (s *SQLiteStore) SetWebhookSink(sink func(string, domain.DomainEvent)) {
-	s.mu.Lock()
-	s.webhookSink = sink
-	s.mu.Unlock()
+	if sink == nil {
+		s.webhookSink.Store(nil)
+		return
+	}
+	s.webhookSink.Store(&sink)
 }
 
 func (s *SQLiteStore) webhookConfigured() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.webhookSink != nil
+	return s.webhookSink.Load() != nil
 }
 
 func (s *SQLiteStore) webhookNeeded(workspaceKey string) bool {
@@ -124,15 +170,17 @@ func (s *SQLiteStore) webhookNeeded(workspaceKey string) bool {
 }
 
 func (s *SQLiteStore) webhook() func(string, domain.DomainEvent) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.webhookSink
+	if sink := s.webhookSink.Load(); sink != nil {
+		return *sink
+	}
+	return nil
 }
 
 func (s *SQLiteStore) realtime() func(string, domain.RealtimeEvent) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.realtimeSink
+	if sink := s.realtimeSink.Load(); sink != nil {
+		return *sink
+	}
+	return nil
 }
 
 func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) {
@@ -154,9 +202,9 @@ func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) 
 			return err
 		}
 	}
-	s.mu.Lock()
+	s.lockWorkspaceWrites()
 	s.workspaces[workspaceKey] = data
-	s.mu.Unlock()
+	s.unlockWorkspaceWrites()
 	return nil
 }
 
@@ -200,12 +248,12 @@ func (s *SQLiteStore) ReloadAllWorkspaces(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.mu.Lock()
+	s.lockWorkspaceWrites()
 	s.workspaces = workspaces
 	if _, ok := workspaces[s.lastWorkspaceKey]; !ok {
 		s.lastWorkspaceKey = firstWorkspaceKey(workspaces)
 	}
-	s.mu.Unlock()
+	s.unlockWorkspaceWrites()
 	return nil
 }
 
@@ -1328,8 +1376,11 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 	var realtimePayload json.RawMessage
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		// Every callback works on a copy of the snapshot (cloneBootstrap or
+		// a field snapshot), so only writers are serialized while the
+		// transaction runs; readers keep reading the committed snapshot.
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
@@ -1337,10 +1388,10 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 			if err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
-			s.workspaces[workspaceKey] = latest
+			s.installWorkspace(workspaceKey, latest, false)
 			traceMark(ctx, "reload")
 		}
-		current, ok := s.workspaces[workspaceKey]
+		current, ok := s.storedWorkspace(workspaceKey)
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
@@ -1438,8 +1489,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 		traceMark(ctx, "persist")
 		next = collectionMetadata(next)
 		domain.RebuildTeamDirectory(&next)
-		s.workspaces[workspaceKey] = next
-		s.lastWorkspaceKey = workspaceKey
+		s.installWorkspace(workspaceKey, next, true)
 		return nil
 	}
 	var err error
@@ -1800,8 +1850,8 @@ func (s *SQLiteStore) CreateWorkspace(ctx context.Context, name, urlKey, region 
 }
 
 func (s *SQLiteStore) createWorkspace(ctx context.Context, name, urlKey, region string) (domain.Bootstrap, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lockWorkspaceWrites()
+	defer s.unlockWorkspaceWrites()
 	if _, exists := s.workspaces[urlKey]; exists {
 		return domain.Bootstrap{}, fmt.Errorf("workspace key already exists")
 	}
@@ -1858,8 +1908,8 @@ func (s *SQLiteStore) UpdateWorkspace(ctx context.Context, workspaceKey string, 
 }
 
 func (s *SQLiteStore) updateWorkspace(ctx context.Context, workspaceKey string, workspace domain.Workspace) (domain.Bootstrap, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lockWorkspaceWrites()
+	defer s.unlockWorkspaceWrites()
 	data, ok := s.workspaces[workspaceKey]
 	if !ok {
 		return domain.Bootstrap{}, fmt.Errorf("workspace not found")
@@ -1991,8 +2041,8 @@ func (s *SQLiteStore) DeleteWorkspace(ctx context.Context, workspaceKey string) 
 }
 
 func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.lockWorkspaceWrites()
+	defer s.unlockWorkspaceWrites()
 	data, ok := s.workspaces[workspaceKey]
 	if !ok {
 		return fmt.Errorf("workspace not found")

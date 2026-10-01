@@ -332,7 +332,7 @@ func updateProjectProgress(ctx context.Context, reader progressReader, workspace
 
 // persistIssueProjectProgress refreshes the progress of projects touched by
 // an issue write on the stored metadata and writes it in tx when a history
-// changed. The caller holds s.mu and installs the returned snapshot after the
+// changed. The caller holds s.writeMu and installs the returned snapshot after the
 // transaction commits.
 func (s *SQLiteStore) persistIssueProjectProgress(ctx context.Context, tx *sqlTx, workspace string, before, after []domain.Issue) (*domain.Bootstrap, error) {
 	stored, ok := s.workspaces[workspace]
@@ -361,10 +361,10 @@ func (s *SQLiteStore) persistIssueProjectProgress(ctx context.Context, tx *sqlTx
 func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
 	now := time.Now().UTC()
 	for _, workspace := range s.WorkspaceKeys() {
-		s.mu.Lock()
+		s.lockWorkspaceWrites()
 		data, ok := s.workspaces[workspace]
 		if !ok || !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return len(project.ProgressHistory) == 0 }) {
-			s.mu.Unlock()
+			s.unlockWorkspaceWrites()
 			continue
 		}
 		before := data
@@ -389,7 +389,7 @@ func (s *SQLiteStore) backfillAllProjectProgress(ctx context.Context) error {
 				s.workspaces[workspace] = data
 			}
 		}
-		s.mu.Unlock()
+		s.unlockWorkspaceWrites()
 		if err != nil {
 			return err
 		}

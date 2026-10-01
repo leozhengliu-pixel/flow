@@ -16,8 +16,8 @@ import (
 func (s *SQLiteStore) DeleteWorkflowStateRecords(ctx context.Context, workspace, teamID string, validate func(*domain.Bootstrap, bool) (domain.WorkflowState, *domain.WorkflowState, error)) error {
 	var event domain.DomainEvent
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		if workspace == "" {
 			workspace = s.lastWorkspaceKey
 		}

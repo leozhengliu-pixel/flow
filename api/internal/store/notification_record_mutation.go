@@ -38,8 +38,8 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 	var event domain.DomainEvent
 	var realtime json.RawMessage
 	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
