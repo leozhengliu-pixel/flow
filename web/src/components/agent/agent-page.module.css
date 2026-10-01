@@ -178,11 +178,12 @@
    the accent once there is text, and a stop square while the agent works. */
 .composer > footer > .sendButton {
   border-radius: 12px;
+  border: 0.5px solid transparent;
   background: var(--agent-send-bg);
   color: var(--agent-send-fg);
 }
-.composer > footer > .sendButton:hover,
-.composer > footer > .sendButton[data-state="working"] {
+/* Measured in Linear: while it responds, the stop button keeps the resting look and lights up on hover. */
+.composer > footer > .sendButton:hover {
   background: var(--agent-send-hover-bg);
   color: var(--agent-send-hover-fg);
 }
