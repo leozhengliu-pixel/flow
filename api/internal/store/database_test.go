@@ -36,7 +36,14 @@ func TestDatabaseDialectRewriting(t *testing.T) {
 
 func TestMySQLURLConversion(t *testing.T) {
 	dsn, err := mysqlDSN("mysql://flow:secret@db:3306/flow?tls=true")
-	if err != nil || dsn != "flow:secret@tcp(db:3306)/flow?parseTime=true&tls=true" {
+	if err != nil || dsn != "flow:secret@tcp(db:3306)/flow?interpolateParams=true&parseTime=true&tls=true" {
 		t.Fatalf("mysql DSN=%q err=%v", dsn, err)
+	}
+	dsn, err = mysqlDSN("mysql://flow:secret@db:3306/flow?interpolateParams=false")
+	if err != nil || dsn != "flow:secret@tcp(db:3306)/flow?interpolateParams=false&parseTime=true" {
+		t.Fatalf("mysql DSN with explicit interpolation=%q err=%v", dsn, err)
+	}
+	if dsn, _ = mysqlDSN("flow:secret@tcp(db:3306)/flow"); dsn != "flow:secret@tcp(db:3306)/flow?parseTime=true&interpolateParams=true" {
+		t.Fatalf("mysql Go DSN=%q", dsn)
 	}
 }

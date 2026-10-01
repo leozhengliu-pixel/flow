@@ -36,8 +36,8 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 	workspace := grant.WorkspaceKey
 	var event domain.DomainEvent
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return ErrAuthForbidden

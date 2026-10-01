@@ -95,8 +95,8 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	traceStart(ctx, "team")
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {

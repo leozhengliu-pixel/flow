@@ -11,7 +11,7 @@ func (s *SQLiteStore) migrateContentIndexes(ctx context.Context) error {
 		raw                       json.RawMessage
 	}
 	for {
-		rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,kind,resource_id,data FROM workspace_content_records WHERE record_version=0 LIMIT 250`)
+		rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,kind,resource_id,data FROM workspace_content_records WHERE record_version=0 LIMIT 1000`)
 		if err != nil {
 			return err
 		}
@@ -36,10 +36,23 @@ func (s *SQLiteStore) migrateContentIndexes(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		// Unversioned rows always need rewriting: build them in memory and
+		// upsert them with multi-row statements (a round trip per record made
+		// this migration take minutes at ~100k records on a networked database).
+		records := make([]contentRecordRow, 0, len(batch))
 		for _, item := range batch {
-			if err = writeContentRecord(ctx, tx, item.workspace, item.kind, item.resource, item.raw); err != nil {
+			var raw []byte
+			if raw, err = json.Marshal(item.raw); err != nil {
 				break
 			}
+			var row contentRecordRow
+			if row, err = buildContentRecordRow(item.workspace, item.kind, item.resource, raw); err != nil {
+				break
+			}
+			records = append(records, row)
+		}
+		if err == nil {
+			err = writeContentRecordRows(ctx, tx, records)
 		}
 		if err != nil {
 			tx.Rollback()

@@ -41,8 +41,8 @@ func (s *SQLiteStore) mutateUserSettingsRecord(ctx context.Context, workspace, e
 	var event domain.DomainEvent
 	var realtimePayload json.RawMessage
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspace, errors.New("not found"))

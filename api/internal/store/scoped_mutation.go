@@ -155,8 +155,10 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 	webhookEnabled := s.webhookConfigured() && s.webhookNeeded(workspaceKey)
 	traceStart(ctx, "scoped")
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		// The callback works on a clone; readers keep the committed snapshot
+		// while the transaction runs (see SQLiteStore.writeMu).
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		if s.coordinator != nil {
@@ -164,9 +166,9 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			if err != nil {
 				return fmt.Errorf("reload workspace before mutation: %w", err)
 			}
-			s.workspaces[workspaceKey] = latest
+			s.installWorkspace(workspaceKey, latest, false)
 		}
-		stored, ok := s.workspaces[workspaceKey]
+		stored, ok := s.storedWorkspace(workspaceKey)
 		if !ok {
 			return fmt.Errorf("workspace %q: %w", workspaceKey, errors.New("not found"))
 		}
@@ -339,8 +341,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 		traceMark(ctx, "persist")
 		s.dropMetadataCache(ctx, workspaceKey)
 		domain.RebuildTeamDirectory(&metadata)
-		s.workspaces[workspaceKey] = metadata
-		s.lastWorkspaceKey = workspaceKey
+		s.installWorkspace(workspaceKey, metadata, true)
 		return nil
 	}
 	var err error

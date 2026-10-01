@@ -148,7 +148,7 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	if err != nil {
 		return err
 	}
-	id, created, err := contentRecordIdentity(item)
+	id, _, err := contentRecordIdentity(item)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,47 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	if err == nil && version == 1 && bytes.Equal(previous, raw) {
 		return nil
 	}
+	row, err := buildContentRecordRow(workspace, kind, resource, raw)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, contentRecordUpsertPrefix+contentRecordTuple+contentRecordUpsertSuffix, row.args()...)
+	if err == nil && row.actorID != "" {
+		_, err = tx.ExecContext(ctx, issueActorUpsertPrefix+issueActorTuple+issueActorUpsertSuffix, workspace, resource, row.actorID, row.actorAt)
+	}
+	if err == nil && kind == "comment" {
+		err = syncApplicationMentions(ctx, tx, workspace, resource, raw)
+	}
+	return err
+}
+
+const (
+	contentRecordUpsertPrefix = `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version) VALUES `
+	contentRecordTuple        = `(?,?,?,?,?,?,?,?,?,?,1)`
+	contentRecordUpsertSuffix = ` ON CONFLICT(workspace_key,kind,resource_id,id) DO UPDATE SET created_at=excluded.created_at,data=excluded.data,owner_id=excluded.owner_id,parent_id=excluded.parent_id,status=excluded.status,next_attempt_at=excluded.next_attempt_at,record_version=excluded.record_version`
+	issueActorUpsertPrefix    = `INSERT INTO issue_actor_records(workspace_key,issue_id,user_id,last_at) VALUES `
+	issueActorTuple           = `(?,?,?,?)`
+	issueActorUpsertSuffix    = ` ON CONFLICT(workspace_key,issue_id,user_id) DO UPDATE SET last_at=CASE WHEN issue_actor_records.last_at>excluded.last_at THEN issue_actor_records.last_at ELSE excluded.last_at END`
+)
+
+// contentRecordRow is one workspace_content_records row with its derived
+// index columns (and, for activities, the issue actor it records).
+type contentRecordRow struct {
+	workspace, kind, resource, id, created string
+	raw                                    []byte
+	owner, parent, status, nextAttempt     string
+	actorID, actorAt                       string
+}
+
+func (row contentRecordRow) args() []any {
+	return []any{row.workspace, row.kind, row.resource, row.id, row.created, row.raw, row.owner, row.parent, row.status, row.nextAttempt}
+}
+
+func buildContentRecordRow(workspace, kind, resource string, raw []byte) (contentRecordRow, error) {
+	row := contentRecordRow{workspace: workspace, kind: kind, resource: resource, raw: raw}
 	var identity struct {
+		ID             string      `json:"id"`
+		CreatedAt      string      `json:"createdAt"`
 		RecipientID    string      `json:"recipientId"`
 		NotificationID string      `json:"notificationId"`
 		ParentID       *string     `json:"parentId"`
@@ -171,8 +211,9 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 		User           domain.User `json:"user"`
 	}
 	if err := json.Unmarshal(raw, &identity); err != nil {
-		return err
+		return row, err
 	}
+	row.id, row.created = identity.ID, identity.CreatedAt
 	owner := identity.RecipientID
 	if owner == "" {
 		owner = identity.Actor.ID
@@ -191,7 +232,7 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	if kind == "notification" {
 		var notification domain.Notification
 		if err := json.Unmarshal(raw, &notification); err != nil {
-			return err
+			return row, err
 		}
 		identity.Status = "unread"
 		if notification.ReadAt != nil {
@@ -207,23 +248,86 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 			nextAttempt = notification.SnoozedUntil.UTC().Format(issueRecordTimestamp)
 		}
 	}
-	if date, err := time.Parse(time.RFC3339Nano, created); err == nil {
-		created = date.UTC().Format(issueRecordTimestamp)
+	if date, err := time.Parse(time.RFC3339Nano, row.created); err == nil {
+		row.created = date.UTC().Format(issueRecordTimestamp)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data,owner_id,parent_id,status,next_attempt_at,record_version) VALUES(?,?,?,?,?,?,?,?,?,?,1) ON CONFLICT(workspace_key,kind,resource_id,id) DO UPDATE SET created_at=excluded.created_at,data=excluded.data,owner_id=excluded.owner_id,parent_id=excluded.parent_id,status=excluded.status,next_attempt_at=excluded.next_attempt_at,record_version=excluded.record_version`, workspace, kind, resource, id, created, raw, owner, parent, identity.Status, nextAttempt)
-	if err == nil && kind == "activity" {
+	row.owner, row.parent, row.status, row.nextAttempt = owner, parent, identity.Status, nextAttempt
+	if kind == "activity" {
 		var activity domain.ActivityEvent
-		if err = json.Unmarshal(raw, &activity); err != nil {
-			return err
+		if err := json.Unmarshal(raw, &activity); err != nil {
+			return row, err
 		}
 		if activity.Actor.ID != "" {
-			_, err = tx.ExecContext(ctx, `INSERT INTO issue_actor_records(workspace_key,issue_id,user_id,last_at) VALUES(?,?,?,?) ON CONFLICT(workspace_key,issue_id,user_id) DO UPDATE SET last_at=CASE WHEN issue_actor_records.last_at>excluded.last_at THEN issue_actor_records.last_at ELSE excluded.last_at END`, workspace, resource, activity.Actor.ID, activity.CreatedAt.UTC().Format(issueRecordTimestamp))
+			row.actorID, row.actorAt = activity.Actor.ID, activity.CreatedAt.UTC().Format(issueRecordTimestamp)
 		}
 	}
-	if err == nil && kind == "comment" {
-		err = syncApplicationMentions(ctx, tx, workspace, resource, raw)
+	return row, nil
+}
+
+// writeContentRecordRows upserts rows (and their issue actors) with
+// multi-row statements; it is writeContentRecord without the per-record
+// unchanged check, for rows known to need rewriting.
+func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecordRow) error {
+	const chunk = 200
+	type actorKey struct{ workspace, issue, user string }
+	actors := map[actorKey]string{}
+	actorOrder := []actorKey{}
+	for start := 0; start < len(rows); start += chunk {
+		part := rows[start:min(start+chunk, len(rows))]
+		// A statement may not touch one key twice (PostgreSQL); keep the last.
+		seen := map[[4]string]int{}
+		unique := make([]contentRecordRow, 0, len(part))
+		for _, row := range part {
+			key := [4]string{row.workspace, row.kind, row.resource, row.id}
+			if index, ok := seen[key]; ok {
+				unique[index] = row
+				continue
+			}
+			seen[key] = len(unique)
+			unique = append(unique, row)
+		}
+		tuples := make([]string, len(unique))
+		args := make([]any, 0, len(unique)*10)
+		for i, row := range unique {
+			tuples[i] = contentRecordTuple
+			args = append(args, row.args()...)
+		}
+		if _, err := tx.ExecContext(ctx, contentRecordUpsertPrefix+strings.Join(tuples, ",")+contentRecordUpsertSuffix, args...); err != nil {
+			return err
+		}
+		for _, row := range part {
+			if row.actorID == "" {
+				continue
+			}
+			key := actorKey{row.workspace, row.resource, row.actorID}
+			if previous, ok := actors[key]; !ok {
+				actorOrder = append(actorOrder, key)
+				actors[key] = row.actorAt
+			} else if row.actorAt > previous {
+				actors[key] = row.actorAt
+			}
+		}
 	}
-	return err
+	for start := 0; start < len(actorOrder); start += chunk {
+		part := actorOrder[start:min(start+chunk, len(actorOrder))]
+		tuples := make([]string, len(part))
+		args := make([]any, 0, len(part)*4)
+		for i, key := range part {
+			tuples[i] = issueActorTuple
+			args = append(args, key.workspace, key.issue, key.user, actors[key])
+		}
+		if _, err := tx.ExecContext(ctx, issueActorUpsertPrefix+strings.Join(tuples, ",")+issueActorUpsertSuffix, args...); err != nil {
+			return err
+		}
+	}
+	for _, row := range rows {
+		if row.kind == "comment" {
+			if err := syncApplicationMentions(ctx, tx, row.workspace, row.resource, row.raw); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func syncContentRecords[T any](ctx context.Context, tx *sqlTx, workspace, kind string, items map[string][]T, metadata domain.Bootstrap, scopes ...[]string) error {

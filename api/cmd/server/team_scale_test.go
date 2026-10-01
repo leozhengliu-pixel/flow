@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,6 +37,7 @@ import (
 // FLOW_SCALE_CASCADE_REPEAT override the sizes; FLOW_SCALE_AUTH=0 runs the
 // auth-disabled (development) handlers instead of signed-in ones;
 // FLOW_SCALE_LOG_EACH=1 logs every request as it completes;
+// FLOW_SCALE_MEMBER_REPEAT samples membership edits more often;
 // FLOW_SCALE_OPEN_ONLY=1 only times opening the store (FLOW_SCALE_OPEN_PROFILE
 // writes a CPU profile of it).
 func TestTeamMutationsAtScale(t *testing.T) {
@@ -184,13 +186,50 @@ func TestTeamMutationsAtScale(t *testing.T) {
 		timed("team clear parent", http.MethodPatch, "/api/teams/"+teamID+"/settings", map[string]any{"parentTeamId": ""})
 	}
 	target := "team_scale_3"
-	for i := 0; i < repeat; i++ {
+	// FLOW_SCALE_MEMBER_REPEAT (at most 50) samples membership edits more
+	// often, to expose tail latency.
+	for i := 0; i < min(scaleEnvInt("FLOW_SCALE_MEMBER_REPEAT", repeat), 50); i++ {
 		user := fmt.Sprintf("usr_scale_%d", 200+i)
 		timed("member add", http.MethodPut, ws+"/teams/"+target+"/members/"+user, map[string]any{"member": true, "role": "member"}, http.StatusNoContent)
 		timed("member role owner", http.MethodPut, ws+"/teams/"+target+"/members/"+user, map[string]any{"member": true, "role": "owner"}, http.StatusNoContent)
 		timed("member role member", http.MethodPut, ws+"/teams/"+target+"/members/"+user, map[string]any{"member": true, "role": "member"}, http.StatusNoContent)
 		timed("member remove", http.MethodPut, ws+"/teams/"+target+"/members/"+user, map[string]any{"member": false}, http.StatusNoContent)
 	}
+	// Membership edits while another client keeps writing (issue edits and
+	// workspace settings, as other users and background jobs do): the edit's
+	// snapshot reads must not queue behind those writes' transactions.
+	stop := make(chan struct{})
+	var background sync.WaitGroup
+	background.Add(1)
+	go func() {
+		defer background.Done()
+		for n := 0; ; n++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			method, path, input := http.MethodPatch, "/api/issue-records/scale_"+strconv.Itoa(700+n%50), map[string]any{"title": fmt.Sprintf("Concurrent title %d", n)}
+			if n%2 == 1 {
+				method, path, input = http.MethodPut, "/api/workspace/settings", map[string]any{"name": fmt.Sprintf("Concurrent workspace %d", n)}
+			}
+			raw, _ := json.Marshal(input)
+			request, _ := http.NewRequest(method, api.URL+path, bytes.NewReader(raw))
+			request.Header.Set("X-Workspace-Key", "test-workspace")
+			request.Header.Set("Content-Type", "application/json")
+			if response, err := client.Do(request); err == nil {
+				_, _ = io.Copy(io.Discard, response.Body)
+				response.Body.Close()
+			}
+		}
+	}()
+	for i := 0; i < repeat; i++ {
+		user := fmt.Sprintf("usr_scale_%d", 260+i%30)
+		timed("member add (concurrent writes)", http.MethodPut, ws+"/teams/"+target+"/members/"+user, map[string]any{"member": true, "role": "member"}, http.StatusNoContent)
+		timed("member remove (concurrent writes)", http.MethodPut, ws+"/teams/"+target+"/members/"+user, map[string]any{"member": false}, http.StatusNoContent)
+	}
+	close(stop)
+	background.Wait()
 	if !seeded {
 		timed("member remove (40 issues)", http.MethodPut, ws+"/teams/team_scale_1/members/usr_scale_250", map[string]any{"member": false}, http.StatusNoContent)
 		timed("member remove (600 issues)", http.MethodPut, ws+"/teams/team_scale_1/members/usr_scale_251", map[string]any{"member": false}, http.StatusNoContent)
@@ -275,6 +314,7 @@ func TestTeamMutationsAtScale(t *testing.T) {
 	issue := timed("issue-record create", http.MethodPost, "/api/issue-records", map[string]any{"title": "Scale created issue", "teamId": "team_test"})
 	timed("issue-record priority", http.MethodPatch, "/api/issue-records/"+id(issue), map[string]any{"priority": 1})
 	timed("GET issue-records/bootstrap", http.MethodGet, "/api/issue-records/bootstrap", nil)
+	runPulseScaleRoutes(t, srv, repository, timed)
 
 	extra := []string{}
 	for label := range scaleExtraSamples {

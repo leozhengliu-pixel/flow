@@ -1,12 +1,13 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -167,18 +168,13 @@ func (s *SQLiteStore) decodeWorkspaceMetadata(ctx context.Context, workspace str
 
 func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace string, reader metadataReader, collections map[string]string) ([]metadataCacheRow, error) {
 	if cached, ok := s.metadataRecordsFromCache(ctx, workspace, collections); ok {
-		sort.Slice(cached, func(i, j int) bool {
-			if cached[i].Field != cached[j].Field {
-				return cached[i].Field < cached[j].Field
-			}
-			if cached[i].Order != cached[j].Order {
-				return cached[i].Order < cached[j].Order
-			}
-			return cached[i].Key < cached[j].Key
-		})
+		sortMetadataRecordRows(cached)
 		return cached, nil
 	}
-	rows, err := reader.QueryContext(ctx, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,collection_order,record_key`, workspace)
+	// Read in primary-key order and sort in memory: ordering by
+	// collection_order on the server sorts every record with its data
+	// (seconds at ~200k records on MySQL).
+	rows, err := reader.QueryContext(ctx, `SELECT field,record_key,collection_order,data FROM workspace_metadata_records WHERE workspace_key=? ORDER BY field,record_key`, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -194,8 +190,22 @@ func (s *SQLiteStore) loadMetadataRecordRows(ctx context.Context, workspace stri
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	sortMetadataRecordRows(result)
 	s.fillMetadataRecordsCache(ctx, workspace, result)
 	return result, nil
+}
+
+// sortMetadataRecordRows orders rows by field, collection order and key.
+func sortMetadataRecordRows(rows []metadataCacheRow) {
+	slices.SortFunc(rows, func(a, b metadataCacheRow) int {
+		if c := strings.Compare(a.Field, b.Field); c != 0 {
+			return c
+		}
+		if a.Order != b.Order {
+			return cmp.Compare(a.Order, b.Order)
+		}
+		return strings.Compare(a.Key, b.Key)
+	})
 }
 
 // decodeArrayFields decodes each array field's records into a new slice

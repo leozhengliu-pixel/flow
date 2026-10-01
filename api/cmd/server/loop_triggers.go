@@ -163,9 +163,30 @@ type loopEvent struct {
 }
 
 // resolveLoopEvent maps a committed domain event onto a loop trigger entity.
-func (s *server) resolveLoopEvent(workspace string, data domain.Bootstrap, event domain.DomainEvent) (loopEvent, bool) {
+// loopEventCandidate reports whether an event type can trigger a loop at all
+// (the cases resolveLoopEvent accepts), so that other writes skip the
+// workspace snapshot.
+func loopEventCandidate(event domain.DomainEvent) bool {
 	entityType, action, found := strings.Cut(event.Type, ".")
 	if !found || event.AggregateID == "" {
+		return false
+	}
+	switch {
+	case event.Type == "comment.created", event.Type == "customer_request.created", event.Type == "customer_request.updated":
+		return true
+	case (entityType == "project" || entityType == "initiative") && action == "update_created":
+		return true
+	case entityType == "issue" || entityType == "project" || entityType == "initiative" || entityType == "release" || entityType == "team":
+		return action == "created" || action == "updated"
+	case entityType == "cycle":
+		return action == "created" || action == "updated" || action == "started" || action == "completed"
+	}
+	return false
+}
+
+func (s *server) resolveLoopEvent(workspace string, data domain.Bootstrap, event domain.DomainEvent) (loopEvent, bool) {
+	entityType, action, found := strings.Cut(event.Type, ".")
+	if !found || event.AggregateID == "" || !loopEventCandidate(event) {
 		return loopEvent{}, false
 	}
 	previous := map[string]json.RawMessage{}
@@ -527,8 +548,12 @@ func loopEventEntityName(data domain.Bootstrap, event loopEvent) string {
 
 // dispatchLoopTriggers starts entity-triggered loops that match a domain event.
 func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent) {
-	// Runs synchronously after every mutation; most workspaces have no event
-	// loops, so check the loop list before cloning the workspace metadata.
+	// Runs synchronously after every mutation; most events cannot trigger a
+	// loop and most workspaces have no event loops, so check both before
+	// cloning the workspace metadata.
+	if !loopEventCandidate(event) {
+		return
+	}
 	if loops, ok := s.store.WorkspaceMetadataFields(workspace, "loops"); !ok || !slices.ContainsFunc(loops.Loops, func(loop domain.Loop) bool { return loopLive(loop) && loop.TriggerType != "schedule" }) {
 		return
 	}

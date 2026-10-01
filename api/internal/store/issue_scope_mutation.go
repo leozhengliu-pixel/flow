@@ -62,11 +62,13 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 	needsFamily := eventType == "issue.deleted" || eventType == "issue.batch_updated" && (batch.Update.StateID != nil || batch.Update.ParentID != nil)
 	traceStart(ctx, "issue")
 	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		// The callback works on a clone; readers keep the committed snapshot
+		// while the transaction runs (see SQLiteStore.writeMu).
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
-		current, ok := s.workspaces[workspace]
+		current, ok := s.storedWorkspace(workspace)
 		if !ok {
 			return fmt.Errorf("workspace not found")
 		}
@@ -327,7 +329,7 @@ func (s *SQLiteStore) mutateIssueScope(ctx context.Context, workspace, eventType
 			return err
 		}
 		traceMark(ctx, "persist")
-		s.workspaces[workspace] = data
+		s.installWorkspace(workspace, data, false)
 		if progressChanged {
 			s.dropMetadataCache(ctx, workspace)
 		}

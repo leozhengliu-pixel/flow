@@ -256,7 +256,11 @@ func mysqlDSN(raw string) (string, error) {
 		if strings.Contains(raw, "?") {
 			separator = "&"
 		}
-		return raw + separator + "parseTime=true", nil
+		dsn := raw + separator + "parseTime=true"
+		if !strings.Contains(raw, "interpolateParams=") {
+			dsn += "&interpolateParams=true"
+		}
+		return dsn, nil
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil || parsed.Scheme != "mysql" || parsed.Host == "" || strings.TrimPrefix(parsed.Path, "/") == "" {
@@ -269,6 +273,12 @@ func mysqlDSN(raw string) (string, error) {
 	}
 	query := parsed.Query()
 	query.Set("parseTime", "true")
+	// Without client-side interpolation every parameterized statement costs
+	// three round trips (prepare, execute, close); startup migrations and
+	// batched writes issue tens of thousands of them.
+	if !query.Has("interpolateParams") {
+		query.Set("interpolateParams", "true")
+	}
 	return fmt.Sprintf("%s@tcp(%s)/%s?%s", credentials, parsed.Host, strings.TrimPrefix(parsed.Path, "/"), query.Encode()), nil
 }
 

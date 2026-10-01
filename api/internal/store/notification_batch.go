@@ -61,8 +61,8 @@ func (s *SQLiteStore) BatchNotificationRecords(ctx context.Context, workspace, u
 	var updated int
 	var event domain.DomainEvent
 	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
