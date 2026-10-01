@@ -220,3 +220,51 @@ func sortByKey(values []string, keys map[string]float64) {
 		}
 	}
 }
+
+// runPulseScaleRoutes times the pulse summary scheduler (one metadata write
+// per due user) in a workspace with a live event-triggered loop, which makes
+// every write compute previous values and run the post-write loop check.
+func runPulseScaleRoutes(t *testing.T, srv *server, repository *store.SQLiteStore, timed scaleTimer) {
+	t.Helper()
+	const workspace = "test-workspace"
+	today := time.Now().UTC()
+	now := time.Date(today.Year(), today.Month(), today.Day(), 10, 0, 0, 0, time.UTC)
+	timed("loop create (issue trigger)", http.MethodPost, "/api/loops", map[string]any{"name": "Scale issue loop", "instructions": "Summarize", "triggerType": "issue"})
+	// A metadata-only event with a field scope keeps this setup off the full
+	// (every issue and content record) write path.
+	setup := store.WithMetadataFields(context.Background(), "workspaceSettings", "loops", "projects", "projectUpdates")
+	if err := repository.MutateWorkspace(setup, workspace, "workspace.agent_guidance_updated", "", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule = "daily"
+		if data.WorkspaceSettings.FeatureFlags == nil {
+			data.WorkspaceSettings.FeatureFlags = map[string]bool{}
+		}
+		data.WorkspaceSettings.FeatureFlags["pulse"] = true
+		for index := range data.Loops {
+			if data.Loops[index].TriggerType == "issue" {
+				data.Loops[index].Enabled, data.Loops[index].Status = true, "published"
+			}
+		}
+		if len(data.Projects) > 0 {
+			if data.ProjectUpdates == nil {
+				data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+			}
+			project := data.Projects[0]
+			data.ProjectUpdates[project.ID] = append(data.ProjectUpdates[project.ID], domain.ProjectUpdate{ID: "pulse-scale-update", ProjectID: project.ID, Body: "Scale update", User: data.Viewer, CreatedAt: now.Add(-2 * time.Hour)})
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		begin := time.Now()
+		_, _ = repository.WorkspaceMetadata(workspace)
+		timedSample("metadata snapshot clone", time.Since(begin))
+	}
+	for i := 0; i < 4; i++ {
+		begin := time.Now()
+		if err := srv.preparePulseSummaries(context.Background(), workspace, now); err != nil {
+			t.Errorf("pulse summaries: %v", err)
+		}
+		timedSample("pulse tick (100 users)", time.Since(begin))
+	}
+}

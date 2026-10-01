@@ -50,8 +50,11 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 	var realtime json.RawMessage
 	var progressMetadata *domain.Bootstrap
 	err := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		// The callback edits a metadata clone and progress refreshes copy
+		// the projects they change, so readers keep the committed snapshot
+		// while the transaction runs (see SQLiteStore.writeMu).
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
@@ -281,7 +284,7 @@ func (s *SQLiteStore) UpdateIssueRecord(ctx context.Context, workspace, id strin
 			return err
 		}
 		if progressMetadata != nil {
-			s.workspaces[workspace] = *progressMetadata
+			s.installWorkspace(workspace, *progressMetadata, false)
 			s.dropMetadataCache(ctx, workspace)
 		}
 		return nil

@@ -62,12 +62,14 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 	progressChanged := false
 	traceStart(ctx, "issue_create")
 	err = func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		// The callback edits a metadata clone; readers keep the committed
+		// snapshot while the transaction runs (see SQLiteStore.writeMu).
+		s.writeMu.Lock()
+		defer s.writeMu.Unlock()
 		traceLocked(ctx)
 		defer traceUnlocked(ctx)
 		actor := metadata.Viewer
-		current, ok := s.workspaces[workspace]
+		current, ok := s.storedWorkspace(workspace)
 		if !ok {
 			return fmt.Errorf("workspace not found")
 		}
@@ -229,7 +231,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 			return err
 		}
 		traceMark(ctx, "persist")
-		s.workspaces[workspace] = metadata
+		s.installWorkspace(workspace, metadata, false)
 		if progressChanged {
 			s.dropMetadataCache(ctx, workspace)
 		}

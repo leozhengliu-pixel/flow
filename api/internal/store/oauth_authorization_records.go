@@ -45,8 +45,8 @@ func oauthPolicyMetadata(ctx context.Context, tx metadataReader, workspace, lock
 // share its lock until both SQL and the immutable cache replacement are visible.
 func (s *SQLiteStore) oauthMetadataTransaction(ctx context.Context, workspace string, mutate func(*sqlTx, string, domain.Bootstrap) (domain.Bootstrap, error)) error {
 	apply := func() error {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		s.lockWorkspaceWrites()
+		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
 		if !ok {
 			return ErrAuthForbidden
