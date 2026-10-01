@@ -260,11 +260,26 @@ func runPulseScaleRoutes(t *testing.T, srv *server, repository *store.SQLiteStor
 		_, _ = repository.WorkspaceMetadata(workspace)
 		timedSample("metadata snapshot clone", time.Since(begin))
 	}
+	users, _ := repository.WorkspaceMetadataFields(workspace, "users")
+	label := fmt.Sprintf("pulse tick (%d users)", len(users.Users))
 	for i := 0; i < 4; i++ {
+		// Every user is due again: clear the delivery cursors (a reused
+		// fixture keeps them from the previous run).
+		reset := store.WithMetadataFields(context.Background(), "settings")
+		if err := repository.MutateWorkspace(reset, workspace, "workspace.agent_guidance_updated", "", nil, func(data *domain.Bootstrap) error {
+			delete(data.Settings, "pulseDeliveryCursors")
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
 		begin := time.Now()
-		if err := srv.preparePulseSummaries(context.Background(), workspace, now); err != nil {
+		if err := srv.preparePulseSummaries(context.Background(), workspace, now.Add(time.Duration(i)*time.Minute)); err != nil {
 			t.Errorf("pulse summaries: %v", err)
 		}
-		timedSample("pulse tick (100 users)", time.Since(begin))
+		timedSample(label, time.Since(begin))
+	}
+	after, _ := repository.WorkspaceMetadataFields(workspace, "settings")
+	if cursors := pulseCursors(&after); len(cursors) < len(users.Users) {
+		t.Errorf("pulse tick advanced %d of %d users", len(cursors), len(users.Users))
 	}
 }

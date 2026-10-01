@@ -2042,3 +2042,44 @@ func titleRole(value string) string {
 	}
 	return "Member"
 }
+
+// ViewerVisibilityKeys groups the workspace's active members by what the
+// per-viewer projection lets them see: viewers with the same key get the same
+// teams, projects, initiatives and documents from PagedWorkspaceMetadata, so
+// a caller that only counts shared resources can project once per key
+// instead of once per member. Inactive members are left out.
+func (s *SQLiteStore) ViewerVisibilityKeys(ctx context.Context, workspace string) (map[string]string, error) {
+	data, ok := s.WorkspaceMetadataFields(workspace, "teams", "teamSettings")
+	if !ok {
+		return nil, ErrAuthForbidden
+	}
+	members, err := s.ListMembers(ctx, data.Workspace.ID)
+	if err != nil {
+		return nil, err
+	}
+	teamMembers, err := s.ListTeamMembers(ctx, data.Workspace.ID)
+	if err != nil {
+		return nil, err
+	}
+	// teamVisibleToUser only looks at the viewer's own memberships.
+	byUser := map[string][]domain.TeamMember{}
+	for _, membership := range teamMembers {
+		byUser[membership.UserID] = append(byUser[membership.UserID], membership)
+	}
+	keys := make(map[string]string, len(members))
+	for _, member := range members {
+		if member.Status != "active" {
+			continue
+		}
+		data.TeamMembers = byUser[member.User.ID]
+		allowed := []string{}
+		for _, team := range data.Teams {
+			if teamVisibleToUser(data, team.ID, member.User.ID, member.Role) {
+				allowed = append(allowed, team.ID)
+			}
+		}
+		slices.Sort(allowed)
+		keys[member.User.ID] = member.Role + "|" + strings.Join(allowed, ",")
+	}
+	return keys, nil
+}

@@ -1759,15 +1759,24 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		}
 	}
 	if event != nil && event.Type == "pulse.summary_scheduled" {
+		// One tick can add a summary for every member: write them in batches.
+		rows := make([]contentRecordRow, 0, len(notifications)+len(deliveries))
 		for _, notification := range notifications {
-			if err := writeContentRecord(ctx, tx, workspaceKey, "notification", notification.IssueID, notification); err != nil {
+			row, err := contentRecordRowFor(workspaceKey, "notification", notification.IssueID, notification)
+			if err != nil {
 				return err
 			}
+			rows = append(rows, row)
 		}
 		for _, delivery := range deliveries {
-			if err := writeContentRecord(ctx, tx, workspaceKey, "delivery", "", delivery); err != nil {
+			row, err := contentRecordRowFor(workspaceKey, "delivery", "", delivery)
+			if err != nil {
 				return err
 			}
+			rows = append(rows, row)
+		}
+		if err := writeContentRecordRows(ctx, tx, rows); err != nil {
+			return err
 		}
 		notifications, deliveries = nil, nil
 	}

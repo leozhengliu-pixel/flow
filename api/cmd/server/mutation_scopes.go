@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode"
 
 	"flow/api/internal/domain"
@@ -262,13 +263,23 @@ func issueCreationScope(ctx context.Context, resolve func(domain.Bootstrap) stor
 func recurringIssueScope(ctx context.Context, sourceID string) context.Context {
 	return store.WithMutationScope(ctx, store.MutationScope{IssueIDs: []string{sourceID}, CreateIssues: true, Expand: func(issues []domain.Issue) store.MutationScope {
 		series := sourceID
+		var since time.Time
 		for _, issue := range issues {
-			if issue.ID == sourceID && issue.RecurrenceSeriesID != "" {
+			if issue.ID != sourceID {
+				continue
+			}
+			if issue.RecurrenceSeriesID != "" {
 				series = issue.RecurrenceSeriesID
+			}
+			// The callback only looks for an occurrence dated on or after the
+			// next scheduled one; it was generated (and last updated) no earlier
+			// than that occurrence's start. Two days cover time zone offsets.
+			if issue.NextOccurrenceAt != nil {
+				since = issue.NextOccurrenceAt.Add(-48 * time.Hour)
 			}
 		}
 		fragment, _ := json.Marshal(series)
-		return store.MutationScope{IssueDataContains: []string{`"recurrenceSeriesId":` + string(fragment)}}
+		return store.MutationScope{IssueDataContains: []string{`"recurrenceSeriesId":` + string(fragment)}, IssueDataUpdatedSince: since}
 	}})
 }
 

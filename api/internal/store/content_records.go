@@ -267,6 +267,15 @@ func buildContentRecordRow(workspace, kind, resource string, raw []byte) (conten
 // writeContentRecordRows upserts rows (and their issue actors) with
 // multi-row statements; it is writeContentRecord without the per-record
 // unchanged check, for rows known to need rewriting.
+// contentRecordRowFor encodes item as a content record row for writeContentRecordRows.
+func contentRecordRowFor[T any](workspace, kind, resource string, item T) (contentRecordRow, error) {
+	raw, err := json.Marshal(item)
+	if err != nil {
+		return contentRecordRow{}, err
+	}
+	return buildContentRecordRow(workspace, kind, resource, raw)
+}
+
 func writeContentRecordRows(ctx context.Context, tx *sqlTx, rows []contentRecordRow) error {
 	const chunk = 200
 	type actorKey struct{ workspace, issue, user string }
