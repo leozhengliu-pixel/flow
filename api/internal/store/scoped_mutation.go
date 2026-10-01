@@ -50,6 +50,10 @@ type MutationScope struct {
 	// of these fragments. It scans issue payloads in the database, so it is
 	// only for rare background work without an index to use.
 	IssueDataContains []string
+	// IssueDataUpdatedSince, when set, limits the IssueDataContains scan to
+	// records updated at or after it (through the updated_at index). Only for
+	// fragments that can only appear on records written after that time.
+	IssueDataUpdatedSince time.Time
 	// IssueFilter, when set, keeps only the matching records loaded through
 	// ProjectIssues, IssueColumns, IssueAttributes, LabelIssues and
 	// IssueDataContains (records named by id or identifier are always kept).
@@ -95,6 +99,18 @@ func (scope MutationScope) merge(extra MutationScope) MutationScope {
 	scope.IssueColumns = append(slices.Clone(scope.IssueColumns), extra.IssueColumns...)
 	scope.IssueAttributes = append(slices.Clone(scope.IssueAttributes), extra.IssueAttributes...)
 	scope.LabelIssues = append(slices.Clone(scope.LabelIssues), extra.LabelIssues...)
+	if len(extra.IssueDataContains) > 0 {
+		// One bound covers every fragment: keep the earliest, and none at all
+		// when either side scans without one.
+		switch {
+		case len(scope.IssueDataContains) == 0:
+			scope.IssueDataUpdatedSince = extra.IssueDataUpdatedSince
+		case scope.IssueDataUpdatedSince.IsZero() || extra.IssueDataUpdatedSince.IsZero():
+			scope.IssueDataUpdatedSince = time.Time{}
+		case extra.IssueDataUpdatedSince.Before(scope.IssueDataUpdatedSince):
+			scope.IssueDataUpdatedSince = extra.IssueDataUpdatedSince
+		}
+	}
 	scope.IssueDataContains = append(slices.Clone(scope.IssueDataContains), extra.IssueDataContains...)
 	scope.Resources = append(slices.Clone(scope.Resources), extra.Resources...)
 	scope.StatusAutomation = scope.StatusAutomation || extra.StatusAutomation
@@ -312,6 +328,7 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 			return err
 		}
 		changedIssues = written
+		traceMark(ctx, "records")
 		// Keep project progress current for issues this write moved (release
 		// completion automations) and rebuild it for new start dates.
 		now := time.Now().UTC()
@@ -331,14 +348,16 @@ func (s *SQLiteStore) mutateScoped(ctx context.Context, workspaceKey, eventType 
 				}
 			}
 		}
+		traceMark(ctx, "progress")
 		metadata := collectionMetadata(next)
 		if err := s.persistWorkspaceTx(ctx, tx, workspaceKey, &stored, metadata, nil, &event); err != nil {
 			return err
 		}
+		traceMark(ctx, "metadata")
 		if err := tx.Commit(); err != nil {
 			return err
 		}
-		traceMark(ctx, "persist")
+		traceMark(ctx, "commit")
 		s.dropMetadataCache(ctx, workspaceKey)
 		domain.RebuildTeamDirectory(&metadata)
 		s.installWorkspace(workspaceKey, metadata, true)
@@ -467,7 +486,12 @@ func (s *SQLiteStore) loadScopedIssues(ctx context.Context, tx *sqlTx, workspace
 		case "postgres":
 			pattern = []byte("%" + fragment + "%")
 		}
-		if err := collect(&scanned, `SELECT id FROM issue_records WHERE workspace_key=? AND `+column+` LIKE ?`, workspace, pattern); err != nil {
+		query, args := `SELECT id FROM issue_records WHERE workspace_key=? AND `+column+` LIKE ?`, []any{workspace, pattern}
+		if !scope.IssueDataUpdatedSince.IsZero() {
+			query += ` AND updated_at>=?`
+			args = append(args, scope.IssueDataUpdatedSince.UTC().Format(issueRecordTimestamp))
+		}
+		if err := collect(&scanned, query, args...); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -680,9 +704,19 @@ func (s *SQLiteStore) persistScopedRecords(ctx context.Context, tx *sqlTx, works
 		// Mirror the full path's collection order: records the callback put in
 		// front of every loaded one go below the current minimum, the rest
 		// after the current maximum.
+		// MIN/MAX with NOT IN scans the whole collection index; reading it in
+		// order stops at the first record that isn't one of the new issues.
 		var low, high sql.NullInt64
-		if err := tx.QueryRowContext(ctx, `SELECT MIN(collection_order),MAX(collection_order) FROM issue_records WHERE workspace_key=? AND id NOT IN (`+strings.TrimSuffix(strings.Repeat("?,", len(created)), ",")+`)`, append([]any{workspace}, issueIDArgs(created)...)...).Scan(&low, &high); err != nil {
-			return nil, err
+		excluded := `id NOT IN (` + strings.TrimSuffix(strings.Repeat("?,", len(created)), ",") + `)`
+		args := append([]any{workspace}, issueIDArgs(created)...)
+		for _, bound := range []struct {
+			order string
+			value *sql.NullInt64
+		}{{"ASC", &low}, {"DESC", &high}} {
+			err := tx.QueryRowContext(ctx, `SELECT collection_order FROM issue_records WHERE workspace_key=? AND `+excluded+` ORDER BY collection_order `+bound.order+` LIMIT 1`, args...).Scan(bound.value)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return nil, err
+			}
 		}
 		maxNumber := 0
 		for index, issue := range created {
