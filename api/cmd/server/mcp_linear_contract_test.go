@@ -46,11 +46,16 @@ func TestMCPGetIssueReturnsLinearStyleDetail(t *testing.T) {
 	created := mcpObject(t, f, "save_issue", map[string]any{
 		"team": team.Key, "title": "Detailed issue", "description": "Body text", "priority": 2, "assignee": "me",
 		"project": f.data.Projects[0].ID, "labels": []string{f.data.Labels[0].Name}, "parentId": parent["identifier"],
-		"blocks": []string{blocked["identifier"].(string)}, "dueDate": "2026-12-01", "recurrence": "weekly",
+		"blocks": []string{blocked["identifier"].(string)}, "dueDate": "2026-12-01", "recurrence": "weekly", "icon": "Repeat",
 	})
 	issue := mcpObject(t, f, "get_issue", map[string]any{"id": created["identifier"]})
-	if issue["identifier"] != created["identifier"] || issue["title"] != "Detailed issue" || issue["description"] != "Body text" || issue["priorityLabel"] != "High" || issue["priority"] != float64(2) || issue["dueDate"] != "2026-12-01" || issue["recurrence"] != "weekly" {
+	if issue["identifier"] != created["identifier"] || issue["title"] != "Detailed issue" || issue["description"] != "Body text" || issue["priorityLabel"] != "High" || issue["priority"] != float64(2) || issue["dueDate"] != "2026-12-01" || issue["recurrence"] != "weekly" || issue["icon"] != "Repeat" {
 		t.Fatalf("core fields: %v", issue)
+	}
+	// dueDate is the recurring issue's first due date; the next instance
+	// follows at 00:01 the day after it (UTC team).
+	if issue["nextOccurrenceAt"] != "2026-12-02T00:01:00Z" || created["icon"] != "Repeat" {
+		t.Fatalf("recurring schedule: %v / receipt %v", issue["nextOccurrenceAt"], created)
 	}
 	if url, _ := issue["url"].(string); !strings.HasSuffix(url, "/issue/"+created["identifier"].(string)) {
 		t.Fatalf("url: %v", issue["url"])

@@ -1,11 +1,17 @@
-.recurrence-dialog { width: min(460px, calc(100vw - 32px)); }
+.recurrence-dialog { width: min(520px, calc(100vw - 32px)); }
+/* Linear's "First due [date] repeats every [N] [unit]" row (measured: 13px/500 labels, 32px controls, 8px radius). */
+.recurrence-cadence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; color: var(--theme-text-primary); font: 500 13px/16px var(--font); }
+.recurrence-cadence .recurrence-cadence__due, .recurrence-cadence__every { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--theme-text-primary); font: inherit; }
+.recurrence-cadence .recurrence-cadence__due input { box-sizing: border-box; width: 120px; height: 32px; padding: 0 10px; border: .5px solid var(--theme-border-strong); border-radius: 8px; outline: 0; background: var(--theme-surface-1); color: var(--theme-text-primary); font: 450 12px/normal var(--font); }
+.recurrence-cadence .recurrence-cadence__due input:focus-visible { border-color: var(--focus-ring); }
+.recurrence-cadence .select-control.recurrence-cadence__select { width: auto; min-width: 44px; height: 30px; padding: 0 8px 0 10px; }
 .recurrence-picker { display: grid; gap: 4px; }
 .recurrence-picker__row { display: flex; flex-wrap: wrap; gap: 10px; }
 .recurrence-picker__row > label { flex: 1 1 120px; min-width: 0; }
-.recurrence-picker__interval { display: flex; align-items: center; gap: 8px; }
-.recurrence-picker__interval input { width: 72px; flex: none; }
-.recurrence-picker__interval span { color: var(--muted); font-size: 12px; }
-.recurrence-picker__weekdays { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; }
+.recurrence-picker__options { display: grid; gap: 8px; margin-top: 16px; }
+.recurrence-picker__caption { color: var(--muted); font-size: 12px; }
+.recurrence-picker__options .recurrence-picker__row > label { margin-top: 0; }
+.recurrence-picker__weekdays { display: flex; flex-wrap: wrap; gap: 4px; }
 .recurrence-picker__weekdays button { min-width: 38px; height: 28px; padding: 0 8px; border: .5px solid var(--border-strong); border-radius: 5px; background: transparent; color: var(--muted); font: 500 12px/1 inherit; }
 .recurrence-picker__weekdays button:hover { background: var(--bg-active); color: var(--text); }
 .recurrence-picker__weekdays button[aria-pressed="true"] { border-color: var(--accent-primary); background: var(--accent-soft); color: var(--text); }

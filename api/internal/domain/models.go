@@ -418,6 +418,7 @@ type Issue struct {
 	Identifier             string              `json:"identifier"`
 	Number                 int                 `json:"number"`
 	Title                  string              `json:"title"`
+	Icon                   string              `json:"icon,omitempty"` // recurring issue icon (issue template icon format)
 	Description            string              `json:"description"`
 	DescriptionState       string              `json:"descriptionState,omitempty"`
 	DocumentContent        *DocumentContent    `json:"documentContent,omitempty"`
@@ -2206,8 +2207,9 @@ type IssueCreateInput struct {
 	SLAType            *string        `json:"slaType,omitempty"`
 	LabelIDs           []string       `json:"labelIds,omitempty"`
 	TemplateID         string         `json:"templateId,omitempty"`
-	Recurrence         *string        `json:"recurrence,omitempty"`
-	NextOccurrenceAt   *string        `json:"nextOccurrenceAt,omitempty"`
+	Icon               *string        `json:"icon,omitempty"`
+	Recurrence         *string        `json:"recurrence,omitempty"`       // with DueDate as the first due date
+	NextOccurrenceAt   *string        `json:"nextOccurrenceAt,omitempty"` // legacy alias for the first due date
 }
 
 type ProjectMutationInput struct {
@@ -2346,8 +2348,9 @@ type IssueUpdateInput struct {
 	Archived                *bool          `json:"archived,omitempty"`
 	ParentID                *string        `json:"parentId,omitempty"`
 	SortOrder               *float64       `json:"sortOrder,omitempty"`
-	Recurrence              *string        `json:"recurrence,omitempty"`
-	NextOccurrenceAt        *string        `json:"nextOccurrenceAt,omitempty"`
+	Icon                    *string        `json:"icon,omitempty"`
+	Recurrence              *string        `json:"recurrence,omitempty"`       // "" stops; DueDate is the current due date
+	NextOccurrenceAt        *string        `json:"nextOccurrenceAt,omitempty"` // legacy alias for the first due date
 	// SnoozedUntil hides a triage issue until the time passes; "" clears it.
 	SnoozedUntil *string `json:"snoozedUntil,omitempty"`
 }

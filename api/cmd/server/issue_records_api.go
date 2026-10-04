@@ -683,14 +683,12 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 	if input.Recurrence != nil && strings.TrimSpace(*input.Recurrence) != issue.Recurrence {
 		return false
 	}
-	if input.NextOccurrenceAt != nil {
-		current := ""
-		if issue.NextOccurrenceAt != nil {
-			current = issue.NextOccurrenceAt.UTC().Format(time.RFC3339)
-		}
-		if strings.TrimSpace(*input.NextOccurrenceAt) != current && !(strings.TrimSpace(*input.NextOccurrenceAt) == "" && issue.NextOccurrenceAt == nil) {
-			return false
-		}
+	if input.NextOccurrenceAt != nil && (strings.TrimSpace(*input.NextOccurrenceAt) != "" || issue.NextOccurrenceAt != nil) {
+		// The legacy first-due-date alias always goes through the write path.
+		return false
+	}
+	if input.Icon != nil && strings.TrimSpace(*input.Icon) != issue.Icon {
+		return false
 	}
 	if input.SnoozedUntil != nil {
 		current := ""

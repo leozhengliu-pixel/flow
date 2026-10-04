@@ -5567,3 +5567,28 @@ Object.assign(zhCN, {
   "Document content copied": "已复制文档内容",
   "Could not save link": "无法保存链接",
 });
+
+// Recurring issues (Linear's due-date model: first due, repeats every N unit).
+Object.assign(zhCN, {
+  "First due": "首次截止",
+  "repeats every": "之后每",
+  "Repeat interval": "重复间隔",
+  "Repeat unit": "重复单位",
+  "Next due {date}": "下次截止 {date}",
+  "Due {date}": "截止 {date}",
+  "Repeats every day": "每天重复",
+  "Repeats every {n} days": "每 {n} 天重复",
+  "Repeats every week": "每周重复",
+  "Repeats every {n} weeks": "每 {n} 周重复",
+  "Repeats every month": "每月重复",
+  "Repeats every {n} months": "每 {n} 个月重复",
+  "Repeats every year": "每年重复",
+  "Repeats every {n} years": "每 {n} 年重复",
+  "Automatically create issues that need to be completed on a regular schedule. Each issue is created with a due date set by the schedule. A new instance is created after each due date passes.": "自动创建需要定期完成的事项。每个事项都会按计划设置截止日期，每次截止日期过后会创建一个新实例。",
+  "Create the first instance of your recurring issue below, including the schedule and initial due date. New instances will be created after each due date passes.": "在下方创建周期性事项的第一个实例，包括重复计划和首次截止日期。每次截止日期过后会创建新实例。",
+  "Recurring issue actions": "周期性事项操作",
+  "{count} sub-issues": "{count} 个子事项",
+  "1 sub-issue": "1 个子事项",
+  "Recurring issue created": "已创建周期性事项",
+  "Convert into": "转换为",
+});

@@ -91,11 +91,20 @@ describe('issue action menu', () => {
     expect(screen.queryByRole('dialog',{name:'Issue options'})).not.toBeInTheDocument()
   })
 
+  it('labels the conversion submenu "Convert into" like Linear', async () => {
+    const user = userEvent.setup(); setup()
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    expect(screen.queryByRole('option',{name:'Convert to'})).not.toBeInTheDocument()
+    await user.hover(screen.getByRole('option',{name:'Convert into'}))
+    const child = await screen.findByRole('dialog',{name:'Convert into'})
+    expect(within(child).getByRole('option',{name:'Recurring issue…'})).toBeInTheDocument()
+  })
+
   it('opens recurrence configuration rather than a replacement submenu', async () => {
     const user = userEvent.setup(); const {actions} = setup()
     await user.click(screen.getByRole('button',{name:'Issue options'}))
-    await user.hover(screen.getByRole('option',{name:'Convert to'}))
-    const child = await screen.findByRole('dialog',{name:'Convert to'})
+    await user.hover(screen.getByRole('option',{name:'Convert into'}))
+    const child = await screen.findByRole('dialog',{name:'Convert into'})
     const recurring = within(child).getByRole('option',{name:'Recurring issue…'})
     expect(recurring).not.toHaveAttribute('data-submenu')
     await user.click(recurring)
@@ -105,16 +114,18 @@ describe('issue action menu', () => {
   it('edits the recurring schedule in place and can stop it', async () => {
     const user = userEvent.setup()
     const actions = {addLink:vi.fn(),addCustomerRequest:vi.fn(),addDocument:vi.fn(),linkReview:vi.fn(),unlinkReview:vi.fn(),toggleRelease:vi.fn(),createRelated:vi.fn(),convert:vi.fn(),setRecurring:vi.fn().mockResolvedValue(undefined),toggleFavorite:vi.fn(),remind:vi.fn(),runLoop:vi.fn(),restoreDescription:vi.fn()} satisfies IssueOptionsActions
-    const issue = makeIssue({recurrence:'FREQ=WEEKLY;BYDAY=MO,FR',nextOccurrenceAt:'2099-01-02'})
+    const issue = makeIssue({recurrence:'FREQ=WEEKLY;BYDAY=MO,FR',dueDate:'2099-01-02',nextOccurrenceAt:'2099-01-03T00:01:00Z'})
     render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({customers:[],reviews:[],releases:[]})} actions={actions} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button',{name:'Issue options'}))
-    await user.hover(screen.getByRole('option',{name:'Convert to'}))
-    const child = await screen.findByRole('dialog',{name:'Convert to'})
+    await user.hover(screen.getByRole('option',{name:'Convert into'}))
+    const child = await screen.findByRole('dialog',{name:'Convert into'})
     expect(within(child).getByRole('option',{name:'Stop recurring'})).toBeInTheDocument()
     await user.click(within(child).getByRole('option',{name:'Recurring issue…'}))
     const dialog = await screen.findByRole('dialog',{name:'Recurring issue'})
     expect(within(dialog).getByText('Weekly on Mon, Fri')).toBeInTheDocument()
+    expect(within(dialog).getByLabelText('First due')).toHaveValue('2099-01-02')
     await user.click(within(dialog).getByRole('button',{name:'Save'}))
+    // The first due date is sent as the issue's dueDate by the action.
     expect(actions.setRecurring).toHaveBeenCalledWith('FREQ=WEEKLY;BYDAY=MO,FR','2099-01-02')
   })
 

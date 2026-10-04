@@ -186,16 +186,122 @@ export function describeRecurrence(value: string | undefined | null, options: { 
   return n === 1 ? phrase(t, 'Yearly {when}', { when: yearly }) : phrase(t, 'Every {n} years {when}', { n, when: yearly })
 }
 
-/** Preset menu entries for quick "Make recurring" choices anchored on `anchor`. */
+/**
+ * Preset menu entries for quick "Make recurring" choices. Values follow Linear's
+ * "repeats every N unit" model: they carry no day parts and are anchored on the
+ * issue's first due date (`anchor`), which only shapes the labels.
+ */
 export function recurrencePresetOptions(anchor: Date, t: Translate = text => text, locale?: string) {
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(anchor)
-  const base = defaultRecurrence(anchor)
   return [
     { value: 'daily', label: t('Daily') },
     { value: 'weekdays', label: t('Every weekday (Mon–Fri)') },
-    { value: serializeRecurrence(base), label: phrase(t, 'Weekly on {weekday}', { weekday }) },
-    { value: serializeRecurrence({ ...base, interval: 2 }), label: phrase(t, 'Every 2 weeks on {weekday}', { weekday }) },
-    { value: serializeRecurrence({ ...base, frequency: 'monthly' }), label: describeRecurrence(serializeRecurrence({ ...base, frequency: 'monthly' }), { t, locale }) },
-    { value: serializeRecurrence({ ...base, frequency: 'yearly' }), label: describeRecurrence(serializeRecurrence({ ...base, frequency: 'yearly' }), { t, locale }) },
+    { value: simpleRecurrence('weekly', 1), label: phrase(t, 'Weekly on {weekday}', { weekday }) },
+    { value: simpleRecurrence('weekly', 2), label: phrase(t, 'Every 2 weeks on {weekday}', { weekday }) },
+    { value: simpleRecurrence('monthly', 1), label: describeRecurrence(simpleRecurrence('monthly', 1), { t, locale, anchor }) },
+    { value: simpleRecurrence('yearly', 1), label: describeRecurrence(simpleRecurrence('yearly', 1), { t, locale, anchor }) },
   ]
+}
+
+/** Linear's "repeats every N unit" schedule: FREQ + INTERVAL, anchored on the due date. */
+export function simpleRecurrence(frequency: RecurrenceFrequency, interval = 1): string {
+  const n = Math.min(MAX_RECURRENCE_INTERVAL, Math.max(1, Math.round(interval) || 1))
+  return `FREQ=${frequency.toUpperCase()}${n > 1 ? `;INTERVAL=${n}` : ''}`
+}
+
+/** The schedule's day parts re-anchored on `anchor` (what a simple schedule means). */
+export function anchorRecurrence(schedule: RecurrenceSchedule, anchor: Date): RecurrenceSchedule {
+  return { ...defaultRecurrence(anchor, schedule.frequency), interval: schedule.interval }
+}
+
+/** True when the schedule repeats on the anchor's own weekday / day / date (no custom day parts). */
+export function isAnchoredRecurrence(schedule: RecurrenceSchedule, anchor: Date): boolean {
+  if (schedule.frequency === 'daily') return true
+  if (schedule.frequency === 'weekly') return schedule.weekdays.length === 1 && schedule.weekdays[0] === anchor.getDay()
+  const dayMatches = schedule.monthMode === 'day' && schedule.monthDay === anchor.getDate()
+  return schedule.frequency === 'monthly' ? dayMatches : dayMatches && schedule.month === anchor.getMonth() + 1
+}
+
+/** Stored value for a schedule anchored on `firstDue`: the simple form when it has no custom day parts. */
+export function serializeRecurrenceFrom(schedule: RecurrenceSchedule, firstDue: Date): string {
+  return isAnchoredRecurrence(schedule, firstDue) ? simpleRecurrence(schedule.frequency, schedule.interval) : serializeRecurrence(schedule)
+}
+
+export function addDays(date: Date, days: number) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days)
+}
+
+/** Linear's default first due date: one week from today. */
+export function defaultFirstDue(today: Date = recurrenceDate()) {
+  return addDays(recurrenceDate(today), 7)
+}
+
+/**
+ * The first due date the API picks for a schedule set without one (mirrors
+ * applyRecurrenceUpdate): schedules without day parts ("weekly", FREQ=MONTHLY)
+ * repeat on today's weekday / day / date and are first due one period from
+ * today; others ("daily", "weekdays", BYDAY lists) on their first date on or
+ * after tomorrow.
+ */
+export function defaultRecurrenceFirstDue(value: string | undefined | null, today: Date = recurrenceDate()): Date | undefined {
+  const start = recurrenceDate(today)
+  const schedule = parseRecurrence(value, start)
+  if (!schedule) return undefined
+  const raw = (value ?? '').trim().toUpperCase().replace(/^RRULE:/, '')
+  const fields = new Set(raw.split(';').map(part => part.split('=')[0]))
+  const needsAnchor = schedule.frequency === 'weekly'
+    ? raw !== 'WEEKDAYS' && !fields.has('BYDAY')
+    : schedule.frequency === 'monthly'
+      ? !fields.has('BYDAY') && !fields.has('BYMONTHDAY')
+      : schedule.frequency === 'yearly' && (!fields.has('BYMONTH') || (!fields.has('BYDAY') && !fields.has('BYMONTHDAY')))
+  return needsAnchor ? nextRecurrenceDue(schedule, start) : firstRecurrenceOnOrAfter(schedule, addDays(start, 1))
+}
+
+/**
+ * The due date of the instance after the one due on `due`: the next cadence date
+ * (mirrors the API's scheduler, which anchors every period on the previous due date).
+ */
+export function nextRecurrenceDue(schedule: RecurrenceSchedule, due: Date): Date {
+  const n = Math.max(1, schedule.interval)
+  if (schedule.frequency === 'daily') return addDays(due, n)
+  if (schedule.frequency === 'weekly') {
+    const days = (schedule.weekdays.length ? schedule.weekdays : [due.getDay()]).map(day => (day + 6) % 7).sort((a, b) => a - b)
+    const offset = (due.getDay() + 6) % 7
+    const later = days.find(day => day > offset)
+    if (later !== undefined) return addDays(due, later - offset)
+    return addDays(due, 7 * n - offset + days[0])
+  }
+  if (schedule.frequency === 'monthly') {
+    const same = monthOccurrence(schedule, due.getFullYear(), due.getMonth())
+    return same > due ? same : monthOccurrence(schedule, due.getFullYear(), due.getMonth() + n)
+  }
+  const same = monthOccurrence(schedule, due.getFullYear(), schedule.month - 1)
+  return same > due ? same : monthOccurrence(schedule, due.getFullYear() + n, schedule.month - 1)
+}
+
+const UNIT_PHRASES: Record<RecurrenceFrequency, [string, string]> = {
+  daily: ['Repeats every day', 'Repeats every {n} days'],
+  weekly: ['Repeats every week', 'Repeats every {n} weeks'],
+  monthly: ['Repeats every month', 'Repeats every {n} months'],
+  yearly: ['Repeats every year', 'Repeats every {n} years'],
+}
+
+/** "Repeats every 2 weeks" for anchored schedules, else the detailed summary (e.g. "Every weekday"). */
+export function describeRepeats(value: string | undefined | null, options: { t?: Translate; locale?: string; anchor?: Date } = {}): string {
+  const t = options.t ?? ((text: string) => text)
+  const anchor = options.anchor ?? recurrenceDate()
+  const schedule = parseRecurrence(value, anchor)
+  if (!schedule) return ''
+  if (!isAnchoredRecurrence(schedule, anchor)) return describeRecurrence(value, { ...options, anchor })
+  const [one, many] = UNIT_PHRASES[schedule.frequency]
+  return schedule.interval === 1 ? t(one) : phrase(t, many, { n: schedule.interval })
+}
+
+/**
+ * The current due date of a recurring issue. Legacy schedules (created before due
+ * dates anchored them) may only carry the next occurrence instant.
+ */
+export function recurrenceDueDate(issue: { dueDate?: string; nextOccurrenceAt?: string }, timeZone?: string): Date | undefined {
+  if (issue.dueDate) return recurrenceDate(issue.dueDate.slice(0, 10))
+  return issue.nextOccurrenceAt ? recurrenceDate(issue.nextOccurrenceAt, timeZone) : undefined
 }

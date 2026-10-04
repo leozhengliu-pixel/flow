@@ -689,6 +689,7 @@ function toRowData(issue: Issue, issues: Issue[]): MyIssuesRowData {
       : undefined,
     estimate: issue.estimate,
     dueDate: issue.dueDate,
+    recurrence: issue.recurrence || undefined,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
     parentId: issue.parentId,

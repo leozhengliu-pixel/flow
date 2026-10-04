@@ -1,0 +1,52 @@
+/* Team settings > Recurring issues (measured from Linear: 640px list, 750px "New recurring issue" column). */
+.recurring-issues-docs { display: inline-flex; align-items: center; gap: 2px; color: var(--theme-text-primary); font-weight: 500; text-decoration: none; white-space: nowrap; }
+.recurring-issues-docs:hover { text-decoration: underline; }
+.settings-page-header p:has(.recurring-issues-docs) { max-width: 600px; }
+.recurring-issues-section .settings-row--action { min-height: 64px; }
+.recurring-issues-section .settings-row--action .settings-row-copy strong { color: var(--theme-text-secondary); font-weight: 450; }
+.recurring-issues-new { gap: 6px; }
+.recurring-issue-row { gap: 12px; cursor: pointer; }
+.recurring-issue-row:hover { background: var(--theme-surface-hover); }
+.recurring-issue-row .settings-row-icon { width: 20px; height: 20px; flex: none; display: grid; place-items: center; color: var(--theme-text-secondary); }
+.recurring-issue-row .settings-row-icon svg, .recurring-issue-row .settings-row-icon span { width: 16px; height: 16px; }
+.recurring-issue-row .settings-row-copy { flex: 1 1 auto; }
+.recurring-issue-title { min-width: 0; display: inline-flex; align-items: baseline; gap: 8px; }
+.recurring-issue-title > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recurring-issue-title > small { flex: none; color: var(--theme-text-tertiary); font-size: 12px; font-weight: 450; }
+.recurring-issue-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--theme-text-secondary); }
+.recurring-issue-meta svg { flex: none; color: var(--theme-text-tertiary); }
+.recurring-issue-due { color: var(--theme-text-secondary); font-size: 12px; white-space: nowrap; }
+.recurring-issues-error { margin: 8px 16px 0; color: var(--danger); font-size: 12px; }
+
+.settings-content:has(.recurring-issue-editor) { width: 750px; }
+.recurring-issue-editor__inner > h1 { margin: 0; padding: 0 16px; color: var(--theme-text-primary); font-size: 24px; font-weight: 500; line-height: 32px; }
+.recurring-issue-editor__intro { margin: 32px 0 0; padding: 0 16px; color: var(--theme-text-secondary); font-size: 13px; line-height: 19.5px; }
+.recurring-issue-editor__icon { display: grid; justify-items: start; gap: 8px; margin-top: 24px; padding: 0 16px; }
+.recurring-issue-editor__icon > span { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 24px; }
+.recurring-issue-editor__icon .recurring-issue-editor__icon-trigger { background: var(--theme-soft-overlay); color: var(--theme-text-tertiary); }
+.recurring-issue-editor__icon .recurring-issue-editor__icon-trigger:hover { background: var(--theme-surface-hover); }
+.recurring-issue-editor__card { box-sizing: border-box; margin-top: 24px; padding: 8px 13px 12px; border: .5px solid var(--theme-border); border-radius: 10px; background: var(--theme-surface-2); box-shadow: var(--shadow); }
+.recurring-issue-editor__title { box-sizing: border-box; width: 100%; height: 29px; margin-top: 5px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--theme-text-primary); font: 600 18px/28.8px var(--font); }
+.recurring-issue-editor__title::placeholder { color: var(--theme-text-tertiary); }
+.recurring-issue-editor__description { min-height: 61px; margin-top: 4px; color: var(--theme-text-primary); font-size: 15px; }
+.recurring-issue-editor__properties { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; padding-left: 5px; }
+.recurring-issue-editor__properties .it-property { border-color: var(--theme-border); background: var(--theme-surface-1); font: 500 12px/12px var(--font); }
+.recurring-issue-editor__properties .it-property[aria-expanded=true] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.recurring-issue-editor__count { color: var(--theme-text-tertiary); }
+.recurring-issue-editor__subissues { margin-top: 12px; overflow: hidden; border: .5px solid var(--theme-border); border-radius: 8px; }
+.recurring-issue-editor__subissues .it-subissue-row { border-width: 0 0 .5px; }
+.recurring-issue-editor__subissues .it-subissue-row:last-child { border-bottom: 0; }
+.recurring-issue-editor__subissues .it-subissue-composer { width: 100%; height: auto; margin: 0; border: 0; border-radius: 0; }
+.recurring-issue-editor__footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 24px; padding: 0 16px; }
+.recurring-issue-editor__actions { display: inline-flex; gap: 9px; margin-left: auto; }
+.recurring-issue-editor__actions button { height: 32px; padding: 0 12px; border: .5px solid var(--theme-border); border-radius: 9999px; background: var(--theme-surface-1); color: var(--theme-text-primary); font: 500 13px var(--font); box-shadow: var(--shadow); }
+.recurring-issue-editor__actions button:hover { background: var(--theme-surface-hover); }
+.recurring-issue-editor__actions .primary { border-color: transparent; background: var(--accent-primary); color: var(--on-accent); }
+.recurring-issue-editor__actions .primary:hover { background: var(--accent-primary); filter: brightness(1.08); }
+.recurring-issue-editor__actions button:disabled { opacity: .5; }
+
+@media (max-width: 760px) {
+  .settings-content:has(.recurring-issue-editor) { width: auto; }
+  .recurring-issue-editor__footer { padding: 0 4px; }
+  .recurring-issue-editor__actions { width: 100%; justify-content: flex-end; }
+}

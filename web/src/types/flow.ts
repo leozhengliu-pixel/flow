@@ -360,10 +360,15 @@ export interface Issue {
   autoClosed?: boolean;
   templateId?: UUID;
   parentId?: UUID;
-  /** Preset (daily, weekdays, weekly, biweekly, monthly, yearly) or RRULE subset; see lib/recurrence. */
+  /** Preset (daily, weekdays, weekly, biweekly, monthly, yearly) or RRULE subset; see lib/recurrence.
+   * A recurring issue is the current instance: its dueDate anchors the schedule. */
   recurrence?: string;
-  /** Team-local midnight of the next occurrence. */
+  /** When the next instance is created: 00:01 (team time) on the day after dueDate. */
   nextOccurrenceAt?: string;
+  /** Icon (issue-template icon format) shown for recurring issues and copied to each instance. */
+  icon?: string;
+  /** Number of sub-issues, where the API returns it (recurring issue lists). */
+  subIssueCount?: number;
   /** First issue of the recurring series this issue belongs to. */
   recurrenceSeriesId?: UUID;
   /** Occurrence date (YYYY-MM-DD) this issue was generated for. */
@@ -2446,10 +2451,11 @@ export interface IssueUpdateInput {
   labelIds?: string[];
   subscriberIds?: string[];
   archived?: boolean;
-  /** "" stops recurring. */
+  /** "" stops recurring (dueDate stays). Sent with dueDate as the first due date. */
   recurrence?: string;
-  /** First occurrence date (YYYY-MM-DD or RFC3339). */
+  /** Legacy alias of the first due date (YYYY-MM-DD or RFC3339); prefer dueDate. */
   nextOccurrenceAt?: string;
+  icon?: string;
   /** RFC3339 time, or "" to clear. */
   snoozedUntil?: string;
   parentId?: string;

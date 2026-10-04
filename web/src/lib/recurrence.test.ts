@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { describeRecurrence, firstRecurrenceOnOrAfter, parseRecurrence, recurrenceDate, recurrencePresetOptions, serializeRecurrence, toDateInput } from './recurrence'
+import { defaultFirstDue, defaultRecurrenceFirstDue, describeRecurrence, describeRepeats, firstRecurrenceOnOrAfter, nextRecurrenceDue, parseRecurrence, recurrenceDate, recurrenceDueDate, recurrencePresetOptions, serializeRecurrence, serializeRecurrenceFrom, simpleRecurrence, toDateInput } from './recurrence'
 
 const tuesday = new Date(2026, 8, 29)
 
@@ -45,15 +45,64 @@ describe('recurrence schedules', () => {
     expect(toDateInput(recurrenceDate('2026-10-05'))).toBe('2026-10-05')
   })
 
-  it('offers anchored presets for the quick menu', () => {
+  it('offers presets anchored on the first due date for the quick menu', () => {
     const values = recurrencePresetOptions(tuesday, text => text, 'en-US').map(option => [option.value, option.label])
     expect(values).toEqual([
       ['daily', 'Daily'],
       ['weekdays', 'Every weekday (Mon–Fri)'],
-      ['FREQ=WEEKLY;BYDAY=TU', 'Weekly on Tuesday'],
-      ['FREQ=WEEKLY;INTERVAL=2;BYDAY=TU', 'Every 2 weeks on Tuesday'],
-      ['FREQ=MONTHLY;BYMONTHDAY=29', 'Monthly on day 29'],
-      ['FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=29', 'Yearly on Sep 29'],
+      ['FREQ=WEEKLY', 'Weekly on Tuesday'],
+      ['FREQ=WEEKLY;INTERVAL=2', 'Every 2 weeks on Tuesday'],
+      ['FREQ=MONTHLY', 'Monthly on day 29'],
+      ['FREQ=YEARLY', 'Yearly on Sep 29'],
     ])
+  })
+
+  it('serializes Linear "repeats every N unit" schedules without day parts', () => {
+    expect(simpleRecurrence('weekly', 1)).toBe('FREQ=WEEKLY')
+    expect(simpleRecurrence('monthly', 3)).toBe('FREQ=MONTHLY;INTERVAL=3')
+    expect(simpleRecurrence('daily', 0)).toBe('FREQ=DAILY')
+    // A schedule on the first due date's own weekday/day stays simple; custom days keep the RRULE.
+    expect(serializeRecurrenceFrom(parseRecurrence('FREQ=WEEKLY;BYDAY=TU', tuesday)!, tuesday)).toBe('FREQ=WEEKLY')
+    expect(serializeRecurrenceFrom(parseRecurrence('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR', tuesday)!, tuesday)).toBe('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR')
+    expect(serializeRecurrenceFrom(parseRecurrence('FREQ=YEARLY;BYMONTH=9;BYMONTHDAY=29', tuesday)!, tuesday)).toBe('FREQ=YEARLY')
+    expect(serializeRecurrenceFrom(parseRecurrence('FREQ=MONTHLY;BYMONTHDAY=-1', tuesday)!, tuesday)).toBe('FREQ=MONTHLY;BYMONTHDAY=-1')
+  })
+
+  it('computes the next instance due date after a due date', () => {
+    const next = (value: string, due: Date) => toDateInput(nextRecurrenceDue(parseRecurrence(value, due)!, due))
+    expect(next('FREQ=WEEKLY', tuesday)).toBe('2026-10-06')
+    expect(next('FREQ=WEEKLY;INTERVAL=2', tuesday)).toBe('2026-10-13')
+    expect(next('FREQ=DAILY;INTERVAL=3', tuesday)).toBe('2026-10-02')
+    expect(next('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR', tuesday)).toBe('2026-10-02')
+    expect(next('FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR', new Date(2026, 9, 2))).toBe('2026-10-12')
+    expect(next('FREQ=MONTHLY', new Date(2027, 0, 31))).toBe('2027-02-28')
+    expect(next('FREQ=MONTHLY;BYDAY=-1FR', tuesday)).toBe('2026-10-30')
+    expect(next('FREQ=YEARLY', tuesday)).toBe('2027-09-29')
+  })
+
+  it('summarizes schedules as "Repeats every …" and reads legacy due dates', () => {
+    expect(describeRepeats('FREQ=WEEKLY', { anchor: tuesday })).toBe('Repeats every week')
+    expect(describeRepeats('FREQ=MONTHLY;INTERVAL=2', { anchor: tuesday })).toBe('Repeats every 2 months')
+    expect(describeRepeats('weekdays', { anchor: tuesday, locale: 'en-US' })).toBe('Every weekday')
+    expect(toDateInput(recurrenceDueDate({ dueDate: '2026-10-09' })!)).toBe('2026-10-09')
+    expect(toDateInput(recurrenceDueDate({ nextOccurrenceAt: '2026-10-04T15:00:00Z' }, 'Asia/Tokyo')!)).toBe('2026-10-05')
+    expect(recurrenceDueDate({})).toBeUndefined()
+    expect(toDateInput(defaultFirstDue(tuesday))).toBe('2026-10-06')
+  })
+
+  it('picks the API\'s default first due date for a schedule set without one', () => {
+    const saturday = new Date(2026, 9, 3)
+    const first = (value: string) => toDateInput(defaultRecurrenceFirstDue(value, saturday)!)
+    // First matching day from tomorrow: never a weekend for "every weekday".
+    expect(first('daily')).toBe('2026-10-04')
+    expect(first('weekdays')).toBe('2026-10-05')
+    expect(first('FREQ=WEEKLY;BYDAY=MO,FR')).toBe('2026-10-05')
+    // No day parts: one period from today, on today's weekday / day / date.
+    expect(first('FREQ=WEEKLY')).toBe('2026-10-10')
+    expect(first('weekly')).toBe('2026-10-10')
+    expect(first('FREQ=WEEKLY;INTERVAL=2')).toBe('2026-10-17')
+    expect(first('FREQ=MONTHLY')).toBe('2026-11-03')
+    expect(first('FREQ=YEARLY')).toBe('2027-10-03')
+    expect(defaultRecurrenceFirstDue('', saturday)).toBeUndefined()
   })
 })

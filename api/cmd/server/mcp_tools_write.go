@@ -259,6 +259,7 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		ctx = store.WithDelegationInstructions(ctx, instructions)
 	}
 	recurrence, recurrencePresent := nullableStringArg(args, "recurrence")
+	icon, iconPresent := nullableStringArg(args, "icon")
 	projectID, err := resolveNullableProjectID(data, args, "project")
 	if err != nil {
 		return nil, err
@@ -316,6 +317,9 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		if recurrencePresent && recurrence != "" {
 			input.Recurrence = &recurrence
 		}
+		if iconPresent && icon != "" {
+			input.Icon = &icon
+		}
 		result, err = invokeJSONHandler(ctx, http.MethodPost, nil, input, s.createIssueRecord)
 	} else {
 		input := domain.IssueUpdateInput{}
@@ -350,6 +354,9 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		}
 		if recurrencePresent {
 			input.Recurrence = &recurrence
+		}
+		if iconPresent {
+			input.Icon = &icon
 		}
 		if hasBoolArg(args, "archived") {
 			archived := boolArg(args, "archived")
@@ -455,6 +462,9 @@ func mcpIssueWriteReceipt(issue domain.Issue, workspace string, args map[string]
 	put(hasAnyArg(args, "slaType"), "slaType", issue.SLAType)
 	put(hasAnyArg(args, "estimate"), "estimate", issue.Estimate)
 	put(hasAnyArg(args, "recurrence"), "recurrence", issue.Recurrence)
+	put(hasAnyArg(args, "recurrence", "dueDate") && issue.NextOccurrenceAt != nil, "nextOccurrenceAt", issue.NextOccurrenceAt)
+	put(hasAnyArg(args, "recurrence") && issue.Recurrence != "", "dueDate", issue.DueDate)
+	put(hasAnyArg(args, "icon"), "icon", issue.Icon)
 	put(hasAnyArg(args, "links"), "attachments", issue.Attachments)
 	put(hasAnyArg(args, "archived"), "archivedAt", issue.ArchivedAt)
 	put(hasAnyArg(args, "blockedBy", "blocks", "relatedTo", "removeBlockedBy", "removeBlocks", "removeRelatedTo", "duplicateOf"), "relations", issue.Relations)

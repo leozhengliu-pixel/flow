@@ -52,8 +52,8 @@ export interface IssueOptionsActions {
   toggleRelease: (releaseId: string) => Promise<void>
   createRelated: (kind: RelatedIssueCreationKind, title: string) => Promise<void>
   convert: (kind: IssueConversionKind) => Promise<void>
-  /** recurrence '' stops recurring; startDate (YYYY-MM-DD) is the first occurrence. */
-  setRecurring: (recurrence: string, startDate?: string) => Promise<void>
+  /** recurrence '' stops recurring (the due date stays); firstDue (YYYY-MM-DD) is sent as the issue's dueDate. */
+  setRecurring: (recurrence: string, firstDue?: string) => Promise<void>
   toggleFavorite: () => Promise<void>
   remind: (remindAt: string) => Promise<void>
   runLoop: (prompt: string) => Promise<void>
@@ -279,7 +279,7 @@ export function IssueOptionsMenu({
               <Option icon={<Link2/>} label="Mark as" nested="mark" anchor={anchors.mark} expanded={submenu === 'mark'} onHover={() => openNested('mark')} onSelect={() => openNested('mark', true)}/>
               <Separator/>
               <Option icon={<Copy/>} label="Copy" nested="copy" anchor={anchors.copy} expanded={submenu === 'copy'} onHover={() => openNested('copy')} onSelect={() => openNested('copy', true)}/>
-              <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
+              <Option icon={<RefreshCw/>} label="Convert into" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
               {actions && <Option icon={<Copy/>} label="Make a copy…" onSelect={() => actions.makeCopy ? void perform(actions.makeCopy) : beginRelated('copy')}/>}
               <Separator/>
               <Option icon={<Star fill={favorited ? 'currentColor' : 'none'}/>} label={favorited ? 'Unfavorite' : 'Favorite'} shortcut="Option F" onSelect={() => {
@@ -336,7 +336,7 @@ export function IssueOptionsMenu({
             <Option icon={<Copy/>} label="Copy git branch name" shortcut="Command Shift ." onSelect={() => void copy(configuredIssueBranch(issue,data), 'Branch name copied to clipboard','branch')}/>
             <Option icon={<Copy/>} label="Copy as prompt" shortcut="Command Option P" onSelect={() => void copy(issuePrompt, 'Prompt copied to clipboard','prompt')}/>
           </SubmenuSurface>}
-          {submenu === 'convert' && <SubmenuSurface label="Convert to" anchor={anchors.convert} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
+          {submenu === 'convert' && <SubmenuSurface label="Convert into" anchor={anchors.convert} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
             <Option icon={<RefreshCw/>} label="Project..." onSelect={() => {
               if (actions) void confirmAction(`Convert ${issue.identifier} to a project?`,{description:'The original issue will be deleted.',confirmLabel:'Convert'}).then(confirmed=>{if(confirmed)return perform(() => actions.convert('project'), 'Converted to project')})
             }}/>
@@ -354,7 +354,7 @@ export function IssueOptionsMenu({
             }}/>
           </SubmenuSurface>}
           {datePickerOpen && <SubmenuSurface label="Due date" anchor={anchors.due} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu} bare searchable>
-            <DueDateCommand autoFocus={false} extraOptions={cycleDates} value={issue.dueDate} onSelect={async dueDate => {
+            <DueDateCommand autoFocus={false} extraOptions={cycleDates} value={issue.dueDate} allowRemove={!issue.recurrence} onSelect={async dueDate => {
               await onUpdate({ dueDate })
               closeMenu()
             }}/>
@@ -363,7 +363,7 @@ export function IssueOptionsMenu({
       </Popover.Portal>
     </Popover.Root>
 
-    <RecurrenceDialog open={dialog === 'recurrence'} onOpenChange={value => !value && setDialog(null)} busy={busy || !actions} value={issue.recurrence} nextOccurrenceAt={issue.nextOccurrenceAt} timeZone={data?.teamSettings?.[issue.team.id]?.timezone} onSave={(value, start) => setRecurrence(value, start)} onStop={() => setRecurrence('')}/>
+    <RecurrenceDialog open={dialog === 'recurrence'} onOpenChange={value => !value && setDialog(null)} busy={busy || !actions} value={issue.recurrence} dueDate={issue.dueDate} nextOccurrenceAt={issue.nextOccurrenceAt} timeZone={data?.teamSettings?.[issue.team.id]?.timezone} onSave={(value, start) => setRecurrence(value, start)} onStop={() => setRecurrence('')}/>
     <ActionDialog open={dialog === 'link'} title={`Add link to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label>URL<input autoFocus type="url" placeholder="https://..." value={linkUrl} onChange={event => setLinkUrl(event.target.value)}/></label>
       <label>Title <small>(optional)</small><input value={linkTitle} onChange={event => setLinkTitle(event.target.value)}/></label>
@@ -416,9 +416,9 @@ export function IssueOptionsMenu({
     if (!actions) return
     void perform(() => actions.remind(date.toISOString()), 'Reminder set')
   }
-  function setRecurrence(value: string, startDate?: string) {
+  function setRecurrence(value: string, firstDue?: string) {
     if (!actions) return
-    void perform(() => actions.setRecurring(value, startDate), value ? 'Recurring schedule saved' : 'Recurring stopped')
+    void perform(() => actions.setRecurring(value, firstDue), value ? 'Recurring schedule saved' : 'Recurring stopped')
   }
 }
 

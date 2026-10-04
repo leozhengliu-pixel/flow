@@ -225,16 +225,16 @@ function IssueDueDate({issue,onUpdate}:{issue:Issue;onUpdate:(input:IssueUpdateI
   const shown=useRef<string|undefined>(undefined)
   if(issue.dueDate)shown.current=issue.id
   if(!issue.dueDate&&shown.current!==issue.id)return null
-  return <div className="issue-due-date-row"><DueDatePicker value={issue.dueDate??''} triggerClassName="label-project-trigger issue-due-date-trigger" onChange={async dueDate=>{await onUpdate({dueDate})}}/></div>
+  return <div className="issue-due-date-row"><DueDatePicker value={issue.dueDate??''} allowRemove={!issue.recurrence} triggerClassName="label-project-trigger issue-due-date-trigger" onChange={async dueDate=>{await onUpdate({dueDate})}}/></div>
 }
 /** Linear's "Recurring" property: shown while the issue owns a schedule. */
 function IssueRecurrenceProperty({issue,timeZone,onUpdate}:{issue:Issue;timeZone?:string;onUpdate:(input:IssueUpdateInput)=>Promise<void>}){
   const [open,setOpen]=useState(false)
   const [busy,setBusy]=useState(false)
-  const summary=useRecurrenceSummary(issue.recurrence,issue.nextOccurrenceAt,timeZone)
+  const summary=useRecurrenceSummary(issue,timeZone)
   if(!issue.recurrence)return null
   const save=async(input:IssueUpdateInput)=>{setBusy(true);try{await onUpdate(input);setOpen(false)}finally{setBusy(false)}}
-  return <div className="issue-recurrence-row"><button type="button" className="issue-recurrence-trigger" aria-label={summary} title={summary} onClick={()=>setOpen(true)}><Repeat2 size={14} aria-hidden="true"/><span>{summary}</span></button><RecurrenceDialog open={open} onOpenChange={setOpen} busy={busy} value={issue.recurrence} nextOccurrenceAt={issue.nextOccurrenceAt} timeZone={timeZone} onSave={(recurrence,start)=>save({recurrence,nextOccurrenceAt:start})} onStop={()=>save({recurrence:''})}/></div>
+  return <div className="issue-recurrence-row"><button type="button" className="issue-recurrence-trigger" aria-label={summary} title={summary} onClick={()=>setOpen(true)}><Repeat2 size={14} aria-hidden="true"/><span>{summary}</span></button><RecurrenceDialog open={open} onOpenChange={setOpen} busy={busy} value={issue.recurrence} dueDate={issue.dueDate} nextOccurrenceAt={issue.nextOccurrenceAt} timeZone={timeZone} onSave={(recurrence,firstDue)=>save({recurrence,dueDate:firstDue})} onStop={()=>save({recurrence:''})}/></div>
 }
 function PropertyGroup({title,children}:{title:string;children:React.ReactNode}){return <section className="property-group"><h4>{title}</h4>{children}</section>}
 function IssueSection({title,count,children}:{title:string;count:number;children:React.ReactNode}){return <section className="issue-detail-section"><header><strong>{title}</strong><span>{count}</span></header>{children}</section>}
