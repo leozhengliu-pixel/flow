@@ -95,6 +95,9 @@ func (s *server) getMCPIssue(ctx context.Context, actor mcpActor, data domain.Bo
 		"createdAt": issue.CreatedAt, "updatedAt": issue.UpdatedAt, "startedAt": issue.StartedAt, "completedAt": issue.CompletedAt,
 		"canceledAt": issue.CanceledAt, "archivedAt": issue.ArchivedAt, "recurrence": issue.Recurrence,
 	}
+	if issue.Icon != "" {
+		result["icon"] = issue.Icon
+	}
 	if issue.NextOccurrenceAt != nil {
 		result["nextOccurrenceAt"] = issue.NextOccurrenceAt
 	}

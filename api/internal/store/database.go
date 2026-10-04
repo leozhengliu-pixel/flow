@@ -185,6 +185,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"migrateIssueStats", s.migrateIssueStats},
 		{"migrateIssueSequences", s.migrateIssueSequences},
 		{"migrateIssueAttributes", s.migrateIssueAttributes},
+		{"migrateRecurrenceInstances", s.migrateRecurrenceInstances},
 		{"migrateAttachmentIndex", s.migrateAttachmentIndex},
 		{"migrateIssueListProjection", s.migrateIssueListProjection},
 		{"migrateIssueSearchIndex", s.migrateIssueSearchIndex},

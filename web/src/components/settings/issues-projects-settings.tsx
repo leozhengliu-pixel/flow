@@ -58,7 +58,7 @@ import {
   updateSLARule,
   updateWorkspaceIssueTemplate,
 } from "@/lib/api";
-import { labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
+import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
 import { useI18n } from "@/i18n/i18n";
 import { Avatar } from "@/components/issue/issue-row";
 import {
@@ -1975,6 +1975,8 @@ function IssueTemplatePropertyMenus({
   projectId,
   labelIds,
   showProject = true,
+  showTeam = true,
+  labelTeamId,
   onTeam,
   onPriority,
   onAssignee,
@@ -1988,6 +1990,9 @@ function IssueTemplatePropertyMenus({
   projectId: string;
   labelIds: string[];
   showProject?: boolean;
+  showTeam?: boolean;
+  /** Only offer the labels this team can use (workspace labels and its own team labels). */
+  labelTeamId?: string;
   onTeam: (id: string) => void;
   onPriority: (value: number) => void;
   onAssignee: (id: string) => void;
@@ -2000,7 +2005,7 @@ function IssueTemplatePropertyMenus({
     project = data.projects.find((item) => item.id === projectId);
   return (
     <>
-      <PropertyMenu
+      {showTeam && <PropertyMenu
         compact
         label={t("Team")}
         ariaLabel={t("Change team")}
@@ -2020,7 +2025,7 @@ function IssueTemplatePropertyMenus({
           })),
         ]}
         onChange={onTeam}
-      />
+      />}
       <PropertyMenu
         compact
         label={t("Priority")}
@@ -2088,13 +2093,13 @@ function IssueTemplatePropertyMenus({
         selectedIds={labelIds}
         triggerClassName="it-property"
         icon={<LabelIcon size={14} />}
-        options={templateLabelOptions(data, "issue")}
+        options={templateLabelOptions(data, "issue", labelTeamId)}
         onChange={(id) =>
           onLabels(
             toggleGroupedLabelIds(
               labelIds,
               id,
-              templateLabelOptions(data, "issue"),
+              templateLabelOptions(data, "issue", labelTeamId),
             ),
           )
         }
@@ -2224,13 +2229,25 @@ function userPropertyOptions(
 function templateLabelOptions(
   data: BootstrapData,
   type: "issue" | "project",
+  teamId?: string,
 ): PropertyOption[] {
   const groups = new Map(
     data.labelGroups
       .filter((group) => group.resourceType === type && !group.archivedAt)
       .map((group) => [group.id, group.name]),
   );
-  return labelsForResource(data.labels, type, data.labelGroups).map((item) => ({
+  const teamScopes = teamId
+    ? new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
+    : undefined;
+  return labelsForResource(data.labels, type, data.labelGroups)
+    .filter(
+      (item) =>
+        !teamScopes ||
+        !item.scope ||
+        item.scope === "Workspace" ||
+        teamScopes.has(item.scope),
+    )
+    .map((item) => ({
     id: item.id,
     label: item.name,
     color: item.color,
@@ -2242,12 +2259,18 @@ function templateLabelOptions(
     i18nIgnore: true,
   }));
 }
-function SubIssueTemplateComposer({
+/** Sub-issue composer shared by issue templates and recurring issues (which keep sub-issues in their own team). */
+export function SubIssueTemplateComposer({
   data,
+  showTeam = true,
+  labelTeamId,
   onCancel,
   onAdd,
 }: {
   data: BootstrapData;
+  showTeam?: boolean;
+  /** The team the sub-issues are created in: only its usable labels are offered. */
+  labelTeamId?: string;
   onCancel: () => void;
   onAdd: (v: TemplateSubIssue) => void;
 }) {
@@ -2283,6 +2306,8 @@ function SubIssueTemplateComposer({
           projectId=""
           labelIds={labelIds}
           showProject={false}
+          showTeam={showTeam}
+          labelTeamId={labelTeamId}
           onTeam={setTeamId}
           onPriority={setPriority}
           onAssignee={setAssigneeId}
@@ -2311,7 +2336,7 @@ function SubIssueTemplateComposer({
     </section>
   );
 }
-function SubIssueTemplateRow({
+export function SubIssueTemplateRow({
   item,
   onChange,
   onRemove,

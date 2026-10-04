@@ -112,7 +112,7 @@ func runIssueCascadeScaleRoutes(t *testing.T, srv *server, repository *store.SQL
 	// Recurring issues (the scheduler's per-series write).
 	for i := 0; i < repeat; i++ {
 		source := issue(300 + i)
-		timed("issue-record recurrence", http.MethodPatch, "/api/issue-records/"+source, map[string]any{"recurrence": "daily", "nextOccurrenceAt": time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)})
+		timed("issue-record recurrence", http.MethodPatch, "/api/issue-records/"+source, map[string]any{"recurrence": "daily", "dueDate": time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")})
 		begin := time.Now()
 		if _, err := srv.createRecurringOccurrence(context.Background(), "test-workspace", source, time.Now().UTC()); err != nil {
 			t.Errorf("recurring occurrence: %v", err)

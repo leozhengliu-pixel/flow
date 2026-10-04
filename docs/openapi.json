@@ -13581,6 +13581,64 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/teams/{id}/recurring-issues": {
+      "get": {
+        "operationId": "get_teams_id_recurring_issues",
+        "tags": [
+          "teams"
+        ],
+        "summary": "GET /api/teams/{id}/recurring-issues",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_teams_id_recurring_issues",
+        "tags": [
+          "teams"
+        ],
+        "summary": "POST /api/teams/{id}/recurring-issues",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/teams/{id}/resource-sections": {
       "post": {
         "operationId": "post_teams_id_resource_sections",

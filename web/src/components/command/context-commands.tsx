@@ -257,7 +257,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
           select: () => applyEach(issue => ({ labelIds: setGroupedLabelSelected(issue.labels.map(item => item.id), label.id, labels, checked !== true) })) }
       })
     }
-    if (page.id === 'dueDate') return datePageOptions(query, same(issue => issue.dueDate ?? ''), issues.some(issue => issue.dueDate), value => choose(() => apply({ dueDate: value })), t)
+    if (page.id === 'dueDate') return datePageOptions(query, same(issue => issue.dueDate ?? ''), issues.some(issue => issue.dueDate) && !issues.some(issue => issue.recurrence), value => choose(() => apply({ dueDate: value })), t)
     if (page.id === 'project') {
       const current = same(issue => issue.project?.id ?? '')
       return [

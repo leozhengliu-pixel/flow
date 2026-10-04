@@ -1893,10 +1893,10 @@ function App() {
           toggleRelease: toggleSelectedRelease,
           createRelated: createSelectedRelated,
           convert: convertSelectedIssue,
-          setRecurring: (recurrence, startDate) =>
+          setRecurring: (recurrence, firstDue) =>
             updateIssueById(selectedIssue, {
               recurrence,
-              ...(recurrence && startDate ? { nextOccurrenceAt: startDate } : {}),
+              ...(recurrence && firstDue ? { dueDate: firstDue } : {}),
             }).then(() => undefined),
           toggleFavorite: toggleSelectedFavorite,
           remind: remindSelectedIssue,

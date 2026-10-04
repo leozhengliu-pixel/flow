@@ -87,6 +87,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     hasContent: Boolean(issue.title?.trim() || issue.description?.trim()),
     estimate: issue.estimate,
     dueDate: issue.dueDate,
+    recurrence: issue.recurrence || undefined,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
     completedAt: issue.completedAt,

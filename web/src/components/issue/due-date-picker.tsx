@@ -11,9 +11,11 @@ interface DueDatePickerProps {
   trigger?: ReactNode
   triggerClassName?: string
   ariaLabel?: string
+  /** False hides "Remove due date" (a recurring issue's due date anchors its schedule). */
+  allowRemove?: boolean
 }
 
-export function DueDatePicker({ value, onChange, trigger, triggerClassName = 'due-date-trigger', ariaLabel }: DueDatePickerProps) {
+export function DueDatePicker({ value, onChange, trigger, triggerClassName = 'due-date-trigger', ariaLabel, allowRemove = true }: DueDatePickerProps) {
   const [open, setOpen] = useState(false)
 
   return <Popover.Root open={open} onOpenChange={setOpen}>
@@ -24,13 +26,13 @@ export function DueDatePicker({ value, onChange, trigger, triggerClassName = 'du
     </Popover.Trigger>
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" className="due-date-popover" side="bottom" align="start" sideOffset={4} onCloseAutoFocus={event => event.preventDefault()}>
-        <DueDateCommand value={value} onSelect={async next => { await onChange(next); setOpen(false) }}/>
+        <DueDateCommand value={value} allowRemove={allowRemove} onSelect={async next => { await onChange(next); setOpen(false) }}/>
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
 }
 
-export function DueDateCommand({ value, onSelect, className = '', autoFocus = true, extraOptions = [] }: { value?: string; onSelect: (value: string) => Promise<void>; className?: string; autoFocus?: boolean; extraOptions?: {label: string; value: string}[] }) {
+export function DueDateCommand({ value, onSelect, className = '', autoFocus = true, extraOptions = [], allowRemove = true }: { value?: string; onSelect: (value: string) => Promise<void>; className?: string; autoFocus?: boolean; extraOptions?: {label: string; value: string}[]; allowRemove?: boolean }) {
   const [query, setQuery] = useState('')
   const [custom, setCustom] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -69,7 +71,7 @@ export function DueDateCommand({ value, onSelect, className = '', autoFocus = tr
       <button type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(dates.endOfWeek) }}><span>End of this week</span><small>{formatShortDate(dates.endOfWeek)}</small></button>
       <button type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(dates.week) }}><span>In one week</span><small>{formatShortDate(dates.week)}</small></button>
       {extraOptions.map(option => <button key={option.label} type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose(option.value) }}><span>{option.label}</span><small>{formatShortDate(option.value)}</small></button>)}
-      {value && <button className="due-date-remove" type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose('') }}><X size={14}/><span>Remove due date</span></button>}
+      {value && allowRemove && <button className="due-date-remove" type="button" role="option" aria-selected="false" disabled={busy} onPointerDown={stopCommandEvent} onClick={event => { stopCommandEvent(event); void choose('') }}><X size={14}/><span>Remove due date</span></button>}
     </div>}
   </div>
 }
