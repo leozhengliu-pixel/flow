@@ -11,7 +11,6 @@ import * as Popover from "@radix-ui/react-popover";
 import {
   Bot,
   ChevronRight,
-  Circle,
   Copy,
   GitBranch,
   Mail,
@@ -21,12 +20,9 @@ import {
   Sparkles,
   Trash2,
   WandSparkles,
-  X,
-  Repeat2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { RecurrenceDialog } from "@/components/issue/recurrence-picker";
-import { RECURRENCE_PRESETS, describeRecurrence, recurrenceDate } from "@/lib/recurrence";
+import { RecurringIssuesSettingsPage } from "./recurring-issues-settings";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';
 import { DELETE_TEAM_DESCRIPTION } from '@/lib/team-deletion';
@@ -41,7 +37,6 @@ import {
 import {
   createDocumentTemplate,
   createEmailIntakeAddress,
-  createIssue,
   createTriageResponsibility,
   createTriageRule,
   createWorkflowState,
@@ -60,7 +55,6 @@ import {
   updateCycleSettings,
   rotateEmailIntakeAddress,
   updateDocumentTemplate,
-  updateIssue,
   updateStructuredTeamSettings,
   updateTeam,
   updateWorkflowState,
@@ -298,6 +292,18 @@ export function TeamWorkflowSettings({
         />
       </>
     );
+  if (section === "recurring-issues")
+    return (
+      <RecurringIssuesSettingsPage
+        key={team.id}
+        data={data}
+        team={team}
+        subPath={subPath}
+        onBack={() => onNavigate("overview")}
+        onNavigateSubPath={(next) => onNavigate("recurring-issues", next)}
+        onReload={onReload}
+      />
+    );
   if (section === "project-statuses")
     return (
       <TeamProjectStatusesSettingsPage
@@ -370,7 +376,6 @@ const TEAM_SECTION_COMPONENTS: Partial<
   security: AccessSettings,
   notifications: SlackSettings,
   templates: TemplatesSettings,
-  "recurring-issues": RecurringIssuesSettings,
   workflow: WorkflowSettings,
   triage: TriageSettings,
   cycles: CyclesSettings,
@@ -1262,167 +1267,6 @@ function SlackSettings({
         </TeamSection>
       </div>
     </>
-  );
-}
-
-function RecurringIssuesSettings({
-  data,
-  team,
-  onReload,
-  subPath,
-  onNavigateSubPath,
-}: {
-  data: BootstrapData;
-  team: Team;
-  onReload: () => Promise<void>;
-  subPath?: string;
-  onNavigateSubPath?: (subPath?: string) => void;
-}) {
-  const { formatDate, locale, t } = useI18n();
-  const issues = data.issues.filter(
-    (issue) => issue.team.id === team.id && issue.recurrence,
-  );
-  const timeZone = data.teamSettings?.[team.id]?.timezone;
-  const [editingId, setEditingId] = useState("");
-  const editing = issues.find((issue) => issue.id === editingId);
-  const saveSchedule = async (issueId: string, recurrence: string, start?: string) => {
-    try {
-      await updateIssue(issueId, { recurrence, ...(recurrence && start ? { nextOccurrenceAt: start } : {}) });
-      setEditingId("");
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    }
-  };
-  const presetOptions = RECURRENCE_PRESETS.map((value) => ({
-    value,
-    label: describeRecurrence(value, { t, locale }),
-  }));
-  const sourceId = new URLSearchParams(window.location.search).get('fromIssue');
-  const source = data.issues.find(issue => issue.id === sourceId && issue.team.id === team.id);
-  const [creatingLocal, setCreatingLocal] = useState(Boolean(source));
-  const creating = creatingLocal || subPath === "new";
-  const setCreating = (value: boolean) => {
-    setCreatingLocal(value);
-    if (!source) onNavigateSubPath?.(value ? "new" : undefined);
-  };
-  const [title, setTitle] = useState(source?.title ?? "");
-  useEffect(() => { if (source && !creating && !title) { setCreatingLocal(true); setTitle(source.title) } }, [source, creating, title]);
-  const closeCreation = () => {
-    setCreating(false); setTitle("");
-    const url = new URL(window.location.href);
-    if (url.searchParams.has('fromIssue')) { url.searchParams.delete('fromIssue'); window.history.replaceState(window.history.state, '', url) }
-  };
-  const [cadence, setCadence] = useState<string>("weekly");
-  const create = async () => {
-    if (!title.trim()) return;
-    try {
-      if (source) {
-        await updateIssue(source.id, {title: title.trim(), recurrence: cadence});
-      } else {
-      const issue = await createIssue({
-        title: title.trim(),
-        description: "",
-        teamId: team.id,
-      });
-      await updateIssue(issue.id, { recurrence: cadence });
-      }
-      closeCreation();
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    }
-  };
-  return (
-    <TeamSection
-      title="Recurring issues"
-      action={
-        <button className="settings-action" onClick={() => setCreating(true)}>
-          <Plus size={13} />
-          New recurring issue
-        </button>
-      }
-    >
-      <div className="team-setting-list">
-        {creating && (
-          <form
-            className="recurring-issue-create"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void create();
-            }}
-          >
-            <input
-              autoFocus
-              className="settings-input"
-              placeholder="Issue title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-            <SettingsSelect
-              label="Cadence"
-              value={cadence}
-              onChange={(value) => setCadence(value as typeof cadence)}
-              options={presetOptions}
-            />
-            <button
-              type="button"
-              className="settings-icon-action"
-              aria-label="Cancel"
-              onClick={closeCreation}
-            >
-              <X size={14} />
-            </button>
-            <button
-              className="settings-action primary"
-              disabled={!title.trim()}
-            >
-              {t(source ? "Save" : "Create")}
-            </button>
-          </form>
-        )}
-        {issues.map((issue) => (
-          <div className="recurring-issue-row" key={issue.id}>
-          <span>
-            <strong data-i18n-ignore>
-              {issue.identifier} {issue.title}
-            </strong>
-              <small>
-                {describeRecurrence(issue.recurrence, { t, locale, anchor: issue.nextOccurrenceAt ? recurrenceDate(issue.nextOccurrenceAt, timeZone) : undefined })}
-                {issue.nextOccurrenceAt
-                  ? ` · ${t("Next")}: ${formatDate(recurrenceDate(issue.nextOccurrenceAt, timeZone).toISOString(), { month: "short", day: "numeric", year: "numeric" })}`
-                  : ""}
-              </small>
-            </span>
-            <button
-              type="button"
-              className="settings-action"
-              aria-label={`${t("Edit schedule")} ${issue.identifier}`}
-              onClick={() => setEditingId(issue.id)}
-            >
-              <Repeat2 size={13} />
-              {t("Edit schedule")}
-            </button>
-          </div>
-        ))}
-        <RecurrenceDialog
-          open={Boolean(editing)}
-          onOpenChange={(open) => !open && setEditingId("")}
-          value={editing?.recurrence}
-          nextOccurrenceAt={editing?.nextOccurrenceAt}
-          timeZone={timeZone}
-          onSave={(recurrence, start) => editing && saveSchedule(editing.id, recurrence, start)}
-          onStop={() => editing && saveSchedule(editing.id, "")}
-        />
-        {!issues.length && !creating && (
-          <TeamEmpty
-            icon={<Circle size={22} />}
-            title="No recurring issues"
-            description="Create issues that repeat daily, on weekdays, weekly, monthly, or yearly."
-          />
-        )}
-      </div>
-    </TeamSection>
   );
 }
 

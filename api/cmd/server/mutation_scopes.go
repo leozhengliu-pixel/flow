@@ -257,30 +257,48 @@ func issueCreationScope(ctx context.Context, resolve func(domain.Bootstrap) stor
 	return store.WithMutationScope(ctx, store.MutationScope{CreateIssues: true, Resolve: resolve})
 }
 
-// recurringIssueScope loads a recurring issue and the other issues of its
-// series (to skip an occurrence that already exists) and lets the callback
-// create the next occurrence.
-func recurringIssueScope(ctx context.Context, sourceID string) context.Context {
+// recurringIssueScope loads a recurring issue, its sub-issues (recreated on
+// the next instance, through the indexed parent_id column) and an existing
+// instance of its series due on the date the next instance would get
+// (through the indexed recurrenceInstance attribute, so the callback skips an
+// instance that already exists), and lets the callback create the next
+// instance. The team time zone is not known here, so the candidate dates
+// cover every UTC offset (-14h..+14h) of now.
+func recurringIssueScope(ctx context.Context, sourceID string, now time.Time) context.Context {
 	return store.WithMutationScope(ctx, store.MutationScope{IssueIDs: []string{sourceID}, CreateIssues: true, Expand: func(issues []domain.Issue) store.MutationScope {
-		series := sourceID
-		var since time.Time
-		for _, issue := range issues {
-			if issue.ID != sourceID {
-				continue
-			}
-			if issue.RecurrenceSeriesID != "" {
-				series = issue.RecurrenceSeriesID
-			}
-			// The callback only looks for an occurrence dated on or after the
-			// next scheduled one; it was generated (and last updated) no earlier
-			// than that occurrence's start. Two days cover time zone offsets.
-			if issue.NextOccurrenceAt != nil {
-				since = issue.NextOccurrenceAt.Add(-48 * time.Hour)
+		return recurringInstanceScope(issues, sourceID, now)
+	}})
+}
+
+// recurringInstanceScope is recurringIssueScope's expansion from the loaded
+// source issue.
+func recurringInstanceScope(issues []domain.Issue, sourceID string, now time.Time) store.MutationScope {
+	scope := store.MutationScope{IssueColumns: []store.IssueColumnScope{{Column: "parent_id", Values: []string{sourceID}}}}
+	for _, issue := range issues {
+		if issue.ID != sourceID {
+			continue
+		}
+		series := issue.RecurrenceSeriesID
+		if series == "" {
+			series = sourceID
+		}
+		due, ok := issueDueDate(issue)
+		rule, err := parseRecurrence(issue.Recurrence)
+		if !ok || err != nil {
+			break
+		}
+		rule = rule.anchored(due)
+		values := []string{}
+		for offset := -14; offset <= 14; offset++ {
+			today := civilDate(now.Add(time.Duration(offset)*time.Hour), time.UTC)
+			key := store.RecurrenceInstanceKey(series, recurrenceTarget(rule, due, today).Format("2006-01-02"))
+			if !slices.Contains(values, key) {
+				values = append(values, key)
 			}
 		}
-		fragment, _ := json.Marshal(series)
-		return store.MutationScope{IssueDataContains: []string{`"recurrenceSeriesId":` + string(fragment)}, IssueDataUpdatedSince: since}
-	}})
+		scope.IssueAttributes = []store.IssueColumnScope{{Column: "recurrenceInstance", Values: values}}
+	}
+	return scope
 }
 
 // codeReviewScope loads the issues a pull/merge request webhook can link or

@@ -636,8 +636,9 @@ func TestIssueOptionsPersistence(t *testing.T) {
 		"descriptionData": map[string]any{"type": "doc", "content": []any{}}, "contentState": "HISTORY_STATE",
 		"recurrence": "weekly", "nextOccurrenceAt": nextOccurrence.Format(time.RFC3339),
 	}, http.StatusOK)
-	// Occurrences are calendar dates: the start snaps to local midnight (UTC team).
-	if updated.Recurrence != "weekly" || updated.NextOccurrenceAt == nil || !updated.NextOccurrenceAt.Equal(nextOccurrence.Truncate(24*time.Hour)) {
+	// The legacy nextOccurrenceAt input is the first due date (a calendar
+	// date); the next instance follows at 00:01 the day after (UTC team).
+	if updated.Recurrence != "weekly" || optionalID(updated.DueDate) != nextOccurrence.Format("2006-01-02") || updated.NextOccurrenceAt == nil || !updated.NextOccurrenceAt.Equal(nextOccurrence.Truncate(24*time.Hour).Add(24*time.Hour+time.Minute)) {
 		t.Fatalf("recurrence was not returned: %#v", updated)
 	}
 	snoozeUntil := time.Now().UTC().Add(48 * time.Hour).Truncate(time.Second)
@@ -675,7 +676,7 @@ func TestIssueOptionsPersistence(t *testing.T) {
 
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	persisted := findIssue(t, bootstrap.Issues, issue.ID)
-	if persisted.Recurrence != "weekly" || persisted.NextOccurrenceAt == nil || !persisted.NextOccurrenceAt.Equal(nextOccurrence.Truncate(24*time.Hour)) || !slices.ContainsFunc(persisted.Attachments, func(item domain.Attachment) bool { return item.ID == link.ID }) {
+	if persisted.Recurrence != "weekly" || persisted.NextOccurrenceAt == nil || !persisted.NextOccurrenceAt.Equal(*updated.NextOccurrenceAt) || optionalID(persisted.DueDate) != optionalID(updated.DueDate) || !slices.ContainsFunc(persisted.Attachments, func(item domain.Attachment) bool { return item.ID == link.ID }) {
 		t.Fatalf("issue menu changes did not survive bootstrap: %#v", persisted)
 	}
 	if !slices.ContainsFunc(bootstrap.Activities[issue.ID], func(item domain.ActivityEvent) bool {

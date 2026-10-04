@@ -43,7 +43,7 @@ func teamOperationPermission(settings domain.TeamSettings, r *http.Request) stri
 		return settings.MemberPermission
 	case strings.Contains(path, "/labels"), strings.Contains(path, "/label-groups"):
 		return settings.LabelPermission
-	case strings.Contains(path, "/templates"):
+	case strings.Contains(path, "/templates"), strings.HasSuffix(path, "/recurring-issues"):
 		return settings.TemplatePermission
 	case strings.Contains(path, "/agent-skills"):
 		return settings.AgentSkillPermission

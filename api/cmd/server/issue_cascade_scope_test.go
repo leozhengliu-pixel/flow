@@ -183,10 +183,11 @@ func runIssueCascadeScript(t *testing.T, forceFull bool) cascadeScriptResult {
 	group := call(http.MethodPost, "/api/label-groups", map[string]any{"name": "Cascade group"}, http.StatusCreated)
 	call(http.MethodPatch, "/api/label-groups/"+id(group), map[string]any{"archivedAt": "2026-01-01T00:00:00Z"}, http.StatusOK)
 
-	// Recurring issues: the next occurrence is created from the sequence.
+	// Recurring issues: once the due date passed the next instance is created
+	// from the sequence.
 	recurring := newIssue("Weekly sync", nil)
-	past := time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339)
-	call(http.MethodPatch, "/api/issues/"+recurring, map[string]any{"recurrence": "daily", "nextOccurrenceAt": past}, http.StatusOK)
+	past := time.Now().UTC().AddDate(0, 0, -2).Format("2006-01-02")
+	call(http.MethodPatch, "/api/issues/"+recurring, map[string]any{"recurrence": "daily", "dueDate": past}, http.StatusOK)
 	occurrences, err := api.generateWorkspaceRecurringIssues(context.Background(), workspace, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)

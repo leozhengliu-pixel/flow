@@ -125,6 +125,8 @@ export interface MyIssuesRowData {
   hasContent?: boolean
   estimate?: number
   dueDate?: string
+  /** The issue owns a recurring schedule (its due date cannot be removed). */
+  recurrence?: string
   sla?: IssueSLA & { ruleName?: string }
   createdAt: string
   updatedAt: string
@@ -328,7 +330,7 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
             {displayProperties.has('milestone') && issue.milestoneName ? <span className={styles.dueDate} aria-label={`Milestone ${issue.milestoneName}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.milestoneName}</span></span> : null}
             {displayProperties.has('customers') && issue.customerNames?.length ? <span className={styles.badgeGroup}>{issue.customerNames.map(name => <span className={styles.badge} key={name}><span data-i18n-ignore>{name}</span></span>)}</span> : null}
             {displayProperties.has('customerRevenue') && customerRevenueTotal(issue) > 0 ? <span className={styles.badge} aria-label={`Customer revenue ${formatRowCustomerRevenue(customerRevenueTotal(issue))}`}>{formatRowCustomerRevenue(customerRevenueTotal(issue))}</span> : null}
-            {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
+            {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} allowRemove={!issue.recurrence} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
             {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to..." selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<MyIssuesAssigneeAvatar assignee={issue.assignee}/>}/> : null}

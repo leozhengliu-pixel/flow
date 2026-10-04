@@ -290,7 +290,7 @@ const aliases: Record<string,string> = {
   "Create related": "create",
   "Mark as": "mark",
   "Copy": "copy",
-  "Convert to": "convert",
+  "Convert into": "convert",
   "Make a copy…": "duplicate",
   "Run loop…": "loop",
   "Show description history": "history",

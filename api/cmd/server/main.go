@@ -66,6 +66,7 @@ type server struct {
 	webSearch                      websearch.Provider // nil when no provider is configured
 	webFetcher                     *websearch.Fetcher
 	triageRuns                     sync.Map
+	recurringNormalized            sync.Map // workspace keys whose legacy recurring schedules were upgraded
 	agentRuns                      sync.Map
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
@@ -725,6 +726,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/teams/{id}/templates", s.createIssueTemplate)
 	mux.HandleFunc("PATCH /api/teams/{id}/templates/{templateId}", s.updateIssueTemplate)
 	mux.HandleFunc("DELETE /api/teams/{id}/templates/{templateId}", s.deleteIssueTemplate)
+	mux.HandleFunc("GET /api/teams/{id}/recurring-issues", s.listTeamRecurringIssues)
+	mux.HandleFunc("POST /api/teams/{id}/recurring-issues", s.createTeamRecurringIssue)
 	mux.HandleFunc("GET /api/teams/{id}/labels", s.listTeamLabels)
 	mux.HandleFunc("POST /api/teams/{id}/labels", s.createTeamLabel)
 	mux.HandleFunc("PATCH /api/teams/{id}/labels/{labelId}", s.updateTeamLabel)
@@ -2666,7 +2669,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 		if id := store.IssueCreationKey(r.Context()); id != "" {
 			created.ID = id
 		}
-		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, Estimate: input.Estimate, AssigneeID: input.AssigneeID, DelegateID: input.DelegateID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate, SLABreachesAt: input.SLABreachesAt, SLAType: input.SLAType, Recurrence: input.Recurrence, NextOccurrenceAt: input.NextOccurrenceAt}
+		createUpdate := domain.IssueUpdateInput{DescriptionState: input.DescriptionState, DescriptionData: input.DescriptionData, ContentState: input.ContentState, StateID: input.StateID, Priority: input.Priority, Estimate: input.Estimate, AssigneeID: input.AssigneeID, DelegateID: input.DelegateID, ProjectID: input.ProjectID, ProjectMilestoneID: input.ProjectMilestoneID, CycleID: input.CycleID, DueDate: input.DueDate, SLABreachesAt: input.SLABreachesAt, SLAType: input.SLAType, Recurrence: input.Recurrence, NextOccurrenceAt: input.NextOccurrenceAt, Icon: input.Icon}
 		if len(input.LabelIDs) > 0 {
 			createUpdate.LabelIDs = &input.LabelIDs
 		}
@@ -5025,6 +5028,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		return nil, fmt.Errorf("%w: team is retired", errInvalid)
 	}
 	changes := map[string]string{}
+	dueBefore, teamBefore := optionalID(issue.DueDate), issue.Team.ID
 	if input.TeamID != nil && *input.TeamID != issue.Team.ID {
 		teamIndex := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == *input.TeamID })
 		if teamIndex < 0 {
@@ -5292,7 +5296,16 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		}
 		issue.SLAType = *input.SLAType
 	}
-	if err := applyRecurrenceUpdate(data, issue, input.Recurrence, input.NextOccurrenceAt, time.Now().UTC(), changes); err != nil {
+	if input.Icon != nil && strings.TrimSpace(*input.Icon) != issue.Icon {
+		icon := strings.TrimSpace(*input.Icon)
+		if len(icon) > 191 {
+			return nil, fmt.Errorf("%w: icon is too long", errInvalid)
+		}
+		issue.Icon = icon
+		changes["icon"] = icon
+	}
+	retime := optionalID(issue.DueDate) != dueBefore || issue.Team.ID != teamBefore
+	if err := applyRecurrenceUpdate(data, issue, input.Recurrence, input.NextOccurrenceAt, dueBefore, retime, time.Now().UTC(), changes); err != nil {
 		return nil, err
 	}
 	if input.SnoozedUntil != nil {

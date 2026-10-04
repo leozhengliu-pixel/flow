@@ -2314,12 +2314,44 @@ export async function createIssue(input: {
   templateId?: string;
   recurrence?: string;
   nextOccurrenceAt?: string;
+  icon?: string;
 }): Promise<Issue> {
   return request(import.meta.env.VITE_PAGED_ISSUES === 'true' ? '/api/issue-records' : '/api/issues', {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
+}
+
+export type RecurringSubIssueInput = {
+  title: string;
+  description?: string;
+  priority?: number;
+  assigneeId?: string;
+  labelIds?: string[];
+};
+export type RecurringIssueCreateInput = {
+  title: string;
+  description: string;
+  descriptionState?: string;
+  stateId?: string;
+  priority?: number;
+  assigneeId?: string;
+  projectId?: string;
+  labelIds?: string[];
+  icon?: string;
+  /** First due date, YYYY-MM-DD. */
+  dueDate: string;
+  recurrence: string;
+  subIssues?: RecurringSubIssueInput[];
+};
+/** Issues of the team that currently own a schedule, sorted by next due date (index-served, paged-safe). */
+export function listRecurringIssues(teamId: string, signal?: AbortSignal): Promise<{ issues: Issue[] }> {
+  return request(`/api/teams/${encodeURIComponent(teamId)}/recurring-issues`, { signal });
+}
+/** Creates the first instance (and its sub-issues) of a recurring issue in one mutation. */
+export function createRecurringIssue(teamId: string, input: RecurringIssueCreateInput): Promise<{ issue: Issue; subIssues: Issue[] }> {
+  return request(`/api/teams/${encodeURIComponent(teamId)}/recurring-issues`, jsonRequest("POST", input));
 }
 
 export function updateIssue(

@@ -19,7 +19,7 @@ var issueAttributeFields = map[string]bool{
 	"templateId": true, "externalSource": true, "delegateId": true,
 	"firstLabel": true, "agentSessionId": true, "addedToCycle": true,
 	"hasLinks": true, "autoClosed": true, "triagedAt": true, "statusChangedAt": true,
-	"nextOccurrenceAt": true,
+	"nextOccurrenceAt": true, "recurrenceInstance": true,
 }
 
 // Multi-valued properties are indexed as one presence row per value
@@ -80,6 +80,9 @@ func issueAttributes(issue domain.Issue) map[string]string {
 	}
 	if issue.AutoClosed {
 		values["autoClosed"] = "true"
+	}
+	if key := RecurrenceInstanceKey(issue.RecurrenceSeriesID, issue.RecurrenceOccurrence); key != "" {
+		values["recurrenceInstance"] = key
 	}
 	for field, value := range map[string]*time.Time{"triagedAt": issue.TriagedAt, "statusChangedAt": issue.StatusChangedAt, "nextOccurrenceAt": issue.NextOccurrenceAt} {
 		if value != nil {
@@ -249,4 +252,127 @@ func compileIssueAttribute(node IssueFilter) (string, []any, error) {
 		return "", nil, fmt.Errorf("%w: unsupported attribute operator", ErrIssueQuery)
 	}
 	return condition, args, nil
+}
+
+// RecurrenceInstanceKey is the indexed recurrenceInstance attribute of a
+// recurring series instance: its series id and occurrence (due) date, so the
+// scheduler finds an existing instance of (series, date) by index.
+func RecurrenceInstanceKey(series, occurrence string) string {
+	if series == "" || occurrence == "" {
+		return ""
+	}
+	return series + "/" + occurrence
+}
+
+// RecurringIssueIDs lists the non-archived issues that own a recurring
+// schedule: exactly those carrying the sparse nextOccurrenceAt attribute. The
+// rows are read from issue_attributes_value_idx (workspace_key, field, value,
+// issue_id), so the cost is proportional to the number of recurring issues,
+// never to the workspace's issues, and the order is earliest next occurrence
+// first. Archived issues are skipped through a primary key lookup of their
+// record (an archived schedule resumes when the issue is unarchived), so they
+// never fill the due window ahead of live schedules. A non-zero dueBy keeps
+// the schedules whose next occurrence is at or before it.
+func (s *SQLiteStore) RecurringIssueIDs(ctx context.Context, workspace string, dueBy time.Time, limit int) ([]string, error) {
+	if limit <= 0 || limit > 10000 {
+		limit = 10000
+	}
+	args := []any{workspace}
+	if !dueBy.IsZero() {
+		args = append(args, dueBy.UTC().Format(issueRecordTimestamp))
+	}
+	rows, err := s.db.QueryContext(ctx, recurringIssueIDQuery(!dueBy.IsZero()), append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+func recurringIssueIDQuery(dueBy bool) string {
+	query := `SELECT a.issue_id FROM issue_attribute_records a WHERE a.workspace_key=? AND a.field='nextOccurrenceAt' AND EXISTS (SELECT 1 FROM issue_records i WHERE i.workspace_key=a.workspace_key AND i.id=a.issue_id AND i.archived=0)`
+	if dueBy {
+		query += ` AND a.value<=?`
+	}
+	return query + ` ORDER BY a.value,a.issue_id LIMIT ?`
+}
+
+// migrateRecurrenceInstances indexes the recurrenceInstance attribute of the
+// series instances written before the attribute existed, once per workspace.
+// Only records whose payload carries a series id are decoded and re-indexed;
+// later writes keep the attribute current.
+func (s *SQLiteStore) migrateRecurrenceInstances(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS recurrence_instance_migrations(workspace_key VARCHAR(191) PRIMARY KEY)`); err != nil {
+		return err
+	}
+	column, pattern := "data", any(`%"recurrenceSeriesId":%`)
+	switch s.dialect {
+	case "sqlite":
+		column = "CAST(data AS TEXT)"
+	case "postgres":
+		pattern = []byte(`%"recurrenceSeriesId":%`)
+	}
+	for workspace := range s.workspaces {
+		var exists int
+		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM recurrence_instance_migrations WHERE workspace_key=?`, workspace).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			continue
+		}
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		err = func() error {
+			rows, err := tx.QueryContext(ctx, `SELECT data FROM issue_records WHERE workspace_key=? AND `+column+` LIKE ?`, workspace, pattern)
+			if err != nil {
+				return err
+			}
+			batch := []domain.Issue{}
+			for rows.Next() {
+				var raw []byte
+				var issue domain.Issue
+				if err := rows.Scan(&raw); err != nil {
+					rows.Close()
+					return err
+				}
+				if err := json.Unmarshal(raw, &issue); err != nil {
+					rows.Close()
+					return err
+				}
+				if issue.RecurrenceSeriesID != "" {
+					batch = append(batch, issue)
+				}
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
+			for start := 0; start < len(batch); start += 250 {
+				if err := writeIssueAttributes(ctx, tx, workspace, batch[start:min(start+250, len(batch))]); err != nil {
+					return err
+				}
+			}
+			_, err = tx.ExecContext(ctx, `INSERT INTO recurrence_instance_migrations(workspace_key) VALUES(?) ON CONFLICT DO NOTHING`, workspace)
+			return err
+		}()
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -19,9 +19,10 @@ import (
 //
 // The legacy preset values "daily", "weekly" and "monthly" (plus "weekdays",
 // "biweekly" and "yearly") are still accepted. Presets that need a day are
-// anchored on the first occurrence date and normalised to the RRULE form.
-// Occurrences are calendar dates in the team's timezone; an occurrence becomes
-// due at local midnight of that date.
+// anchored on the first due date and normalised to the RRULE form.
+// Occurrences are due dates (calendar dates in the team's timezone). The
+// instance due on a date is replaced by the next one at 00:01 on the following
+// day (recurrenceCreationInstant), when its due date has passed.
 
 type recurrenceRule struct {
 	Freq     string // DAILY, WEEKLY, MONTHLY, YEARLY
@@ -207,6 +208,60 @@ func civilDate(value time.Time, loc *time.Location) time.Time {
 // midnight in the team timezone.
 func occurrenceInstant(date time.Time, loc *time.Location) time.Time {
 	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, loc).UTC()
+}
+
+// recurrenceCreationInstant is when the instance due on date has passed and
+// the next one is created: 00:01 on the following day in the team timezone.
+//
+// In a time zone whose DST change skips local midnight (America/Santiago),
+// 00:01 does not exist on that day and time.Date resolves it to the evening
+// before, while the due date still runs; the instant then moves forward to
+// one minute after the day actually begins.
+func recurrenceCreationInstant(due time.Time, loc *time.Location) time.Time {
+	day := time.Date(due.Year(), due.Month(), due.Day()+1, 0, 0, 0, 0, time.UTC)
+	instant := time.Date(day.Year(), day.Month(), day.Day(), 0, 1, 0, 0, loc)
+	for range 4 {
+		if !civilDate(instant, loc).Before(day) {
+			break
+		}
+		instant = instant.Add(time.Hour)
+	}
+	return instant.UTC()
+}
+
+// currentRecurrenceTiming reports whether next was written by the current
+// timing model for an instance due on due: the creation instant after the due
+// date, or a later 00:01 local (a schedule waiting for an existing instance's
+// date to pass). Legacy schedules fired at local midnight.
+func currentRecurrenceTiming(next, due time.Time, loc *time.Location) bool {
+	expected := recurrenceCreationInstant(due, loc)
+	if next.Equal(expected) {
+		return true
+	}
+	local := next.In(loc)
+	return next.After(expected) && local.Hour() == 0 && local.Minute() == 1 && local.Second() == 0
+}
+
+// reanchored moves a single-day schedule that repeats on the previous due
+// date's weekday / day of month / date onto the new due date, so "every week"
+// keeps following the due date when it is edited. Multi-day and nth-weekday
+// rules are kept as they are.
+func (rule recurrenceRule) reanchored(previous, due time.Time) recurrenceRule {
+	switch rule.Freq {
+	case "WEEKLY":
+		if len(rule.ByDay) == 1 && rule.ByDay[0] == previous.Weekday() {
+			rule.ByDay = []time.Weekday{due.Weekday()}
+		}
+	case "MONTHLY":
+		if rule.Ordinal == 0 && rule.MonthDay == previous.Day() {
+			rule.MonthDay = due.Day()
+		}
+	case "YEARLY":
+		if rule.Ordinal == 0 && rule.Month == previous.Month() && rule.MonthDay == previous.Day() {
+			rule.Month, rule.MonthDay = due.Month(), due.Day()
+		}
+	}
+	return rule
 }
 
 func daysInMonth(year int, month time.Month) int {
