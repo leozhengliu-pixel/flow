@@ -20,6 +20,7 @@ import { confirmAction } from '@/components/ui/action-dialog-service'
 import { fetchIssueRecord } from '@/lib/api'
 import { toast } from 'sonner'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
+import { MyIssuesSummaryCard } from './my-issues-summary-card'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -234,7 +235,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       />}
     >
       <IssuesSplitLayout
-        detailsOpen={controller.detailsOpen || split}
+        detailsOpen={(controller.detailsOpen && Boolean(previewRow)) || split}
+        aside={controller.detailsOpen && !previewRow && !split && !insightsOpen ? <MyIssuesSummaryCard summary={controller.summary} onItemSelect={summaryFilter}/> : undefined}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}
