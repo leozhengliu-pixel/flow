@@ -812,3 +812,8 @@
   border-color: var(--popover-border);
   box-shadow: var(--sidebar-submenu-shadow);
 }
+/* Pulse summary audio: inline Play/Pause on the sidebar item. */
+.nav-audio-toggle{width:18px;height:18px;flex:0 0 18px;display:grid;place-items:center;margin-left:auto;padding:0;border:0;border-radius:50%;background:var(--theme-control);color:var(--theme-text-primary)}
+.nav-audio-toggle:hover{background:var(--theme-control-hover)}
+.nav-audio-toggle[data-playing]{background:var(--accent-primary);color:var(--on-accent)}
+.nav-audio-toggle+.nav-unread{margin-left:6px}

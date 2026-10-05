@@ -37,8 +37,10 @@ func TestPulseTickCountsPerVisibilityInOneWrite(t *testing.T) {
 			settings.Timezone = "UTC"
 			data.TeamSettings[id] = settings
 		}
-		data.Projects = append(data.Projects, domain.Project{ID: "project_private", Name: "Private project", TeamIDs: []string{private.ID}})
-		data.ProjectUpdates["project_private"] = []domain.ProjectUpdate{{ID: "private-update", ProjectID: "project_private", Body: "Secret", User: data.Viewer, CreatedAt: now.Add(-2 * time.Hour)}}
+		// Both members follow the project, but only the admin can see its team.
+		data.Projects = append(data.Projects, domain.Project{ID: "project_private", Name: "Private project", TeamIDs: []string{private.ID}, MemberIDs: []string{"usr_admin", "usr_member"}})
+		author := domain.User{ID: "usr_author", Name: "Author", DisplayName: "Author"}
+		data.ProjectUpdates["project_private"] = []domain.ProjectUpdate{{ID: "private-update", ProjectID: "project_private", Body: "Secret", User: author, CreatedAt: now.Add(-5 * time.Hour)}}
 		return nil
 	})
 	if err != nil {
@@ -76,7 +78,7 @@ func TestPulseTickCountsPerVisibilityInOneWrite(t *testing.T) {
 	}
 	settings, _ := repo.WorkspaceMetadataFields(key, "settings")
 	cursors := pulseCursors(&settings)
-	if !cursors["usr_admin"].Equal(time.Date(2026, 9, 14, 9, 0, 0, 0, time.UTC)) || !cursors["usr_member"].Equal(cursors["usr_admin"]) {
-		t.Fatalf("cursors = %v, want both advanced to 09:00", cursors)
+	if !cursors["usr_admin"].Equal(time.Date(2026, 9, 14, 6, 0, 0, 0, time.UTC)) || !cursors["usr_member"].Equal(cursors["usr_admin"]) {
+		t.Fatalf("cursors = %v, want both advanced to 06:00", cursors)
 	}
 }

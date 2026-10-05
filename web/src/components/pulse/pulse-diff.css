@@ -1,0 +1,26 @@
+/* Diff block */
+.pulse-diff{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-1);font-size:12px}
+.pulse-diff-title{margin-bottom:4px;color:var(--theme-text-tertiary);font-size:11px;font-weight:500}
+.pulse-diff-row{min-height:26px;display:grid;grid-template-columns:minmax(96px,max-content) 1fr;align-items:center;gap:12px}
+.pulse-diff-label{color:var(--theme-text-tertiary)}
+.pulse-diff-change{min-width:0;display:flex;align-items:center;gap:6px;color:var(--theme-text-secondary)}
+.pulse-diff-change.is-list{flex-wrap:wrap}
+.pulse-diff-change strong{color:var(--theme-text-primary);font-weight:500}
+.pulse-diff-value{min-width:0;display:inline-flex;align-items:center;gap:5px;color:var(--theme-text-primary)}
+.pulse-diff-value.is-empty{color:var(--theme-text-tertiary)}
+.pulse-diff-arrow{flex-shrink:0;color:var(--theme-text-tertiary)}
+.pulse-diff-status{width:10px;height:10px;border:1.5px solid var(--theme-text-tertiary);border-radius:50%;background:transparent}
+.pulse-diff-avatar{width:16px;height:16px;font-size:7px}
+.pulse-diff-progress{width:48px;height:4px;overflow:hidden;border-radius:2px;background:var(--theme-control)}
+.pulse-diff-progress>i{height:100%;display:block;background:var(--accent-primary)}
+.pulse-diff-milestones{list-style:none;display:flex;flex-direction:column;gap:4px;margin:2px 0 4px;padding:0 0 0 108px}
+.pulse-diff-milestones li{display:flex;align-items:center;gap:6px;color:var(--theme-text-secondary)}
+.pulse-diff-milestone{width:8px;height:8px;border:1.5px solid var(--theme-text-tertiary);transform:rotate(45deg)}
+.pulse-diff-milestone-done{color:var(--accent-primary)}
+.pulse-diff-milestone-progress{margin-left:auto;color:var(--theme-text-tertiary);font-variant-numeric:tabular-nums}
+.pulse-diff-chip{height:20px;display:inline-flex;align-items:center;padding:0 6px;border-radius:4px;background:var(--theme-control);color:var(--theme-text-primary)}
+.pulse-diff-chip.is-removed{color:var(--theme-text-tertiary);text-decoration:line-through}
+
+@media (max-width:640px){
+  .pulse-diff-milestones{padding-left:0}
+}

@@ -780,6 +780,12 @@ type ProjectUpdate struct {
 	Attachments []Attachment        `json:"attachments"`
 	DueAt       *time.Time          `json:"dueAt,omitempty"`
 	Missing     bool                `json:"missing,omitempty"`
+	// Snapshot records the project's status, priority, lead, dates and
+	// milestone progress when the update was posted; Diff compares it with
+	// the previous update's snapshot. Updates posted before snapshots were
+	// recorded have neither.
+	Snapshot *PulseSnapshot `json:"snapshot,omitempty"`
+	Diff     *PulseDiff     `json:"diff,omitempty"`
 }
 
 type CustomerRequest struct {
@@ -1103,23 +1109,26 @@ type UserSettings struct {
 	GitBranchMoveStarted  bool              `json:"gitBranchMoveStarted"`
 	CodingToolMoveStarted bool              `json:"codingToolMoveStarted"`
 	// Coding tools offered in an issue's "Work on issue" menu.
-	EnabledCodingTools        []string  `json:"enabledCodingTools,omitempty"`
-	CustomDeepLinkURLTemplate string    `json:"customDeepLinkUrlTemplate,omitempty"`
-	CodingPromptTemplate      string    `json:"codingPromptTemplate,omitempty"`
-	ChangelogUpdates          bool      `json:"changelogUpdates"`
-	ChangelogNewsletter       bool      `json:"changelogNewsletter"`
-	MarketingUpdates          bool      `json:"marketingUpdates"`
-	InviteAcceptedUpdates     bool      `json:"inviteAcceptedUpdates"`
-	PrivacyUpdates            bool      `json:"privacyUpdates"`
-	DPAUpdates                bool      `json:"dpaUpdates"`
-	AgentEnabled              bool      `json:"agentEnabled"`
-	AgentInstructions         string    `json:"agentInstructions"`
-	PulseSchedule             string    `json:"pulseSchedule"`
-	PulseWelcomeDismissed     bool      `json:"pulseWelcomeDismissed,omitempty"`
-	FeedLastSeenTime          string    `json:"feedLastSeenTime,omitempty"`
-	JobTitle                  string    `json:"jobTitle,omitempty"`
-	Username                  string    `json:"username,omitempty"`
-	UpdatedAt                 time.Time `json:"updatedAt"`
+	EnabledCodingTools        []string `json:"enabledCodingTools,omitempty"`
+	CustomDeepLinkURLTemplate string   `json:"customDeepLinkUrlTemplate,omitempty"`
+	CodingPromptTemplate      string   `json:"codingPromptTemplate,omitempty"`
+	ChangelogUpdates          bool     `json:"changelogUpdates"`
+	ChangelogNewsletter       bool     `json:"changelogNewsletter"`
+	MarketingUpdates          bool     `json:"marketingUpdates"`
+	InviteAcceptedUpdates     bool     `json:"inviteAcceptedUpdates"`
+	PrivacyUpdates            bool     `json:"privacyUpdates"`
+	DPAUpdates                bool     `json:"dpaUpdates"`
+	AgentEnabled              bool     `json:"agentEnabled"`
+	AgentInstructions         string   `json:"agentInstructions"`
+	PulseSchedule             string   `json:"pulseSchedule"`
+	PulseWelcomeDismissed     bool     `json:"pulseWelcomeDismissed,omitempty"`
+	FeedLastSeenTime          string   `json:"feedLastSeenTime,omitempty"`
+	// Timezone is the IANA zone reported by the user's browser. Pulse
+	// summaries are delivered at 06:00 in this zone.
+	Timezone  string    `json:"timezone,omitempty"`
+	JobTitle  string    `json:"jobTitle,omitempty"`
+	Username  string    `json:"username,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // CommitSigningKey describes the key used by coding sessions to sign commits.
@@ -1693,11 +1702,14 @@ type TeamDefaultFavorite struct {
 }
 
 type Subscription struct {
-	ID           string    `json:"id"`
-	UserID       string    `json:"userId"`
-	ResourceType string    `json:"resourceType"`
-	ResourceID   string    `json:"resourceId"`
-	Events       []string  `json:"events,omitempty"`
+	ID           string   `json:"id"`
+	UserID       string   `json:"userId"`
+	ResourceType string   `json:"resourceType"`
+	ResourceID   string   `json:"resourceId"`
+	Events       []string `json:"events,omitempty"`
+	// OptOutEvents are events the user explicitly unsubscribed from, such as
+	// "pulse" on a project they would otherwise follow by default.
+	OptOutEvents []string  `json:"optOutEvents,omitempty"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 
@@ -1923,6 +1935,8 @@ type InitiativeUpdate struct {
 	Comments     []Comment           `json:"comments"`
 	Reactions    map[string][]string `json:"reactions"`
 	Attachments  []Attachment        `json:"attachments"`
+	Snapshot     *PulseSnapshot      `json:"snapshot,omitempty"`
+	Diff         *PulseDiff          `json:"diff,omitempty"`
 }
 
 type CommentThreadSummary struct {
@@ -1977,8 +1991,17 @@ type Notification struct {
 	DeletedAt       *time.Time `json:"deletedAt,omitempty"`
 	SnoozedUntil    *time.Time `json:"snoozedUntil,omitempty"`
 	Favorite        bool       `json:"favorite"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
+	// Title and Text are the display strings of notifications that do not
+	// derive them from an issue (Pulse summaries).
+	Title   string               `json:"title,omitempty"`
+	Text    string               `json:"text,omitempty"`
+	Payload *NotificationPayload `json:"payload,omitempty"`
+	// PulseSummary caches the generated summary of a Pulse summary
+	// notification; it is served by /api/pulse/summaries/{id}, not in lists.
+	PulseSummary   *PulseSummary        `json:"pulseSummary,omitempty"`
+	SummaryReports []PulseSummaryReport `json:"summaryReports,omitempty"`
+	CreatedAt      time.Time            `json:"createdAt"`
+	UpdatedAt      time.Time            `json:"updatedAt"`
 }
 
 type NotificationChannelPreferences struct {

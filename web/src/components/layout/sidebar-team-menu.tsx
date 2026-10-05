@@ -9,6 +9,7 @@ import { toggleFavoriteFor } from '@/lib/favorites'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { settingsPath, teamArchivePath, teamHomePath } from '@/lib/app-routes'
 import { confirmAction } from '@/components/ui/action-dialog-service'
+import { PULSE_EVENT, sessionPulseChoice, teamPulseSubscribed, usePulseSubscription } from '@/lib/pulse-subscriptions'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { SlackIcon } from '@/components/issue/issue-icons'
 import { TeamSettingsIcon, TeamArchiveIcon } from './team-menu-icons'
@@ -18,7 +19,7 @@ const notifications = [
   ['issueAdded', 'An issue is added to the team'],
   ['issueCompleted', 'An issue is marked completed or canceled'],
   ['triage', 'An issue is added to the triage queue'],
-  ['pulse', 'A team project update is posted'],
+  [PULSE_EVENT, 'A team project update is posted'],
 ] as const
 
 function teamLeaveDisabledReason(data: BootstrapData, team: Team) {
@@ -53,10 +54,14 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
   const content = useRef<HTMLDivElement>(null), search = useRef<HTMLInputElement>(null), busy = useRef(false)
   const favorite = useMemo(() => open && data.favorites.some(item => item.userId === data.viewer.id && item.resourceType === 'team' && item.resourceId === team.id), [open, data.favorites, data.viewer.id, team.id])
   const subscription = useMemo(() => open ? data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'team' && item.resourceId === team.id) : undefined, [open, data.subscriptions, data.viewer.id, team.id])
-  const savedEvents = subscription ? subscription.events?.length ? subscription.events.map(event => event === 'updates' ? 'pulse' : event) : ['pulse'] : []
+  const savedEvents = subscription?.events ?? []
   const savedKey = JSON.stringify(savedEvents)
   const [events, setEvents] = useState<string[]>(savedEvents)
   useEffect(() => { if (!pending) setEvents(JSON.parse(savedKey) as string[]) }, [savedKey, pending])
+  // "A team project update is posted" is the team's Pulse subscription (contract item 2): written through the
+  // Pulse API, on by default for teams you belong to, and an explicit choice overrides that default.
+  const pulseFallback = useMemo(() => open && teamPulseSubscribed(team.id, { viewerId: data.viewer.id, subscriptions: data.subscriptions, teamMembers: data.teamMembers }), [open, team.id, data.viewer.id, data.subscriptions, data.teamMembers])
+  const pulse = usePulseSubscription('team', team.id, pulseFallback, open)
   const label = favorite ? 'Unfavorite' : 'Favorite'
   const matches = (label: string) => [label, t(label)].some(value => value.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
   const groups = [[label], ['Team settings', 'Copy URL', 'Open archive'], ['Subscribe', 'Configure Slack notifications…'], ['Leave team…']].map(group => group.filter(matches)).filter(group => group.length)
@@ -68,12 +73,26 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
     const previous = events, next = checked ? [...new Set([...events, event])] : events.filter(value => value !== event)
     setEvents(next)
     try {
-      if (next.length) await addSubscription('team', team.id, next)
+      // Deleting the record would also drop an explicit Pulse choice, so keep it while one exists.
+      const keepsPulseChoice = next.includes(PULSE_EVENT) || Boolean((subscription as { optOutEvents?: string[] } | undefined)?.optOutEvents?.includes(PULSE_EVENT)) || sessionPulseChoice('team', team.id) !== undefined
+      if (next.length || keepsPulseChoice) await addSubscription('team', team.id, next)
       else await removeSubscription('team', team.id)
       await refreshResourcePreferences(data.workspace.urlKey)
     } catch (error) {
       setEvents(previous)
       toast.error(t('Could not update team notifications'), { description: error instanceof Error ? error.message : undefined })
+    } finally { busy.current = false; setPending(false) }
+  }
+  const updatePulse = async (checked: boolean) => {
+    if (busy.current || pulse.saving) return
+    busy.current = true
+    setPending(true)
+    try {
+      const subscribed = await pulse.toggle(checked)
+      setEvents(current => subscribed ? [...new Set([...current, PULSE_EVENT])] : current.filter(value => value !== PULSE_EVENT))
+      await refreshResourcePreferences(data.workspace.urlKey).catch(() => undefined)
+    } catch (error) {
+      toast.error(t('Could not update Pulse subscription'), { description: error instanceof Error ? error.message : undefined })
     } finally { busy.current = false; setPending(false) }
   }
   const leave = async () => {
@@ -114,7 +133,7 @@ export function SidebarTeamMenu({ data, team, onReload, children }: { data: Boot
       {!groups.length && <div className="sidebar-team-menu-empty" role="status">{t('No results')}</div>}
       {groups.map((group, index) => <div className="sidebar-team-menu-group" key={index}>{index > 0 && <DropdownMenu.Separator/>}{group.map(label => {
         if (label === 'Subscribe') return <DropdownMenu.Sub key={label}><DropdownMenu.SubTrigger>{icon(label)}<span>{t(label)}</span><ChevronRight className="menu-chevron"/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="sidebar-popover sidebar-team-subscribe-menu" sideOffset={narrow ? -247 : -2} collisionPadding={8}>
-          {notifications.map(([event, label], index) => <div className="sidebar-team-subscribe-group" key={event}>{index === 0 && <DropdownMenu.Label>{t('Inbox notifications')}</DropdownMenu.Label>}{index === 3 && <DropdownMenu.Label>{t('Pulse updates')}</DropdownMenu.Label>}<DropdownMenu.CheckboxItem disabled={pending} checked={events.includes(event)} onCheckedChange={checked => void updateEvent(event, checked)} onSelect={event => event.preventDefault()}><span className="sidebar-team-subscribe-check"><DropdownMenu.ItemIndicator><Check size={10}/></DropdownMenu.ItemIndicator></span><span>{t(label)}</span></DropdownMenu.CheckboxItem></div>)}
+          {notifications.map(([event, label], index) => <div className="sidebar-team-subscribe-group" key={event}>{index === 0 && <DropdownMenu.Label>{t('Inbox notifications')}</DropdownMenu.Label>}{index === 3 && <DropdownMenu.Label>{t('Pulse updates')}</DropdownMenu.Label>}<DropdownMenu.CheckboxItem disabled={pending} checked={event === PULSE_EVENT ? pulse.subscribed : events.includes(event)} onCheckedChange={checked => void (event === PULSE_EVENT ? updatePulse(checked === true) : updateEvent(event, checked === true))} onSelect={event => event.preventDefault()}><span className="sidebar-team-subscribe-check"><DropdownMenu.ItemIndicator><Check size={10}/></DropdownMenu.ItemIndicator></span><span>{t(label)}</span></DropdownMenu.CheckboxItem></div>)}
         </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
         const href = label === 'Team settings' ? settingsPath(data.workspace.urlKey, 'team', team.key) : label === 'Open archive' ? teamArchivePath(data.workspace.urlKey, team.key) : label === 'Configure Slack notifications…' ? settingsPath(data.workspace.urlKey, 'team', team.key, 'notifications') : undefined
         const body = <>{icon(label)}<span>{t(label)}</span>{(label === 'Favorite' || label === 'Unfavorite') && <kbd>⌥ F</kbd>}{label === 'Copy URL' && <kbd>⌘ ⇧ ,</kbd>}</>

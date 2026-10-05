@@ -98,7 +98,7 @@ import type {
   WorkspaceRole,
   WorkspaceSettings,
 } from "@/types/flow";
-import { jsonRequest, request } from "@/lib/api-client";
+import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
 import type {
@@ -1783,7 +1783,8 @@ export function addSubscription(
     body: events ? JSON.stringify({ events }) : undefined,
   });
 }
-export function removeSubscription(type: string, id: string): Promise<void> {
+/** Resolves to the record the server kept (its Pulse part / opt-out), when it returns one. */
+export function removeSubscription(type: string, id: string): Promise<Subscription | undefined> {
   return request(`/api/subscriptions/${type}/${id}`, { method: "DELETE" });
 }
 export function restoreTrashEntry(id: string): Promise<unknown> {
@@ -3410,11 +3411,13 @@ export function createProjectUpdateComment(
   projectId: string,
   updateId: string,
   body: string,
+  bodyData?: Record<string, unknown>,
+  parentId?: string,
 ): Promise<ProjectUpdate> {
   return request(`/api/projects/${projectId}/updates/${updateId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, bodyData, parentId }),
   });
 }
 export function toggleProjectUpdateReaction(
@@ -3622,11 +3625,13 @@ export function createInitiativeUpdateComment(
   id: string,
   updateId: string,
   body: string,
+  bodyData?: Record<string, unknown>,
+  parentId?: string,
 ): Promise<InitiativeUpdate> {
   return request(`/api/initiatives/${id}/updates/${updateId}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ body }),
+    body: JSON.stringify({ body, bodyData, parentId }),
   });
 }
 export function toggleInitiativeUpdateReaction(
@@ -3858,4 +3863,91 @@ export function fetchFilterSuggestions(
   if (field) params.set("field", field);
   if (query) params.set("q", query);
   return request(`/api/search/filter-suggestions?${params}`);
+}
+
+/* Pulse (contract items 1–6). */
+export type PulseFeedQuery = {
+  view: import("@/types/flow").PulseFeedView;
+  viewId?: string;
+  q?: string;
+  filter?: unknown;
+  cursor?: string;
+  limit?: number;
+};
+export function fetchPulseFeed(
+  query: PulseFeedQuery,
+  signal?: AbortSignal,
+): Promise<import("@/types/flow").PulseFeedPage> {
+  const params = new URLSearchParams({ view: query.view });
+  if (query.viewId) params.set("viewId", query.viewId);
+  if (query.q?.trim()) params.set("q", query.q.trim());
+  if (query.filter) params.set("filter", JSON.stringify(query.filter));
+  if (query.cursor) params.set("cursor", query.cursor);
+  if (query.limit) params.set("limit", String(query.limit));
+  return request(`/api/pulse/feed?${params.toString()}`, { signal });
+}
+export function fetchPulseUnread(signal?: AbortSignal): Promise<import("@/types/flow").PulseUnread> {
+  return request("/api/pulse/unread", { signal });
+}
+/** Moves the viewer's Pulse last-seen cursor forward; the server never moves it back. */
+export function markPulseSeen(at: string, options?: { keepalive?: boolean }): Promise<unknown> {
+  return request("/api/pulse/seen", { ...jsonRequest("POST", { at }), keepalive: options?.keepalive });
+}
+export function setPulseSubscription(
+  type: import("@/types/flow").PulseSubscriptionType,
+  id: string,
+  subscribed: boolean,
+): Promise<{ subscribed: boolean }> {
+  return request(`/api/pulse/subscriptions/${type}/${encodeURIComponent(id)}`, {
+    method: subscribed ? "PUT" : "DELETE",
+  });
+}
+/** "Subscribe to initiative's project updates": every project update of the initiative's projects. */
+export function setInitiativeProjectUpdatesSubscription(
+  initiativeId: string,
+  subscribed: boolean,
+): Promise<{ subscribed: boolean }> {
+  return request(`/api/pulse/subscriptions/initiative/${encodeURIComponent(initiativeId)}/project-updates`, {
+    method: subscribed ? "PUT" : "DELETE",
+  });
+}
+export function fetchInitiativeProjectUpdatesSubscription(initiativeId: string, signal?: AbortSignal): Promise<{ subscribed: boolean }> {
+  return request(`/api/pulse/subscriptions/initiative/${encodeURIComponent(initiativeId)}/project-updates`, { signal });
+}
+export function fetchPulseSummary(
+  notificationId: string,
+  signal?: AbortSignal,
+): Promise<import("@/types/flow").PulseSummary> {
+  return request(`/api/pulse/summaries/${encodeURIComponent(notificationId)}`, { signal });
+}
+export function reportPulseSummary(notificationId: string, reason: string, updateId?: string): Promise<unknown> {
+  return request(
+    `/api/pulse/summaries/${encodeURIComponent(notificationId)}/report`,
+    jsonRequest("POST", updateId ? { reason, updateId } : { reason }),
+  );
+}
+/** Fetches the summary's spoken audio (audio/mpeg). 404 when TTS is disabled. */
+export async function fetchPulseSummaryAudio(notificationId: string, signal?: AbortSignal): Promise<Blob> {
+  const response = await apiFetch(`/api/pulse/summaries/${encodeURIComponent(notificationId)}/audio`, { signal });
+  if (!response.ok) throw new PulseApiError(`Request failed: ${response.status}`, response.status);
+  return response.blob();
+}
+export function fetchPulseCapabilities(signal?: AbortSignal): Promise<import("@/types/flow").PulseCapabilities> {
+  return request("/api/pulse/capabilities", { signal });
+}
+/** One project's updates, newest first, with comments and reactions (paged workspaces). */
+export function listProjectUpdates(projectId: string, signal?: AbortSignal): Promise<ProjectUpdate[]> {
+  return request(`/api/projects/${encodeURIComponent(projectId)}/updates`, { signal });
+}
+/** One initiative's updates, newest first, with comments and reactions (paged workspaces). */
+export function listInitiativeUpdates(initiativeId: string, signal?: AbortSignal): Promise<InitiativeUpdate[]> {
+  return request(`/api/initiatives/${encodeURIComponent(initiativeId)}/updates`, { signal });
+}
+/** The diff the server would record if an update were posted now. */
+export function fetchUpdateDiffPreview(
+  kind: "project" | "initiative",
+  id: string,
+  signal?: AbortSignal,
+): Promise<{ diff?: import("@/types/flow").PulseDiff; snapshot?: unknown }> {
+  return request(`/api/${kind === "project" ? "projects" : "initiatives"}/${encodeURIComponent(id)}/updates/diff-preview`, { signal });
 }

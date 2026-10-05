@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
+	"encoding/json"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -249,7 +251,7 @@ func runPulseScaleRoutes(t *testing.T, srv *server, repository *store.SQLiteStor
 				data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 			}
 			project := data.Projects[0]
-			data.ProjectUpdates[project.ID] = append(data.ProjectUpdates[project.ID], domain.ProjectUpdate{ID: "pulse-scale-update", ProjectID: project.ID, Body: "Scale update", User: data.Viewer, CreatedAt: now.Add(-2 * time.Hour)})
+			data.ProjectUpdates[project.ID] = append(data.ProjectUpdates[project.ID], domain.ProjectUpdate{ID: "pulse-scale-update", ProjectID: project.ID, Body: "Scale update", User: domain.User{ID: "usr_scale_author", Name: "Scale author"}, CreatedAt: now.Add(-5 * time.Hour)})
 		}
 		return nil
 	}); err != nil {
@@ -281,5 +283,172 @@ func runPulseScaleRoutes(t *testing.T, srv *server, repository *store.SQLiteStor
 	after, _ := repository.WorkspaceMetadataFields(workspace, "settings")
 	if cursors := pulseCursors(&after); len(cursors) < len(users.Users) {
 		t.Errorf("pulse tick advanced %d of %d users", len(cursors), len(users.Users))
+	}
+}
+
+// seedPulseScaleFixture adds a long-lived tenant's Pulse history to the scale
+// fixture: FLOW_SCALE_PROJECTS projects (default 300) sharing
+// FLOW_SCALE_PROJECT_UPDATES updates (default 4800) and FLOW_SCALE_INITIATIVES
+// initiatives (default 50) sharing FLOW_SCALE_INITIATIVE_UPDATES updates
+// (default 1000), each update with a snapshot, two comments and reactions.
+// A fixture that already holds them is left alone.
+func seedPulseScaleFixture(t *testing.T, db scaleDB) {
+	t.Helper()
+	const workspace = "test-workspace"
+	projectCount := scaleEnvInt("FLOW_SCALE_PROJECTS", 300)
+	projectUpdates := scaleEnvInt("FLOW_SCALE_PROJECT_UPDATES", 4800)
+	initiativeCount := scaleEnvInt("FLOW_SCALE_INITIATIVES", 50)
+	initiativeUpdates := scaleEnvInt("FLOW_SCALE_INITIATIVE_UPDATES", 1000)
+	var have int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' AND record_key LIKE 'pulse_scale_project_%'`, workspace).Scan(&have); err != nil {
+		t.Fatal(err)
+	}
+	if have >= projectCount {
+		return
+	}
+	started := time.Now()
+	var rootRaw []byte
+	if err := db.QueryRow(`SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&rootRaw); err != nil {
+		t.Fatal(err)
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(rootRaw, &root); err != nil {
+		t.Fatal(err)
+	}
+	shapes := map[string]string{}
+	_ = json.Unmarshal(root["_flowCollections"], &shapes)
+	for field, shape := range map[string]string{"projects": "array", "initiatives": "array", "projectUpdates": "updates", "initiativeUpdates": "updates"} {
+		if shapes[field] == "" {
+			shapes[field] = shape
+		}
+		if shapes[field] != shape {
+			t.Fatalf("%s is stored as %q", field, shapes[field])
+		}
+	}
+	orders := map[string]int64{}
+	for _, field := range []string{"projects", "initiatives"} {
+		var highest sql.NullInt64
+		if err := db.QueryRow(`SELECT MAX(collection_order) FROM workspace_metadata_records WHERE workspace_key=? AND field=?`, workspace, field).Scan(&highest); err != nil {
+			t.Fatal(err)
+		}
+		orders[field] = highest.Int64 + 1
+	}
+	var templateRaw []byte
+	if err := db.QueryRow(`SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projects' ORDER BY collection_order LIMIT 1`, workspace).Scan(&templateRaw); err != nil {
+		t.Fatal(err)
+	}
+	var template domain.Project
+	if err := json.Unmarshal(templateRaw, &template); err != nil {
+		t.Fatal(err)
+	}
+	records := &scaleInserter{t: t, db: db, prefix: `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data)`, columns: 5}
+	put := func(field, key string, order int64, value any) {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		records.add(workspace, field, key, order, raw)
+	}
+	type updateRecord struct {
+		Parent string `json:"parent"`
+		Item   any    `json:"item,omitempty"`
+	}
+	hashKey := func(parent, id string) string {
+		key, _ := json.Marshal([]string{parent, id})
+		return fmt.Sprintf("%x", sha256.Sum256(key))
+	}
+	parentKey := func(parent string) string {
+		return fmt.Sprintf("%x", sha256.Sum256([]byte("parent:"+parent)))
+	}
+	now := time.Now().UTC()
+	user := func(n int) domain.User {
+		id := fmt.Sprintf("usr_scale_%d", n%200)
+		return domain.User{ID: id, Name: fmt.Sprintf("Scale user %d", n%200), DisplayName: fmt.Sprintf("scale%d", n%200), Email: fmt.Sprintf("scale%d@example.test", n%200), Active: true}
+	}
+	comments := func(prefix string, n int, at time.Time) []domain.Comment {
+		return []domain.Comment{
+			{ID: prefix + "_c1", Body: "Looks good, thanks for the update.", Reactions: map[string][]string{"👍": {user(n + 1).ID}}, CreatedAt: at.Add(time.Hour), User: user(n + 1)},
+			{ID: prefix + "_c2", Body: "Can we get the milestone dates confirmed before the review?", Reactions: map[string][]string{}, CreatedAt: at.Add(2 * time.Hour), User: user(n + 2)},
+		}
+	}
+	snapshot := func(n int, at time.Time) *domain.PulseSnapshot {
+		priority, progress := n%4, float64(n%100)/100
+		return &domain.PulseSnapshot{CapturedAt: at, StatusID: "started", Status: "In Progress", Priority: &priority, PriorityLabel: "Medium", LeadID: user(n).ID, Lead: user(n).Name, TargetDate: "2026-12-31", Progress: &progress, Milestones: []domain.PulseMilestoneSnapshot{{ID: "ms_a", Name: "Alpha", Progress: progress, Total: 40, Completed: int64(n % 40)}, {ID: "ms_b", Name: "Beta", Progress: progress / 2, Total: 30, Completed: int64(n % 30)}}}
+	}
+	body := "We finished the API migration and started the rollout to the first customers. Next week we focus on performance, the dashboard polish and the remaining edge cases in the importer."
+	projectIDs := make([]string, projectCount)
+	perProject := max(projectUpdates/projectCount, 1)
+	for i := range projectCount {
+		project := template
+		project.ID = fmt.Sprintf("pulse_scale_project_%d", i)
+		projectIDs[i] = project.ID
+		project.Name, project.SlugID = fmt.Sprintf("Pulse scale project %d", i), fmt.Sprintf("pulse-scale-%d", i)
+		project.TeamIDs = []string{"team_test"}
+		project.MemberIDs = []string{user(i).ID, user(i + 1).ID, user(i + 2).ID}
+		project.Comments, project.Initiatives, project.Milestones, project.DescriptionRevisions = []domain.Comment{}, []string{}, []domain.ProjectMilestone{}, []domain.ProjectDescriptionRevision{}
+		project.CreatedAt, project.UpdatedAt = now.Add(-time.Duration(i)*time.Hour), now
+		put("projects", project.ID, orders["projects"], project)
+		orders["projects"]++
+		put("projectUpdates", parentKey(project.ID), 0, updateRecord{Parent: project.ID})
+		for j := range perProject {
+			at := now.Add(-time.Duration(j)*24*time.Hour - time.Duration(i)*time.Minute)
+			id := fmt.Sprintf("pulse_scale_pu_%d_%d", i, j)
+			update := domain.ProjectUpdate{ID: id, ProjectID: project.ID, Body: body, Health: "onTrack", CreatedAt: at, User: user(i + j), Comments: comments(id, i+j, at), Reactions: map[string][]string{"🎉": {user(i).ID, user(i + 3).ID}}, Attachments: []domain.Attachment{}, Snapshot: snapshot(i+j, at)}
+			put("projectUpdates", hashKey(project.ID, id), int64(j), updateRecord{Parent: project.ID, Item: update})
+		}
+	}
+	perInitiative := max(initiativeUpdates/initiativeCount, 1)
+	admin := domain.User{ID: "usr_admin", Name: "Test admin", Email: "admin@example.test", Active: true}
+	for i := range initiativeCount {
+		id := fmt.Sprintf("pulse_scale_initiative_%d", i)
+		linked := []string{}
+		for k := range 6 {
+			linked = append(linked, projectIDs[(i*6+k)%projectCount])
+		}
+		initiative := domain.Initiative{ID: id, Name: fmt.Sprintf("Pulse scale initiative %d", i), SlugID: fmt.Sprintf("pulse-initiative-%d", i), Color: "#5E6AD2", Status: "active", Health: "onTrack", Owner: &admin, Creator: admin, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: linked, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now.Add(-time.Duration(i) * time.Hour), UpdatedAt: now}
+		put("initiatives", id, orders["initiatives"], initiative)
+		orders["initiatives"]++
+		put("initiativeUpdates", parentKey(id), 0, updateRecord{Parent: id})
+		refs := []domain.PulseRef{}
+		for _, projectID := range linked {
+			refs = append(refs, domain.PulseRef{ID: projectID, Name: projectID})
+		}
+		for j := range perInitiative {
+			at := now.Add(-time.Duration(j)*24*time.Hour - time.Duration(i)*time.Minute)
+			updateID := fmt.Sprintf("pulse_scale_iu_%d_%d", i, j)
+			update := domain.InitiativeUpdate{ID: updateID, InitiativeID: id, Body: body, Health: "onTrack", CreatedAt: at, User: admin, Comments: comments(updateID, i+j, at), Reactions: map[string][]string{"👀": {user(i).ID}}, Attachments: []domain.Attachment{}, Snapshot: &domain.PulseSnapshot{CapturedAt: at, Status: "active", StatusID: "active", LeadID: admin.ID, Lead: admin.Name, Projects: refs}}
+			put("initiativeUpdates", hashKey(id, updateID), int64(j), updateRecord{Parent: id, Item: update})
+		}
+	}
+	records.flush()
+	root["_flowCollections"], _ = json.Marshal(shapes)
+	encoded, _ := json.Marshal(root)
+	if _, err := db.Exec(`UPDATE workspace_states SET data=? WHERE workspace_key=?`, encoded, workspace); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("seeded %d projects with %d updates and %d initiatives with %d updates in %s", projectCount, perProject*projectCount, initiativeCount, perInitiative*initiativeCount, time.Since(started).Round(time.Millisecond))
+}
+
+// runPulseUpdateScaleRoutes times posting, commenting on and reacting to
+// project and initiative updates in a workspace with thousands of stored
+// updates (seedPulseScaleFixture). Each write must touch only its own
+// project's or initiative's update records.
+func runPulseUpdateScaleRoutes(t *testing.T, timed scaleTimer, repeat int) {
+	t.Helper()
+	id := func(value map[string]any) string { text, _ := value["id"].(string); return text }
+	for i := range repeat {
+		project := fmt.Sprintf("pulse_scale_project_%d", 10+i)
+		initiative := fmt.Sprintf("pulse_scale_initiative_%d", 1+i%40)
+		n := strconv.Itoa(i)
+		update := timed("pulse: project update post", http.MethodPost, "/api/projects/"+project+"/updates", map[string]any{"body": "Scale pulse update " + n, "health": "atRisk"}, http.StatusCreated)
+		timed("pulse: project update comment", http.MethodPost, "/api/projects/"+project+"/updates/"+id(update)+"/comments", map[string]any{"body": "Scale comment " + n}, http.StatusCreated)
+		timed("pulse: project update reaction", http.MethodPost, "/api/projects/"+project+"/updates/pulse_scale_pu_"+strconv.Itoa(10+i)+"_3/reactions", map[string]any{"emoji": "🚀"})
+		timed("pulse: project update comment (old)", http.MethodPost, "/api/projects/"+project+"/updates/pulse_scale_pu_"+strconv.Itoa(10+i)+"_5/comments", map[string]any{"body": "Late comment " + n}, http.StatusCreated)
+		posted := timed("pulse: initiative update post", http.MethodPost, "/api/initiatives/"+initiative+"/updates", map[string]any{"body": "Scale initiative update " + n, "health": "onTrack"}, http.StatusCreated)
+		timed("pulse: initiative update comment", http.MethodPost, "/api/initiatives/"+initiative+"/updates/"+id(posted)+"/comments", map[string]any{"body": "Initiative comment " + n}, http.StatusCreated)
+		timed("pulse: initiative update reaction", http.MethodPost, "/api/initiatives/"+initiative+"/updates/"+id(posted)+"/reactions", map[string]any{"emoji": "👍"})
+		timed("pulse: feed following", http.MethodGet, "/api/pulse/feed?view=following&limit=30", nil)
+		timed("pulse: feed popular", http.MethodGet, "/api/pulse/feed?view=popular&limit=30", nil)
+		timed("pulse: unread", http.MethodGet, "/api/pulse/unread", nil)
 	}
 }

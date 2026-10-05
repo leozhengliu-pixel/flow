@@ -18,6 +18,9 @@ import { useIssueSearch } from '@/components/issue/use-issue-search'
 import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
 import { documentPath, issuePath, projectPath } from '@/lib/app-routes'
+import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
+import { PulseIcon } from '@/components/pulse/pulse-icon'
+import { changePulseSubscription, projectPulseSubscribed, sessionPulseChoice } from '@/lib/pulse-subscriptions'
 import { estimatePickerOptions } from '@/lib/estimates'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { labelTeamScopeIds, labelsForResource, setGroupedLabelSelected } from '@/lib/labels'
@@ -41,6 +44,8 @@ export interface ContextAction {
   /** Opens a nested page instead of running. */
   page?: CommandPage
   run?: () => void | Promise<unknown>
+  /** Toggle state shown with a check (e.g. "Subscribe to project updates in Pulse"). */
+  checked?: boolean
 }
 
 export interface PageOption {
@@ -302,6 +307,10 @@ function projectCommands(context: Extract<CommandContext, { kind: 'project' }>, 
     { id: 'ctx-project-initiative', label: 'Add to initiative…', icon: <Lightbulb/>, page: { id: 'projectInitiative', label: 'Add to initiative…' } },
     { id: 'ctx-project-url', label: 'Copy project URL', icon: <Clipboard/>, shortcut: ['⌘', '⇧', ','], keywords: 'link', run: () => { close(); return copyText(`${location.origin}${projectPath(data.workspace.urlKey, project)}`, t('Copied to clipboard')) } },
   ]
+  if (data.viewerRole !== 'guest' && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'pulse')) {
+    const subscribed = sessionPulseChoice('project', project.id) ?? projectPulseSubscribed(project, { viewerId: data.viewer.id, subscriptions: data.subscriptions, teamMembers: data.teamMembers, projects: data.projects, initiatives: data.initiatives })
+    actions.push({ id: 'ctx-project-pulse', label: 'Subscribe to project updates in Pulse', icon: <PulseIcon size={14}/>, keywords: 'feed pulse updates', checked: subscribed, run: () => { close(); return changePulseSubscription('project', project.id, !subscribed).catch(() => toast.error(t('Could not update subscription'))) } })
+  }
   let options: PageOption[] = []
   if (page?.id === 'projectStatus') options = [...data.projectStatuses].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)).map(status => ({ id: status.id, label: status.name, icon: <ProjectStatusIcon color={status.color} name={status.name} type={status.type}/>, current: project.status.id === status.id, select: update({ statusId: status.id }) }))
   if (page?.id === 'projectLead') options = [

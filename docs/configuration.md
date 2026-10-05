@@ -355,6 +355,52 @@ For a legacy OpenAI-compatible endpoint, use
 `FLOW_AGENT_PROTOCOL=openai-chat-completions`. Responses and Messages streams
 are normalized into text, reasoning, tool-call, error, and completion events.
 
+## Pulse summaries and audio
+
+Pulse summary notifications ("Daily Pulse" / "Weekly Pulse") are created by the
+delivery scheduler at 06:00 in each member's time zone (the browser zone the
+web app reports, else the member's first team's zone, else UTC). Opening a
+summary in the Inbox generates a short summary of every update once and caches
+it on the notification:
+
+- When Flow Agent is enabled (`FLOW_AGENT_ENABLED=true`), the configured Agent
+  model writes one or two sentences per update with a strict no-invention
+  prompt.
+- Without an Agent, or when the provider fails, Flow falls back to an
+  extractive summary (the first sentences of each update) and marks the
+  summary `ai: false`. A fallback caused by a provider failure is retried on a
+  later open (after 10 minutes, doubling up to 6 hours, at most 5 attempts).
+- Update text is sent as delimited, untrusted content; a summary is accepted
+  only for the update it names, so one update cannot rewrite another's.
+
+"Listen" reads the summary text (at most 4000 characters) aloud through an
+OpenAI-compatible text-to-speech endpoint, `POST {FLOW_TTS_BASE_URL}/audio/speech`.
+The MP3 is cached in the configured object store (`FLOW_STORAGE_DRIVER`), keyed
+by a hash of the text, model and voice, so each summary is synthesized once.
+`GET /api/pulse/capabilities` reports `{ "aiSummaries", "audio" }` so the web app
+hides "Listen" when speech is disabled; the audio endpoint returns 404 then.
+Workspace AI policy applies to both: in a HIPAA workspace, or when the
+workspace turns AI off (Settings > Features, the `ai` feature), summaries are
+extractive (`ai: false`), `capabilities` reports both as `false` and the audio
+endpoint returns 404.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_TTS_ENABLED` | `false` | Enable "Listen" for Pulse summaries. |
+| `FLOW_TTS_BASE_URL` | `FLOW_AGENT_BASE_URL` | OpenAI-compatible API base URL that serves `/audio/speech`. |
+| `FLOW_TTS_API_KEY` | `FLOW_AGENT_API_KEY` when `FLOW_TTS_BASE_URL` equals `FLOW_AGENT_BASE_URL` | Bearer credential for the speech endpoint; `_FILE` is supported. Required when the speech endpoint is not the Agent provider: without it Flow logs a startup warning and turns "Listen" off, so the Agent key is never sent to another host. |
+| `FLOW_TTS_MODEL` | `gpt-4o-mini-tts` | Speech model identifier. |
+| `FLOW_TTS_VOICE` | `alloy` | Voice name passed to the speech endpoint. |
+| `FLOW_TTS_TIMEOUT` | `60s` | Per-request timeout for speech synthesis. |
+
+```dotenv
+FLOW_TTS_ENABLED=true
+FLOW_TTS_BASE_URL=https://api.openai.com/v1
+FLOW_TTS_API_KEY=secret
+FLOW_TTS_MODEL=gpt-4o-mini-tts
+FLOW_TTS_VOICE=alloy
+```
+
 ## Telemetry
 
 Telemetry is opt-in. When enabled, Flow exports HTTP traces and request metrics through OTLP/HTTP.

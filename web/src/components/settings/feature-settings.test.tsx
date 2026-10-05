@@ -1,14 +1,15 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap } from '@/test/fixtures'
+import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { BootstrapData, WorkspaceSettings } from '@/types/flow'
-import { updateWorkspacePreferences } from '@/lib/api'
+import { updateUserSettings, updateWorkspacePreferences } from '@/lib/api'
+import { ActionDialogHost } from '@/components/ui/action-dialogs'
 import { FeatureSettingsPage } from './feature-settings'
 
-vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), updateWorkspacePreferences: vi.fn() }))
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), updateWorkspacePreferences: vi.fn(), updateUserSettings: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.setItem('flow:locale','en-US') })
 const initial = { sessionDurationDays:30, featureFlags:{'customer-requests':true,initiatives:true,pulse:true},featureSettings:{} } as unknown as WorkspaceSettings
@@ -130,16 +131,88 @@ it('rolls back and reports a failed save instead of leaving a false disabled sta
   expect(toggle).toBeEnabled()
 })
 
-it('disables Pulse without requesting another workspace snapshot',async()=>{
+it('asks before disabling Pulse for the entire workspace and saves only after confirming',async()=>{
+  const user=userEvent.setup()
   vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce({...initial,featureFlags:{...initial.featureFlags,pulse:false}})
   const reload=vi.fn()
-  render(page(reload,'pulse'))
+  render(<>{page(reload,'pulse')}<ActionDialogHost/></>)
   const toggle=screen.getByRole('checkbox',{name:'Enable Pulse'})
-  fireEvent.click(toggle)
+  await user.click(toggle)
+  const dialog=await screen.findByRole('dialog',{name:'Disable Pulse for entire workspace?'})
+  expect(updateWorkspacePreferences).not.toHaveBeenCalled()
+  await user.click(within(dialog).getByRole('button',{name:'Cancel'}))
+  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'Disable Pulse for entire workspace?'})).not.toBeInTheDocument())
+  expect(updateWorkspacePreferences).not.toHaveBeenCalled()
+  expect(toggle).toBeChecked()
+  await user.click(toggle)
+  await user.click(within(await screen.findByRole('dialog',{name:'Disable Pulse for entire workspace?'})).getByRole('button',{name:'Disable'}))
+  await waitFor(()=>expect(toggle).not.toBeChecked())
   await waitFor(()=>expect(toggle).toBeEnabled())
-  expect(toggle).not.toBeChecked()
+  expect(updateWorkspacePreferences).toHaveBeenCalledTimes(1)
   expect(updateWorkspacePreferences).toHaveBeenCalledWith({featureFlags:{pulse:false}},'workspace')
   expect(reload).not.toHaveBeenCalled()
+})
+
+it('enables Pulse with a Daily workspace schedule when none was chosen',async()=>{
+  const off={...initial,featureFlags:{...initial.featureFlags,pulse:false},featureSettings:{}} as unknown as WorkspaceSettings
+  vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce({...off,featureFlags:{...off.featureFlags,pulse:true},featureSettings:{pulseWorkspaceSchedule:'daily'}} as unknown as WorkspaceSettings)
+  render(page(vi.fn(),'pulse',vi.fn(),{workspaceSettings:off}))
+  fireEvent.click(screen.getByRole('checkbox',{name:'Enable Pulse'}))
+  expect(updateWorkspacePreferences).toHaveBeenCalledWith({featureFlags:{pulse:true},featureSettings:{pulseWorkspaceSchedule:'daily'}},'workspace')
+  await waitFor(()=>expect(screen.getByRole('checkbox',{name:'Enable Pulse'})).toBeEnabled())
+})
+
+it('keeps an existing workspace schedule when Pulse is enabled again',()=>{
+  const off={...initial,featureFlags:{...initial.featureFlags,pulse:false},featureSettings:{pulseWorkspaceSchedule:'weekly'}} as unknown as WorkspaceSettings
+  vi.mocked(updateWorkspacePreferences).mockResolvedValueOnce(off)
+  render(page(vi.fn(),'pulse',vi.fn(),{workspaceSettings:off}))
+  fireEvent.click(screen.getByRole('checkbox',{name:'Enable Pulse'}))
+  expect(updateWorkspacePreferences).toHaveBeenCalledWith({featureFlags:{pulse:true}},'workspace')
+})
+
+it('dims and disables the summary schedules while Pulse is off',()=>{
+  const off={...initial,featureFlags:{...initial.featureFlags,pulse:false}} as WorkspaceSettings
+  render(page(vi.fn(),'pulse',vi.fn(),{workspaceSettings:off}))
+  const section=screen.getByRole('heading',{name:'Summary notifications'}).closest('section')
+  expect(section).toHaveClass('is-disabled')
+  expect(section).toHaveAttribute('aria-disabled','true')
+  expect(screen.getByRole('combobox',{name:'Default workspace schedule'})).toBeDisabled()
+  expect(screen.getByRole('combobox',{name:'Your personal schedule'})).toBeDisabled()
+})
+
+it('describes only project updates when initiatives are off',()=>{
+  render(page(vi.fn(),'pulse',vi.fn(),{workspaceSettings:{...initial,featureFlags:{...initial.featureFlags,initiatives:false}} as WorkspaceSettings}))
+  expect(screen.getByText('Pulse centralizes all your project updates into a single feed. Members can choose to receive summary notifications daily or weekly.')).toBeVisible()
+})
+
+it('saves the personal Pulse schedule as a user setting that overrides the workspace default',async()=>{
+  const user=userEvent.setup()
+  vi.mocked(updateUserSettings).mockResolvedValueOnce({userId:viewer.id,pulseSchedule:'weekly'} as never)
+  render(page(vi.fn(),'pulse',vi.fn(),{userSettings:{}}))
+  const personal=screen.getByRole('combobox',{name:'Your personal schedule'})
+  expect(personal).toHaveTextContent('Daily')
+  await user.click(personal)
+  await user.click(await screen.findByRole('menuitem',{name:'Weekly'}))
+  expect(updateUserSettings).toHaveBeenCalledWith({pulseSchedule:'weekly'},'workspace')
+  expect(updateWorkspacePreferences).not.toHaveBeenCalled()
+  expect(screen.getByRole('combobox',{name:'Your personal schedule'})).toHaveTextContent('Weekly')
+})
+
+it('rolls back the personal Pulse schedule when saving fails',async()=>{
+  const user=userEvent.setup()
+  vi.mocked(updateUserSettings).mockRejectedValueOnce(new Error('Offline'))
+  render(page(vi.fn(),'pulse',vi.fn(),{userSettings:{[viewer.id]:{userId:viewer.id,pulseSchedule:'never'}} as never}))
+  await user.click(screen.getByRole('combobox',{name:'Your personal schedule'}))
+  await user.click(await screen.findByRole('menuitem',{name:'Daily'}))
+  await waitFor(()=>expect(toast.error).toHaveBeenCalledWith('Offline'))
+  expect(screen.getByRole('combobox',{name:'Your personal schedule'})).toHaveTextContent('Never')
+})
+
+it('keeps the Pulse switch and workspace schedule admin-only',()=>{
+  render(page(vi.fn(),'pulse',vi.fn(),{viewerRole:'member'}))
+  expect(screen.getByRole('checkbox',{name:'Enable Pulse'})).toBeDisabled()
+  expect(screen.getByRole('combobox',{name:'Default workspace schedule'})).toBeDisabled()
+  expect(screen.getByRole('combobox',{name:'Your personal schedule'})).toBeEnabled()
 })
 
 it('edits the complete initiative update schedule and opens initiative labels',async()=>{

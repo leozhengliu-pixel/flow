@@ -2343,8 +2343,21 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
 		})
 		if index >= 0 {
+			if input.Events == nil && len(data.Subscriptions[index].Events) == 0 {
+				// A subscribe without events on a record that only held opt-outs
+				// (a Pulse unsubscribe) subscribes to everything again; left as
+				// is it would still read as "not subscribed".
+				data.Subscriptions[index].OptOutEvents = nil
+			}
 			if input.Events != nil {
 				data.Subscriptions[index].Events = slices.Clone(*input.Events)
+				// Choosing Pulse updates again lifts an earlier explicit opt-out.
+				if slices.Contains(*input.Events, pulseSubscriptionEvent) {
+					data.Subscriptions[index].OptOutEvents = slices.DeleteFunc(slices.Clone(data.Subscriptions[index].OptOutEvents), func(event string) bool { return event == pulseSubscriptionEvent })
+					if len(data.Subscriptions[index].OptOutEvents) == 0 {
+						data.Subscriptions[index].OptOutEvents = nil
+					}
+				}
 			}
 			created = data.Subscriptions[index]
 			return nil
@@ -2360,8 +2373,14 @@ func (s *server) addSubscription(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, created)
 }
 
+// removeSubscription is the generic unsubscribe. The Pulse choices on the
+// record are separate (PUT/DELETE /api/pulse/subscriptions): an explicit Pulse
+// subscribe survives as events ["pulse"], and a Pulse opt-out survives as a
+// record with no events. A kept record is returned (200); 204 means the
+// record is gone.
 func (s *server) removeSubscription(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
+	var kept *domain.Subscription
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "subscription.removed", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
 		if kind == "document" {
 			document, _ := documentByID(data, id)
@@ -2370,11 +2389,31 @@ func (s *server) removeSubscription(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		setDocumentSubscription(data, kind, id, data.Viewer.ID, false)
+		kept = nil
+		for index := range data.Subscriptions {
+			item := &data.Subscriptions[index]
+			if item.UserID != data.Viewer.ID || item.ResourceType != kind || item.ResourceID != id {
+				continue
+			}
+			pulse := slices.Contains(item.Events, pulseSubscriptionEvent)
+			item.Events = nil
+			if pulse {
+				item.Events = []string{pulseSubscriptionEvent}
+			}
+			if pulse || len(item.OptOutEvents) > 0 {
+				copied := *item
+				kept = &copied
+			}
+		}
 		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
-			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
+			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id && len(item.Events) == 0 && len(item.OptOutEvents) == 0
 		})
 		return nil
 	})
+	if err == nil && kept != nil {
+		writeJSON(w, http.StatusOK, kept)
+		return
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 

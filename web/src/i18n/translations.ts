@@ -1,3 +1,5 @@
+import { pulseZhCN } from './translations-pulse';
+
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
   "Save as team default": "保存为团队默认",
@@ -5592,3 +5594,5 @@ Object.assign(zhCN, {
   "Recurring issue created": "已创建周期性事项",
   "Convert into": "转换为",
 });
+
+Object.assign(zhCN, pulseZhCN);

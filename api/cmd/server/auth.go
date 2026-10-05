@@ -543,6 +543,9 @@ func featureForPath(path string) string {
 	if (strings.HasPrefix(path, "/api/issues/") || strings.HasPrefix(path, "/api/issue-records/")) && strings.HasSuffix(path, "/releases") {
 		return "releases"
 	}
+	if path == "/api/pulse" || strings.HasPrefix(path, "/api/pulse/") {
+		return "pulse"
+	}
 	for prefix, feature := range map[string]string{"/api/documents": "documents", "/api/customers": "customer-requests", "/api/customer-requests": "customer-requests", "/api/releases": "releases", "/api/release-pipelines": "releases", "/api/asks": "asks", "/api/initiatives": "initiatives", "/api/dashboards": "dashboards"} {
 		if strings.HasPrefix(path, prefix) {
 			return feature
@@ -710,7 +713,7 @@ func teamIDFromWorkspacePath(path string) string {
 }
 
 func guestRestrictedPath(path string) bool {
-	return strings.HasPrefix(path, "/api/initiatives") || strings.HasPrefix(path, "/api/customers") || strings.HasPrefix(path, "/api/customer-requests") || strings.HasPrefix(path, "/api/views") || strings.HasPrefix(path, "/api/analytics") || strings.HasPrefix(path, "/api/dashboards")
+	return strings.HasPrefix(path, "/api/pulse/") || strings.HasPrefix(path, "/api/initiatives") || strings.HasPrefix(path, "/api/customers") || strings.HasPrefix(path, "/api/customer-requests") || strings.HasPrefix(path, "/api/views") || strings.HasPrefix(path, "/api/analytics") || strings.HasPrefix(path, "/api/dashboards")
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {
@@ -737,6 +740,11 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	// Bootstrap performs the viewer projection itself. Repeating it here loads
 	// every issue and discussion once before the handler loads them again.
 	if r.URL.Path == "/api/bootstrap" {
+		return true
+	}
+	// Pulse handlers check visibility per update from the shared feed index
+	// and summaries are read by recipient; no workspace projection is needed.
+	if strings.HasPrefix(r.URL.Path, "/api/pulse/") {
 		return true
 	}
 	if boundedIssueAuthorizationRequest(r) {

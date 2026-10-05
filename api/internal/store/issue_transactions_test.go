@@ -65,6 +65,8 @@ func TestIssueRecordTransactionsPreserveScopeAndRollback(t *testing.T) {
 	if child.Number <= parent.Number {
 		t.Fatal("creation reused the issue sequence")
 	}
+	// Each creation also signals its new notification (notification.created).
+	realtime = slices.DeleteFunc(realtime, func(event domain.RealtimeEvent) bool { return event.Type == "notification.created" })
 	if len(hooks) != 2 || len(realtime) != 2 || realtime[1].AggregateID != child.ID {
 		t.Fatal("committed creation did not publish the entity")
 	}

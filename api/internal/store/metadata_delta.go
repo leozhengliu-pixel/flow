@@ -174,6 +174,26 @@ func metadataValueEqual(a, b reflect.Value) bool {
 			}
 		}
 		return true
+	case reflect.Map:
+		if a.IsNil() != b.IsNil() || a.Len() != b.Len() {
+			return false
+		}
+		if a.Len() == 0 || a.Pointer() == b.Pointer() {
+			return true
+		}
+		if a.Type().Key().Kind() != reflect.String {
+			return reflect.DeepEqual(a.Interface(), b.Interface())
+		}
+		// Per-key compare so slices of structs (project updates by project)
+		// take the memory fast path instead of a deep walk.
+		iter := a.MapRange()
+		for iter.Next() {
+			other := b.MapIndex(iter.Key())
+			if !other.IsValid() || !metadataValueEqual(addressable(iter.Value()), addressable(other)) {
+				return false
+			}
+		}
+		return true
 	case reflect.Pointer:
 		if a.IsNil() || b.IsNil() {
 			return a.IsNil() == b.IsNil()
@@ -226,6 +246,15 @@ func (s *SQLiteStore) writeWorkspaceMetadataDelta(ctx context.Context, tx *sqlTx
 	// element; everything else goes through the per-field record sync.
 	slow := changed[:0:0]
 	for _, field := range changed {
+		if storedShapes[field.name] == "updates" {
+			done, err := writeUpdatesFieldDelta(ctx, tx, workspace, refs, field, reflect.ValueOf(&before).Elem().Field(field.index), reflect.ValueOf(&after).Elem().Field(field.index))
+			if err != nil {
+				return false, err
+			}
+			if done {
+				continue
+			}
+		}
 		if storedShapes[field.name] == "array" {
 			done, err := writeArrayFieldDelta(ctx, tx, workspace, refs, field, reflect.ValueOf(&before).Elem().Field(field.index), reflect.ValueOf(&after).Elem().Field(field.index))
 			if err != nil {
@@ -478,4 +507,116 @@ func writeArrayFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs
 		}
 	}
 	return true, nil
+}
+
+// addressable returns value itself when it can be addressed (slice elements,
+// struct fields) or an addressable copy (map values), so metadataValueEqual
+// can compare its memory.
+func addressable(value reflect.Value) reflect.Value {
+	if value.CanAddr() {
+		return value
+	}
+	copied := reflect.New(value.Type()).Elem()
+	copied.Set(value)
+	return copied
+}
+
+// writeUpdatesFieldDelta persists a changed per-parent update collection
+// (projectUpdates, initiativeUpdates: parent id -> updates) by rewriting only
+// the parents whose update list changed. Only those parents' updates are
+// encoded, and only their stored rows (whose keys derive from the parent and
+// update ids) are read, so a comment on one project's update costs the same
+// however many updates the workspace holds. It reports false (and writes
+// nothing) when the stored rows differ from the before snapshot, leaving the
+// full field sync to repair them.
+func writeUpdatesFieldDelta(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, field metadataField, before, after reflect.Value) (bool, error) {
+	if before.Kind() != reflect.Map || before.Type().Key().Kind() != reflect.String || before.IsNil() || after.IsNil() {
+		return false, nil
+	}
+	partialBefore, partialAfter := reflect.MakeMap(before.Type()), reflect.MakeMap(after.Type())
+	changed := 0
+	iter := after.MapRange()
+	for iter.Next() {
+		previous := before.MapIndex(iter.Key())
+		if previous.IsValid() && metadataValueEqual(addressable(previous), addressable(iter.Value())) {
+			continue
+		}
+		partialAfter.SetMapIndex(iter.Key(), iter.Value())
+		if previous.IsValid() {
+			partialBefore.SetMapIndex(iter.Key(), previous)
+		}
+		changed++
+	}
+	iter = before.MapRange()
+	for iter.Next() {
+		if !after.MapIndex(iter.Key()).IsValid() {
+			partialBefore.SetMapIndex(iter.Key(), iter.Value())
+			changed++
+		}
+	}
+	if changed == 0 {
+		return true, nil
+	}
+	split := func(value reflect.Value) (map[metadataRecordKey]metadataRecord, bool, error) {
+		raw, err := json.Marshal(value.Interface())
+		if err != nil {
+			return nil, false, err
+		}
+		var items map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
+			return nil, false, err
+		}
+		records, ok := splitUpdateMetadata(field.name, items)
+		return records, ok, nil
+	}
+	wanted, ok, err := split(partialAfter)
+	if err != nil || !ok {
+		return false, err
+	}
+	known, ok, err := split(partialBefore)
+	if err != nil || !ok {
+		return false, err
+	}
+	lookup := make([]string, 0, len(wanted)+len(known))
+	for key := range known {
+		lookup = append(lookup, key.key)
+	}
+	for key := range wanted {
+		if _, ok := known[key]; !ok {
+			lookup = append(lookup, key.key)
+		}
+	}
+	previous := make(map[metadataRecordKey]metadataRecord, len(known))
+	for start := 0; start < len(lookup); start += 500 {
+		chunk := lookup[start:min(start+500, len(lookup))]
+		clause, args := bindList("record_key", chunk)
+		rows, err := tx.QueryContext(ctx, `SELECT record_key,collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field=? AND `+clause, append([]any{workspace, field.name}, args...)...)
+		if err != nil {
+			return false, err
+		}
+		for rows.Next() {
+			key := metadataRecordKey{field: field.name}
+			var value metadataRecord
+			if err := rows.Scan(&key.key, &value.order); err != nil {
+				rows.Close()
+				return false, err
+			}
+			if stored, ok := known[key]; ok {
+				value.data = stored.data
+			}
+			previous[key] = value
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return false, err
+		}
+	}
+	for key := range known {
+		if _, ok := previous[key]; !ok {
+			// The stored rows differ from the snapshot; let the full sync fix it.
+			return false, nil
+		}
+	}
+	return true, applyMetadataRecords(ctx, tx, workspace, refs, map[string]string{field.name: "updates"}, wanted, previous)
 }

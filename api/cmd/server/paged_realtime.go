@@ -135,7 +135,50 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		event.Payload, _ = json.Marshal(payload)
 		return event, true, nil
 	}
+	if visible, decided := s.pagedPulseSourceVisible(r, data, event); decided {
+		return event, visible, nil
+	}
 	return event, realtimeEventVisible(data, event), nil
+}
+
+// pagedPulseSourceVisible authorizes project and initiative events (updates,
+// comments, reactions, edits) for paged clients, whose request metadata
+// carries no projects or initiatives: the aggregate's visibility is checked
+// against the shared project/initiative snapshot with the viewer's teams.
+// decided is false for events of other kinds or unknown aggregates.
+func (s *server) pagedPulseSourceVisible(r *http.Request, data domain.Bootstrap, event domain.RealtimeEvent) (visible, decided bool) {
+	kind := ""
+	switch {
+	case strings.HasPrefix(event.Type, "project.") || strings.HasPrefix(event.Type, "project_update."):
+		kind = "project"
+	case strings.HasPrefix(event.Type, "initiative.") || strings.HasPrefix(event.Type, "initiative_update."):
+		kind = "initiative"
+	default:
+		return false, false
+	}
+	if event.AggregateID == "" {
+		return false, false
+	}
+	snapshot, ok := s.store.PulseSources(workspaceKey(r))
+	if !ok {
+		return false, true
+	}
+	rules := newPulseRules(snapshot)
+	role := data.ViewerRole
+	if s.authDisabled && role == "" {
+		role = "admin"
+	}
+	viewer := newPulseViewer(snapshot, data.Viewer.ID, role, data.TeamMembers, pulseRestrictTeams(r))
+	if kind == "project" {
+		if project := rules.projects[event.AggregateID]; project != nil {
+			return rules.projectVisible(viewer, project), true
+		}
+		return false, false
+	}
+	if initiative := rules.initiatives[event.AggregateID]; initiative != nil {
+		return rules.initiativeVisible(viewer, initiative), true
+	}
+	return false, true
 }
 
 func (s *server) pagedIssueVisible(r *http.Request, id string) bool {

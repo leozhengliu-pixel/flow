@@ -5642,6 +5642,34 @@
       }
     },
     "/api/initiatives/{id}/updates": {
+      "get": {
+        "operationId": "get_initiatives_id_updates",
+        "tags": [
+          "initiatives"
+        ],
+        "summary": "GET /api/initiatives/{id}/updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
       "post": {
         "operationId": "post_initiatives_id_updates",
         "tags": [
@@ -5885,6 +5913,36 @@
           },
           {
             "name": "updateId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/initiatives/{id}/updates/diff-preview": {
+      "get": {
+        "operationId": "get_initiatives_id_updates_diff_preview",
+        "tags": [
+          "initiatives"
+        ],
+        "summary": "GET /api/initiatives/{id}/updates/diff-preview",
+        "parameters": [
+          {
+            "name": "id",
             "in": "path",
             "required": true,
             "schema": {
@@ -11514,6 +11572,34 @@
       }
     },
     "/api/projects/{id}/updates": {
+      "get": {
+        "operationId": "get_projects_id_updates",
+        "tags": [
+          "projects"
+        ],
+        "summary": "GET /api/projects/{id}/updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
       "post": {
         "operationId": "post_projects_id_updates",
         "tags": [
@@ -11764,6 +11850,402 @@
             }
           }
         ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/projects/{id}/updates/diff-preview": {
+      "get": {
+        "operationId": "get_projects_id_updates_diff_preview",
+        "tags": [
+          "projects"
+        ],
+        "summary": "GET /api/projects/{id}/updates/diff-preview",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/capabilities": {
+      "get": {
+        "operationId": "get_pulse_capabilities",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/capabilities",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/feed": {
+      "get": {
+        "operationId": "get_pulse_feed",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/feed",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/seen": {
+      "post": {
+        "operationId": "post_pulse_seen",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "POST /api/pulse/seen",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/subscriptions/{type}/{id}": {
+      "delete": {
+        "operationId": "delete_pulse_subscriptions_type_id",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "DELETE /api/pulse/subscriptions/{type}/{id}",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "get": {
+        "operationId": "get_pulse_subscriptions_type_id",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/subscriptions/{type}/{id}",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_pulse_subscriptions_type_id",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "PUT /api/pulse/subscriptions/{type}/{id}",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/subscriptions/initiative/{id}/project-updates": {
+      "delete": {
+        "operationId": "delete_pulse_subscriptions_initiative_id_project_updates",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "DELETE /api/pulse/subscriptions/initiative/{id}/project-updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "get": {
+        "operationId": "get_pulse_subscriptions_initiative_id_project_updates",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/subscriptions/initiative/{id}/project-updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_pulse_subscriptions_initiative_id_project_updates",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "PUT /api/pulse/subscriptions/initiative/{id}/project-updates",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/summaries/{id}": {
+      "get": {
+        "operationId": "get_pulse_summaries_id",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/summaries/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/summaries/{id}/audio": {
+      "get": {
+        "operationId": "get_pulse_summaries_id_audio",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/summaries/{id}/audio",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/summaries/{id}/report": {
+      "post": {
+        "operationId": "post_pulse_summaries_id_report",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "POST /api/pulse/summaries/{id}/report",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/pulse/unread": {
+      "get": {
+        "operationId": "get_pulse_unread",
+        "tags": [
+          "pulse"
+        ],
+        "summary": "GET /api/pulse/unread",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

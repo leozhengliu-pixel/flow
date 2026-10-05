@@ -9,6 +9,7 @@ import { InboxPageShell, type InboxDisplayOptions, type InboxTab } from './inbox
 import { useInboxController, type InboxPersistenceAdapter } from './inbox-controller'
 import type { InboxFilterCondition, InboxFilterOptions } from './inbox-filter-builder'
 import type { InboxNotificationRowData } from './notification-row'
+import type { PulseFrequency } from './pulse-summary-model'
 
 export interface InboxPageAdapter extends InboxPersistenceAdapter {
   markAllRead: () => Promise<void>
@@ -48,6 +49,9 @@ export interface InboxPageProps {
   onOpenSettings?: () => void
   onCopyLink?: (notification: InboxNotificationRowData) => void
   onCopyIdentifier?: (notification: InboxNotificationRowData) => void
+  /** Pulse summaries: the viewer's effective schedule and the "Pulse frequency" setter. */
+  pulseFrequency?: PulseFrequency
+  onPulseFrequencyChange?: (frequency: PulseFrequency) => void | Promise<void>
   subscribed?: (notification: InboxNotificationRowData) => boolean
   onSubscribeChange?: (notification: InboxNotificationRowData, subscribed: boolean) => void
   loading?: boolean
@@ -118,6 +122,8 @@ export function InboxPage(props: InboxPageProps) {
       onCreateRelation={detail.onCreateRelation}
       onCopyLink={props.onCopyLink}
       onCopyIdentifier={props.onCopyIdentifier}
+      pulseFrequency={props.pulseFrequency}
+      onPulseFrequencyChange={props.onPulseFrequencyChange}
     >
       {detail.loading ? <InboxDetailLoading /> : detail.error ? <InboxDetailError onRetry={detail.retry ?? props.onRetryLoad} /> : detail.content}
     </InboxDetailPreview>
@@ -165,6 +171,8 @@ export function InboxPage(props: InboxPageProps) {
               onFavoriteChange={(notification, favorite) => void controller.actions.setFavorite(notification, favorite).catch(() => undefined)}
               onCopyLink={props.onCopyLink}
               onCopyIdentifier={props.onCopyIdentifier}
+              pulseFrequency={props.pulseFrequency}
+              onPulseFrequencyChange={props.onPulseFrequencyChange ? (_, frequency) => props.onPulseFrequencyChange?.(frequency) : undefined}
             />
           </InboxListBoundary>
         )}

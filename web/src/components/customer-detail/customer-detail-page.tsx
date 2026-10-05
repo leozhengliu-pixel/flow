@@ -39,6 +39,7 @@ import {
 import type { BootstrapData, Customer, CustomerRequest } from "@/types/flow";
 
 import "./customer-detail-page.css";
+import { isActiveSubscription } from "@/lib/subscription-records";
 
 export function CustomerDetailPage({
   data,
@@ -71,7 +72,7 @@ export function CustomerDetailPage({
   );
   const subscribed = data.subscriptions.some(
     (item) =>
-      item.resourceType === "customer" && item.resourceId === customer.id,
+      item.resourceType === "customer" && item.resourceId === customer.id && isActiveSubscription(item),
   );
   useEffect(() => {
     const openRequest = (event: KeyboardEvent) => {

@@ -362,7 +362,9 @@ func TestPulseScheduleCreatesOneSummaryWithoutReplacingHistory(t *testing.T) {
 			data.TeamSettings[id] = settings
 		}
 		project := data.Projects[0]
-		data.ProjectUpdates[project.ID] = append(data.ProjectUpdates[project.ID], domain.ProjectUpdate{ID: "pulse-test-update", ProjectID: project.ID, Body: "A new update", User: data.Viewer, CreatedAt: now.Add(-2 * time.Hour)})
+		// Summaries never include the recipient's own updates.
+		author := domain.User{ID: "usr_member", Name: "Test member", DisplayName: "Test member"}
+		data.ProjectUpdates[project.ID] = append(data.ProjectUpdates[project.ID], domain.ProjectUpdate{ID: "pulse-test-update", ProjectID: project.ID, Body: "A new update", User: author, CreatedAt: now.Add(-5 * time.Hour)})
 		data.Notifications = append(data.Notifications, domain.Notification{ID: "keep-notification", RecipientID: userID, Type: "activity", CreatedAt: now.Add(-48 * time.Hour), UpdatedAt: now.Add(-48 * time.Hour)})
 		return nil
 	})
@@ -395,7 +397,7 @@ func TestPulseScheduleCreatesOneSummaryWithoutReplacingHistory(t *testing.T) {
 	if _, _, due := pulseWindow("weekly", time.Date(2026, 9, 15, 15, 0, 0, 0, time.UTC), zone); due {
 		t.Fatal("weekly schedule ran on Tuesday")
 	}
-	if _, _, due := pulseWindow("daily", time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC), zone); due {
-		t.Fatal("daily summary sent before local 9am")
+	if _, _, due := pulseWindow("daily", time.Date(2026, 9, 14, 9, 59, 0, 0, time.UTC), zone); due {
+		t.Fatal("daily summary sent before local 6am")
 	}
 }

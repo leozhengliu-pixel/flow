@@ -1,5 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
+import { projectHasUpdates } from '@/lib/project-has-updates'
+import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { BarChart3, Bell, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, Copy, Edit3, HeartPulse, ListFilter, MessageSquare, MoreHorizontal, MousePointer2, Plus, Search, Send, Sparkles, Star, Tags, Trash2, UserRound, Users, X } from 'lucide-react'
@@ -92,6 +94,7 @@ export function InitiativesPage(props: Props) {
   const [grouping, setGrouping] = useState<Grouping>(() => displayDefault ? defaultGrouping : readInitiativeSetting('grouping', ['none','contributingTeam','leadTeam','owner','health','status','priority','label'], 'none'))
   const [showTeamInitiatives, setShowTeamInitiatives] = useState(() => displayDefault ? defaultShowTeam : localStorage.getItem('flow:initiatives:show-team') !== 'false')
   const [updatesInitiative, setUpdatesInitiative] = useState<Initiative>()
+  useRequestEntityUpdates('initiative', [updatesInitiative?.id])
   const [detailsOpen, setDetailsOpen] = useState(() => window.innerWidth > 800 && localStorage.getItem('flow:initiatives:details-open') === 'true')
 
   const visible = useMemo(() => scopedInitiatives.filter(item => {
@@ -239,7 +242,7 @@ function InitiativeRow({ contextOnly, depth, childCount, collapsed, onToggleChil
 }) {
   const linked = projects.filter(project => projectIds.has(project.id))
   const completed = linked.filter(project => project.status.type === 'completed').length
-  const needingUpdate = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !(projectUpdates[project.id]?.length)).length
+  const needingUpdate = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !projectHasUpdates(project, projectUpdates)).length
   const selectedLabels = labels.filter(label => initiative.labelIds.includes(label.id))
   return <ContextMenu.Root><ContextMenu.Trigger asChild><a aria-selected={selected} className={`li-row${contextOnly ? " is-context-only" : ""}`} data-selected={selected} href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onOpen(initiative) }} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === ' ') { event.preventDefault(); onSelect() } }} style={{ gridTemplateColumns: grid }}>
     <button aria-label="Select initiative" className="li-select" onClick={event => { event.preventDefault(); event.stopPropagation(); onSelect() }} style={{ gridColumn: 2 }} type="button"><span>{selected && <Check size={11}/>}</span></button>
@@ -255,7 +258,7 @@ function InitiativeRow({ contextOnly, depth, childCount, collapsed, onToggleChil
     if (property === 'target') return <InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'status') return <InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={onUpdate}/>
     if (property === 'projects') return <button aria-label={`${completed} of ${linked.length} project completed. Click to view projects.`} className="li-project-count" onClick={() => onOpen(initiative, 'projects')} type="button"><span>{completed} /</span> {linked.length}</button>
-    if (property === 'health') return <button aria-label={initiativeUpdates.length ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><span>{initiativeUpdates.length ? healthLabel(initiative.health) : 'No updates'}</span></button>
+    if (property === 'health') { const hasUpdates = initiativeUpdates.length > 0 || initiative.health !== 'noUpdate'; return <button aria-label={hasUpdates ? healthLabel(initiative.health) : 'There are no updates for this initiative'} className={`li-health is-${initiative.health}`} onClick={onOpenUpdates} type="button"><i/><span>{hasUpdates ? healthLabel(initiative.health) : 'No updates'}</span></button> }
     if (property === 'activeProjects') return <button aria-label={`${needingUpdate} project${needingUpdate === 1 ? '' : 's'} need an update. Click to open updates.`} className="li-active-projects" onClick={onOpenUpdates} type="button"><i/>{needingUpdate}</button>
     if (property === 'labels') return <InitiativeLabelsPicker compact initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate}/>
     if (property === 'created' || property === 'updated') return <time>{new Date(property === 'created' ? initiative.createdAt : initiative.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}</time>

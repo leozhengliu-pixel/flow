@@ -276,6 +276,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
           { title: 'Mobile', keywords: ['mobile notifications'] },
           { title: 'Email', keywords: ['email notifications'] },
           { title: 'Slack', keywords: ['slack notifications'] },
+          { title: 'Pulse summaries', keywords: ['pulse', 'daily', 'weekly', 'summary'] },
         ],
       },
       {
@@ -606,7 +607,7 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
     id: 'pulse',
     title: 'Pulse',
     section: 'Features',
-    keywords: ['updates', 'summary'],
+    keywords: ['updates', 'pulse', 'feed', 'summary', 'notifications'],
     groups: [
       {
         title: 'Pulse',
@@ -614,7 +615,10 @@ export const SETTINGS_SEARCH_PAGES: SettingsSearchPage[] = [
       },
       {
         title: 'Summary notifications',
-        items: [{ title: 'Default workspace schedule', keywords: ['daily', 'weekly'] }],
+        items: [
+          { title: 'Default workspace schedule', keywords: ['daily', 'weekly', 'morning'] },
+          { title: 'Your personal schedule', keywords: ['daily', 'weekly', 'personal'] },
+        ],
       },
     ],
   },

@@ -91,6 +91,10 @@ func (s *server) dispatchNotificationDigests(ctx context.Context, workspace stri
 		for _, delivery := range claimed {
 			for _, notification := range data.Notifications {
 				if notification.ID == delivery.NotificationID {
+					if notification.IssueID == "" && notification.Title != "" {
+						fmt.Fprintf(&body, "- %s\n", readableNotificationLine(notification))
+						break
+					}
 					title := notification.Type
 					if issue, err := issueByID(&data, notification.IssueID); err == nil {
 						title = issue.Identifier + " " + issue.Title

@@ -5,9 +5,12 @@ import { forwardRef, useEffect, useState } from 'react'
 
 import { IssueOptionsMenu } from '@/components/issue/issue-options-menu'
 import { RelationPicker } from '@/components/issue/relation-picker'
+import { PulseIcon } from '@/components/pulse/pulse-icon'
 import type { Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 import { InboxCustomSnoozeForm, type InboxNotificationRowData, type InboxSnoozePreset } from './notification-row'
+import { PulseFrequencyDropdownSubmenu } from './pulse-frequency-menu'
+import type { PulseFrequency } from './pulse-summary-model'
 import './inbox.css'
 
 export interface InboxDetailPreviewProps {
@@ -30,11 +33,14 @@ export interface InboxDetailPreviewProps {
   onCreateRelation?: (type: IssueRelationType, relatedIssueId: string) => Promise<void>
   onCopyLink?: (notification: InboxNotificationRowData) => void
   onCopyIdentifier?: (notification: InboxNotificationRowData) => void
+  pulseFrequency?: PulseFrequency
+  onPulseFrequencyChange?: (frequency: PulseFrequency) => void | Promise<void>
 }
 
 export function InboxDetailPreview(props: InboxDetailPreviewProps) {
   const { notification } = props
-  const identifier = notification.identifier?.trim() || 'Issue'
+  const pulse = notification.kind === 'pulse'
+  const identifier = notification.identifier?.trim() || (pulse ? '' : 'Issue')
   const title = notification.title?.trim() || 'Untitled issue'
   const [relationType, setRelationType] = useState<IssueRelationType | null>(null)
   const [snoozeOpen, setSnoozeOpen] = useState(false)
@@ -61,19 +67,25 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
   ) : <DetailOptionsFallback {...props} />
 
   return (
-    <article className="flow-inbox-detail" aria-label={`${identifier} ${title}`} aria-busy={props.pending || undefined}>
+    <article className="flow-inbox-detail" aria-label={identifier ? `${identifier} ${title}` : title} aria-busy={props.pending || undefined}>
       <header className="flow-inbox-detail__header">
         <button className="flow-inbox-detail__back" type="button" aria-label="Back to Inbox" onClick={props.onBack}>
           <BackIcon />
           <span>Inbox</span><i>›</i>
         </button>
-        <button className="flow-inbox-detail__source" type="button" aria-label={`Open ${identifier}: ${title}`} onClick={() => props.onOpenIssue(notification)} title={title}>
-          <b>{identifier}</b><span>{title}</span>
-        </button>
+        {pulse ? (
+          <span className="flow-inbox-detail__source flow-inbox-detail__source--pulse" title={title}>
+            <PulseIcon size={14} /><span>{title}</span>
+          </span>
+        ) : (
+          <button className="flow-inbox-detail__source" type="button" aria-label={`Open ${identifier}: ${title}`} onClick={() => props.onOpenIssue(notification)} title={title}>
+            <b>{identifier}</b><span>{title}</span>
+          </button>
+        )}
         <div className="flow-inbox-detail__actions">
           <DetailIconButton data-detail-action="favorite" disabled={props.pending} label={notification.favorite ? 'Remove from favorites' : 'Add to favorites'} pressed={notification.favorite} onClick={() => props.onFavoriteChange(notification, !notification.favorite)}><StarIcon /></DetailIconButton>
           {issueOptions}
-          {props.onSubscribeChange ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}><BellIcon /></DetailIconButton> : null}
+          {props.onSubscribeChange && !pulse ? <DetailIconButton data-detail-action="subscription" disabled={props.pending} label={props.subscribed ? 'Unsubscribe from issue' : 'Subscribe to issue'} pressed={props.subscribed} onClick={() => props.onSubscribeChange?.(notification, !props.subscribed)}><BellIcon /></DetailIconButton> : null}
           <DetailSnoozeMenu notification={notification} onSnooze={props.onSnooze} pending={props.pending} open={snoozeOpen} onOpenChange={setSnoozeOpen} />
           <DetailIconButton data-detail-action="delete" disabled={props.pending} label="Delete notification" onClick={() => props.onDelete(notification)}><DeleteDetailIcon /></DetailIconButton>
         </div>
@@ -90,10 +102,12 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
 
 function DetailOptionsFallback(props: InboxDetailPreviewProps) {
   const { notification } = props
-  return <DropdownMenu.Root modal={false}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="issue-options" disabled={props.pending} label="Issue options"><MoreDetailIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-detail-menu" align="end" sideOffset={4}>
+  const pulse = notification.kind === 'pulse'
+  return <DropdownMenu.Root modal={false}><DropdownMenu.Trigger asChild><DetailIconButton data-detail-action="issue-options" disabled={props.pending} label={pulse ? 'Notification options' : 'Issue options'}><MoreDetailIcon /></DetailIconButton></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={`flow-inbox-menu flow-inbox-detail-menu${pulse ? ' flow-inbox-detail-menu--pulse' : ''}`} align="end" sideOffset={4}>
     <DetailMenuItem shortcut="U" onSelect={() => props.onReadChange(notification, !notification.read)}>{notification.read ? 'Mark as unread' : 'Mark as read'}</DetailMenuItem>
-    {props.onCopyLink ? <DetailMenuItem onSelect={() => props.onCopyLink?.(notification)}>Copy issue URL</DetailMenuItem> : null}
-    {props.onCopyIdentifier ? <DetailMenuItem onSelect={() => props.onCopyIdentifier?.(notification)}>Copy issue ID</DetailMenuItem> : null}
+    {pulse && props.onPulseFrequencyChange ? <PulseFrequencyDropdownSubmenu value={props.pulseFrequency ?? 'daily'} disabled={props.pending} onChange={frequency => void props.onPulseFrequencyChange?.(frequency)} /> : null}
+    {props.onCopyLink && !pulse ? <DetailMenuItem onSelect={() => props.onCopyLink?.(notification)}>Copy issue URL</DetailMenuItem> : null}
+    {props.onCopyIdentifier && !pulse ? <DetailMenuItem onSelect={() => props.onCopyIdentifier?.(notification)}>Copy issue ID</DetailMenuItem> : null}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
