@@ -944,3 +944,66 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-permission-hint { color: var(--theme-text-primary); }
 .loops-permission-footnote { margin: 16px 0 0; padding: 16px 0 0; border-top: 0.5px solid var(--theme-border); color: var(--theme-text-secondary); font-size: 12px; }
 .loops-permission-footnote a { color: var(--theme-text-primary); }
+
+/* Display options — Linear's Loops popover: 300px, Grouping + Ordering rows with ringed selects, then two switches. */
+.loops-display-menu {
+  z-index: 1400;
+  box-sizing: border-box;
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 8px 0;
+  border: 0.5px solid var(--popover-border);
+  border-radius: 12px;
+  outline: 0;
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+  font: 450 13px var(--font);
+}
+.loops-display-row { box-sizing: border-box; height: 32px; display: flex; align-items: center; gap: 4px; padding: 0 16px; }
+.loops-display-row > span { min-width: 0; flex: 1; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; }
+.loops-display-menu .select-control.loops-display-select {
+  position: relative;
+  width: 99px;
+  min-width: 0;
+  height: 24px;
+  padding: 1px 18px 1px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--project-display-select-bg);
+  box-shadow: var(--inbox-select-ring);
+  color: var(--project-display-select-fg);
+  font: 400 12px/15px var(--font);
+}
+.loops-display-menu .select-control.loops-display-select:is(:hover, [data-state='open']) { background: var(--project-display-select-hover-bg); color: var(--project-display-select-hover-fg); }
+.loops-display-menu .select-control.loops-display-select > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.loops-display-menu .select-control.loops-display-select > span:last-child { position: absolute; top: 50%; right: 6px; color: currentColor; transform: translateY(-50%); }
+.loops-display-direction {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--project-display-select-bg);
+  box-shadow: var(--inbox-select-ring);
+  color: var(--project-display-select-fg);
+  cursor: pointer;
+}
+.loops-display-direction:hover { background: var(--project-display-select-hover-bg); color: var(--project-display-select-hover-fg); }
+.loops-display-direction svg { width: 14px; height: 14px; }
+.loops-display-direction:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.loops-display-separator { height: 0.5px; margin-top: 12px; background: var(--popover-border); }
+.loops-display-toggles { padding: 0 16px; }
+.loops-display-toggles label { height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--theme-text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
+
+/* Filter bar under the toolbar (the team directory's chips); the loops toolbar has no divider, so neither does the bar. */
+.workspace-filter-bar.loops-filter-bar { flex: none; padding: 5px 8px; border-bottom: 0; background: transparent; }
+:root[data-theme="light"] .workspace-filter-bar.loops-filter-bar { background: transparent; }
+
+/* Linear's "Current user" owner option: a small muted person glyph in the avatar slot. */
+.loops-current-user-glyph { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; color: var(--theme-text-secondary); }
+.loops-current-user-glyph svg { width: 14px; height: 14px; }

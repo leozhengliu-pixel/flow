@@ -235,7 +235,8 @@ function TriggerSentence({ data, triggerType, config }: { data: TriggerData; tri
   );
 }
 
-function triggerIcon(triggerType: LoopTriggerType, event: string) {
+/** The trigger type's glyph (also the loops list's Trigger group headers). */
+export function TriggerIcon({ triggerType, event = "" }: { triggerType: LoopTriggerType; event?: string }) {
   if (triggerType === "schedule") return <CalendarClock size={14} />;
   if (triggerType === "issue") return event === "triage" ? <TriageGlyph /> : <CircleDot size={14} />;
   if (triggerType === "project") return <ProjectIcon size={14} />;
@@ -252,7 +253,7 @@ function TriggerMenu({ data, triggerType, config, onChange, readOnly }: { data: 
   if (readOnly)
     return (
       <span className="loops-sentence-subject">
-        {triggerIcon(triggerType, event)}
+        <TriggerIcon triggerType={triggerType} event={event} />
         <span>
           <TriggerSentence data={data} triggerType={triggerType} config={config} />
         </span>
@@ -338,7 +339,7 @@ function TriggerMenu({ data, triggerType, config, onChange, readOnly }: { data: 
         {entityTypes.map((type) => (
           <DropdownMenuSub key={type}>
             <DropdownMenuSubTrigger>
-              {triggerIcon(type, "")}
+              <TriggerIcon triggerType={type} />
               {t(ENTITY_NAMES[type])}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="loops-menu">

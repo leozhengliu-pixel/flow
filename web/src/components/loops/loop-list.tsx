@@ -1,28 +1,39 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { ArrowDown, ArrowUp, Check, Search, Settings2, X } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { DisplayIcon, FilterIcon, PlusIcon } from "@/components/ui/view-action-icons";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, Check, Search, Settings2, UserRound, X } from "lucide-react";
+import { PlusIcon } from "@/components/ui/view-action-icons";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
+import { DirectoryFilterMenu } from "@/components/workspace-directory/directory-menus";
+import { TeamDateFilterDialog } from "@/components/workspace-directory/team-directory-controls";
 import { loopPath, newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
-import type { BootstrapData, Loop, LoopTriggerType, Team } from "@/types/flow";
+import type { BootstrapData, Loop, LoopTriggerType, User } from "@/types/flow";
 import { LoopActionsMenu, LoopBulkActionsMenu } from "./loop-actions";
 import { LoopCreateDialog, LoopCreateHub } from "./loop-create-hub";
 import { LoopIcon, loopIconColor } from "./loop-glyph";
 import { loopOwner, useLoops } from "./loop-data";
-import { ENTITY_NAMES, compactAge, isLoopDraft, loopTeamId, triggerSummary } from "./loop-model";
+import { ENTITY_NAMES, compactAge, isLoopDraft, loopTeam, loopTeamId, triggerSummary } from "./loop-model";
+import { TriggerIcon } from "./loop-trigger";
+import { LoopDisplayMenu, LoopFilterBar } from "./loop-list-controls";
+import {
+  LOOP_FILTER_FIELDS,
+  defaultDescending,
+  emptyLoopFilters,
+  loopDisplayKey,
+  loopFilterGroups,
+  loopFiltersActive,
+  matchesLoopFilters,
+  readLoopDisplay,
+  writeLoopDisplay,
+  type LoopDisplaySettings,
+  type LoopListFilterField,
+  type LoopListFilters,
+  type LoopOrdering,
+} from "./loop-list-model";
 
-type SortKey = "name" | "trigger" | "owner" | "runs" | "lastRun";
-type Column = Exclude<SortKey, "name">;
+type SortKey = LoopOrdering;
+type Column = "trigger" | "owner" | "runs" | "lastRun";
 /** Linear's column widths; runs and last executed are right-aligned. */
 const COLUMN_WIDTH: Record<Column, string> = { trigger: "100px", owner: "140px", runs: "80px", lastRun: "120px" };
 const END_COLUMNS: Column[] = ["runs", "lastRun"];
@@ -32,7 +43,8 @@ const COLUMNS: { id: Column; label: string }[] = [
   { id: "runs", label: "Runs (30d)" },
   { id: "lastRun", label: "Last executed" },
 ];
-type StatusFilter = "enabled" | "disabled" | "draft";
+const TRIGGER_ORDER: LoopTriggerType[] = ["schedule", "issue", "project", "initiative", "release", "team", "cycle"];
+type LoopGroup = { key: string; label: string; icon: ReactNode; entityName?: boolean; loops: Loop[] };
 
 export function LoopList({
   data,
@@ -58,12 +70,18 @@ export function LoopList({
   // The team page has no tabs; it lists every loop of the team.
   const tab = embedded ? "all" : storedTab;
   const [query, setQuery] = useState("");
-  const [statusFilters, setStatusFilters] = useState<StatusFilter[]>([]);
-  const [typeFilters, setTypeFilters] = useState<LoopTriggerType[]>([]);
-  const [hidden, setHidden] = useState<Column[]>([]);
-  const [grouped, setGrouped] = useState(true);
+  const [filters, setFilters] = useState<LoopListFilters>(emptyLoopFilters);
+  const [dateOpen, setDateOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<string[]>([]);
-  const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "name", desc: false });
+  // Display options persist per workspace and viewer, like the tab.
+  const displayKey = loopDisplayKey(data);
+  const [display, setDisplay] = useState<LoopDisplaySettings>(() => readLoopDisplay(displayKey));
+  useEffect(() => writeLoopDisplay(displayKey, display), [display, displayKey]);
+  // The team page lists only that team's loops, so it ignores "Show team loops".
+  const showTeamLoops = display.showTeamLoops || Boolean(teamId);
+  const grouping = display.grouping;
+  const grouped = grouping !== "none";
+  const sort = { key: display.ordering, desc: display.descending };
   const [createOpen, setCreateOpen] = useState(Boolean(createOpenProp));
   useEffect(() => {
     if (createOpenProp) setCreateOpen(true);
@@ -86,24 +104,33 @@ export function LoopList({
       }),
     [allLoops, data.viewer.id, teamId],
   );
+  // Rows the tab and display toggles leave; the filter menu counts and "hidden by filters" use these.
+  const base = useMemo(
+    () =>
+      visible.filter((loop) => {
+        if (tab === "mine" && (loop.ownerId ?? loop.creator?.id) !== data.viewer.id) return false;
+        if (!showTeamLoops && loop.level === "team") return false;
+        if (!display.showDisabledLoops && !isLoopDraft(loop) && !loop.enabled) return false;
+        return true;
+      }),
+    [data.viewer.id, display.showDisabledLoops, showTeamLoops, tab, visible],
+  );
+  const sortKey = sort.key;
+  const sortDesc = sort.desc;
   const loops = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    const rows = visible.filter((loop) => {
-      if (tab === "mine" && (loop.ownerId ?? loop.creator?.id) !== data.viewer.id) return false;
+    const rows = base.filter((loop) => {
       if (needle && !`${loop.name} ${loop.description ?? ""}`.toLowerCase().includes(needle)) return false;
-      if (statusFilters.length) {
-        const status: StatusFilter = isLoopDraft(loop) ? "draft" : loop.enabled ? "enabled" : "disabled";
-        if (!statusFilters.includes(status)) return false;
-      }
-      if (typeFilters.length && !typeFilters.includes(loop.triggerType)) return false;
-      return true;
+      return matchesLoopFilters(loop, filters, data.viewer.id);
     });
     const value = (loop: Loop): string | number => {
-      switch (sort.key) {
+      switch (sortKey) {
         case "trigger":
           return triggerSummary(loop).toLowerCase();
         case "owner":
           return (loopOwner(data, loop)?.displayName ?? "").toLowerCase();
+        case "team":
+          return (loopTeam(data, loop)?.name ?? "").toLowerCase();
         case "runs":
           return loop.runCount30d ?? 0;
         case "lastRun":
@@ -115,24 +142,46 @@ export function LoopList({
     return rows.sort((a, b) => {
       const left = value(a);
       const right = value(b);
-      const result = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right));
-      return sort.desc ? -result : result;
+      const result =
+        (typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right))) ||
+        (a.name || "").toLowerCase().localeCompare((b.name || "").toLowerCase());
+      return sortDesc ? -result : result;
     });
-  }, [data, query, sort, statusFilters, tab, typeFilters, visible]);
+  }, [base, data, filters, query, sortDesc, sortKey]);
 
-  const groups = useMemo(() => {
-    if (!grouped) return [{ key: "all", team: undefined as Team | undefined, loops }];
-    const byTeam = new Map<string, Loop[]>();
+  const groups = useMemo<LoopGroup[]>(() => {
+    if (!grouped) return [{ key: "all", label: "", icon: null, loops }];
+    const buckets = new Map<string, Loop[]>();
+    const keyOf = (loop: Loop) =>
+      grouping === "trigger" ? loop.triggerType : grouping === "owner" ? (loopOwner(data, loop)?.id ?? "none") : (loopTeamId(loop) ?? "workspace");
     for (const loop of loops) {
-      const key = loopTeamId(loop) ?? "workspace";
-      byTeam.set(key, [...(byTeam.get(key) ?? []), loop]);
+      const key = keyOf(loop);
+      buckets.set(key, [...(buckets.get(key) ?? []), loop]);
     }
-    const result: { key: string; team?: Team; loops: Loop[] }[] = [];
-    if (byTeam.has("workspace")) result.push({ key: "workspace", loops: byTeam.get("workspace")! });
-    for (const team of data.teams) if (byTeam.has(team.id)) result.push({ key: team.id, team, loops: byTeam.get(team.id)! });
-    for (const [key, items] of byTeam) if (!result.some((group) => group.key === key)) result.push({ key, loops: items });
+    const result: LoopGroup[] = [];
+    const add = (key: string, group: Omit<LoopGroup, "key" | "loops">) => {
+      const items = buckets.get(key);
+      if (items) result.push({ key: `${grouping}:${key}`, ...group, loops: items });
+      buckets.delete(key);
+    };
+    if (grouping === "trigger") {
+      for (const type of TRIGGER_ORDER) add(type, { label: t(ENTITY_NAMES[type]), icon: <TriggerIcon triggerType={type} /> });
+    } else if (grouping === "owner") {
+      const owners = new Map<string, User>();
+      for (const loop of loops) {
+        const owner = loopOwner(data, loop);
+        if (owner) owners.set(owner.id, owner);
+      }
+      for (const owner of [...owners.values()].sort((left, right) => (left.displayName || left.name).localeCompare(right.displayName || right.name)))
+        add(owner.id, { label: owner.displayName || owner.name, entityName: true, icon: <UserAvatar avatarUrl={owner.avatarUrl} className="avatar loops-avatar" name={owner.displayName || owner.name} /> });
+      add("none", { label: t("No owner"), icon: <UserRound size={14} /> });
+    } else {
+      add("workspace", { label: t("Workspace"), icon: <ViewGlyph color="currentColor" icon="Team" /> });
+      for (const team of data.teams) add(team.id, { label: team.name, entityName: true, icon: <TeamIcon team={team} size={14} /> });
+    }
+    for (const [key, items] of buckets) result.push({ key: `${grouping}:${key}`, label: key, entityName: true, icon: null, loops: items });
     return result;
-  }, [data.teams, grouped, loops]);
+  }, [data, grouped, grouping, loops, t]);
 
   // Linear's row selection: checkboxes, shift-click ranges, ⌘A, X on the hovered row, Escape to clear.
   const [selected, setSelected] = useState<string[]>([]);
@@ -212,18 +261,34 @@ export function LoopList({
   };
   const open = (loop: Loop) =>
     onNavigate(isLoopDraft(loop) ? `${newLoopPath(data.workspace.urlKey)}?draftId=${encodeURIComponent(loop.id)}` : loopPath(data.workspace.urlKey, loop.id));
-  const sortBy = (key: SortKey) => setSort((current) => ({ key, desc: current.key === key ? !current.desc : key === "runs" || key === "lastRun" }));
+  // Column headers and the display menu's Ordering are the same setting.
+  const sortBy = (key: SortKey) => setDisplay((current) => ({ ...current, ordering: key, descending: current.ordering === key ? !current.descending : defaultDescending(key) }));
   const toggle = <T,>(list: T[], value: T) => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
-  const shown = COLUMNS.filter((column) => !hidden.includes(column.id));
   const empty = visible.length === 0;
   const Container = embedded ? "div" : "main";
-  const gridTemplate = ["minmax(0,1fr)", ...shown.map((column) => COLUMN_WIDTH[column.id])].join(" ");
-  const filtering = Boolean(query.trim() || statusFilters.length || typeFilters.length);
+  const gridTemplate = ["minmax(0,1fr)", ...COLUMNS.map((column) => COLUMN_WIDTH[column.id])].join(" ");
+  const filtersActive = loopFiltersActive(filters);
+  const filtering = Boolean(query.trim()) || filtersActive;
   const clearFilters = () => {
     setQuery("");
-    setStatusFilters([]);
-    setTypeFilters([]);
+    setFilters(emptyLoopFilters());
   };
+  const changeFilter = (groupId: string, choiceId: string, checked: boolean) => {
+    if (choiceId === "custom") {
+      setDateOpen(true);
+      return;
+    }
+    const field = groupId as LoopListFilterField;
+    if (!LOOP_FILTER_FIELDS.includes(field)) return;
+    setFilters((current) => {
+      // Owner is multi-select; Last executed and Runs hold one value.
+      const next = new Set(field === "owner" ? current[field] : []);
+      if (checked) next.add(choiceId);
+      else next.delete(choiceId);
+      return { ...current, [field]: [...next] };
+    });
+  };
+  const filterGroups = loopFilterGroups({ data, loops: base, t, onRuns: (value) => changeFilter("runs", value, true) });
 
   return (
     <Container className={embedded ? "loops-embedded" : "main-panel loops-page"} aria-label={t("Loops")} role={embedded ? "region" : undefined}>
@@ -274,52 +339,37 @@ export function LoopList({
                 {t("New loop")}
               </button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger className={`loops-icon-button${statusFilters.length || typeFilters.length ? " is-open" : ""}`} aria-label={t("Filter")}>
-                <FilterIcon />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="loops-menu">
-                <DropdownMenuLabel>{t("Status")}</DropdownMenuLabel>
-                {(["enabled", "disabled", "draft"] as const).map((item) => (
-                  <DropdownMenuCheckboxItem key={item} checked={statusFilters.includes(item)} onSelect={(event) => event.preventDefault()} onCheckedChange={() => setStatusFilters((current) => toggle(current, item))}>
-                    {t(item === "enabled" ? "Enabled" : item === "disabled" ? "Disabled" : "Draft")}
-                  </DropdownMenuCheckboxItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>{t("Trigger")}</DropdownMenuLabel>
-                {(["schedule", "issue", "project", "initiative", "release", "team"] as const).map((item) => (
-                  <DropdownMenuCheckboxItem key={item} checked={typeFilters.includes(item)} onSelect={(event) => event.preventDefault()} onCheckedChange={() => setTypeFilters((current) => toggle(current, item))}>
-                    {t(ENTITY_NAMES[item])}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger className="loops-icon-button" aria-label={t("Display options")}>
-                <DisplayIcon />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="loops-menu">
-                <DropdownMenuCheckboxItem checked={grouped} onSelect={(event) => event.preventDefault()} onCheckedChange={(checked) => setGrouped(checked === true)}>
-                  {t("Group by team")}
-                </DropdownMenuCheckboxItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>{t("Display properties")}</DropdownMenuLabel>
-                {COLUMNS.map((column) => (
-                  <DropdownMenuCheckboxItem key={column.id} checked={!hidden.includes(column.id)} onSelect={(event) => event.preventDefault()} onCheckedChange={() => setHidden((current) => toggle(current, column.id))}>
-                    {t(column.label)}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <DirectoryFilterMenu
+              groups={filterGroups}
+              selected={Object.fromEntries(LOOP_FILTER_FIELDS.map((field) => [field, new Set(filters[field])]))}
+              onChoice={changeFilter}
+              onAdvanced={() => setFilters((current) => ({ ...current, advanced: true }))}
+              tooltip={{ label: t("Add Filter"), shortcut: "F" }}
+              triggerClassName={`loops-icon-button${filtersActive ? " is-open" : ""}`}
+            />
+            <LoopDisplayMenu settings={display} onChange={setDisplay} hideTeamToggle={Boolean(teamId)} />
           </div>
         </div>
       )}
+      {!empty && filtersActive && <LoopFilterBar data={data} filters={filters} groups={filterGroups} onChange={setFilters} onChoice={changeFilter} onDate={() => setDateOpen(true)} />}
+      <TeamDateFilterDialog
+        open={dateOpen}
+        value={filters.lastRun[0]}
+        title={t("Last executed")}
+        fromLabel={t("Last executed on or after")}
+        toLabel={t("Last executed through")}
+        onClose={() => setDateOpen(false)}
+        onApply={(value) => {
+          changeFilter("lastRun", value, true);
+          setDateOpen(false);
+        }}
+      />
       {empty ? (
         <div className="loops-hub-scroll">
           <LoopCreateHub data={data} onNavigate={onNavigate} onReload={onReload} />
         </div>
       ) : loops.length === 0 && filtering ? (
-        <LoopsFilteredEmpty hiddenCount={visible.length - loops.length} onClear={clearFilters} />
+        <LoopsFilteredEmpty hiddenCount={base.length} onClear={clearFilters} />
       ) : (
         <div className={`loops-table${selected.length ? " has-selection" : ""}`} role="table" aria-label={t("Loops")} aria-multiselectable="true" style={{ ["--loops-columns" as string]: gridTemplate }}>
           <div className="loops-table-head" role="row">
@@ -327,7 +377,7 @@ export function LoopList({
               {t("Name")}
               {sort.key === "name" && (sort.desc ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
             </button>
-            {shown.map((column) => {
+            {COLUMNS.map((column) => {
               const end = END_COLUMNS.includes(column.id);
               const arrow = sort.key === column.id && (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />);
               return (
@@ -339,7 +389,7 @@ export function LoopList({
               );
             })}
           </div>
-          {loops.length === 0 && <p className="loops-table-empty">{t(tab === "mine" && !query && !statusFilters.length && !typeFilters.length ? "You don't own any loops yet." : "No loops match.")}</p>}
+          {loops.length === 0 && <p className="loops-table-empty">{t(tab === "mine" && !filtering ? "You don't own any loops yet." : "No loops match.")}</p>}
           {groups.map((group) =>
             group.loops.length ? (
               <div className="loops-group" role="rowgroup" key={group.key}>
@@ -354,8 +404,8 @@ export function LoopList({
                       <svg className="loops-group-chevron" viewBox="0 0 16 16" aria-hidden="true">
                         <path d="M4.5 6.25h7L8 10.25z" fill="currentColor" />
                       </svg>
-                      {group.team ? <TeamIcon team={group.team} size={14} /> : <ViewGlyph color="currentColor" icon="Team" />}
-                      <strong data-i18n-ignore={group.team ? true : undefined}>{group.team ? group.team.name : t("Workspace")}</strong>
+                      {group.icon}
+                      <strong data-i18n-ignore={group.entityName || undefined}>{group.label}</strong>
                     </button>
                     <button className="loops-group-add" aria-label={t("New loop")} onClick={() => setCreateOpen(true)}>
                       <PlusIcon />
@@ -367,7 +417,7 @@ export function LoopList({
                     key={loop.id}
                     data={data}
                     loop={loop}
-                    columns={shown.map((column) => column.id)}
+                    columns={COLUMNS.map((column) => column.id)}
                     selected={selected.includes(loop.id)}
                     selection={selected.length > 1 && selected.includes(loop.id) ? selectedLoops : undefined}
                     onToggleSelect={(range) => toggleSelect(loop.id, range)}

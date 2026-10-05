@@ -5602,4 +5602,28 @@ Object.assign(zhCN, {
   "Convert into": "转换为",
 });
 
+// Loops list: Linear's filter menu (Owner, Last executed, Runs (30d)) and display options.
+Object.assign(zhCN, {
+  "Current user": "当前用户",
+  "Never executed": "从未执行",
+  "1 day ago": "1 天前",
+  "3 days ago": "3 天前",
+  "1 week ago": "1 周前",
+  "1 month ago": "1 个月前",
+  "3 months ago": "3 个月前",
+  "6 months ago": "6 个月前",
+  "1 year ago": "1 年前",
+  "Enter runs (30d)…": "输入运行次数（30 天）…",
+  "Loop filters": "Loop 筛选条件",
+  "Filter conjunction": "筛选条件组合方式",
+  "not between": "不在时间段内",
+  "{field} operator": "{field} 运算符",
+  "{field} values": "{field} 值",
+  "Remove {field} filter": "移除 {field} 筛选条件",
+  "Last executed on or after": "上次执行不早于",
+  "Last executed through": "上次执行截至",
+  "Show team loops": "显示团队 Loop",
+  "Show disabled loops": "显示已停用的 Loop",
+});
+
 Object.assign(zhCN, pulseZhCN);

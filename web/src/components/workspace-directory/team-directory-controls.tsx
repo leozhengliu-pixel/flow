@@ -33,12 +33,13 @@ export function TeamFilterBar({ filters, groups, onChange, onChoice, onDate }: {
   </div>
 }
 
-export function TeamDateFilterDialog({ open, value, onClose, onApply }: { open: boolean; value?: string; onClose: () => void; onApply: (value: string) => void }) {
+/** Linear's "Custom date or timeframe…" dialog; `value` and `onApply` use `date:YYYY-MM-DD[/YYYY-MM-DD]`. Shared by date filters outside the team directory (e.g. loops' Last executed). */
+export function TeamDateFilterDialog({ open, value, onClose, onApply, title = 'Created date', fromLabel = 'Created on or after', toLabel = 'Created through' }: { open: boolean; value?: string; onClose: () => void; onApply: (value: string) => void; title?: string; fromLabel?: string; toLabel?: string }) {
   const [from, setFrom] = useState(''), [to, setTo] = useState('')
   useEffect(() => { if (open) { const [start, end] = value?.startsWith('date:') ? value.slice(5).split('/') : []; setFrom(start ?? format(new Date(), 'yyyy-MM-dd')); setTo(end ?? '') } }, [open, value])
-  return <Dialog open={open} onOpenChange={next => { if (!next) onClose() }}><DialogContent className="workspace-team-date-dialog"><DialogTitle>Created date</DialogTitle>
-    <label>On or after<DateTimeControl label="Created on or after" value={from} onChange={setFrom}/></label>
-    {to ? <><label>Through<DateTimeControl label="Created through" min={from || undefined} value={to} onChange={setTo}/></label><button type="button" onClick={() => setTo('')}>Remove end date</button></> : <button type="button" onClick={() => setTo(from)}>Add end date</button>}
+  return <Dialog open={open} onOpenChange={next => { if (!next) onClose() }}><DialogContent className="workspace-team-date-dialog"><DialogTitle>{title}</DialogTitle>
+    <label>On or after<DateTimeControl label={fromLabel} value={from} onChange={setFrom}/></label>
+    {to ? <><label>Through<DateTimeControl label={toLabel} min={from || undefined} value={to} onChange={setTo}/></label><button type="button" onClick={() => setTo('')}>Remove end date</button></> : <button type="button" onClick={() => setTo(from)}>Add end date</button>}
     <footer><button type="button" onClick={onClose}>Cancel</button><button type="button" disabled={!from || Boolean(to && to < from)} onClick={() => onApply(`date:${from}${to ? `/${to}` : ''}`)}>Apply filter</button></footer>
   </DialogContent></Dialog>
 }

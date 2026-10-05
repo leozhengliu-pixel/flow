@@ -1,8 +1,9 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
 import { ArrowDownWideNarrow, Check, ChevronDown, Search, ArrowDownNarrowWide } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PersonHover } from '@/components/property/person-info';
+import { FlowTooltip } from '@/components/ui/tooltip';
 import type { User } from '@/types/flow';
 
 import './workspace-directory.css';
@@ -23,6 +24,8 @@ export interface DirectoryFilterGroup {
   choices?: DirectoryFilterChoice[];
   selectionMode?: "multiple" | "single";
   separatorBefore?: boolean;
+  /** Linear's free-form value submenu (e.g. a number): a single input; Enter applies it and closes the menu. */
+  input?: { placeholder: string; numeric?: boolean; onSubmit: (value: string) => void };
 }
 
 export function DirectoryFilterMenu({
@@ -40,6 +43,7 @@ export function DirectoryFilterMenu({
   onOpenChange,
   hideSearch = false,
   submenuClassName = '',
+  tooltip,
 }: {
   groups: DirectoryFilterGroup[];
   selected: Record<string, Set<string>>;
@@ -56,6 +60,8 @@ export function DirectoryFilterMenu({
   /** Keep type-to-filter but only reveal the search field once the viewer types (Linear's short filter menus). */
   hideSearch?: boolean;
   submenuClassName?: string;
+  /** Linear's hover tooltip on the icon trigger, e.g. "Add Filter" with its F shortcut. */
+  tooltip?: { label: string; shortcut?: string };
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -79,18 +85,16 @@ export function DirectoryFilterMenu({
       ),
     [groups, query],
   );
-  return (
-    <DropdownMenu.Root
-      open={controlledOpen ?? menuOpen}
-      onOpenChange={(open) => {
-        setMenuOpen(open);
-        onOpenChange?.(open);
-        if (!open) {
-          setQuery("");
-          setActiveGroup(null);
-        }
-      }}
-    >
+  const changeOpen = (open: boolean) => {
+    setMenuOpen(open);
+    onOpenChange?.(open);
+    if (!open) {
+      setQuery("");
+      setActiveGroup(null);
+    }
+  };
+  const open = controlledOpen ?? menuOpen;
+  const triggerElement = (
       <DropdownMenu.Trigger asChild>
         {triggerNode ?? (trigger === "icon" ? (
           <button
@@ -113,6 +117,10 @@ export function DirectoryFilterMenu({
           <button aria-label="Add filter" className="workspace-advanced-filter-add" type="button">+&nbsp; Filter</button>
         ))}
       </DropdownMenu.Trigger>
+  );
+  return (
+    <DropdownMenu.Root open={open} onOpenChange={changeOpen}>
+      {tooltip ? <FlowTooltip disabled={open} label={tooltip.label} shortcut={tooltip.shortcut}>{triggerElement}</FlowTooltip> : triggerElement}
       <DropdownMenu.Portal>
         <DropdownMenu.Content data-flow-motion="floating"
           align="end"
@@ -144,6 +152,7 @@ export function DirectoryFilterMenu({
                 onPointerAway={() => setActiveGroup(current => current === group.id ? null : current)}
                 onChoice={onChoice}
                 onDirect={onDirect}
+                onClose={() => changeOpen(false)}
                 hideSearch={hideSearch}
                 submenuClassName={submenuClassName}
                 selected={selected[group.id] ?? new Set()}
@@ -169,6 +178,7 @@ function FilterGroup({
   selected,
   onChoice,
   onDirect,
+  onClose,
   hideSearch = false,
   submenuClassName = '',
 }: {
@@ -179,6 +189,7 @@ function FilterGroup({
   selected: Set<string>;
   onChoice: (groupId: string, choiceId: string, checked: boolean) => void;
   onDirect?: (groupId: string) => void;
+  onClose: () => void;
   hideSearch?: boolean;
   submenuClassName?: string;
 }) {
@@ -192,7 +203,27 @@ function FilterGroup({
   return (
     <>
       {group.separatorBefore && <DropdownMenu.Separator />}
-      {group.choices ? (
+      {group.input ? (
+        <DropdownMenu.Sub
+          open={open}
+          onOpenChange={(nextOpen) => nextOpen ? onOpen() : onPointerAway()}
+        >
+          <DropdownMenu.SubTrigger className="workspace-directory-filter-menu__item">
+            {group.icon}
+            <span>{group.label}</span>
+            <span className="workspace-directory-filter-menu__chevron" aria-hidden="true">▶</span>
+          </DropdownMenu.SubTrigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.SubContent data-flow-motion="floating"
+              className={`workspace-directory-filter-submenu is-input ${submenuClassName}`.trim()}
+              sideOffset={5}
+              collisionPadding={8}
+            >
+              <DirectoryFilterInput input={group.input} onDone={onClose}/>
+            </DropdownMenu.SubContent>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Sub>
+      ) : group.choices ? (
         <DropdownMenu.Sub
           open={open}
           onOpenChange={(nextOpen) => nextOpen ? onOpen() : onPointerAway()}
@@ -264,6 +295,22 @@ function DirectoryFilterSearch({ autoFocus = false, hidden = false, label, onQue
       items?.[event.key === 'ArrowDown' ? 0 : items.length - 1]?.focus();
     } else if (!['Escape', 'Tab'].includes(event.key)) event.stopPropagation();
   }} placeholder={label} value={query}/>{shortcut && <kbd>{shortcut}</kbd>}</label>
+}
+
+function DirectoryFilterInput({ input, onDone }: { input: NonNullable<DirectoryFilterGroup["input"]>; onDone: () => void }) {
+  const [value, setValue] = useState("");
+  const ref = useRef<HTMLInputElement>(null);
+  // Radix focuses the submenu itself after it opens; the field takes focus right after so typing goes into it.
+  useEffect(() => { const timer = window.setTimeout(() => ref.current?.focus()); return () => window.clearTimeout(timer); }, []);
+  const valid = input.numeric ? /^\d+$/.test(value.trim()) : Boolean(value.trim());
+  return <label className="workspace-directory-filter-menu__search is-input"><input aria-label={input.placeholder} inputMode={input.numeric ? "numeric" : undefined} onChange={event => setValue(input.numeric ? event.target.value.replace(/[^\d]/g, "") : event.target.value)} onKeyDown={event => {
+    if (event.key === 'Enter') {
+      event.preventDefault(); event.stopPropagation();
+      if (!valid) return;
+      input.onSubmit(value.trim());
+      onDone();
+    } else if (!['Escape', 'Tab'].includes(event.key)) event.stopPropagation();
+  }} placeholder={input.placeholder} ref={ref} value={value}/></label>
 }
 
 function DirectoryChoiceContent({ choice }: { choice: DirectoryFilterChoice }) {

@@ -38,7 +38,11 @@ export function compareDirectoryTeams(left: Team, right: Team, ordering: TeamOrd
 
 export function matchesTeamDate(team: Team, value: string, now = new Date()) {
   const timestamp = teamTimestamp(team, 'created')
-  if (timestamp === undefined) return false
+  return timestamp !== undefined && matchesDateChoice(timestamp, value, now)
+}
+
+/** Whether a timestamp falls in a Linear relative date choice ("1 week ago" = within the past week) or a `date:from[/to]` range. */
+export function matchesDateChoice(timestamp: number, value: string, now = new Date()) {
   if (value.startsWith('date:')) {
     const [from, to] = value.slice(5).split('/')
     const start = new Date(`${from}T00:00:00`).getTime()
