@@ -59,6 +59,12 @@ const properties: Array<{ id: InboxFilterProperty; label: string }> = [
   { id: 'reviewStatus', label: 'Review status' },
 ]
 
+// Initiative and review status only appear when there is something to filter on.
+const OPTIONAL_PROPERTIES = new Set<InboxFilterProperty>(['initiative', 'reviewStatus'])
+function availableProperties(options: InboxFilterOptions) {
+  return properties.filter(property => !OPTIONAL_PROPERTIES.has(property.id) || (options[property.id]?.length ?? 0) > 0)
+}
+
 const operatorOptions: Array<{ id: InboxFilterOperator; label: string }> = [
   { id: 'is', label: 'is' },
   { id: 'isNot', label: 'is not' },
@@ -251,7 +257,7 @@ function FilterCommandStage({ property, options, itemCount, onActivate, onSelect
     closeOnSelect: false,
     options: property
       ? (searching ? ordered : partitionInboxOptions(ordered, itemCount).matching)
-      : properties.map(item => ({ ...item, keywords: t(item.label) })),
+      : availableProperties(options).map(item => ({ ...item, keywords: t(item.label) })),
     personOptions: property === 'from',
     onOpenChange: next => { if (!next) onClose() },
     onSelect: option => property ? onSelect(property, option) : onActivate(option.id as InboxFilterProperty),
@@ -299,7 +305,7 @@ function PropertyPicker({
   const [focusValuePicker, setFocusValuePicker] = useState(false)
   const hoverTimerRef = useRef<number | undefined>(undefined)
   const propertyRefs = useRef(new Map<string, HTMLButtonElement>())
-  const visibleProperties = properties.filter(property => `${property.label} ${t(property.label)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const visibleProperties = availableProperties(options).filter(property => `${property.label} ${t(property.label)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
 
   useEffect(() => () => window.clearTimeout(hoverTimerRef.current), [])
 

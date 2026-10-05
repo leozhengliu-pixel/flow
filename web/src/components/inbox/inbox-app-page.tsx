@@ -1,3 +1,4 @@
+import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
@@ -819,7 +820,8 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
       { id: '__none__', label: 'No project', keywords: 'none empty', icon: <NoProjectIcon size={15} />, count: count('project', '__none__') },
       ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, icon: <ProjectGlyph project={project} size={15} />, count: count('project', project.id), i18nIgnore: true })),
     ],
-    initiative: [
+    // Like Linear, properties with nothing to filter on are left out of the menu.
+    initiative: !workspaceFeatureEnabled(data.workspaceSettings?.featureFlags, 'initiatives') || !data.initiatives.length ? [] : [
       { id: '__none__', label: 'No initiative', keywords: 'none empty', icon: <InitiativeGlyph />, count: count('initiative', '__none__') },
       ...data.initiatives.map(initiative => ({ id: initiative.id, label: initiative.name, color: initiative.color, icon: <InitiativeGlyph color={initiative.color} />, count: count('initiative', initiative.id), i18nIgnore: true })),
     ],
@@ -830,7 +832,7 @@ function buildInboxFilterOptions(notifications: InboxProjection[], display: Inbo
         : { id: status.id, name: status.label, type: status.type, color: status.color }
       return { id: status.id, label: status.label, color: status.color, icon: <WorkflowStatusGlyph state={state} size={14} />, count: count('issueStatusType', status.id) }
     }),
-    reviewStatus: INBOX_REVIEW_STATUS_OPTIONS.map(status => ({ id: status.id, label: status.label, color: status.color, count: count('reviewStatus', status.id) })),
+    reviewStatus: !notifications.some(notification => notification.kind === 'review') ? [] : INBOX_REVIEW_STATUS_OPTIONS.map(status => ({ id: status.id, label: status.label, color: status.color, count: count('reviewStatus', status.id) })),
   }
 }
 

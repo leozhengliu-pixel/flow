@@ -6,6 +6,7 @@ import { forwardRef, useEffect, useRef, useState } from 'react'
 import { InboxFilterBuilder, type InboxFilterCondition, type InboxFilterOptions } from './inbox-filter-builder'
 import './inbox.css'
 import { CheckIcon, DisplayIcon, FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import {
   SPLIT_VIEW_DEFAULT_LIST_WIDTH,
   SPLIT_VIEW_MIN_DETAIL_WIDTH,
@@ -215,7 +216,6 @@ export function InboxHeader({
   onDisplayOptionsChange,
   onDeleteAll,
   onDeleteAllRead,
-  onDeleteAllReadCompleted,
   onMarkAllRead,
   onOpenSettings,
   onOpenSidebar,
@@ -239,22 +239,23 @@ export function InboxHeader({
           onMarkAllRead={onMarkAllRead}
           onDeleteAll={onDeleteAll}
           onDeleteAllRead={onDeleteAllRead}
-          onDeleteAllReadCompleted={onDeleteAllReadCompleted}
           onOpenSettings={onOpenSettings}
         />
       </div>
       <div className="flow-inbox__header-spacer" />
       <div className="flow-inbox__header-controls">
-        <button
-          aria-label="Show unreads only"
-          aria-pressed={!displayOptions.showRead}
-          className="flow-inbox__icon-button"
-          data-active={!displayOptions.showRead || undefined}
-          onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
-          type="button"
-        ><UnreadFilterIcon /></button>
+        <FlowTooltip label="Show unreads only">
+          <button
+            aria-label="Show unreads only"
+            aria-pressed={!displayOptions.showRead}
+            className="flow-inbox__icon-button"
+            data-active={!displayOptions.showRead || undefined}
+            onClick={() => onDisplayOptionsChange({ ...displayOptions, showRead: !displayOptions.showRead })}
+            type="button"
+          ><UnreadFilterIcon /></button>
+        </FlowTooltip>
         <InboxFilterBuilder
-          trigger={<IconButton label="Add filter" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
+          trigger={<IconButton label="Add filter" tooltip="Add Filter" shortcut="F" count={filters?.length ?? 0}><FilterIcon /></IconButton>}
           filters={filters ?? []}
           options={filterOptions}
           onFiltersChange={nextFilters => onFiltersChange?.(nextFilters)}
@@ -274,11 +275,10 @@ function NotificationActionsMenu({
   onMarkAllRead,
   onDeleteAll,
   onDeleteAllRead,
-  onDeleteAllReadCompleted,
   onOpenSettings,
 }: Pick<
   InboxPageShellProps,
-  'onMarkAllRead' | 'onDeleteAll' | 'onDeleteAllRead' | 'onDeleteAllReadCompleted' | 'onOpenSettings'
+  'onMarkAllRead' | 'onDeleteAll' | 'onDeleteAllRead' | 'onOpenSettings'
 > & { pending?: boolean }) {
   useInboxShortcut('Backspace', event => {
     if (!event.shiftKey) return false
@@ -317,12 +317,6 @@ function NotificationActionsMenu({
           <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAll}>
             Delete all
           </InboxMenuItem>
-          <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} shortcut="⇧⌫" onSelect={onDeleteAllRead}>
-            Delete all read
-          </InboxMenuItem>
-          <InboxMenuItem disabled={pending} icon={<DeleteInboxIcon />} onSelect={onDeleteAllReadCompleted}>
-            Delete all completed
-          </InboxMenuItem>
           <DropdownMenu.Separator className="flow-inbox-menu__separator" />
           <InboxMenuItem disabled={pending || !onOpenSettings} icon={<SettingsInboxIcon />} onSelect={() => onOpenSettings?.()}>
             Go to settings
@@ -341,10 +335,21 @@ function DisplayOptionsMenu({
   onChange: (value: InboxDisplayOptions) => void
 }) {
   const update = (change: Partial<InboxDisplayOptions>) => onChange({ ...value, ...change })
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    // Linear: ⇧V shows display options.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.shiftKey || event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || isEditableTarget(event.target)) return
+      event.preventDefault()
+      setOpen(current => !current)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root open={open} onOpenChange={setOpen}>
       <DropdownMenu.Trigger asChild>
-        <IconButton label="Display options">
+        <IconButton label="Display options" tooltip={open ? undefined : 'Show display options'} shortcut="⇧ V">
           <DisplayIcon />
         </IconButton>
       </DropdownMenu.Trigger>
@@ -366,7 +371,8 @@ function DisplayOptionsMenu({
               onClick={() => update({ priorityInbox: !value.priorityInbox })}
             />
           </div>
-          <div className="flow-inbox-menu__display-row">
+          <div className="flow-inbox-menu__separator" />
+          <div className="flow-inbox-menu__display-row flow-inbox-menu__display-row--first">
             <span>Group unreads by</span>
             <UnreadGroupingSelect value={value.unreadGrouping} onChange={unreadGrouping => update({ unreadGrouping })} />
           </div>
@@ -450,7 +456,7 @@ function InboxMenuItem({
     <DropdownMenu.Item className="flow-inbox-menu__item" data-active={active || undefined} disabled={disabled} onSelect={onSelect}>
       {icon ? <span className="flow-inbox-menu__item-icon">{icon}</span> : null}
       <span className="flow-inbox-menu__item-label">{children}</span>
-      {shortcut ? <kbd className="flow-inbox-menu__shortcut">{shortcut}</kbd> : null}
+      {shortcut ? <kbd className="flow-inbox-menu__shortcut" aria-label={shortcut}>{[...shortcut].map((key, index) => <span key={index}>{key}</span>)}</kbd> : null}
       {trailing ? <span className="flow-inbox-menu__trailing">{trailing}</span> : null}
     </DropdownMenu.Item>
   )
@@ -499,16 +505,20 @@ function isEditableTarget(target: EventTarget | null) {
 interface IconButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   label: string
   count?: number
+  /** Linear's hover tooltip (the ⋯ menu has none). */
+  tooltip?: string
+  shortcut?: string
   children: ReactNode
 }
 
-const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, count, children, ...buttonProps }, ref) {
-  return (
+const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton({ label, count, tooltip, shortcut, children, ...buttonProps }, ref) {
+  const button = (
     <button {...buttonProps} ref={ref} className="flow-inbox__icon-button" type="button" aria-label={label}>
       {children}
       {count ? <span className="flow-inbox__filter-count">{count}</span> : null}
     </button>
   )
+  return tooltip ? <FlowTooltip label={tooltip} shortcut={shortcut}>{button}</FlowTooltip> : button
 })
 
 export function InboxNoSelection() {
@@ -526,7 +536,7 @@ function MoreIcon() {
 
 
 function MarkAllReadIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M3.22 8.28a.75.75 0 0 1 1.06-1.06L6.5 9.44l5.22-5.22a.75.75 0 1 1 1.06 1.06l-5.75 5.75a.75.75 0 0 1-1.06 0L3.22 8.28Z"/></svg>
+  return <svg viewBox="0 0 16 16" aria-hidden="true"><path fillRule="evenodd" clipRule="evenodd" d="M7.25 1a.75.75 0 0 1 0 1.5H5.18a1 1 0 0 0-.956.706L2.75 8h1.623c.955 0 1.846.477 2.376 1.272a.51.51 0 0 0 .427.228h1.648a.51.51 0 0 0 .427-.228A2.856 2.856 0 0 1 11.627 8H14.5l.323.009c.117.38.177.777.177 1.176V11.5a3.5 3.5 0 0 1-3.5 3.5h-7A3.5 3.5 0 0 1 1 11.5V9.185c0-.299.033-.597.1-.888l.077-.288L2.79 2.765A2.5 2.5 0 0 1 5.18 1h2.07ZM2.5 9.5v2a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2v-2h-1.873c-.397 0-.77.174-1.025.47l-.103.134A2.014 2.014 0 0 1 8.824 11H7.176a2.014 2.014 0 0 1-1.675-.896l-.103-.134a1.356 1.356 0 0 0-1.025-.47H2.5Zm12.28-8.28a.75.75 0 0 1 0 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L8.97 4.03a.75.75 0 0 1 1.06-1.06l.97.97 2.72-2.72a.75.75 0 0 1 1.06 0Z" /></svg>
 }
 
 function DeleteInboxIcon() {
