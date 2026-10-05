@@ -3399,7 +3399,6 @@ export const zhCN: Record<string, string> = {
   "Created in the past day": "过去一天内创建",
   "Updated in the past day": "过去一天内更新",
   "No agent session": "无 Agent 会话",
-  "Any agent session": "任意 Agent 会话",
   "No suggested label": "无建议标签",
   "No external source": "无外部来源",
   "Not auto-closed": "非自动关闭",

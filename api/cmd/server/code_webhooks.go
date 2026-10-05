@@ -82,7 +82,10 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.CodeReview
+	var mergedNow bool
+	var mergedWorkspace string
 	err = s.store.MutateWorkspace(codeReviewScope(r.Context(), provider, eventID, event), workspaceKey(r), "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
+		mergedNow, mergedWorkspace = false, data.Workspace.URLKey
 		if existing := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
 			return slices.ContainsFunc(item.Events, func(reviewEvent domain.ReviewEvent) bool { return reviewEvent.ID == eventID })
 		}); existing >= 0 {
@@ -92,6 +95,8 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		index := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
 			return item.Provider == provider && item.ExternalID == event.ExternalID()
 		})
+		wasMerged := index >= 0 && data.Reviews[index].Status == "merged"
+		defer func() { mergedNow = !wasMerged && updated.Status == "merged" }()
 		now := time.Now().UTC()
 		if index < 0 {
 			review := event.toReview(provider, data.Viewer, now)
@@ -154,6 +159,12 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not persist webhook")
 		return
+	}
+	if mergedNow {
+		if err := s.store.MarkAgentSessionsMerged(r.Context(), mergedWorkspace, updated.IssueIDs, time.Now()); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not persist webhook")
+			return
+		}
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"reviewId": updated.ID, "eventId": eventID})
 }
