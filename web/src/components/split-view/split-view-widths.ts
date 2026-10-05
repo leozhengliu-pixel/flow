@@ -15,7 +15,7 @@ export type SplitViewSurface = keyof typeof SPLIT_VIEW_LIST_WIDTH_KEYS
 export const LEGACY_INBOX_LIST_WIDTH_KEY = 'flow.inbox.list-width'
 
 export const SPLIT_VIEW_DEFAULT_LIST_WIDTH: Record<SplitViewSurface, number> = {
-  inbox: 300,
+  inbox: 400,
   reviews: 360,
   search: 360,
   triage: 320,

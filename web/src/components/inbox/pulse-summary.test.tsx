@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { fetchPulseCapabilities, fetchPulseSummary, reportPulseSummary, updateUserSettings } from '@/lib/api'
 import { makeBootstrap, makeIssue, teammate, viewer } from '@/test/fixtures'
 import type { BootstrapData, Notification, PulseSummary } from '@/types/flow'
@@ -53,7 +54,7 @@ function bootstrap(notifications: Notification[], overrides: Partial<BootstrapDa
 function renderInbox(data: BootstrapData) {
   const noop = vi.fn(async () => undefined)
   return render(
-    <I18nProvider>
+    <I18nProvider><TooltipProvider>
       <InboxAppPage
         data={data}
         onReload={noop}
@@ -68,7 +69,7 @@ function renderInbox(data: BootstrapData) {
         onUploadAttachment={noop}
         onDeleteAttachment={noop}
       />
-    </I18nProvider>,
+    </TooltipProvider></I18nProvider>,
   )
 }
 
