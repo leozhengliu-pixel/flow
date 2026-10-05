@@ -21,7 +21,7 @@ export interface IssuesSplitLayoutProps {
 export function IssuesSplitLayout({ detailsOpen, list, detail, fallbackDetail, aside }: IssuesSplitLayoutProps) {
   const isSplitView = useIsSplitView(detailsOpen || Boolean(aside))
   if (isSplitView && aside) {
-    return <div className={styles.asideLayout}><div className={styles.asideList}>{list}</div>{aside}</div>
+    return <div className={styles.asideLayout} data-aside-layout=""><div className={styles.asideList}>{list}</div>{aside}</div>
   }
   if (isSplitView && detailsOpen) {
     return <IssuesSplitViewPage list={list} detail={detail} />

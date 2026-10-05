@@ -55,8 +55,12 @@ function savedViewInsightsConfig(view: SavedView): SavedViewInsightsConfig {
   }
 }
 
-export function SavedViewDetailsPanel({ favorite, menu, onClose, onSummaryItemSelect, onToggleFavorite, rows, team, users, view, workspace }: {
+export function SavedViewDetailsPanel({ belowFilterBar = false, favorite, inline = false, menu, onClose, onSummaryItemSelect, onToggleFavorite, rows, team, users, view, workspace }: {
   favorite: boolean
+  /** Linear's desktop layout: a column of cards beside the list instead of an overlay. */
+  inline?: boolean
+  /** Keeps Linear's 8px gap when a filter bar sits between the toolbar and the cards. */
+  belowFilterBar?: boolean
   menu: ReactNode
   onClose: () => void
   onSummaryItemSelect: (dimension: 'assignee' | 'labels' | 'project', id: string, label: string, color?: string) => void
@@ -71,7 +75,7 @@ export function SavedViewDetailsPanel({ favorite, menu, onClose, onSummaryItemSe
   const owner = users.find(user => user.id === view.ownerId) ?? users[0]
   const items = useMemo(() => summaryItems(rows, tab), [rows, tab])
   const scopeLabel = view.scope === 'personal' ? 'Personal' : view.scope === 'team' ? team?.name ?? 'Team' : workspace.name
-  return <aside aria-label="View sidebar" className={styles.panel}>
+  return <aside aria-label="View sidebar" className={inline ? `${styles.panel} ${styles.inline}${belowFilterBar ? ` ${styles.belowFilterBar}` : ''}` : styles.panel}>
     <section className={styles.identityCard}>
       <ViewGlyph className={styles.viewIcon} color={view.color} icon={view.icon}/>
       <h2 data-i18n-ignore>{view.name}</h2>

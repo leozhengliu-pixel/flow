@@ -437,7 +437,21 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       </>}
     >
       <IssuesSplitLayout
-        detailsOpen={((detailsOpen && (!detailsPanel || Boolean(previewIssue))) || split) && !insightsOpen}
+        detailsOpen={((detailsOpen && ((!detailsPanel && !savedView) || Boolean(previewIssue))) || split) && !insightsOpen}
+        aside={savedView && detailsOpen && !previewIssue && !split && !insightsOpen ? <SavedViewDetailsPanel
+          inline
+          belowFilterBar={Boolean(filters.length > 0 || viewEditor)}
+          favorite={savedViewFavorite}
+          menu={savedViewMenu}
+          onClose={() => changeDetails(false)}
+          onSummaryItemSelect={(dimension, id, label, color) => addFilter(dimension === 'assignee' ? 'assignee' : dimension === 'project' ? 'project' : 'labels', { id, label, color })}
+          onToggleFavorite={() => { if (onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) }}
+          rows={rows}
+          team={data.teams.find(team => team.id === savedView.teamId)}
+          users={data.users}
+          view={savedView}
+          workspace={data.workspace}
+        /> : undefined}
         list={<>
       {data.issueCollectionPaged && !drillRows ? <PagedIssueList
         data={data}

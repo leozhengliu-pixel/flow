@@ -950,3 +950,18 @@
     grid-column: 1/6;
   }
 }
+
+/* Measured from Linear's view details: three 388px cards, 8px apart and from the
+   panel edges, beside the list; the summary card fills the remaining height. */
+.panel.inline {
+  position: static;
+  z-index: auto;
+  width: 396px;
+  flex: 0 0 396px;
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px 8px 0;
+}
+.panel.inline .identityCard { min-height: 0; grid-template-rows: 28px auto; padding: 12px 10px 12px 12px; }
+.panel.inline .summaryCard { flex: 1; min-height: 0; overflow: auto; }
+.panel.inline.belowFilterBar { padding-top: 8px; }
