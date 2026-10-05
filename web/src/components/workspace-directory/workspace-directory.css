@@ -331,6 +331,13 @@
   margin-right: 7px;
   color: var(--theme-text-tertiary);
 }
+.workspace-directory-filter-submenu.is-input {
+  width: 220px;
+}
+.workspace-directory-filter-menu__search.is-input {
+  height: 40px;
+  border-bottom: 0;
+}
 .workspace-directory-filter-menu__items {
   padding: 6px 7px;
   max-height: min(360px, calc(var(--radix-dropdown-menu-content-available-height, 100vh) - 48px));

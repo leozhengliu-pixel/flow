@@ -2661,7 +2661,7 @@ function ReleasesIcon() {
     </svg>
   );
 }
-function LoopsIcon() {
+export function LoopsIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path
