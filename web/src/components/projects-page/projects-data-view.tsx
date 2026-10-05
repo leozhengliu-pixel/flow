@@ -28,6 +28,8 @@ import type { TimelineZoom } from './project-timeline-model'
 
 export type ProjectPageItem = {
   id: string
+  /** Short project identifier shown by the "ID" display property. */
+  slugId?: string
   name: string
   href?: string
   icon?: string
@@ -50,6 +52,8 @@ export type ProjectPageItem = {
   statusType?: string
   statusColor?: string
   team?: { id: string, name: string }
+  /** The project's lead team (Flow: the first of its teams), for "Only show lead team projects". */
+  leadTeamId?: string
   memberIds?: string[]
   labelIds?: string[]
   initiativeNames?: string[]
@@ -512,7 +516,7 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
       </label>
       <div className="lp-project-row__name" role="gridcell">
         <ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} triggerClassName="lp-project-row__project-icon" />
-        <div><strong>{project.name}</strong>{project.summary && <small>{project.summary}</small>}</div>
+        <div>{visible.has('ID') && project.slugId && <span className="lp-project-row__id" data-i18n-ignore>{project.slugId}</span>}<strong>{project.name}</strong>{project.summary && <small>{project.summary}</small>}</div>
       </div>
       <div aria-hidden={!visible.has('Health') || undefined} data-column-hidden={!visible.has('Health') || undefined} role="gridcell"><button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-row__health" onClick={event => { stopPropagation(event); onOpenUpdates?.(project) }} type="button"><HealthIcon value={project.health} /><span>{healthText(project.health)}</span>{project.health !== 'no-update' && <small>· {compactAge(project.updatedAt)}</small>}</button></div>
       <div aria-hidden={!visible.has('Priority') || undefined} data-column-hidden={!visible.has('Priority') || undefined} role="gridcell"><ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker></div>
@@ -593,7 +597,7 @@ function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onO
       role="button"
       tabIndex={0}
     >
-      <div className="lp-project-card__top"><span className="lp-project-card__identity"><ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} triggerClassName="lp-project-card__icon"/><strong data-i18n-ignore>{project.name}</strong></span><span className="lp-project-card__properties">
+      <div className="lp-project-card__top"><span className="lp-project-card__identity"><ViewIconPicker color={project.color} icon={project.icon || 'Project'} onChange={visual => onProjectVisualChange?.(project, visual.icon, visual.color)} triggerClassName="lp-project-card__icon"/>{visible.has('ID') && project.slugId && <span className="lp-project-card__id" data-i18n-ignore>{project.slugId}</span>}<strong data-i18n-ignore>{project.name}</strong></span><span className="lp-project-card__properties">
         {visible.has('Health') && <button aria-label={project.healthLabel ?? `${healthText(project.health)}. Click to open updates.`} className="lp-project-property-trigger" onClick={event => { stopPropagation(event); onOpenUpdates?.(project) }} type="button"><HealthIcon value={project.health} /></button>}
         {showStatus && visible.has('Status') && <ProjectPropertyPicker label={project.status} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/></ProjectPropertyPicker>}
         {visible.has('Priority') && <ProjectPropertyPicker label={`${priorityText(project.priority)} Priority`} onChange={value => onPropertyChange?.(project, 'priority', value)} options={propertyOptions?.priority ?? PROPERTY_OPTIONS.priority} property="priority" value={project.priority}><DataViewPriorityIcon value={project.priority} /></ProjectPropertyPicker>}

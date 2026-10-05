@@ -33,7 +33,7 @@
   "components/panel/entity-activity-panel.css": 10,
   "components/project-detail/project-detail-page.css": 245,
   "components/projects-page/project-row-menus.module.css": 6,
-  "components/projects-page/projects-page.css": 172,
+  "components/projects-page/projects-page.css": 167,
   "components/pulse/pulse.css": 9,
   "components/releases/pipeline-editor.css": 13,
   "components/releases/releases.css": 18,
