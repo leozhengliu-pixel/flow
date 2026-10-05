@@ -440,3 +440,7 @@
 :global(:root[data-theme='light']) .customerNeeds li {
   color: var(--theme-text-primary);
 }
+
+/* List + Linear's floating details card. */
+.asideLayout { display: flex; min-height: 0; flex: 1; align-items: stretch; }
+.asideList { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; }

@@ -1,0 +1,76 @@
+/* Measured from Linear's My issues details panel (338px card, 8px from the toolbar and panel edges). */
+.card {
+  box-sizing: border-box;
+  width: 338px;
+  flex: 0 0 338px;
+  align-self: stretch;
+  margin: 0 8px 8px 4px;
+  padding: 12px;
+  overflow: auto;
+  border: 0.5px solid var(--summary-card-border);
+  border-radius: 10px;
+  background: var(--summary-card-bg);
+  box-shadow: var(--summary-card-shadow);
+}
+
+.emptyCard {
+  align-self: flex-start;
+  padding: 16px 12px;
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+
+.tab {
+  position: relative;
+  flex: 1 1 auto;
+  height: 28px;
+  padding: 0 12px;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
+  background: var(--summary-card-bg);
+  color: var(--theme-text-secondary);
+  font: 500 12px/1 inherit;
+  cursor: default;
+}
+
+.tab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  box-shadow: var(--inbox-select-ring);
+  pointer-events: none;
+}
+
+.tab[aria-selected="true"] { background: var(--summary-card-tab-active-bg); color: var(--theme-text-primary); }
+.tab:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: 1px; }
+
+.list { display: flex; flex-direction: column; gap: 1px; }
+
+.row {
+  display: flex;
+  height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: 450 13px/16px inherit;
+  text-align: left;
+  cursor: default;
+}
+
+.row:hover, .row:focus-visible { background: var(--summary-card-row-hover-bg); outline: none; }
+
+.icon { display: inline-flex; width: 16px; flex: 0 0 16px; align-items: center; justify-content: center; color: var(--theme-text-secondary); }
+.dot { width: 9px; height: 9px; border-radius: 50%; }
+.label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seeIssues { display: none; color: var(--theme-text-primary); }
+.row:hover .seeIssues, .row:focus-visible .seeIssues { display: inline; }
+.count { min-width: 12px; color: var(--theme-text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+.none { padding: 12px 10px; color: var(--theme-text-secondary); font-size: 13px; }

@@ -55,18 +55,26 @@ const defaultPersonalOrder: SidebarEntry[] = [
   "inbox", "reviews", "myIssues", "pulse", "drafts", "agent",
 ];
 const defaultWorkspaceOrder: SidebarEntry[] = [
+  "initiatives", "projects", "loops", "views", "members", "releases",
+  "teams", "dashboards", "customers",
+];
+const legacyWorkspaceOrder: SidebarEntry[] = [
   "members", "initiatives", "projects", "teams", "views",
   "dashboards", "releases", "loops", "customers",
 ];
+// Like Linear: the Workspace section shows Initiatives, Projects, Loops and
+// Views; Members, Teams, Releases (and Dashboards, Customers) live under More.
 const defaultPreferences: SidebarPreferences = {
   inbox: "always", reviews: "always", myIssues: "always", pulse: "always",
   drafts: "always", agent: "always", initiatives: "always",
   projects: "always", documents: "always", views: "always",
-  members: "always", customers: "never", teams: "always",
-  releases: "always", loops: "always",
-  // Like Linear, Dashboards is its own page reached from the More menu.
+  members: "never", customers: "never", teams: "never",
+  releases: "never", loops: "always",
   dashboards: "never",
 };
+// Defaults before the Linear-parity change. Builds up to then saved the whole
+// preference object, so values equal to these were never explicit choices.
+const legacyDefaultPreferences: Partial<SidebarPreferences> = { members: "always", teams: "always", releases: "always" };
 
 /**
  * Sidebar customisation is per user (like Linear): stored under keys scoped to
@@ -95,8 +103,13 @@ export function useSidebarCustomizationState(userId?: string) {
   const current = state.userId === userId ? state : { userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId) }
   if (current !== state) setState(current)
   const { preferences, order, badgeStyle } = current
-  useEffect(() => persist(sidebarStorageKey("flow.sidebar.preferences", userId), preferences), [preferences, userId]);
-  useEffect(() => persist(sidebarStorageKey("flow.sidebar.order", userId), order), [order, userId]);
+  useEffect(() => persist(sidebarStorageKey(PREFERENCE_OVERRIDES_KEY, userId), preferenceOverrides(preferences)), [preferences, userId]);
+  useEffect(() => {
+    // Saved only once rearranged, so later default changes reach everyone else.
+    const key = sidebarStorageKey("flow.sidebar.order", userId)
+    const isDefault = sameEntries(order.personal, defaultPersonalOrder) && sameEntries(order.workspace, defaultWorkspaceOrder)
+    if (isDefault) { try { localStorage.removeItem(key) } catch { /* ignore */ } } else persist(key, order)
+  }, [order, userId]);
   useEffect(() => persist(sidebarStorageKey("flow.sidebar.badge-style", userId), badgeStyle), [badgeStyle, userId]);
   const update = <K extends "preferences" | "order" | "badgeStyle">(key: K, value: SetStateAction<(typeof current)[K]>) =>
     setState(previous => ({ ...previous, [key]: typeof value === "function" ? (value as (old: (typeof current)[K]) => (typeof current)[K])(previous[key]) : value }))
@@ -116,20 +129,49 @@ function readBadgeStyle(userId?: string): SidebarBadgeStyle {
   catch { return "count"; }
 }
 function readPreferences(userId?: string): SidebarPreferences {
-  try {
-    return { ...defaultPreferences, ...JSON.parse(readStored("flow.sidebar.preferences", userId) ?? "{}") };
-  } catch { return defaultPreferences; }
+  return { ...defaultPreferences, ...readPreferenceOverrides(userId) }
 }
+/** Only the entries the user changed; everything else follows the defaults. */
+function readPreferenceOverrides(userId?: string): Partial<SidebarPreferences> {
+  try {
+    const stored = readStored(PREFERENCE_OVERRIDES_KEY, userId)
+    if (stored !== null) return JSON.parse(stored) as Partial<SidebarPreferences>
+    const legacy = JSON.parse(readStored("flow.sidebar.preferences", userId) ?? "{}") as Partial<SidebarPreferences>
+    const legacyDefaults: Partial<SidebarPreferences> = { ...defaultPreferences, ...legacyDefaultPreferences }
+    return Object.fromEntries(Object.entries(legacy).filter(([key, value]) => legacyDefaults[key as SidebarEntry] !== value)) as Partial<SidebarPreferences>
+  } catch { return {} }
+}
+function preferenceOverrides(preferences: SidebarPreferences): Partial<SidebarPreferences> {
+  return Object.fromEntries(Object.entries(preferences).filter(([key, value]) => defaultPreferences[key as SidebarEntry] !== value)) as Partial<SidebarPreferences>
+}
+const PREFERENCE_OVERRIDES_KEY = "flow.sidebar.preference-overrides"
 function readOrder(userId?: string): SidebarOrder {
   try {
     const stored = JSON.parse(readStored("flow.sidebar.order", userId) ?? "{}") as Partial<SidebarOrder>;
     return {
       personal: normalizeOrder(stored.personal, defaultPersonalOrder),
-      workspace: normalizeOrder(stored.workspace, defaultWorkspaceOrder),
+      // An order saved before the Linear-parity change that still equals the
+      // old default was never customised: use the new default.
+      workspace: normalizeOrder(sameOrder(stored.workspace, legacyWorkspaceOrder) ? undefined : stored.workspace, defaultWorkspaceOrder),
     };
   } catch {
     return { personal: [...defaultPersonalOrder], workspace: [...defaultWorkspaceOrder] };
   }
+}
+/**
+ * True when stored keeps the reference's relative order for the core entries.
+ * Older builds appended entries added later (Loops, Dashboards, Customers) at
+ * the end and saved the result, so those are ignored here.
+ */
+function sameOrder(stored: SidebarEntry[] | undefined, reference: SidebarEntry[]) {
+  if (!stored?.length) return false
+  const appendedLater = new Set<SidebarEntry>(["loops", "dashboards", "customers"])
+  const core = stored.filter(entry => !appendedLater.has(entry))
+  if (core.some(entry => !reference.includes(entry))) return false
+  return core.every((entry, index) => index === 0 || reference.indexOf(core[index - 1]) < reference.indexOf(entry))
+}
+function sameEntries(a: SidebarEntry[], b: SidebarEntry[]) {
+  return a.length === b.length && a.every((entry, index) => entry === b[index])
 }
 function normalizeOrder(stored: SidebarEntry[] | undefined, defaults: SidebarEntry[]) {
   const allowed = new Set(defaults);
