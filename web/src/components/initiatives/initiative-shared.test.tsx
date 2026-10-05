@@ -92,3 +92,36 @@ describe('InitiativeLabelsPicker', () => {
     }
   })
 })
+
+describe('New initiative property pills', () => {
+  it('render the shared create-pill style: values strong, empty properties as placeholders', async () => {
+    const { InitiativeCreateRow } = await import('./initiatives-page')
+    const previousLocale = localStorage.getItem('flow:locale')
+    localStorage.setItem('flow:locale', 'zh-CN')
+    try {
+      const viewer = { id: 'user-1', name: 'Ada', displayName: 'Ada', email: 'ada@example.com', active: true } as unknown as Parameters<typeof InitiativeCreateRow>[0]['viewer']
+      const { container } = render(<I18nProvider><InitiativeCreateRow labels={[label]} teams={[]} users={[viewer]} viewer={viewer} view="active" onCancel={vi.fn()} onCreate={vi.fn()} onCreateLabel={vi.fn()}/></I18nProvider>)
+      const pills = [...container.querySelectorAll('.li-create-properties > button.create-pill')]
+      expect(pills).toHaveLength(6)
+      expect(container.querySelector('.li-create-properties')).toHaveClass('create-pill-row')
+      await waitFor(() => expect(pills.map(pill => pill.textContent)).toEqual(['进行中', '无优先级', '所有者', '主导团队', '目标日期', '标签']))
+      // Status and priority are set values; owner, lead team, target date and labels are placeholders.
+      expect(pills.map(pill => pill.classList.contains('is-placeholder'))).toEqual([false, false, true, true, true, true])
+      // Every pill carries a 14px icon (status, priority dashes, owner, team, calendar, label tag).
+      for (const pill of pills) expect(pill.querySelector('svg')).toBeInTheDocument()
+      expect(container.querySelector('.li-label-picker')).not.toBeInTheDocument()
+    } finally {
+      if (previousLocale === null) localStorage.removeItem('flow:locale')
+      else localStorage.setItem('flow:locale', previousLocale)
+    }
+  })
+
+  it('shows a chosen label on the Labels pill', async () => {
+    const { InitiativeLabelsPill } = await import('./initiative-shared')
+    const { container } = render(<I18nProvider><InitiativeLabelsPill initiative={{ ...initiative, labelIds: [label.id] } as Initiative} labels={[label]} onUpdate={vi.fn()}/></I18nProvider>)
+    const pill = container.querySelector('button.create-pill')
+    expect(pill).toHaveTextContent('Launch')
+    expect(pill).not.toHaveClass('is-placeholder')
+    expect(pill?.querySelector('.create-pill__label-dot')).toHaveStyle({ background: '#5e6ad2' })
+  })
+})

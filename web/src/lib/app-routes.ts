@@ -293,7 +293,7 @@ export type AppRoute =
       /** Asks Slack deep settings (`/settings/asks/:integrationId`). */
       asksIntegrationId?: string;
       /** Asks email intake wizard (`/settings/asks/email-intake/new`). */
-      asksEmailIntakeMode?: "new";
+      asksEmailIntakeMode?: "new" | "edit";
       asksEmailIntakeId?: string;
       identityProviderId?: string;
       applicationId?: string;
@@ -1020,7 +1020,7 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
       asksEmailIntakeMode: "new",
     };
   if (section === "settings" && third === "asks" && fourth === "email-intake" && fifth && fifth !== "new" && (segments.length === 5 || (segments.length === 6 && segments[5] === "edit")))
-    return { kind: "settings", workspaceSlug, page: "asks", asksEmailIntakeId: decodeURIComponent(fifth) };
+    return { kind: "settings", workspaceSlug, page: "asks", asksEmailIntakeId: decodeURIComponent(fifth), ...(segments[5] === "edit" ? { asksEmailIntakeMode: "edit" as const } : {}) };
   // Web forms are not supported; their links land on the Asks page.
   if (section === "settings" && third === "asks" && fourth === "web-forms")
     return { kind: "settings", workspaceSlug, page: "asks" };

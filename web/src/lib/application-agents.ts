@@ -4,7 +4,7 @@ function apiRequest<T>(path: string, workspace: string, options: RequestInit = {
   return request<T>(path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Workspace-Key': workspace, ...options.headers } })
 }
 
-export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; builtin: boolean; active: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
+export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; builtin: boolean; active: boolean; allTeams?: boolean; serverSuspended?: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
 export type ApplicationTask = { id: string; issueId: string; teamId: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled'; prompt: string; trigger: string; version: number; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string} }
 export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string }
 export const isAgentMember = (user: User) => Boolean(user.app && user.active && (user.appScopes?.includes('app:assignable') || user.appScopes?.includes('app:mentionable')))

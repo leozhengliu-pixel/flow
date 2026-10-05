@@ -319,7 +319,7 @@ type SettingsPageProps = {
   onOpenJiraSyncNew?: () => void;
   onOpenJiraSyncEdit?: (jiraProjectId: string) => void;
   asksIntegrationId?: string;
-  asksEmailIntakeMode?: "new";
+  asksEmailIntakeMode?: "new" | "edit";
   asksEmailIntakeId?: string;
   onOpenAsksSlack?: (integrationId: string) => void;
   onOpenAsksEmailIntake?: (addressId?: string) => void;
@@ -1128,12 +1128,14 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
-  if (page === "asks" && props.asksEmailIntakeMode === "new")
+  if (page === "asks" && (props.asksEmailIntakeMode === "new" || (props.asksEmailIntakeMode === "edit" && props.asksEmailIntakeId)))
     return (
       <NewAsksEmailIntakePage
         data={props.data}
+        addressId={props.asksEmailIntakeMode === "edit" ? props.asksEmailIntakeId : undefined}
         onBack={() => props.onNavigate("asks")}
         onReload={props.onReload}
+        onOpenAddress={props.onOpenAsksEmailIntake}
       />
     );
   if (page === "asks" && props.asksEmailIntakeId)

@@ -3,7 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   CalendarDays, Check, ChevronDown, ChevronRight,
-  CircleHelp, Copy, KeyRound, MoreHorizontal, Plus, Repeat2, Trash2,
+  Copy, KeyRound, MoreHorizontal, Repeat2, Trash2,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
@@ -13,19 +13,11 @@ import { usePropertyCommand } from '@/components/property/use-property-command'
 import { Toggle } from '@/components/ui/toggle'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { createReleasePipeline, deleteReleasePipeline, rotateReleasePipelineAccessKey, updateReleasePipeline } from '@/lib/api'
-import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
+import type { BootstrapData, ReleasePipeline } from '@/types/flow'
 
-import { ReleaseStatusIcon } from './release-icons'
+import { PipelineStageEditor } from './pipeline-stage-editor'
+import { stageMutation, stagesFromPipeline, type StageDraft } from './pipeline-stages'
 import './pipeline-editor.css'
-
-type StageDraft = { name: string; status: Release['status'] }
-
-const DEFAULT_STAGES: StageDraft[] = [
-  { name: 'Planned', status: 'planned' },
-  { name: 'In Progress', status: 'inProgress' },
-  { name: 'Released', status: 'released' },
-  { name: 'Canceled', status: 'canceled' },
-]
 
 export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
   data: BootstrapData
@@ -39,15 +31,13 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
   const [teamOpen, setTeamOpen] = useState(false)
   const [production, setProduction] = useState(pipeline?.production??true)
   const [type, setType] = useState<ReleasePipeline['type']>(pipeline?.type??'scheduled')
-  const [stages, setStages] = useState<StageDraft[]>(pipeline?.stages.map(value=>({name:value,status:pipeline.stageStatuses[value]??'planned'}))??DEFAULT_STAGES)
+  const [stages, setStages] = useState<StageDraft[]>(() => stagesFromPipeline(pipeline))
   const [moveOpenIssues,setMoveOpenIssues]=useState(pipeline?.moveOpenIssuesToNextRelease??true)
   const [autoNotes,setAutoNotes]=useState(pipeline?.autoGenerateReleaseNotes??false)
   const [notesTemplate,setNotesTemplate]=useState(pipeline?.releaseNotesTemplate??'')
   const [pathFilters,setPathFilters]=useState((pipeline?.pathFilters??[]).join('\n'))
   const [accessKey,setAccessKey]=useState<string>()
   const [deleteOpen,setDeleteOpen]=useState(false)
-  const [addingStage, setAddingStage] = useState(false)
-  const [stageName, setStageName] = useState('')
   const [saving, setSaving] = useState(false)
   const teamOptions = useMemo(() => data.teams.map(team => ({ id: team.id, label: team.name, keywords: team.key })), [data.teams])
   const selectedTeams = data.teams.filter(team => teamIds.includes(team.id))
@@ -55,21 +45,19 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
   const toggleTeam = (id: string) => setTeamIds(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
   const teamCommand = usePropertyCommand({ closeOnSelect: false, open: teamOpen, options: teamOptions, selectedIds: teamIds, onOpenChange: setTeamOpen, onSelect: option => toggleTeam(option.id) })
   const filteredTeams = teamCommand.filteredOptions.map(option => data.teams.find(team => team.id === option.id)!).filter(Boolean)
-  const addStage = () => {
-    const next = stageName.trim()
-    if (!next || stages.some(stage => stage.name.toLowerCase() === next.toLowerCase())) return
-    setStages(current => [...current.slice(0, -2), { name: next, status: 'inProgress' }, ...current.slice(-2)])
-    setStageName('')
-    setAddingStage(false)
-  }
+  const releaseCountByStage = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const release of data.releases ?? []) if (pipeline && release.pipelineId === pipeline.id && release.stage) counts[release.stage] = (counts[release.stage] ?? 0) + 1
+    return counts
+  }, [data.releases, pipeline])
   const save = async () => {
     if (!name.trim() || saving) return
     setSaving(true)
     try {
-      const stageStatuses = Object.fromEntries(stages.map(stage => [stage.name, stage.status])) as ReleasePipeline['stageStatuses']
+      const { stageRenames, ...stageFields } = stageMutation(stages)
       const input={
         name: name.trim(), teamIds, production, type,
-        stages: stages.map(stage => stage.name), stageStatuses,
+        ...stageFields, ...(pipeline ? { stageRenames } : {}),
         moveOpenIssuesToNextRelease:moveOpenIssues,autoGenerateReleaseNotes:autoNotes,
         releaseNotesTemplate:notesTemplate,pathFilters:pathFilters.split('\n').map(value=>value.trim()).filter(Boolean),
       }
@@ -81,7 +69,7 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
     }
   }
 
-  const duplicate=async()=>{if(!pipeline||saving)return;setSaving(true);try{await onSaved(await createReleasePipeline({name:`${pipeline.name} copy`,teamIds:pipeline.teamIds,type:pipeline.type,production:pipeline.production,stages:pipeline.stages,stageStatuses:pipeline.stageStatuses,moveOpenIssuesToNextRelease:pipeline.moveOpenIssuesToNextRelease??true,autoGenerateReleaseNotes:pipeline.autoGenerateReleaseNotes,releaseNotesTemplate:pipeline.releaseNotesTemplate,pathFilters:pipeline.pathFilters}))}catch(error){toast.error(error instanceof Error?error.message:t('Could not create release pipeline'))}finally{setSaving(false)}}
+  const duplicate=async()=>{if(!pipeline||saving)return;setSaving(true);try{await onSaved(await createReleasePipeline({name:`${pipeline.name} copy`,teamIds:pipeline.teamIds,type:pipeline.type,production:pipeline.production,stages:pipeline.stages,stageStatuses:pipeline.stageStatuses,stageColors:pipeline.stageColors,frozenStages:pipeline.frozenStages,moveOpenIssuesToNextRelease:pipeline.moveOpenIssuesToNextRelease??true,autoGenerateReleaseNotes:pipeline.autoGenerateReleaseNotes,releaseNotesTemplate:pipeline.releaseNotesTemplate,pathFilters:pipeline.pathFilters}))}catch(error){toast.error(error instanceof Error?error.message:t('Could not create release pipeline'))}finally{setSaving(false)}}
   const remove=async()=>{if(!pipeline||saving)return;setSaving(true);try{await deleteReleasePipeline(pipeline.id);await onSaved(pipeline)}catch(error){toast.error(error instanceof Error?error.message:t('Could not delete release pipeline'))}finally{setSaving(false)}}
   const generateKey=async()=>{if(!pipeline||saving)return;setSaving(true);try{const key=await rotateReleasePipelineAccessKey(pipeline.id);setAccessKey(key.secret)}catch(error){toast.error(error instanceof Error?error.message:t('Could not generate access key'))}finally{setSaving(false)}}
   return <form className="flow-pipeline-settings-editor" aria-label={t(pipeline?'Release pipeline settings':'New release pipeline')} onSubmit={event => { event.preventDefault(); void save() }}>
@@ -135,18 +123,7 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
 
     {type==='scheduled'&&<section className="flow-pipeline-stages-section" aria-labelledby="pipeline-stages-heading">
       <header><h2 id="pipeline-stages-heading">{t('Stages')}</h2><p>{t('Manage the stages that releases move through in this pipeline. Syncs won’t automatically add issues to frozen stages.')}</p></header>
-      <div className="flow-pipeline-stage-list">
-        <StageRow stage={stages[0]}/>
-        <div className="flow-pipeline-started-label"><span>{t('Started')}</span><button type="button" aria-label={t('Add stage')} title={t('Add stage')} onClick={() => setAddingStage(true)}><Plus/></button><span className="flow-pipeline-stage-help" title={t('Stages between planned and released are considered started.')}><CircleHelp/></span></div>
-        {stages.slice(1, -2).map(stage => <StageRow inset key={stage.name} stage={stage}/>)}
-        {addingStage && <div className="flow-pipeline-stage-edit-row">
-          <span className="flow-pipeline-stage-edit-icon"><ReleaseStatusIcon status="inProgress"/></span>
-          <input autoFocus value={stageName} onChange={event => setStageName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addStage() } if (event.key === 'Escape') { event.preventDefault(); setAddingStage(false); setStageName('') } }} placeholder={t('Stage name')}/>
-          <div><button type="button" onClick={() => { setAddingStage(false); setStageName('') }}>{t('Cancel')}</button><button type="button" className="primary" disabled={!stageName.trim() || stages.some(stage => stage.name.toLowerCase() === stageName.trim().toLowerCase())} onClick={addStage}>{t('Create')}</button></div>
-        </div>}
-        <StageRow stage={stages.at(-2)!}/>
-        <StageRow stage={stages.at(-1)!}/>
-      </div>
+      <PipelineStageEditor stages={stages} onChange={setStages} releaseCountByStage={releaseCountByStage}/>
     </section>}
 
     {type==='scheduled'&&<section className="flow-pipeline-settings-section"><header><h2>{t('Completion')}</h2></header><label className="flow-pipeline-setting-toggle"><span><strong>{t('Move open issues to the next release')}</strong><small>{t('Turn off to leave open issues on a release when it completes')}</small></span><div className="flow-pipeline-toggle-control"><Toggle checked={moveOpenIssues} label={t('Move open issues to the next release')} onChange={setMoveOpenIssues} size="regular"/></div></label></section>}
@@ -156,8 +133,4 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
     <footer className="flow-pipeline-settings-actions"><button type="button" disabled={saving} onClick={onCancel}>{t('Cancel')}</button><button type="submit" className="primary" disabled={saving || !name.trim()}>{t(saving ? 'Saving…' : pipeline?'Save changes':'Create pipeline')}</button></footer>
     {pipeline&&<Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="flow-pipeline-delete-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="flow-pipeline-delete-dialog"><Dialog.Title>{t('Delete release pipeline')}</Dialog.Title><p>{t('This moves the release pipeline to recently deleted.')} <strong data-i18n-ignore>{pipeline.name}</strong></p><footer><Dialog.Close>{t('Cancel')}</Dialog.Close><button type="button" className="danger" disabled={saving} onClick={()=>void remove()}>{t('Delete')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>}
   </form>
-}
-
-function StageRow({ stage, inset = false }: { stage: StageDraft; inset?: boolean }) {
-  return <div className={`flow-pipeline-stage-row status-${stage.status}${inset ? ' inset' : ''}`}><div><ReleaseStatusIcon status={stage.status}/><strong data-i18n-ignore>{stage.name}</strong></div></div>
 }

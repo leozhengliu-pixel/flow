@@ -21,4 +21,11 @@ export const viewFiltersZhCN: Record<string, string> = {
   "3 months from now": "从现在起 3 个月",
   "Has auto-closed date": "有自动关闭日期",
   "Save to this view": "保存到此视图",
+  "Configure custom view Slack notifications…": "配置自定义视图 Slack 通知…",
+  "Parent issues": "父事项",
+  "Blocked issues": "被阻塞的事项",
+  "Issues with relations": "有关联的事项",
+  "Duplicates": "重复事项",
+  "Any recurring issue": "任意周期性事项",
+  "Not recurring": "非周期性事项",
 };

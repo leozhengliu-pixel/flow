@@ -6,7 +6,7 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Clock3, Ellipsis, GitPullRequest, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
-import { IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
+import { DelegateAvatar, IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { CalendarIcon, CycleIcon, NoAssigneeIcon, PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DueDatePicker } from '@/components/issue/due-date-picker'
@@ -262,6 +262,7 @@ export function IssueBoardCard({ issue, properties, propertyOptions, selected, d
       {properties.has('id') && <span data-i18n-ignore>{issue.identifier}</span>}
       {issue.ancestors?.length?<IssueParentTrail ancestors={issue.ancestors} board/>:null}
     </div>}
+      {properties.has('assignee') && issue.delegate && <DelegateAvatar delegate={issue.delegate} className={styles.delegateAvatar}/>}
       {properties.has('assignee') && <RowCommandPicker
         propertyLabel="Assignee" label={issue.assignee ? `Assign to. Current assignee is ${issue.assignee.name}` : 'Assign issue'} searchLabel="Assign to..."
         selectedIds={[issue.assignee?.id ?? '']} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} triggerClassName={styles.assigneeTrigger}

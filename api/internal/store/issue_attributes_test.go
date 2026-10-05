@@ -34,9 +34,12 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 			issue.Relations = []domain.IssueRelation{{ID: "rel-" + issue.ID, Type: "blocked_by", IssueID: issue.ID, RelatedIssueID: base.ID}}
 			issue.Attachments = []domain.Attachment{{ID: "att-" + issue.ID, URL: "https://example.test"}}
 			issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs = true, "session-1", []string{"suggested"}
+			issue.SuggestedAssigneeIDs, issue.SuggestedProjectIDs, issue.SuggestedTeamIDs = []string{"suggested-user"}, []string{"suggested-project"}, []string{"suggested-team"}
+			issue.SuggestedDuplicateIDs, issue.SuggestedRelatedIDs = []string{base.ID}, []string{base.ID}
 			issue.Permissions = []domain.IssuePermission{{ID: "perm-" + issue.ID, IssueID: issue.ID, SubjectType: "user", SubjectID: "shared-user", Role: "viewer"}}
 		} else {
 			issue.Relations, issue.Attachments, issue.AutoClosed, issue.AgentSessionID, issue.SuggestedLabelIDs, issue.Permissions = nil, nil, false, "", nil, nil
+			issue.SuggestedAssigneeIDs, issue.SuggestedProjectIDs, issue.SuggestedTeamIDs, issue.SuggestedDuplicateIDs, issue.SuggestedRelatedIDs = nil, nil, nil, nil, nil
 		}
 		rows[i] = issue
 	}
@@ -61,6 +64,15 @@ func TestSparseIssueAttributesFilterGroupAndResumeMigration(t *testing.T) {
 			{IssueFilter{Field: "autoClosed", Values: []string{"true"}}, 310},
 			{IssueFilter{Field: "agentSessionId", Operator: "isNotEmpty"}, 310},
 			{IssueFilter{Field: "suggestedLabel:suggested", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggestedAssignee:suggested-user", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggestedProject:suggested-project", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggestedTeam:suggested-team", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggestedDuplicate:" + base.ID, Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggestedRelated:" + base.ID, Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggested:assignee", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggested:label", Operator: "isEmpty"}, 310},
+			{IssueFilter{Field: "suggested:duplicate", Operator: "isNotEmpty"}, 310},
+			{IssueFilter{Field: "suggested:related", Operator: "isEmpty"}, 310},
 			{IssueFilter{Field: "sharedWith", Values: []string{"shared-user"}}, 310},
 			{IssueFilter{Not: &IssueFilter{Or: []IssueFilter{{Field: "relation:blocked_by", Operator: "isNotEmpty"}, {Field: "hasLinks", Operator: "isNotEmpty"}}}}, 310},
 		} {

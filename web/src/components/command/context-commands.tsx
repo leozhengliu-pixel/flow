@@ -13,6 +13,8 @@ import { toast } from 'sonner'
 
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { AgentBadge } from '@/components/agent/agent-badge'
+import { assigneeCandidates } from '@/lib/agent-members'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useIssueSearch } from '@/components/issue/use-issue-search'
 import { useIssuesById } from '@/components/issue/use-issues-by-id'
@@ -249,7 +251,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
       const current = same(issue => issue.assignee?.id ?? '')
       return [
         { id: '', label: 'No assignee', icon: <NoAssigneeIcon/>, keywords: 'unassign none', current: current === '', select: choose(() => apply({ assigneeId: '' })) },
-        ...data.users.filter(user => user.active !== false).map(user => ({ id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/>, current: current === user.id, select: choose(() => apply({ assigneeId: user.id })) })),
+        ...assigneeCandidates(data.users.filter(user => user.active !== false), oneTeam).map(user => ({ id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}${user.app ? ' agent' : ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/>, ...(user.app ? { detail: <AgentBadge/> } : {}), current: user.app ? issues.every(issue => issue.delegate?.id === user.id) : current === user.id, select: choose(() => apply(user.app ? { delegateId: user.id } : { assigneeId: user.id })) })),
       ]
     }
     if (page.id === 'labels') {

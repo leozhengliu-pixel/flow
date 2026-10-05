@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react'
+import { AgentBadge } from '@/components/agent/agent-badge'
 import { useMemo } from 'react'
 import type { User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -14,5 +15,5 @@ export function PeopleMenuItems({ users, selectedId, onSelect, emptyLabel, itemC
   return <SearchableMenuItems options={options} className="people-menu-body" searchClassName="property-command-search" itemClassName={itemClassName} searchLabel="Search people" selectedId={selectedId} contextMenu={contextMenu}
     matches={(option, query) => personMatchesQuery(option.person ?? { id: option.id, label: t(option.label) }, query)}
     onSelect={option => onSelect(option.id)} wrapOption={(option, row) => <PersonHover person={option.person}>{row}</PersonHover>}
-    renderOption={option => <>{option.person && <span aria-hidden="true"><UserAvatar className="people-menu-avatar" avatarUrl={option.person.avatarUrl} name={option.label}/></span>}<span data-menu-label data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>{selectedId === option.id && <Check size={14}/>}</>}/>
+    renderOption={option => <>{option.person && <span aria-hidden="true"><UserAvatar className="people-menu-avatar" avatarUrl={option.person.avatarUrl} name={option.label}/></span>}<span data-menu-label data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>{option.person?.app && <AgentBadge/>}{selectedId === option.id && <Check size={14}/>}</>}/>
 }

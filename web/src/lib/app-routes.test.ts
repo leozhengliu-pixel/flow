@@ -327,7 +327,7 @@ describe('settings aliases and deep links', () => {
     expect(parseAppRoute('/acme/settings/ai/coding-sessions/environments')).toMatchObject({ kind: 'settings', page: 'coding-environments' })
     expect(parseAppRoute('/acme/settings/skill/skill_1/edit')).toMatchObject({ kind: 'settings', page: 'agents', agentSkillMode: 'edit', agentSkillId: 'skill_1' })
     expect(parseAppRoute('/acme/settings/workspace/welcome-message')).toMatchObject({ kind: 'settings', page: 'workspace', workspaceView: 'welcome-message' })
-    expect(parseAppRoute('/acme/settings/asks/email-intake/addr-1/edit')).toMatchObject({ kind: 'settings', page: 'asks', asksEmailIntakeId: 'addr-1' })
+    expect(parseAppRoute('/acme/settings/asks/email-intake/addr-1/edit')).toMatchObject({ kind: 'settings', page: 'asks', asksEmailIntakeId: 'addr-1', asksEmailIntakeMode: 'edit' })
     expect(parseAppRoute('/acme/settings/asks/email-intake/new')).toMatchObject({ page: 'asks', asksEmailIntakeMode: 'new' })
     expect(parseAppRoute('/acme/settings/asks/web-forms/form-1/pages/new')).toEqual({ kind: 'settings', workspaceSlug: 'acme', page: 'asks' })
     expect(parseAppRoute('/acme/settings/teams/ENG/retire')).toMatchObject({ page: 'team', teamKey: 'ENG', teamSection: 'overview', teamSubPath: 'retire' })

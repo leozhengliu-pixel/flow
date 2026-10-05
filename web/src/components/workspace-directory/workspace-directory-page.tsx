@@ -192,7 +192,10 @@ export function WorkspaceDirectoryPage({
       />}
       <CustomerDialog
         currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
+        customers={data.customers}
         open={customerOpen}
+        statuses={data.customerStatuses}
+        tiers={data.customerTiers}
         users={data.users}
         onOpenChange={setCustomerOpen}
         onSubmit={async (input) => {
@@ -950,7 +953,7 @@ function TeamsDirectory({
   /** Refreshes workspace metadata; a team id also refetches that team's issues (membership changed). */
   onReload: (teamId?: string) => Promise<void>;
 }) {
-  const {t}=useI18n();
+  const {t, locale}=useI18n();
   const { filters, setFilters, preferences, setPreferences } = useTeamDirectoryControls(data.workspace.id, data.viewer.id);
   const hierarchy = useMemo(() => teamHierarchy(data.teams, data.teamSettings), [data.teams, data.teamSettings]);
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
@@ -1208,7 +1211,7 @@ function TeamsDirectory({
                 </div>
                 <span className="workspace-team-description" title={description || undefined}>{description}</span>
                 {columns.has("membership") && (
-                  viewerMembership?<span className="workspace-team-joined"><Check/>{t('Joined')}</span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(()=>onReload(team.id))}}>{t('Join')}</button>
+                  viewerMembership?<span className="workspace-team-joined" data-i18n-ignore><Check/>{locale === 'zh-CN' ? '已加入' : 'Joined'}</span>:<button className="workspace-team-joined" onClick={event=>{event.stopPropagation();void setTeamMembership(data.workspace.urlKey,team.id,data.viewer.id,true,'member').then(()=>onReload(team.id))}}>{t('Join')}</button>
                 )}
                 {columns.has("owners") && (
                   <span className="workspace-team-owner">

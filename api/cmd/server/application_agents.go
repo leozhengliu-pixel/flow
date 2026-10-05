@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"strings"
@@ -58,12 +59,14 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 			writeError(w, 409, "Configure Flow Agent before enabling its application member")
 			return
 		}
-		input.ClientID = "builtin-flow-agent"
-		input.Name = "Flow Agent"
+		input.ClientID = store.BuiltinApplicationClientID
+		input.Name = "Flow"
+		input.AvatarURL = "/favicon.svg"
 		input.WebhookURL = ""
+		input.ServerSuspended = false
 		input.Scopes = []string{"read", "write", "app:assignable", "app:mentionable"}
 	} else {
-		if input.ClientID == "builtin-flow-agent" {
+		if input.ClientID == store.BuiltinApplicationClientID {
 			writeError(w, 400, "Reserved application client")
 			return
 		}
@@ -103,6 +106,20 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 		return
 	}
 	writeJSON(w, 200, map[string]any{"application": installed, "webhookSecret": secret})
+}
+
+// ensureBuiltinApplications installs (or suspends) the built-in Flow agent
+// member in every workspace to match FLOW_AGENT_ENABLED. It runs at startup.
+func (s *server) ensureBuiltinApplications(ctx context.Context) {
+	for _, workspace := range s.store.WorkspaceKeys() {
+		s.ensureBuiltinApplication(ctx, workspace)
+	}
+}
+
+func (s *server) ensureBuiltinApplication(ctx context.Context, workspace string) {
+	if _, err := s.store.EnsureBuiltinApplication(ctx, workspace, s.agent.Enabled); err != nil {
+		log.Printf("ensure built-in Flow agent workspace=%s: %v", workspace, err)
+	}
 }
 
 func (s *server) applicationConsentTeams(w http.ResponseWriter, r *http.Request) {
