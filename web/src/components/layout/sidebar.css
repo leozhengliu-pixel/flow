@@ -454,11 +454,12 @@
   font-size: 13px;
 }
 .sidebar-badge-value { display: flex; align-items: center; gap: 7px; }
-.badge-preview { min-width: 15px; height: 15px; display: grid; place-items: center; padding: 0 4px; border-radius: 9999px; background: var(--accent-primary); color: var(--on-accent); font-size: 9px; font-weight: 600; line-height: 15px; }
-.badge-preview.is-dot { min-width: 6px; width: 6px; height: 6px; padding: 0; }
-.nav-unread{min-width:16px;height:16px;display:grid;place-items:center;margin-left:auto;padding:0 4px;border-radius:8px;background:#5e6ad2;color:#fff;font-size:10px;font-weight:600;line-height:16px}
-.nav-count{margin-left:auto;color:var(--theme-text-secondary);font-size:11px;font-variant-numeric:tabular-nums}
-.sidebar[data-badge-style="dot"] .nav-unread{width:14px;min-width:14px;height:14px;padding:0;overflow:hidden;color:transparent;font-size:0;line-height:14px;border-radius:50%}
+/* Linear: "Count" is a plain muted number, "Dot" an 8px grey dot. */
+.badge-preview { min-width: 0; display: inline-block; color: var(--sidebar-count-fg); font-size: 11px; font-weight: 450; font-variant-numeric: tabular-nums; }
+.badge-preview.is-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--theme-text-tertiary); }
+/* Linear draws every sidebar count the same way: a plain muted number 10px from the edge. */
+.nav-unread,.nav-count{margin-left:auto;margin-right:2px;color:var(--sidebar-count-fg);font-size:11px;font-weight:450;font-variant-numeric:tabular-nums}
+.sidebar[data-badge-style="dot"] .nav-unread{width:8px;height:8px;overflow:hidden;color:transparent;font-size:0;border-radius:50%;background:var(--theme-text-tertiary)}
 .dialog-content.sidebar-shortcuts-dialog{box-sizing:border-box;left:auto;right:12px;top:8px;bottom:8px;transform:none;width:min(326px,calc(100vw - 24px));height:auto;display:flex;flex-direction:column;overflow:hidden;padding:0;border-radius:12px;background:var(--theme-surface-2);color:var(--theme-text-primary)}
 .sidebar-shortcuts-dialog h2{height:50px;flex:0 0 50px;display:flex;align-items:center;margin:0;padding:0 16px;font-size:14px;font-weight:600;line-height:20px}
 .sidebar-shortcuts-dialog>.dialog-close{top:11px;right:12px;width:28px;height:28px;border-radius:6px}
