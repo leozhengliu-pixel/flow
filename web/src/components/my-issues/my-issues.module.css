@@ -6,7 +6,7 @@
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}
 .mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}
 .toolbar{height:44px;flex:0 0 44px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:.5px solid var(--border)}
-.tabs,.actions{display:flex;align-items:center}.tabs{gap:8px}.actions{gap:6px}
+.tabs,.actions{display:flex;align-items:center}.tabs{gap:8px}.actions,.actions.actions{gap:6px}
 .tab{height:28px;display:inline-flex;align-items:center;padding:0 10px;border:.5px solid transparent;border-radius:9999px;background:var(--bg-subtle);color:var(--issue-muted);font-size:12px;font-weight:500;line-height:normal;text-decoration:none;white-space:nowrap;cursor:pointer}
 .tab[data-active=true]{background:var(--bg-active);color:var(--bright)}
 .tab:hover:not([data-active=true]),.iconButton:hover{background:var(--bg-active);color:var(--text)}

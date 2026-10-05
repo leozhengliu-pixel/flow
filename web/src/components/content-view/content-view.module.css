@@ -128,7 +128,7 @@
   overflow:hidden;
   text-overflow:ellipsis;
   white-space:nowrap;
-  color:var(--theme-text-primary);
+  color:var(--page-title-fg);
   font-size:13px;
   font-weight:500;
   line-height:normal;
