@@ -6053,6 +6053,7 @@ function App() {
                 projectRelations={data.projectRelations}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={viewsTeam?.id}
+                featureFlags={featureFlags}
                 teamSettings={data.teamSettings}
                 teamParents={data.teamParents}
                 viewerId={data.viewer.id}
@@ -6175,6 +6176,7 @@ function App() {
                 projectRelations={data.projectRelations}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={projectTeam?.id}
+                featureFlags={featureFlags}
                 teamSettings={data.teamSettings}
                 teamParents={data.teamParents}
                 viewerId={data.viewer.id}

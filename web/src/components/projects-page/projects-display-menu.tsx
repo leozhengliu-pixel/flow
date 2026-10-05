@@ -2,13 +2,9 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject 
 import { ArrowDownUp, ChevronDown, GitBranch, LayoutGrid, List, Plus } from 'lucide-react'
 import { usePropertyCommand, type PropertyCommandOption } from '@/components/property/use-property-command'
 import { CheckIcon } from './projects-page-icons'
-import { projectLabelGroupProperty, type ProjectsDisplaySettings } from './projects-display-model'
+import { DEFAULT_PROJECTS_DISPLAY, projectDisplayProperties, projectLabelGroupProperty, projectsDisplayEqual, type ProjectsDisplaySettings } from './projects-display-model'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { Toggle } from '@/components/ui/toggle'
-
-const PROJECT_DISPLAY_PROPERTIES = [
-  'Milestones', 'Summary', 'Priority', 'Status', 'Health', 'Teams', 'Initiatives', 'Lead', 'Members', 'Dependencies', 'Start date', 'Target date', 'Issues', 'Created', 'Updated', 'Completed', 'Customers', 'Customer revenue', 'Labels',
-]
 
 type DisplayField = 'grouping' | 'subGrouping' | 'ordering' | 'showClosed'
 type DisplayOption = PropertyCommandOption & { id: string }
@@ -61,13 +57,21 @@ const LAYOUTS = [
   { id: 'timeline' as const, label: 'Timeline', icon: GitBranch },
 ]
 
-export function ProjectsDisplayMenu({ labelGroups = [], onChange, onReset, onSetDefault, rootRef, settings }: {
+const ALL_PROJECT_DISPLAY_PROPERTIES = projectDisplayProperties()
+
+export function ProjectsDisplayMenu({ defaultSettings = DEFAULT_PROJECTS_DISPLAY, labelGroups = [], onChange, onReset, onSetDefault, properties = ALL_PROJECT_DISPLAY_PROPERTIES, rootRef, settings, teamScoped = false }: {
+  /** The settings Reset returns to; the footer only appears once the current settings differ from it. */
+  defaultSettings?: ProjectsDisplaySettings
   labelGroups?: Array<{ id: string; name: string }>
   onChange: (settings: ProjectsDisplaySettings) => void
   onReset?: () => void
   onSetDefault?: () => void
+  /** Display properties offered, in order (feature-dependent ones already removed). */
+  properties?: string[]
   rootRef?: RefObject<HTMLDivElement | null>
   settings: ProjectsDisplaySettings
+  /** A team's projects page: offers "Only show lead team projects". */
+  teamScoped?: boolean
 }) {
   const [openField, setOpenField] = useState<DisplayField | null>(null)
   const [labelGroupsOpen, setLabelGroupsOpen] = useState(false)
@@ -75,6 +79,9 @@ export function ProjectsDisplayMenu({ labelGroups = [], onChange, onReset, onSet
   const toggleProperty = (property: string) => set('properties', settings.properties.includes(property)
     ? settings.properties.filter(item => item !== property)
     : [...settings.properties, property])
+  const grouped = settings.grouping !== 'No grouping'
+  const modified = !projectsDisplayEqual(settings, defaultSettings)
+  const selectProps = (field: DisplayField) => ({ field, onOpenChange: (open: boolean) => setOpenField(open ? field : null), open: openField === field })
 
   return <div aria-label="Display options" className="lp-projects-display" ref={rootRef} role="dialog">
     <div aria-label="Project layout" className="lp-projects-display__modes" role="tablist">
@@ -85,27 +92,35 @@ export function ProjectsDisplayMenu({ labelGroups = [], onChange, onReset, onSet
         onClick={() => onChange({ ...settings, layout: id, ...(id === 'board' ? { showEmptyGroups: true } : {}) })}
         role="tab"
         type="button"
-      ><Icon aria-hidden="true" size={13} />{label}</button>)}
+      ><Icon aria-hidden="true" size={14} />{label}</button>)}
     </div>
 
-    <div className="lp-projects-display__selectors">
-      <ProjectDisplaySelect direction={settings.groupOrder} field="grouping" label="Grouping" onChange={value => set('grouping', value)} onOpenChange={open => setOpenField(open ? 'grouping' : null)} onToggleDirection={() => set('groupOrder', settings.groupOrder === 'asc' ? 'desc' : 'asc')} open={openField === 'grouping'} value={settings.grouping} />
-      <ProjectDisplaySelect field="subGrouping" label="Sub-grouping" onChange={value => set('subGrouping', value)} onOpenChange={open => setOpenField(open ? 'subGrouping' : null)} open={openField === 'subGrouping'} value={settings.subGrouping} />
-      <ProjectDisplaySelect direction={settings.orderingDirection} field="ordering" label="Ordering" onChange={value => set('ordering', value)} onOpenChange={open => setOpenField(open ? 'ordering' : null)} onToggleDirection={() => set('orderingDirection', settings.orderingDirection === 'asc' ? 'desc' : 'asc')} open={openField === 'ordering'} value={settings.ordering} />
-      <ProjectDisplaySelect field="showClosed" label="Show closed projects" onChange={value => set('showClosed', value)} onOpenChange={open => setOpenField(open ? 'showClosed' : null)} open={openField === 'showClosed'} value={settings.showClosed} />
+    <div className="lp-projects-display__rows">
+      <ProjectDisplaySelect {...selectProps('grouping')} direction={grouped ? settings.groupOrder : undefined} label="Grouping" onChange={value => set('grouping', value)} onToggleDirection={() => set('groupOrder', settings.groupOrder === 'asc' ? 'desc' : 'asc')} value={settings.grouping} />
+      {grouped && <ProjectDisplaySelect {...selectProps('subGrouping')} label="Sub-grouping" onChange={value => set('subGrouping', value)} value={settings.subGrouping} />}
+      <ProjectDisplaySelect {...selectProps('ordering')} direction={settings.ordering !== 'Manual' ? settings.orderingDirection : undefined} label="Ordering" onChange={value => set('ordering', value)} onToggleDirection={() => set('orderingDirection', settings.orderingDirection === 'asc' ? 'desc' : 'asc')} value={settings.ordering} />
     </div>
+    <div className="lp-projects-display__separator" role="separator" />
+    <div className="lp-projects-display__rows">
+      <ProjectDisplaySelect {...selectProps('showClosed')} label="Show closed projects" onChange={value => set('showClosed', value)} value={settings.showClosed} />
+      {teamScoped && <div className="lp-projects-display__row">
+        <span>Only show lead team projects</span>
+        <Toggle checked={Boolean(settings.onlyLeadTeamProjects)} label="Only show lead team projects" onChange={checked => set('onlyLeadTeamProjects', checked)}/>
+      </div>}
+    </div>
+    <div className="lp-projects-display__separator" role="separator" />
 
-    {(settings.layout === 'list' || settings.layout === 'board') && <section className="lp-projects-display__section">
+    {(settings.layout === 'list' || settings.layout === 'board') && <section className="lp-projects-display__options">
       <h2>{settings.layout === 'board' ? 'Board options' : 'List options'}</h2>
-      <div className="lp-projects-display__check">
+      {grouped && <div className="lp-projects-display__row">
         <span>Show empty groups</span>
         <Toggle checked={settings.showEmptyGroups} label="Show empty groups" onChange={showEmptyGroups => set('showEmptyGroups', showEmptyGroups)}/>
-      </div>
+      </div>}
     </section>}
 
-    <section className="lp-projects-display__section lp-projects-display__properties">
-      <h2>Display properties</h2>
-      <div>{PROJECT_DISPLAY_PROPERTIES.map(property => {
+    <section className="lp-projects-display__properties">
+      <h3>Display properties</h3>
+      <div>{properties.map(property => {
         const selected = settings.properties.includes(property)
         return <button
           aria-pressed={selected}
@@ -131,10 +146,10 @@ export function ProjectsDisplayMenu({ labelGroups = [], onChange, onReset, onSet
       </div>}
     </section>
 
-    <footer className="lp-projects-display__footer">
+    {modified && <footer className="lp-projects-display__footer">
       <button aria-label="Reset to view default" onClick={onReset} type="button">Reset</button>
       <button aria-label="Save as default for view" onClick={onSetDefault} type="button">Set default for everyone</button>
-    </footer>
+    </footer>}
   </div>
 }
 
