@@ -30,6 +30,8 @@ import {
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
 import { loopsPath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
+import { persistUserSettings } from "@/lib/settings-persistence";
+import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useNavigate } from "react-router-dom";
 import type {
   BootstrapData, CustomEmoji, DocumentTemplate, FeatureOption, FeatureSettings,
@@ -109,7 +111,7 @@ export function FeatureSettingsPage({ page, data, onCreateReleasePipeline, onOpe
   if (page === "documents") return <DocumentsPage data={data} onReload={onReload}/>;
   if (page === "customer-requests") return <CustomerRequestsPage data={data} settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload}/>;
   if (page === "releases") return <ReleasesFeatureSettings data={data} onCreate={onCreateReleasePipeline} onOpen={onOpenReleasePipeline} onReload={onReload}/>;
-  if (page === "pulse") return <PulseFeatureSettings settings={settings} busy={busy} setEnabled={setEnabled} setFeature={setFeature}/>;
+  if (page === "pulse") return <PulseFeatureSettings data={data} settings={settings} rawWorkspaceSchedule={(savedSettings?.workspace === data.workspace.urlKey ? savedSettings.value : data.workspaceSettings).featureSettings?.pulseWorkspaceSchedule} busy={busy} onSave={save}/>;
   if (page === "asks") return <AsksSettingsPage data={data} settings={settings} busy={busy || !['admin', 'owner'].includes(data.viewerRole)} setEnabled={setEnabled} setFeature={setFeature} onReload={onReload} onOpenSlack={onOpenAsksSlack} onOpenEmailIntake={onOpenAsksEmailIntake}/>;
   if (page === "emojis") return <EmojisPage data={data} onReload={onReload}/>;
   return <IntegrationsPage data={data} onOpen={onOpenIntegration} onReload={onReload}/>;
@@ -366,10 +368,48 @@ function ReleasesFeatureSettings({data,onCreate,onOpen,onReload}:{data:Bootstrap
     <div className="feature-table"><header><span>{t("Pipeline name")}</span><span>{t("Teams")}</span><span>{t("Type")}</span><span>{t("Releases")}</span><span/></header>{state==='active'?pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>onOpen(item)}><Rocket size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore={item.teamIds.length?true:undefined}>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||t("All teams")}</span><span>{t(item.type==="scheduled"?"Scheduled":"Continuous")}</span><span>{data.releases.filter(release=>release.pipelineId===item.id).length}</span><ChevronRight size={15}/></button>):deleted.map(item=><div className="feature-table-row flow-deleted-pipeline-row" key={item.id}><Rocket size={16}/><strong data-i18n-ignore>{item.title}</strong><span/><span>{formatDate(item.deletedAt,{dateStyle:"medium"})}</span><span/><FeatureButton onClick={()=>void restoreTrashEntry(item.id).then(onReload)}>Restore</FeatureButton></div>)}{state==='active'&&!pipelines.length&&<FeatureEmpty icon={Rocket} title={query?"No matching pipelines":"No release pipelines"}/>} {state==='deleted'&&!deleted.length&&<FeatureEmpty icon={Rocket} title="No recently deleted pipelines"/>}</div></FeatureShell></div>;
 }
 
-function PulseFeatureSettings({settings,busy,setEnabled,setFeature}:{settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void}) {
-  return <FeatureShell title="Pulse" description="Pulse centralizes all your project and initiative updates into a single feed. Members can choose to receive summary notifications daily or weekly."><FeatureCard><FeatureRow title="Enable Pulse" description="Workspace-wide feed of updates with optional summary notifications"><Toggle checked={settings.featureFlags.pulse??true} disabled={busy} label="Enable Pulse" onChange={value=>setEnabled("pulse",value)}/></FeatureRow></FeatureCard><FeatureSection title="Summary notifications" description="Pulse summary notifications can be delivered in the mornings based on a set schedule"><FeatureCard><FeatureRow title="Default workspace schedule" description="Applies to all members who haven’t set their own preference"><FeatureSelect label="Default workspace schedule" value={settings.featureSettings.pulseWorkspaceSchedule} options={[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"never",label:"Never"}]} disabled={busy} onChange={value=>setFeature("pulseWorkspaceSchedule",value)}/></FeatureRow></FeatureCard></FeatureSection></FeatureShell>;
+const PULSE_SCHEDULE_OPTIONS=[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"never",label:"Never"}];
+type PulseSchedule="daily"|"weekly"|"never";
+const pulseScheduleValue=(value:string|undefined):PulseSchedule|undefined=>value==="daily"||value==="weekly"||value==="never"?value:undefined;
+/** Linear's Settings > Features > Pulse: workspace switch, workspace default schedule, and the viewer's own schedule. */
+function PulseFeatureSettings({data,settings,rawWorkspaceSchedule,busy,onSave}:{data:BootstrapData;settings:WorkspaceSettings;rawWorkspaceSchedule?:string;busy:boolean;onSave:(next:Parameters<typeof updateWorkspacePreferences>[0])=>Promise<void>}) {
+  const {t}=useI18n();
+  const isAdmin=["admin","owner"].includes(data.viewerRole);
+  const enabled=settings.featureFlags.pulse??true;
+  const workspaceSchedule=pulseScheduleValue(settings.featureSettings.pulseWorkspaceSchedule)??"daily";
+  const stored=data.userSettings?.[data.viewer.id]?.pulseSchedule;
+  const [personal,setPersonal]=useState<{workspace:string;value:PulseSchedule}>();
+  const personalSchedule=(personal?.workspace===data.workspace.urlKey?personal.value:undefined)??pulseScheduleValue(stored)??workspaceSchedule;
+  const description=settings.featureFlags.initiatives===false
+    ?"Pulse centralizes all your project updates into a single feed. Members can choose to receive summary notifications daily or weekly."
+    :"Pulse centralizes all your project and initiative updates into a single feed. Members can choose to receive summary notifications daily or weekly.";
+  const setPulseEnabled=async(value:boolean)=>{
+    if(!isAdmin)return;
+    if(!value){
+      if(!await confirmAction(t("Disable Pulse for entire workspace?"),{confirmLabel:t("Disable"),danger:true}))return;
+      await onSave({featureFlags:{pulse:false}});
+      return;
+    }
+    // Linear: turning Pulse on gives the workspace a Daily summary schedule when none was chosen yet.
+    await onSave(pulseScheduleValue(rawWorkspaceSchedule)?{featureFlags:{pulse:true}}:{featureFlags:{pulse:true},featureSettings:{pulseWorkspaceSchedule:"daily"}});
+  };
+  const setPersonalSchedule=async(value:string)=>{
+    const next=pulseScheduleValue(value);
+    if(!next)return;
+    const workspace=data.workspace.urlKey;
+    const before=personal;
+    setPersonal({workspace,value:next});
+    try{await persistUserSettings(workspace,data.viewer.id,{pulseSchedule:next});}
+    catch(error){setPersonal(before);toast.error(error instanceof Error?error.message:t("Could not save Pulse schedule"));}
+  };
+  return <FeatureShell title="Pulse" description={description}>
+    <FeatureCard><FeatureRow title="Enable Pulse" description="Workspace-wide feed of updates with optional summary notifications"><Toggle checked={enabled} disabled={busy||!isAdmin} label="Enable Pulse" onChange={value=>void setPulseEnabled(value)}/></FeatureRow></FeatureCard>
+    {data.viewerRole!=="guest"&&<FeatureSection title="Summary notifications" description="Pulse summary notifications can be delivered in the mornings based on a set schedule" disabled={!enabled}><FeatureCard>
+      <FeatureRow title="Default workspace schedule" description="Applies to all members who haven’t set their own preference"><FeatureSelect label="Default workspace schedule" value={workspaceSchedule} options={PULSE_SCHEDULE_OPTIONS} disabled={busy||!enabled||!isAdmin} onChange={value=>void onSave({featureSettings:{pulseWorkspaceSchedule:value}})}/></FeatureRow>
+      <FeatureRow title="Your personal schedule" description="Only applies to you, overriding the workspace default"><FeatureSelect label="Your personal schedule" value={personalSchedule} options={PULSE_SCHEDULE_OPTIONS} disabled={!enabled} onChange={value=>void setPersonalSchedule(value)}/></FeatureRow>
+    </FeatureCard></FeatureSection>}
+  </FeatureShell>;
 }
-
 function EmojisPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
   const { t } = useI18n();
   const [query,setQuery]=useState(""); const [showArchived,setShowArchived]=useState(false); const [upload,setUpload]=useState<{name:string;imageUrl:string}|null>(null); const fileRef=useRef<HTMLInputElement>(null);
@@ -419,7 +459,7 @@ function IntegrationsPage({data,onOpen}:{data:BootstrapData;onOpen:(provider:Int
 }
 
 function FeatureShell({className,title,description,children}:{className?:string;title:string;description?:ReactNode;children:ReactNode}) { const {t}=useI18n();return <div className={`feature-settings${className?` ${className}`:""}`}><header className="feature-header"><h1>{t(title)}</h1>{description&&<p>{typeof description==="string"?t(description):description}</p>}</header>{children}</div> }
-function FeatureSection({title,description,children}:{title:string;description?:string;children:ReactNode}) { const {t}=useI18n();return <section className="feature-section"><header><h2>{t(title)}</h2>{description&&<p>{t(description)}</p>}</header>{children}</section> }
+function FeatureSection({title,description,disabled,children}:{title:string;description?:string;disabled?:boolean;children:ReactNode}) { const {t}=useI18n();return <section className={`feature-section${disabled?" is-disabled":""}`} aria-disabled={disabled||undefined}><header><h2>{t(title)}</h2>{description&&<p>{t(description)}</p>}</header>{children}</section> }
 function FeatureCard({children}:{children:ReactNode}) {return <div className="feature-card">{children}</div>}
 function Toggle(props:ComponentProps<typeof BaseSettingsToggle>) {const {t}=useI18n();return <BaseSettingsToggle {...props} label={t(props.label)}/>}
 function FeatureRow({title,description,icon:Icon,badge,businessTitle,children}:{title:string;description?:string;icon?:LucideIcon;badge?:string;businessTitle?:boolean;children?:ReactNode}) { const {t}=useI18n();return <div className="feature-row">{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong data-i18n-ignore={businessTitle||undefined}>{businessTitle?title:t(title)}{badge&&<small>{t(badge)}</small>}</strong>{description&&<span>{t(description)}</span>}</div>{children&&<aside>{children}</aside>}</div> }

@@ -69,6 +69,7 @@ import {
   fetchIssueHistory,
   fetchIssueRelated,
   fetchVisibleIssueIds,
+  fetchIssueRecordContext,
   logoutAccount,
   listProjectRelations,
   recordRecentResource,
@@ -107,6 +108,7 @@ import {
   updateWorkspace,
   updateWorkspaceSettings,
   updateUserSettings,
+  updateWorkspacePreferences,
   uploadProjectUpdateAttachment,
   deleteProjectUpdateAttachment,
   uploadInitiativeUpdateAttachment,
@@ -237,6 +239,7 @@ import {
   projectsSavedViewEditPath,
   pulsePath,
   pulseViewPath,
+  pulseNewViewPath,
   releasePipelinesPath,
   releasePipelineSettingsPath,
   reviewPath,
@@ -278,9 +281,14 @@ function mergeProjectRelations(data: BootstrapData, projectId: string, relations
 }
 
 import { useWorkspaceRealtime } from "@/hooks/use-workspace-realtime";
+import { isPulseRealtimeEvent, pulseSidebarPath, pulseUnread } from "@/components/pulse/pulse-unread";
+import { useEntityUpdatesLoader, useRequestEntityUpdates } from "@/lib/entity-updates";
 import { applyFavoriteDelta, FAVORITES_CHANGED, overlayPendingFavoriteIntents, toggleFavoriteFor } from '@/lib/favorites';
 import { fetchResourcePreferences, mergeResourcePreferences, RESOURCE_PREFERENCES_UPDATED, type ResourcePreferences } from '@/lib/resource-preferences';
 import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
+import { useSaveBrowserTimeZone } from "@/hooks/use-browser-timezone";
+import { subscriptionAfterGenericDelete } from "@/lib/subscription-records";
+import { INBOX_ACTIVITY_EVENT, inboxRealtimeRelevant, inboxUnread } from "@/lib/inbox-unread";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
 import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
 import { persistUserSettings } from "@/lib/settings-persistence";
@@ -825,6 +833,13 @@ function App() {
         navigateTo(reviewsPath(data.workspace.urlKey));
         return;
       }
+      if (inSequence && sequence.key === "g" && pressed === "f" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        if (data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse"))
+          navigateTo(pulseSidebarPath(data.workspace.urlKey, pulseUnread.state.count));
+        return;
+      }
       if (inSequence && sequence.key === "g" && pressed === "s" && data) {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
@@ -972,6 +987,16 @@ function App() {
           (initiative) => initiative.slugId === route.initiativeSlugId,
         ) || null
       : null;
+  // Paged workspaces load project/initiative updates per entity on demand.
+  useEntityUpdatesLoader(data, setData);
+  useRequestEntityUpdates("project", selectedProject ? [selectedProject.id] : []);
+  useRequestEntityUpdates("initiative", selectedInitiative ? [selectedInitiative.id] : []);
+  useRequestEntityUpdates(
+    "project",
+    selectedInitiative && data
+      ? data.projects.filter((project) => project.initiatives.includes(selectedInitiative.id) || selectedInitiative.projectIds?.includes(project.id)).map((project) => project.id)
+      : [],
+  );
   const selectedCycle =
     route.kind === "cycle"
       ? route.cycleId === "active"
@@ -1096,6 +1121,16 @@ function App() {
       const workspace = data?.workspace.urlKey;
       if (!workspace) return;
       const viewerId=data.viewer.id;
+      if (data.issueCollectionPaged && inboxRealtimeRelevant(event, viewerId)) {
+        // Paged inbox rows and the sidebar badge read /api/notifications, not the bootstrap.
+        inboxUnread.schedule(workspace, /^notifications?\./.test(event.type) ? 300 : 2000);
+        window.dispatchEvent(new CustomEvent(INBOX_ACTIVITY_EVENT, { detail: event }));
+      }
+      if (isPulseRealtimeEvent(event.type)) {
+        // The Pulse feed and sidebar badge read the feed API, not the bootstrap.
+        pulseUnread.schedule(workspace);
+        window.dispatchEvent(new CustomEvent('flow:pulse-activity', { detail: event }));
+      }
       if (event.type === 'workspace_preferences.updated') {
         const settings = await fetchWorkspacePreferences(workspace);
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, workspaceSettings: settings } : current);
@@ -2134,25 +2169,11 @@ function App() {
     events: string[],
   ) => {
     if (!events.length) {
-      await run(
+      const response = await run(
         () => removeSubscription("project", projectId),
         "Could not update project notifications",
       );
-      setData((state) =>
-        state
-          ? {
-              ...state,
-              subscriptions: state.subscriptions.filter(
-                (item) =>
-                  !(
-                    item.userId === state.viewer.id &&
-                    item.resourceType === "project" &&
-                    item.resourceId === projectId
-                  ),
-              ),
-            }
-          : state,
-      );
+      setData((state) => state ? withGenericSubscriptionRemoved(state, "project", projectId, response) : state);
       return;
     }
     const updated = await run(
@@ -2615,9 +2636,10 @@ function App() {
     initiativeId: string,
     updateId: string,
     body: string,
+    bodyData?: Record<string, unknown>,
   ) => {
     const update = await run(
-      () => createInitiativeUpdateComment(initiativeId, updateId, body),
+      () => createInitiativeUpdateComment(initiativeId, updateId, body, bodyData),
       "Could not post comment",
     );
     replaceInitiativeUpdate(initiativeId, update);
@@ -2778,9 +2800,10 @@ function App() {
     projectId: string,
     updateId: string,
     body: string,
+    bodyData?: Record<string, unknown>,
   ) => {
     const update = await run(
-      () => createProjectUpdateComment(projectId, updateId, body),
+      () => createProjectUpdateComment(projectId, updateId, body, bodyData),
       "Could not post comment",
     );
     replaceProjectUpdate(projectId, update);
@@ -3508,6 +3531,7 @@ function App() {
     window.addEventListener('flow:workspace-preferences-updated',syncWorkspace);
     return () => { window.removeEventListener('flow:user-settings-updated',sync); window.removeEventListener('flow:workspace-preferences-updated',syncWorkspace); };
   }, []);
+  useSaveBrowserTimeZone(data?.workspace.urlKey, data?.viewer.id, data ? data.userSettings[data.viewer.id]?.timezone : undefined);
   const changeCurrentUserSettings = async (input: UserSettings) => {
     const settings = await run(
       () => updateUserSettings(input),
@@ -3541,26 +3565,13 @@ function App() {
         item.resourceId === view.id,
     );
     if (!events.length) {
-      if (current)
-        await run(
-          () => removeSubscription("view", view.id),
-          "Could not unsubscribe from view",
-        );
-      setData((state) =>
-        state
-          ? {
-              ...state,
-              subscriptions: state.subscriptions.filter(
-                (item) =>
-                  !(
-                    item.userId === state.viewer.id &&
-                    item.resourceType === "view" &&
-                    item.resourceId === view.id
-                  ),
-              ),
-            }
-          : state,
-      );
+      const response = current
+        ? await run(
+            () => removeSubscription("view", view.id),
+            "Could not unsubscribe from view",
+          )
+        : undefined;
+      setData((state) => state ? withGenericSubscriptionRemoved(state, "view", view.id, response) : state);
       return;
     }
     const updated = await run(
@@ -3913,19 +3924,19 @@ function App() {
       canonicalize(inboxPath(workspace, route.tab), { replace: true });
     if (route.kind === "search" && location.pathname !== searchPath(workspace))
       canonicalize(searchPath(workspace), { replace: true });
-    if (
-      route.kind === "pulse" &&
-      location.pathname !==
-        (route.viewId
-          ? pulseViewPath(workspace, route.viewId)
-          : pulsePath(workspace, route.view))
-    )
-      canonicalize(
-        route.viewId
-          ? pulseViewPath(workspace, route.viewId)
-          : pulsePath(workspace, route.view),
-        { replace: true },
-      );
+    if (route.kind === "pulse") {
+      // Pulse follows the workspace feature flag; guests never get Pulse.
+      if (data.viewerRole === "guest" || !workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse")) {
+        canonicalize(inboxPath(workspace), { replace: true });
+        return;
+      }
+      const canonical = route.viewMode === "new"
+        ? pulseNewViewPath(workspace)
+        : route.viewId
+          ? pulseViewPath(workspace, route.viewId, route.viewMode === "edit" ? "edit" : undefined)
+          : pulsePath(workspace, route.view);
+      if (location.pathname !== canonical) canonicalize(canonical, { replace: true });
+    }
     if (
       route.kind === "my-issues" &&
       location.pathname !== myIssuesPath(workspace, route.view)
@@ -4585,6 +4596,18 @@ function App() {
     : [];
   const rememberResult = (type: SearchResourceType, id: string) => {
     void recordRecentResource(type, id).catch(() => undefined);
+  };
+  /** Paged inbox: the opened notification's full issue and history. */
+  const loadInboxIssueContext = async (issueId: string) => {
+    const workspace = data.workspace.urlKey, viewerId = data.viewer.id;
+    const context = await fetchIssueRecordContext(issueId);
+    setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? {
+      ...current,
+      issues: mergeIssueRecords(current.issues, [context.issue, ...context.relatedIssues]),
+      comments: { ...current.comments, [context.issue.id]: context.comments },
+      activities: { ...current.activities, [context.issue.id]: context.activities },
+      issueHistoryCursors: { ...current.issueHistoryCursors, [context.issue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
+    } : current);
   };
   const openIssue = (issue: Issue, sequence?: string[]) => {
     if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000) } : current);
@@ -5248,6 +5271,8 @@ function App() {
             data={data}
             view={route.view}
             viewId={route.viewId}
+            viewMode={route.viewMode}
+            onNavigate={navigateTo}
             onNavigateView={(view) =>
               navigateTo(pulsePath(data.workspace.urlKey, view))
             }
@@ -5490,6 +5515,7 @@ function App() {
             }}
             onOpenSidebar={() => setMobileSidebarOpen(true)}
             onOpenSettings={() => navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"))}
+            onLoadIssueContext={loadInboxIssueContext}
             onOpenIssue={openIssue}
             onOpenProject={openProject}
             onOpenInitiative={openInitiative}
@@ -6578,6 +6604,11 @@ function App() {
             }
             onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
             onNavigateReviews={() => navigateTo(reviewsPath(data.workspace.urlKey))}
+            onNavigatePulse={data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse") ? () => navigateTo(pulseSidebarPath(data.workspace.urlKey, pulseUnread.state.count)) : undefined}
+            pulseToggle={data.viewerRole === "admin" || data.viewerRole === "owner" ? {
+              enabled: workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse"),
+              run: () => void togglePulseFeature(data.workspace.urlKey, !workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse"), data.workspaceSettings.featureSettings?.pulseWorkspaceSchedule),
+            } : undefined}
             onOpenResult={openSearchResult}
             data={data}
             onUpdateIssue={updateIssueFromPage}
@@ -6882,6 +6913,16 @@ function withAgentSession(data: BootstrapData, id: string, session?: AgentSessio
     : sessions.some(item => item.id === id) ? sessions.map(item => item.id === id ? session : item) : [...sessions, session];
   return { ...data, agentSessions };
 }
+/** ⌘K "Enable Pulse" / "Disable Pulse" (admins); disabling asks first, like the settings page. */
+async function togglePulseFeature(workspaceKey: string, enable: boolean, schedule?: string) {
+  if (!enable && !(await confirmAction("Disable Pulse for entire workspace?", { confirmLabel: "Disable", danger: true }))) return;
+  try {
+    await updateWorkspacePreferences(enable && !schedule ? { featureFlags: { pulse: true }, featureSettings: { pulseWorkspaceSchedule: "daily" } } : { featureFlags: { pulse: enable } }, workspaceKey);
+    toast.success(enable ? "Pulse enabled" : "Pulse disabled");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Could not update Pulse");
+  }
+}
 function isEditableTarget(target: EventTarget | null) {
   return (
     target instanceof HTMLInputElement ||
@@ -6985,4 +7026,12 @@ function issueIdentifierScope(raw: string | null) {
     scopeFilter: (issue: Issue) => wanted.has(issue.identifier.toUpperCase()),
     scopeConditions: [{ field: "identifier", operator: "in", values: identifiers }],
   };
+}
+
+/** Local mirror of DELETE /api/subscriptions/{type}/{id}: the server keeps a Pulse subscribe or opt-out. */
+function withGenericSubscriptionRemoved(state: BootstrapData, type: string, id: string, response: unknown): BootstrapData {
+  const mine = (item: BootstrapData["subscriptions"][number]) => item.userId === state.viewer.id && item.resourceType === type && item.resourceId === id;
+  const kept = subscriptionAfterGenericDelete(state.subscriptions.find(mine), response);
+  const rest = state.subscriptions.filter((item) => !mine(item));
+  return { ...state, subscriptions: kept ? [kept, ...rest] : rest };
 }

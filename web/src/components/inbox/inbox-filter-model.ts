@@ -5,7 +5,9 @@ import type { InboxFilterCondition, InboxFilterOption } from './inbox-filter-typ
 export const UNMATCHED_OPTION_ID = '__inbox_unmatched__'
 
 export function inboxNotificationCategory(notification: Pick<Notification, 'category' | 'type'>, fallback = notification.type) {
-  const categories: Record<string, string> = { assignments: 'assignment', statusChanges: 'status', comments: 'comment', mentions: 'mention', reactions: 'reaction', subscriptions: 'subscription', documents: 'document', updates: 'project', reminders: 'reminder', loops: 'loop', integrations: 'apps', customerRequests: 'customerRequest', triage: 'triage' }
+  // Pulse summaries are the "Pulse summaries" filter option whatever category older records carry.
+  if (notification.type === 'pulseSummary') return 'pulse'
+  const categories: Record<string, string> = { assignments: 'assignment', statusChanges: 'status', comments: 'comment', mentions: 'mention', reactions: 'reaction', subscriptions: 'subscription', documents: 'document', updates: 'project', reminders: 'reminder', loops: 'loop', integrations: 'apps', customerRequests: 'customerRequest', triage: 'triage', pulse: 'pulse' }
   return categories[notification.category] ?? fallback
 }
 

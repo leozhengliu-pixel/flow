@@ -843,37 +843,138 @@ func mcpCommentVisible(data domain.Bootstrap, id string) bool {
 }
 
 type mcpStatusUpdate struct {
-	ID        string           `json:"id"`
-	Type      string           `json:"type"`
-	ParentID  string           `json:"parentId"`
-	Body      string           `json:"body"`
-	Health    string           `json:"health"`
-	User      domain.User      `json:"user"`
-	Comments  []domain.Comment `json:"comments"`
-	CreatedAt time.Time        `json:"createdAt"`
+	ID         string            `json:"id"`
+	Type       string            `json:"type"`
+	ParentID   string            `json:"parentId"`
+	ParentName string            `json:"parentName,omitempty"`
+	Body       string            `json:"body"`
+	Health     string            `json:"health"`
+	User       domain.User       `json:"user"`
+	Comments   []domain.Comment  `json:"comments"`
+	Diff       *domain.PulseDiff `json:"diff,omitempty"`
+	CreatedAt  time.Time         `json:"createdAt"`
+	UpdatedAt  time.Time         `json:"updatedAt"`
 }
 
+// statusUpdates lists project or initiative updates with Linear's filters:
+// id, project, initiative, user, createdAt/updatedAt (after an ISO date or
+// -P duration), includeArchived, and orderBy createdAt|updatedAt (newest
+// first, ties broken by id so pages are stable).
 func statusUpdates(data domain.Bootstrap, args map[string]any) (any, error) {
 	typeName := stringArg(args, "type")
-	items := []mcpStatusUpdate{}
+	if typeName != "project" && typeName != "initiative" {
+		return nil, fmt.Errorf("type must be project or initiative")
+	}
+	since := func(name string) (time.Time, error) {
+		value := stringArg(args, name)
+		if value == "" {
+			return time.Time{}, nil
+		}
+		date, err := mcpDate(value)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("%s must be an ISO date or an ISO-8601 duration such as -P1D", name)
+		}
+		return date, nil
+	}
+	createdAfter, err := since("createdAt")
+	if err != nil {
+		return nil, err
+	}
+	updatedAfter, err := since("updatedAt")
+	if err != nil {
+		return nil, err
+	}
+	orderBy := stringArg(args, "orderBy")
+	if orderBy == "" {
+		orderBy = "createdAt"
+	}
+	if orderBy != "createdAt" && orderBy != "updatedAt" {
+		return nil, fmt.Errorf("orderBy must be createdAt or updatedAt")
+	}
+	parents := map[string]string{}
 	if typeName == "project" {
-		for parentID, updates := range data.ProjectUpdates {
-			for _, update := range updates {
-				items = append(items, mcpStatusUpdate{ID: update.ID, Type: "project", ParentID: parentID, Body: update.Body, Health: update.Health, User: update.User, Comments: update.Comments, CreatedAt: update.CreatedAt})
+		if value := stringArg(args, "project"); value != "" {
+			project, err := mcpFindProject(data, value)
+			if err != nil {
+				return nil, err
+			}
+			parents[project.ID] = project.Name
+		} else {
+			for _, project := range data.Projects {
+				if project.ArchivedAt == nil || boolArg(args, "includeArchived") {
+					parents[project.ID] = project.Name
+				}
 			}
 		}
-	} else if typeName == "initiative" {
-		for parentID, updates := range data.InitiativeUpdates {
-			for _, update := range updates {
-				items = append(items, mcpStatusUpdate{ID: update.ID, Type: "initiative", ParentID: parentID, Body: update.Body, Health: update.Health, User: update.User, Comments: update.Comments, CreatedAt: update.CreatedAt})
+		if value := stringArg(args, "initiative"); value != "" {
+			initiative, err := mcpFindInitiative(data, value)
+			if err != nil {
+				return nil, err
+			}
+			for id := range parents {
+				if !slices.Contains(initiative.ProjectIDs, id) && !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == id && slices.Contains(project.Initiatives, initiative.ID) }) {
+					delete(parents, id)
+				}
 			}
 		}
 	} else {
-		return nil, fmt.Errorf("type must be project or initiative")
+		if stringArg(args, "project") != "" {
+			return nil, fmt.Errorf("project filters project updates; use initiative for initiative updates")
+		}
+		if value := stringArg(args, "initiative"); value != "" {
+			initiative, err := mcpFindInitiative(data, value)
+			if err != nil {
+				return nil, err
+			}
+			parents[initiative.ID] = initiative.Name
+		} else {
+			for _, initiative := range data.Initiatives {
+				parents[initiative.ID] = initiative.Name
+			}
+		}
 	}
-	if id := stringArg(args, "id"); id != "" {
-		items = slices.DeleteFunc(items, func(item mcpStatusUpdate) bool { return item.ID != id })
+	items := []mcpStatusUpdate{}
+	keep := func(item mcpStatusUpdate) {
+		if id := stringArg(args, "id"); id != "" && item.ID != id {
+			return
+		}
+		if !matchesUser(&item.User, data.Viewer, stringArg(args, "user")) {
+			return
+		}
+		if !createdAfter.IsZero() && item.CreatedAt.Before(createdAfter) || !updatedAfter.IsZero() && item.UpdatedAt.Before(updatedAfter) {
+			return
+		}
+		items = append(items, item)
 	}
+	updatedAt := func(created time.Time, edited *time.Time) time.Time {
+		if edited != nil && edited.After(created) {
+			return *edited
+		}
+		return created
+	}
+	if typeName == "project" {
+		for parentID, name := range parents {
+			for _, update := range data.ProjectUpdates[parentID] {
+				keep(mcpStatusUpdate{ID: update.ID, Type: "project", ParentID: parentID, ParentName: name, Body: update.Body, Health: update.Health, User: update.User, Comments: update.Comments, Diff: update.Diff, CreatedAt: update.CreatedAt, UpdatedAt: updatedAt(update.CreatedAt, update.EditedAt)})
+			}
+		}
+	} else {
+		for parentID, name := range parents {
+			for _, update := range data.InitiativeUpdates[parentID] {
+				keep(mcpStatusUpdate{ID: update.ID, Type: "initiative", ParentID: parentID, ParentName: name, Body: update.Body, Health: update.Health, User: update.User, Comments: update.Comments, Diff: update.Diff, CreatedAt: update.CreatedAt, UpdatedAt: updatedAt(update.CreatedAt, update.EditedAt)})
+			}
+		}
+	}
+	slices.SortFunc(items, func(a, b mcpStatusUpdate) int {
+		left, right := a.CreatedAt, b.CreatedAt
+		if orderBy == "updatedAt" {
+			left, right = a.UpdatedAt, b.UpdatedAt
+		}
+		if order := right.Compare(left); order != 0 {
+			return order
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
 	return paginate(items, args), nil
 }
 
@@ -931,6 +1032,7 @@ func searchFlowDocumentation(query string, page int) map[string]any {
 		{"title": "Flow MCP", "url": "/docs/mcp", "content": "Connect MCP clients to /mcp for read-write access or /mcp/readonly for read-only access. Flow supports OAuth 2.1 with PKCE and scoped API keys."},
 		{"title": "Issues", "url": "/docs/issues", "content": "Issues belong to a team and can have status, priority, assignee, project, cycle, labels, due date, parent, relations, comments, and attachments."},
 		{"title": "Projects and initiatives", "url": "/docs/projects", "content": "Projects group issues, milestones, resources, updates, members, teams, and initiatives. Initiatives group projects for workspace-level planning."},
+		{"title": "Pulse", "url": "/docs/pulse", "content": "Pulse collects project and initiative updates into one feed (For me, Popular, Recent and custom feeds), explains why an update is shown, records what changed since the previous update, and sends daily or weekly summary notifications at 06:00 local time."},
 	}
 	query = strings.ToLower(strings.TrimSpace(query))
 	results := slices.DeleteFunc(docs, func(item map[string]string) bool {

@@ -3803,6 +3803,7 @@ function defaultNotificationPreferences(
     integrations: true,
     customerRequests: true,
     triage: true,
+    pulse: true,
   };
   return {
     userId,

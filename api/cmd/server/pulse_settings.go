@@ -10,9 +10,19 @@ import (
 	"flow/api/internal/store"
 )
 
+// pulseDeliveryHour is the local hour Pulse summaries arrive (Linear sends
+// them in the morning, around 6 AM in the member's time zone).
+const pulseDeliveryHour = 6
+
+// pulseSummaryRefLimit caps the update references stored on one summary
+// notification; OccurrenceCount and Payload.Total keep the full count.
+const pulseSummaryRefLimit = 100
+
+// pulseWindow reports the summary window ending at today's 06:00 in zone.
+// Daily summaries arrive every day, weekly summaries on Mondays.
 func pulseWindow(schedule string, now time.Time, zone *time.Location) (time.Time, time.Time, bool) {
 	local := now.In(zone)
-	end := time.Date(local.Year(), local.Month(), local.Day(), 9, 0, 0, 0, zone)
+	end := time.Date(local.Year(), local.Month(), local.Day(), pulseDeliveryHour, 0, 0, 0, zone)
 	if now.Before(end) {
 		return time.Time{}, time.Time{}, false
 	}
@@ -25,6 +35,15 @@ func pulseWindow(schedule string, now time.Time, zone *time.Location) (time.Time
 		}
 	}
 	return time.Time{}, time.Time{}, false
+}
+
+// effectivePulseSchedule resolves a personal schedule: "" (legacy) and
+// "default" follow the workspace default.
+func effectivePulseSchedule(personal, workspaceDefault string) string {
+	if personal == "" || personal == "default" {
+		return workspaceDefault
+	}
+	return personal
 }
 
 func pulseCursors(data *domain.Bootstrap) map[string]time.Time {
@@ -44,52 +63,122 @@ type pulseDue struct {
 	user       domain.User
 	schedule   string
 	start, end time.Time
-	count      int
+	eligible   bool
+	role       string
+	refs       []domain.PulseUpdateRef
+	total      int
 }
 
+type pulseZones map[string]*time.Location
+
+func (zones pulseZones) load(name string) (*time.Location, bool) {
+	if name == "" {
+		return nil, false
+	}
+	if zone, ok := zones[name]; ok {
+		return zone, zone != nil
+	}
+	zone, err := time.LoadLocation(name)
+	if err != nil {
+		zones[name] = nil
+		return nil, false
+	}
+	zones[name] = zone
+	return zone, true
+}
+
+// pulseUserZone is the member's browser time zone, else their first team's
+// time zone, else UTC.
+func pulseUserZone(zones pulseZones, settings domain.UserSettings, memberships []domain.TeamMember, teamSettings map[string]domain.TeamSettings) *time.Location {
+	if zone, ok := zones.load(settings.Timezone); ok {
+		return zone
+	}
+	for _, membership := range memberships {
+		if zone, ok := zones.load(teamSettings[membership.TeamID].Timezone); ok {
+			return zone
+		}
+	}
+	return time.UTC
+}
+
+// pulseMaxWindow bounds how far back a summary reaches when the member's
+// delivery cursor is very old (a schedule that was "never" for months).
+const pulseMaxWindow = 31 * 24 * time.Hour
+
 func (s *server) preparePulseSummaries(ctx context.Context, key string, now time.Time) error {
-	// Each tick reads only the fields the schedule check needs; the
-	// per-viewer projection is built only when updates were posted, once per
-	// group of viewers who see the same things.
 	metadata, ok := s.store.WorkspaceMetadataFields(key, "workspaceSettings")
 	if !ok || !workspaceFeatureEnabled(metadata.WorkspaceSettings, "pulse") {
 		return nil
 	}
-	metadata, ok = s.store.WorkspaceMetadataFields(key, "workspaceSettings", "settings", "users", "userSettings", "teamMembers", "teamSettings", "projectUpdates", "initiativeUpdates")
+	metadata, ok = s.store.WorkspaceMetadataFields(key, "workspaceSettings", "settings", "userSettings", "teamSettings")
 	if !ok {
 		return nil
 	}
 	cursors := pulseCursors(&metadata)
-	firstTeam := map[string]string{}
-	for _, membership := range metadata.TeamMembers {
-		if _, seen := firstTeam[membership.UserID]; !seen {
-			firstTeam[membership.UserID] = membership.TeamID
-		}
+	workspaceDefault := metadata.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
+	// Every active member is a candidate, including invited members who never
+	// wrote anything (the metadata user list only grows on writes).
+	members, err := s.store.ListMembers(ctx, metadata.Workspace.ID)
+	if err != nil {
+		return err
 	}
-	zones := map[string]*time.Location{}
-	due := []pulseDue{}
-	for _, user := range metadata.Users {
-		schedule := metadata.UserSettings[user.ID].PulseSchedule
-		if schedule == "" || schedule == "default" {
-			schedule = metadata.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
-		}
-		zone := time.UTC
-		if teamID, ok := firstTeam[user.ID]; ok {
-			name := metadata.TeamSettings[teamID].Timezone
-			if cached, ok := zones[name]; ok {
-				zone = cached
-			} else if location, err := time.LoadLocation(name); err == nil {
-				zones[name], zone = location, location
-			}
-		}
-		start, end, isDue := pulseWindow(schedule, now, zone)
-		if !isDue || !cursors[user.ID].Before(end) {
+	zones := pulseZones{}
+	roles := map[string]string{}
+	candidates := []domain.User{}
+	for _, member := range members {
+		if member.Status != "active" {
 			continue
 		}
-		if cursors[user.ID].After(start) {
-			start = cursors[user.ID]
+		user := member.User
+		settings := metadata.UserSettings[user.ID]
+		schedule := effectivePulseSchedule(settings.PulseSchedule, workspaceDefault)
+		if schedule != "daily" && schedule != "weekly" {
+			continue
 		}
-		due = append(due, pulseDue{user: user, schedule: schedule, start: start, end: end})
+		// A member with a browser time zone is ruled out here when their
+		// cursor already reaches today's window end; the others need their
+		// team's zone below.
+		if zone, ok := zones.load(settings.Timezone); ok {
+			if _, end, due := pulseWindow(schedule, now, zone); !due || !cursors[user.ID].Before(end) {
+				continue
+			}
+		}
+		roles[user.ID] = member.Role
+		candidates = append(candidates, user)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	memberships, err := s.store.ListTeamMembers(ctx, metadata.Workspace.ID)
+	if err != nil {
+		return err
+	}
+	byUser := map[string][]domain.TeamMember{}
+	for _, membership := range memberships {
+		byUser[membership.UserID] = append(byUser[membership.UserID], membership)
+	}
+	due := []pulseDue{}
+	for _, user := range candidates {
+		settings := metadata.UserSettings[user.ID]
+		schedule := effectivePulseSchedule(settings.PulseSchedule, workspaceDefault)
+		zone := pulseUserZone(zones, settings, byUser[user.ID], metadata.TeamSettings)
+		start, end, isDue := pulseWindow(schedule, now, zone)
+		cursor := cursors[user.ID]
+		if !isDue || !cursor.Before(end) {
+			continue
+		}
+		// The window starts where the previous summary ended, so switching
+		// from daily to weekly (or moving to another time zone) never drops
+		// updates; a cursor older than pulseMaxWindow is clamped.
+		if !cursor.IsZero() {
+			start = cursor
+			if limit := end.Add(-pulseMaxWindow); start.Before(limit) {
+				start = limit
+			}
+		}
+		role := roles[user.ID]
+		// Guests never receive Pulse; app users neither.
+		due = append(due, pulseDue{user: user, schedule: schedule, start: start, end: end, role: role, eligible: role != "guest" && role != "app" && !user.App})
 		if len(due) >= pulseMaxUsersPerTick {
 			break
 		}
@@ -97,82 +186,49 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 	if len(due) == 0 {
 		return nil
 	}
-	// The visible count is zero when nothing was posted in the window, so the
-	// projection (a clone of the workspace) is skipped entirely.
-	posted := false
-	for _, item := range due {
-		if pulseUpdatesPosted(&metadata, item.start, item.end) {
-			posted = true
-			break
+	if snapshot, ok := s.store.PulseFeed(key); ok {
+		rules := newPulseRules(snapshot)
+		subscriptions := map[string][]domain.Subscription{}
+		for _, subscription := range snapshot.Subscriptions {
+			subscriptions[subscription.UserID] = append(subscriptions[subscription.UserID], subscription)
 		}
-	}
-	if posted {
-		visibility, err := s.store.ViewerVisibilityKeys(ctx, key)
-		if err != nil {
-			return err
-		}
-		groups := map[string][]int{}
-		order := []string{}
-		for index, item := range due {
-			group, ok := visibility[item.user.ID]
-			if !ok {
-				continue // not an active member: nothing visible
-			}
-			if _, seen := groups[group]; !seen {
-				order = append(order, group)
-			}
-			groups[group] = append(groups[group], index)
-		}
-		for _, group := range order {
-			members := groups[group]
-			view, err := s.store.PagedWorkspaceMetadata(ctx, key, due[members[0]].user.ID)
-			if err != nil {
+		for index := range due {
+			item := &due[index]
+			if !item.eligible {
 				continue
 			}
-			for _, index := range members {
-				due[index].count = pulseVisibleUpdates(&view, due[index].start, due[index].end)
+			viewer := newPulseViewerFrom(snapshot, item.user.ID, item.role, byUser[item.user.ID], subscriptions[item.user.ID], nil)
+			entries, total := rules.pulseForMeSince(viewer, item.start, item.end, pulseSummaryRefLimit)
+			item.total = total
+			for _, entry := range entries {
+				item.refs = append(item.refs, domain.PulseUpdateRef{ID: entry.UpdateID, Kind: entry.Kind, SourceID: entry.SourceID, Source: rules.sourceName(entry.Kind, entry.SourceID), At: entry.CreatedAt})
 			}
 		}
 	}
-	// One write for every due viewer: cursors live in one settings value, so
-	// per-viewer writes would each rewrite it.
+	// One write for every due member: cursors live in one settings value, so
+	// per-member writes would each rewrite it.
 	pulseCtx := store.WithMetadataFields(ctx, "settings", "workspaceSettings", "userSettings", "notificationPreferences", "pushSubscriptions")
 	return s.store.MutateWorkspace(pulseCtx, key, "pulse.summary_scheduled", "", nil, func(data *domain.Bootstrap) error {
 		if !workspaceFeatureEnabled(data.WorkspaceSettings, "pulse") {
 			return store.ErrNoMutation
 		}
 		current := pulseCursors(data)
-		existing := map[string]bool{}
-		for _, notification := range data.Notifications {
-			if notification.Type == "pulseSummary" {
-				existing[notification.ID] = true
-			}
-		}
 		changed := false
 		for _, item := range due {
 			user := item.user
 			if !current[user.ID].Before(item.end) {
 				continue
 			}
-			currentSchedule := data.UserSettings[user.ID].PulseSchedule
-			if currentSchedule == "" || currentSchedule == "default" {
-				currentSchedule = data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule
-			}
-			if currentSchedule != item.schedule {
+			if effectivePulseSchedule(data.UserSettings[user.ID].PulseSchedule, data.WorkspaceSettings.FeatureSettings.PulseWorkspaceSchedule) != item.schedule {
 				continue
 			}
 			preferences, ok := data.NotificationPreferences[user.ID]
 			if !ok {
 				preferences = defaultPreferences(user.ID)
 			}
-			if item.count > 0 && preferences.Inbox.Enabled && categoryEnabled(preferences.Inbox, "pulse") {
-				id := fmt.Sprintf("pulse_%s_%d", user.ID, item.end.Unix())
-				if !existing[id] {
-					notification := domain.Notification{ID: id, RecipientID: user.ID, Type: "pulseSummary", SourceType: "pulse", SourceID: item.end.Format(time.RFC3339), Category: "pulse", GroupKey: id, OccurrenceCount: item.count, Actor: domain.User{ID: "flow", Name: "Flow", DisplayName: "Flow"}, CreatedAt: now, UpdatedAt: now}
-					data.Notifications = append(data.Notifications, notification)
-					enqueueNotificationDeliveries(data, notification, preferences)
-					existing[id] = true
-				}
+			if item.eligible && item.total > 0 && preferences.Inbox.Enabled && categoryEnabled(preferences.Inbox, "pulse") {
+				data.Notifications = append(data.Notifications, newPulseSummaryNotification(item, now))
+				enqueueNotificationDeliveries(data, data.Notifications[len(data.Notifications)-1], preferences)
 			}
 			current[user.ID] = item.end
 			changed = true
@@ -188,44 +244,16 @@ func (s *server) preparePulseSummaries(ctx context.Context, key string, now time
 	})
 }
 
-// pulseVisibleUpdates counts the updates a viewer's projection shows in the window.
-func pulseVisibleUpdates(view *domain.Bootstrap, start, end time.Time) int {
-	count := 0
-	for _, project := range view.Projects {
-		if project.ArchivedAt != nil {
-			continue
-		}
-		for _, update := range view.ProjectUpdates[project.ID] {
-			if update.CreatedAt.After(start) && !update.CreatedAt.After(end) {
-				count++
-			}
-		}
+func newPulseSummaryNotification(item pulseDue, now time.Time) domain.Notification {
+	id := fmt.Sprintf("pulse_%s_%d", item.user.ID, item.end.Unix())
+	start, end := item.start, item.end
+	payload := &domain.NotificationPayload{Schedule: item.schedule, WindowStart: &start, WindowEnd: &end, Updates: item.refs, Total: item.total, UpdateIDs: make([]string, 0, len(item.refs))}
+	for _, ref := range item.refs {
+		payload.UpdateIDs = append(payload.UpdateIDs, ref.ID)
 	}
-	for _, initiative := range view.Initiatives {
-		for _, update := range view.InitiativeUpdates[initiative.ID] {
-			if update.CreatedAt.After(start) && !update.CreatedAt.After(end) {
-				count++
-			}
-		}
+	return domain.Notification{
+		ID: id, RecipientID: item.user.ID, Type: "pulseSummary", SourceType: "pulse", SourceID: item.end.Format(time.RFC3339), Category: "pulse", GroupKey: id,
+		OccurrenceCount: item.total, Actor: domain.User{ID: "flow", Name: "Flow", DisplayName: "Flow"}, LatestActorIDs: []string{},
+		Title: pulseSummaryTitle(item.schedule), Text: pulseSummaryText(item.refs, item.total), Payload: payload, CreatedAt: now, UpdatedAt: now,
 	}
-	return count
-}
-
-func pulseUpdatesPosted(data *domain.Bootstrap, start, end time.Time) bool {
-	within := func(at time.Time) bool { return at.After(start) && !at.After(end) }
-	for _, updates := range data.ProjectUpdates {
-		for _, update := range updates {
-			if within(update.CreatedAt) {
-				return true
-			}
-		}
-	}
-	for _, updates := range data.InitiativeUpdates {
-		for _, update := range updates {
-			if within(update.CreatedAt) {
-				return true
-			}
-		}
-	}
-	return false
 }

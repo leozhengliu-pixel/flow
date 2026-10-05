@@ -63,6 +63,8 @@ type server struct {
 	externalAuth                   *externalAuth
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
+	tts                            appconfig.TTSConfig
+	ttsClient                      *http.Client
 	webSearch                      websearch.Provider // nil when no provider is configured
 	webFetcher                     *websearch.Fetcher
 	triageRuns                     sync.Map
@@ -87,6 +89,9 @@ func main() {
 	applicationConfig, err := appconfig.Load()
 	if err != nil {
 		log.Fatal(err)
+	}
+	for _, warning := range applicationConfig.Warnings {
+		log.Printf("WARNING: %s", warning)
 	}
 	repository, err := store.OpenDatabase(applicationConfig.Database)
 	if err != nil {
@@ -126,6 +131,8 @@ func main() {
 		externalAuth:                   external,
 		agent:                          applicationConfig.Agent,
 		agentClient:                    &http.Client{Timeout: applicationConfig.Agent.Timeout},
+		tts:                            applicationConfig.TTS,
+		ttsClient:                      &http.Client{Timeout: applicationConfig.TTS.Timeout},
 		webSearch:                      websearch.New(websearch.Config{Provider: applicationConfig.WebSearch.Provider, APIKey: applicationConfig.WebSearch.APIKey, URL: applicationConfig.WebSearch.URL}, nil),
 		webFetcher:                     &websearch.Fetcher{},
 		allowedOrigin:                  applicationConfig.AppURL,
@@ -761,6 +768,23 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", s.setProjectThreadSubscription)
 	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", s.clearProjectThreadSubscription)
 	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
+	mux.HandleFunc("GET /api/pulse/feed", s.getPulseFeed)
+	mux.HandleFunc("GET /api/pulse/unread", s.getPulseUnread)
+	mux.HandleFunc("POST /api/pulse/seen", s.postPulseSeen)
+	mux.HandleFunc("GET /api/pulse/capabilities", s.getPulseCapabilities)
+	mux.HandleFunc("GET /api/pulse/subscriptions/initiative/{id}/project-updates", s.getInitiativeProjectUpdatesSubscription)
+	mux.HandleFunc("PUT /api/pulse/subscriptions/initiative/{id}/project-updates", s.setInitiativeProjectUpdatesSubscription(true))
+	mux.HandleFunc("DELETE /api/pulse/subscriptions/initiative/{id}/project-updates", s.setInitiativeProjectUpdatesSubscription(false))
+	mux.HandleFunc("GET /api/pulse/subscriptions/{type}/{id}", s.getPulseSubscription)
+	mux.HandleFunc("PUT /api/pulse/subscriptions/{type}/{id}", s.setPulseSubscription(true))
+	mux.HandleFunc("DELETE /api/pulse/subscriptions/{type}/{id}", s.setPulseSubscription(false))
+	mux.HandleFunc("GET /api/pulse/summaries/{id}", s.getPulseSummary)
+	mux.HandleFunc("POST /api/pulse/summaries/{id}/report", s.reportPulseSummary)
+	mux.HandleFunc("GET /api/pulse/summaries/{id}/audio", s.getPulseSummaryAudio)
+	mux.HandleFunc("GET /api/projects/{id}/updates", s.listProjectUpdates)
+	mux.HandleFunc("GET /api/projects/{id}/updates/diff-preview", s.projectUpdateDiffPreview)
+	mux.HandleFunc("GET /api/initiatives/{id}/updates", s.listInitiativeUpdates)
+	mux.HandleFunc("GET /api/initiatives/{id}/updates/diff-preview", s.initiativeUpdateDiffPreview)
 	mux.HandleFunc("POST /api/projects/{id}/updates", s.createProjectUpdate)
 	mux.HandleFunc("PATCH /api/projects/{id}/updates/{updateId}", s.updateProjectUpdate)
 	mux.HandleFunc("DELETE /api/projects/{id}/updates/{updateId}", s.deleteProjectUpdate)
@@ -914,6 +938,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 }
 
 func sanitizeBootstrap(data *domain.Bootstrap) {
+	stripPulseSnapshots(data)
 	data.ProviderJobs = nil
 	delete(data.Settings, "providerJobs")
 	availability, _ := data.Settings["calendarAvailability"].(map[string]any)
@@ -3329,11 +3354,17 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 			health = "onTrack"
 		}
 		created = domain.InitiativeUpdate{ID: fmt.Sprintf("initiative_update_%d", time.Now().UnixNano()), InitiativeID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: time.Now().UTC(), User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
+		created.Snapshot = initiativePulseSnapshot(data, *initiative, created.CreatedAt)
+		created.Diff = pulseDiffBetween(latestInitiativeSnapshot(data.InitiativeUpdates[id]), created.Snapshot)
+		if data.InitiativeUpdates == nil {
+			data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
+		}
 		data.InitiativeUpdates[id] = append([]domain.InitiativeUpdate{created}, data.InitiativeUpdates[id]...)
 		initiative.Health = health
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
 	})
+	created.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
@@ -3353,6 +3384,9 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		index := slices.IndexFunc(updates, func(item domain.InitiativeUpdate) bool { return item.ID == updateID })
 		if index < 0 {
 			return errNotFound
+		}
+		if !canEditPulseUpdate(data, updates[index].User) {
+			return store.ErrAuthForbidden
 		}
 		if input.Body != nil {
 			if strings.TrimSpace(*input.Body) == "" {
@@ -3379,6 +3413,7 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		updated = updates[index]
 		return nil
 	})
+	updated.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -3394,6 +3429,9 @@ func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		index := slices.IndexFunc(updates, func(item domain.InitiativeUpdate) bool { return item.ID == updateID })
 		if index < 0 {
 			return errNotFound
+		}
+		if !canEditPulseUpdate(data, updates[index].User) {
+			return store.ErrAuthForbidden
 		}
 		for _, attachment := range updates[index].Attachments {
 			objectKeys = append(objectKeys, filepath.Base(attachment.URL))
@@ -3427,8 +3465,10 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 	}
 	initiativeID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_commented", initiativeID, input, func(data *domain.Bootstrap) error {
-		if _, err := initiativeByID(data, initiativeID); err != nil {
+	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "initiative.update_commented", initiativeID, input, func(data *domain.Bootstrap) error {
+		initiative, err := initiativeByID(data, initiativeID)
+		if err != nil {
 			return err
 		}
 		updates := data.InitiativeUpdates[initiativeID]
@@ -3436,12 +3476,15 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 		if index < 0 {
 			return errNotFound
 		}
-		comment := domain.Comment{ID: fmt.Sprintf("initiative_update_comment_%d", time.Now().UnixNano()), Body: strings.TrimSpace(input.Body), Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
+		now := time.Now().UTC()
+		comment := domain.Comment{ID: fmt.Sprintf("initiative_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.InitiativeUpdates[initiativeID] = updates
 		updated = updates[index]
+		notifyUpdateAuthor(data, "initiative", initiativeID, initiative.Name, updateID, updates[index].User, notificationUpdateComment, comment.ID, "", now)
 		return nil
 	})
+	updated.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusCreated, updated)
 }
 
@@ -3453,8 +3496,10 @@ func (s *server) toggleInitiativeUpdateReaction(w http.ResponseWriter, r *http.R
 	}
 	initiativeID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_reaction_toggled", initiativeID, input, func(data *domain.Bootstrap) error {
-		if _, err := initiativeByID(data, initiativeID); err != nil {
+	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "initiative.update_reaction_toggled", initiativeID, input, func(data *domain.Bootstrap) error {
+		initiative, err := initiativeByID(data, initiativeID)
+		if err != nil {
 			return err
 		}
 		updates := data.InitiativeUpdates[initiativeID]
@@ -3471,6 +3516,7 @@ func (s *server) toggleInitiativeUpdateReaction(w http.ResponseWriter, r *http.R
 			users = slices.Delete(users, viewerIndex, viewerIndex+1)
 		} else {
 			users = append(users, data.Viewer.ID)
+			notifyUpdateAuthor(data, "initiative", initiativeID, initiative.Name, updateID, updates[index].User, notificationUpdateReaction, "", input.Emoji, time.Now().UTC())
 		}
 		if len(users) == 0 {
 			delete(updates[index].Reactions, input.Emoji)
@@ -3481,6 +3527,7 @@ func (s *server) toggleInitiativeUpdateReaction(w http.ResponseWriter, r *http.R
 		updated = updates[index]
 		return nil
 	})
+	updated.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -3907,6 +3954,12 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var created domain.ProjectUpdate
+	var snapshot *domain.PulseSnapshot
+	if feed, ok := s.store.PulseFeed(workspaceKey(r)); ok {
+		if project := pulseProjectIn(feed, id); project != nil {
+			snapshot = s.projectPulseSnapshot(r.Context(), feed.Workspace.URLKey, *project, time.Now().UTC())
+		}
+	}
 	// Posting an update archives the project's pending update reminders,
 	// which are notifications owned by the project.
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{id}})
@@ -3924,6 +3977,17 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		created = domain.ProjectUpdate{ID: fmt.Sprintf("project_update_%d", time.Now().UnixNano()), ProjectID: id, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Health: health, CreatedAt: now, User: data.Viewer, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}
+		if snapshot != nil {
+			// Status, lead, priority and dates are read again under the lock;
+			// milestone progress comes from the pre-read issue counts.
+			current := *snapshot
+			priority := project.Priority
+			current.CapturedAt, current.StatusID, current.Status, current.Priority, current.PriorityLabel = now, project.Status.ID, project.Status.Name, &priority, project.PriorityLabel
+			current.StartDate, current.TargetDate = optionalDate(project.StartDate), optionalDate(project.TargetDate)
+			current.LeadID, current.Lead = userName(project.Lead)
+			created.Snapshot = &current
+			created.Diff = pulseDiffBetween(latestProjectSnapshot(data.ProjectUpdates[id]), created.Snapshot)
+		}
 		settings, _ := data.Settings["projectUpdates"].(map[string]any)
 		if cadence := projectScheduleDays(*project, intFromAny(settings["cadenceDays"])); cadence > 0 {
 			dueAt := projectNextUpdateDue(*project, now, cadence)
@@ -3945,6 +4009,7 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		return id, nil
 	})
+	created.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
@@ -3960,6 +4025,9 @@ func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		index := slices.IndexFunc(updates, func(update domain.ProjectUpdate) bool { return update.ID == updateID })
 		if index < 0 {
 			return errNotFound
+		}
+		if !canEditPulseUpdate(data, updates[index].User) {
+			return store.ErrAuthForbidden
 		}
 		for _, attachment := range updates[index].Attachments {
 			objectKeys = append(objectKeys, filepath.Base(attachment.URL))
@@ -4014,6 +4082,9 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
+		if !canEditPulseUpdate(data, updates[index].User) {
+			return store.ErrAuthForbidden
+		}
 		if input.Body != nil {
 			updates[index].Body = strings.TrimSpace(*input.Body)
 		}
@@ -4033,6 +4104,7 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		updated = updates[index]
 		return nil
 	})
+	updated.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -4044,18 +4116,26 @@ func (s *server) createProjectUpdateComment(w http.ResponseWriter, r *http.Reque
 	}
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_commented", projectID, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.update_commented", projectID, input, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, projectID)
+		if err != nil {
+			return err
+		}
 		updates := data.ProjectUpdates[projectID]
 		index := slices.IndexFunc(updates, func(update domain.ProjectUpdate) bool { return update.ID == updateID })
 		if index < 0 {
 			return errNotFound
 		}
-		comment := domain.Comment{ID: fmt.Sprintf("project_update_comment_%d", time.Now().UnixNano()), Body: strings.TrimSpace(input.Body), Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
+		now := time.Now().UTC()
+		comment := domain.Comment{ID: fmt.Sprintf("project_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.ProjectUpdates[projectID] = updates
 		updated = updates[index]
+		notifyUpdateAuthor(data, "project", projectID, project.Name, updateID, updates[index].User, notificationUpdateComment, comment.ID, "", now)
 		return nil
 	})
+	updated.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusCreated, updated)
 }
 
@@ -4067,7 +4147,12 @@ func (s *server) toggleProjectUpdateReaction(w http.ResponseWriter, r *http.Requ
 	}
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+	ctx := store.WithMutationScope(r.Context(), pulseUpdateScope(updateID))
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.update_reaction_toggled", projectID, input, func(data *domain.Bootstrap) error {
+		project, err := fullProjectByID(data, projectID)
+		if err != nil {
+			return err
+		}
 		updates := data.ProjectUpdates[projectID]
 		index := slices.IndexFunc(updates, func(update domain.ProjectUpdate) bool { return update.ID == updateID })
 		if index < 0 {
@@ -4083,6 +4168,7 @@ func (s *server) toggleProjectUpdateReaction(w http.ResponseWriter, r *http.Requ
 			users = slices.Delete(users, viewerIndex, viewerIndex+1)
 		} else {
 			users = append(users, viewerID)
+			notifyUpdateAuthor(data, "project", projectID, project.Name, updateID, updates[index].User, notificationUpdateReaction, "", input.Emoji, time.Now().UTC())
 		}
 		if len(users) == 0 {
 			delete(updates[index].Reactions, input.Emoji)
@@ -4093,6 +4179,7 @@ func (s *server) toggleProjectUpdateReaction(w http.ResponseWriter, r *http.Requ
 		updated = updates[index]
 		return nil
 	})
+	updated.Snapshot = nil // stored for diffs only
 	respondMutation(w, err, http.StatusOK, updated)
 }
 

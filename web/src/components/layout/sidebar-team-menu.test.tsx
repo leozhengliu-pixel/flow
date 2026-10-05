@@ -6,10 +6,12 @@ import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import { SidebarTeamMenu } from './sidebar-team-menu'
 import type { BootstrapData } from '@/types/flow'
+import { PULSE_SUBSCRIPTIONS_CHANGED_EVENT, resetPulseSessionChoices } from '@/lib/pulse-subscriptions'
 
-const mocks = vi.hoisted(() => ({ toggle: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), membership: vi.fn(), refresh: vi.fn(), confirm: vi.fn(), error: vi.fn(), success: vi.fn() }))
+const mocks = vi.hoisted(() => ({ toggle: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), membership: vi.fn(), refresh: vi.fn(), confirm: vi.fn(), error: vi.fn(), success: vi.fn(), pulse: vi.fn(), request: vi.fn() }))
 vi.mock('@/lib/favorites', () => ({ toggleFavoriteFor: mocks.toggle }))
-vi.mock('@/lib/api', () => ({ addSubscription: mocks.subscribe, removeSubscription: mocks.unsubscribe, setTeamMembership: mocks.membership }))
+vi.mock('@/lib/api', () => ({ addSubscription: mocks.subscribe, removeSubscription: mocks.unsubscribe, setTeamMembership: mocks.membership, setPulseSubscription: mocks.pulse }))
+vi.mock('@/lib/api-client', () => ({ request: mocks.request }))
 vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: mocks.refresh }))
 vi.mock('@/components/ui/action-dialog-service', () => ({ confirmAction: mocks.confirm }))
 vi.mock('sonner', () => ({ toast: { error: mocks.error, success: mocks.success } }))
@@ -23,7 +25,7 @@ function fixture() {
 function tree(data = fixture(), reload = vi.fn().mockResolvedValue(undefined)) {
   return <MemoryRouter><I18nProvider><SidebarTeamMenu data={data} team={data.teams[0]} onReload={reload}><button>Team menu</button></SidebarTeamMenu></I18nProvider></MemoryRouter>
 }
-beforeEach(() => { vi.resetAllMocks(); vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })); localStorage.setItem('flow:locale', 'en-US'); mocks.toggle.mockResolvedValue(undefined); mocks.refresh.mockResolvedValue(undefined); mocks.subscribe.mockResolvedValue(undefined); mocks.membership.mockResolvedValue(undefined) })
+beforeEach(() => { vi.resetAllMocks(); vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })); localStorage.setItem('flow:locale', 'en-US'); mocks.toggle.mockResolvedValue(undefined); mocks.refresh.mockResolvedValue(undefined); mocks.subscribe.mockResolvedValue(undefined); mocks.membership.mockResolvedValue(undefined); mocks.request.mockReturnValue(new Promise(() => undefined)); resetPulseSessionChoices() })
 afterEach(() => { localStorage.removeItem('flow:locale') })
 
 it('does not mount selectable items during the opening pointer gesture', async () => {
@@ -126,4 +128,52 @@ it('opens subscriptions on hover and prevents overlapping saves, with failure fe
   expect(screen.getByRole('menuitemcheckbox', { name: 'An issue is added to the team' })).toHaveAttribute('aria-checked', 'false')
   expect(mocks.subscribe).toHaveBeenCalledTimes(1)
   expect(mocks.error).toHaveBeenCalledWith('Could not update team notifications', { description: 'Offline' })
+})
+
+it('follows team project updates in Pulse by default and writes the choice through the Pulse API', async () => {
+  const user = userEvent.setup()
+  mocks.pulse.mockResolvedValue({ subscribed: false })
+  const changes: unknown[] = []
+  const listener = (event: Event) => changes.push((event as CustomEvent).detail)
+  window.addEventListener(PULSE_SUBSCRIPTIONS_CHANGED_EVENT, listener)
+  const data = fixture()
+  data.subscriptions = [{ id: 'subscription', userId: viewer.id, resourceType: 'team', resourceId: data.teams[0].id, events: ['issueAdded'], createdAt: '' }]
+  render(tree(data))
+  await user.click(screen.getByRole('button', { name: 'Team menu' }))
+  await user.hover(screen.getByRole('menuitem', { name: 'Subscribe' }))
+  expect(await screen.findByText('Pulse updates')).toBeVisible()
+  const pulse = screen.getByRole('menuitemcheckbox', { name: 'A team project update is posted' })
+  expect(pulse).toHaveAttribute('aria-checked', 'true')
+  expect(mocks.request).toHaveBeenCalledWith('/api/pulse/subscriptions/team/team-1', expect.anything())
+  act(() => pulse.focus())
+  await user.keyboard(' ')
+  await waitFor(() => expect(screen.getByRole('menuitemcheckbox', { name: 'A team project update is posted' })).toHaveAttribute('aria-checked', 'false'))
+  expect(mocks.pulse).toHaveBeenCalledWith('team', 'team-1', false)
+  expect(mocks.subscribe).not.toHaveBeenCalled()
+  expect(mocks.unsubscribe).not.toHaveBeenCalled()
+  expect(changes).toEqual([{ type: 'team', id: 'team-1', subscribed: false }])
+  // Inbox events written afterwards keep the record, so the explicit opt-out survives.
+  const issueAdded = screen.getByRole('menuitemcheckbox', { name: 'An issue is added to the team' })
+  expect(issueAdded).toHaveAttribute('aria-checked', 'true')
+  act(() => issueAdded.focus())
+  await user.keyboard(' ')
+  await waitFor(() => expect(mocks.subscribe).toHaveBeenLastCalledWith('team', 'team-1', []))
+  expect(mocks.unsubscribe).not.toHaveBeenCalled()
+  window.removeEventListener(PULSE_SUBSCRIPTIONS_CHANGED_EVENT, listener)
+})
+
+it('rolls back a failed team Pulse subscription change', async () => {
+  const user = userEvent.setup()
+  mocks.pulse.mockRejectedValue(new Error('Offline'))
+  const data = fixture()
+  data.teamMembers = data.teamMembers.filter(item => item.teamId !== data.teams[0].id)
+  render(tree(data))
+  await user.click(screen.getByRole('button', { name: 'Team menu' }))
+  await user.hover(screen.getByRole('menuitem', { name: 'Subscribe' }))
+  const pulse = await screen.findByRole('menuitemcheckbox', { name: 'A team project update is posted' })
+  expect(pulse).toHaveAttribute('aria-checked', 'false')
+  act(() => pulse.focus())
+  await user.keyboard(' ')
+  await waitFor(() => expect(mocks.error).toHaveBeenCalledWith('Could not update Pulse subscription', { description: 'Offline' }))
+  expect(screen.getByRole('menuitemcheckbox', { name: 'A team project update is posted' })).toHaveAttribute('aria-checked', 'false')
 })

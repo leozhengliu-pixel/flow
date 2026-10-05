@@ -11,19 +11,37 @@ import type { Initiative, InitiativeMutationInput, InitiativeUpdateSchedule, Pro
 import { NotificationCheckbox, NotificationOptionSection } from '@/components/ui/notification-controls'
 import { SelectControl } from '@/components/ui/select-control'
 import { DateTimeControl } from '@/components/ui/date-time-control'
+import { useI18n } from '@/i18n/i18n'
+import { usePulseSubscription } from '@/lib/pulse-subscriptions'
 import './initiative-controls.css'
 
 const DEFAULT_RULES = { descriptionChanges: true, newUpdate: true, allProjectUpdates: false }
 const DEFAULT_SCHEDULE: InitiativeUpdateSchedule = { cadence: 'none', weekday: 1, timeRange: '09:00-12:00' }
 type Update = (input: InitiativeMutationInput) => void | Promise<unknown>
 
-export function InitiativeNotificationMenu({ initiative, onUpdate }: { initiative: Initiative; onUpdate: Update }) {
+/** The viewer's Pulse subscription for the initiative (contract item 2), via the Pulse API. */
+function useInitiativePulse(initiative: Initiative, pulseSubscribed: boolean | undefined, refresh: boolean) {
+  const { t } = useI18n()
+  const pulse = usePulseSubscription('initiative', initiative.id, pulseSubscribed ?? false, refresh)
+  const change = async (checked: boolean) => {
+    if (pulse.saving) return
+    try { await pulse.toggle(checked) }
+    catch (error) { toast.error(t('Could not update Pulse subscription'), { description: error instanceof Error ? error.message : undefined }) }
+  }
+  return { ...pulse, change }
+}
+
+export function InitiativeNotificationMenu({ initiative, pulseSubscribed, onUpdate }: { initiative: Initiative; /** Derived from loaded data (explicit choice + default rules). */ pulseSubscribed?: boolean; onUpdate: Update }) {
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [open, setOpen] = useState(false)
+  const pulse = useInitiativePulse(initiative, pulseSubscribed, open)
+  const { t } = useI18n()
   const rules = initiative.notificationRules ?? DEFAULT_RULES
   const changeRule = (field: keyof typeof rules, value: boolean) => void onUpdate({ notificationRules: { ...rules, [field]: value } })
   return <>
-    <Popover.Root><Popover.Trigger asChild><button aria-label="Setup initiative notifications" className={initiative.subscribed ? 'is-active' : ''} type="button"><Bell size={14}/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" alignOffset={-2} className="li-notifications" collisionPadding={10} sideOffset={4}>
+    <Popover.Root open={open} onOpenChange={setOpen}><Popover.Trigger asChild><button aria-label="Setup initiative notifications" className={initiative.subscribed ? 'is-active' : ''} type="button"><Bell size={14}/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" alignOffset={-2} className="li-notifications" collisionPadding={10} sideOffset={4}>
       <NotificationOptionSection className="li-notifications__section" title="Send inbox notifications for"><NotificationCheckbox checked={rules.descriptionChanges} label="Comments and changes to initiative description" onChange={value => changeRule('descriptionChanges', value)}/><NotificationCheckbox checked={rules.newUpdate} label="New initiative update is posted" onChange={value => changeRule('newUpdate', value)}/></NotificationOptionSection>
+      <NotificationOptionSection className="li-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={pulse.saving} checked={pulse.subscribed} label={t('Subscribe to initiative updates')} onChange={value => void pulse.change(value)}/></NotificationOptionSection>
       <section className="li-notifications__schedule"><div><strong>Update schedule</strong><span>{scheduleLabel(initiative.updateSchedule ?? DEFAULT_SCHEDULE)}</span></div><button onClick={() => setScheduleOpen(true)} type="button">Change</button></section>
       <section className="li-notifications__slack"><ViewGlyph color="currentColor" icon="Slack"/><strong>Slack notifications</strong><button disabled title="Connect Slack from workspace integrations first" type="button">Connect</button></section>
     </Popover.Content></Popover.Portal></Popover.Root>
@@ -31,18 +49,21 @@ export function InitiativeNotificationMenu({ initiative, onUpdate }: { initiativ
   </>
 }
 
-export function InitiativeActionsMenu({ initiative, onCreateReminder, onDelete, onNewUpdate, onShowActivity, onUpdate }: { initiative: Initiative; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: () => void; onNewUpdate: () => void; onShowActivity: () => void; onUpdate: Update }) {
+export function InitiativeActionsMenu({ initiative, pulseSubscribed, onCreateReminder, onDelete, onNewUpdate, onShowActivity, onUpdate }: { initiative: Initiative; pulseSubscribed?: boolean; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: () => void; onNewUpdate: () => void; onShowActivity: () => void; onUpdate: Update }) {
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const pulse = useInitiativePulse(initiative, pulseSubscribed, menuOpen)
+  const { t } = useI18n()
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [reminderOpen, setReminderOpen] = useState(false)
   const rules = initiative.notificationRules ?? DEFAULT_RULES
   const remind = async (date: Date) => { await onCreateReminder(date.toISOString()); toast.success('Reminder created') }
   return <>
-    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Initiative actions" type="button"><span className="li-ellipsis">•••</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="li-menu li-actions-menu" sideOffset={4}>
+    <DropdownMenu.Root onOpenChange={setMenuOpen}><DropdownMenu.Trigger asChild><button aria-label="Initiative actions" type="button"><span className="li-ellipsis">•••</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="li-menu li-actions-menu" sideOffset={4}>
       <DropdownMenu.Sub><DropdownMenu.SubTrigger><Clipboard size={14}/>Copy<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu" sideOffset={5}><DropdownMenu.Item onSelect={() => copyText(location.href, 'Initiative URL copied')}><Link2 size={14}/>Copy URL</DropdownMenu.Item><DropdownMenu.Item onSelect={() => copyText(initiative.name, 'Initiative title copied')}><Clipboard size={14}/>Copy title</DropdownMenu.Item><DropdownMenu.Item onSelect={() => copyText(`[${initiative.name}](${location.href})`, 'Linked title copied')}><Link2 size={14}/>Copy title as link</DropdownMenu.Item><DropdownMenu.Item onSelect={() => copyText(overviewMarkdown(initiative), 'Overview copied as Markdown')}><Clipboard size={14}/>Copy overview as Markdown</DropdownMenu.Item></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Separator/>
       <DropdownMenu.Item onSelect={() => onUpdate({ favorite: !initiative.favorite })}><Star fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/>{initiative.favorite ? 'Unfavorite' : 'Favorite'}<kbd>⌥ F</kbd></DropdownMenu.Item>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger><Bell size={14}/>Subscribe<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu li-subscription-menu" sideOffset={5}><DropdownMenu.CheckboxItem checked={rules.descriptionChanges} onCheckedChange={value => onUpdate({ notificationRules: { ...rules, descriptionChanges: value === true } })}>{rules.descriptionChanges && <Check size={12}/>}Comments and description changes</DropdownMenu.CheckboxItem><DropdownMenu.CheckboxItem checked={rules.newUpdate} onCheckedChange={value => onUpdate({ notificationRules: { ...rules, newUpdate: value === true }, subscribed: value === true })}>{rules.newUpdate && <Check size={12}/>}New initiative updates</DropdownMenu.CheckboxItem></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
+      <DropdownMenu.Sub><DropdownMenu.SubTrigger><Bell size={14}/>Subscribe<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu li-subscription-menu" sideOffset={5}><DropdownMenu.CheckboxItem checked={rules.descriptionChanges} onCheckedChange={value => onUpdate({ notificationRules: { ...rules, descriptionChanges: value === true } })}>{rules.descriptionChanges && <Check size={12}/>}Comments and description changes</DropdownMenu.CheckboxItem><DropdownMenu.CheckboxItem checked={rules.newUpdate} onCheckedChange={value => onUpdate({ notificationRules: { ...rules, newUpdate: value === true }, subscribed: value === true })}>{rules.newUpdate && <Check size={12}/>}New initiative updates</DropdownMenu.CheckboxItem><DropdownMenu.Separator/><DropdownMenu.Label className="li-menu-section-label">{t('Pulse updates')}</DropdownMenu.Label><DropdownMenu.CheckboxItem checked={pulse.subscribed} disabled={pulse.saving} onSelect={event => event.preventDefault()} onCheckedChange={value => void pulse.change(value === true)}>{pulse.subscribed && <Check size={12}/>}{t('Subscribe to initiative updates')}</DropdownMenu.CheckboxItem></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Sub><DropdownMenu.SubTrigger><Clock3 size={14}/>Remind me<kbd>⇧ H</kbd><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu" sideOffset={5}><DropdownMenu.Item onSelect={() => void remind(addHours(new Date(), 1))}>In one hour</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void remind(atMorning(addDays(new Date(), 1)))}>Tomorrow</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void remind(atMorning(addDays(new Date(), 7)))}>Next week</DropdownMenu.Item><DropdownMenu.Item onSelect={() => { const date = new Date(); date.setMonth(date.getMonth() + 1); void remind(atMorning(date)) }}>Next month</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={() => setReminderOpen(true)}><CalendarClock size={14}/>Custom…</DropdownMenu.Item></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
       <DropdownMenu.Separator/>
       <DropdownMenu.Item onSelect={onNewUpdate}><InitiativeUpdateGlyph/>New initiative update<kbd>N then U</kbd></DropdownMenu.Item>

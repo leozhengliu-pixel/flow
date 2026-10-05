@@ -1,5 +1,6 @@
 import type { BootstrapData } from '@/types/flow'
 import { request } from './api-client'
+import { isActiveSubscription } from './subscription-records'
 
 export type ResourcePreferences = Pick<BootstrapData, 'favorites' | 'favoriteFolders' | 'subscriptions'> & { documentSubscriptions?: Record<string, boolean> }
 export const RESOURCE_PREFERENCES_UPDATED = 'flow-resource-preferences-updated'
@@ -16,7 +17,7 @@ export function fetchResourcePreferences(workspaceKey: string) {
 export function mergeResourcePreferences(data: BootstrapData, preferences: ResourcePreferences): BootstrapData {
   const { documentSubscriptions, ...collections } = preferences
   const favorites = new Set(preferences.favorites.filter(item => item.userId === data.viewer.id).map(item => `${item.resourceType}:${item.resourceId}`))
-  const subscriptions = new Set(preferences.subscriptions.filter(item => item.userId === data.viewer.id).map(item => `${item.resourceType}:${item.resourceId}`))
+  const subscriptions = new Set(preferences.subscriptions.filter(item => item.userId === data.viewer.id && isActiveSubscription(item)).map(item => `${item.resourceType}:${item.resourceId}`))
   return {
     ...data, ...collections,
     documents: data.documents.map(item => ({ ...item, favorite: favorites.has(`document:${item.id}`), subscriberIds: documentSubscriptions?.[item.id] === undefined ? item.subscriberIds : documentSubscriptions[item.id] ? [...new Set([...(item.subscriberIds ?? []), data.viewer.id])] : (item.subscriberIds ?? []).filter(id => id !== data.viewer.id) })),

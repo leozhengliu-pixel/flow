@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type SetStateAction } from "react";
 
 export type SidebarEntry =
   | "inbox"
@@ -68,33 +68,61 @@ const defaultPreferences: SidebarPreferences = {
   dashboards: "never",
 };
 
-export function useSidebarCustomizationState() {
-  const [preferences, setPreferences] = useState(readPreferences);
-  const [order, setOrder] = useState(readOrder);
-  const [badgeStyle, setBadgeStyle] = useState<SidebarBadgeStyle>(readBadgeStyle);
-  useEffect(() => persist("flow.sidebar.preferences", preferences), [preferences]);
-  useEffect(() => persist("flow.sidebar.order", order), [order]);
-  useEffect(() => persist("flow.sidebar.badge-style", badgeStyle), [badgeStyle]);
+/**
+ * Sidebar customisation is per user (like Linear): stored under keys scoped to
+ * the signed-in user, so one person's choices never change another's sidebar
+ * in a shared browser. The first user to load after an upgrade adopts the old
+ * unscoped values, which are then removed.
+ */
+export function sidebarStorageKey(base: string, userId?: string) {
+  return userId ? `${base}:${userId}` : base
+}
+function readStored(base: string, userId?: string): string | null {
+  const key = sidebarStorageKey(base, userId)
+  const value = localStorage.getItem(key)
+  if (value !== null || !userId) return value
+  const legacy = localStorage.getItem(base)
+  if (legacy !== null) {
+    localStorage.setItem(key, legacy)
+    localStorage.removeItem(base)
+  }
+  return legacy
+}
+
+export function useSidebarCustomizationState(userId?: string) {
+  const [state, setState] = useState(() => ({ userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId) }))
+  // Another user signed in: load their own choices.
+  const current = state.userId === userId ? state : { userId, preferences: readPreferences(userId), order: readOrder(userId), badgeStyle: readBadgeStyle(userId) }
+  if (current !== state) setState(current)
+  const { preferences, order, badgeStyle } = current
+  useEffect(() => persist(sidebarStorageKey("flow.sidebar.preferences", userId), preferences), [preferences, userId]);
+  useEffect(() => persist(sidebarStorageKey("flow.sidebar.order", userId), order), [order, userId]);
+  useEffect(() => persist(sidebarStorageKey("flow.sidebar.badge-style", userId), badgeStyle), [badgeStyle, userId]);
+  const update = <K extends "preferences" | "order" | "badgeStyle">(key: K, value: SetStateAction<(typeof current)[K]>) =>
+    setState(previous => ({ ...previous, [key]: typeof value === "function" ? (value as (old: (typeof current)[K]) => (typeof current)[K])(previous[key]) : value }))
+  const setPreferences = (value: SetStateAction<SidebarPreferences>) => update("preferences", value)
+  const setBadgeStyle = (value: SetStateAction<SidebarBadgeStyle>) => update("badgeStyle", value)
   const reorder = (group: SidebarGroup, active: SidebarEntry, target: SidebarEntry) =>
-    setOrder((current) => ({
-      ...current,
-      [group]: reorderEntries(current[group], active, target),
+    update("order", (value: SidebarOrder) => ({
+      ...value,
+      [group]: reorderEntries(value[group], active, target),
     }));
   return { badgeStyle, order, preferences, reorder, setBadgeStyle, setPreferences };
 }
 
-function readBadgeStyle(): SidebarBadgeStyle {
-  try { return localStorage.getItem("flow.sidebar.badge-style") === "dot" ? "dot" : "count"; }
+function readBadgeStyle(userId?: string): SidebarBadgeStyle {
+  // Stored JSON-encoded ('"dot"'); older builds wrote the bare value.
+  try { const value = readStored("flow.sidebar.badge-style", userId); return value === "dot" || value === '"dot"' ? "dot" : "count"; }
   catch { return "count"; }
 }
-function readPreferences(): SidebarPreferences {
+function readPreferences(userId?: string): SidebarPreferences {
   try {
-    return { ...defaultPreferences, ...JSON.parse(localStorage.getItem("flow.sidebar.preferences") ?? "{}") };
+    return { ...defaultPreferences, ...JSON.parse(readStored("flow.sidebar.preferences", userId) ?? "{}") };
   } catch { return defaultPreferences; }
 }
-function readOrder(): SidebarOrder {
+function readOrder(userId?: string): SidebarOrder {
   try {
-    const stored = JSON.parse(localStorage.getItem("flow.sidebar.order") ?? "{}") as Partial<SidebarOrder>;
+    const stored = JSON.parse(readStored("flow.sidebar.order", userId) ?? "{}") as Partial<SidebarOrder>;
     return {
       personal: normalizeOrder(stored.personal, defaultPersonalOrder),
       workspace: normalizeOrder(stored.workspace, defaultWorkspaceOrder),

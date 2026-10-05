@@ -90,6 +90,7 @@ func TestTeamMutationsAtScale(t *testing.T) {
 		seedTeamScaleFixture(t, db, issues, metadata)
 		t.Logf("seeded %s fixture in %s", driver, time.Since(started).Round(time.Millisecond))
 	}
+	seedPulseScaleFixture(t, db)
 	opened := time.Now()
 	if profile := os.Getenv("FLOW_SCALE_OPEN_PROFILE"); profile != "" {
 		file, err := os.Create(profile)
@@ -315,6 +316,7 @@ func TestTeamMutationsAtScale(t *testing.T) {
 	timed("issue-record priority", http.MethodPatch, "/api/issue-records/"+id(issue), map[string]any{"priority": 1})
 	timed("GET issue-records/bootstrap", http.MethodGet, "/api/issue-records/bootstrap", nil)
 	runPulseScaleRoutes(t, srv, repository, timed)
+	runPulseUpdateScaleRoutes(t, timed, repeat)
 
 	extra := []string{}
 	for label := range scaleExtraSamples {

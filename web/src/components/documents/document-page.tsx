@@ -30,6 +30,7 @@ import type { BootstrapData, DocumentPermission, FlowDocument, User } from '@/ty
 
 import './document-page.css'
 import { useRegisterCommandContext } from '@/components/command/command-context'
+import { isActiveSubscription } from '@/lib/subscription-records'
 
 export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled }: { origin?: {label:string;entity?:boolean}; data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void; /** Open the history dialog on arrival (e.g. from a project resource menu). */ openHistoryRequest?: boolean; onHistoryRequestHandled?: () => void }) {
   const {t}=useI18n()
@@ -56,7 +57,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const pending=useRef<number | undefined>(undefined)
   const editedTriggerRef=useRef<HTMLButtonElement>(null)
   const favorite=data.favorites.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.favorite
-  const subscribed=data.subscriptions.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.subscriberIds.includes(data.viewer.id)
+  const subscribed=data.subscriptions.some(item=>item.resourceType==='document'&&item.resourceId===document.id&&isActiveSubscription(item)) || document.subscriberIds.includes(data.viewer.id)
   const collaborators=[...new Map(presence.filter(user=>Boolean(user.id)&&user.id!==data.viewer.id).map(user=>[user.id,user])).values()]
   useEffect(()=>{setTitle(document.title);setBody({value:document.content,state:document.contentData?JSON.stringify(document.contentData):document.contentState})},[document])
   useEffect(()=>{setDocumentContent(document.id,body.value,body.state);return()=>clearDocumentContent(document.id)},[document.id,body.value,body.state])

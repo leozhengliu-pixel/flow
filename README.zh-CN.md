@@ -92,6 +92,12 @@ docker compose up -d --build
 | `FLOW_COOKIE_SECURE` | `false` | 强制使用安全 Cookie，生产环境应启用。 |
 | `FLOW_DEV_AUTH_TOKENS` | `false` | 在开发响应中返回账户操作令牌，仅可在隔离的本地开发环境中开启。 |
 | `FLOW_TRUST_PROXY_HEADERS` | `false` | 信任受控反向代理传入的转发信息。 |
+| `FLOW_AGENT_ENABLED` | `false` | 启用 Flow Agent 与 AI Pulse 摘要（提供方变量见 `docs/configuration.md`）。 |
+| `FLOW_TTS_ENABLED` | `false` | 为 Pulse 摘要启用“收听”（文字转语音）。 |
+| `FLOW_TTS_BASE_URL` | `FLOW_AGENT_BASE_URL` | 提供 `/audio/speech` 的 OpenAI 兼容 API 地址。 |
+| `FLOW_TTS_API_KEY` | `FLOW_AGENT_API_KEY`（仅当 `FLOW_TTS_BASE_URL` 与 `FLOW_AGENT_BASE_URL` 相同） | 语音接口凭据；支持 `_FILE`。语音服务不是 Agent 提供方时必填，否则启动时警告并关闭“收听”。 |
+| `FLOW_TTS_MODEL` | `gpt-4o-mini-tts` | 语音模型。 |
+| `FLOW_TTS_VOICE` | `alloy` | 语音音色。 |
 
 仅当可信代理会覆盖客户端传入的转发请求头时，才启用 `FLOW_TRUST_PROXY_HEADERS`。
 

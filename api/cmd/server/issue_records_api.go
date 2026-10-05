@@ -159,6 +159,11 @@ func (s *server) issueRecordsBootstrap(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sanitizeBootstrap(&data)
+	// Paged clients read project and initiative updates (with their comments
+	// and reactions) from /api/pulse/feed and the per-project and
+	// per-initiative update endpoints instead of the bootstrap.
+	data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+	data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 	w.Header().Set("Server-Timing", fmt.Sprintf("bootstrap;dur=%.2f", float64(time.Since(started).Microseconds())/1000))
 	writeJSON(w, 200, data)
 }

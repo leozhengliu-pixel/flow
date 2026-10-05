@@ -1,29 +1,27 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
-import { Sparkles } from 'lucide-react'
+import { useEffect, useState, type RefObject } from 'react'
 import { toast } from 'sonner'
-import type { UserSettings } from '@/types/flow'
+import { useI18n } from '@/i18n/i18n'
+import { PulseIcon } from './pulse-icon'
 import { pulseWelcomeBannerCopy } from './use-show-pulse-welcome-banner'
-import type { PulseCadence } from './pulse-menus'
+import { PULSE_SCHEDULES, pulseScheduleLabels, type PulseSchedule } from './pulse-schedule'
 
 export type PulseWelcomeBannerProps = {
   containerRef?: RefObject<HTMLElement | null>
-  cadence: PulseCadence
-  workspaceDefault?: string
-  onConfirm: (cadence: PulseCadence) => Promise<UserSettings | void> | UserSettings | void
+  cadence: PulseSchedule
+  onConfirm: (cadence: PulseSchedule) => Promise<unknown> | unknown
 }
 
-const BANNER_HEIGHT = 300
 const SCROLL_OFFSET = 236
 
 /**
- * LS-0767 — Welcome to Pulse first-run banner + Confirm schedule.
+ * LS-0767 — "Welcome to Pulse" first-run banner: pick the summary schedule, then Confirm.
  */
-export function PulseWelcomeBanner({ containerRef, cadence, workspaceDefault, onConfirm }: PulseWelcomeBannerProps) {
+export function PulseWelcomeBanner({ containerRef, cadence, onConfirm }: PulseWelcomeBannerProps) {
+  const { t } = useI18n()
   const copy = pulseWelcomeBannerCopy()
-  const [draft, setDraft] = useState<PulseCadence>(cadence === 'default' ? 'default' : cadence)
+  const [draft, setDraft] = useState<PulseSchedule>(cadence)
   const [busy, setBusy] = useState(false)
   const [opacity, setOpacity] = useState(1)
-  const rootRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const scroller = containerRef?.current
@@ -42,60 +40,30 @@ export function PulseWelcomeBanner({ containerRef, cadence, workspaceDefault, on
     setBusy(true)
     try {
       await onConfirm(draft)
-      toast.success('Pulse schedule saved', {
-        description: 'You can always edit your preferences in Pulse Settings',
-      })
+      toast.success(t('Pulse schedule saved'), { description: t('You can always edit your preferences in Pulse Settings') })
     } catch (cause) {
-      toast.error(cause instanceof Error ? cause.message : 'Could not save Pulse schedule')
+      toast.error(cause instanceof Error ? cause.message : t('Could not save Pulse schedule'))
     } finally {
       setBusy(false)
     }
   }
 
-  const options: { id: PulseCadence; label: string }[] = [
-    { id: 'default', label: workspaceDefault ? `Workspace default (${workspaceDefault})` : 'Workspace default' },
-    { id: 'daily', label: 'Daily' },
-    { id: 'weekly', label: 'Weekly' },
-    { id: 'never', label: 'Never' },
-  ]
-
   return (
-    <div
-      ref={rootRef}
-      className="pulse-welcome-banner"
-      data-pulse-welcome-banner=""
-      style={{ opacity, minHeight: BANNER_HEIGHT }}
-    >
-      <div className="pulse-welcome-banner__glyph" aria-hidden>
-        <Sparkles size={28} />
-      </div>
-      <h2>{copy.title}</h2>
-      <p>{copy.body}</p>
+    <div className="pulse-welcome-banner" data-pulse-welcome-banner="" style={{ opacity }}>
+      <div className="pulse-welcome-banner__glyph" aria-hidden><PulseIcon size={26}/></div>
+      <h2>{t(copy.title)}</h2>
+      <p>{t(copy.body)}</p>
       <div className="pulse-welcome-banner__schedule">
-        <strong>{copy.scheduleLabel}</strong>
-        <span>{copy.scheduleHelp}</span>
-        <div className="pulse-welcome-banner__options" role="radiogroup" aria-label={copy.scheduleLabel}>
-          {options.map(option => (
-            <button
-              key={option.id}
-              type="button"
-              role="radio"
-              aria-checked={draft === option.id}
-              data-active={draft === option.id || undefined}
-              onClick={() => setDraft(option.id)}
-            >
-              {option.label}
+        <strong>{t(copy.scheduleLabel)}</strong>
+        <span>{t(copy.scheduleHelp)}</span>
+        <div className="pulse-welcome-banner__options" role="radiogroup" aria-label={t(copy.scheduleLabel)}>
+          {PULSE_SCHEDULES.map(option => (
+            <button key={option} type="button" role="radio" aria-checked={draft === option} data-active={draft === option || undefined} onClick={() => setDraft(option)}>
+              {t(pulseScheduleLabels[option])}
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          className="pulse-welcome-banner__confirm"
-          disabled={busy}
-          onClick={() => void confirm()}
-        >
-          {copy.confirm}
-        </button>
+        <button type="button" className="pulse-welcome-banner__confirm" disabled={busy} onClick={() => void confirm()}>{t(copy.confirm)}</button>
       </div>
     </div>
   )

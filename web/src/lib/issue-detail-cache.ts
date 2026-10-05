@@ -50,7 +50,14 @@ export function mergeWorkspaceDirectory(current: BootstrapData | null, next: Boo
     ...Object.fromEntries(Object.entries(fresh).filter(([id]) => !issueIds.has(id) || keep.has(id))),
     ...Object.fromEntries(Object.entries(previous).filter(([id]) => keep.has(id))),
   })
+  // Paged bootstraps ship no project/initiative updates; keep the ones loaded on demand.
+  const retainUpdates = <T,>(previous: Record<string,T[]> = {}, fresh: Record<string,T[]> = {}, alive: { id: string }[] = []): Record<string,T[]> => {
+    const ids = new Set(alive.map(entry => entry.id))
+    return { ...Object.fromEntries(Object.entries(previous).filter(([id]) => ids.has(id))), ...Object.fromEntries(Object.entries(fresh).filter(([, list]) => list?.length)) }
+  }
   return {...next, issues,
+    projectUpdates: retainUpdates(current.projectUpdates, next.projectUpdates, next.projects),
+    initiativeUpdates: retainUpdates(current.initiativeUpdates, next.initiativeUpdates, next.initiatives),
     comments: retainHistory(current.comments, next.comments),
     activities: retainHistory(current.activities, next.activities),
     issueHistoryCursors: retainHistory(current.issueHistoryCursors, next.issueHistoryCursors),

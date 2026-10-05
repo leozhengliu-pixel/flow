@@ -5,7 +5,13 @@ import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, project, teammate, viewer } from '@/test/fixtures'
 import type { Initiative, Project, Subscription } from '@/types/flow'
 import { ProjectPropertiesMenu } from './project-properties-menu'
-import { ProjectActionsMenu } from './project-header-menus'
+import { ProjectActionsMenu, ProjectNotificationMenu } from './project-header-menus'
+import { resetPulseSessionChoices } from '@/lib/pulse-subscriptions'
+import { TooltipProvider } from '@/components/ui/tooltip'
+
+const pulseMocks = vi.hoisted(() => ({ setPulseSubscription: vi.fn(), request: vi.fn() }))
+vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), setPulseSubscription: pulseMocks.setPulseSubscription }))
+vi.mock('@/lib/api-client', async original => ({ ...await original<typeof import('@/lib/api-client')>(), request: pulseMocks.request }))
 
 const initiative = {id:'initiative-1',name:'Platform reliability',status:'active',color:'#4caf80',icon:'Initiative'} as Initiative
 
@@ -18,13 +24,13 @@ function properties(overrides: Partial<Project> = {}) {
   return {save,updateProject,next}
 }
 
-function actions() {
+function actions(pulseSubscribed?: boolean) {
   const callbacks = {onDelete:vi.fn(),onFavorite:vi.fn(),onRemind:vi.fn().mockResolvedValue(undefined),onShowActivity:vi.fn(),onShowHistory:vi.fn(),onShowNotifications:vi.fn(),onSetEvents:vi.fn().mockResolvedValue(undefined),onUpdateSchedule:vi.fn().mockResolvedValue(undefined)}
-  render(<I18nProvider><ProjectActionsMenu project={project} favorited={false} subscription={{events:['projectUpdate']} as Subscription} {...callbacks}/></I18nProvider>)
+  render(<I18nProvider><ProjectActionsMenu project={project} favorited={false} subscription={{events:['projectUpdate']} as Subscription} pulseSubscribed={pulseSubscribed} {...callbacks}/></I18nProvider>)
   return callbacks
 }
 
-beforeEach(() => { localStorage.clear(); vi.stubGlobal('ResizeObserver',class { observe() {} unobserve() {} disconnect() {} }) })
+beforeEach(() => { localStorage.clear(); resetPulseSessionChoices(); pulseMocks.setPulseSubscription.mockReset(); pulseMocks.request.mockReset().mockReturnValue(new Promise(() => undefined)); vi.stubGlobal('ResizeObserver',class { observe() {} unobserve() {} disconnect() {} }) })
 afterEach(() => vi.unstubAllGlobals())
 
 describe('project properties menus', () => {
@@ -143,5 +149,35 @@ describe('project header menu', () => {
     const labels = screen.getAllByRole('menuitem').map(item => item.querySelector('.project-menu-label')?.textContent ?? item.textContent)
     expect(labels).toEqual(['Copy','Favorite','Subscribe','Remind me','Change update schedule…','Show description history','Show updates and activity','Delete'])
     expect(screen.queryByRole('menuitem',{name:/project insights/})).not.toBeInTheDocument()
+  })
+
+  it('subscribes to project updates in Pulse through the Pulse API, apart from inbox events', async () => {
+    const user = userEvent.setup(); const {onSetEvents} = actions(true)
+    pulseMocks.setPulseSubscription.mockResolvedValue({subscribed:false})
+    await user.click(screen.getByRole('button',{name:'Project actions'}))
+    await user.hover(screen.getByRole('menuitem',{name:'Subscribe'}))
+    expect(await screen.findByText('Pulse updates')).toBeVisible()
+    const pulse = screen.getByRole('menuitemcheckbox',{name:'Subscribe to project updates'})
+    expect(pulse).toHaveAttribute('aria-checked','true')
+    await user.click(pulse)
+    await waitFor(() => expect(screen.getByRole('menuitemcheckbox',{name:'Subscribe to project updates'})).toHaveAttribute('aria-checked','false'))
+    expect(pulseMocks.setPulseSubscription).toHaveBeenCalledWith('project',project.id,false)
+    expect(onSetEvents).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('menuitemcheckbox',{name:'An issue is added to the project'}))
+    expect(onSetEvents).toHaveBeenLastCalledWith(['projectUpdate','issueAdded'])
+  })
+
+  it('rolls back the Pulse checkbox in the notification popover when saving fails', async () => {
+    const user = userEvent.setup()
+    pulseMocks.setPulseSubscription.mockRejectedValue(new Error('Offline'))
+    const toastError = vi.spyOn((await import('sonner')).toast, 'error')
+    render(<I18nProvider><TooltipProvider><ProjectNotificationMenu open onOpenChange={vi.fn()} project={project} subscription={{events:['pulse']} as Subscription} onSetEvents={vi.fn()} onUpdate={vi.fn()}/></TooltipProvider></I18nProvider>)
+    const pulse = screen.getByRole('checkbox',{name:'Subscribe to project updates'})
+    expect(pulse).toBeChecked()
+    expect(pulseMocks.request).toHaveBeenCalledWith(`/api/pulse/subscriptions/project/${project.id}`,expect.anything())
+    await user.click(pulse)
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Could not update Pulse subscription',{description:'Offline'}))
+    expect(pulseMocks.setPulseSubscription).toHaveBeenCalledWith('project',project.id,false)
+    expect(screen.getByRole('checkbox',{name:'Subscribe to project updates'})).toBeChecked()
   })
 })

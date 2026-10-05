@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -41,13 +42,14 @@ type teamSlackMessage struct {
 // dispatchTeamSlackEvent posts to each affected team's Slack channel when the
 // team opted into that notification and the workspace has Slack connected.
 func (s *server) dispatchTeamSlackEvent(workspace string, event domain.DomainEvent) {
-	if !strings.HasPrefix(event.Type, "issue.") && event.Type != "comment.created" && event.Type != "project.update_created" {
+	if !strings.HasPrefix(event.Type, "issue.") && event.Type != "comment.created" && event.Type != "project.update_created" && event.Type != "initiative.update_created" {
 		return
 	}
 	if connections, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections"); !ok || slackBotToken(connections) == "" {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadata(workspace)
+	// Only the collections the messages read; never the whole workspace.
+	data, ok := s.store.WorkspaceMetadataFields(workspace, "integrationConnections", "teamSettings", "projects", "initiatives")
 	if !ok {
 		return
 	}
@@ -98,6 +100,31 @@ func (s *server) teamSlackMessages(workspace string, data domain.Bootstrap, even
 		messages := make([]teamSlackMessage, 0, len(project.TeamIDs))
 		for _, teamID := range project.TeamIDs {
 			messages = append(messages, teamSlackMessage{teamID: teamID, key: slackTeamProjectUpdate, text: text})
+		}
+		return messages
+	case event.Type == "initiative.update_created":
+		// Initiative updates go to the lead and contributing teams that opted
+		// into project updates in Slack.
+		var initiative *domain.Initiative
+		for index := range data.Initiatives {
+			if data.Initiatives[index].ID == event.AggregateID {
+				initiative = &data.Initiatives[index]
+				break
+			}
+		}
+		if initiative == nil {
+			return nil
+		}
+		slugID := initiative.SlugID
+		if slugID == "" {
+			slugID = initiative.ID
+		}
+		text := fmt.Sprintf("New initiative update posted for %s", slackLink(fmt.Sprintf("%s/%s/initiative/%s", slackAppURL(), workspace, slugID), initiative.Name))
+		messages := []teamSlackMessage{}
+		for _, teamID := range append([]string{initiative.LeadTeamID}, initiative.ContributingTeamIDs...) {
+			if teamID != "" && !slices.ContainsFunc(messages, func(message teamSlackMessage) bool { return message.teamID == teamID }) {
+				messages = append(messages, teamSlackMessage{teamID: teamID, key: slackTeamProjectUpdate, text: text})
+			}
 		}
 		return messages
 	case event.Type == "comment.created":

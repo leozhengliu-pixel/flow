@@ -19,6 +19,7 @@ import { projectScheduleLabel } from './project-schedule'
 import { SubscriptionIcon } from '@/components/ui/view-action-icons'
 import { SlackIcon } from '@/components/issue/issue-icons'
 import { FlowTooltip } from '@/components/ui/tooltip'
+import { PULSE_EVENT, usePulseSubscription } from '@/lib/pulse-subscriptions'
 
 const EVENT_OPTIONS = [
   ['issueAdded', 'An issue is added to the project'],
@@ -28,13 +29,29 @@ const EVENT_OPTIONS = [
   ['projectUpdate', 'New project update is posted'],
 ] as const
 
-export function ProjectNotificationMenu({ onOpenChange, open, project, subscription, onSetEvents, onUpdate, onShowSlack }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project; subscription?: Subscription; onSetEvents: (events: string[]) => Promise<void>; onShowSlack?: () => void; onUpdate: (input: { updateSchedule?: ProjectUpdateSchedule }) => Promise<void> }) {
+/** Keeps the inbox-event list's `pulse` entry in step with the viewer's Pulse choice, so writing inbox events never undoes it. */
+const withPulseEvent = (events: string[], subscribed: boolean) => subscribed ? [...new Set([...events, PULSE_EVENT])] : events.filter(event => event !== PULSE_EVENT)
+
+/** Pulse subscription for the project (contract item 2), written through the Pulse API rather than the inbox-event list. */
+function useProjectPulse(project: Project, events: string[], pulseSubscribed: boolean | undefined, refresh: boolean, setEvents: (update: (events: string[]) => string[]) => void) {
+  const { t } = useI18n()
+  const pulse = usePulseSubscription('project', project.id, pulseSubscribed ?? events.includes(PULSE_EVENT), refresh)
+  const change = async (checked: boolean) => {
+    if (pulse.saving) return
+    try { const subscribed = await pulse.toggle(checked); setEvents(current => withPulseEvent(current, subscribed)) }
+    catch (error) { toast.error(t('Could not update Pulse subscription'), { description: error instanceof Error ? error.message : undefined }) }
+  }
+  return { ...pulse, change }
+}
+
+export function ProjectNotificationMenu({ onOpenChange, open, project, subscription, pulseSubscribed, onSetEvents, onUpdate, onShowSlack }: { open: boolean; onOpenChange: (open: boolean) => void; project: Project; subscription?: Subscription; /** The viewer's Pulse subscription derived from loaded data (explicit choice + default rules). */ pulseSubscribed?: boolean; onSetEvents: (events: string[]) => Promise<void>; onShowSlack?: () => void; onUpdate: (input: { updateSchedule?: ProjectUpdateSchedule }) => Promise<void> }) {
   const { t } = useI18n()
   const [scheduleOpen,setScheduleOpen] = useState(false)
   const [events,setEvents] = useState(subscription?.events ?? [])
   const [saving,setSaving] = useState(false)
   const persisted = JSON.stringify(subscription?.events ?? [])
   useEffect(() => setEvents(JSON.parse(persisted) as string[]), [persisted])
+  const pulse = useProjectPulse(project, events, pulseSubscribed, open, setEvents)
   const changeEvent = async (eventName: string, checked: boolean) => {
     if (saving) return
     const before = events
@@ -49,7 +66,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
       <FlowTooltip disabled={open} label={t('Project notifications')}><Popover.Trigger asChild><button aria-label={t('Setup project notifications')} className="project-detail-page__header-action" data-active={Boolean(subscription)} type="button"><SubscriptionIcon/></button></Popover.Trigger></FlowTooltip>
       <Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="project-notifications" collisionPadding={16} sideOffset={4}>
         <NotificationOptionSection className="project-notifications__section" title={<><span>{t('Send inbox notifications for')}</span> <span data-i18n-ignore>{project.name}</span></>}>{EVENT_OPTIONS.map(([eventName,label]) => <NotificationCheckbox disabled={saving} checked={events.includes(eventName)} key={eventName} label={t(label)} onChange={checked => void changeEvent(eventName,checked)}/>)}</NotificationOptionSection>
-        <NotificationOptionSection className="project-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={saving} checked={events.includes('pulse')} label={t('Subscribe to project updates')} onChange={checked => void changeEvent('pulse',checked)}/></NotificationOptionSection>
+        <NotificationOptionSection className="project-notifications__section" title={t('Pulse updates')}><NotificationCheckbox disabled={pulse.saving} checked={pulse.subscribed} label={t('Subscribe to project updates')} onChange={checked => void pulse.change(checked)}/></NotificationOptionSection>
         <section className="project-notifications__schedule"><div><strong>{t('Update schedule')}</strong><span>{t(projectScheduleLabel(project))}</span></div><button type="button" onClick={() => { onOpenChange(false); setScheduleOpen(true) }}>{t('Change')}</button></section>
         {onShowSlack && <section className="project-notifications__slack"><strong>{t('Slack notifications')}</strong><button type="button" onClick={onShowSlack}>{t(project.slackChannelId ? 'Change' : 'Connect')}</button></section>}
       </Popover.Content></Popover.Portal>
@@ -58,7 +75,7 @@ export function ProjectNotificationMenu({ onOpenChange, open, project, subscript
   </>
 }
 
-export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, onRemind, onShowActivity, onShowHistory, onShowNotifications, onSetEvents, subscription, onUpdateSchedule, onShowSlack }: { project: Project; favorited: boolean; onDelete: () => void; onFavorite: () => void; onRemind: (remindAt: string) => Promise<void>; onShowActivity: () => void; onShowHistory: () => void; onShowNotifications: () => void; onSetEvents: (events: string[]) => Promise<void>; subscription?: Subscription; onUpdateSchedule?: (schedule: ProjectUpdateSchedule) => Promise<void>; onShowSlack?: () => void }) {
+export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, onRemind, onShowActivity, onShowHistory, onShowNotifications, onSetEvents, subscription, pulseSubscribed, onUpdateSchedule, onShowSlack }: { project: Project; favorited: boolean; onDelete: () => void; onFavorite: () => void; onRemind: (remindAt: string) => Promise<void>; onShowActivity: () => void; onShowHistory: () => void; onShowNotifications: () => void; onSetEvents: (events: string[]) => Promise<void>; subscription?: Subscription; pulseSubscribed?: boolean; onUpdateSchedule?: (schedule: ProjectUpdateSchedule) => Promise<void>; onShowSlack?: () => void }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [customReminder, setCustomReminder] = useState(false)
@@ -68,6 +85,8 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
   const [events, setEvents] = useState(subscription?.events ?? [])
   const persistedEvents = JSON.stringify(subscription?.events ?? [])
   useEffect(() => setEvents(JSON.parse(persistedEvents) as string[]), [persistedEvents])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const pulse = useProjectPulse(project, events, pulseSubscribed, menuOpen, setEvents)
   const visible = (label: string) => !query || `${label} ${t(label)}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())
   const markdown = `# ${project.name}\n\n${project.summary}${project.description ? `\n\n${project.description}` : ''}`
   const copy = (value: string) => void navigator.clipboard.writeText(value).then(() => toast.success(t('Copied to clipboard'))).catch(() => toast.error(t('Could not copy to clipboard')))
@@ -94,7 +113,7 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
   ]
   const separator = (index: number) => groupVisible(groups[index]) && groups.slice(0,index).some(groupVisible) ? <DropdownMenu.Separator/> : null
   return <>
-    <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}>
+    <DropdownMenu.Root onOpenChange={open => { setMenuOpen(open); if (!open) setQuery('') }}>
       <DropdownMenu.Trigger asChild><button aria-label={t('Project actions')} className="project-detail-page__header-action" type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger>
       <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" aria-label={t('Project actions')} align="start" className="project-action-menu project-action-menu--header" sideOffset={4} collisionPadding={16}>
         <div className={`project-action-menu__search${query ? '' : ' is-hidden'}`}><input aria-label={t('Filter project actions')} autoFocus onChange={event => setQuery(event.target.value)} onKeyDown={event => {
@@ -116,7 +135,9 @@ export function ProjectActionsMenu({ project, favorited, onDelete, onFavorite, o
         {visible(favoriteLabel) && <ProjectMenuItem label={favoriteLabel} icon={<FlowFavoriteIcon/>} shortcut="⌥ F" onSelect={onFavorite}/>}
         {visible('Subscribe') && <ProjectSubmenu label="Subscribe" icon={<SubscriptionIcon/>}>
           {EVENT_OPTIONS.map(([eventName,label]) => <DropdownMenu.CheckboxItem key={eventName} checked={events.includes(eventName)} disabled={saving} onSelect={event => event.preventDefault()} onCheckedChange={() => void toggleEvent(eventName)}><span className="project-menu-checkbox">{events.includes(eventName) && <CheckboxMark/>}</span><span className="project-menu-label">{t(label)}</span></DropdownMenu.CheckboxItem>)}
-          <DropdownMenu.CheckboxItem checked={events.includes('pulse')} disabled={saving} onSelect={event => event.preventDefault()} onCheckedChange={() => void toggleEvent('pulse')}><span className="project-menu-checkbox">{events.includes('pulse') && <CheckboxMark/>}</span><span className="project-menu-label">{t('Subscribe to project updates in Pulse')}</span></DropdownMenu.CheckboxItem>
+          <DropdownMenu.Separator/>
+          <DropdownMenu.Label className="project-action-menu__section-label">{t('Pulse updates')}</DropdownMenu.Label>
+          <DropdownMenu.CheckboxItem checked={pulse.subscribed} disabled={pulse.saving} onSelect={event => event.preventDefault()} onCheckedChange={checked => void pulse.change(checked === true)}><span className="project-menu-checkbox">{pulse.subscribed && <CheckboxMark/>}</span><span className="project-menu-label">{t('Subscribe to project updates')}</span></DropdownMenu.CheckboxItem>
         </ProjectSubmenu>}
         {visible('Remind me') && <ProjectSubmenu label="Remind me" icon={<Clock3 size={16}/>} shortcut="⇧ H" searchable>{close => <ReminderChoices onChoose={date => { close(); void remind(date.toISOString()) }} onCustom={() => { close(); setCustomReminder(true) }}/>}</ProjectSubmenu>}
         {separator(2)}

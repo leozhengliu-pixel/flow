@@ -16,6 +16,7 @@ const categories: [NotificationCategory,string,string][] = [
   ['integrations','Apps and integrations','OAuth apps and integrations'],
   ['customerRequests','Customer requests','Requests from your customers'],
   ['triage','Triage','Issues added to triage'],
+  ['pulse','Pulse summaries','Daily or weekly summaries of your subscribed project and initiative updates'],
 ]
 
 export function NotificationChannelSettings({channel,preferences,save,onBack,p}:{channel:'desktop'|'email';preferences:NotificationPreferences;save:(value:NotificationPreferences)=>Promise<void>;onBack:()=>void;p:(text:string)=>string}) {

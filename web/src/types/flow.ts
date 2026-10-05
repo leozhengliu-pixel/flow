@@ -510,8 +510,22 @@ export interface Notification {
   deletedAt?: string;
   snoozedUntil?: string;
   favorite: boolean;
+  /** Pulse summaries ("Daily Pulse" / "Weekly Pulse") carry their own title and text. */
+  title?: string;
+  text?: string;
+  /** Pulse summary payload: the update ids it covers and the schedule that produced it. */
+  payload?: PulseSummaryPayload;
   createdAt: string;
   updatedAt: string;
+}
+export interface PulseSummaryPayload {
+  updateIds?: string[];
+  schedule?: "daily" | "weekly" | string;
+  windowStart?: string;
+  windowEnd?: string;
+  updates?: { id: string; kind: "project" | "initiative" | string; sourceId: string; source?: string; createdAt?: string }[];
+  total?: number;
+  [key: string]: unknown;
 }
 export type NotificationCategory =
   | "assignments"
@@ -526,7 +540,8 @@ export type NotificationCategory =
   | "loops"
   | "integrations"
   | "customerRequests"
-  | "triage";
+  | "triage"
+  | "pulse";
 export interface NotificationChannelPreferences {
   enabled: boolean;
   categories: Record<NotificationCategory, boolean>;
@@ -678,6 +693,9 @@ export interface EmailIntakeMessage {
 export interface NotificationList {
   notifications: Notification[];
   unreadCount: number;
+  /** Paging (GET /api/notifications?limit=&cursor=). */
+  nextCursor?: string;
+  hasMore?: boolean;
 }
 export interface NotificationMutationInput {
   read?: boolean;
@@ -809,6 +827,8 @@ export interface ProjectUpdate {
   attachments: Attachment[];
   dueAt?: string;
   missing?: boolean;
+  /** Changes since the previous update, recorded when this one was posted. */
+  diff?: PulseDiff;
 }
 export interface CustomerRequest {
   id: UUID;
@@ -1187,6 +1207,8 @@ export interface UserSettings {
   pulseWelcomeDismissed?: boolean;
   /** LS-0270 / LS-0731 — persisted Pulse feed last-seen cursor (ISO). */
   feedLastSeenTime?: string;
+  /** IANA time zone used to deliver Pulse summaries in the user's morning. */
+  timezone?: string;
   jobTitle?: string;
   username?: string;
   updatedAt: string;
@@ -1683,6 +1705,8 @@ export interface Subscription {
   resourceType: string;
   resourceId: UUID;
   events?: string[];
+  /** Events explicitly unsubscribed from (Pulse opt-out: ["pulse"]). A record with only opt-outs is not a subscription. */
+  optOutEvents?: string[];
   createdAt: string;
 }
 /** A user's explicit choice for one comment thread (root comment and replies). Participants follow threads implicitly. */
@@ -1984,6 +2008,8 @@ export interface InitiativeUpdate {
   comments: Comment[];
   reactions: Record<string, UUID[]>;
   attachments: Attachment[];
+  /** Changes since the previous update (owner changes arrive in `lead`). */
+  diff?: PulseDiff;
 }
 export interface InitiativeMutationInput {
   parentInitiativeIds?: UUID[];
@@ -2609,4 +2635,104 @@ export interface RealtimeEvent {
     deleted?: boolean;
   };
   createdAt: string;
+}
+
+/* Pulse feed (contract items 1–6). */
+export type PulseFeedView = "following" | "popular" | "all" | "created";
+export type PulseReasonType =
+  | "author"
+  | "mentioned"
+  | "initiativeOwner"
+  | "initiativeProjectMember"
+  | "projectMember"
+  | "subscribed"
+  | "teamProjectUpdates";
+export interface PulseReason {
+  type: PulseReasonType;
+  sourceIds?: string[];
+  /** Contract name; the server sends `sourceNames`. Both are read. */
+  names?: string[];
+  sourceNames?: string[];
+  /** teamProjectUpdates followed through an initiative's project updates subscription. */
+  initiativeIds?: string[];
+  initiativeNames?: string[];
+}
+export interface PulseSource {
+  id: UUID;
+  name: string;
+  icon?: string;
+  color?: string;
+  url: string;
+}
+/** A diff endpoint value: the server may send a plain string/number or a named record. */
+export type PulseDiffValue =
+  | string
+  | number
+  | null
+  | { id?: string; name?: string; color?: string; type?: string; value?: string | number; avatarUrl?: string };
+export interface PulseDiffChange {
+  from?: PulseDiffValue;
+  to?: PulseDiffValue;
+  fromId?: string;
+  toId?: string;
+}
+export interface PulseDiffMilestone {
+  id?: string;
+  name: string;
+  from?: number;
+  to?: number;
+  completed?: boolean;
+  /** Created since the previous update. */
+  added?: boolean;
+  targetDate?: string;
+}
+export interface PulseDiff {
+  status?: PulseDiffChange;
+  priority?: PulseDiffChange;
+  lead?: PulseDiffChange;
+  owner?: PulseDiffChange;
+  startDate?: PulseDiffChange;
+  targetDate?: PulseDiffChange;
+  progressSince?: { date: string; from: number; to: number };
+  milestones?: PulseDiffMilestone[];
+  projects?: { added?: PulseDiffValue[]; removed?: PulseDiffValue[] };
+  initiatives?: { added?: PulseDiffValue[]; removed?: PulseDiffValue[] };
+}
+export type PulseItem =
+  | { id: string; kind: "project"; update: ProjectUpdate; source: PulseSource; reasons: PulseReason[]; diff?: PulseDiff; subscribed: boolean; createdAt?: string }
+  | { id: string; kind: "initiative"; update: InitiativeUpdate; source: PulseSource; reasons: PulseReason[]; diff?: PulseDiff; subscribed: boolean; createdAt?: string;
+      /** Subscribed to every project update of this initiative's projects (when the feed sends it). */
+      projectUpdatesSubscribed?: boolean };
+export interface PulseFeedPage {
+  items: PulseItem[];
+  nextCursor?: string;
+  unreadCount: number;
+  lastSeenAt?: string;
+}
+export interface PulseUnread {
+  count: number;
+  latestAt?: string;
+}
+export type PulseSubscriptionType = "project" | "initiative" | "team";
+export interface PulseSummaryItem {
+  updateId: UUID;
+  sourceId?: UUID;
+  sourceName: string;
+  health: Project["health"];
+  summary: string;
+}
+export interface PulseSummarySection {
+  kind: "project" | "initiative";
+  items: PulseSummaryItem[];
+}
+export interface PulseSummary {
+  title: string;
+  generatedAt: string;
+  sections: PulseSummarySection[];
+  text: string;
+  ai: boolean;
+}
+export interface PulseCapabilities {
+  aiSummaries: boolean;
+  audio: boolean;
 }

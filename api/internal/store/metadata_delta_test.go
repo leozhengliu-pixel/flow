@@ -2,11 +2,13 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,8 +95,48 @@ func TestWorkspaceMetadataDeltaMatchesFullWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
+	// Per-project and per-initiative update lists for the update delta cases.
+	updates := func(parent string, count int) []domain.ProjectUpdate {
+		result := []domain.ProjectUpdate{}
+		for i := range count {
+			id := fmt.Sprintf("%s_update_%d", parent, i)
+			result = append(result, domain.ProjectUpdate{ID: id, ProjectID: parent, Body: "Update " + id, Health: "onTrack", CreatedAt: now.Add(-time.Duration(i) * time.Hour), Comments: []domain.Comment{{ID: id + "_c", Body: "Comment", Reactions: map[string][]string{}}}, Reactions: map[string][]string{"+1": {"usr_admin"}}, Attachments: []domain.Attachment{}})
+		}
+		return result
+	}
+	if base.ProjectUpdates == nil {
+		base.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+	}
+	base.ProjectUpdates["delta_p1"], base.ProjectUpdates["delta_p2"] = updates("delta_p1", 4), updates("delta_p2", 3)
+	if base.InitiativeUpdates == nil {
+		base.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
+	}
+	base.InitiativeUpdates["delta_i1"] = []domain.InitiativeUpdate{{ID: "delta_i1_update", InitiativeID: "delta_i1", Body: "Initiative", Health: "onTrack", CreatedAt: now, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}}
 	cases := map[string]func(*domain.Bootstrap){
-		"no change":      func(*domain.Bootstrap) {},
+		"no change": func(*domain.Bootstrap) {},
+		"prepend project update": func(data *domain.Bootstrap) {
+			data.ProjectUpdates["delta_p1"] = append(updates("delta_p1_new", 1), data.ProjectUpdates["delta_p1"]...)
+		},
+		"comment on old project update": func(data *domain.Bootstrap) {
+			data.ProjectUpdates["delta_p1"][2].Comments = append(data.ProjectUpdates["delta_p1"][2].Comments, domain.Comment{ID: "late", Body: "Late", Reactions: map[string][]string{}})
+		},
+		"react to project update": func(data *domain.Bootstrap) {
+			data.ProjectUpdates["delta_p2"][0].Reactions["rocket"] = []string{"usr_admin"}
+		},
+		"delete middle project update": func(data *domain.Bootstrap) {
+			data.ProjectUpdates["delta_p1"] = slices.Delete(data.ProjectUpdates["delta_p1"], 1, 2)
+		},
+		"reorder project updates": func(data *domain.Bootstrap) { slices.Reverse(data.ProjectUpdates["delta_p1"]) },
+		"remove update parent":    func(data *domain.Bootstrap) { delete(data.ProjectUpdates, "delta_p2") },
+		"new update parent": func(data *domain.Bootstrap) {
+			data.ProjectUpdates["delta_p3"] = updates("delta_p3", 2)
+		},
+		"nil and empty update parents": func(data *domain.Bootstrap) {
+			data.ProjectUpdates["delta_p4"], data.ProjectUpdates["delta_p2"] = nil, []domain.ProjectUpdate{}
+		},
+		"initiative update": func(data *domain.Bootstrap) {
+			data.InitiativeUpdates["delta_i1"] = append([]domain.InitiativeUpdate{{ID: "delta_i1_new", InitiativeID: "delta_i1", Body: "New", Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}}, data.InitiativeUpdates["delta_i1"]...)
+		},
 		"workspace name": func(data *domain.Bootstrap) { data.Workspace.Name = "Renamed" },
 		"append project": func(data *domain.Bootstrap) {
 			project := data.Projects[0]
@@ -286,6 +328,126 @@ func TestHighFrequencyEventsAvoidFullWorkspacePath(t *testing.T) {
 	for _, item := range events {
 		if !metadataOnlyMutation(item.event, item.payload) && !metadataTeamMutation(item.event, item.payload) {
 			t.Errorf("%s takes the full workspace path", item.event)
+		}
+	}
+}
+
+// A comment on one project's update rewrites only that project's update rows:
+// another project's rows are neither read for payloads nor rewritten, and the
+// record group pass stays linear when every project changes.
+func TestUpdatesDeltaTouchesOnlyChangedParentAndStaysLinear(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	const workspace, parents, perParent = "test-workspace", 120, 12
+	now := time.Now().UTC()
+	repo.mu.RLock()
+	base := cloneBootstrap(collectionMetadata(repo.workspaces[workspace]))
+	repo.mu.RUnlock()
+	base.ProjectUpdates = map[string][]domain.ProjectUpdate{}
+	for p := range parents {
+		parent := fmt.Sprintf("linear_p%d", p)
+		for u := range perParent {
+			base.ProjectUpdates[parent] = append(base.ProjectUpdates[parent], domain.ProjectUpdate{ID: fmt.Sprintf("%s_u%d", parent, u), ProjectID: parent, Body: "Body", CreatedAt: now, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}})
+		}
+	}
+	writeFullMetadata(t, repo, workspace, base)
+	// Mark a row of another project; a delta that rewrote it would reset it.
+	key := metadataRecordKeyFor("projectUpdates", "linear_p1", "linear_p1_u3")
+	if _, err := repo.db.Exec(`UPDATE workspace_metadata_records SET collection_order=987 WHERE workspace_key=? AND field='projectUpdates' AND record_key=?`, workspace, key); err != nil {
+		t.Fatal(err)
+	}
+	write := func(before, after domain.Bootstrap) {
+		t.Helper()
+		tx, err := repo.db.BeginTx(context.Background(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+		if _, err := repo.writeWorkspaceMetadataDelta(context.Background(), tx, workspace, before, after); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.Commit(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	after := cloneBootstrap(base)
+	after.ProjectUpdates["linear_p0"][5].Comments = append(after.ProjectUpdates["linear_p0"][5].Comments, domain.Comment{ID: "comment", Body: "Hi", Reactions: map[string][]string{}})
+	evaluations := metadataGroupEvaluations.Load()
+	write(base, after)
+	if got := metadataGroupEvaluations.Load() - evaluations; got > 2*(perParent+1) {
+		t.Fatalf("one-project comment evaluated %d record groups, want at most %d", got, 2*(perParent+1))
+	}
+	var order int
+	if err := repo.db.QueryRow(`SELECT collection_order FROM workspace_metadata_records WHERE workspace_key=? AND field='projectUpdates' AND record_key=?`, workspace, key).Scan(&order); err != nil || order != 987 {
+		t.Fatalf("another project's row was rewritten: order %d (%v)", order, err)
+	}
+	var stored []byte
+	if err := repo.db.QueryRow(`SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='projectUpdates' AND record_key=?`, workspace, metadataRecordKeyFor("projectUpdates", "linear_p0", "linear_p0_u5")).Scan(&stored); err != nil || !strings.Contains(string(stored), `"id":"comment"`) {
+		t.Fatalf("commented update not written: %s (%v)", stored, err)
+	}
+	// Every project gains an update: each record's group is evaluated a
+	// bounded number of times, not once per (group, record) pair.
+	next := cloneBootstrap(after)
+	for parent := range next.ProjectUpdates {
+		next.ProjectUpdates[parent] = append([]domain.ProjectUpdate{{ID: parent + "_new", ProjectID: parent, Body: "New", CreatedAt: now, Comments: []domain.Comment{}, Reactions: map[string][]string{}, Attachments: []domain.Attachment{}}}, next.ProjectUpdates[parent]...)
+	}
+	evaluations = metadataGroupEvaluations.Load()
+	write(after, next)
+	records := parents * (perParent + 2)
+	if got := metadataGroupEvaluations.Load() - evaluations; got > int64(2*records) {
+		t.Fatalf("all-project write evaluated %d record groups for %d records (quadratic)", got, records)
+	}
+	if got := len(repo.mustExpandProjectUpdates(t, workspace)["linear_p7"]); got != perParent+1 {
+		t.Fatalf("linear_p7 has %d updates after the write, want %d", got, perParent+1)
+	}
+}
+
+func metadataRecordKeyFor(field, parent, id string) string {
+	records, _ := splitUpdateMetadata(field, map[string]json.RawMessage{parent: json.RawMessage(`[{"id":"` + id + `"}]`)})
+	for key, value := range records {
+		if update, item := metadataUpdateParent(value.data); item && update == parent {
+			return key.key
+		}
+	}
+	return ""
+}
+
+func (s *SQLiteStore) mustExpandProjectUpdates(t *testing.T, workspace string) map[string][]json.RawMessage {
+	t.Helper()
+	var root []byte
+	if err := s.db.QueryRow(`SELECT data FROM workspace_states WHERE workspace_key=?`, workspace).Scan(&root); err != nil {
+		t.Fatal(err)
+	}
+	expanded, err := s.expandWorkspaceMetadata(context.Background(), workspace, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		ProjectUpdates map[string][]json.RawMessage `json:"projectUpdates"`
+	}
+	if err := json.Unmarshal(expanded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	return decoded.ProjectUpdates
+}
+
+func TestMetadataUpdateParentReadsThePrefix(t *testing.T) {
+	for _, test := range []struct {
+		value  metadataUpdate
+		parent string
+		item   bool
+	}{
+		{metadataUpdate{Parent: "project_1", Item: json.RawMessage(`{"id":"u"}`)}, "project_1", true},
+		{metadataUpdate{Parent: "project_1"}, "project_1", false},
+		{metadataUpdate{Parent: "project_1", Null: true}, "project_1", false},
+		{metadataUpdate{Parent: `quoted "<parent>"`, Item: json.RawMessage(`{"id":"u"}`)}, `quoted "<parent>"`, true},
+	} {
+		raw, _ := json.Marshal(test.value)
+		if parent, item := metadataUpdateParent(raw); parent != test.parent || item != test.item {
+			t.Errorf("metadataUpdateParent(%s) = %q, %v", raw, parent, item)
 		}
 	}
 }

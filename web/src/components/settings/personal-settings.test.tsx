@@ -213,6 +213,32 @@ describe('personal settings workflows', () => {
     expect(screen.getByRole('option', { name: '标题和 URL' })).toBeInTheDocument()
   })
 
+  it.each(['desktop', 'email'] as const)('offers Pulse summaries on the %s channel, on by default and user-toggleable', async channel => {
+    const user = userEvent.setup()
+    const base = props('notifications')
+    // Legacy saved preferences have no Pulse entry; the category still defaults on.
+    const categories = { assignments: true, statusChanges: true, comments: true, mentions: true, reactions: true, subscriptions: true, documents: true, updates: true, reminders: true, loops: true, integrations: true, customerRequests: true, triage: true }
+    const preferences = { userId: viewer.id, inbox: { enabled: true, categories }, email: { enabled: true, categories }, desktop: { enabled: true, categories }, emailFormat: 'digest', delayLowPriority: true, immediateUrgent: true, soundEnabled: true, updatedAt: '' }
+    const input = { ...base, data: { ...base.data, notificationPreferences: { [viewer.id]: preferences } }, notificationChannel: channel } as unknown as ComponentProps<typeof PersonalSettings>
+    render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(screen.getByText('Daily or weekly summaries of your subscribed project and initiative updates')).toBeInTheDocument()
+    const toggle = screen.getByRole('checkbox', { name: 'Pulse summaries' })
+    expect(toggle).toBeChecked()
+    await user.click(toggle)
+    await waitFor(() => expect(api.updateNotificationPreferences).toHaveBeenCalled())
+    const saved = api.updateNotificationPreferences.mock.calls.at(-1)?.[0]
+    expect(saved[channel].categories.pulse).toBe(false)
+    expect(saved[channel].categories.comments).toBe(true)
+  })
+
+  it('localizes the Pulse summaries notification category', () => {
+    localStorage.setItem('flow:locale', 'zh-CN')
+    const input = { ...props('notifications'), notificationChannel: 'email' } as ComponentProps<typeof PersonalSettings>
+    render(<I18nProvider><PersonalSettings {...input}/></I18nProvider>)
+    expect(screen.getByRole('checkbox', { name: '动态摘要' })).toBeInTheDocument()
+    expect(screen.getByText('你订阅的项目和目标更新的每日或每周摘要')).toBeInTheDocument()
+  })
+
   it.each([
     ['profile', '个人资料'],
     ['account-security', '安全与访问'],

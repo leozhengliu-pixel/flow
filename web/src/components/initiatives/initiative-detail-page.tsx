@@ -1,8 +1,10 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { projectHasUpdates } from '@/lib/project-has-updates'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { Check, ChevronDown, ChevronRight, Copy, Edit3, Link2, MoreHorizontal, MessageSquare, Paperclip, PanelRightClose, PanelRightOpen, Plus, Send, Sparkles, Star, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { initiativePulseSubscribed } from '@/lib/pulse-subscriptions'
 import { ActivityPage } from '@/components/activity/activity-page'
 import { ActivitySidebarSection, type ActivitySidebarItem } from '@/components/panel/activity-sidebar-section'
 import { formatDistanceToNowStrict } from 'date-fns'
@@ -117,6 +119,8 @@ export function InitiativeDetailPage(props: Props) {
   const [deletingView, setDeletingView] = useState<InitiativeStoredView>()
   const activeView = tab === 'view' ? storedViews.find(view => view.slugId === props.viewId || view.id === props.viewId) : undefined
   const update = (input: InitiativeMutationInput) => onUpdate(initiative.id, input)
+  // Explicit choices are not in this page's props; the menus ask the server when opened.
+  const pulseSubscribed = useMemo(() => initiativePulseSubscribed(initiative, { viewerId: props.viewer.id, projects: props.projects, initiatives: props.initiatives }), [initiative, props.viewer.id, props.projects, props.initiatives])
   const initiativeLabels = useMemo(() => labelsForResource(props.labels, 'initiative', props.labelGroups), [props.labelGroups, props.labels])
   const projectLabels = useMemo(() => labelsForResource(props.labels, 'project', props.labelGroups), [props.labelGroups, props.labels])
 
@@ -167,10 +171,10 @@ export function InitiativeDetailPage(props: Props) {
       <button className="li-detail-all" onClick={props.onBack} type="button">Initiatives</button><ChevronRight className="li-detail-separator" size={12}/>
       <button className="li-detail-crumb" data-i18n-ignore onClick={() => onTabChange('overview')} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><strong>{initiative.name}</strong></button>
       <button aria-checked={initiative.favorite} aria-label="Add to favorites" className={initiative.favorite ? 'is-active' : ''} onClick={() => update({ favorite: !initiative.favorite })} role="switch" type="button"><Star fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/></button>
-      <InitiativeActionsMenu initiative={initiative} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => setUpdatesOpen(true)} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
+      <InitiativeActionsMenu initiative={initiative} pulseSubscribed={pulseSubscribed} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => setUpdatesOpen(true)} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
       <span/>
       <button aria-label="Copy page URL" onClick={() => void navigator.clipboard.writeText(window.location.href).then(() => toast.success('Initiative URL copied'))} type="button"><Link2 size={14}/></button>
-      <InitiativeNotificationMenu initiative={initiative} onUpdate={update}/>
+      <InitiativeNotificationMenu initiative={initiative} pulseSubscribed={pulseSubscribed} onUpdate={update}/>
       {tab !== 'activity' && <AddProjectMenu initiative={initiative} projects={props.projects} onCreateNew={() => setProjectCreateOpen(true)} onUpdate={update}/>} 
     </header>
     <div className="li-detail-toolbar"><nav>{(['overview', 'activity', 'projects'] as InitiativeRouteTab[]).map(item => <a aria-current={tab === item ? 'page' : undefined} href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/${item}`)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onTabChange(item) }}>{titleCase(item)}</a>)}{storedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><a aria-current={activeView?.id === view.id ? 'page' : undefined} aria-label={view.name} className="li-saved-view-tab" data-i18n-ignore href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onOpenView(view.slugId) }}><ViewGlyph color={view.color} icon={view.icon}/><span>{view.name}</span></a></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="li-menu li-saved-view-menu"><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)}`)}><Copy size={14}/>Copy link</ContextMenu.Item><ContextMenu.Item onSelect={() => void updateStoredView({ ...view, favorite: !view.favorite })}><Star fill={view.favorite ? 'currentColor' : 'none'} size={14}/>{view.favorite ? 'Unfavorite' : 'Favorite'}</ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item onSelect={() => setEditingView(view)}><Edit3 size={14}/>Edit…</ContextMenu.Item><ContextMenu.Item onSelect={() => void duplicateStoredView(view)}><Copy size={14}/>Duplicate…</ContextMenu.Item><ContextMenu.Item className="danger" onSelect={() => setDeletingView(view)}><Trash2 size={14}/>Delete</ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}{tab === 'new' ? <a aria-current="page" className="li-new-view-tab" href={location.pathname}><ViewGlyph color="#8a8f98" icon="CustomView"/><span>New view</span><Edit3 size={11}/></a> : <button aria-label="Add new view" onClick={() => onTabChange('new')} type="button"><ViewGlyph color="#8a8f98" icon="CustomView"/></button>}</nav><div>
@@ -374,7 +378,7 @@ function InitiativeSidebar({ initiatives, initiative, users, teams, labels, proj
   const [activityOpen, setActivityOpen] = useState(true)
   const effectiveProjects = initiativeProjectIds(initiative, initiatives)
   const linked = projects.filter(project => effectiveProjects.has(project.id))
-  const updateMissing = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !(projectUpdates[project.id]?.length)).length
+  const updateMissing = linked.filter(project => !['completed', 'canceled'].includes(project.status.type) && !projectHasUpdates(project, projectUpdates)).length
   return <aside className="li-detail-sidebar"><section><button aria-expanded={propertiesOpen} className="li-sidebar-heading" onClick={() => setPropertiesOpen(open => !open)} type="button">Properties <ChevronDown size={11}/></button>{propertiesOpen && <dl><dt>Status</dt><dd><InitiativeProperties compact only="status" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Priority</dt><dd><InitiativeProperties compact only="priority" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Owner</dt><dd><InitiativeProperties compact only="owner" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Lead team</dt><dd><InitiativeProperties compact only="leadTeam" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Contributing teams</dt><dd><InitiativeProperties compact only="contributingTeams" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Target date</dt><dd><InitiativeProperties compact only="target" initiative={initiative} teams={teams} users={users} onUpdate={update}/></dd><dt>Labels</dt><dd><InitiativeLabelsPicker initiative={initiative} labels={labels} onCreateLabel={onCreateLabel} onUpdate={update}/></dd></dl>}</section><section><button aria-expanded={progressOpen} className="li-sidebar-heading" onClick={() => setProgressOpen(open => !open)} type="button">Progress <ChevronDown size={11}/></button>{progressOpen && <div className="li-sidebar-progress"><div role="tablist">{(['health','status','leads'] as const).map(item => <button aria-selected={progressTab === item} key={item} onClick={() => setProgressTab(item)} role="tab" type="button">{titleCase(item)}</button>)}</div><ProgressBreakdown linked={linked} projectUpdates={projectUpdates} tab={progressTab} updateMissing={updateMissing}/></div>}</section><ActivitySidebarSection
     entityId={initiative.id}
     items={[{ id: `created-${initiative.id}`, createdAt: initiative.createdAt, category: 'system' as const, userIds: [viewer.id], userNames: [viewer.displayName || viewer.name], text: 'created the initiative', actorLabel: viewer.displayName || viewer.name } satisfies ActivitySidebarItem]}
@@ -388,7 +392,7 @@ function InitiativeSidebar({ initiatives, initiative, users, teams, labels, proj
 function ProgressBreakdown({ linked, projectUpdates, tab, updateMissing }: { linked: Project[]; projectUpdates: Record<string, ProjectUpdate[]>; tab: 'health'|'status'|'leads'; updateMissing: number }) {
   if (!linked.length) return <span className="li-progress-empty">No projects</span>
   if (tab === 'health') {
-    const counts = (['onTrack', 'atRisk', 'offTrack'] as Project['health'][]).map(value => ({ key: value, label: healthLabel(value), count: linked.filter(project => projectUpdates[project.id]?.length && project.health === value).length })).filter(item => item.count)
+    const counts = (['onTrack', 'atRisk', 'offTrack'] as Project['health'][]).map(value => ({ key: value, label: healthLabel(value), count: linked.filter(project => projectHasUpdates(project, projectUpdates) && project.health === value).length })).filter(item => item.count)
     return <><div className="li-progress-summary"><strong>{updateMissing}</strong><span>{updateMissing === 1 ? 'project needs an update' : 'projects need updates'}</span></div><ProgressRows rows={counts}/></>
   }
   if (tab === 'status') {

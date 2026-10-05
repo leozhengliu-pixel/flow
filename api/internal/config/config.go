@@ -24,8 +24,12 @@ type Config struct {
 	Storage                        objectstore.Config
 	Auth                           AuthConfig
 	Agent                          AgentConfig
+	TTS                            TTSConfig
 	WebSearch                      WebSearchConfig
 	Telemetry                      TelemetryConfig
+	// Warnings lists settings Load adjusted (for example a feature turned
+	// off for a missing credential); the server logs them at startup.
+	Warnings []string
 }
 
 type AgentConfig struct {
@@ -39,6 +43,19 @@ type AgentConfig struct {
 	AnthropicVersion string
 	ToolsEnabled     bool
 	WriteTools       bool
+}
+
+// TTSConfig configures text-to-speech for Pulse summaries ("Listen"). It
+// calls an OpenAI-compatible POST {BaseURL}/audio/speech endpoint. The base
+// URL defaults to the Agent provider's; the Agent key is reused only when
+// the speech endpoint is the Agent provider itself.
+type TTSConfig struct {
+	Enabled bool
+	BaseURL string
+	APIKey  string
+	Model   string
+	Voice   string
+	Timeout time.Duration
 }
 
 // WebSearchConfig selects the web search provider loops and Flow Agent use.
@@ -154,10 +171,34 @@ func Load() (Config, error) {
 			Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second), MaxOutputTokens: integer("FLOW_AGENT_MAX_OUTPUT_TOKENS", 4096),
 			AnthropicVersion: value("FLOW_AGENT_ANTHROPIC_VERSION", "2023-06-01"), ToolsEnabled: boolean("FLOW_AGENT_TOOLS_ENABLED", true), WriteTools: boolean("FLOW_AGENT_WRITE_TOOLS", false),
 		},
+		TTS: TTSConfig{
+			Enabled: boolean("FLOW_TTS_ENABLED", false), BaseURL: strings.TrimRight(value("FLOW_TTS_BASE_URL", value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1")), "/"),
+			APIKey: secret("FLOW_TTS_API_KEY"), Model: value("FLOW_TTS_MODEL", "gpt-4o-mini-tts"), Voice: value("FLOW_TTS_VOICE", "alloy"),
+			Timeout: duration("FLOW_TTS_TIMEOUT", 60*time.Second),
+		},
 		WebSearch: WebSearchConfig{Provider: strings.ToLower(value("FLOW_WEB_SEARCH_PROVIDER", "")), APIKey: secret("FLOW_WEB_SEARCH_API_KEY"), URL: strings.TrimRight(value("FLOW_WEB_SEARCH_URL", ""), "/")},
 		Telemetry: TelemetryConfig{Enabled: boolean("FLOW_TELEMETRY_ENABLED", false) && !boolean("OTEL_SDK_DISABLED", false), ServiceName: value("OTEL_SERVICE_NAME", "flow-api"), Environment: value("FLOW_ENVIRONMENT", "production"), Endpoint: value("OTEL_EXPORTER_OTLP_ENDPOINT", ""), TraceEndpoint: value("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", ""), MetricEndpoint: value("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")},
 	}
+	config.resolveTTSCredential()
 	return config, config.Validate()
+}
+
+// resolveTTSCredential reuses the Agent API key for speech only when the
+// speech base URL is the Agent base URL, so the Agent credential is never
+// sent to another host. A speech endpoint elsewhere needs FLOW_TTS_API_KEY;
+// without it Pulse audio is turned off with a startup warning.
+func (c *Config) resolveTTSCredential() {
+	if c.TTS.APIKey != "" {
+		return
+	}
+	if strings.TrimRight(c.TTS.BaseURL, "/") == strings.TrimRight(c.Agent.BaseURL, "/") {
+		c.TTS.APIKey = c.Agent.APIKey
+		return
+	}
+	if c.TTS.Enabled {
+		c.TTS.Enabled = false
+		c.Warnings = append(c.Warnings, "FLOW_TTS_ENABLED=true but FLOW_TTS_API_KEY is not set and FLOW_TTS_BASE_URL is not FLOW_AGENT_BASE_URL; Pulse audio is disabled")
+	}
 }
 
 func (c Config) Validate() error {
@@ -234,6 +275,12 @@ func (c Config) Validate() error {
 	}
 	if c.Agent.MaxOutputTokens < 1 || c.Agent.MaxOutputTokens > 131072 {
 		return fmt.Errorf("FLOW_AGENT_MAX_OUTPUT_TOKENS must be between 1 and 131072")
+	}
+	if c.TTS.Enabled && (c.TTS.BaseURL == "" || c.TTS.Model == "" || c.TTS.Voice == "") {
+		return fmt.Errorf("FLOW_TTS_BASE_URL, FLOW_TTS_MODEL and FLOW_TTS_VOICE are required when FLOW_TTS_ENABLED=true")
+	}
+	if c.TTS.Enabled && !strings.HasPrefix(c.TTS.BaseURL, "http://") && !strings.HasPrefix(c.TTS.BaseURL, "https://") {
+		return fmt.Errorf("FLOW_TTS_BASE_URL must be an http(s) URL")
 	}
 	if err := c.WebSearch.Validate(); err != nil {
 		return err

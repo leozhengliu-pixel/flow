@@ -20,6 +20,8 @@ import {
   MessageCircle,
   MessageCircleQuestion,
   MoreHorizontal,
+  Pause,
+  Play,
   Plus,
   Search,
   Settings,
@@ -123,6 +125,9 @@ import {
 } from "./sidebar-customization-state";
 
 import "./sidebar.css";
+import { pulseSidebarPath, usePulseUnread } from "@/components/pulse/pulse-unread";
+import { useInboxUnread } from "@/lib/inbox-unread";
+import { pulseAudio, usePulseAudio } from "@/lib/pulse-audio";
 
 export type PageId =
   | "inbox"
@@ -188,6 +193,7 @@ export function Sidebar({
   onReload?: (teamId?: string) => Promise<void>;
 }) {
   const layout = useSidebarLayout(open, onOpenChange);
+  const { t: translate } = useI18n();
   const currentLocation = useLocation();
   const navigationRoute = parseAppRoute(sourcePath?.split(/[?#]/)[0] ?? currentLocation.pathname);
   const selectedNavigationPath = sidebarRoutePath(navigationRoute);
@@ -219,7 +225,7 @@ export function Sidebar({
     reorder: reorderSidebar,
     setBadgeStyle,
     setPreferences,
-  } = useSidebarCustomizationState();
+  } = useSidebarCustomizationState(data.viewer.id);
   const [dismissedTry, setDismissedTry] = useState<string[]>(readDismissedTry);
   const featureFlags = data.workspaceSettings?.featureFlags;
   const featureEnabled = (feature: string) =>
@@ -255,7 +261,9 @@ export function Sidebar({
     window.addEventListener("keydown", openShortcuts);
     return () => window.removeEventListener("keydown", openShortcuts);
   }, []);
-  const inboxUnread = data.inboxUnreadCount ?? data.notifications.filter(
+  // Paged workspaces hold no notification list: the badge is the server's unread count.
+  const pagedInboxUnread = useInboxUnread(workspaceSlug, Boolean(data.issueCollectionPaged));
+  const inboxUnread = data.inboxUnreadCount ?? pagedInboxUnread ?? data.notifications.filter(
     (item) =>
       item.recipientId === data.viewer.id &&
       !item.readAt &&
@@ -263,6 +271,8 @@ export function Sidebar({
       !item.deletedAt &&
       (!item.snoozedUntil || new Date(item.snoozedUntil) <= new Date()),
   ).length;
+  const pulseAvailable = data.viewerRole !== "guest" && featureEnabled("pulse");
+  const pulseUnreadCount = usePulseUnread(workspaceSlug, pulseAvailable);
   const reviewCount = data.reviewCount ?? data.reviews.filter(
     (item) =>
       item.status !== "merged" &&
@@ -272,6 +282,8 @@ export function Sidebar({
   const badgeCount = (entry: SidebarEntry) =>
     entry === "inbox"
       ? inboxUnread
+      : entry === "pulse"
+        ? pulseUnreadCount
       : entry === "reviews"
         ? reviewCount
         : entry === "drafts"
@@ -307,10 +319,21 @@ export function Sidebar({
               : selectedNavigationPath === loopsPath(workspaceSlug)
                 ? "loops"
                 : undefined;
+  // The item for the page you are on stays visible (Linear), e.g. Pulse set to
+  // "Show when badged" after its badge clears because you are reading it.
+  const activePersonalEntry: SidebarEntry | undefined =
+    page === "inbox" ? "inbox"
+      : page === "pulse" ? "pulse"
+        : page === "reviews" ? "reviews"
+          : page === "drafts" ? "drafts"
+            : page === "agent" ? "agent"
+              : page === "my-issues" ? "myIssues"
+                : undefined;
   const show = (entry: SidebarEntry) =>
     preferences[entry] === "always" ||
     (preferences[entry] === "badged" && badgeCount(entry) > 0) ||
-    entry === activeWorkspaceEntry;
+    entry === activeWorkspaceEntry ||
+    entry === activePersonalEntry;
   const available = (entry: SidebarEntry) =>
     sidebarEntryAvailable(entry, featureFlags);
   const hiddenWorkspaceEntries = sidebarOrder.workspace.filter(
@@ -476,11 +499,15 @@ export function Sidebar({
         onClick={close}
       />
     ),
-    pulse: featureEnabled("pulse") ? (
+    pulse: pulseAvailable ? (
       <Nav
+        accessory={<PulseAudioMiniPlayer />}
+        badge={pulseUnreadCount}
+        badgeLabel={translate(pulseUnreadCount === 1 ? "{count} new pulse item" : "{count} new pulse items").replace("{count}", String(pulseUnreadCount))}
         icon={<PulseIcon />}
         label="Pulse"
-        to={pulsePath(workspaceSlug)}
+        matchPath={pulsePath(workspaceSlug)}
+        to={pulseSidebarPath(workspaceSlug, pulseUnreadCount)}
         onClick={close}
       />
     ) : null,
@@ -1789,14 +1816,23 @@ function Nav({
   icon,
   label,
   badge,
+  badgeLabel,
   count,
   active,
+  accessory,
+  matchPath,
   onClick,
   to,
 }: {
   icon: ReactElement;
   label: string;
   badge?: number;
+  /** Accessible name for the unread pill (defaults to "N unread"). */
+  badgeLabel?: string;
+  /** Inline control after the label (Pulse's audio Play/Pause). */
+  accessory?: ReactNode;
+  /** Path that marks the item active when `to` is a dynamic click target. */
+  matchPath?: string;
   /** A plain muted count (Linear's Triage count), unlike the unread `badge` pill. */
   count?: number;
   active?: boolean;
@@ -1808,8 +1844,9 @@ function Nav({
     <>
       <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
+      {accessory}
       {badge ? (
-        <span className="nav-unread" aria-label={`${badge} unread`}>
+        <span className="nav-unread" aria-label={badgeLabel ?? `${badge} unread`}>
           {badge > 99 ? "99+" : badge}
         </span>
       ) : count ? (
@@ -1817,6 +1854,7 @@ function Nav({
       ) : null}
     </>
   );
+  const activePath = (matchPath ?? to ?? "").toLowerCase();
   if (!to)
     return (
       <button
@@ -1832,7 +1870,7 @@ function Nav({
     <NavLink
       end={false}
       className={({ isActive }) =>
-        `nav-item ${(contextPath ? contextPath.toLowerCase() === to.toLowerCase() : active || isActive) ? "active" : ""}`
+        `nav-item ${(contextPath ? contextPath.toLowerCase() === activePath : active || isActive) ? "active" : ""}`
       }
       to={to}
       title={label}
@@ -2397,6 +2435,30 @@ function MyIssuesIcon() {
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M14.2458 10C14.6255 10 14.9393 10.2822 14.9889 10.6482L14.9958 10.75V12.2475C14.9958 13.7083 13.8567 14.9034 12.4177 14.9922L12.2504 14.9975L10.7513 15C10.3371 15.0007 10.0007 14.6655 10 14.2513C9.99936 13.8716 10.281 13.5573 10.647 13.507L10.7487 13.5L12.2479 13.4975C12.8943 13.4964 13.4255 13.0047 13.4893 12.3751L13.4958 12.2475V10.75C13.4958 10.3358 13.8316 10 14.2458 10ZM1.75 10C2.16421 10 2.5 10.3358 2.5 10.75V12.2475C2.5 12.937 3.05836 13.4963 3.74789 13.4975L5.24703 13.5C5.66125 13.5007 5.99646 13.8371 5.99576 14.2513C5.99506 14.6655 5.65871 15.0007 5.2445 15L3.74535 14.9975C2.22839 14.9949 1 13.7644 1 12.2475V10.75C1 10.3358 1.33579 10 1.75 10ZM8 6C9.10457 6 10 6.89543 10 8C10 9.10457 9.10457 10 8 10C6.89543 10 6 9.10457 6 8C6 6.89543 6.89543 6 8 6ZM10.7513 1L12.2504 1.00254C13.7674 1.0051 14.9958 2.23556 14.9958 3.75253V5.25C14.9958 5.66422 14.66 6 14.2458 6C13.8316 6 13.4958 5.66422 13.4958 5.25V3.75253C13.4958 3.063 12.9374 2.5037 12.2479 2.50253L10.7487 2.5C10.3345 2.4993 9.9993 2.16295 10 1.74873C10.0007 1.33452 10.3371 0.999302 10.7513 1ZM5.24873 1C5.66295 0.999303 5.9993 1.33452 6 1.74873C6.0007 2.16295 5.66548 2.4993 5.25127 2.5L3.75212 2.50253C3.06259 2.5037 2.50424 3.063 2.50424 3.75253V5.25C2.50424 5.66422 2.16845 6 1.75424 6C1.34002 6 1.00424 5.66422 1.00424 5.25V3.75253C1.00424 2.23556 2.23262 1.0051 3.74959 1.00254L5.24873 1Z" />
     </svg>
+  );
+}
+/** While a Pulse summary is playing or paused, an inline Play/Pause on the sidebar item. */
+function PulseAudioMiniPlayer() {
+  const { t } = useI18n();
+  const audio = usePulseAudio();
+  if (!audio.notificationId || (audio.status !== "playing" && audio.status !== "paused")) return null;
+  const playing = audio.status === "playing";
+  return (
+    <FlowTooltip label={playing ? t("Pause") : t("Play")}>
+      <button
+        aria-label={playing ? t("Pause Pulse summary") : t("Play Pulse summary")}
+        className="nav-audio-toggle"
+        data-playing={playing || undefined}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          pulseAudio.toggle();
+        }}
+        type="button"
+      >
+        {playing ? <Pause size={11} /> : <Play size={11} />}
+      </button>
+    </FlowTooltip>
   );
 }
 function PulseIcon() {

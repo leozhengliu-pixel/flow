@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import { ProjectGlyph } from '@/components/views/project-glyph'
 
 import type { ActivityEvent, Attachment, BootstrapData, CodeReview, Initiative, InitiativeUpdate, Issue, IssueRelationType, IssueUpdateInput, Notification, Presence, Project, ProjectUpdate, User } from '@/types/flow'
 import { DetailPane } from '@/components/detail/detail-pane'
 import { NoProjectIcon, PriorityIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
-import { batchNotifications, updateInboxNotification } from '@/lib/api'
+import { useI18n } from '@/i18n/i18n'
+import { batchNotifications, updateInboxNotification, updateUserSettings } from '@/lib/api'
+import { inboxUnread } from '@/lib/inbox-unread'
 import {
   InitiativeOverviewInboxView,
   InitiativeUpdatesInboxView,
@@ -22,6 +26,9 @@ import { inboxActorOptions, inboxNotificationCategory, matchesInboxFilter as not
 import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
+import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, pulseSummaryTitle, type PulseFrequency } from './pulse-summary-model'
+import { PulseSummaryView } from './pulse-summary-view'
+import { usePagedInbox } from './use-paged-inbox'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 
 const initialDisplayOptions: InboxDisplayOptions = {
@@ -79,18 +86,53 @@ export interface InboxAppPageProps {
   onOpenSidebar?: () => void
   activeTab?: InboxTab
   onTabChange?: (tab: InboxTab) => void
+  /** Paged workspaces: load the full issue and its history into the app before showing it. */
+  onLoadIssueContext?: (issueId: string) => Promise<void> | void
 }
 
-export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange }: InboxAppPageProps) {
-  const source = useMemo(() => projectInbox(data), [data])
-  const issueById = useMemo(() => new Map(data.issues.map(issue => [issue.id, issue])), [data.issues])
+export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpenProject, onOpenInitiative, onOpenReview, onOpenSettings, onCreateProjectUpdate, onCreateInitiativeUpdate, onSubscriberChange, onUpdateIssue, onDeleteIssue, onCreateRelation, onDeleteRelation, onCreateSubIssue, onReactIssue, onCreateComment, onEditComment, onDeleteComment, onReactComment, onUploadAttachment, onDeleteAttachment, onCopyIssueLink, onOpenSidebar, activeTab = 'all', onTabChange, onLoadIssueContext }: InboxAppPageProps) {
+  const { t } = useI18n()
+  // Paged workspaces ship no notifications in the bootstrap: read them from the API.
+  const paged = Boolean(data.issueCollectionPaged)
+  const pagedInbox = usePagedInbox({ enabled: paged, workspaceKey: data.workspace.urlKey, live: data.notifications, loadedIssues: data.issues })
+  const inboxData = useMemo(() => paged ? { ...data, notifications: pagedInbox.notifications, issues: pagedInbox.issues } : data, [data, paged, pagedInbox.issues, pagedInbox.notifications])
+  const source = useMemo(() => projectInbox(inboxData, t), [inboxData, t])
+  const savedPulseFrequency = effectivePulseFrequency(data)
+  const [pulseFrequency, setPulseFrequency] = useState<PulseFrequency>(savedPulseFrequency)
+  useEffect(() => setPulseFrequency(savedPulseFrequency), [savedPulseFrequency])
+  const changePulseFrequency = async (next: PulseFrequency) => {
+    const previous = pulseFrequency
+    if (next === previous) return
+    setPulseFrequency(next)
+    try {
+      await updateUserSettings({ pulseSchedule: next })
+    } catch {
+      setPulseFrequency(previous)
+      toast.error(t('Couldn’t update Pulse frequency'))
+    }
+  }
+  const issueById = useMemo(() => new Map(inboxData.issues.map(issue => [issue.id, issue])), [inboxData.issues])
   const [notifications, setNotifications] = useState<InboxProjection[]>(source)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Desktop/email notifications link to `/inbox?notification=<id>`.
+  const [selectedId, setSelectedId] = useState<string | null>(() => typeof window === 'undefined' ? null : new URL(window.location.href).searchParams.get('notification'))
+  const selectedProjection = selectedId ? notifications.find(item => item.id === selectedId) : undefined
+  // Paged workspaces load the opened notification's project/initiative updates on demand.
+  useRequestEntityUpdates('project', [selectedProjection?.projectId])
+  useRequestEntityUpdates('initiative', [selectedProjection?.initiativeId ?? (selectedProjection?.hostKind?.startsWith('initiative') ? selectedProjection.sourceId : undefined)])
+  // …and the opened issue's full record and history (the list only holds summaries).
+  const selectedIssueId = selectedProjection?.issueId || undefined
+  const selectedIssueSummary = Boolean(selectedIssueId && (issueById.get(selectedIssueId)?.isSummary || !data.issues.some(issue => issue.id === selectedIssueId)))
+  const requestedContext = useRef(new Set<string>())
+  useEffect(() => {
+    if (!paged || !selectedIssueId || !selectedIssueSummary || !onLoadIssueContext || requestedContext.current.has(selectedIssueId)) return
+    requestedContext.current.add(selectedIssueId)
+    void Promise.resolve(onLoadIssueContext(selectedIssueId)).catch(() => requestedContext.current.delete(selectedIssueId))
+  }, [onLoadIssueContext, paged, selectedIssueId, selectedIssueSummary])
   const [displayOptions, setDisplayOptions] = useState(readInboxDisplayOptions)
   const [filters, setFilters] = useState<InboxFilterCondition[]>(readInboxFilters)
   const filterOptions = useMemo<InboxFilterOptions>(
-    () => buildInboxFilterOptions(notifications, displayOptions, data),
-    [data, displayOptions, notifications],
+    () => buildInboxFilterOptions(notifications, displayOptions, inboxData),
+    [inboxData, displayOptions, notifications],
   )
   const notificationsRef = useRef(notifications)
   notificationsRef.current = notifications
@@ -111,60 +153,82 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     }
   }, [displayOptions])
 
+  // Until the first paged load lands, keep a `?notification=` selection from a desktop/email link.
+  const listPending = paged && pagedInbox.loading && !pagedInbox.notifications.length
   useEffect(() => {
     sourceByIdRef.current = new Map(source.map(notification => [notification.id, notification]))
     setNotifications(source)
-    setSelectedId(current => source.some(notification => notification.id === current) ? current : null)
-  }, [source])
+    if (!listPending) setSelectedId(current => source.some(notification => notification.id === current) ? current : null)
+  }, [listPending, source])
 
-  const adapter = useMemo<InboxPageAdapter>(() => ({
+  const { upsert: upsertPaged, reload: reloadPaged } = pagedInbox
+  const adapter = useMemo<InboxPageAdapter>(() => {
+    // Paged rows live in the inbox's own list: apply the server's answer there and refresh the badge.
+    const applied = (updated: Notification | undefined) => {
+      if (!paged) return
+      upsertPaged(updated)
+      inboxUnread.schedule(data.workspace.urlKey, 0)
+    }
+    const batch = async (action: Parameters<typeof batchNotifications>[0]) => {
+      await batchNotifications(action)
+      if (paged) { await reloadPaged() }
+    }
+    return {
     setRead: async (id, read) => {
-      await updateInboxNotification(id, { read })
+      applied(await updateInboxNotification(id, { read }))
     },
     delete: async id => {
-      await updateInboxNotification(id, { deleted: true })
+      applied(await updateInboxNotification(id, { deleted: true }))
     },
     snooze: async (id, preset) => {
       const snoozedUntil = resolveSnoozedUntil(preset)
-      await updateInboxNotification(id, { snoozedUntil })
+      applied(await updateInboxNotification(id, { snoozedUntil }))
       setNotifications(current => {
         const existing = current.find(notification => notification.id === id) ?? sourceByIdRef.current.get(id)
         return existing ? putProjection(current, { ...existing, snoozedUntil }) : current
       })
     },
     setFavorite: async (id, favorite) => {
-      await updateInboxNotification(id, { favorite })
+      applied(await updateInboxNotification(id, { favorite }))
     },
     markAllRead: async () => {
       const snapshot = notificationsRef.current
       setNotifications(current => current.map(notification => ({ ...notification, read: true })))
-      try { await batchNotifications('markAllRead') } catch (error) { setNotifications(snapshot); throw error }
+      try { await batch('markAllRead') } catch (error) { setNotifications(snapshot); throw error }
     },
     deleteAll: async () => {
       const snapshot = notificationsRef.current
       setNotifications([])
-      try { await batchNotifications('deleteAll') } catch (error) { setNotifications(snapshot); throw error }
+      try { await batch('deleteAll') } catch (error) { setNotifications(snapshot); throw error }
     },
     deleteAllRead: async () => {
       const snapshot = notificationsRef.current
       setNotifications(current => current.filter(notification => !notification.read))
-      try { await batchNotifications('deleteRead') } catch (error) { setNotifications(snapshot); throw error }
+      try { await batch('deleteRead') } catch (error) { setNotifications(snapshot); throw error }
     },
     deleteAllReadCompleted: async () => {
-      const completedIssueIds = new Set(data.issues.filter(issue => issue.state.type === 'completed').map(issue => issue.id))
+      const completedIssueIds = new Set(inboxData.issues.filter(issue => issue.state.type === 'completed').map(issue => issue.id))
       const snapshot = notificationsRef.current
       setNotifications(current => current.filter(notification => !(notification.read && completedIssueIds.has(notification.issueId))))
-      try { await batchNotifications('deleteReadCompleted') } catch (error) { setNotifications(snapshot); throw error }
+      try { await batch('deleteReadCompleted') } catch (error) { setNotifications(snapshot); throw error }
     },
-  }), [data.issues])
+  }
+  }, [data.workspace.urlKey, inboxData.issues, paged, reloadPaged, upsertPaged])
 
   const tabNotifications = useMemo(() => {
     const scope = activeTab === 'all' && displayOptions.priorityInbox ? 'priority' : activeTab
     return notifications.filter(notification => matchesInboxTab(notification, scope))
   }, [activeTab, displayOptions.priorityInbox, notifications])
   useEffect(() => {
-    setSelectedId(current => current && tabNotifications.some(notification => notification.id === current) ? current : null)
-  }, [tabNotifications])
+    if (listPending) return
+    const scope = activeTab === 'all' && displayOptions.priorityInbox ? 'priority' : activeTab
+    // The list state lags a fresh source by one render: look the row up in either.
+    setSelectedId(current => {
+      if (!current) return current
+      const projection = tabNotifications.find(notification => notification.id === current) ?? sourceByIdRef.current.get(current)
+      return projection && matchesInboxTab(projection, scope) ? current : null
+    })
+  }, [activeTab, displayOptions.priorityInbox, listPending, tabNotifications])
   const visibleNotifications = useMemo(() => {
     const now = Date.now()
     let visible = tabNotifications.filter(notification => {
@@ -212,7 +276,12 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     onFiltersChange={setFilters}
     onOpenSidebar={onOpenSidebar}
     onOpenSettings={onOpenSettings}
-    onRetryLoad={() => void onReload()}
+    onRetryLoad={() => void (paged ? reloadPaged() : onReload())}
+    loading={paged && pagedInbox.loading && !pagedInbox.notifications.length}
+    loadError={paged && pagedInbox.error && !pagedInbox.notifications.length}
+    hasMore={paged && pagedInbox.hasMore}
+    loadingMore={paged && pagedInbox.loadingMore}
+    onLoadMore={paged ? () => void pagedInbox.loadMore() : undefined}
     onShowAllNotifications={() => {
       setFilters([])
       setDisplayOptions(current => ({ ...current, priorityInbox: false, showRead: true, showSnoozed: true, showUnreadFirst: false, unreadGrouping: 'none' }))
@@ -229,6 +298,8 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       }
     }}
     onCopyIdentifier={notification => void copyText(notification.identifier)}
+    pulseFrequency={pulseFrequency}
+    onPulseFrequencyChange={changePulseFrequency}
     activeTab={activeTab}
     onTabChange={onTabChange}
     tabCounts={tabCounts}
@@ -259,7 +330,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       const hostKind = projection?.hostKind
         ?? (projection
           ? classifyInboxHost({
-              type: projection.notificationType === 'reminder' ? (data.notifications.find(item => item.id === projection.id)?.type ?? projection.notificationType) : (data.notifications.find(item => item.id === projection.id)?.type ?? projection.notificationType),
+              type: projection.notificationType === 'reminder' ? (inboxData.notifications.find(item => item.id === projection.id)?.type ?? projection.notificationType) : (inboxData.notifications.find(item => item.id === projection.id)?.type ?? projection.notificationType),
               projectId: projection.projectId,
               issueId: projection.issueId || undefined,
               sourceType: projection.sourceType,
@@ -268,13 +339,16 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
             })
           : 'other')
 
-      if (projection?.identifier === 'pulseSummary') {
-        return { content: <div className="flow-inbox-project-reminder"><h2>Pulse summary</h2><p>{projection.body}</p><a href={`/${data.workspace.urlKey}/pulse`}>Open Pulse</a></div> }
+      if (projection?.kind === 'pulse') {
+        return {
+          content: <PulseSummaryView key={projection.id} notificationId={projection.id} title={projection.title} data={data} onOpenProject={onOpenProject} onOpenInitiative={onOpenInitiative} />,
+          fullBleed: true,
+        }
       }
 
       if (hostKind === 'project-updates' && project) {
         const updates = data.projectUpdates?.[project.id] ?? []
-        const rawType = data.notifications.find(item => item.id === projection!.id)?.type ?? ''
+        const rawType = inboxData.notifications.find(item => item.id === projection!.id)?.type ?? ''
         return {
           content: (
             <ProjectUpdatesInboxView
@@ -292,7 +366,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
 
       if (hostKind === 'initiative-updates' && initiative) {
         const updates = data.initiativeUpdates?.[initiative.id] ?? []
-        const rawType = data.notifications.find(item => item.id === projection!.id)?.type ?? ''
+        const rawType = inboxData.notifications.find(item => item.id === projection!.id)?.type ?? ''
         return {
           content: (
             <InitiativeUpdatesInboxView
@@ -345,7 +419,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
         content: <DetailPane
           key={issue.id}
           issue={issue}
-          data={data}
+          data={inboxData}
           presence={presence}
           workspacePresence={presence}
           comments={data.comments[issue.id] ?? []}
@@ -369,7 +443,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
         />,
         fullBleed: true,
         issue,
-        issues: data.issues,
+        issues: inboxData.issues,
         onUpdateIssue: onUpdateIssue ? input => onUpdateIssue(issue, input) : undefined,
         onDeleteIssue: onDeleteIssue ? () => onDeleteIssue(issue) : undefined,
         onCreateRelation: onCreateRelation ? (type, relatedIssueId) => onCreateRelation(issue, type, relatedIssueId) : undefined,
@@ -419,7 +493,8 @@ function readInboxDisplayOptions(): InboxDisplayOptions {
   return initialDisplayOptions
 }
 
-function projectInbox(data: BootstrapData): InboxProjection[] {
+function projectInbox(data: BootstrapData, t: (source: string) => string): InboxProjection[] {
+  const pulseFrequency = effectivePulseFrequency(data)
   const issues = new Map(data.issues.map(issue => [issue.id, issue]))
   // Bootstrap may contain workspace-wide notification history in development
   // mode; Inbox itself is strictly recipient-scoped so every mutation maps to
@@ -459,9 +534,35 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
       if (!review || notification.deletedAt || notification.archivedAt) return []
       return [{ id: notification.id, href: `/${data.workspace.urlKey}/review/${review.slugId}`, issueId: '', sourceType: 'activity' as const, sourceId: notification.sourceId, notificationType: 'review', actorId: notification.actor.id, actor: notification.actor.displayName, actorAvatarUrl: notification.actor.avatarUrl, kind: 'review' as const, identifier: `${review.provider}#${review.number}`, title: review.title, body: `${notification.actor.displayName} requested your review`, timeLabel: relativeTime(notification.updatedAt), timestamp: notification.updatedAt, read: Boolean(notification.readAt), favorite: notification.favorite, snoozedUntil: notification.snoozedUntil, initiativeIds: [], issuePriority: 0, issueStatusType: 'started' as const, reviewId: review.id, reviewStatus: review.draft ? 'draft' : review.status }]
     }
+    if (isPulseSummaryNotification(notification)) {
+      if (notification.deletedAt || notification.archivedAt) return []
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: 'activity' as const,
+        sourceId: notification.sourceId,
+        notificationType: 'pulse',
+        actorId: notification.actor.id,
+        // Summaries come from Pulse itself, not a person.
+        actor: '',
+        kind: 'pulse' as const,
+        identifier: '',
+        title: t(pulseSummaryTitle(notification, pulseFrequency)),
+        body: localizePulseText(pulseSummaryText(notification), t),
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        initiativeIds: [],
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+        hostKind: 'other',
+      }]
+    }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
-    if (!issue && reminderProject && /project/i.test(notification.type) && !notification.deletedAt && !notification.archivedAt) {
+    if (!issue && reminderProject && (/project/i.test(notification.type) || (/^update(Comment|Reaction)$/.test(notification.type) && notification.sourceType !== 'initiativeUpdate')) && !notification.deletedAt && !notification.archivedAt) {
       const hostKind = classifyInboxHost({
         type: notification.type,
         projectId: reminderProject.id,
@@ -481,7 +582,8 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         kind: 'project' as const,
         identifier: notification.type === 'projectReminder' ? 'Reminder' : 'Project update',
         title: reminderProject.name,
-        body: notification.type === 'projectReminder'
+        // Server-written text (e.g. updateComment / updateReaction: "Ann commented on your update") wins.
+        body: notification.text ? notification.text : notification.type === 'projectReminder'
           ? `${notification.actor.displayName} set a reminder`
           : notification.type === 'projectUpdateDueReminder'
             ? 'A project update is due soon'
@@ -509,13 +611,14 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
     if (!issue && !reminderProject && !notification.deletedAt && !notification.archivedAt) {
       const initiative = data.initiatives.find(item => item.id === notification.sourceId)
         ?? (notification.sourceType === 'initiative' ? data.initiatives.find(item => item.id === notification.sourceId) : undefined)
+        // updateComment / updateReaction on an initiative update name the initiative in the payload.
+        ?? (notification.sourceType === 'initiativeUpdate' ? data.initiatives.find(item => item.id === notification.payload?.updates?.[0]?.sourceId) : undefined)
       const hostKind = classifyInboxHost({
         type: notification.type,
         sourceType: notification.sourceType,
         sourceId: notification.sourceId,
-        identifier: notification.type === 'pulseSummary' ? 'pulseSummary' : undefined,
       })
-      const isInitiative = Boolean(initiative) || /initiative/i.test(notification.type) || notification.sourceType === 'initiative'
+      const isInitiative = Boolean(initiative) || /initiative/i.test(notification.type) || notification.sourceType === 'initiative' || notification.sourceType === 'initiativeUpdate'
       return [{
         id: notification.id,
         issueId: '',
@@ -526,15 +629,13 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
         actor: notification.actor.displayName,
         actorAvatarUrl: notification.actor.avatarUrl,
         kind: isInitiative ? 'project' as const : 'generic' as const,
-        identifier: notification.type === 'initiativeReminder' || notification.type === 'documentReminder' ? 'Reminder' : notification.type === 'pulseSummary' ? 'pulseSummary' : genericNotificationTitle(notification),
-        title: initiative?.name || (notification.sourceType === 'document' ? data.documents?.find(item => item.id === notification.sourceId)?.title : undefined) || genericNotificationTitle(notification),
-        body: notification.type === 'pulseSummary'
-          ? `${notification.occurrenceCount} project and initiative updates`
-          : notification.type === 'initiativeReminder' || notification.type === 'documentReminder'
-            ? `${notification.actor.displayName} set a reminder`
-            : /initiativeUpdate/i.test(notification.type)
-              ? `${notification.actor.displayName} shared an initiative update`
-              : withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
+        identifier: notification.type === 'initiativeReminder' || notification.type === 'documentReminder' ? 'Reminder' : genericNotificationTitle(notification),
+        title: notification.title || initiative?.name || (notification.sourceType === 'document' ? data.documents?.find(item => item.id === notification.sourceId)?.title : undefined) || genericNotificationTitle(notification),
+        body: notification.text ? notification.text : notification.type === 'initiativeReminder' || notification.type === 'documentReminder'
+          ? `${notification.actor.displayName} set a reminder`
+          : /initiativeUpdate/i.test(notification.type)
+            ? `${notification.actor.displayName} shared an initiative update`
+            : withOccurrence(genericNotificationBody(notification), notification.occurrenceCount),
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),
@@ -580,6 +681,15 @@ function projectInbox(data: BootstrapData): InboxProjection[] {
       issueStatusType: issue.state.name.toLowerCase() === 'triage' ? 'triage' : issue.state.name.toLowerCase() === 'duplicate' ? 'duplicate' : issue.state.type,
     }]
   })
+}
+
+/** Localizes the server's summary line ("Update from X" / "A, B and N other updates"); source names stay as written. */
+function localizePulseText(text: string, t: (source: string) => string) {
+  const single = /^Update from (.+)$/.exec(text)
+  if (single) return t('Update from {name}').replace('{name}', single[1])
+  const many = /^(.+) and (\d+) other updates?$/.exec(text)
+  if (many) return t(many[2] === '1' ? '{names} and 1 other update' : '{names} and {count} other updates').replace('{names}', many[1]).replace('{count}', many[2])
+  return t(text)
 }
 
 function withOccurrence(body: string, count: number) { return count > 1 ? `${body} · ${count} updates` : body }

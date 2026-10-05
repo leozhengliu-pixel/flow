@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func (s *server) createPulseUpdateAttachment(kind string) http.HandlerFunc {
@@ -59,6 +60,9 @@ func (s *server) createPulseUpdateAttachment(kind string) http.HandlerFunc {
 				if index < 0 {
 					return errNotFound
 				}
+				if !canEditPulseUpdate(data, updates[index].User) {
+					return store.ErrAuthForbidden
+				}
 				updates[index].Attachments = append(updates[index].Attachments, attachment)
 				data.ProjectUpdates[parentID] = updates
 				result = updates[index]
@@ -72,6 +76,9 @@ func (s *server) createPulseUpdateAttachment(kind string) http.HandlerFunc {
 			if index < 0 {
 				return errNotFound
 			}
+			if !canEditPulseUpdate(data, updates[index].User) {
+				return store.ErrAuthForbidden
+			}
 			updates[index].Attachments = append(updates[index].Attachments, attachment)
 			data.InitiativeUpdates[parentID] = updates
 			result = updates[index]
@@ -80,7 +87,7 @@ func (s *server) createPulseUpdateAttachment(kind string) http.HandlerFunc {
 		if err != nil {
 			_ = storage.Delete(r.Context(), objectKey)
 		}
-		respondMutation(w, err, http.StatusCreated, result)
+		respondMutation(w, err, http.StatusCreated, withoutPulseSnapshot(result))
 	}
 }
 
@@ -95,6 +102,9 @@ func (s *server) deletePulseUpdateAttachment(kind string) http.HandlerFunc {
 				index := slices.IndexFunc(updates, func(item domain.ProjectUpdate) bool { return item.ID == updateID })
 				if index < 0 {
 					return errNotFound
+				}
+				if !canEditPulseUpdate(data, updates[index].User) {
+					return store.ErrAuthForbidden
 				}
 				attachmentIndex := slices.IndexFunc(updates[index].Attachments, func(item domain.Attachment) bool { return item.ID == attachmentID })
 				if attachmentIndex < 0 {
@@ -111,6 +121,9 @@ func (s *server) deletePulseUpdateAttachment(kind string) http.HandlerFunc {
 			if index < 0 {
 				return errNotFound
 			}
+			if !canEditPulseUpdate(data, updates[index].User) {
+				return store.ErrAuthForbidden
+			}
 			attachmentIndex := slices.IndexFunc(updates[index].Attachments, func(item domain.Attachment) bool { return item.ID == attachmentID })
 			if attachmentIndex < 0 {
 				return errNotFound
@@ -126,6 +139,6 @@ func (s *server) deletePulseUpdateAttachment(kind string) http.HandlerFunc {
 				_ = storage.Delete(r.Context(), objectKey)
 			}
 		}
-		respondMutation(w, err, http.StatusOK, result)
+		respondMutation(w, err, http.StatusOK, withoutPulseSnapshot(result))
 	}
 }

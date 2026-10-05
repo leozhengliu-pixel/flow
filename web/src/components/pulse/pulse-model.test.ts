@@ -1,85 +1,22 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { BootstrapData, SavedView } from '@/types/flow'
-import { buildPulseFeed, filterValues, pulseConfigFromView, pulseViewMutation } from './pulse-model'
+import { describe, expect, it } from 'vitest'
+import type { BootstrapData, PulseItem, SavedView } from '@/types/flow'
+import { filterValues, nextPulseSeen, pulseConfigFromView, pulseFilterParam, pulseGroupKey, pulseGroupStarts, pulseLastSeenItemId, pulseViewMutation, weekStartsOnFromSetting } from './pulse-model'
 
 function pulseData() {
   const viewer = { id: 'user-1', name: 'viewer', displayName: 'Viewer', active: true }
   const author = { id: 'user-2', name: 'author', displayName: 'Author', active: true }
   const status = { id: 'status-1', name: 'In progress', color: '#123456', type: 'started' }
-  const project = {
-    id: 'project-1', name: 'Project', teamIds: ['team-1'], memberIds: [viewer.id], labelIds: ['label-1'],
-    initiatives: ['initiative-1'], status, lead: viewer,
-  }
-  const initiative = {
-    id: 'initiative-1', name: 'Initiative', projectIds: [], contributingTeamIds: ['team-1'],
-    leadTeamId: 'team-1', subscribed: false, owner: author,
-  }
-  const projectUpdate = {
-    id: 'project-update-1', user: author, health: 'onTrack', createdAt: '2026-08-30T08:00:00.000Z',
-    comments: [{ id: 'comment-1' }], reactions: { thumbsUp: [viewer.id] },
-  }
-  const initiativeUpdate = {
-    id: 'initiative-update-1', user: viewer, health: 'atRisk', createdAt: '2026-08-29T08:00:00.000Z',
-    comments: [], reactions: {},
-  }
   return {
     viewer, users: [viewer, author], teams: [{ id: 'team-1', name: 'Engineering' }],
-    projects: [project], initiatives: [initiative], projectStatuses: [status],
+    projects: [{ id: 'project-1', name: 'Project' }], initiatives: [{ id: 'initiative-1', name: 'Initiative' }], projectStatuses: [status],
     labels: [{ id: 'label-1', name: 'Portfolio', color: '#654321', resourceType: 'project' }],
-    subscriptions: [], projectUpdates: { [project.id]: [projectUpdate] },
-    initiativeUpdates: { [initiative.id]: [initiativeUpdate] },
+    workspaceSettings: { featureFlags: {} },
   } as unknown as BootstrapData
 }
 
+const item = (id: string, createdAt: string) => ({ id, update: { createdAt } }) as unknown as PulseItem
+
 describe('pulse model', () => {
-  it('keeps inbox event preferences separate from Pulse subscriptions', () => {
-    const data = pulseData()
-    data.projects[0].lead = undefined
-    data.projects[0].memberIds = []
-    data.subscriptions = [{id:'subscription',userId:data.viewer.id,resourceType:'project',resourceId:data.projects[0].id,events:['projectChanges'],createdAt:'2026-09-01T00:00:00Z'}]
-    expect(buildPulseFeed(data,'following')).toHaveLength(0)
-    data.subscriptions[0].events = ['projectChanges','pulse']
-    expect(buildPulseFeed(data,'following').map(item=>item.kind)).toEqual(['project'])
-    data.subscriptions[0].events = []
-    expect(buildPulseFeed(data,'following').map(item=>item.kind)).toEqual(['project'])
-  })
-  it('sorts updates and applies following and filter semantics', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-08-30T12:00:00.000Z'))
-    const data = pulseData()
-    expect(buildPulseFeed(data, 'all').map(item => item.id)).toEqual(['project:project-update-1', 'initiative:initiative-update-1'])
-    expect(buildPulseFeed(data, 'following').map(item => item.kind)).toEqual(['project'])
-    expect(buildPulseFeed(data, 'popular')[0].kind).toBe('project')
-    expect(buildPulseFeed(data, 'all', {
-      match: 'all', filters: [{ id: 'type', field: 'updateType', operator: 'is', values: ['initiative'] }],
-    }).map(item => item.kind)).toEqual(['initiative'])
-    expect(buildPulseFeed(data, 'all', {
-      match: 'any', filters: [
-        { id: 'health', field: 'health', operator: 'isNot', values: ['onTrack'] },
-        { id: 'project', field: 'project', operator: 'is', values: ['missing'] },
-      ],
-    }).map(item => item.kind)).toEqual(['initiative'])
-
-    data.initiatives[0].projectIds = ['project-1']
-    const filters = [
-      { field: 'author', value: 'user-2', count: 1 },
-      { field: 'team', value: 'team-1', count: 2 },
-      { field: 'createdDate', value: 'past-day', count: 1 },
-      { field: 'health', value: 'atRisk', count: 1 },
-      { field: 'initiative', value: 'initiative-1', count: 2 },
-      { field: 'project', value: 'project-1', count: 2 },
-      { field: 'projectMember', value: 'user-1', count: 2 },
-      { field: 'projectStatus', value: 'status-1', count: 2 },
-      { field: 'projectLabel', value: 'label-1', count: 2 },
-    ] as const
-    for (const filter of filters) {
-      expect(buildPulseFeed(data, 'all', {
-        match: 'all', filters: [{ id: filter.field, field: filter.field, operator: 'is', values: [filter.value] }],
-      }), filter.field).toHaveLength(filter.count)
-    }
-    vi.useRealTimers()
-  })
-
   it('normalizes saved view configuration and serializes mutations', () => {
     const validFilter = { id: 'author', field: 'author', operator: 'is', values: ['user-1'] }
     const view = { filters: [validFilter, { id: 4 }], display: { match: 'any' } } as unknown as SavedView
@@ -90,28 +27,59 @@ describe('pulse model', () => {
     expect(pulseViewMutation(config)).toEqual({ filters: [validFilter], display: { match: 'any' } })
   })
 
+  it('sends filters to the feed API as {match, filters} and drops empty ones', () => {
+    expect(pulseFilterParam({ match: 'all', filters: [] })).toBeUndefined()
+    expect(pulseFilterParam({ match: 'any', filters: [
+      { id: 'a', field: 'health', operator: 'isNot', values: ['onTrack'] },
+      { id: 'b', field: 'project', operator: 'is', values: [] },
+    ] })).toEqual({ match: 'any', filters: [{ field: 'health', operator: 'isNot', values: ['onTrack'] }] })
+  })
+
   it('builds picker values from workspace entities', () => {
     const data = pulseData()
     expect(filterValues(data, 'author')).toHaveLength(2)
     expect(filterValues(data, 'team')).toEqual([{ id: 'team-1', label: 'Engineering' }])
     expect(filterValues(data, 'projectStatus')).toEqual([{ id: 'status-1', label: 'In progress' }])
+    expect(filterValues(data, 'projectStatusType').map(value => value.id)).toEqual(['started'])
     expect(filterValues(data, 'projectLabel')).toEqual([{ id: 'label-1', label: 'Portfolio' }])
     expect(filterValues(data, 'createdDate')).toHaveLength(4)
-    expect(filterValues(data, 'updateType')).toHaveLength(2)
     expect(filterValues(data, 'health')).toHaveLength(4)
-    expect(filterValues(data, 'initiative')).toEqual([{ id: 'initiative-1', label: 'Initiative' }])
-    expect(filterValues(data, 'project')).toEqual([{ id: 'project-1', label: 'Project' }])
-    expect(filterValues(data, 'projectMember')).toHaveLength(2)
   })
 
-  it('supports projectStatusType and flag-gated team update type (LS-0266)', () => {
+  it('hides "Team update" unless team posts exist, even with the feedPostUpdate flag', () => {
     const data = pulseData()
-    expect(filterValues(data, 'projectStatusType').map(item => item.id)).toContain('started')
-    expect(filterValues(data, 'updateType').map(item => item.id)).toEqual(['project', 'initiative'])
+    expect(filterValues(data, 'updateType').map(value => value.id)).toEqual(['project', 'initiative'])
     data.workspaceSettings = { featureFlags: { feedPostUpdate: true } } as unknown as BootstrapData['workspaceSettings']
-    expect(filterValues(data, 'updateType').map(item => item.id)).toEqual(['project', 'initiative', 'team'])
-    expect(buildPulseFeed(data, 'all', {
-      match: 'all', filters: [{ id: 'pst', field: 'projectStatusType', operator: 'is', values: ['started'] }],
-    }).map(item => item.kind)).toEqual(['project'])
+    expect(filterValues(data, 'updateType').map(value => value.id)).toEqual(['project', 'initiative'])
+  })
+
+  it('groups items into Today / This week / Last week / This month / Last month / Older', () => {
+    const now = new Date(2026, 9, 22, 15) // Thursday 22 Oct 2026
+    expect(pulseGroupKey(new Date(2026, 9, 22, 8).toISOString(), now)).toBe('today')
+    expect(pulseGroupKey(new Date(2026, 9, 19, 9).toISOString(), now)).toBe('thisWeek') // Monday
+    expect(pulseGroupKey(new Date(2026, 9, 18, 9).toISOString(), now)).toBe('lastWeek') // Sunday
+    expect(pulseGroupKey(new Date(2026, 9, 3, 9).toISOString(), now)).toBe('thisMonth')
+    expect(pulseGroupKey(new Date(2026, 8, 3, 9).toISOString(), now)).toBe('lastMonth')
+    expect(pulseGroupKey(new Date(2026, 5, 3, 9).toISOString(), now)).toBe('older')
+    // Weeks starting on Sunday move Sunday into this week.
+    expect(pulseGroupKey(new Date(2026, 9, 18, 9).toISOString(), now, weekStartsOnFromSetting('sunday'))).toBe('thisWeek')
+    const items = [item('a', new Date(2026, 9, 22, 9).toISOString()), item('b', new Date(2026, 9, 22, 8).toISOString()), item('c', new Date(2026, 9, 20).toISOString()), item('d', new Date(2026, 5, 1).toISOString())]
+    expect([...pulseGroupStarts(items, now).entries()]).toEqual([[0, 'today'], [2, 'thisWeek'], [3, 'older']])
+  })
+
+  it('puts the last-seen divider above the first item at or before the stable last-seen time', () => {
+    const items = [item('new', '2026-10-03T10:00:00Z'), item('seen', '2026-10-02T10:00:00Z'), item('older', '2026-10-01T10:00:00Z')]
+    expect(pulseLastSeenItemId(items, Date.parse('2026-10-02T12:00:00Z'))).toBe('seen')
+    // Nothing new → no divider; never seen → no divider.
+    expect(pulseLastSeenItemId(items, Date.parse('2026-10-04T00:00:00Z'))).toBeUndefined()
+    expect(pulseLastSeenItemId(items, 0)).toBeUndefined()
+  })
+
+  it('only moves last seen forward', () => {
+    expect(nextPulseSeen(undefined, '2026-10-01T00:00:00Z')).toBe(Date.parse('2026-10-01T00:00:00Z'))
+    expect(nextPulseSeen('2026-10-02T00:00:00Z', '2026-10-01T00:00:00Z')).toBeUndefined()
+    expect(nextPulseSeen(Date.parse('2026-10-02T00:00:00Z'), '2026-10-02T00:00:00Z')).toBeUndefined()
+    expect(nextPulseSeen('2026-10-02T00:00:00Z', Date.parse('2026-10-03T00:00:00Z'))).toBe(Date.parse('2026-10-03T00:00:00Z'))
+    expect(nextPulseSeen('2026-10-02T00:00:00Z', 'not a date')).toBeUndefined()
   })
 })

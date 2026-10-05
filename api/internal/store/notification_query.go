@@ -103,6 +103,8 @@ func (s *SQLiteStore) QueryNotifications(ctx context.Context, q NotificationQuer
 		if n.RecipientID != q.UserID {
 			return result, fmt.Errorf("invalid notification owner index")
 		}
+		// Generated Pulse summaries are served by their own endpoint.
+		n.PulseSummary, n.SummaryReports = nil, nil
 		result.Notifications = append(result.Notifications, n)
 		last = cursor
 	}

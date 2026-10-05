@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -37,6 +38,10 @@ type sqlDatabase struct {
 	*sql.DB
 	dialect             string
 	maxTransactionBytes int
+	// notified receives the notifications a committed transaction created
+	// (or brought back as unread news), for the notification.created
+	// realtime signal.
+	notified atomic.Pointer[func([]notificationSignal)]
 }
 
 type sqlTx struct {
@@ -45,6 +50,13 @@ type sqlTx struct {
 	maxTransactionBytes int
 	writtenBytes        int
 	writeErr            error
+	database            *sqlDatabase
+	signals             []notificationSignal
+}
+
+// notificationSignal names a notification that is news to its recipient.
+type notificationSignal struct {
+	workspace, id, recipient string
 }
 
 var ErrTransactionWriteBudget = errors.New("transaction write budget exceeded")
@@ -54,7 +66,36 @@ func (tx *sqlTx) Commit() error {
 		_ = tx.Tx.Rollback()
 		return tx.writeErr
 	}
-	return tx.Tx.Commit()
+	if err := tx.Tx.Commit(); err != nil {
+		return err
+	}
+	if len(tx.signals) > 0 && tx.database != nil {
+		if sink := tx.database.notified.Load(); sink != nil {
+			(*sink)(tx.signals)
+		}
+	}
+	tx.signals = nil
+	return nil
+}
+
+// noteNotificationRow records a written notification row that is news for
+// its recipient: a new unread notification, or an unread one whose
+// occurrence count grew (new activity grouped into it). Read-state edits
+// (read, archive, snooze, mark unread) are not news; they have their own
+// notification.* events.
+func (tx *sqlTx) noteNotificationRow(row contentRecordRow, previous []byte, existed bool) {
+	if row.kind != "notification" || row.status != "unread" || row.nextAttempt != "" || row.owner == "" {
+		return
+	}
+	if existed {
+		var before, after struct {
+			OccurrenceCount int `json:"occurrenceCount"`
+		}
+		if json.Unmarshal(previous, &before) != nil || json.Unmarshal(row.raw, &after) != nil || after.OccurrenceCount <= before.OccurrenceCount {
+			return
+		}
+	}
+	tx.signals = append(tx.signals, notificationSignal{workspace: row.workspace, id: row.id, recipient: row.owner})
 }
 
 func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
@@ -150,6 +191,8 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		maxTransactionBytes = 32 << 20
 	}
 	s := &SQLiteStore{db: &sqlDatabase{DB: db, dialect: driver, maxTransactionBytes: maxTransactionBytes}, dialect: driver, fixtureProfile: strings.TrimSpace(config.FixtureProfile), fixturePassword: config.FixturePassword, maxStateBytes: maxStateBytes}
+	notify := s.publishNotificationSignals
+	s.db.notified.Store(&notify)
 	s.lifecycle, s.stopLifecycle = context.WithCancel(context.Background())
 	// Startup runs schema checks, loads workspace metadata and applies
 	// idempotent data migrations. Stage timings are logged for slow opens.
@@ -312,7 +355,7 @@ func (d *sqlDatabase) BeginTx(ctx context.Context, options *sql.TxOptions) (*sql
 	if err != nil {
 		return nil, err
 	}
-	return &sqlTx{Tx: tx, dialect: d.dialect, maxTransactionBytes: d.maxTransactionBytes}, nil
+	return &sqlTx{Tx: tx, dialect: d.dialect, maxTransactionBytes: d.maxTransactionBytes, database: d}, nil
 }
 
 func (tx *sqlTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {

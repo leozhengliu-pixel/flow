@@ -157,6 +157,12 @@ Flow reads configuration from environment variables passed to the API process.
 | `FLOW_COOKIE_SECURE` | `false` | Force secure authentication cookies. Set to `true` in production. |
 | `FLOW_DEV_AUTH_TOKENS` | `false` | Include account action tokens in development responses. Enable only for isolated local development. |
 | `FLOW_TRUST_PROXY_HEADERS` | `false` | Trust forwarded client information from a controlled reverse proxy. |
+| `FLOW_AGENT_ENABLED` | `false` | Enable Flow Agent and AI Pulse summaries (see `docs/configuration.md` for the provider variables). |
+| `FLOW_TTS_ENABLED` | `false` | Enable "Listen" (text-to-speech) for Pulse summaries. |
+| `FLOW_TTS_BASE_URL` | `FLOW_AGENT_BASE_URL` | OpenAI-compatible base URL serving `/audio/speech`. |
+| `FLOW_TTS_API_KEY` | `FLOW_AGENT_API_KEY` (only when `FLOW_TTS_BASE_URL` is `FLOW_AGENT_BASE_URL`) | Speech endpoint credential; `_FILE` is supported. Required for any other speech host, otherwise "Listen" is disabled with a startup warning. |
+| `FLOW_TTS_MODEL` | `gpt-4o-mini-tts` | Speech model. |
+| `FLOW_TTS_VOICE` | `alloy` | Speech voice. |
 
 Example production-oriented environment:
 
