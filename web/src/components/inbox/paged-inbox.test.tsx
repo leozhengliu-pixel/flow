@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { fetchInboxNotifications, fetchPulseCapabilities, fetchPulseSummary, listIssueRecords, updateInboxNotification } from '@/lib/api'
 import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
 import { makeBootstrap, makeIssue, teammate, viewer } from '@/test/fixtures'
@@ -55,9 +56,9 @@ function pagedData(overrides: Partial<BootstrapData> = {}) {
 function renderInbox(data: BootstrapData, onLoadIssueContext = vi.fn(async () => undefined)) {
   const noop = vi.fn(async () => undefined)
   const view = render(
-    <I18nProvider>
+    <I18nProvider><TooltipProvider>
       <InboxAppPage data={data} onReload={noop} onOpenIssue={vi.fn()} onDeleteRelation={noop} onCreateSubIssue={noop} onReactIssue={noop} onCreateComment={noop} onEditComment={noop} onDeleteComment={noop} onReactComment={noop} onUploadAttachment={noop} onDeleteAttachment={noop} onLoadIssueContext={onLoadIssueContext}/>
-    </I18nProvider>,
+    </TooltipProvider></I18nProvider>,
   )
   return { ...view, onLoadIssueContext }
 }
