@@ -111,7 +111,7 @@ export function MyIssuesSurface({
 }: MyIssuesSurfaceProps) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
-    <ContentViewHeader compact onOpenSidebar={onOpenSidebar}>
+    <ContentViewHeader onOpenSidebar={onOpenSidebar}>
       <ContentViewHeaderTitle title="My issues" />
     </ContentViewHeader>
     <ContentViewSubheader
