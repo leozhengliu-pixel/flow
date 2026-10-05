@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ProjectStatus } from '@/types/flow'
 import type { ProjectDataGroup, ProjectPageItem, ProjectProperty, ProjectsDataViewProps, ProjectSortColumn } from './projects-data-view'
-import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
+import { DEFAULT_PROJECTS_DISPLAY, filterProjectsByLeadTeam, type ProjectsDisplaySettings } from './projects-display-model'
 import { ClientStorage } from '@/lib/client-storage'
 import { isTimelineZoom, normalizeTimelineZoom, type TimelineZoom } from './project-timeline-model'
 import {
@@ -23,6 +23,8 @@ type ProjectsViewStateOptions = {
   workspaceDefault?: ProjectsDisplaySettings
   /** Viewer context for LS-0500 Relevance ordering. */
   relevanceViewer?: ProjectRelevanceViewer
+  /** The team whose projects page this is; enables "Only show lead team projects". */
+  leadTeamId?: string
 }
 
 const PRIORITY_GROUPS = [
@@ -63,17 +65,20 @@ function statusForProject(project: ProjectPageItem, projectStatuses: ProjectStat
     ?? projectStatuses.find(status => status.name === project.status && (!project.statusType || status.type === project.statusType))
 }
 
-export function useProjectsViewState(projects: ProjectPageItem[], { initial, projectStatuses = [], storageKey = 'workspace:all', workspaceDefault, relevanceViewer }: ProjectsViewStateOptions = {}) {
+export function useProjectsViewState(projects: ProjectPageItem[], { initial, projectStatuses = [], storageKey = 'workspace:all', workspaceDefault, relevanceViewer, leadTeamId }: ProjectsViewStateOptions = {}) {
   const personalKey = `flow:projects:view:${storageKey}`
   const workspaceDefaultKey = `flow:projects:view-default:${storageKey}`
   const [state, setState] = useState<ProjectsViewState>(() => createInitialState(initial, personalKey, workspaceDefaultKey, workspaceDefault))
+  const [storedDefault, setStoredDefault] = useState(() => readStoredDisplay(workspaceDefaultKey))
+  const displayDefault = useMemo(() => workspaceDefault ?? storedDefault ?? defaultDisplay(), [storedDefault, workspaceDefault])
 
   useEffect(() => {
     writeStoredDisplay(personalKey, state.display)
   }, [personalKey, state.display])
 
   const statuses = useMemo(() => projectStatusesForLayout(projectStatuses, state.display.layout), [projectStatuses, state.display.layout])
-  const grouped = useMemo(() => groupProjectsForView(projects, state, statuses, relevanceViewer), [projects, relevanceViewer, state, statuses])
+  const displayedProjects = useMemo(() => filterProjectsByLeadTeam(projects, state.display, leadTeamId), [leadTeamId, projects, state.display])
+  const grouped = useMemo(() => groupProjectsForView(displayedProjects, state, statuses, relevanceViewer), [displayedProjects, relevanceViewer, state, statuses])
 
   const dataViewProps: Pick<ProjectsDataViewProps, 'groups' | 'layout' | 'grouping' | 'manualOrdering' | 'selectedIds' | 'sort' | 'visibleProperties' | 'onSelectionChange' | 'onSort' | 'timelineZoom' | 'onTimelineZoomChange'> = {
     groups: grouped,
@@ -92,12 +97,17 @@ export function useProjectsViewState(projects: ProjectPageItem[], { initial, pro
   return {
     state,
     groups: grouped,
+    /** The display default "Reset" returns to. */
+    displayDefault,
     dataViewProps,
     visibleColumns: new Set(state.display.properties),
     setDisplay: (display: ProjectsDisplaySettings) => setState(current => ({ ...current, display: cloneDisplay(display), sort: sortForOrdering(display.ordering, current.sort) })),
     setSelectedIds: (selectedIds: string[]) => setState(current => ({ ...current, selectedIds })),
-    resetDisplay: () => setState(current => ({ ...current, display: workspaceDefault ?? readStoredDisplay(workspaceDefaultKey) ?? defaultDisplay(), sort: { column: 'name', direction: 'asc' } })),
-    setDisplayDefault: () => writeStoredDisplay(workspaceDefaultKey, state.display),
+    resetDisplay: () => setState(current => ({ ...current, display: cloneDisplay(displayDefault), sort: { column: 'name', direction: 'asc' } })),
+    setDisplayDefault: () => {
+      writeStoredDisplay(workspaceDefaultKey, state.display)
+      setStoredDefault(cloneDisplay(state.display))
+    },
     updateProject: (project: ProjectPageItem, property: ProjectProperty, value: string) => updateProject(project, property, value, statuses),
   }
 }

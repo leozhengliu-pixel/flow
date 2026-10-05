@@ -43,6 +43,12 @@ export type ProjectsPageSurfaceProps = {
   filterBar?: ReactNode
   filterOptions?: Partial<Record<string, ProjectFilterOption[]>>
   displaySettings?: Partial<ProjectsDisplaySettings>
+  /** The settings "Reset" returns to; the display menu footer only shows once settings differ from it. */
+  displayDefault?: ProjectsDisplaySettings
+  /** Display properties offered by the display menu, in order. */
+  displayProperties?: string[]
+  /** A team's projects page: the display menu offers "Only show lead team projects". */
+  displayTeamScoped?: boolean
   filterCount?: number
   selectedFilters?: ProjectFilter[]
   onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]>
@@ -81,6 +87,9 @@ export function ProjectsPageSurface({
   filterBar,
   filterOptions,
   displaySettings,
+  displayDefault,
+  displayProperties,
+  displayTeamScoped = false,
   filterCount = 0,
   selectedFilters = [],
   onSearchFilterOptions,
@@ -138,15 +147,18 @@ export function ProjectsPageSurface({
       setOpenSurface(null)
     }} />}
     {openSurface?.origin === origin && openSurface.kind === 'display' && <ProjectsDisplayMenu
+      defaultSettings={displayDefault ?? DEFAULT_PROJECTS_DISPLAY}
       labelGroups={displayLabelGroups}
       onChange={updateSettings}
       onReset={() => {
         if (onResetDisplay) onResetDisplay()
-        else setSettings(DEFAULT_PROJECTS_DISPLAY)
+        else setSettings(displayDefault ?? DEFAULT_PROJECTS_DISPLAY)
       }}
       onSetDefault={onSetDisplayDefault}
+      properties={displayProperties}
       rootRef={openSurfaceRef}
       settings={settings}
+      teamScoped={displayTeamScoped}
     />}
   </>
   const renderView = (view: ProjectsView) => <a

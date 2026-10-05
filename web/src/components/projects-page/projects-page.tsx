@@ -9,7 +9,7 @@ import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft }
 import { projectPeopleChoices } from './project-people'
 import { ProjectsDataView, type ProjectAction, type ProjectPageItem, type ProjectProperty, type ProjectPropertyOptions } from './projects-data-view'
 import { ProjectsPageSurface } from './projects-page-surface'
-import { DEFAULT_PROJECTS_DISPLAY, type ProjectsDisplaySettings } from './projects-display-model'
+import { DEFAULT_PROJECTS_DISPLAY, filterProjectsByLeadTeam, projectDisplayProperties, type ProjectsDisplaySettings } from './projects-display-model'
 import { ProjectsInsightsSidebar, type ProjectInsightFilter, type ProjectInsightMode } from './projects-insights-sidebar'
 import { projectStatusesForLayout, useProjectsViewState } from './use-projects-view-state'
 import { ProjectsFilterBar } from './projects-filter-bar'
@@ -94,6 +94,8 @@ export type ProjectsPageProps = {
   editingView?: boolean
   savedViews?: SavedView[]
   scopeTeamId?: string
+  /** Workspace feature flags; feature-dependent display properties (Initiatives, Customers) follow them. */
+  featureFlags?: Record<string, boolean>
   teamSettings?: TeamHierarchySettings
   teamParents?: Record<string, string>
   viewerId?: string
@@ -166,6 +168,7 @@ export function ProjectsPage({
   editingView = false,
   savedViews = [],
   scopeTeamId,
+  featureFlags,
   teamSettings,
   teamParents,
   viewerId,
@@ -313,7 +316,11 @@ export function ProjectsPage({
     const activeTeamIds = teams.map(team => team.id)
     return { id: currentViewerId, activeTeamIds }
   }, [currentViewerId, teams])
-  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer })
+  const view = useProjectsViewState(visibleItems, { initial: savedDisplay ? { display: savedDisplay } : undefined, projectStatuses: availableProjectStatuses, storageKey: `${workspaceKey}:${scopeTeamId ?? 'workspace'}:${savedView?.id ?? 'all'}`, workspaceDefault, relevanceViewer, leadTeamId: scopeTeamId })
+  // "Only show lead team projects" is applied client-side to the loaded pages; derive every other count from it too.
+  const leadScopedItems = useMemo(() => filterProjectsByLeadTeam(items, view.state.display, scopeTeamId), [items, scopeTeamId, view.state.display])
+  const leadScopedVisibleItems = useMemo(() => filterProjectsByLeadTeam(visibleItems, view.state.display, scopeTeamId), [scopeTeamId, view.state.display, visibleItems])
+  const displayProperties = useMemo(() => projectDisplayProperties(featureFlags), [featureFlags])
   const [createOpen, setCreateOpen] = useState(false)
   const [createStatus, setCreateStatus] = useState(defaultCreateStatus)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
@@ -331,7 +338,7 @@ export function ProjectsPage({
     status: statusOptions,
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
-  const filterOptions = useMemo(() => projectFilterOptions(items, users, availableProjectStatuses, projectLabels, teams), [availableProjectStatuses, items, projectLabels, teams, users])
+  const filterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams), [availableProjectStatuses, leadScopedItems, projectLabels, teams, users])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
     { scope: 'workspace', label: 'Workspace' },
@@ -481,6 +488,9 @@ export function ProjectsPage({
     activeViewId={creatingView ? 'new' : savedView?.id ?? 'all'}
     creatingView={creatingView}
     displaySettings={view.state.display}
+    displayDefault={view.displayDefault}
+    displayProperties={displayProperties}
+    displayTeamScoped={Boolean(scopeTeamId)}
     filterBar={<ProjectsFilterBar
       filters={projectFilters}
       onAdd={() => document.querySelector<HTMLButtonElement>('.lp-projects__actions [aria-label="Add filter"]')?.click()}
@@ -538,7 +548,7 @@ export function ProjectsPage({
       onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
       onShare={onShareSavedView ? () => { void onShareSavedView(savedView).then(path => { if (path) void navigator.clipboard.writeText(`${location.origin}${path}`) }) } : undefined}
       onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
-      onExport={() => exportProjectsCsv(visibleItems, savedView.name)}
+      onExport={() => exportProjectsCsv(leadScopedVisibleItems, savedView.name)}
       onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
     />}
     viewEditor={viewEditor ? actions => <SavedViewEditor
@@ -603,7 +613,7 @@ export function ProjectsPage({
           onCreateReminder: onCreateProjectReminder,
         } : undefined}
       /></div>
-      {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={items} />}
+      {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} />}
     </div>
     {updatesProjectId && projectById.get(updatesProjectId) && <ProjectUpdatesPreview
       onClose={() => setUpdatesProjectId(undefined)}
@@ -670,6 +680,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     health: ({ onTrack: 'on-track', atRisk: 'at-risk', offTrack: 'off-track', noUpdate: 'no-update' } as const)[project.health],
     icon: normalizeProjectIcon(project.icon),
     id: project.id,
+    slugId: project.slugId,
     href,
     issueCount: project.issueCount,
     lead: project.lead ? { avatarUrl: project.lead.avatarUrl, id: project.lead.id, name: project.lead.displayName } : undefined,
@@ -688,6 +699,8 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     startDate: project.startDate ? formatMonth(project.startDate) : undefined,
     summary: project.description || project.summary,
     team: project.teamIds[0] ? indexes.teams.get(project.teamIds[0]) : undefined,
+    // Flow records a project's lead (primary) team as the first of its teams.
+    leadTeamId: project.teamIds[0],
     memberIds: project.memberIds,
     labelIds: project.labelIds,
     initiativeNames: (project.initiatives ?? []).map(id => indexes.initiatives.get(id)).filter((name): name is string => Boolean(name)),
@@ -795,6 +808,7 @@ function parseProjectDisplayDefault(value: Record<string, unknown> | undefined):
     properties: value.properties.filter((property): property is string => typeof property === 'string'),
     showClosed: typeof value.showClosed === 'string' ? value.showClosed : DEFAULT_PROJECTS_DISPLAY.showClosed,
     showEmptyGroups: typeof value.showEmptyGroups === 'boolean' ? value.showEmptyGroups : DEFAULT_PROJECTS_DISPLAY.showEmptyGroups,
+    onlyLeadTeamProjects: value.onlyLeadTeamProjects === true,
     subGrouping: typeof value.subGrouping === 'string' ? value.subGrouping : DEFAULT_PROJECTS_DISPLAY.subGrouping,
     timelineZoom: isTimelineZoom(value.timelineZoom) ? value.timelineZoom : undefined,
   }

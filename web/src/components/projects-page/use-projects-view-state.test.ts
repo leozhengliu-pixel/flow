@@ -1,9 +1,10 @@
+import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import type { ProjectStatus } from '@/types/flow'
 import type { ProjectPageItem } from './projects-data-view'
 import { DEFAULT_PROJECTS_DISPLAY } from './projects-display-model'
-import { groupProjectsForView, projectStatusesForLayout, type ProjectsViewState } from './use-projects-view-state'
+import { groupProjectsForView, projectStatusesForLayout, useProjectsViewState, type ProjectsViewState } from './use-projects-view-state'
 
 const statuses: ProjectStatus[] = [
   { id: 'status-backlog', name: '待规划', color: '#8a8d93', type: 'backlog', position: 0 },
@@ -88,5 +89,39 @@ describe('workspace project status dictionaries', () => {
 
     const withoutPlanned = withAdded.filter(status => status.id !== 'status-planned')
     expect(groupProjectsForView([], state(), withoutPlanned).map(group => group.name)).not.toContain('规划中')
+  })
+})
+
+describe('only show lead team projects', () => {
+  const projects = [
+    project(statuses[2], { id: 'led', leadTeamId: 'team-a' }),
+    project(statuses[2], { id: 'contributing', leadTeamId: 'team-b', teamIds: ['team-b', 'team-a'] }),
+  ]
+  const ids = (groups: ReturnType<typeof useProjectsViewState>['groups']) => groups.flatMap(group => group.projects).map(item => item.id).sort()
+
+  it('filters the team page to its lead-team projects and persists the setting', () => {
+    const storageKey = `lead-team-${Math.random()}`
+    const { result } = renderHook(() => useProjectsViewState(projects, { projectStatuses: statuses, storageKey, leadTeamId: 'team-a' }))
+    expect(ids(result.current.groups)).toEqual(['contributing', 'led'])
+
+    act(() => result.current.setDisplay({ ...result.current.state.display, onlyLeadTeamProjects: true }))
+    expect(ids(result.current.groups)).toEqual(['led'])
+    expect(result.current.groups.reduce((total, group) => total + group.projects.length, 0)).toBe(1)
+
+    const reopened = renderHook(() => useProjectsViewState(projects, { projectStatuses: statuses, storageKey, leadTeamId: 'team-a' }))
+    expect(reopened.result.current.state.display.onlyLeadTeamProjects).toBe(true)
+    expect(ids(reopened.result.current.groups)).toEqual(['led'])
+  })
+
+  it('ignores the setting outside a team page and resets to the view default', () => {
+    const { result } = renderHook(() => useProjectsViewState(projects, { projectStatuses: statuses, storageKey: `workspace-${Math.random()}` }))
+    act(() => result.current.setDisplay({ ...result.current.state.display, onlyLeadTeamProjects: true }))
+    expect(ids(result.current.groups)).toEqual(['contributing', 'led'])
+
+    act(() => result.current.setDisplayDefault())
+    expect(result.current.displayDefault.onlyLeadTeamProjects).toBe(true)
+    act(() => result.current.setDisplay({ ...result.current.state.display, onlyLeadTeamProjects: false }))
+    act(() => result.current.resetDisplay())
+    expect(result.current.state.display.onlyLeadTeamProjects).toBe(true)
   })
 })
