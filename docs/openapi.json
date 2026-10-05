@@ -13853,6 +13853,42 @@
           }
         },
         "x-flow-source": "main.go"
+      },
+      "patch": {
+        "operationId": "patch_teams_id_email_intake_addresses_addressId",
+        "tags": [
+          "teams"
+        ],
+        "summary": "PATCH /api/teams/{id}/email-intake-addresses/{addressId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "addressId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
       }
     },
     "/api/teams/{id}/email-intake-addresses/{addressId}/rotate": {

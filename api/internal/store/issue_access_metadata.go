@@ -95,9 +95,25 @@ func (s *SQLiteStore) IssueReferenceMetadata(ctx context.Context, query IssueRec
 		for _, label := range issue.Labels {
 			labelIDs[label.ID] = true
 		}
+		for _, id := range issue.SuggestedProjectIDs {
+			projectIDs[id] = true
+		}
+		for _, id := range issue.SuggestedLabelIDs {
+			labelIDs[id] = true
+		}
 	}
 	allowed := func(id string) bool {
 		return (query.Access == nil || query.Access.Admin || slices.Contains(query.Access.VisibleTeamIDs, id)) && (query.AllowedTeamIDs == nil || slices.Contains(query.AllowedTeamIDs, id))
+	}
+	result := domain.Bootstrap{}
+	seenTeams := map[string]bool{}
+	for _, issue := range issues {
+		for _, id := range issue.SuggestedTeamIDs {
+			if !seenTeams[id] && allowed(id) {
+				seenTeams[id] = true
+				result.Teams = append(result.Teams, domain.Team{ID: id})
+			}
+		}
 	}
 	projectAllowed := func(teamIDs []string) bool {
 		if len(teamIDs) == 0 {
@@ -109,7 +125,6 @@ func (s *SQLiteStore) IssueReferenceMetadata(ctx context.Context, query IssueRec
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && (query.Workspace == "" || query.Workspace == snapshot.workspace) {
 		reader = snapshot.reader
 	}
-	result := domain.Bootstrap{}
 	for _, field := range []string{"projects", "labels"} {
 		ids, property := projectIDs, "teamIds"
 		if field == "labels" {

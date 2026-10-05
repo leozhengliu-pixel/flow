@@ -18,6 +18,7 @@ import { ProjectCreationAgent } from './project-creation-agent'
 import type { ProjectAgentDraft } from './project-agent-draft'
 import { AgentPointerIcon } from '@/components/agent/agent-icons'
 import './projects-page.css'
+import '@/components/ui/create-pill.css'
 
 export type NewProjectDraft = {
   templateId?: string
@@ -220,17 +221,17 @@ export function NewProjectDialog({
             <input aria-label="Project summary" className="lp-new-project__summary" onChange={event => set('summary', event.target.value)} placeholder="Add a short summary…" value={draft.summary} />
           </div>
         </div>
-        <div className="lp-new-project__properties">
+        <div className="lp-new-project__properties create-pill-row">
           {templates.length > 0 && <ProjectDraftProperty icon={<LayoutTemplate size={14}/>} label="Apply project template" options={[{ id: '', label: 'No template' }, ...templates]} placeholder="Template" value={draft.templateId ?? ''} onChange={applyTemplate} />}
           <ProjectDraftProperty icon={statuses.find(status=>status.id===draft.status)?.icon??<ProjectStatusGlyph name={draft.status} type="planned"/>} label="Change project status" options={statuses} value={draft.status} onChange={value => set('status', value)} />
-          <ProjectDraftProperty icon={<PriorityIcon priority={Math.max(0, PRIORITY.indexOf(draft.priority))} size={14}/>} label="Change project priority" options={PRIORITY.map((value, priority) => ({ id: value, icon: <PriorityIcon priority={priority} size={14}/>, label: value }))} value={draft.priority} onChange={value => set('priority', value)} />
-          <PersonPicker ariaLabel="Set project lead" emptyOptionLabel="No lead" emptyOptionShortcut="0" emptyTriggerLabel="Lead" label="Lead" onChange={value => set('leadId', value || undefined)} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={leads.map(lead => ({ id: lead.id, label: lead.label, name: lead.name, email: lead.email, avatarUrl: lead.avatarUrl, color: lead.color, active: lead.active, online: lead.online, disabled: lead.disabled, end: lead.end, groupId: lead.groupId, groupLabel: lead.groupLabel, hoverContent: lead.hoverContent, hoverClassName: lead.hoverClassName }))} searchPlaceholder="Set lead…" searchShortcut="P, then A" selectedId={draft.leadId} showUnselectedGroupWhenEmpty surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__lead" triggerClassName="lp-new-project-picker__trigger" unselectedGroupLabel="Users from the project team" />
-          <PersonPicker ariaLabel="Change project members" closeOnSelect emptyTriggerLabel="Members" icon={<MembersIcon size={14}/>} label="Members" multiple onChange={id => setDraft(current => ({ ...current, memberIds: current.memberIds.includes(id) ? current.memberIds.filter(value => value !== id) : [...current.memberIds, id] }))} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={members.map(member => ({ id: member.id, label: member.label, name: member.name, email: member.email, avatarUrl: member.avatarUrl, color: member.color, active: member.active, online: member.online, disabled: member.disabled, end: member.end, groupId: member.groupId, groupLabel: member.groupLabel, hoverContent: member.hoverContent, hoverClassName: member.hoverClassName }))} searchPlaceholder="Change members…" searchShortcut="P, then M" selectedIds={draft.memberIds} surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__members" trigger={<>{members.find(member => member.id === draft.memberIds[0]) ? <UserAvatar avatarUrl={members.find(member => member.id === draft.memberIds[0])?.avatarUrl} className="avatar core-person-picker-avatar" color={members.find(member => member.id === draft.memberIds[0])?.color} name={members.find(member => member.id === draft.memberIds[0])?.label ?? ''}/> : <MembersIcon size={14}/>}<span>{draft.memberIds.length ? t(`${draft.memberIds.length} member${draft.memberIds.length === 1 ? '' : 's'}`) : t('Members')}</span></>} triggerClassName="lp-new-project-picker__trigger" unselectedGroupLabel="Users from the project team" />
+          <ProjectDraftProperty icon={<PriorityIcon priority={Math.max(0, PRIORITY.indexOf(draft.priority))} size={14}/>} label="Change project priority" options={PRIORITY.map((value, priority) => ({ id: value, icon: <PriorityIcon priority={priority} size={14}/>, label: value }))} translateValue value={draft.priority} onChange={value => set('priority', value)} />
+          <PersonPicker ariaLabel="Set project lead" emptyOptionLabel="No lead" emptyOptionShortcut="0" emptyTriggerLabel="Lead" label="Lead" onChange={value => set('leadId', value || undefined)} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={leads.map(lead => ({ id: lead.id, label: lead.label, name: lead.name, email: lead.email, avatarUrl: lead.avatarUrl, color: lead.color, active: lead.active, online: lead.online, disabled: lead.disabled, end: lead.end, groupId: lead.groupId, groupLabel: lead.groupLabel, hoverContent: lead.hoverContent, hoverClassName: lead.hoverClassName }))} searchPlaceholder="Set lead…" searchShortcut="P, then A" selectedId={draft.leadId} showUnselectedGroupWhenEmpty surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__lead" triggerClassName={`lp-new-project-picker__trigger create-pill${draft.leadId ? '' : ' is-placeholder'}`} unselectedGroupLabel="Users from the project team" />
+          <PersonPicker ariaLabel="Change project members" closeOnSelect emptyTriggerLabel="Members" icon={<MembersIcon size={14}/>} label="Members" multiple onChange={id => setDraft(current => ({ ...current, memberIds: current.memberIds.includes(id) ? current.memberIds.filter(value => value !== id) : [...current.memberIds, id] }))} optionHoverClassName="lp-new-project-person-hover" optionHoverContent={person => <PersonHoverPreview person={person} workspaceName={teamLabel}/>} people={members.map(member => ({ id: member.id, label: member.label, name: member.name, email: member.email, avatarUrl: member.avatarUrl, color: member.color, active: member.active, online: member.online, disabled: member.disabled, end: member.end, groupId: member.groupId, groupLabel: member.groupLabel, hoverContent: member.hoverContent, hoverClassName: member.hoverClassName }))} searchPlaceholder="Change members…" searchShortcut="P, then M" selectedIds={draft.memberIds} surfaceClassName="lp-new-project-picker__surface lp-new-project-person-picker__surface lp-new-project-person-picker__members" trigger={<>{members.find(member => member.id === draft.memberIds[0]) ? <UserAvatar avatarUrl={members.find(member => member.id === draft.memberIds[0])?.avatarUrl} className="avatar core-person-picker-avatar" color={members.find(member => member.id === draft.memberIds[0])?.color} name={members.find(member => member.id === draft.memberIds[0])?.label ?? ''}/> : <MembersIcon size={14}/>}<span>{draft.memberIds.length ? t(`${draft.memberIds.length} member${draft.memberIds.length === 1 ? '' : 's'}`) : t('Members')}</span></>} triggerClassName={`lp-new-project-picker__trigger create-pill${draft.memberIds.length ? '' : ' is-placeholder'}`} unselectedGroupLabel="Users from the project team" />
           <DateChip kind="start" max={draft.targetDate} placeholder="Start" resolution={draft.startDateResolution} value={draft.startDate} onChange={(value, resolution) => setDraft(current => ({ ...current, startDate: value || undefined, startDateResolution: resolution }))} />
           <DateChip kind="target" min={draft.startDate} placeholder="Target" resolution={draft.targetDateResolution} value={draft.targetDate} onChange={(value, resolution) => setDraft(current => ({ ...current, targetDate: value || undefined, targetDateResolution: resolution }))} />
           <ProjectDraftProperty icon={<Flag size={14}/>} label="Change project initiatives" multiple options={initiatives} placeholder="Initiatives" value={draft.initiativeIds} onChange={value => set('initiativeIds', value)} />
           <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels.filter(label => projectLabelInTeams(label, draft.teamIds))} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
-          <ProjectDependencyPicker ariaLabel="Add dependencies" onChange={value => setDraft(current => ({ ...current, dependencyIds: value.filter(item => item.type === 'blocked_by').map(item => item.projectId), dependencyRelations: value }))} projects={dependencies.filter(project => !project.id.startsWith('__')).map(project => ({ id: project.id, label: project.label, icon: typeof project.icon === 'string' ? project.icon : undefined, color: project.color, group: project.group, keywords: [project.name, project.email].filter(Boolean).join(' '), disabled: project.disabled, previewData: project.previewData }))} triggerClassName="lp-new-project-picker__trigger lp-new-project-dependency-trigger" value={draft.dependencyRelations as ProjectDependencyValue[]} />
+          <ProjectDependencyPicker ariaLabel="Add dependencies" onChange={value => setDraft(current => ({ ...current, dependencyIds: value.filter(item => item.type === 'blocked_by').map(item => item.projectId), dependencyRelations: value }))} projects={dependencies.filter(project => !project.id.startsWith('__')).map(project => ({ id: project.id, label: project.label, icon: typeof project.icon === 'string' ? project.icon : undefined, color: project.color, group: project.group, keywords: [project.name, project.email].filter(Boolean).join(' '), disabled: project.disabled, previewData: project.previewData }))} triggerClassName={`lp-new-project-picker__trigger lp-new-project-dependency-trigger create-pill${draft.dependencyRelations.length ? '' : ' is-placeholder'}`} value={draft.dependencyRelations as ProjectDependencyValue[]} />
         </div>
         <textarea aria-label="Project description" className="lp-new-project__description" onChange={event => set('description', event.target.value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
         <MilestonesEditor
@@ -257,6 +258,8 @@ function ProjectDraftProperty(props: {
   onChange: (value: string) => void
   options: NewProjectChoice[]
   placeholder?: string
+  /** Translate the chosen value (fixed choices such as priorities, not workspace data). */
+  translateValue?: boolean
   value: string
 } | {
   icon?: ReactNode
@@ -265,11 +268,14 @@ function ProjectDraftProperty(props: {
   onChange: (value: string[]) => void
   options: NewProjectChoice[]
   placeholder: string
+  translateValue?: boolean
   value: string[]
 }) {
   const { icon, label, options, placeholder, value } = props
   const multiple = props.multiple === true
   const selected = Array.isArray(value) ? options.filter(option => value.includes(option.id)) : options.find(option => option.id === value)
+  const hasValue = Array.isArray(selected) ? selected.length > 0 : Boolean(selected)
+  const valueIsEntityName = hasValue && !props.translateValue
   const selectedIds = Array.isArray(value) ? value : [value]
   const display = Array.isArray(selected) ? selected.length ? `${placeholder} · ${selected.length}` : placeholder : selected?.label ?? placeholder ?? label
   const propertyOptions: PropertyOption[] = options.map(option => ({ id: option.id, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.groupLabel, groupColor: option.groupColor, icon: option.icon ?? (placeholder === 'Initiatives' ? <ViewGlyph color={option.color} icon="Initiative"/> : undefined), i18nIgnore: Boolean(option.id) }))
@@ -290,18 +296,20 @@ function ProjectDraftProperty(props: {
     selectedId={Array.isArray(value) ? undefined : value}
     selectedIds={selectedIds}
     surfaceClassName={`lp-new-project-picker__surface${placeholder === 'Initiatives' ? ' lp-new-project-picker__initiatives' : ''}`}
-    trigger={<>{icon ?? <span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }}/>}<span data-i18n-ignore={Boolean(Array.isArray(selected) ? selected.length : selected) || undefined}>{display}</span></>}
-    triggerClassName="lp-new-project-picker__trigger"
+    trigger={<>{icon ?? <span className="lp-new-project-picker__dot" style={{ background: Array.isArray(selected) ? selected[0]?.color : selected?.color }}/>}<span data-i18n-ignore={valueIsEntityName || undefined}>{display}</span></>}
+    triggerClassName={`lp-new-project-picker__trigger create-pill${hasValue ? '' : ' is-placeholder'}`}
     value={display}
-    valueIsEntityName={Boolean(Array.isArray(selected) ? selected.length : selected)}
+    valueIsEntityName={valueIsEntityName}
   />
 }
 
 function DateChip({ kind, max, min, onChange, placeholder, resolution, value }: { kind: 'start' | 'target', max?: string, min?: string, onChange: (value: string, resolution?: 'halfYear' | 'month' | 'quarter' | 'year') => void, placeholder: string, resolution?: 'halfYear' | 'month' | 'quarter' | 'year', value?: string }) {
   const label = kind === 'start' ? 'Start date' : 'Target date'
-  const { locale, formatDate } = useI18n()
-  const displayValue = value ? formatProjectPropertyDate(value, resolution, placeholder, locale, formatDate) : placeholder
-  return <ProjectDatePicker align="start" buttonClassName="lp-new-project-date" contentClassName="lp-new-project-date__surface" label={label} max={max} min={min} onChange={onChange} resolution={resolution} value={value}><CalendarIcon size={14} variant={kind}/><span>{displayValue}</span></ProjectDatePicker>
+  const { locale, formatDate, t } = useI18n()
+  // "Target" alone translates to 目标 (the Initiatives word), so zh shows the full date label.
+  const emptyLabel = locale === 'zh-CN' ? t(label) : placeholder
+  const displayValue = value ? formatProjectPropertyDate(value, resolution, placeholder, locale, formatDate) : emptyLabel
+  return <ProjectDatePicker align="start" buttonClassName={`lp-new-project-date create-pill${value ? '' : ' is-placeholder'}`} contentClassName="lp-new-project-date__surface" label={label} max={max} min={min} onChange={onChange} resolution={resolution} value={value}><CalendarIcon size={14} variant={kind}/><span data-i18n-ignore>{displayValue}</span></ProjectDatePicker>
 }
 
 function ProjectIconPicker({ color = '#5e6ad2', icon = 'Project', onChange }: { color?: string, icon?: string, onChange: (icon: string, color: string) => void }) {

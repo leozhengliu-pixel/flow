@@ -1,5 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
-import { Plus, X } from 'lucide-react'
+import { X } from 'lucide-react'
+import { PlusIcon } from '@/components/ui/view-action-icons'
 import { useState, type ReactNode } from 'react'
 import { FilterConditionChip } from '@/components/filter/applied-filter-bar'
 import { MyIssuesFilterMenu, OptionMark } from '@/components/my-issues/my-issues-filter-menu'
@@ -131,6 +132,6 @@ function AddFilterButton({ depth, filterOptions, onAddCondition, onAddGroup }: {
     options={filterOptions}
     onAddGroup={onAddGroup}
     onToggle={(field, option) => onAddCondition(createCondition(field, option.filterLabel ?? ISSUE_FILTER_LABELS[field] ?? field, { value: option.id, valueLabel: option.label, color: option.color }, field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is'))}
-    trigger={<button type="button" className={styles.addFilter} data-depth={depth} aria-label={t('Add filter')}><Plus size={13}/><span>{t('Filter')}</span></button>}
+    trigger={<button type="button" className={styles.addFilter} data-depth={depth} aria-label={t('Add filter')}><PlusIcon aria-hidden/><span>{t('Filter')}</span></button>}
   />
 }

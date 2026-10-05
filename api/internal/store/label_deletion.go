@@ -169,17 +169,16 @@ func (s *SQLiteStore) MutateLabelDeletion(ctx context.Context, workspace, eventT
 		}
 		if issueLabels {
 			for _, labelID := range ids {
-				// Applied labels use the existing reverse index. Suggested labels
-				// have no reverse index yet; inspect only SQL-matched list projections.
+				// Applied labels use the label reverse index; suggested labels use
+				// the sparse suggestedLabel:<id> attribute rows.
 				for _, suggested := range []bool{false, true} {
 					lastID := ""
 					for {
 						query := `SELECT i.id FROM issue_label_records l JOIN issue_records i ON i.workspace_key=l.workspace_key AND i.id=l.issue_id WHERE l.workspace_key=? AND l.label_id=? AND i.id>? ORDER BY i.id LIMIT 100`
 						args := []any{workspace, labelID, lastID}
 						if suggested {
-							projection := strings.ReplaceAll(text, "data", "COALESCE(list_data,data)")
-							query = `SELECT id FROM issue_records WHERE workspace_key=? AND id>? AND ` + projection + ` LIKE ? ESCAPE '!' AND ` + projection + ` LIKE '%"suggestedLabelIds"%' ORDER BY id LIMIT 100`
-							args = []any{workspace, lastID, labelReferencePattern(labelID)}
+							query = `SELECT issue_id FROM issue_attribute_records WHERE workspace_key=? AND field=? AND value='true' AND issue_id>? ORDER BY issue_id LIMIT 100`
+							args = []any{workspace, "suggestedLabel:" + labelID, lastID}
 						}
 						rows, err := tx.QueryContext(ctx, query, args...)
 						if err != nil {

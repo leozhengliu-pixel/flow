@@ -1448,32 +1448,8 @@
 .lp-new-project__summary { color: var(--theme-text-secondary); font-size: 15px; font-weight: 450; height: 23px; line-height: 23px; }
 .lp-new-project__summary::placeholder,
 .lp-new-project__description::placeholder { color: #66666b; opacity: 1; }
-.lp-new-project__properties { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; min-height: 24px; }
-.lp-new-project-picker__trigger,
-.lp-new-project-date {
-  align-items: center;
-  background: var(--ui-pill-bg);
-  border: .5px solid transparent;
-  border-radius: 9999px;
-  box-shadow: 0 0 0 .5px var(--ui-pill-ring), var(--ui-pill-shadow);
-  color: var(--ui-pill-fg);
-  display: inline-flex;
-  font-size: 12px;
-  font-weight: 500;
-  gap: 5px;
-  height: 24px;
-  line-height: 12px;
-  padding: 0 8px 0 6px;
-}
-.lp-new-project-dependency-trigger { max-width: 220px; min-width: 0; }
-.lp-new-project-dependency-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lp-new-project-picker__trigger:hover,
-.lp-new-project-picker__trigger[data-state="open"],
-.lp-new-project-date:hover,
-.lp-new-project-date[data-state="open"] { background: var(--ui-pill-hover-bg); color: var(--ui-pill-hover-fg); }
-.lp-new-project-picker__trigger > svg,
-.lp-new-project-date > svg { flex: 0 0 14px; height: 14px; width: 14px; }
-.lp-new-project-picker__trigger > .avatar { flex: 0 0 16px; height: 16px; width: 16px; }
+/* Property pills: shared create-pill style (components/ui/create-pill.css). */
+.lp-new-project-dependency-trigger { max-width: 220px; }
 .lp-new-project-picker__dot { background: #68686e; border-radius: 50%; display: inline-block; height: 8px; width: 8px; }
 .lp-new-project-picker__surface { width: 252px; }
 .lp-new-project-picker__initiatives { width: max-content; min-width: 175px; max-width: min(252px, calc(100vw - 20px)); }

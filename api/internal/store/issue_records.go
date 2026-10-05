@@ -255,6 +255,8 @@ func equalIssueRecordData(previous, next []byte) bool {
 
 func issueRecordValues(workspace string, issue domain.Issue) ([]any, error) {
 	normalizeIssueRecord(&issue)
+	// The agent session status is a read decoration of the task row.
+	issue.AgentSessionState = ""
 	// Usage counts belong to the label read model. Copying them into every
 	// issue rewrites the entire labeled collection whenever its count changes.
 	issue.Labels = slices.Clone(issue.Labels)

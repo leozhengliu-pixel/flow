@@ -26,6 +26,8 @@ export function sidebarRoutePath(route: AppRoute): string | undefined {
     case 'team-initiatives': return teamInitiativesPath(w, route.teamKey)
     case 'team-views': case 'team-views-new': case 'team-saved-view': return teamViewsPath(w, route.teamKey)
     case 'workspace-views': case 'workspace-views-new': case 'workspace-saved-view': return workspaceViewsPath(w)
+    // Dashboards is a tab of the Views page.
+    case 'dashboards': return route.teamKey ? teamViewsPath(w, route.teamKey) : workspaceViewsPath(w)
     default: return
   }
 }

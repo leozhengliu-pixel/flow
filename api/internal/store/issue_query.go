@@ -349,6 +349,15 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			args = append(args, values...)
 			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
 		}
+		if node.Field == "agentSessionState" {
+			clause, values, err := compileAgentSessionState(node)
+			if err != nil {
+				return "", nil, err
+			}
+			clauses = append(clauses, clause)
+			args = append(args, values...)
+			return "(" + strings.Join(clauses, " AND ") + ")", args, nil
+		}
 		if isIssueAttributeField(node.Field) {
 			clause, values, err := compileIssueAttribute(node)
 			if err != nil {

@@ -148,6 +148,7 @@ func main() {
 	}()
 	shutdownSignal, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	s.ensureBuiltinApplications(shutdownSignal)
 	go s.runApplicationAgentWorker(shutdownSignal)
 	go s.runRecurringIssueScheduler(shutdownSignal)
 	go func() {
@@ -725,6 +726,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/teams/{id}/triage-rules/{ruleId}", s.deleteTriageRule)
 	mux.HandleFunc("GET /api/teams/{id}/email-intake-addresses", s.listEmailIntakeAddresses)
 	mux.HandleFunc("POST /api/teams/{id}/email-intake-addresses", s.createEmailIntakeAddress)
+	mux.HandleFunc("PATCH /api/teams/{id}/email-intake-addresses/{addressId}", s.updateEmailIntakeAddress)
 	mux.HandleFunc("POST /api/teams/{id}/email-intake-addresses/{addressId}/verify", s.verifyEmailIntakeAddress)
 	mux.HandleFunc("POST /api/teams/{id}/email-intake-addresses/{addressId}/rotate", s.rotateEmailIntakeAddress)
 	mux.HandleFunc("DELETE /api/teams/{id}/email-intake-addresses/{addressId}", s.deleteEmailIntakeAddress)
@@ -919,6 +921,14 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 	if err := s.filterPreferenceIssueTeams(r, &data); err != nil {
 		issueRecordsError(w, err)
 		return
+	}
+	if slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.AgentSessionID != "" }) {
+		// Decorate a copy: the issue slice may be shared with the store snapshot.
+		data.Issues = slices.Clone(data.Issues)
+		if err := s.decorateAgentSessionStates(r.Context(), data.Workspace.URLKey, data.Issues); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
 	}
 	if projectListBootstrapRequested(r) {
 		store.ProjectListBootstrapProjection(&data)
@@ -1303,6 +1313,9 @@ func (s *server) createWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := s.store.CreateWorkspace(r.Context(), input.Name, input.URLKey, input.Region)
+	if err == nil {
+		s.ensureBuiltinApplication(r.Context(), data.Workspace.URLKey)
+	}
 	respondMutation(w, err, http.StatusCreated, data)
 }
 
@@ -1639,6 +1652,10 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
 		err = s.store.SetTeamMembership(r.Context(), data.Workspace.ID, team.ID, authUser(r).ID, "owner", true)
 	}
+	if err == nil {
+		// The built-in Flow agent works in every team, including new ones.
+		s.ensureBuiltinApplication(r.Context(), workspaceKey)
+	}
 	respondMutation(w, err, http.StatusCreated, team)
 }
 
@@ -1784,6 +1801,9 @@ func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) err
 		// Only the workspace id is needed; BootstrapFor would load every issue.
 		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
 		err = s.store.DeleteTeamMemberships(ctx, data.Workspace.ID, teamID)
+		s.pruneIssueSuggestionTargets(ctx, workspaceKey, func(item domain.IssueSuggestion) bool {
+			return item.Type == "team" && item.SuggestedTeamID == teamID
+		})
 	}
 	return err
 }
@@ -2942,6 +2962,11 @@ func (s *server) updateProject(w http.ResponseWriter, r *http.Request) {
 		updated = *project
 		return nil
 	})
+	if err == nil && input.Archived != nil && *input.Archived {
+		s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
+			return item.Type == "project" && item.SuggestedProjectID == id
+		})
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -2977,6 +3002,9 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
+	s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
+		return item.Type == "project" && item.SuggestedProjectID == id
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -4347,6 +4375,9 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 		if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, documentID); deleteErr != nil {
 			log.Printf("delete collaboration document=%s: %v", documentID, deleteErr)
 		}
+		s.pruneIssueSuggestionTargets(r.Context(), workspace, func(item domain.IssueSuggestion) bool {
+			return (item.Type == "similarIssue" || item.Type == "relatedIssue") && item.SuggestedIssueID == id
+		})
 	}
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
@@ -5198,11 +5229,13 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 				data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 					return item.IssueID == issue.ID
 				})
+				syncIssueSuggestionTargets(data, issue)
 			} else if previousState.Type == "backlog" && value.Type != "backlog" && triageSettings.TriageEnabled && issue.TriagedAt == nil {
 				issue.TriagedAt = &now
 				data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 					return item.IssueID == issue.ID
 				})
+				syncIssueSuggestionTargets(data, issue)
 			}
 			changes["stateBefore"] = issue.State.Name
 			changes["stateBeforeId"] = issue.State.ID

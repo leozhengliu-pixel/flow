@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"sort"
@@ -81,7 +83,100 @@ func storeTriageSuggestions(data *domain.Bootstrap, issue *domain.Issue, generat
 	issue.SuggestionsGeneratedAt = &now
 	issue.SuggestionsSource = source
 	issue.SuggestionsThinking = thinking
+	syncIssueSuggestionTargets(data, issue)
 	return suggestions
+}
+
+// syncIssueSuggestionTargets mirrors the issue's active suggestions onto the
+// issue record (suggestedAssigneeIds, suggestedProjectIds, …) so Triage
+// Intelligence filters are sparse indexed attributes. Accepted and dismissed
+// suggestions, and targets that no longer exist, drop out. It reports whether
+// any target list changed.
+func syncIssueSuggestionTargets(data *domain.Bootstrap, issue *domain.Issue) bool {
+	var labels, assignees, projects, teams, duplicates, related []string
+	add := func(list *[]string, id string) {
+		if id != "" && !slices.Contains(*list, id) {
+			*list = append(*list, id)
+		}
+	}
+	for _, item := range data.IssueSuggestions {
+		if item.IssueID != issue.ID || item.State != "active" {
+			continue
+		}
+		switch item.Type {
+		case "label":
+			if labelByID(data, item.SuggestedLabelID) != nil {
+				add(&labels, item.SuggestedLabelID)
+			}
+		case "assignee":
+			if user := userByID(data, item.SuggestedUserID); user != nil && user.Active {
+				add(&assignees, item.SuggestedUserID)
+			}
+		case "project":
+			if slices.ContainsFunc(data.Projects, func(project domain.Project) bool {
+				return project.ID == item.SuggestedProjectID && project.ArchivedAt == nil
+			}) {
+				add(&projects, item.SuggestedProjectID)
+			}
+		case "team":
+			if teamByID(data, item.SuggestedTeamID) != nil {
+				add(&teams, item.SuggestedTeamID)
+			}
+		case "similarIssue":
+			if item.SuggestedIssueID != issue.ID {
+				add(&duplicates, item.SuggestedIssueID)
+			}
+		case "relatedIssue":
+			if item.SuggestedIssueID != issue.ID {
+				add(&related, item.SuggestedIssueID)
+			}
+		}
+	}
+	changed := false
+	for _, pair := range []struct {
+		target *[]string
+		next   []string
+	}{{&issue.SuggestedLabelIDs, labels}, {&issue.SuggestedAssigneeIDs, assignees}, {&issue.SuggestedProjectIDs, projects}, {&issue.SuggestedTeamIDs, teams}, {&issue.SuggestedDuplicateIDs, duplicates}, {&issue.SuggestedRelatedIDs, related}} {
+		slices.Sort(pair.next)
+		if !slices.Equal(*pair.target, pair.next) {
+			changed = changed || len(*pair.target) > 0 || len(pair.next) > 0
+			*pair.target = pair.next
+		}
+	}
+	return changed
+}
+
+// pruneIssueSuggestionTargets drops suggestions whose target was deleted,
+// archived or deactivated, and rewrites only the affected issues (found from
+// the in-memory suggestion records) through the scoped issue-record path.
+func (s *server) pruneIssueSuggestionTargets(ctx context.Context, workspace string, stale func(domain.IssueSuggestion) bool) {
+	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	if !ok {
+		return
+	}
+	ids := []string{}
+	for _, item := range metadata.IssueSuggestions {
+		if stale(item) && !slices.Contains(ids, item.IssueID) {
+			ids = append(ids, item.IssueID)
+		}
+	}
+	for start := 0; start < len(ids); start += 500 {
+		batch := ids[start:min(start+500, len(ids))]
+		err := s.store.MutateWorkspace(store.WithIssueRecordMutations(ctx, batch...), workspace, "issue.suggestions_pruned", batch[0], nil, func(data *domain.Bootstrap) error {
+			data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, stale)
+			now := time.Now().UTC()
+			for index := range data.Issues {
+				if syncIssueSuggestionTargets(data, &data.Issues[index]) {
+					data.Issues[index].Version++
+					data.Issues[index].UpdatedAt = now
+				}
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, store.ErrNoMutation) {
+			log.Printf("prune issue suggestions workspace=%s: %v", workspace, err)
+		}
+	}
 }
 
 func issueSuggestionTargetKey(item domain.IssueSuggestion) string {
@@ -1086,6 +1181,10 @@ func (s *server) updateIssueSuggestionState(w http.ResponseWriter, r *http.Reque
 		suggestion.StateChangedAt = now
 		suggestion.UpdatedAt = now
 		updated = *suggestion
+		if syncIssueSuggestionTargets(data, issue) && !accept {
+			issue.UpdatedAt = now
+			issue.Version++
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)

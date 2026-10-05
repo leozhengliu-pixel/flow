@@ -47,3 +47,4 @@
 :root[data-theme="light"] .settings-segmented button.active{background:var(--theme-surface-2);color:var(--text)}
 :root[data-theme="light"] .team-settings-section-title h3,:root[data-theme="light"] .team-settings-header h1{color:var(--theme-text-primary)}
 .team-settings-section-title+.settings-section-description{margin-top:-9px}
+.email-intake-row>.email-intake-copy-text{display:block;overflow:hidden;padding:6px 10px;border:.5px solid var(--theme-border-strong);border-radius:8px;background:var(--theme-surface-1);color:var(--theme-text-secondary);font-size:13px;line-height:18px;text-overflow:ellipsis;white-space:nowrap;user-select:all}

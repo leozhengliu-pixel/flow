@@ -65,6 +65,9 @@ export type ViewsPageProps = {
   onOpenSidebar?: () => void;
   onResourceChange: (resource: ViewsResource) => void;
   resourceHref: (resource: ViewsResource) => string;
+  /** Dashboards (enterprise) is a tab of the Views page when the feature is on. */
+  dashboardsHref: string;
+  onOpenDashboards: () => void;
   onUpdate: (
     viewId: string,
     input: SavedViewMutationInput,
@@ -89,6 +92,8 @@ export function ViewsPage({
   onOpenSidebar,
   onResourceChange,
   resourceHref,
+  dashboardsHref,
+  onOpenDashboards,
   onUpdate,
   onToggleFavorite,
   onToggleScopeFavorite,
@@ -343,6 +348,16 @@ export function ViewsPage({
             href: resourceHref("projects"),
             onSelect: () => onResourceChange("projects"),
           },
+          ...(data.workspaceSettings.featureFlags.dashboards !== false
+            ? [
+                {
+                  resource: "dashboards" as const,
+                  label: "Dashboards",
+                  href: dashboardsHref,
+                  onSelect: onOpenDashboards,
+                },
+              ]
+            : []),
         ]}
         title="Views"
         toolbarEnd={

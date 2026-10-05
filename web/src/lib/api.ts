@@ -1544,12 +1544,17 @@ type ReleasePipelineMutation = Partial<
     | "production"
     | "stages"
     | "stageStatuses"
+    | "stageColors"
+    | "frozenStages"
     | "pathFilters"
     | "releaseNotesTemplate"
     | "autoGenerateReleaseNotes"
     | "moveOpenIssuesToNextRelease"
   >
->;
+> & {
+  /** Maps current stage names to new names so releases follow a renamed stage. */
+  stageRenames?: Record<string, string>;
+};
 export function listReleasePipelines(): Promise<ReleasePipeline[]> {
   return request("/api/release-pipelines");
 }
@@ -2970,7 +2975,7 @@ export function listEmailIntakeAddresses(
 }
 export function createEmailIntakeAddress(
   teamId: string,
-  input: { localPart: string; domain: string },
+  input: EmailIntakeAddressCreateInput,
 ): Promise<{
   address: EmailIntakeAddress;
   inboundToken: string;
@@ -2979,6 +2984,34 @@ export function createEmailIntakeAddress(
   return request(
     `/api/teams/${teamId}/email-intake-addresses`,
     jsonRequest("POST", input),
+  );
+}
+/** Omitting localPart and domain generates an address on Flow's intake domain. */
+export type EmailIntakeAddressCreateInput = {
+  localPart?: string;
+  domain?: string;
+  type?: "asks" | "team";
+  templateId?: string;
+  senderName?: string;
+  forwardingEmailAddress?: string;
+  customerRequestsEnabled?: boolean;
+};
+export type EmailIntakeAddressUpdateInput = {
+  teamId?: string;
+  templateId?: string;
+  senderName?: string;
+  forwardingEmailAddress?: string;
+  customerRequestsEnabled?: boolean;
+  enabled?: boolean;
+};
+export function updateEmailIntakeAddress(
+  teamId: string,
+  id: string,
+  input: EmailIntakeAddressUpdateInput,
+): Promise<EmailIntakeAddress> {
+  return request(
+    `/api/teams/${teamId}/email-intake-addresses/${id}`,
+    jsonRequest("PATCH", input),
   );
 }
 export function verifyEmailIntakeAddress(

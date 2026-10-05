@@ -42,7 +42,7 @@ const defaultVisibility: SidebarPreferences = {
   drafts: 'always', agent: 'always', initiatives: 'always',
   projects: 'always', documents: 'always', views: 'always',
   members: 'always', customers: 'never', teams: 'always',
-  releases: 'always', loops: 'always', dashboards: 'never',
+  releases: 'always', loops: 'always',
 }
 
 function workspaceSettings(flags: Record<string, boolean>): WorkspaceSettings {

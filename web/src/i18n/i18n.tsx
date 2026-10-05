@@ -106,7 +106,7 @@ export function translateToChinese(source: string): string {
     [/^(\d+) release pipelines?$/, count => `${count} 个发布流水线`],
     [/^(\d+) reviews?$/, count => `${count} 个评审`],
     [/^(\d+) filters?$/, count => `${count} 个筛选条件`],
-    [/^(\d+) (statuses|labels|assignees|creators|subscribers|agents|milestones|customers|templates|relations|values)$/, (count, noun) => `${count} 个${({ statuses: '状态', labels: '标签', assignees: '负责人', creators: '创建者', subscribers: '订阅者', agents: '智能体', milestones: '里程碑', customers: '客户', templates: '模板', relations: '关系', values: '值' } as Record<string, string>)[noun]}`],
+    [/^(\d+) (statuses|labels|assignees|creators|subscribers|agents|milestones|customers|templates|relations|values)$/, (count, noun) => `${count} 个${({ statuses: '状态', labels: '标签', assignees: '负责人', creators: '创建者', subscribers: '订阅者', agents: ' Agent', milestones: '里程碑', customers: '客户', templates: '模板', relations: '关系', values: '值' } as Record<string, string>)[noun]}`],
     [/^(\d+) files? selected$/, count => `已选择 ${count} 个文件`],
     [/^(\d+) invitations? sent$/, count => `已发送 ${count} 份邀请`],
     [/^(\d+) other (?:person|people) viewing$/, count => `其他 ${count} 人正在查看`],

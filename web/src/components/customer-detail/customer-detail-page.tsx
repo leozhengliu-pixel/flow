@@ -355,7 +355,10 @@ export function CustomerDetailPage({
       </Dialog>
       <CustomerDialog
         currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
+        customers={data.customers}
         open={editOpen}
+        statuses={data.customerStatuses}
+        tiers={data.customerTiers}
         users={data.users}
         customer={customer}
         onOpenChange={setEditOpen}
