@@ -91,3 +91,11 @@ describe("routeInfo titles", () => {
     expect(routeInfo({ kind: "team-cycles", workspaceSlug: "acme", teamKey: "ACM" }, data).title).toBe("Acme Team › Cycles");
   });
 });
+
+describe("custom view titles", () => {
+  it("uses the view name and Linear's \"<name> > Edit\" while editing", () => {
+    const savedViews = [{ id: "view-1", slugId: "urgent-view-1", name: "Urgent" }] as BootstrapData["savedViews"];
+    expect(routeInfo({ kind: "workspace-saved-view", workspaceSlug: "w", viewId: "urgent-view-1" }, { savedViews }).title).toBe("Urgent");
+    expect(routeInfo({ kind: "team-saved-view", workspaceSlug: "w", teamKey: "T", viewId: "view-1", editing: true }, { savedViews }).title).toBe("Urgent > Edit");
+  });
+});

@@ -2034,6 +2034,9 @@ func resourceExists(data *domain.Bootstrap, kind, id string) bool {
 		return validateResourceIDs(data, "project", []string{id})
 	case "team":
 		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == id && item.RetiredAt == nil })
+	case "triage":
+		// A team's Triage page (Linear's "Favorite page"); the id is the team id.
+		return slices.ContainsFunc(data.Teams, func(item domain.Team) bool { return item.ID == id && item.RetiredAt == nil })
 	case "document":
 		return slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id })
 	case "label":

@@ -40,6 +40,7 @@ import { CheckboxMark } from "@/components/ui/checkbox-mark";
 import { FlowPlusIcon, ViewsDirectoryHeader } from "./views-directory-header";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useI18n } from "@/i18n/i18n";
+import { countFilterConditions } from "@/components/issue-explorer/advanced-filter";
 
 type ViewsScope = { kind: "workspace" } | { kind: "team"; team: Team };
 type Ordering = "created" | "name" | "owner" | "updated";
@@ -989,7 +990,8 @@ function viewDescription(
   translate: (source: string) => string,
 ) {
   if (view.description) return view.description;
-  const count = Array.isArray(view.filters) ? view.filters.length : 0;
+  // Advanced filters count their conditions (Linear "matching N filters").
+  const count = countFilterConditions(view.filters);
   return count
     ? translate(
         `${resource === "issues" ? "Issues" : "Projects"} matching ${count} ${count === 1 ? "filter" : "filters"}`,

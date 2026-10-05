@@ -101,6 +101,7 @@ import { StatusIcon } from "@/components/issue/issue-icons";
 import { DefaultFavoritesSettings } from './team-default-favorites-settings';
 import { TeamProjectStatusesSettingsPage } from './team-project-statuses-settings';
 import { PropertyMenu } from '@/components/property/property-menu';
+import { TriageResponsibilityMembers } from '@/components/triage/triage-responsibility-dialog';
 import { WorkflowStateDeleteDialog } from './workflow-state-delete-dialog';
 import {
   ViewIconPicker,
@@ -1713,15 +1714,31 @@ function TriageSettings({
           title="Action"
           description="When a new issue is added to triage, take the following action"
           value={settings.triageAction}
-          options={["none", "creator", "teamOwner", "responsibility"]}
+          options={["none", "notify", "assign", "creator", "teamOwner", "responsibility"]}
           labels={{
             none: "No action",
+            notify: "Notify",
+            assign: "Assign",
             creator: "Assign to issue creator",
             teamOwner: "Assign to team owner",
             responsibility: "Use responsibility",
           }}
-          onChange={(value) => save({ triageAction: value })}
+          onChange={(value) => save({ triageAction: value, ...(value === "notify" || value === "assign" ? {} : { triageActionUserIds: [] }) })}
         />
+        {(settings.triageAction === "notify" || settings.triageAction === "assign") && (
+          <TeamRow
+            title={settings.triageAction === "assign" ? "Assignee" : "Members to notify"}
+            description={settings.triageAction === "assign" ? "New triage issues are assigned to this member" : "These members get an inbox notification for each new triage issue"}
+          >
+            <TriageResponsibilityMembers
+              data={data}
+              teamId={team.id}
+              multiple={settings.triageAction === "notify"}
+              value={settings.triageActionUserIds ?? []}
+              onChange={(ids) => save({ triageActionUserIds: ids })}
+            />
+          </TeamRow>
+        )}
         {responsibilities.map((item) => (
           <div className="automation-rule-row" key={item.id}>
             <span>
@@ -3450,6 +3467,7 @@ function defaultTeamSettings(
     triageEnabled: false,
     triageRequirePriority: false,
     triageAction: "none",
+    triageActionUserIds: [],
     triageRules: [],
     agentSkills: [],
     projectUpdatePrompt: "",

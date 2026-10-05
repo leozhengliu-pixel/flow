@@ -8,6 +8,8 @@ import { MyIssuesDisplayMenu } from "@/components/my-issues/my-issues-display-me
 import { MyIssuesFilterMenu } from "@/components/my-issues/my-issues-filter-menu";
 import { FilterIcon as Filter } from "@/components/ui/view-action-icons";
 import { MyIssuesFilterBar } from "@/components/my-issues/my-issues-filter-bar";
+import { AdvancedFilterChip } from "@/components/issue-explorer/advanced-filter-editor";
+import { advancedFilterTree, createAdvancedFilter } from "@/components/issue-explorer/advanced-filter";
 import {
   filterValues,
   issueFiltersToQueryAst,
@@ -87,6 +89,7 @@ export function ProjectIssueFilterMenu({
       filters={filters}
       onOpenChange={setOpen}
       onToggle={toggle}
+      onAdvanced={() => onChange([...filters, createAdvancedFilter()])}
       open={open}
       options={(field) => (options ? explorerFilterOptions(field, options) : undefined)}
       trigger={
@@ -169,6 +172,18 @@ export function ProjectIssueFilterBar({
       onRemove={(id) => onChange(filters.filter((filter) => filter.id !== id))}
       onValuesChange={(id, values) =>
         onChange(updateFilterValues(filters, id, values))
+      }
+      renderFilter={(filter) =>
+        filter.field === "advanced" ? (
+          <AdvancedFilterChip
+            key={filter.id}
+            defaultOpen={!advancedFilterTree(filter).items.length}
+            filter={filter}
+            filterOptions={(field) => (options ? explorerFilterOptions(field, options) : undefined)}
+            onChange={(tree) => onChange(filters.map((item) => (item.id === filter.id ? { ...item, tree } : item)))}
+            onRemove={() => onChange(filters.filter((item) => item.id !== filter.id))}
+          />
+        ) : undefined
       }
     />
   );

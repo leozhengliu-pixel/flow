@@ -64,6 +64,8 @@ export interface MyIssuesSurfaceProps {
   filterOptions?: (filter: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined
   onFilterSelect?: (filter: MyIssuesFilterKey, option?: MyIssuesFilterOption) => void
   onFilterToggle?: (filter: MyIssuesFilterKey, option: MyIssuesFilterOption) => void
+  /** "Advanced filter" adds an advanced-filter chip. */
+  onAdvancedFilter?: () => void
   onViewChange?: (view: MyIssuesView) => void
   onOpenSidebar?: () => void
   /** Surface-specific display menu capabilities (available groupings/orderings, toggles, footer). */
@@ -71,7 +73,7 @@ export interface MyIssuesSurfaceProps {
 }
 
 export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id']
-export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string }
+export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string; textConditionInput?: 'text' | 'date' }
 
 const views: { id: MyIssuesView; label: string }[] = [
   { id: 'assigned', label: 'Assigned' },
@@ -107,7 +109,7 @@ const filterGroups = [
 
 export function MyIssuesSurface({
   activeView = 'assigned', children, filterBar, detailsOpen = false, insightsOpen = false, displayOptions = defaultMyIssuesDisplayOptions, filterOpenSignal = 0, filters = [], viewCounts, viewHref,
-  filterOptions, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar, displayMenuProps,
+  filterOptions, onAdvancedFilter, onDetailsOpenChange, onInsightsOpenChange, onDisplayOptionsChange, onFilterSelect, onFilterToggle, onViewChange, onOpenSidebar, displayMenuProps,
 }: MyIssuesSurfaceProps) {
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
   return <ContentViewContainer framed inset="tall" data-my-issues-surface="true">
@@ -123,7 +125,7 @@ export function MyIssuesSurface({
       }
       end={
         <ToolbarButtonsNavigation className={styles.actions}>
-          <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
+          <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onAdvanced={onAdvancedFilter} onToggle={(field, option) => { if (onFilterToggle) onFilterToggle(field, option); else onFilterSelect?.(field, option) }} trigger={<ToolbarButton label="Add filter"><FilterIcon/></ToolbarButton>}/>
           <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={options => onDisplayOptionsChange?.(options)}/>
           <ToolbarButton label={insightsOpen ? 'Close insights' : 'Open insights'} pressed={insightsOpen} aria-expanded={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}><InsightsIcon/></ToolbarButton>
           <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut="⌘ I"><ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} aria-expanded={detailsOpen} onClick={() => onDetailsOpenChange?.(!detailsOpen)}><DetailsIcon open={detailsOpen}/></ToolbarButton></FlowTooltip>

@@ -2195,7 +2195,10 @@ export interface TeamSettings {
   /** Team default display options per issue view (all / active / backlog / board). */
   issueViewDefaults?: Record<string, Record<string, unknown>>;
   triageRequirePriority: boolean;
+  /** "none" | "notify" | "assign" (Linear) or the earlier "creator" | "teamOwner" | "responsibility". */
   triageAction: string;
+  /** Members the triage responsibility notifies or assigns. */
+  triageActionUserIds?: string[];
   triageRules: TeamAutomationRule[];
   agentSkills: TeamAgentSkill[];
   agentConnectors?: TeamAgentConnector[];

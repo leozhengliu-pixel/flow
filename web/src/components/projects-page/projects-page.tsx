@@ -13,6 +13,7 @@ import { DEFAULT_PROJECTS_DISPLAY, filterProjectsByLeadTeam, projectDisplayPrope
 import { ProjectsInsightsSidebar, type ProjectInsightFilter, type ProjectInsightMode } from './projects-insights-sidebar'
 import { projectStatusesForLayout, useProjectsViewState } from './use-projects-view-state'
 import { ProjectsFilterBar } from './projects-filter-bar'
+import { SavedViewBandCommands } from '@/components/issue-explorer/saved-view-filter-band'
 import { createProjectFilter, isProjectFilter, type ProjectFilter, type ProjectFilterField, type ProjectFilterOption } from './projects-filter-model'
 import { ProjectsBulkActionBar, type ProjectBulkAction } from './projects-bulk-action-bar'
 import { ViewGlyph, type ViewVisual } from '@/components/views/view-icon-picker'
@@ -198,7 +199,11 @@ export function ProjectsPage({
   const sourceView = savedView ?? duplicateFrom
   const draftFiltersKey = `flow:projects:draft-filters:${workspaceKey}:${scopeTeamId ?? 'workspace'}`
   const [projectFilters, setProjectFilters] = useState<ProjectFilter[]>(() => { const params=new URLSearchParams(location.search),fallback:ProjectFilter[]=[];const label=labelsForResource(labels,'project',labelGroups).find(item=>item.id===params.get('label'));if(label)fallback.push({id:`labels-url-${label.id}`,field:'labels',fieldLabel:'Labels',operator:'is',values:[{id:label.id,label:label.name,color:label.color}]});const status=projectStatuses.find(item=>item.id===params.get('status'));if(status)fallback.push({id:`status-url-${status.id}`,field:'status',fieldLabel:'Status',operator:'is',values:[{id:status.name,label:status.name,color:status.color}]});return projectFiltersFromSavedView(sourceView,fallback.length?fallback:creatingView?readDraftFilters(draftFiltersKey):[]) })
-  const projectFilterQuery = useMemo(() => projectFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [projectFilters])
+  // Linear: filters added on a saved view (outside edit mode) are temporary — the band with Clear / Save ⌄.
+  const [extraFilters, setExtraFilters] = useState<ProjectFilter[]>([])
+  const bandActive = Boolean(savedView && !editingView)
+  const activeFilters = useMemo(() => bandActive && extraFilters.length ? [...projectFilters, ...extraFilters] : projectFilters, [bandActive, extraFilters, projectFilters])
+  const projectFilterQuery = useMemo(() => activeFilters.map(filter => ({ field: filter.field, operator: filter.operator, values: filter.values.map(value => value.id) })), [activeFilters])
   const [pagedProjects, setPagedProjects] = useState<Project[]>(projects)
   const [directoryLoading, setDirectoryLoading] = useState(projects.length === 0)
   const [directoryLoadingMore, setDirectoryLoadingMore] = useState(false)
@@ -301,12 +306,12 @@ export function ProjectsPage({
   const [insightMode, setInsightMode] = useState<ProjectInsightMode>('health')
   const [insightFilter, setInsightFilter] = useState<ProjectInsightFilter>(() => projectFilterFromSavedView(sourceView))
   const visibleItems = useMemo(() => {
-    let result = items.filter(item => projectFilters.every(filter => matchesProjectFilter(item, filter)))
+    let result = items.filter(item => activeFilters.every(filter => matchesProjectFilter(item, filter)))
     if (!insightFilter) return result
     if (insightFilter.kind === 'health') result = result.filter(item => item.health === insightFilter.value)
     else result = result.filter(item => (item.lead?.id ?? '') === insightFilter.value)
     return result
-  }, [insightFilter, items, projectFilters])
+  }, [activeFilters, insightFilter, items])
   const availableProjectStatuses = useMemo(() => projectStatusesForLayout(projectStatuses.length ? projectStatuses : uniqueStatuses(projectCollection.map(project => project.status)), 'board'), [projectCollection, projectStatuses])
   const defaultCreateStatus = availableProjectStatuses.find(status => status.type === 'backlog')?.name ?? availableProjectStatuses[0]?.name ?? ''
   const workspaceDefault = useMemo(() => parseProjectDisplayDefault(projectDisplayDefault), [projectDisplayDefault])
@@ -414,7 +419,10 @@ export function ProjectsPage({
     setViewSaving(true)
     try {
       if (viewEditor === 'edit' && savedView && onUpdateSavedView) {
-        await onUpdateSavedView(savedView.id, { ...savedViewSnapshot(), name, description, ...visual })
+        // Only what the card edits: owner and resource stay; scope moves only through "Save to".
+        const destination = target ?? initialSaveTarget
+        const snapshot = savedViewSnapshot()
+        await onUpdateSavedView(savedView.id, { name, description, ...visual, filters: snapshot.filters, display: snapshot.display, scope: destination.scope, teamId: destination.scope === 'team' ? destination.teamId : '' })
       } else if (onCreateSavedView) {
         const destination = target ?? initialSaveTarget
         const created = await onCreateSavedView({ ...savedViewSnapshot(), name, description, ...visual, scope: destination.scope, teamId: destination.scope === 'team' ? destination.teamId : '' })
@@ -436,6 +444,15 @@ export function ProjectsPage({
     ...(creatingView ? [{ id: 'new', kind: 'saved' as const, label: 'New view' }] : []),
   ]
 
+  const saveBandToView = () => {
+    if (!savedView || !onUpdateSavedView || !extraFilters.length) return
+    const merged = [...projectFilters, ...extraFilters]
+    void onUpdateSavedView(savedView.id, { filters: [...merged, ...(insightFilter ? [insightFilter] : [])] }).then(() => { setProjectFilters(merged); setExtraFilters([]) }).catch(() => undefined)
+  }
+  const createViewFromBand = () => {
+    writeDraftFilters(draftFiltersKey, [...projectFilters, ...extraFilters])
+    onNavigateNewView?.()
+  }
   const addFilter = (label: string, option?: ProjectFilterOption) => {
     const field = PROJECT_FILTER_FIELDS[label]
     if (!field) {
@@ -443,7 +460,8 @@ export function ProjectsPage({
       return
     }
     if (!option) return
-    setProjectFilters(current => {
+    const setTarget = bandActive && !viewEditor ? setExtraFilters : setProjectFilters
+    setTarget(current => {
       const existing = current.find(filter => filter.field === field && filter.operator === 'is')
       if (!existing) return [...current, createProjectFilter(field, label, option)]
       if (existing.values.some(value => value.id === option.id)) return current
@@ -491,7 +509,16 @@ export function ProjectsPage({
     displayDefault={view.displayDefault}
     displayProperties={displayProperties}
     displayTeamScoped={Boolean(scopeTeamId)}
-    filterBar={<ProjectsFilterBar
+    filterBar={bandActive && !viewEditor ? <ProjectsFilterBar
+      band
+      filters={extraFilters}
+      onAdd={() => document.querySelector<HTMLButtonElement>('.lp-projects__actions [aria-label="Add filter"]')?.click()}
+      onChange={next => setExtraFilters(current => current.map(filter => filter.id === next.id ? next : filter))}
+      onClear={() => setExtraFilters([])}
+      onRemove={id => setExtraFilters(current => current.filter(filter => filter.id !== id))}
+      commands={<SavedViewBandCommands canUpdate={Boolean(onUpdateSavedView)} onClear={() => setExtraFilters([])} onCreate={createViewFromBand} onUpdate={saveBandToView}/>}
+      options={filterOptions}
+    /> : <ProjectsFilterBar
       filters={projectFilters}
       onAdd={() => document.querySelector<HTMLButtonElement>('.lp-projects__actions [aria-label="Add filter"]')?.click()}
       onChange={next => setProjectFilters(current => current.map(filter => filter.id === next.id ? next : filter))}
@@ -500,8 +527,8 @@ export function ProjectsPage({
       onSave={!creatingView && !savedView ? beginSaveFilteredView : undefined}
       options={filterOptions}
     />}
-    filterCount={projectFilters.length + (insightFilter ? 1 : 0)}
-    selectedFilters={projectFilters}
+    filterCount={activeFilters.length + (insightFilter ? 1 : 0)}
+    selectedFilters={bandActive && !viewEditor ? extraFilters : projectFilters}
     displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}
@@ -552,15 +579,16 @@ export function ProjectsPage({
       onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
     />}
     viewEditor={viewEditor ? actions => <SavedViewEditor
-      actions={creatingView ? undefined : actions}
+      actions={actions}
       ariaLabel={viewEditor === 'edit' ? 'Edit project view' : 'New project view'}
+      mode={viewEditor}
       initialName={viewEditor === 'edit' ? savedView?.name : duplicateFrom?.name ?? ''}
       namePlaceholder="All projects"
       initialDescription={viewEditor === 'edit' ? savedView?.description : duplicateFrom?.description ?? ''}
       initialIcon={viewEditor === 'edit' ? savedView?.icon : duplicateFrom?.icon}
       initialColor={viewEditor === 'edit' ? savedView?.color : duplicateFrom?.color}
       initialTarget={initialSaveTarget}
-      saveTargets={viewEditor === 'create' ? saveTargets : []}
+      saveTargets={saveTargets}
       saving={viewSaving}
       onCancel={() => {
         setViewEditor(undefined)

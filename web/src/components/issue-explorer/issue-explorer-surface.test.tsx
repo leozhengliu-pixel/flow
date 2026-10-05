@@ -12,14 +12,14 @@ const display = { layout: 'list', grouping: 'status', subGrouping: 'none', prope
 beforeEach(() => localStorage.setItem('flow:locale', 'en-US'))
 it('keeps the create-view filter menu clickable outside the fixed editor panel', async () => {
   const user = userEvent.setup()
-  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => [{ id: 'open', label: 'Open' }] as never} viewEditor={<div aria-label="New issue view">Editor</div>} onNewViewResourceChange={vi.fn()} onOpenSidebar={vi.fn()}>Content</IssueExplorerSurface></I18nProvider>)
+  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => [{ id: 'open', label: 'Open' }] as never} viewEditor={controls => <div aria-label="New issue view">Editor{controls.filterButton}</div>} onNewViewResourceChange={vi.fn()} onOpenSidebar={vi.fn()}>Content</IssueExplorerSurface></I18nProvider>)
   await user.click(screen.getByRole('button', { name: 'Add filter' }))
   expect(document.querySelector('.rootSearch input, input[placeholder="Add Filter…"]')).toBeTruthy()
 })
 
 it.each(['mouse', 'keyboard'])('applies a filter from its portaled submenu using %s', async mode => {
   const user = userEvent.setup(), toggle = vi.fn()
-  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={toggle} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={field => field === 'priority' ? [{ id: '2', label: 'High' }] : undefined} viewEditor={<div>Editor</div>}>Content</IssueExplorerSurface></I18nProvider>)
+  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={toggle} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={field => field === 'priority' ? [{ id: '2', label: 'High' }] : undefined} viewEditor={controls => <div>Editor{controls.filterButton}</div>}>Content</IssueExplorerSurface></I18nProvider>)
   const trigger = screen.getByRole('button', { name: 'Add filter' })
   if (mode === 'mouse') {
     await user.click(trigger)
@@ -33,7 +33,9 @@ it.each(['mouse', 'keyboard'])('applies a filter from its portaled submenu using
     trigger.focus()
     await user.keyboard('{Enter}')
     await user.type(await screen.findByLabelText('Add Filter…'), 'Priority')
-    await user.keyboard('{ArrowDown}{Enter}')
+    // The first match is active; the search always ends with `AI filter "<query>"`.
+    expect(screen.getByRole('option', { name: /AI filter/ })).toBeInTheDocument()
+    await user.keyboard('{Enter}')
     const search = await screen.findByRole('searchbox', { name: 'Filter Priority' })
     search.focus()
     await user.keyboard('{ArrowDown}{Enter}')
@@ -43,7 +45,7 @@ it.each(['mouse', 'keyboard'])('applies a filter from its portaled submenu using
 
 it('keeps project milestone off the team issue filter menu', async () => {
   const user = userEvent.setup()
-  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => []} viewEditor={<div>Editor</div>}>Content</IssueExplorerSurface></I18nProvider>)
+  render(<I18nProvider><IssueExplorerSurface creatingView scopeName="Workspace" activeView="all" viewHref={() => '#'} filters={[]} displayOptions={display} detailsOpen={false} onFilterToggle={vi.fn()} onDisplayOptionsChange={vi.fn()} onDetailsOpenChange={vi.fn()} onNavigateView={vi.fn()} filterOptions={() => []} viewEditor={controls => <div>Editor{controls.filterButton}</div>}>Content</IssueExplorerSurface></I18nProvider>)
   await user.click(screen.getByRole('button', { name: 'Add filter' }))
   expect(screen.getByRole('option', { name: 'Project' })).toBeInTheDocument()
   expect(screen.getByRole('option', { name: 'Customers' })).toBeInTheDocument()

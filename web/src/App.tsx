@@ -253,6 +253,7 @@ import {
   teamDashboardsNewPath,
   teamHomePath,
   teamIssuesPath,
+  teamTriagePath,
   teamProjectsNewViewPath,
   teamProjectsPath,
   teamProjectsSavedViewPath,
@@ -301,6 +302,8 @@ import { ActiveTeamProvider } from '@/lib/active-team'
 import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
+import { triageState } from '@/components/triage/triage-model'
+import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-secondary-page'
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
 
@@ -807,6 +810,19 @@ function App() {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
         navigateTo(`${initiativesPath(data.workspace.urlKey)}?create=1`);
+        return;
+      }
+      if (inSequence && sequence.key === "g" && pressed === "t" && data) {
+        // Go to triage: the current team's, else the first triage team the viewer belongs to.
+        const routeKey = "teamKey" in route && typeof route.teamKey === "string" ? route.teamKey.toLowerCase() : undefined;
+        const issueTeamId = route.kind === "issue" ? data.issues.find((issue) => issue.identifier.toUpperCase() === route.identifier.toUpperCase())?.team.id : undefined;
+        const triageTeams = data.teams.filter((team) => data.teamSettings?.[team.id]?.triageEnabled && !team.archivedAt);
+        const target = triageTeams.find((team) => team.key.toLowerCase() === routeKey || team.id === issueTeamId)
+          ?? triageTeams.find((team) => data.teamMembers.some((member) => member.teamId === team.id && member.userId === data.viewer.id))
+          ?? triageTeams[0];
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        if (target) navigateTo(teamTriagePath(data.workspace.urlKey, target.key));
         return;
       }
       if (inSequence && sequence.key === "g" && pressed === "i" && data) {
@@ -4555,10 +4571,17 @@ function App() {
     );
   const workspaceValid = routeBelongsToWorkspace(route, data.workspace.urlKey);
   const routeTeamKey = "teamKey" in route ? route.teamKey : undefined;
+  // Linear opens a triage issue at /issue/KEY-n and keeps the triage list beside it: an issue entered
+  // from a team's Triage page (its navigation origin) renders inside that page.
+  const triageReturnRoute = route.kind === "issue" ? triageOrigin(location.state, data.workspace.urlKey) : undefined;
+  const triageIssueTeam = triageReturnRoute
+    ? data.teams.find((team) => team.key.toLowerCase() === triageReturnRoute.teamKey.toLowerCase() && data.teamSettings?.[team.id]?.triageEnabled)
+    : undefined;
   const teamPagesTeamKey =
     "teamKey" in route && isTeamPagesRoute(route.kind)
       ? route.teamKey
-      : undefined;
+      : triageIssueTeam?.key;
+  const triagePageTeam = triageIssueTeam ?? (route.kind === "team-triage" ? data.teams.find((team) => team.key.toLowerCase() === route.teamKey.toLowerCase()) : undefined);
   const teamValid =
     !routeTeamKey ||
     data.teams.some(
@@ -4608,6 +4631,76 @@ function App() {
       activities: { ...current.activities, [context.issue.id]: context.activities },
       issueHistoryCursors: { ...current.issueHistoryCursors, [context.issue.id]: { commentsCursor: context.commentsCursor, activitiesCursor: context.activitiesCursor } },
     } : current);
+  };
+  /** The issue page body (access check, preview, editor, loading, not found); Triage shows it beside its list. */
+  const renderIssuePane = (inTriage: boolean) => {
+    const IssuePanel = inTriage ? TriageIssuePanel : MainIssuePanel;
+    return <>
+        {issuePane === "checking-access" && <IssuePanel role="status">Checking issue access…</IssuePanel>}
+        {issuePane === "preview" && previewIssue && (
+          <Suspense fallback={<IssuePanel><SkeletonRows count={9}/></IssuePanel>}>
+            <IssuePanel>
+              <IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(data.workspace.urlKey,'all'))}/>
+            </IssuePanel>
+          </Suspense>
+        )}
+        {issuePane === "editor" && selectedIssue && !selectedIssue.isSummary && (
+          <IssuePanel>
+            <IssueDetails
+              key={selectedIssue.id}
+              issue={selectedIssue}
+              data={data}
+              full
+              triageView={inTriage}
+              historyLoading={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.loading}
+              historyError={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.error ? 'Could not load issue history' : undefined}
+              onRetryHistory={()=>{void refreshActivity(false).catch(()=>undefined)}}
+              returnPath={issueReturnPath(location.state, data.workspace.urlKey, selectedIssue)}
+              navigationIssueIds={issueSequenceIDs(location.state)}
+              workspacePresence={realtime.presence}
+              issueOptionsActions={selectedIssueOptionsActions}
+              presence={realtime.presence.filter(
+                (item) =>
+                  item.issueId === selectedIssue.id &&
+                  item.clientId !== realtime.clientId,
+              )}
+              onClose={() =>
+                navigateTo(
+                  issueReturnPath(location.state, data.workspace.urlKey, selectedIssue),
+                )
+              }
+              onNavigateRoot={() =>
+                navigateTo(issueReturnPath(location.state, data.workspace.urlKey, selectedIssue))
+              }
+              onNavigateIssue={openIssue}
+              onUpdate={updateSelected}
+              onIssueUpdated={replaceIssue}
+              onDelete={removeSelected}
+              onCreateSubIssue={addSubIssue}
+              onCreateProject={addIssueProject}
+              onCreateProjectMilestone={addProjectMilestone}
+              onCreateLabel={addIssueLabel}
+              onReactIssue={reactIssue}
+              onComment={addComment}
+              onEditComment={editComment}
+              onDeleteComment={removeComment}
+              onReactComment={reactComment}
+              onResolveComment={resolveSelectedComment}
+              onRelation={addRelation}
+              onDeleteRelation={removeRelation}
+              onUpload={addAttachment}
+              onDeleteAttachment={removeAttachment}
+            />
+          </IssuePanel>
+        )}
+        {routeScopeValid && issuePane === "loading" && <IssuePanel role="status">Loading issue…</IssuePanel>}
+        {routeScopeValid && issuePane === "not-found" && (
+          <RouteNotFound
+            title="Issue not found"
+            description="This issue does not exist or is no longer available."
+          />
+        )}
+    </>;
   };
   const openIssue = (issue: Issue, sequence?: string[]) => {
     if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000) } : current);
@@ -4856,6 +4949,7 @@ function App() {
           route.kind === "automation-detail" ||
           route.kind === "automation-runs" ||
           route.kind === "team-triage" ||
+          Boolean(triageIssueTeam) ||
           route.kind === "team-updates" ||
           route.kind === "team-update" ||
           route.kind === "team-resources" ||
@@ -4866,21 +4960,36 @@ function App() {
           <WorkspaceSecondaryPage
             data={data}
             kind={
-              route.kind === "automation-detail"
+              triageIssueTeam
+                ? "team-triage"
+                : route.kind === "automation-detail"
                 ? "automation-detail"
                 : route.kind === "automation-runs"
                   ? "automation-runs"
-                  : route.kind
+                  : route.kind as WorkspaceSecondaryKind
             }
             meetingId={route.kind === "meeting" ? route.meetingId : undefined}
             team={
-              "teamKey" in route
+              triageIssueTeam ?? ("teamKey" in route && route.teamKey
                 ? data.teams.find(
                     (team) =>
-                      team.key.toLowerCase() === route.teamKey.toLowerCase(),
+                      team.key.toLowerCase() === route.teamKey?.toLowerCase(),
                   )
-                : undefined
+                : undefined)
             }
+            triageSelectedIdentifier={triageIssueTeam && route.kind === "issue" ? route.identifier : undefined}
+            triageDetail={triageIssueTeam ? renderIssuePane(true) : undefined}
+            onTriageSelect={(issue, { replace, sequence }) => {
+              const triageTeam = triagePageTeam;
+              if (!triageTeam) return;
+              const triagePath = teamTriagePath(data.workspace.urlKey, triageTeam.key);
+              if (!issue) {
+                navigateTo(triagePath);
+                return;
+              }
+              if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: mergeIssueRecords(current.issues, [issue]) } : current);
+              navigateTo(issuePath(data.workspace.urlKey, issue), { replace, state: { returnTo: triagePath, issueSequence: sequence.slice(0, 1000) } });
+            }}
             workflowId={
               route.kind === "automation-detail" ||
               route.kind === "automation-runs"
@@ -4907,7 +5016,12 @@ function App() {
               if (issue) replaceIssue(issue);
               else await reloadWorkspaceMetadata(data.workspace.urlKey);
             }}
-            onCreateIssue={() => openCreateIssue()}
+            onCreateIssue={() => {
+              const triageTeam = triagePageTeam;
+              // "Create triage issue" files the issue in this team's triage status.
+              const stateId = triageTeam ? triageState(data.states, triageTeam.id, data.teamSettings?.[triageTeam.id]?.defaultStateId)?.id : undefined;
+              openCreateIssue(triageTeam ? { teamId: triageTeam.id, stateId } : undefined);
+            }}
           />
         )}
         {page === "analytics" && route.kind === "analytics" && (
@@ -6430,70 +6544,8 @@ function App() {
               onOpenSidebar={() => setMobileSidebarOpen(true)}
             />
           )}
-        {page === "issue-detail" && issuePane === "checking-access" && <main className="main-panel issue-panel" role="status">Checking issue access…</main>}
-        {page === "issue-detail" && issuePane === "preview" && previewIssue && (
-          <Suspense fallback={<main className="main-panel issue-panel"><SkeletonRows count={9}/></main>}>
-            <main className="main-panel issue-panel">
-              <IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(data.workspace.urlKey,'all'))}/>
-            </main>
-          </Suspense>
-        )}
-        {page === "issue-detail" && issuePane === "editor" && selectedIssue && !selectedIssue.isSummary && (
-          <main className="main-panel issue-panel">
-            <IssueDetails
-              key={selectedIssue.id}
-              issue={selectedIssue}
-              data={data}
-              full
-              historyLoading={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.loading}
-              historyError={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.error ? 'Could not load issue history' : undefined}
-              onRetryHistory={()=>{void refreshActivity(false).catch(()=>undefined)}}
-              returnPath={issueReturnPath(location.state, data.workspace.urlKey, selectedIssue)}
-              navigationIssueIds={issueSequenceIDs(location.state)}
-              workspacePresence={realtime.presence}
-              issueOptionsActions={selectedIssueOptionsActions}
-              presence={realtime.presence.filter(
-                (item) =>
-                  item.issueId === selectedIssue.id &&
-                  item.clientId !== realtime.clientId,
-              )}
-              onClose={() =>
-                navigateTo(
-                  issueReturnPath(location.state, data.workspace.urlKey, selectedIssue),
-                )
-              }
-              onNavigateRoot={() =>
-                navigateTo(issueReturnPath(location.state, data.workspace.urlKey, selectedIssue))
-              }
-              onNavigateIssue={openIssue}
-              onUpdate={updateSelected}
-              onIssueUpdated={replaceIssue}
-              onDelete={removeSelected}
-              onCreateSubIssue={addSubIssue}
-              onCreateProject={addIssueProject}
-              onCreateProjectMilestone={addProjectMilestone}
-              onCreateLabel={addIssueLabel}
-              onReactIssue={reactIssue}
-              onComment={addComment}
-              onEditComment={editComment}
-              onDeleteComment={removeComment}
-              onReactComment={reactComment}
-              onResolveComment={resolveSelectedComment}
-              onRelation={addRelation}
-              onDeleteRelation={removeRelation}
-              onUpload={addAttachment}
-              onDeleteAttachment={removeAttachment}
-            />
-          </main>
-        )}
+        {page === "issue-detail" && !triageIssueTeam && renderIssuePane(false)}
         {routeScopeValid && page === "not-found" && <RouteNotFound />}
-        {routeScopeValid && page === "issue-detail" && issuePane === "loading" && <main className="main-panel issue-panel" role="status">Loading issue…</main>}
-        {routeScopeValid && page === "issue-detail" && issuePane === "not-found" && (
-          <RouteNotFound
-            title="Issue not found"
-            description="This issue does not exist or is no longer available."
-          />
-        )}
         {routeScopeValid && page === "cycle-detail" && !selectedCycle && (
           <RouteNotFound
             title="Cycle not found"
@@ -6894,6 +6946,21 @@ function RouteNotFound({
   );
 }
 
+function MainIssuePanel({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
+  return <main className="main-panel issue-panel" {...props}>{children}</main>;
+}
+/** The issue view inside the Triage page's right pane. */
+function TriageIssuePanel({ children, ...props }: React.HTMLAttributes<HTMLElement>) {
+  return <div className="flow-triage-issue-panel" {...props}>{children}</div>;
+}
+/** The team Triage page an issue was opened from, if its navigation origin is one. */
+function triageOrigin(state: unknown, workspace: string) {
+  const origin = navigationReturnPath(state, workspace, "");
+  if (!origin) return undefined;
+  const url = new URL(origin, "https://flow.invalid");
+  const parsed = parseAppRoute(url.pathname, url.search);
+  return parsed.kind === "team-triage" ? parsed : undefined;
+}
 function IssueDetails(
   props: Omit<
     React.ComponentProps<typeof DetailPane>,

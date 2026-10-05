@@ -1846,7 +1846,7 @@ func filterBootstrapTeams(data *domain.Bootstrap, allowed map[string]bool, guest
 			return visibleDocuments[id]
 		case "view":
 			return slices.ContainsFunc(data.SavedViews, func(view domain.SavedView) bool { return view.ID == id || view.SlugID == id })
-		case "team":
+		case "team", "triage":
 			return allowed[id]
 		case "label":
 			return slices.ContainsFunc(data.Labels, func(label domain.IssueLabel) bool { return label.ID == id && label.ArchivedAt == nil })

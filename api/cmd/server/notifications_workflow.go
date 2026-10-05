@@ -829,7 +829,29 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 			settings.TriageRequirePriority = *input.TriageRequirePriority
 		}
 		if input.TriageAction != nil {
-			settings.TriageAction = strings.TrimSpace(*input.TriageAction)
+			action := strings.TrimSpace(*input.TriageAction)
+			if !slices.Contains(triageResponsibilityActions, action) {
+				return errInvalid
+			}
+			settings.TriageAction = action
+		}
+		if input.TriageActionUserIDs != nil {
+			ids := []string{}
+			for _, id := range *input.TriageActionUserIDs {
+				if userByID(data, id) == nil {
+					return errInvalid
+				}
+				if !slices.Contains(ids, id) {
+					ids = append(ids, id)
+				}
+			}
+			if len(ids) > 50 {
+				return errInvalid
+			}
+			settings.TriageActionUserIDs = ids
+		}
+		if settings.TriageAction == "assign" && len(settings.TriageActionUserIDs) > 1 {
+			return fmt.Errorf("%w: assign takes one member", errInvalid)
 		}
 		if input.TriageRules != nil {
 			settings.TriageRules = slices.Clone(*input.TriageRules)
@@ -1365,6 +1387,9 @@ func teamSettings(data *domain.Bootstrap, teamID string) domain.TeamSettings {
 	}
 	if settings.TriageAction == "" {
 		settings.TriageAction = "none"
+	}
+	if settings.TriageActionUserIDs == nil {
+		settings.TriageActionUserIDs = []string{}
 	}
 	if settings.ReleaseAutomations == nil {
 		settings.ReleaseAutomations = []domain.TeamAutomationRule{}

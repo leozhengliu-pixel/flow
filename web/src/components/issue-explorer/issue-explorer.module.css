@@ -9,10 +9,6 @@
 .mobileSidebarButton{display:none;width:32px;height:32px;padding:8px;border:0;border-radius:6px;background:transparent}.mobileSidebarButton span{display:block;width:14px;height:1px;margin:3px 0;background:var(--issue-muted)}
 .toolbar{height:43px;flex:0 0 43px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;border-bottom:0}.tabs,.actions{display:flex;align-items:center}.tabs{min-width:0;flex:1;gap:8px;overflow:hidden}.actions{flex:none;gap:6px}.savedTabs{height:32px;min-width:0;flex:1;overflow:hidden}.savedTabs .savedTab{margin-right:8px}
 .viewCount{padding-left:10px;color:var(--muted);font-size:12px;font-weight:450}
-.createPanel{height:137px;flex:0 0 137px;margin:8px 11px 0 8px;overflow:visible;border:1px solid var(--theme-border);border-radius:10px;background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-medium),0 1px 1px var(--shadow-color-raised)}
-.createPanel>section{background:transparent;border-bottom:0}
-.createPanel .toolbar{height:45px;flex-basis:45px;padding:8px 12px;border-bottom:0}
-:global(:root[data-theme="light"]) .createPanel{border-color:var(--theme-surface-1);background:var(--theme-surface-2);box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
 :global(:root[data-theme="light"]) .header{border-bottom-color:var(--border);border-bottom-width:.5px}
 :global(:root[data-theme="light"]) .header h2,:global(:root[data-theme="light"]) .scope{color:var(--theme-text-primary)}
 :global(:root[data-theme="light"]) .tab,:global(:root[data-theme="light"]) .savedTab{background:var(--ui-pill-bg);color:var(--ui-pill-fg)}
@@ -28,3 +24,21 @@
 @media(max-width:800px){.body[data-insights-open=true]>:first-child{margin-right:0}}
 .tab:focus-visible,.addView:focus-visible,.iconButton:focus-visible,.headerAction:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
 @media(max-width:800px){.surface{width:100%;height:calc(100% - 36px);margin:0 0 36px;border:0;border-radius:0;box-shadow:none}.mobileSidebarButton{display:flex;flex-direction:column;justify-content:center}.header{padding:0 8px}.toolbar{overflow:visible}.tabs{min-width:0;overflow-x:auto;scrollbar-width:none}.actions{margin-left:8px}.headerAction:last-child{display:none}.body[data-saved-panel-open=true]>:first-child{margin-right:0}}
+/* View card (new / edit): Linear places it under the count row with its own filter + display buttons. */
+.createPanel{height:auto;flex:none;margin:0 8px 8px;overflow:visible;border:0;border-radius:0;background:transparent;box-shadow:none}
+.createPanel[data-mode=create]{margin-top:8px}
+:global(:root[data-theme="light"]) .createPanel{border:0;background:transparent;box-shadow:none}
+.cardDisplay{display:inline-flex}
+.cardButton,.cardDisplay>button{width:28px;height:28px;border-radius:9999px;background:var(--theme-surface-2);box-shadow:0 0 0 .5px var(--theme-border-strong),0 1px 2px var(--shadow-color-faint)}
+.editorFilters{min-width:0;display:flex;align-items:center;gap:8px}
+.editorFilters>:first-child{min-width:0;flex:1}
+.editorButtons{display:flex;align-items:center;gap:6px;flex:none;margin-left:auto}
+.resourceTabs{display:flex;align-items:center;gap:6px}
+.resourceTab{height:28px;display:inline-flex;align-items:center;padding:0 10px;border:0;border-radius:9999px;background:var(--theme-surface-2);box-shadow:0 0 0 .5px var(--theme-border-strong);color:var(--theme-text-secondary);font:500 12px/1 inherit}
+.resourceTab[data-active=true]{background:var(--summary-card-tab-active-bg);box-shadow:none;color:var(--theme-text-primary)}
+.resourceTab:hover:not([data-active=true]){background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.headerEnd{display:flex;align-items:center;gap:6px;margin-left:auto}
+.draftPlaceholder{color:var(--theme-text-tertiary)}
+.iconButton[data-filter-active]{background:var(--ui-pill-hover-bg,var(--theme-surface-hover));color:var(--theme-text-primary)}
+.createPanel .cardBar{min-height:28px;flex:none;align-items:flex-start;padding:0;border:0;background:transparent}
+.createPanel .cardBar>:first-child{min-height:28px;align-items:center}

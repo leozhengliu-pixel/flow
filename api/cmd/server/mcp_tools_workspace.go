@@ -608,29 +608,134 @@ func mcpViewFilters(data domain.Bootstrap, teamID string, raw any) ([]map[string
 		if !ok {
 			return nil, fmt.Errorf("unsupported filter field %q", filter.Field)
 		}
-		operator := filter.Operator
-		if operator == "" {
-			operator = "is"
-		}
-		if operator != "is" && operator != "isNot" {
-			return nil, fmt.Errorf("filter operator must be is or isNot")
-		}
-		if len(filter.Values) == 0 {
-			return nil, fmt.Errorf("filter %q needs at least one value", filter.Field)
-		}
-		values := []map[string]any{}
-		for _, value := range filter.Values {
-			resolved, err := mcpViewFilterValue(data, teamID, filter.Field, strings.TrimSpace(value))
-			if err != nil {
-				return nil, err
-			}
-			for _, pair := range resolved {
-				values = append(values, map[string]any{"value": pair[0], "valueLabel": pair[1]})
-			}
+		operator, values, err := mcpViewFilterCondition(data, teamID, filter.Field, filter.Operator, filter.Values)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, map[string]any{"id": fmt.Sprintf("filter_%d_%s", index+1, filter.Field), "field": filter.Field, "fieldLabel": fieldLabel, "operator": operator, "value": values[0]["value"], "valueLabel": values[0]["valueLabel"], "values": values})
 	}
 	return result, nil
+}
+
+// mcpViewFilterCondition validates one condition's operator and resolves its
+// values: is / isNot everywhere, includesAll / excludesAll for labels (Linear).
+func mcpViewFilterCondition(data domain.Bootstrap, teamID, field, operator string, raw []string) (string, []map[string]any, error) {
+	if operator == "" {
+		operator = "is"
+	}
+	if operator != "is" && operator != "isNot" && !((operator == "includesAll" || operator == "excludesAll") && field == "labels") {
+		return "", nil, fmt.Errorf("filter operator must be is or isNot (includesAll / excludesAll for labels)")
+	}
+	if len(raw) == 0 {
+		return "", nil, fmt.Errorf("filter %q needs at least one value", field)
+	}
+	values := []map[string]any{}
+	for _, value := range raw {
+		resolved, err := mcpViewFilterValue(data, teamID, field, strings.TrimSpace(value))
+		if err != nil {
+			return "", nil, err
+		}
+		for _, pair := range resolved {
+			values = append(values, map[string]any{"value": pair[0], "valueLabel": pair[1]})
+		}
+	}
+	return operator, values, nil
+}
+
+type mcpAdvancedFilterNode struct {
+	Conjunction string                  `json:"conjunction"`
+	Items       []mcpAdvancedFilterNode `json:"items"`
+	Field       string                  `json:"field"`
+	Operator    string                  `json:"operator"`
+	Values      []string                `json:"values"`
+}
+
+// mcpAdvancedViewFilters turns agent-provided filter trees into the web
+// client's advanced-filter chips ({field: "advanced", tree}); at most three
+// levels (top level, group, nested group), conditions use the same fields.
+func mcpAdvancedViewFilters(data domain.Bootstrap, teamID string, raw any) ([]map[string]any, error) {
+	var trees []mcpAdvancedFilterNode
+	if err := jsonClone(raw, &trees); err != nil {
+		return nil, err
+	}
+	sequence := 0
+	var convert func(node mcpAdvancedFilterNode, depth int) (map[string]any, error)
+	convert = func(node mcpAdvancedFilterNode, depth int) (map[string]any, error) {
+		sequence++
+		conjunction := node.Conjunction
+		if conjunction == "" {
+			conjunction = "and"
+		}
+		if conjunction != "and" && conjunction != "or" {
+			return nil, fmt.Errorf("advanced filter conjunction must be and or or")
+		}
+		if depth > 3 {
+			return nil, fmt.Errorf("advanced filters nest at most three levels")
+		}
+		items := []map[string]any{}
+		for _, item := range node.Items {
+			if item.Field == "" {
+				group, err := convert(item, depth+1)
+				if err != nil {
+					return nil, err
+				}
+				items = append(items, group)
+				continue
+			}
+			fieldLabel, ok := mcpViewFilterLabels[item.Field]
+			if !ok {
+				return nil, fmt.Errorf("unsupported filter field %q", item.Field)
+			}
+			operator, values, err := mcpViewFilterCondition(data, teamID, item.Field, item.Operator, item.Values)
+			if err != nil {
+				return nil, err
+			}
+			sequence++
+			items = append(items, map[string]any{"id": fmt.Sprintf("condition_%d", sequence), "field": item.Field, "fieldLabel": fieldLabel, "operator": operator, "values": values})
+		}
+		return map[string]any{"id": fmt.Sprintf("group_%d", sequence), "conjunction": conjunction, "items": items}, nil
+	}
+	result := []map[string]any{}
+	for index, tree := range trees {
+		converted, err := convert(tree, 1)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, map[string]any{"id": fmt.Sprintf("advanced_%d", index+1), "field": "advanced", "fieldLabel": "Advanced filter", "operator": "is", "value": "", "valueLabel": "", "values": []any{}, "tree": converted})
+	}
+	return result, nil
+}
+
+// mcpPlainFilters keeps a view's plain chips when an agent replaces only its
+// advanced filters.
+func mcpPlainFilters(raw json.RawMessage) []map[string]any {
+	var chips []map[string]any
+	if json.Unmarshal(raw, &chips) != nil {
+		return []map[string]any{}
+	}
+	kept := []map[string]any{}
+	for _, chip := range chips {
+		if chip["field"] != "advanced" {
+			kept = append(kept, chip)
+		}
+	}
+	return kept
+}
+
+// mcpExistingAdvancedFilters keeps a view's advanced chips when an agent
+// replaces only its plain filters.
+func mcpExistingAdvancedFilters(raw json.RawMessage) []map[string]any {
+	var chips []map[string]any
+	if json.Unmarshal(raw, &chips) != nil {
+		return nil
+	}
+	kept := []map[string]any{}
+	for _, chip := range chips {
+		if chip["field"] == "advanced" {
+			kept = append(kept, chip)
+		}
+	}
+	return kept
 }
 
 func mcpFindView(data domain.Bootstrap, query string) (domain.SavedView, error) {
@@ -714,10 +819,25 @@ func (s *server) saveMCPView(ctx context.Context, actor mcpActor, data domain.Bo
 		resource, owner := "issues", actor.User.ID
 		input.Resource, input.OwnerID = &resource, &owner
 	}
-	if raw, present := args["filters"]; present {
-		filters, err := mcpViewFilters(data, teamID, raw)
-		if err != nil {
-			return nil, err
+	rawFilters, hasFilters := args["filters"]
+	rawAdvanced, hasAdvanced := args["advancedFilters"]
+	if hasFilters || hasAdvanced {
+		filters := []map[string]any{}
+		if hasFilters {
+			if filters, err = mcpViewFilters(data, teamID, rawFilters); err != nil {
+				return nil, err
+			}
+		} else if id != "" {
+			filters = mcpPlainFilters(current.Filters)
+		}
+		if hasAdvanced {
+			advanced, err := mcpAdvancedViewFilters(data, teamID, rawAdvanced)
+			if err != nil {
+				return nil, err
+			}
+			filters = append(filters, advanced...)
+		} else if id != "" {
+			filters = append(filters, mcpExistingAdvancedFilters(current.Filters)...)
 		}
 		if input.Filters, err = json.Marshal(filters); err != nil {
 			return nil, err

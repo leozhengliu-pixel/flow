@@ -1902,3 +1902,8 @@
 /* LS-0609 Timeline honesty — Add dates empty, Today chrome, resize handles */
 
 .lp-projects-empty-icon{color:var(--theme-text-secondary);margin-bottom:8px}
+/* View card bottom row (Linear): resource pills left, filter / display buttons right. */
+.lp-projects__editor-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0}
+.lp-projects__editor-actions{display:flex;align-items:center;gap:6px}
+.lp-projects__header > .lp-projects__copy-url:not(:last-child) { margin-left: auto; }
+.lp-projects__header > .lp-projects__copy-url:not(:last-child) + .lp-projects__icon-button { margin-left: 6px; }

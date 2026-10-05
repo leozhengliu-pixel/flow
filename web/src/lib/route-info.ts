@@ -23,7 +23,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & {
+> & Partial<Pick<BootstrapData, "savedViews">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -140,6 +140,15 @@ export function routeInfo(
       pinnedTitle: label,
       icon: "settings",
     };
+  }
+
+  // Custom views: the view name; editing reads "<name> > Edit" like Linear.
+  if (route.kind === "workspace-saved-view" || route.kind === "team-saved-view") {
+    const view = data?.savedViews?.find((item) => item.id === route.viewId || item.slugId === route.viewId);
+    if (view) {
+      const editing = "editing" in route && route.editing;
+      return { title: editing ? `${view.name} > ${t("Edit")}` : view.name, pinnedTitle: view.name, icon: "view" };
+    }
   }
 
   if (route.kind === "workspace-root") {

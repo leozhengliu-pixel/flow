@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Check, MoreHorizontal, Sparkles, ThumbsDown, X } from 'lucide-react'
+import { Check, MoreHorizontal, RotateCw, Sparkles, ThumbsDown, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   acceptIssueSuggestion,
+  createRelation,
   dismissIssueSuggestion,
   fetchIssueRecord,
   fetchIssueSuggestions,
   refreshIssueSuggestions,
 } from '@/lib/api'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { FlowTooltip } from '@/components/ui/tooltip'
+import { useI18n } from '@/i18n/i18n'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { isIssueInTriage } from '@/components/triage/triage-model'
-import type { BootstrapData, Issue, IssueSuggestion } from '@/types/flow'
+import type { BootstrapData, Issue, IssueRelationType, IssueSuggestion } from '@/types/flow'
 import './triage-intelligence-suggestions.css'
 import { useIssuesById } from './use-issues-by-id'
 
@@ -56,6 +59,7 @@ export function TriageIntelligenceSuggestions({
   /** `compact` is the tighter card used inside the Fast accept editor. */
   variant?: 'card' | 'compact'
 }) {
+  const { t } = useI18n()
   const [removed, setRemoved] = useState<Set<string>>(() => new Set())
   const [remote, setRemote] = useState<RemoteSuggestions>()
   const [busy, setBusy] = useState<string>()
@@ -134,6 +138,22 @@ export function TriageIntelligenceSuggestions({
     }
   }
 
+  /** "Mark current issue as" another relation than the suggested one: link it, then retire the suggestion. */
+  const relate = async (suggestion: IssueSuggestion, type: IssueRelationType) => {
+    if (!suggestion.suggestedIssueId) return
+    setBusy(suggestion.id)
+    try {
+      await createRelation(issue.id, type, suggestion.suggestedIssueId)
+      await dismissIssueSuggestion(issue.id, suggestion.id).catch(() => undefined)
+      onIssueUpdated?.(await fetchIssueRecord(issue.id, undefined, data.workspace.urlKey))
+      setRemoved(current => new Set(current).add(suggestion.id))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update suggestion')
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
   const dismissAll = async () => {
     const ids = suggestions.map(item => item.id)
     setBusy('all')
@@ -180,7 +200,7 @@ export function TriageIntelligenceSuggestions({
           {pending ? (
             <span className="triage-intelligence-shimmer" role="status">Finding suggestions…</span>
           ) : (
-            <strong>Triage Intelligence</strong>
+            <strong className="triage-intelligence-gradient">Triage Intelligence</strong>
           )}
         </span>
         <DropdownMenu modal={false}>
@@ -199,10 +219,13 @@ export function TriageIntelligenceSuggestions({
       </header>
       {pending ? null : empty ? (
         <div className="triage-intelligence-empty">
-          <span>No suggestions found</span>
-          <button type="button" className="triage-intelligence-small-button" disabled={refreshing} onClick={() => void runAgain()}>
-            Run again
-          </button>
+          <span>{t('No suggestions found')}</span>
+          <FlowTooltip label={t('Find suggestions')}>
+            <button type="button" className="triage-intelligence-run-again" disabled={refreshing} onClick={() => void runAgain()}>
+              <RotateCw size={12} aria-hidden="true" />
+              {t('Run again')}
+            </button>
+          </FlowTooltip>
         </div>
       ) : (
         <div className="triage-intelligence-body">
@@ -215,6 +238,7 @@ export function TriageIntelligenceSuggestions({
               busy={busy}
               onAccept={suggestion => void update(suggestion, true)}
               onDismiss={suggestion => void update(suggestion, false)}
+              onRelate={(suggestion, type) => void relate(suggestion, type)}
             />
           )}
           {related.length > 0 && (
@@ -226,6 +250,7 @@ export function TriageIntelligenceSuggestions({
               busy={busy}
               onAccept={suggestion => void update(suggestion, true)}
               onDismiss={suggestion => void update(suggestion, false)}
+              onRelate={(suggestion, type) => void relate(suggestion, type)}
             />
           )}
           {visiblePropertySuggestions.length > 0 && (
@@ -286,6 +311,7 @@ function RelationRow({
   busy,
   onAccept,
   onDismiss,
+  onRelate,
 }: {
   label: string
   suggestions: IssueSuggestion[]
@@ -294,48 +320,149 @@ function RelationRow({
   busy: string | undefined
   onAccept: (suggestion: IssueSuggestion) => void
   onDismiss: (suggestion: IssueSuggestion) => void
+  onRelate: (suggestion: IssueSuggestion, type: IssueRelationType) => void
 }) {
-  const kind = label === 'Duplicate of' ? 'duplicate' : 'related issue'
+  const { t } = useI18n()
+  const duplicate = label === 'Duplicate of'
+  const kind = duplicate ? 'duplicate' : 'related issue'
   return (
     <div className="triage-intelligence-row">
-      <span className="triage-intelligence-row-label">{label}</span>
+      <span className="triage-intelligence-row-label triage-intelligence-relation-pill">{t(label)}</span>
       <div className="triage-intelligence-related-list">
         {suggestions.map(suggestion => {
           const relatedIssue = suggestion.suggestedIssueId ? issues.get(suggestion.suggestedIssueId) : undefined
           if (!relatedIssue) return null
           const disabled = busy === suggestion.id || busy === 'all'
+          const url = `${typeof location === 'undefined' ? '' : location.origin}/${data.workspace.urlKey}/issue/${relatedIssue.identifier}`
+          const copy = (text: string, message: string) => void navigator.clipboard.writeText(text).then(() => toast.success(t(message))).catch(() => toast.error(t('Could not write to clipboard')))
           return (
             <div className="triage-intelligence-related-row" key={suggestion.id} data-source={sourceOf(suggestion)}>
-              <a className="triage-intelligence-issue-chip" href={`/${data.workspace.urlKey}/issue/${relatedIssue.identifier}`} data-i18n-ignore>
-                <StatusIcon state={relatedIssue.state} size={14} />
-                <span className="triage-intelligence-issue-id">{relatedIssue.identifier}</span>
-                <span className="triage-intelligence-issue-title">{relatedIssue.title}</span>
-              </a>
+              <RelatedIssueHoverCard suggestion={suggestion} issue={relatedIssue} data={data} duplicate={duplicate} disabled={disabled} onAccept={() => onAccept(suggestion)} onDismiss={() => onDismiss(suggestion)} />
               <span className="triage-intelligence-row-actions">
-                <button
-                  type="button"
-                  className="triage-intelligence-small-button"
-                  aria-label={`Apply ${kind} ${relatedIssue.identifier}`}
-                  disabled={disabled}
-                  onClick={() => onAccept(suggestion)}
-                >
-                  Apply
-                </button>
-                <button
-                  type="button"
-                  className="triage-intelligence-icon-button"
-                  aria-label={`Dismiss ${kind} ${relatedIssue.identifier}`}
-                  disabled={disabled}
-                  onClick={() => onDismiss(suggestion)}
-                >
-                  <X size={13} />
-                </button>
+                <FlowTooltip label={t(duplicate ? 'Mark as duplicate' : 'Mark as related')}>
+                  <button
+                    type="button"
+                    className="triage-intelligence-small-button"
+                    aria-label={`Apply ${kind} ${relatedIssue.identifier}`}
+                    disabled={disabled}
+                    onClick={() => onAccept(suggestion)}
+                  >
+                    {t('Apply')}
+                  </button>
+                </FlowTooltip>
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="triage-intelligence-icon-button" aria-label={t('Suggestion options')} disabled={disabled}>
+                      <MoreHorizontal size={14} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="triage-intelligence-menu">
+                    <DropdownMenuLabel>{t('Mark current issue as')}</DropdownMenuLabel>
+                    <DropdownMenuItem onSelect={() => onRelate(suggestion, 'related')}>{t('Related to')}</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onRelate(suggestion, 'duplicate')}>{t('Duplicate of')}</DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => onRelate(suggestion, 'blocked_by')}>{t('Blocked by')}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>{t('Copy')}</DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent className="triage-intelligence-menu">
+                        <DropdownMenuItem onSelect={() => copy(relatedIssue.identifier, 'Issue ID copied to clipboard')}>{t('Copy issue ID')}</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => copy(url, 'Issue URL copied to clipboard')}>{t('Copy issue URL')}</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => copy(relatedIssue.title, 'Issue title copied to clipboard')}>{t('Copy issue title')}</DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem aria-label={`Dismiss ${kind} ${relatedIssue.identifier}`} onSelect={() => onDismiss(suggestion)}>{t('Dismiss suggestion')}</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </span>
             </div>
           )
         })}
       </div>
     </div>
+  )
+}
+
+function createdAgo(value: string, t: (text: string) => string) {
+  const days = Math.floor(Math.max(0, Date.now() - Date.parse(value)) / 86_400_000)
+  if (days < 1) return t('Created today')
+  if (days < 7) return t('Created {count}d ago').replace('{count}', String(days))
+  if (days < 30) return t('Created {count}w ago').replace('{count}', String(Math.floor(days / 7)))
+  if (days < 365) return t('Created {count}mo ago').replace('{count}', String(Math.floor(days / 30)))
+  return t('Created {count}y ago').replace('{count}', String(Math.floor(days / 365)))
+}
+
+/** Linear's 321px hover card for a suggested duplicate / related issue: when, what, why, and accept / dismiss. */
+function RelatedIssueHoverCard({ suggestion, issue, data, duplicate, disabled, onAccept, onDismiss }: { suggestion: IssueSuggestion; issue: Issue; data: BootstrapData; duplicate: boolean; disabled: boolean; onAccept: () => void; onDismiss: () => void }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const schedule = (next: boolean) => {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => setOpen(next), next ? HOVER_OPEN_MS : HOVER_CLOSE_MS)
+  }
+  const cancel = () => clearTimeout(timer.current)
+  const reasons = (suggestion.metadata?.reasons ?? []).filter(reason => typeof reason === 'string')
+  const why = t(duplicate ? 'Why this looks like a duplicate' : 'Why this looks related')
+  return (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Anchor asChild>
+        <a
+          className="triage-intelligence-issue-chip"
+          href={`/${data.workspace.urlKey}/issue/${issue.identifier}`}
+          data-i18n-ignore
+          onPointerEnter={event => { if (event.pointerType !== 'touch') schedule(true) }}
+          onPointerLeave={event => { if (event.pointerType !== 'touch') schedule(false) }}
+          onFocus={() => schedule(true)}
+          onBlur={() => schedule(false)}
+        >
+          <StatusIcon state={issue.state} size={14} />
+          <span className="triage-intelligence-issue-id">{issue.identifier}</span>
+          <span className="triage-intelligence-issue-title">{issue.title}</span>
+        </a>
+      </Popover.Anchor>
+      <Popover.Portal>
+        <Popover.Content
+          data-flow-motion="floating"
+          className="triage-intelligence-popover triage-intelligence-issue-card"
+          side="bottom"
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          aria-label={why}
+          onOpenAutoFocus={event => event.preventDefault()}
+          onPointerEnter={cancel}
+          onPointerLeave={event => { if (event.pointerType !== 'touch') schedule(false) }}
+        >
+          <span className="triage-intelligence-issue-card__created">{createdAgo(issue.createdAt, t)}</span>
+          <strong className="triage-intelligence-issue-card__title" data-i18n-ignore>{issue.identifier} {issue.title}</strong>
+          <span className="triage-intelligence-issue-card__meta">
+            <StatusIcon state={issue.state} size={12} />
+            <span data-i18n-ignore>{issue.state.name}</span>
+            <i>·</i>
+            <span data-i18n-ignore={issue.assignee ? true : undefined}>{issue.assignee?.displayName ?? t('Unassigned')}</span>
+            <i>·</i>
+            <span>{t(issue.priorityLabel || 'No priority')}</span>
+          </span>
+          <h4>{why}</h4>
+          {reasons.length > 0 ? (
+            <ul data-i18n-ignore>{reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>
+          ) : (
+            <p>{t('The issues share similar titles and context.')}</p>
+          )}
+          <div className="triage-intelligence-popover-actions">
+            <button type="button" disabled={disabled} onClick={() => { setOpen(false); onAccept() }}>
+              <Check size={14} />
+              {t(duplicate ? 'Accept duplicate suggestion' : 'Accept related suggestion')}
+            </button>
+            <button type="button" aria-label={t('Dismiss suggestion')} disabled={disabled} onClick={() => { setOpen(false); onDismiss() }}>
+              <ThumbsDown size={14} />
+            </button>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }
 

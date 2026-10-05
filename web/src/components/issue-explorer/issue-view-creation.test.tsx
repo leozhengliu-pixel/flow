@@ -24,7 +24,7 @@ it.each(['Personal', 'Workspace', 'Test team'])('persists configured filters and
   expect(screen.getByText('Included high priority')).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: /^Save to / }))
   await user.click(screen.getByRole('menuitemradio', { name: destination }))
-  await user.click(screen.getByRole('button', { name: /^Save$/ }))
+  await user.click(screen.getByRole('button', { name: /^Create view$/ }))
   await waitFor(() => expect(create).toHaveBeenCalledOnce())
   const input = create.mock.calls[0][0]
   expect(input).toMatchObject({ name: 'Priority view', resource: 'issues', scope: destination === 'Personal' ? 'personal' : destination === 'Workspace' ? 'workspace' : 'team', teamId: destination === 'Test team' ? data.teams[0].id : '', ownerId: data.viewer.id })

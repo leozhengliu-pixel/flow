@@ -2,8 +2,20 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surfac
 import { combineModelFilters } from '@/components/filter/filter-block-helper'
 import { filterToQueryNode, type IssueFilterQueryContext } from '@/components/issue-explorer/issue-filter-query'
 
-export type MyIssuesFilterOperator = 'is' | 'isNot'
+/**
+ * Linear's operator sets: is / is not (several values read "is any of"), labels add "include all of" /
+ * "exclude if all", dates compare "before" / "after". `isNot` and `excludesAll` negate.
+ */
+export type MyIssuesFilterOperator = 'is' | 'isNot' | 'includesAll' | 'excludesAll' | 'before' | 'after'
 export interface MyIssuesFilterValue { value: string; valueLabel: string; color?: string }
+
+/** Advanced filter tree (Linear "Advanced filter"): top level → group → nested group, at most 3 levels. */
+export type AdvancedFilterConjunction = 'and' | 'or'
+export interface AdvancedFilterCondition { id: string; field: MyIssuesFilterKey; fieldLabel: string; operator: MyIssuesFilterOperator; values: MyIssuesFilterValue[] }
+export interface AdvancedFilterGroup { id: string; conjunction: AdvancedFilterConjunction; items: AdvancedFilterNode[] }
+export type AdvancedFilterNode = AdvancedFilterCondition | AdvancedFilterGroup
+export const ADVANCED_FILTER_MAX_DEPTH = 3
+
 export interface MyIssuesAppliedFilter {
   id: string
   field: MyIssuesFilterKey
@@ -15,6 +27,8 @@ export interface MyIssuesAppliedFilter {
   operatorLabel?: string
   negativeOperatorLabel?: string
   values?: MyIssuesFilterValue[]
+  /** Present on advanced-filter chips (`field: 'advanced'`); combined with the other chips by AND. */
+  tree?: AdvancedFilterGroup
 }
 
 /** JSON-compatible query AST sent to the server-backed issue list endpoint. */
@@ -39,7 +53,7 @@ const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
 /** Convert the existing filter-bar state into a composable AND expression (FilterBlockHelper). */
 export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[], context?: IssueFilterQueryContext): IssueQueryAstNode {
   // With workspace context every filter-menu field is translated to the server vocabulary.
-  if (context) return { and: filters.map(filter => filterToQueryNode(filter, context)) }
+  if (context) return simplifyQueryNode({ and: filters.map(filter => filterToQueryNode(filter, context)) }, true)
   const leaves = filters.map(filter => ({
     field: QUERY_FIELDS[filter.field] ?? filter.field,
     operator: filter.operator,
@@ -49,6 +63,35 @@ export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[], context
   const combined = combineModelFilters('and', leaves)
   // Keep a stable `and` root for REST list callers that nest this node.
   return combined.and ? combined : { and: [combined] }
+}
+
+/**
+ * Flatten same-kind nesting, unwrap single-child groups and double negation so nested advanced
+ * filters stay inside the server's depth (8) and node (100) budgets. Keeps a stable `and` root.
+ */
+export function simplifyQueryNode(node: IssueQueryAstNode, keepAndRoot = false): IssueQueryAstNode {
+  const simplify = (current: IssueQueryAstNode): IssueQueryAstNode => {
+    if (current.not) {
+      const inner = simplify(current.not as IssueQueryAstNode)
+      return inner.not ? inner.not as IssueQueryAstNode : { not: inner }
+    }
+    for (const key of ['and', 'or'] as const) {
+      const children = current[key]
+      if (!children) continue
+      const flat: IssueQueryAstNode[] = []
+      for (const child of children.map(simplify)) {
+        if (child[key] && Object.keys(child).length === 1) flat.push(...child[key]!)
+        else flat.push(child)
+      }
+      if (flat.length === 1) return flat[0]
+      return { [key]: flat }
+    }
+    return current
+  }
+  const result = simplify(node)
+  if (!keepAndRoot) return result
+  if (result.and && Object.keys(result).length === 1) return result
+  return { and: Object.keys(result).length ? [result] : [] }
 }
 
 export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue[] {
@@ -65,8 +108,15 @@ export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue
 export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter[] {
   filters = consolidateFilters(filters)
   const effectiveLabel = option.filterLabel ?? fieldLabel
-  const existing = filters.find(filter => filter.field === field && filter.fieldLabel === effectiveLabel && filter.operator === 'is')
+  // Date filters hold one comparison ("Due date before 1 week from now"): picking another preset replaces it.
+  const singleValue = field === 'dates'
+  const existing = filters.find(filter => filter.field === field && filter.fieldLabel === effectiveLabel && (singleValue || filter.operator === 'is'))
   if (!existing) return [...filters, fromOption(field, effectiveLabel, option)]
+  if (singleValue) {
+    if (filterValues(existing).some(value => value.value === option.id)) return filters.filter(filter => filter.id !== existing.id)
+    const replacement = fromOption(field, effectiveLabel, option)
+    return filters.map(filter => filter.id === existing.id ? { ...replacement, id: existing.id } : filter)
+  }
   const current = filterValues(existing)
   const values = current.some(value => value.value === option.id)
     ? current.filter(value => value.value !== option.id)
@@ -79,6 +129,7 @@ export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIs
 export function consolidateFilters(filters: MyIssuesAppliedFilter[]) {
   const result: MyIssuesAppliedFilter[] = []
   for (const filter of filters) {
+    if (filter.field === 'advanced' || filter.field === 'dates') { result.push(filter); continue }
     const existingIndex = result.findIndex(item => item.field === filter.field && item.fieldLabel === filter.fieldLabel && item.operator === filter.operator)
     if (existingIndex < 0) { result.push(filter); continue }
     const existing = result[existingIndex]
@@ -92,11 +143,60 @@ export function consolidateFilters(filters: MyIssuesAppliedFilter[]) {
 export function replaceFilterValues(filter: MyIssuesAppliedFilter, options: MyIssuesFilterOption[]): MyIssuesAppliedFilter | undefined {
   if (!options.length) return
   const values = options.map(option => ({ value: option.id, valueLabel: option.label, color: option.color }))
-  return { ...filter, ...values[0], values }
+  return { ...filter, ...values[0], values, operator: normalizeFilterOperator(filter.field, filter.operator, values.map(value => value.value)) }
 }
 
 export function updateFilterOperator(filters: MyIssuesAppliedFilter[], id: string, operator: MyIssuesFilterOperator) {
   return filters.map(filter => filter.id === id ? { ...filter, operator } : filter)
+}
+
+export interface FilterOperatorChoice { operator: MyIssuesFilterOperator; label: string }
+
+const DATE_VALUE = /^(due|created|updated|started|completed|triaged|status):(?:[+-]\d+[dwmy]|\d{4}-\d{2}-\d{2})$/
+
+/** Whether a dates value compares against a point in time (so it offers before / after). */
+export function isComparableDateValue(value: string) { return DATE_VALUE.test(value) }
+
+/** Default comparison for a dates value: future presets read "before", past presets "after" (Linear). */
+export function defaultDateOperator(value: string): 'before' | 'after' {
+  const match = value.match(/^(\w+):([+-])?/)
+  if (!match) return 'after'
+  if (match[1] === 'status') return 'before'
+  if (match[2]) return match[2] === '+' ? 'before' : 'after'
+  return match[1] === 'due' ? 'before' : 'after'
+}
+
+/**
+ * The operator menu for a chip or condition, per Linear: one value "is"/"is not", several "is any of";
+ * labels "include"/"do not include", several values add "include all of" and "exclude if all";
+ * point-in-time dates "before"/"after".
+ */
+export function filterOperatorChoices(field: MyIssuesFilterKey, values: string[], labels?: { operatorLabel?: string; negativeOperatorLabel?: string }): FilterOperatorChoice[] {
+  if (labels?.operatorLabel) return [{ operator: 'is', label: labels.operatorLabel }, { operator: 'isNot', label: labels.negativeOperatorLabel ?? 'is not' }]
+  if (field === 'dates' && values.length > 0 && values.every(isComparableDateValue)) {
+    return values.every(value => value.startsWith('status:'))
+      ? [{ operator: 'before', label: 'more than' }, { operator: 'after', label: 'less than' }]
+      : [{ operator: 'before', label: 'before' }, { operator: 'after', label: 'after' }]
+  }
+  if (field === 'labels') return values.length > 1
+    ? [{ operator: 'includesAll', label: 'include all of' }, { operator: 'is', label: 'include any of' }, { operator: 'isNot', label: 'exclude if any of' }, { operator: 'excludesAll', label: 'exclude if all' }]
+    : [{ operator: 'is', label: 'include' }, { operator: 'isNot', label: 'do not include' }]
+  return [{ operator: 'is', label: values.length > 1 ? 'is any of' : 'is' }, { operator: 'isNot', label: 'is not' }]
+}
+
+/** Keep the operator valid for the current values (for example "include all of" back to "include" at one value). */
+export function normalizeFilterOperator(field: MyIssuesFilterKey, operator: MyIssuesFilterOperator, values: string[]): MyIssuesFilterOperator {
+  const choices = filterOperatorChoices(field, values)
+  if (choices.some(choice => choice.operator === operator)) return operator
+  if (operator === 'excludesAll' || operator === 'isNot') return choices.some(choice => choice.operator === 'isNot') ? 'isNot' : choices[0].operator
+  if ((operator === 'is' || operator === 'includesAll') && choices[0].operator === 'before') return values[0] ? defaultDateOperator(values[0]) : 'before'
+  return choices.some(choice => choice.operator === 'is') ? 'is' : choices[0].operator
+}
+
+export function filterOperatorLabel(filter: Pick<MyIssuesAppliedFilter, 'field' | 'operator' | 'operatorLabel' | 'negativeOperatorLabel'>, values: string[]) {
+  const choices = filterOperatorChoices(filter.field, values, filter)
+  const operator = filter.field === 'dates' && filter.operator === 'is' && values[0] && isComparableDateValue(values[0]) ? defaultDateOperator(values[0]) : filter.operator
+  return choices.find(choice => choice.operator === operator)?.label ?? choices[0].label
 }
 
 export function updateFilterValues(filters: MyIssuesAppliedFilter[], id: string, options: MyIssuesFilterOption[]) {
@@ -108,5 +208,8 @@ export function updateFilterValues(filters: MyIssuesAppliedFilter[], id: string,
 
 function fromOption(field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter {
   const value = { value: option.id, valueLabel: option.label, color: option.color }
-  return { id: `${field}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, field, fieldLabel, operator: 'is', operatorLabel: option.operatorLabel, negativeOperatorLabel: option.negativeOperatorLabel, ...value, values: [value] }
+  const operator: MyIssuesFilterOperator = field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is'
+  return { id: filterId(field), field, fieldLabel, operator, operatorLabel: option.operatorLabel, negativeOperatorLabel: option.negativeOperatorLabel, ...value, values: [value] }
 }
+
+export function filterId(prefix: string) { return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }

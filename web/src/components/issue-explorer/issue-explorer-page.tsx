@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { IssueRowActionsProvider } from '@/components/my-issues/issue-row-actions'
 import { useActionGroupsForSelection } from '@/hooks/use-action-groups-for-selection'
 import { clearSelectedModels, setSelectedModels } from '@/lib/selected-models-store'
@@ -15,14 +15,19 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, M
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
 import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { PagedIssueList } from './paged-issue-list'
-import { fetchIssueRecord, updateStructuredTeamSettings } from '@/lib/api'
+import { fetchIssueRecord, listIssueRecords, updateStructuredTeamSettings } from '@/lib/api'
 import { toast } from 'sonner'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
-import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from './saved-view-editor'
-import { EditCustomViewHeader } from './edit-custom-view-header'
-import { filtersAreDirty, SaveCustomViewButtons } from './save-custom-view-buttons'
-import { discardCustomViewDraft } from './custom-view-draft'
+import { SavedViewEditor, SavedViewMenu, type SavedViewDraft, type SavedViewTarget } from './saved-view-editor'
+import { HiddenByFiltersFooter, NoMatchingIssues, SavedViewBandCommands } from './saved-view-filter-band'
+import bandStyles from './saved-view-filter-band.module.css'
+import explorerStyles from './issue-explorer.module.css'
+import { AdvancedFilterChip } from './advanced-filter-editor'
+import { createAdvancedFilter, decodeFiltersParam, encodeFiltersParam, normalizeStoredFilters, savableFilters } from './advanced-filter'
+import { suggestView } from './view-suggestions'
+import { useI18n } from '@/i18n/i18n'
+import type { ViewEditorControls } from './issue-explorer-surface'
 import { InsightHiddenNotice, SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import type { ViewVisual } from '@/components/views/view-icon-picker'
@@ -106,7 +111,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const personalViewKey = savedView ? `${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display` : undefined
   const [display, setDisplay] = useState<MyIssuesDisplayOptions>(() => personalViewKey ? readPersonalDisplay(personalViewKey, savedView!, view) : duplicateFrom ? displayFromSavedView(duplicateFrom, view) : readDisplay(`${preferencesKey}:display`, view, boardRoute, teamDefault, defaultDisplayOverrides))
   const detailsKey = detailsStorageKey ?? `${data.workspace.urlKey}:issue-explorer:${storageScope}:details`
-  const [detailsOpen, setDetailsOpen] = useState(() => readBoolean(detailsKey, false))
+  const [storedDetailsOpen, setDetailsOpen] = useState(() => readBoolean(detailsKey, false))
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [drillRows, setDrillRows] = useState<MyIssuesRowData[]>()
   const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
@@ -121,6 +126,16 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
+  // Linear's new-view page has no details panel.
+  const detailsOpen = storedDetailsOpen && !(creatingView || viewEditor === 'create')
+  // Linear: filters added on a saved view (outside edit mode) are temporary — a band with Clear / Save,
+  // shareable as `?filter=`; the view's own filters live in the edit card.
+  const [extraFilters, setExtraFilters] = useState<MyIssuesAppliedFilter[]>(() => savedView && !editingView && typeof location !== 'undefined' ? decodeFiltersParam(new URLSearchParams(location.search).get('filter')) : [])
+  const [openAdvancedId, setOpenAdvancedId] = useState<string>()
+  const [editorDraft, setEditorDraft] = useState<SavedViewDraft>()
+  const [bandCreateRestore, setBandCreateRestore] = useState<{ filters: MyIssuesAppliedFilter[]; extra: MyIssuesAppliedFilter[] }>()
+  const [baseTotal, setBaseTotal] = useState<number>()
+  const { locale } = useI18n()
   const hydratedSavedViewId = useRef(savedView?.id)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -130,7 +145,6 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const savedViewSubscription = savedView ? data.subscriptions.find(item => item.userId === data.viewer.id && item.resourceType === 'view' && item.resourceId === savedView.id) : undefined
   const savedViewSubscriptionEvents = savedViewSubscription?.events?.length ? savedViewSubscription.events : savedViewSubscribed ? ['issue-added', 'issue-completed'] : []
 
-  useEffect(() => { const onKey = (event: KeyboardEvent) => { if (!event.altKey || event.metaKey || event.ctrlKey || event.key.toLowerCase() !== 'v' || savedView || creatingView || viewEditor || (event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return; event.preventDefault(); setViewEditor('create') }; addEventListener('keydown', onKey); return () => removeEventListener('keydown', onKey) }, [creatingView, savedView, viewEditor])
 
   const showSubTeams = display.showSubTeamIssues !== false
   const scopeTeamIds = useMemo(() => scope.kind === 'team' ? (showSubTeams ? teamHierarchy(data.teams, data.teamSettings).subtree(scope.team.id) : new Set([scope.team.id])) : undefined, [data.teams, data.teamSettings, scope, showSubTeams])
@@ -140,25 +154,37 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const rowOptions = useMemo(() => explorerPropertyOptions(data, scopedIssues), [data, scopedIssues])
   // Bootstrap/sync owns the complete visible collection. Group before virtualizing;
   // replacing it with one query page truncates both group counts and membership.
-  const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, filters, data), [data, filters, scopedIssues, pagedIssues])
+  const bandActive = Boolean(savedView && !viewEditor)
+  const effectiveFilters = useMemo(() => bandActive && extraFilters.length ? [...filters, ...extraFilters] : filters, [bandActive, extraFilters, filters])
+  const visibleIssues = useMemo(() => data.issueCollectionPaged ? pagedIssues : applyExplorerFilters(scopedIssues, effectiveFilters, data), [data, effectiveFilters, scopedIssues, pagedIssues])
   const baseRows = useMemo(() => visibleIssues.map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)), [data, rowOverrides, visibleIssues])
   const rows = drillRows ?? baseRows
-  const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, filters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, filters, insightIssues, insightsOpen, rowOverrides])
+  const insightRows = useMemo(() => insightsOpen ? applyExplorerFilters(insightIssues, effectiveFilters, data).map(issue => rowOverrides.get(issue.id) ?? issueToExplorerRow(issue, data.workspace.urlKey,data.issues,data)) : [], [data, effectiveFilters, insightIssues, insightsOpen, rowOverrides])
   const activeInsightRows = useMemo(() => insightRows.filter(row => !row.archivedAt), [insightRows])
   const groups = useMemo(() => buildExplorerIssueGroups(rows, display, data, view, manualOrder), [data, display, manualOrder, rows, view])
-  const pagedQuery = useMemo(() => {
+  const buildPagedQuery = useCallback((list: MyIssuesAppliedFilter[]) => {
     const triageTeamIds = Object.values(data.teamSettings ?? {}).filter(settings => settings.triageEnabled).map(settings => settings.teamId)
     const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display, Date.now(), triageTeamIds)
     if (view === 'backlog') conditions.push({ field: 'status', operator: 'is', values: ['backlog'] })
     if (view === 'active') conditions.push({ field: 'status', operator: 'in', values: ['unstarted', 'started'] })
     const includeSubTeams = scope.kind === 'team' && display.showSubTeamIssues !== false
-    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, { data }), ...conditions, ...(scopeConditions ?? [])] } }
-  }, [data, display, filters, initialInsightFilters?.teamIds, scope, scopeConditions, view])
+    return { teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds, includeSubTeams, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(list, { data }), ...conditions, ...(scopeConditions ?? [])] } }
+  }, [data, display, initialInsightFilters?.teamIds, scope, scopeConditions, view])
+  const pagedQuery = useMemo(() => buildPagedQuery(effectiveFilters), [buildPagedQuery, effectiveFilters])
+  // "N issues hidden by filters": the saved view's own count without the temporary filters.
+  const baseQuery = useMemo(() => bandActive && extraFilters.length && data.issueCollectionPaged ? buildPagedQuery(filters) : undefined, [bandActive, buildPagedQuery, data.issueCollectionPaged, extraFilters.length, filters])
+  useEffect(() => {
+    if (!baseQuery) { setBaseTotal(undefined); return }
+    const abort = new AbortController()
+    void listIssueRecords({ ...baseQuery, groupBy: undefined, limit: 1, includeTotal: true }, abort.signal).then(page => setBaseTotal(page.total)).catch(() => undefined)
+    return () => abort.abort()
+  }, [baseQuery])
+  const clientBaseCount = useMemo(() => bandActive && extraFilters.length && !data.issueCollectionPaged ? applyExplorerFilters(scopedIssues, filters, data).length : undefined, [bandActive, data, extraFilters.length, filters, scopedIssues])
   const insightQuery = useMemo(() => ({
     teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
     includeSubTeams: scope.kind === 'team',
-    filter: { and: [issueFiltersToQueryAst(filters, { data }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
-  }), [filters, initialInsightFilters?.teamIds, scope, view])
+    filter: { and: [issueFiltersToQueryAst(effectiveFilters, { data }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
+  }), [effectiveFilters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   useActionGroupsForSelection(['Issues', 'Projects'])
   useEffect(() => {
@@ -219,7 +245,15 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     })
   }, [data.issues])
 
-  const persistFilters = (next: MyIssuesAppliedFilter[]) => { setFilters(next); writeValue(`${preferencesKey}:filters`, JSON.stringify(next)) }
+  // A saved view's filters belong to the view (changed only through edit / "Save to this view").
+  const persistFilters = (next: MyIssuesAppliedFilter[]) => { setFilters(next); if (!sourceView && !creatingView) writeValue(`${preferencesKey}:filters`, JSON.stringify(next)) }
+  useEffect(() => {
+    if (!savedView || viewEditor || typeof location === 'undefined') return
+    const url = new URL(location.href)
+    if (extraFilters.length) url.searchParams.set('filter', encodeFiltersParam(extraFilters))
+    else url.searchParams.delete('filter')
+    if (url.href !== location.href) history.replaceState(history.state, '', url)
+  }, [extraFilters, savedView, viewEditor])
   const changeDisplay = (next: MyIssuesDisplayOptions) => {
     setDisplay(next)
     // Never write through to a shared saved view; "Save as default for view" does that explicitly.
@@ -231,7 +265,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     removeValue(personalViewKey ?? `${preferencesKey}:display`)
   }
   const saveDisplayAsViewDefault = savedView && onUpdateSavedView ? () => {
-    void onUpdateSavedView(savedView.id, { resource: 'issues', scope: savedView.scope, teamId: savedView.teamId, ownerId: savedView.ownerId, view: savedView.view, filters: filtersFromSavedView(savedView), display: displaySnapshot(display) })
+    void onUpdateSavedView(savedView.id, { display: displaySnapshot(display) })
       .then(() => { if (personalViewKey) removeValue(personalViewKey); toast.success('Saved as default for view') })
       .catch(() => toast.error('Could not save view default'))
   } : scope.kind === 'team' ? () => {
@@ -268,14 +302,46 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       ? { type: 'teamView' as const, teamKey: scope.team.key, viewKind: view }
       : { type: 'issueView' as const, teamKey: data.teams[0]?.key }
   // AI filter applies several filters in one go; chain them on the latest list instead of the render-time snapshot.
-  const latestFilters = useRef(filters)
-  latestFilters.current = filters
+  const latestFilters = useRef({ base: filters, extra: extraFilters })
+  latestFilters.current = { base: filters, extra: extraFilters }
+  const filterTarget: 'base' | 'extra' = bandActive ? 'extra' : 'base'
+  const setListFilters = (list: 'base' | 'extra', next: MyIssuesAppliedFilter[]) => {
+    latestFilters.current = { ...latestFilters.current, [list]: next }
+    if (list === 'extra') setExtraFilters(next)
+    else persistFilters(next)
+  }
+  const updateList = (list: 'base' | 'extra', change: (current: MyIssuesAppliedFilter[]) => MyIssuesAppliedFilter[]) => setListFilters(list, change(latestFilters.current[list]))
   const addFilter = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     const label = ISSUE_FILTER_LABELS[field]
     if (!label) return
-    const next = toggleFilterOption(latestFilters.current, field, label, option)
-    latestFilters.current = next
-    persistFilters(next)
+    setListFilters(filterTarget, toggleFilterOption(latestFilters.current[filterTarget], field, label, option))
+  }
+  const addAdvancedFilter = () => {
+    const chip = createAdvancedFilter()
+    setOpenAdvancedId(chip.id)
+    setListFilters(filterTarget, [...latestFilters.current[filterTarget], chip])
+  }
+  const renderAdvanced = (list: 'base' | 'extra') => (filter: MyIssuesAppliedFilter) => filter.field !== 'advanced' ? undefined : <AdvancedFilterChip
+    key={filter.id}
+    defaultOpen={filter.id === openAdvancedId}
+    filter={filter}
+    filterOptions={field => explorerFilterOptions(field, rowOptions)}
+    onChange={tree => updateList(list, current => current.map(item => item.id === filter.id ? { ...item, tree } : item))}
+    onOpenChange={open => { if (!open) setOpenAdvancedId(current => current === filter.id ? undefined : current) }}
+    onRemove={() => updateList(list, current => current.filter(item => item.id !== filter.id))}
+  />
+  const filterBarProps = (list: 'base' | 'extra') => {
+    const current = list === 'extra' ? extraFilters : filters
+    return {
+      filters: current,
+      filterOptions: (filter: MyIssuesAppliedFilter) => explorerFilterOptions(filter.field, rowOptions),
+      renderFilter: renderAdvanced(list),
+      onAdd: () => setFilterOpenSignal(value => value + 1),
+      onClear: () => setListFilters(list, []),
+      onOperatorChange: (id: string, operator: MyIssuesAppliedFilter['operator']) => updateList(list, items => updateFilterOperator(items, id, operator)),
+      onRemove: (id: string) => updateList(list, items => items.filter(filter => filter.id !== id)),
+      onValuesChange: (id: string, options: MyIssuesFilterOption[]) => updateList(list, items => updateFilterValues(items, id, options)),
+    }
   }
 
   const updateOne = async (row: MyIssuesRowData, input: IssueUpdateInput) => {
@@ -333,15 +399,19 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     const update: IssueUpdateInput = { sortOrder, ...(sourceGroupId === targetGroupId ? {} : explorerBoardGroupUpdate(row, display.grouping, targetGroupId, data, display.labelGroupId)) }
     void updateOne(row, update).catch(() => undefined)
   }
-  const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), ...(draftInsights ? { insights: draftInsights as unknown as Record<string, unknown> } : {}) })
+  const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters: savableFilters(filters), display: displaySnapshot(display), ...(draftInsights ? { insights: draftInsights as unknown as Record<string, unknown> } : {}) })
   const previewTarget = initialSaveTarget ?? (scope.kind === 'team' ? { scope: 'team' as const, teamId: scope.team.id, label: scope.team.name, team: scope.team } : { scope: 'workspace' as const, label: data.workspace.name })
-  const insightsView: SavedView = savedView ?? { id: creatingView ? '__new-view' : preferencesKey, name: scope.kind === 'team' ? scope.team.name : 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: '', updatedAt: '' }
+  const insightsView: SavedView = savedView ?? { id: creatingView ? '__new-view' : preferencesKey, name: scope.kind === 'team' ? scope.team.name : 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters: effectiveFilters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: '', updatedAt: '' }
   const saveViewEditor = async (name: string, description: string, target: SavedViewTarget | undefined, visual: ViewVisual) => {
     if (viewSaving) return
     setViewSaving(true)
     try {
-      if (viewEditor === 'edit' && savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { ...savedViewSnapshot(), name, description, ...visual })
-      else if (onCreateSavedView) {
+      if (viewEditor === 'edit' && savedView && onUpdateSavedView) {
+        // Only what the card edits: the owner and resource stay; scope moves only through "Save to".
+        const destination = target ?? initialSaveTarget
+        await onUpdateSavedView(savedView.id, { name, description, ...visual, filters: savableFilters(filters), display: displaySnapshot(display), scope: destination.scope, teamId: destination.scope === 'team' ? destination.teamId : '' })
+        if (personalViewKey) removeValue(personalViewKey)
+      } else if (onCreateSavedView) {
         const destination = target ?? initialSaveTarget
         const created = await onCreateSavedView({ ...savedViewSnapshot(), name, description, ...visual, scope: destination.scope, teamId: destination.scope === 'team' ? destination.teamId : '' })
         onNavigateSavedView?.(created)
@@ -350,11 +420,75 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       if (viewEditor === 'edit') onFinishEditSavedView?.()
     } finally { setViewSaving(false) }
   }
-  const filtersDirty = Boolean(savedView && filtersAreDirty(filters, filtersFromSavedView(savedView)))
-  const updateSavedViewFilters = () => {
-    if (!savedView || !onUpdateSavedView) return
-    void onUpdateSavedView(savedView.id, { resource: 'issues', scope: savedView.scope, teamId: savedView.teamId, ownerId: savedView.ownerId, view: savedView.view, filters, display: displaySnapshot(display) }).catch(() => undefined)
+  // Band: "Save to this view" merges the temporary filters into the view (nothing else changes).
+  const saveBandToView = () => {
+    if (!savedView || !onUpdateSavedView || !extraFilters.length) return
+    const merged = savableFilters([...filters, ...extraFilters])
+    void onUpdateSavedView(savedView.id, { filters: merged }).then(() => { setFilters(merged); setExtraFilters([]) }).catch(() => undefined)
   }
+  // Band: "Create new view…" opens the new-view card with the view's filters plus the temporary ones.
+  const createViewFromBand = () => {
+    setBandCreateRestore({ filters, extra: extraFilters })
+    setFilters([...filters, ...extraFilters])
+    setExtraFilters([])
+    setViewEditor('create')
+  }
+  const cancelViewEditor = () => {
+    const mode = viewEditor
+    setViewEditor(undefined)
+    setEditorDraft(undefined)
+    if (bandCreateRestore) { setFilters(bandCreateRestore.filters); setExtraFilters(bandCreateRestore.extra); setBandCreateRestore(undefined) }
+    if (mode === 'edit') onFinishEditSavedView?.()
+    else if (creatingView) onCancelCreateSavedView?.()
+  }
+  const clearAllFilters = () => setListFilters(filterTarget, [])
+  // Linear shortcuts: ⌥⇧F clear all filters, ⌥S save to this view, ⌥V create new view, ⌥F favorite view.
+  const shortcutActions = useRef({ clearAllFilters, saveBandToView, createViewFromBand, openCreate: () => setViewEditor('create'), favorite: () => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) } })
+  shortcutActions.current = { clearAllFilters, saveBandToView, createViewFromBand, openCreate: () => setViewEditor('create'), favorite: () => { if (savedView && onToggleSavedViewFavorite) void onToggleSavedViewFavorite(savedView) } }
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.altKey || event.metaKey || event.ctrlKey || event.defaultPrevented) return
+      if ((event.target as HTMLElement | null)?.closest('input,textarea,[contenteditable=true],[role=textbox]')) return
+      const actions = shortcutActions.current
+      if (event.code === 'KeyF' && event.shiftKey) { event.preventDefault(); actions.clearAllFilters(); return }
+      if (event.shiftKey) return
+      if (event.code === 'KeyS' && bandActive && extraFilters.length) { event.preventDefault(); actions.saveBandToView() }
+      else if (event.code === 'KeyV' && !viewEditor && !creatingView) { event.preventDefault(); if (savedView) { if (extraFilters.length) actions.createViewFromBand() } else actions.openCreate() }
+      else if (event.code === 'KeyF' && savedView && !viewEditor) { event.preventDefault(); actions.favorite() }
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [bandActive, creatingView, extraFilters.length, savedView, viewEditor])
+  const editorMode = viewEditor === 'edit' && savedView ? 'edit' : viewEditor ? 'create' : undefined
+  // Suggestions follow filter changes (Linear): a view being edited keeps its own icon / description until its filters change.
+  const filtersChanged = editorMode !== 'edit' || !savedView || JSON.stringify(savableFilters(filters)) !== JSON.stringify(savableFilters(filtersFromSavedView(savedView)))
+  const suggestion = useMemo(() => editorMode && filtersChanged ? suggestView(filters, { states: data.states, locale }) : {}, [data.states, editorMode, filters, filtersChanged, locale])
+  const shownSavedView = savedView && editorMode === 'edit' && editorDraft ? { ...savedView, name: editorDraft.name.trim() || savedView.name, description: editorDraft.description, icon: editorDraft.visual.icon, color: editorDraft.visual.color } : savedView
+  const hiddenByFilters = bandActive && extraFilters.length ? Math.max(0, (data.issueCollectionPaged ? baseTotal ?? 0 : clientBaseCount ?? 0) - (data.issueCollectionPaged ? pagedTotal : rows.length)) : 0
+  const editorCard = editorMode && ((controls: ViewEditorControls) => <SavedViewEditor
+    mode={editorMode}
+    ariaLabel={editorMode === 'edit' ? 'Edit view' : 'New view'}
+    initialName={editorMode === 'edit' ? savedView!.name : duplicateFrom?.name ?? ''}
+    namePlaceholder="All issues"
+    suggestedName={suggestion.name}
+    suggestedDescription={suggestion.description}
+    suggestedIcon={suggestion.icon}
+    initialDescription={editorMode === 'edit' ? savedView!.description : duplicateFrom?.description ?? ''}
+    initialIcon={editorMode === 'edit' ? savedView!.icon : duplicateFrom?.icon}
+    initialColor={editorMode === 'edit' ? savedView!.color : duplicateFrom?.color}
+    initialTarget={editorMode === 'edit' ? initialSaveTarget : bandCreateRestore ? saveTargets.find(target => target.scope === 'personal') ?? initialSaveTarget : initialSaveTarget}
+    saveTargets={saveTargets}
+    saving={viewSaving}
+    onCancel={cancelViewEditor}
+    onDraftChange={setEditorDraft}
+    onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual).then(() => setBandCreateRestore(undefined)) }}
+    actions={editorMode === 'edit'
+      ? <MyIssuesFilterBar {...filterBarProps('base')} className={explorerStyles.cardBar} compact showEmpty wrap commands={<div className={explorerStyles.editorButtons}>{controls.filterButton}{controls.displayButton}</div>}/>
+      : <>
+          <div className={explorerStyles.editorFilters}>{controls.resourceTabs}<div className={explorerStyles.editorButtons}>{controls.filterButton}{controls.displayButton}</div></div>
+          {filters.length > 0 && <MyIssuesFilterBar {...filterBarProps('base')} className={explorerStyles.cardBar} compact wrap commands={<span/>}/>}
+        </>}
+  />)
 
   const savedViewMenu = savedView && <SavedViewMenu
     view={savedView}
@@ -384,7 +518,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       favorite={savedViewFavorite}
       savedViews={savedViews}
       savedViewHref={savedViewHref}
-      filters={filters}
+      filters={filterTarget === 'extra' ? extraFilters : filters}
       displayOptions={display}
       detailsOpen={detailsOpen}
       insightsOpen={insightsOpen}
@@ -407,44 +541,26 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       className={className}
       insightsLabel={insightsLabel}
       detailsShortcutTooltip={Boolean(detailsPanel)}
-      viewEditor={viewEditor && (viewEditor === 'edit' && savedView ? <EditCustomViewHeader
-        orgKey={data.workspace.urlKey}
-        viewId={savedView.id}
-        initialName={savedView.name}
-        initialDescription={savedView.description}
-        initialIcon={savedView.icon}
-        initialColor={savedView.color}
-        initialTarget={initialSaveTarget}
-        saveTargets={[]}
-        saving={viewSaving}
-        hasChanges
-        onCancel={() => { setViewEditor(undefined); onFinishEditSavedView?.() }}
-        onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual) }}
-      /> : <SavedViewEditor
-        initialName={duplicateFrom?.name ?? ''}
-        namePlaceholder="All issues"
-        initialDescription={duplicateFrom?.description ?? ''}
-        initialIcon={duplicateFrom?.icon}
-        initialColor={duplicateFrom?.color}
-        initialTarget={initialSaveTarget}
-        saveTargets={saveTargets}
-        saving={viewSaving}
-        onCancel={() => { setViewEditor(undefined); if (creatingView) onCancelCreateSavedView?.(); discardCustomViewDraft(data.workspace.urlKey, 'new') }}
-        onSave={(name, description, target, visual) => { void saveViewEditor(name, description, target, visual) }}
-      />)}
-      filterBar={(filters.length > 0 || viewEditor || !savedView) && <>
-        <MyIssuesFilterBar filters={filters} filterOptions={filter => explorerFilterOptions(filter.field, rowOptions)} onAdd={() => setFilterOpenSignal(value => value + 1)} onClear={() => persistFilters([])} onOperatorChange={(id, operator) => persistFilters(updateFilterOperator(filters, id, operator))} onRemove={id => persistFilters(filters.filter(filter => filter.id !== id))} onValuesChange={(id, options) => persistFilters(updateFilterValues(filters, id, options))}/>
-        {savedView && filtersDirty && !viewEditor && <SaveCustomViewButtons saving={viewSaving} onUpdate={updateSavedViewFilters} onCreate={() => setViewEditor('create')} />}
-      </>}
+      viewEditor={editorCard || undefined}
+      viewEditorMode={editorMode}
+      draftName={editorDraft?.name.trim() || undefined}
+      draftPlaceholder={suggestion.name}
+      draftVisual={editorDraft?.visual}
+      filterActive={bandActive && extraFilters.length > 0}
+      onAdvancedFilter={addAdvancedFilter}
+      filterBar={bandActive
+        ? extraFilters.length > 0 && <MyIssuesFilterBar {...filterBarProps('extra')} className={bandStyles.band} compact wrap commands={<SavedViewBandCommands canUpdate={Boolean(onUpdateSavedView)} onClear={() => setExtraFilters([])} onCreate={createViewFromBand} onUpdate={saveBandToView}/>}/>
+        : !editorMode && <MyIssuesFilterBar {...filterBarProps('base')}/>}
+      footer={hiddenByFilters > 0 && <HiddenByFiltersFooter hidden={hiddenByFilters} onClear={() => setExtraFilters([])}/>}
     >
       <IssuesSplitLayout
         detailsOpen={((detailsOpen && Boolean(previewIssue)) || split) && !insightsOpen}
         // Linear: with no issue open, details sit beside the list — the view's
         // card stack on saved views, the shared summary card elsewhere (same
         // component as My issues); custom detailsPanel pages keep their own.
-        aside={detailsOpen && !previewIssue && !split && !insightsOpen && !detailsPanel && !savedView ? <MyIssuesSummaryCard summary={summary} onItemSelect={summaryFilter}/> : savedView && detailsOpen && !previewIssue && !split && !insightsOpen ? <SavedViewDetailsPanel
+        aside={detailsOpen && editorMode !== 'create' && !previewIssue && !split && !insightsOpen && !detailsPanel && !savedView ? <MyIssuesSummaryCard summary={summary} onItemSelect={summaryFilter}/> : savedView && detailsOpen && !previewIssue && !split && !insightsOpen ? <SavedViewDetailsPanel
           inline
-          belowFilterBar={Boolean(filters.length > 0 || viewEditor)}
+          belowFilterBar={Boolean((bandActive && extraFilters.length > 0) || viewEditor)}
           favorite={savedViewFavorite}
           menu={savedViewMenu}
           onClose={() => changeDetails(false)}
@@ -453,7 +569,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
           rows={rows}
           team={data.teams.find(team => team.id === savedView.teamId)}
           users={data.users}
-          view={savedView}
+          view={shownSavedView!}
           workspace={data.workspace}
         /> : undefined}
         list={<>
@@ -467,7 +583,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         onMoveIssueRecord={(issue, input) => onUpdateIssue(issue.id, input)}
         onTotalChange={setPagedTotal}
         onLoadedIssuesChange={setPagedIssues}
-        emptyState={emptyState}
+        emptyState={emptyState ?? (effectiveFilters.length ? <NoMatchingIssues/> : undefined)}
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         propertyOptions={rowOptions}
@@ -487,7 +603,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         collapsedGroupIds={collapsedGroups}
         displayProperties={split || (detailsOpen && previewIssueId) ? splitProperties : display.properties}
         nestedSubIssues={display.nestedSubIssues}
-        emptyState={emptyState}
+        emptyState={emptyState ?? (effectiveFilters.length ? <NoMatchingIssues/> : undefined)}
         propertyOptions={rowOptions}
         mutationErrors={mutationErrors}
         onCreateIssue={group => { const stateId = stateIdForExplorerGroup(group, data); const context = group.createContext ?? (stateId ? { stateId } : undefined); onCreateIssue?.(scope.kind === 'team' ? { ...context, teamId: scope.team.id } : context) }}
@@ -531,7 +647,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
               rows={rows}
               team={data.teams.find(team => team.id === savedView.teamId)}
               users={data.users}
-              view={savedView}
+              view={shownSavedView!}
               workspace={data.workspace}
             />
           ) : (
@@ -566,7 +682,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
               rows={rows}
               team={data.teams.find(team => team.id === savedView.teamId)}
               users={data.users}
-              view={savedView}
+              view={shownSavedView!}
               workspace={data.workspace}
             />}
           </>
@@ -637,7 +753,7 @@ function insightPropertyFilters(data: BootstrapData, filters: NonNullable<IssueE
   return result
 }
 function filterInsightTeams(issues: Issue[], teamIds?: string[]) { return teamIds?.length ? issues.filter(issue=>teamIds.includes(issue.team.id)) : issues }
-function readFilters(key: string): MyIssuesAppliedFilter[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) ? value : [] } catch { return [] } }
+function readFilters(key: string): MyIssuesAppliedFilter[] { try { return normalizeStoredFilters(JSON.parse(localStorage.getItem(key) ?? '[]')) } catch { return [] } }
 function readDisplay(key: string, view: TeamIssuesRouteView, board = false, teamDefault?: Record<string, unknown>, overrides?: Partial<MyIssuesDisplayOptions>): MyIssuesDisplayOptions { const fallback = withTeamDefault({ ...defaultDisplay(view, overrides), ...(board ? { layout: 'board' as const, showEmptyGroups: true } : {}) }, teamDefault); try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback } }
 function readBoolean(key: string, fallback: boolean) { try { const value = localStorage.getItem(key); return value == null ? fallback : value === 'true' } catch { return fallback } }
 function writeValue(key: string, value: string) { try { localStorage.setItem(key, value) } catch { /* Preferences are best-effort. */ } }
@@ -647,7 +763,7 @@ function readPersonalDisplay(key: string, view: SavedView, routeView: TeamIssues
   try { const value = JSON.parse(localStorage.getItem(key) ?? 'null'); return value ? { ...fallback, ...value, properties: new Set(Array.isArray(value.properties) ? value.properties : [...fallback.properties]) } : fallback } catch { return fallback }
 }
 function readOrder(key: string): string[] { try { const value = JSON.parse(localStorage.getItem(key) ?? '[]'); return Array.isArray(value) && value.every(item => typeof item === 'string') ? value : [] } catch { return [] } }
-function filtersFromSavedView(view: SavedView): MyIssuesAppliedFilter[] { return Array.isArray(view.filters) ? view.filters as MyIssuesAppliedFilter[] : [] }
+function filtersFromSavedView(view: SavedView): MyIssuesAppliedFilter[] { return normalizeStoredFilters(view.filters) }
 function displayFromSavedView(view: SavedView, routeView: TeamIssuesRouteView): MyIssuesDisplayOptions {
   const fallback = defaultDisplay(routeView)
   const value = view.display && typeof view.display === 'object' ? view.display : {}

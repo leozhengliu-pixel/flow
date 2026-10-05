@@ -406,3 +406,32 @@ func TestReleaseIssueProgressUsesBoundedRecordQueries(t *testing.T) {
 		t.Fatalf("release progress=%#v", projection.Releases[0])
 	}
 }
+
+func TestIssueQueryFiltersActiveSnoozes(t *testing.T) {
+	repository, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	ctx := context.Background()
+	data := repository.Bootstrap()
+	workspace := data.Workspace.URLKey
+	now := time.Now().UTC()
+	past, future := now.Add(-time.Hour), now.Add(time.Hour)
+	for i, snoozed := range []*time.Time{nil, &past, &future} {
+		issue := data.Issues[0]
+		issue.ID = fmt.Sprintf("snooze-%d", i)
+		issue.Identifier = fmt.Sprintf("SNOOZE-%d", i)
+		issue.State.ID = "snooze-state"
+		issue.SnoozedUntil = snoozed
+		if err := repository.ImportIssues(ctx, workspace, []domain.Issue{issue}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The triage sidebar count: unsnoozed issues plus snoozes that already ended.
+	filter := IssueFilter{And: []IssueFilter{{Field: "status", Values: []string{"snooze-state"}}, {Or: []IssueFilter{{Field: "snoozedUntil", Operator: "isEmpty"}, {Field: "snoozedUntil", Operator: "before", Values: []string{now.Format(time.RFC3339)}}}}}}
+	page, err := repository.QueryIssueRecords(ctx, IssueRecordQuery{Workspace: workspace, Filter: filter, IncludeTotal: true})
+	if err != nil || page.Total != 2 {
+		t.Fatalf("active snoozes were not excluded: %v %#v", err, page)
+	}
+}

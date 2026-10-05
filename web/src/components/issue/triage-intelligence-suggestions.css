@@ -491,3 +491,22 @@ ul.triage-intelligence-thinking-text {
     animation: none;
   }
 }
+
+/* Linear's card: white, 0.5px border, radius 10, gradient title, monospace "No suggestions found" footer. */
+.triage-intelligence-panel:not(.is-compact) { border: 0.5px solid var(--triage-card-border); border-radius: 10px; background: var(--triage-card-bg); }
+.triage-intelligence-title { font-size: 12px; }
+.triage-intelligence-gradient { color: transparent; background: var(--triage-ti-gradient); background-clip: text; -webkit-background-clip: text; font-size: 12px; font-weight: 500; }
+.triage-intelligence-empty { justify-content: space-between; color: var(--triage-ti-muted); font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.triage-intelligence-run-again { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); font: 500 12px var(--font); cursor: pointer; }
+.triage-intelligence-run-again:hover { background: var(--theme-control-hover); color: var(--theme-text-primary); }
+.triage-intelligence-run-again:disabled { opacity: 0.5; cursor: default; }
+.triage-intelligence-run-again:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.triage-intelligence-relation-pill { width: auto; min-width: 0; height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border: 0.5px solid var(--triage-card-border); border-radius: 9999px; font-size: 12px; line-height: 16px; white-space: nowrap; }
+.triage-intelligence-related-row .triage-intelligence-small-button { opacity: 0; transition: opacity 120ms ease; }
+.triage-intelligence-related-row:hover .triage-intelligence-small-button,
+.triage-intelligence-related-row:focus-within .triage-intelligence-small-button { opacity: 1; }
+.triage-intelligence-issue-card { width: 321px; display: flex; flex-direction: column; gap: 6px; }
+.triage-intelligence-issue-card__created { color: var(--theme-text-tertiary); font-size: 12px; }
+.triage-intelligence-issue-card__title { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 18px; }
+.triage-intelligence-issue-card__meta { display: inline-flex; align-items: center; gap: 5px; color: var(--theme-text-secondary); font-size: 12px; }
+.triage-intelligence-issue-card__meta i { color: var(--theme-text-tertiary); font-style: normal; }

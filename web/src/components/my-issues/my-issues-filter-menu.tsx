@@ -1,7 +1,7 @@
 import { cloneElement, Fragment, isValidElement, useMemo, useRef, useState, type ReactElement } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
-import { Command } from 'cmdk'
+import { Command, defaultFilter } from 'cmdk'
 import { Archive, Bot, Building2, CalendarDays, CircleDot, Diamond, ExternalLink, FileText, Flag, GitBranch, Layers3, Link2, ListFilter, Rocket, Sparkles, Tags, UserRound, Users } from 'lucide-react'
 import { ChevronRightIcon } from './my-issues-icons'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
@@ -25,6 +25,13 @@ export interface MyIssuesFilterMenuProps {
   availableFields?: MyIssuesFilterKey[]
   /** Team/workspace issues hide project milestone; project issues hide project/initiative fields. */
   scope?: IssueFilterScope
+  /** "Advanced filter" adds a separate advanced-filter chip (Linear); hidden when the page does not support it. */
+  onAdvanced?: () => void
+  /** The advanced editor's "+ Filter" menu: offers "( ) Add filter group" (omit at the depth limit). */
+  onAddGroup?: () => void
+  /** `advanced`: the advanced editor's property menu (no AI filter / Advanced filter, "Filter" search). */
+  variant?: 'root' | 'advanced'
+  align?: 'start' | 'center' | 'end'
 }
 
 const ISSUE_FILTER_SCOPE_HIDDEN: Record<IssueFilterScope, MyIssuesFilterKey[]> = {
@@ -56,13 +63,15 @@ const MY_ISSUES_FILTER_GROUPS = [
   ],
 ] as const
 
-export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange, onToggle, open, options, scope = 'issues', trigger }: MyIssuesFilterMenuProps) {
+export function MyIssuesFilterMenu({ align = 'center', availableFields, filters = [], onAddGroup, onAdvanced, onOpenChange, onToggle, open, options, scope = 'issues', trigger, variant = 'root' }: MyIssuesFilterMenuProps) {
   const { t } = useI18n()
   const [activeField, setActiveField] = useState<MyIssuesFilterKey>()
+  const [query, setQuery] = useState('')
+  const [aiPending, setAiPending] = useState(false)
   const [textCondition, setTextCondition] = useState<{ field: MyIssuesFilterKey; option: MyIssuesFilterOption }>()
   const hiddenFields = ISSUE_FILTER_SCOPE_HIDDEN[scope]
   const close = (next: boolean) => {
-    if (!next) setActiveField(undefined)
+    if (!next) { setActiveField(undefined); setQuery('') }
     onOpenChange(next)
   }
   const openValues = (field: MyIssuesFilterKey) => {
@@ -70,8 +79,43 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
   }
   const visibleGroups = MY_ISSUES_FILTER_GROUPS.map(group => group.filter(item => {
     const field = item.id as MyIssuesFilterKey
+    if (field === 'advanced' && (variant === 'advanced' || !onAdvanced)) return false
+    if (field === 'ai' && variant === 'advanced') return false
     return (!availableFields || availableFields.includes(field)) && !hiddenFields.includes(field)
   })).filter(group => group.length)
+  // Linear's deep search: "Priority › Urgent", "Labels › Bug  1 issue", "Project properties › Project priority › Urgent".
+  const deepMatches = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase()
+    if (!needle || !open) return []
+    const matches: { field: MyIssuesFilterKey; option: MyIssuesFilterOption; path: string[] }[] = []
+    const walk = (field: MyIssuesFilterKey, items: MyIssuesFilterOption[], path: string[], depth: number) => {
+      for (const option of items) {
+        if (option.children?.length) { if (depth < 2) walk(field, option.children, [...path, option.label], depth + 1); continue }
+        if (option.textConditionPrefix || option.id === 'content-prompt') continue
+        if (option.label.toLocaleLowerCase().includes(needle)) matches.push({ field, option, path: [...path, option.label] })
+      }
+    }
+    for (const item of visibleGroups.flat()) {
+      const field = item.id as MyIssuesFilterKey
+      if (field === 'ai' || field === 'advanced') continue
+      walk(field, options?.(field) ?? [], [item.label], 0)
+      if (matches.length > 40) break
+    }
+    return matches.slice(0, 40)
+  }, [open, options, query, visibleGroups])
+  const aiAvailable = variant === 'root' && visibleGroups.some(group => group.some(item => item.id === 'ai'))
+  const runAIQuery = (text: string) => {
+    const normalized = text.trim()
+    if (!normalized || aiPending) return
+    setAiPending(true)
+    void resolveAIFilter(normalized, field => options?.(field)).then(async parsed => {
+      if (!parsed.length) { onToggle('ai', interpretAIQuery(normalized)); return }
+      for (const [index, item] of parsed.entries()) {
+        if (index) await new Promise(resolve => setTimeout(resolve, 16))
+        onToggle(item.field, item.option)
+      }
+    }).finally(() => { setAiPending(false); close(false) })
+  }
   const choose = (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => {
     if (option.textConditionPrefix) {
       setTextCondition({ field, option })
@@ -85,21 +129,22 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={styles.rootMenu} side="bottom" align="center" alignOffset={-15} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
-        <Command className={styles.rootCommand} loop>
+      <Popover.Content data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-variant={variant} side="bottom" align={align} alignOffset={align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+        <Command className={styles.rootCommand} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
-            <Command.Input aria-label={t('Add Filter…')} placeholder={t('Add Filter…')} autoFocus/>
-            <kbd aria-hidden="true">F</kbd>
+            <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
+            {variant === 'root' && <kbd aria-hidden="true">F</kbd>}
           </div>
           <Command.List className={styles.rootList}>
             <Command.Empty className={styles.empty}>{t('No filters found')}</Command.Empty>
+            {onAddGroup && <><Command.Group className={styles.rootGroup}><Command.Item className={styles.rootItem} value="Add filter group" onSelect={() => { onAddGroup(); close(false) }}><span className={styles.rootIcon} aria-hidden="true">( )</span><span>{t('Add filter group')}</span></Command.Item></Command.Group><Command.Separator className={styles.rootSeparator}/></>}
             {visibleGroups.map((visibleItems, groupIndex) => {
               return <Fragment key={groupIndex}>{groupIndex > 0 && <Command.Separator className={styles.rootSeparator}/>}<Command.Group className={styles.rootGroup}>
               {visibleItems.map(item => {
                 const field = item.id as MyIssuesFilterKey
-                const hasValues = Boolean(options?.(field)?.length)
+                const hasValues = field === 'advanced' ? Boolean(onAdvanced) : Boolean(options?.(field)?.length)
                 const hasSubmenu = 'submenu' in item && item.submenu
-                const directApply = field === 'autoClosed'
+                const directApply = field === 'autoClosed' || field === 'advanced'
                 return <Popover.Root key={field} open={activeField === field} onOpenChange={next => setActiveField(next ? field : undefined)}>
                   <Popover.Anchor asChild>
                     <Command.Item
@@ -110,7 +155,7 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
                       disabled={!hasValues}
                       onFocus={() => { if (hasValues && !directApply) setActiveField(field) }}
                       onMouseMove={() => { if (hasValues && !directApply) setActiveField(field) }}
-                      onSelect={() => { if (directApply) { const option=options?.(field)?.[0]; if(option){onToggle(field,option);close(false)} } else openValues(field) }}
+                      onSelect={() => { if (field === 'advanced') { close(false); onAdvanced?.() } else if (directApply) { const option=options?.(field)?.[0]; if(option){onToggle(field,option);close(false)} } else openValues(field) }}
                     >
                       <span className={styles.rootIcon}><FilterGlyph label={item.label} fallback={<FilterFieldIcon field={field}/>}/></span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
                     </Command.Item>
@@ -119,6 +164,18 @@ export function MyIssuesFilterMenu({ availableFields, filters = [], onOpenChange
                 </Popover.Root>
               })}
             </Command.Group></Fragment>})}
+            {deepMatches.length > 0 && <><Command.Separator className={styles.rootSeparator}/><Command.Group className={styles.rootGroup}>
+              {deepMatches.map(match => <Command.Item key={`${match.field}:${match.path.join('/')}:${match.option.id}`} className={`${styles.rootItem} ${styles.deepItem}`} value={`${match.path.join(' › ')} ${match.field}:${match.option.id}`} onSelect={() => choose(match.field, match.option)}>
+                <span className={styles.rootIcon}><OptionMark field={match.field} option={match.option}/></span>
+                <span className={styles.deepPath} data-i18n-ignore>{match.path.slice(0, -1).map(part => `${t(part)} › `).join('')}<b>{match.option.label}</b></span>
+                {(optionCount(match.option) ?? 0) > 0 && <span className={styles.count}>{optionCount(match.option)} {t(optionCount(match.option) === 1 ? 'issue' : 'issues')}</span>}
+              </Command.Item>)}
+            </Command.Group></>}
+            {aiAvailable && query.trim() && <Command.Group className={styles.rootGroup} forceMount>
+              <Command.Item forceMount className={styles.rootItem} value={`__ai__ ${query}`} disabled={aiPending} onSelect={() => runAIQuery(query)}>
+                <span className={styles.rootIcon}><Sparkles size={15}/></span><span data-i18n-ignore>{t('AI filter')} “{query.trim()}”</span>
+              </Command.Item>
+            </Command.Group>}
           </Command.List>
         </Command>
       </Popover.Content>
@@ -201,14 +258,14 @@ function TextConditionDialog({ condition, onApply, onClose }: { condition?: { fi
     <Dialog.Overlay data-flow-motion="backdrop" className={styles.conditionOverlay}/>
     <Dialog.Content data-flow-motion="dialog" className={styles.conditionDialog} aria-describedby={undefined} onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`.${styles.conditionInput}`)?.focus()) }}>
       <form onSubmit={event => { event.preventDefault(); apply() }}>
-        <div className={styles.conditionBody}><Dialog.Title>{t(condition?.option.label ?? '')}</Dialog.Title><input className={styles.conditionInput} aria-label={t(condition?.option.label ?? '')} value={value} onChange={event => setValue(event.target.value)}/></div>
+        <div className={styles.conditionBody}><Dialog.Title>{t(condition?.option.label ?? '')}</Dialog.Title><input className={styles.conditionInput} aria-label={t(condition?.option.label ?? '')} type={condition?.option.textConditionInput ?? 'text'} value={value} onChange={event => setValue(event.target.value)}/></div>
         <footer><button type="button" onClick={close}>{t('Cancel')}</button><button type="submit" className={styles.conditionApply}>{t('Apply')}</button></footer>
       </form>
     </Dialog.Content>
   </Dialog.Portal></Dialog.Root>
 }
 
-function OptionMark({ field, option }: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }) {
+export function OptionMark({ field, option }: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }) {
   const kind=option.kind??field
   if(kind==='status'&&option.stateType)return <StatusIcon state={{id:option.id,name:option.label,type:option.stateType,color:option.color??'var(--theme-text-secondary)'}} size={14}/>
   if(kind==='priority'){const priority=(option.priority??Number(option.id))||0;return <PriorityIcon priority={priority} size={14} style={{color:priorityColor(priority)}}/>}
@@ -243,7 +300,7 @@ function ProjectPropertyCategoryIcon({ kind }: { kind: 'status'|'statusType'|'pr
   return <svg className={styles.categoryIcon} width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M7.3406 2.32C7.68741 1.89333 8.31259 1.89333 8.6594 2.32L12.7903 7.402C13.0699 7.74597 13.0699 8.25403 12.7903 8.598L8.6594 13.68C8.31259 14.1067 7.68741 14.1067 7.3406 13.68L3.2097 8.598C2.9301 8.25403 2.9301 7.74597 3.2097 7.402L7.3406 2.32Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg>
 }
 
-function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){const props={size:15};if(field==='ai')return <Sparkles {...props}/>;if(field==='advanced')return <ListFilter {...props}/>;if(field==='status')return <CircleDot {...props}/>;if(field==='assignee'||field==='creator')return <UserRound {...props}/>;if(field==='agent'||field==='agentSession')return <Bot {...props}/>;if(field==='priority')return <Flag {...props}/>;if(field==='labels'||field==='suggestedLabel')return <Tags {...props}/>;if(field==='relations')return <GitBranch {...props}/>;if(field==='dates'||field==='addedToCycle')return <CalendarDays {...props}/>;if(field==='projectMilestone')return <Diamond {...props}/>;if(field==='project')return <ProjectIcon {...props}/>;if(field==='projectProperties'||field==='initiative')return <Layers3 {...props}/>;if(field==='cycle')return <CycleIcon {...props}/>;if(field==='releases')return <Rocket {...props}/>;if(field==='customers')return <Building2 {...props}/>;if(field==='subscribers')return <Users {...props}/>;if(field==='externalSource'||field==='links')return <ExternalLink {...props}/>;if(field==='autoClosed')return <Archive {...props}/>;if(field==='content')return <FileText {...props}/>;if(field==='template')return <FileText {...props}/>;return <Link2 {...props}/>}
+export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){const props={size:15};if(field==='ai')return <Sparkles {...props}/>;if(field==='advanced')return <ListFilter {...props}/>;if(field==='status')return <CircleDot {...props}/>;if(field==='assignee'||field==='creator')return <UserRound {...props}/>;if(field==='agent'||field==='agentSession')return <Bot {...props}/>;if(field==='priority')return <Flag {...props}/>;if(field==='labels'||field==='suggestedLabel')return <Tags {...props}/>;if(field==='relations')return <GitBranch {...props}/>;if(field==='dates'||field==='addedToCycle')return <CalendarDays {...props}/>;if(field==='projectMilestone')return <Diamond {...props}/>;if(field==='project')return <ProjectIcon {...props}/>;if(field==='projectProperties'||field==='initiative')return <Layers3 {...props}/>;if(field==='cycle')return <CycleIcon {...props}/>;if(field==='releases')return <Rocket {...props}/>;if(field==='customers')return <Building2 {...props}/>;if(field==='subscribers')return <Users {...props}/>;if(field==='externalSource'||field==='links')return <ExternalLink {...props}/>;if(field==='autoClosed')return <Archive {...props}/>;if(field==='content')return <FileText {...props}/>;if(field==='template')return <FileText {...props}/>;return <Link2 {...props}/>}
 function priorityColor(priority:number|undefined){return ['var(--theme-text-tertiary)','var(--priority-urgent)','var(--priority-high)','var(--priority-medium)','var(--priority-low)'][priority??0]}
 function initials(value:string){return value.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()}
 

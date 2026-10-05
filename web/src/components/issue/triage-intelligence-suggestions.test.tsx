@@ -1,4 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { I18nProvider } from '@/i18n/i18n'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { TriageIntelligenceSuggestions } from './triage-intelligence-suggestions'
@@ -7,6 +10,7 @@ import type { BootstrapData, Issue, IssueSuggestion } from '@/types/flow'
 
 const mocks = vi.hoisted(() => ({
   acceptIssueSuggestion: vi.fn(),
+  createRelation: vi.fn(),
   dismissIssueSuggestion: vi.fn(),
   fetchIssueRecord: vi.fn(),
   fetchIssueSuggestions: vi.fn(),
@@ -14,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/api', () => mocks)
+const renderCard = (node: ReactElement) => render(<I18nProvider><TooltipProvider>{node}</TooltipProvider></I18nProvider>)
 
 class TestResizeObserver {
   observe() {}
@@ -66,7 +71,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const data = bootstrap([issue], { issueSuggestions: [assignee] })
     respond(issue.id, [assignee])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={data} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={data} />)
 
     await waitFor(() => expect(mocks.fetchIssueSuggestions).toHaveBeenCalledWith(issue.id, expect.any(AbortSignal)))
     expect(screen.getByText('Triage Intelligence')).toBeInTheDocument()
@@ -86,7 +91,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const projectSuggestion = suggestion({ id: 'suggestion-2', type: 'project', suggestedProjectId: project.id, metadata: { rank: 1, reasons: ['Matches the Project one fixture.'] } })
     respond(issue.id, [projectSuggestion])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
 
     await user.click(await screen.findByRole('button', { name: 'Add to project: Project one' }))
     const card = await screen.findByRole('dialog', { name: 'Why this project was suggested' })
@@ -102,7 +107,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const issue = triageIssue({ suggestionsGeneratedAt: GENERATED })
     respond(issue.id, [suggestion({ id: 'suggestion-2', type: 'project', suggestedProjectId: project.id })])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add to project: Project one' }).querySelector('svg')).toHaveStyle({ color: project.color }))
   })
 
@@ -113,7 +118,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const relatedSuggestion = suggestion({ id: 'suggestion-3', type: 'relatedIssue', suggestedIssueId: other.id })
     respond(issue.id, [relatedSuggestion])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue, other])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue, other])} />)
 
     expect(await screen.findByText('Related to')).toBeInTheDocument()
     expect(screen.getByText('TST-3')).toBeInTheDocument()
@@ -122,11 +127,35 @@ describe('TriageIntelligenceSuggestions', () => {
     expect(mocks.acceptIssueSuggestion).toHaveBeenCalledWith(issue.id, relatedSuggestion.id)
   })
 
+  it("marks the current issue with another relation from the suggestion's menu, with Linear's hover card", async () => {
+    const user = userEvent.setup()
+    const issue = triageIssue({ suggestionsGeneratedAt: GENERATED })
+    const other = makeIssue({ id: 'issue-other', identifier: 'TST-3', title: 'Import your data', priorityLabel: 'No priority', assignee: undefined })
+    const relatedSuggestion = suggestion({ id: 'suggestion-3', type: 'relatedIssue', suggestedIssueId: other.id, metadata: { reasons: ['Both mention imports.'] } })
+    respond(issue.id, [relatedSuggestion])
+    mocks.createRelation.mockResolvedValue({})
+    mocks.fetchIssueRecord.mockResolvedValue(issue)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue, other])} />)
+
+    await user.hover(await screen.findByText('Import your data'))
+    const card = await screen.findByRole('dialog', { name: 'Why this looks related' })
+    expect(within(card).getByText('Both mention imports.')).toBeInTheDocument()
+    expect(within(card).getByText('Unassigned')).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Accept related suggestion' })).toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Dismiss suggestion' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Suggestion options' }))
+    expect(await screen.findByText('Mark current issue as')).toBeInTheDocument()
+    await user.click(screen.getByRole('menuitem', { name: 'Blocked by' }))
+    await waitFor(() => expect(mocks.createRelation).toHaveBeenCalledWith(issue.id, 'blocked_by', other.id))
+    expect(mocks.dismissIssueSuggestion).toHaveBeenCalledWith(issue.id, relatedSuggestion.id)
+  })
+
   it('shows the pending shimmer while suggestions are being generated', async () => {
     const issue = triageIssue()
     respond(issue.id, [], {})
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
 
     expect(await screen.findByRole('status')).toHaveTextContent('Finding suggestions…')
     expect(screen.getByRole('region', { name: 'Triage Intelligence' })).toHaveAttribute('data-state', 'pending')
@@ -138,7 +167,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const issue = triageIssue()
     respond(issue.id, [])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
 
     expect(await screen.findByText('No suggestions found')).toBeInTheDocument()
     const assignee = suggestion({ suggestedUserId: viewer.id })
@@ -156,7 +185,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const projectSuggestion = suggestion({ id: 'suggestion-2', type: 'project', suggestedProjectId: project.id, metadata: { rank: 2 } })
     respond(issue.id, [assignee, projectSuggestion], { suggestionsGeneratedAt: GENERATED, thinking: 'Compared the issue against recent importer work.' })
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
     await screen.findByRole('button', { name: 'Assign to user: Viewer' })
 
     await user.click(screen.getByRole('button', { name: 'Triage Intelligence options' }))
@@ -180,7 +209,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const issue = triageIssue({ suggestionsGeneratedAt: GENERATED })
     respond(issue.id, [suggestion({ suggestedUserId: viewer.id, metadata: { rank: 1, reasons: ['Owns the importer.'] } })])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
     await screen.findByRole('button', { name: 'Assign to user: Viewer' })
     await user.click(screen.getByRole('button', { name: 'Triage Intelligence options' }))
     await user.click(await screen.findByRole('menuitem', { name: 'Show thinking…' }))
@@ -189,7 +218,7 @@ describe('TriageIntelligenceSuggestions', () => {
 
   it('renders nothing for an issue outside triage without suggestions', () => {
     const issue = makeIssue()
-    const { container } = render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    const { container } = renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
     expect(container).toBeEmptyDOMElement()
     expect(mocks.fetchIssueSuggestions).not.toHaveBeenCalled()
   })
@@ -198,7 +227,7 @@ describe('TriageIntelligenceSuggestions', () => {
     const issue = makeIssue({ id: 'issue-triage', triagedAt: GENERATED, suggestionsGeneratedAt: GENERATED })
     respond(issue.id, [suggestion({ suggestedUserId: viewer.id })])
 
-    render(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
     expect(await screen.findByRole('button', { name: 'Assign to user: Viewer' })).toBeInTheDocument()
   })
 })

@@ -178,10 +178,11 @@ export function ProjectsPageSurface({
   return <div className="lp-projects">
     <header className="lp-projects__header">
       <button type="button" data-sidebar-trigger className="lp-projects__mobile-menu" aria-label="Open workspace sidebar" onClick={onOpenAppSidebar} />
-      {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><ChevronRight size={13}/><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton></> : <><h1>Projects</h1><button aria-label="New project" className="lp-projects__new-project" onClick={onCreateProject} type="button"><PlusIcon/><span>New project</span></button></>}
+      {creatingView ? <><span className="lp-projects__new-view-parent">Views</span><ChevronRight size={13}/><h1>All projects</h1><IconButton className="lp-projects__copy-url" label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}><Link2 size={14}/></IconButton><IconButton active={sidebarOpen} label={sidebarOpen ? 'Close Insights' : 'Open Insights'} onClick={onToggleSidebar}><InsightsIcon/></IconButton></> : <><h1>Projects</h1><button aria-label="New project" className="lp-projects__new-project" onClick={onCreateProject} type="button"><PlusIcon/><span>New project</span></button></>}
     </header>
-    {creatingView && viewEditor?.(editorActions)}
-    <div className="lp-projects__toolbar">
+    {/* Linear: the view card carries the resource pills and its own filter / display buttons; the toolbar hides while it is open. */}
+    {creatingView && viewEditor?.(<div className="lp-projects__editor-row"><nav aria-label="View resource" className="lp-projects__views"><button className="lp-projects__view ui-pill" type="button" onClick={() => onNewViewResourceChange?.('issues')}>Issues</button><button aria-current="page" className="lp-projects__view ui-pill" type="button">Projects</button></nav><div className="lp-projects__editor-actions">{editorActions}</div></div>)}
+    {!viewEditor && <div className="lp-projects__toolbar">
       {creatingView ? <nav aria-label="View resource" className="lp-projects__views"><button className="lp-projects__view ui-pill" type="button" onClick={() => onNewViewResourceChange?.('issues')}>Issues</button><button aria-current="page" className="lp-projects__view ui-pill" type="button">Projects</button></nav> : <nav aria-label="Project views" className="lp-projects__views">
         {views.length > VIEW_VIRTUALIZATION_THRESHOLD ? <Virtuoso horizontalDirection className="lp-projects__virtual-views" data={views} computeItemKey={(_index, view) => view.id} increaseViewportBy={360} itemContent={(_index, view) => renderView(view)}/> : views.map(renderView)}
         <IconButton className="lp-projects__add-view" label="Add new view" onClick={onAddView}><AddViewIcon /></IconButton>
@@ -206,8 +207,8 @@ export function ProjectsPageSurface({
       </div>
 
       {surfaceMenu('toolbar')}
-    </div>
-    {!creatingView && viewEditor?.(editorActions)}
+    </div>}
+    {!creatingView && viewEditor?.(<div className="lp-projects__editor-row"><span/><div className="lp-projects__editor-actions">{editorActions}</div></div>)}
     <div className="lp-projects__editor-surface">{surfaceMenu('editor')}</div>
     {filterBar}
     <section className="lp-projects__content">{children}</section>

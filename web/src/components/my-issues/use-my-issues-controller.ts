@@ -1,3 +1,4 @@
+import { normalizeStoredFilters } from '@/components/issue-explorer/advanced-filter'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MyIssuesBulkAction } from './my-issues-bulk-action-bar'
 import type { MyIssuesDetailsSummary, MyIssuesSummaryItem } from './my-issues-details-pane'
@@ -103,6 +104,7 @@ export function useMyIssuesController({ workspaceSlug, initialView, initialGroup
     toggleFilter: (field: MyIssuesAppliedFilter['field'], fieldLabel: string, option: { id: string; label: string; color?: string }) => { setFilters(current => { const next = toggleFilterOption(current, field, fieldLabel, option); writeFilters(workspaceSlug, view, next); return next }); setFilterSaveState('idle') },
     changeFilterOperator: (id: string, operator: MyIssuesFilterOperator) => { setFilters(current => { const next = updateFilterOperator(current, id, operator); writeFilters(workspaceSlug, view, next); return next }); setFilterSaveState('idle') },
     changeFilterValues: (id: string, options: { id: string; label: string; color?: string }[]) => { setFilters(current => { const next = updateFilterValues(current, id, options); writeFilters(workspaceSlug, view, next); return next }); setFilterSaveState('idle') },
+    setFilterTree: (id: string, tree: NonNullable<MyIssuesAppliedFilter['tree']>) => { setFilters(current => { const next = current.map(filter => filter.id === id ? { ...filter, tree } : filter); writeFilters(workspaceSlug, view, next); return next }); setFilterSaveState('idle') },
     removeFilter: (id: string) => { setFilters(current => { const next = current.filter(filter => filter.id !== id); writeFilters(workspaceSlug, view, next); return next }); setFilterSaveState('idle') },
     clearFilters: () => { setFilters([]); writeFilters(workspaceSlug, view, []); setFilterSaveState('idle') }, saveFilters,
     selectIssue: visibleSelection.selectIssue, clearSelection: visibleSelection.clearSelection,
@@ -142,7 +144,7 @@ function writeDisplay(workspace: string, view: MyIssuesView, value: MyIssuesDisp
 function readFilters(workspace: string, view: MyIssuesView, fallback: MyIssuesAppliedFilter[]): MyIssuesAppliedFilter[] {
   try {
     const value = JSON.parse(globalThis.localStorage?.getItem(filterKey(workspace, view)) ?? 'null')
-    return Array.isArray(value) ? consolidateFilters(value.filter(isAppliedFilter)) : fallback
+    return Array.isArray(value) ? consolidateFilters(normalizeStoredFilters(value.filter(isAppliedFilter))) : fallback
   } catch { return fallback }
 }
 function writeFilters(workspace: string, view: MyIssuesView, value: MyIssuesAppliedFilter[]) { writeValue(filterKey(workspace, view), JSON.stringify(value)) }

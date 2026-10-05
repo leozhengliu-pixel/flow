@@ -239,6 +239,8 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   }, [availableStates, draftId, initialTemplateId, open, requestedStateId])
 
   const state = availableStates.find(item => item.id === stateId) ?? defaultState
+  // A backlog status of a triage team files the issue into Triage, which Linear shows as the Triage status.
+  const inTriage = Boolean(data.teamSettings?.[teamId]?.triageEnabled && state?.type === 'backlog')
   const team = data.teams.find(item => item.id === teamId) ?? data.teams[0]
   const assignee = data.users.find(user => user.id === assigneeId)
   const project = data.projects.find(item => item.id === projectId)
@@ -445,7 +447,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
 
           <div className={styles.properties}>
             {templateOptions.length>0 && <MiniProperty label="Template" value={templateOptions.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...templateOptions.map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>applyTemplate(id)}/>}
-            <MiniProperty label="Status" value={state.name} selectedId={stateId} icon={<StatusIcon state={state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
+            <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state.name} selectedId={stateId} icon={<StatusIcon state={inTriage ? TRIAGE_STATUS : state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={value=>setEstimate(Number(value))}/>}
             <MiniProperty label="Assignee" value={assignee?.displayName ?? 'Assignee'} selectedId={assigneeId} icon={assignee ? <Avatar name={assignee.displayName}/> : <NoAssigneeIcon/>} options={[{id:'',label:'No assignee',icon:<NoAssigneeIcon/>},...data.users.filter(user => user.active).map(user => ({id:user.id,label:user.displayName,keywords:user.email,icon:<Avatar name={user.displayName}/>}))]} onChange={setAssigneeId}/>
@@ -616,6 +618,7 @@ function removeStoredDraft(key: string) {
 function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]!) }
 function escapeAttribute(value: string) { return escapeHtml(value) }
 import { useCreateMotion } from '@/components/ui/motion';
+import { TRIAGE_STATUS } from '@/components/triage/triage-model'
 
 /** Links a newly created issue to the issue it was created from ("Create related"). */
 async function relateCreatedIssue(created: Issue, related: NonNullable<MyIssuesCreateContext['related']>) {

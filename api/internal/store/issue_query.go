@@ -413,6 +413,28 @@ func compileIssueFilter(node IssueFilter, depth int, remaining *int) (string, []
 			if op == "isnot" || op == "notin" {
 				clause = "NOT (" + clause + ")"
 			}
+		case "includesall", "excludesall":
+			// Linear's "include all of": one indexed EXISTS per value, all required.
+			if relationTable == "" || len(node.Values) == 0 || len(node.Values) > 100 {
+				return "", nil, ErrIssueQuery
+			}
+			valueColumn := "l.user_id"
+			if node.Field == "labels" {
+				valueColumn = "l.label_id"
+			}
+			parts := make([]string, 0, len(node.Values))
+			for _, value := range node.Values {
+				if value == "" {
+					parts = append(parts, "NOT EXISTS (SELECT 1 FROM "+relationTable+" l WHERE l.workspace_key=i.workspace_key AND l.issue_id=i.id)")
+					continue
+				}
+				parts = append(parts, "EXISTS (SELECT 1 FROM "+relationTable+" l WHERE l.workspace_key=i.workspace_key AND l.issue_id=i.id AND "+valueColumn+"=?)")
+				values = append(values, value)
+			}
+			clause = "(" + strings.Join(parts, " AND ") + ")"
+			if op == "excludesall" {
+				clause = "NOT " + clause
+			}
 		case "isempty", "isnotempty":
 			clause = "i." + column + "=''"
 			if node.Field == "labels" {

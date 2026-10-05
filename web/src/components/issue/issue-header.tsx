@@ -24,9 +24,11 @@ interface IssueHeaderProps {
   onUpdate: (input: IssueUpdateInput) => Promise<void>; onDelete: () => Promise<void>; onRelation: (type: IssueRelationType) => void
   /** Linear's Accept / Decline / duplicate / snooze controls, shown while the issue is in Triage. */
   triageActions?: React.ReactNode
+  /** `triage`: Linear's header beside the triage list (identifier + title, favorite, options, triage actions). */
+  variant?: 'page' | 'triage'
 }
 
-export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onClose, onNavigate, onNavigateRoot, returnPath, onUpdate, onDelete, onRelation, triageActions }: IssueHeaderProps) {
+export function IssueHeader({ issue, states, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, onClose, onNavigate, onNavigateRoot, returnPath, onUpdate, onDelete, onRelation, triageActions, variant = 'page' }: IssueHeaderProps) {
   const [working,setWorking]=useState(false)
   const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
@@ -38,12 +40,14 @@ export function IssueHeader({ issue, states, presence = [], saveState, onRetrySa
   const copyWork=useCallback(async(kind:'branch'|'prompt')=>{try{const text=kind==='branch'?configuredIssueBranch(issue,data):buildPrompt();await copyIssueForWork(text,kind,issue,data,onUpdate);toast.success(kind==='branch'?'Branch name copied to clipboard':'Prompt copied to clipboard')}catch(error){toast.error(error instanceof Error?error.message:'Could not write to clipboard')}},[issue,data,onUpdate,buildPrompt])
   useEffect(()=>{const onKey=(event:KeyboardEvent)=>{if(isEditable(event.target))return;if((event.metaKey||event.ctrlKey)&&event.altKey&&event.key.toLowerCase()==='p'){event.preventDefault();void copyWork('prompt')} };addEventListener('keydown',onKey);return()=>removeEventListener('keydown',onKey)},[copyWork])
   const startWork=async()=>{if(working)return;const started=states.find(state=>state.type==='started');if(!started){toast.error('No started status is configured');return}if(issue.state.id===started.id){toast('Issue is already in progress');return}setWorking(true);try{await onUpdate({stateId:started.id});toast.success(`Moved ${issue.identifier} to ${started.name}`)}finally{setWorking(false)}}
-  return <header className="issue-header">
+  const triage=variant==='triage'
+  return <header className={triage?'issue-header issue-header--triage':'issue-header'}>
     <button type="button" data-sidebar-trigger aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))} />
-    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {presence.length>0&&<div className="issue-presence" aria-label={`${presence.length} other ${presence.length===1?'person':'people'} viewing`}><span className="issue-presence-dot"/>{presence.slice(0,3).map(item=><span className="issue-presence-avatar" title={`${item.user.displayName} is viewing`} key={item.clientId}>{initials(item.user.displayName)}</span>)}</div>}
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     {triageActions}
+    {!triage&&<>
     <div className="issue-command-strip">
       <CommandButton label="Copy issue URL" shortcut="⌘ ⇧ ," onClick={()=>copyText(location.href,'Issue URL copied to clipboard')}><FlowUrlIcon/></CommandButton>
       <CommandButton label="Copy issue ID" shortcut="⌘ ." onClick={()=>copyText(issue.identifier,'Issue ID copied to clipboard')}><FlowIssueIdIcon/></CommandButton>
@@ -52,6 +56,7 @@ export function IssueHeader({ issue, states, presence = [], saveState, onRetrySa
     </div>
     <div className="issue-sequence" aria-label="Issue navigation"><span><strong>{position}</strong><i>/</i>{total}</span><div className="issue-sequence-buttons"><FlowTooltip label="Previous item" shortcut="K"><button type="button" aria-label="Go to previous item" disabled={!canGoPrevious} onClick={()=>onNavigate('previous')}><FlowPreviousIcon/></button></FlowTooltip><FlowTooltip label="Next item" shortcut="J"><button type="button" aria-label="Go to next item" disabled={!canGoNext} onClick={()=>onNavigate('next')}><FlowNextIcon/></button></FlowTooltip></div></div>
     <FlowTooltip label="Close" shortcut="Esc"><button className="issue-header-icon issue-header-close" type="button" aria-label="Close issue" aria-keyshortcuts="Escape" onClick={onClose}><X size={16}/></button></FlowTooltip>
+    </>}
   </header>
 }
 

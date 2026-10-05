@@ -1,7 +1,8 @@
-import { type ComponentPropsWithRef, type ReactNode } from 'react'
-import { FlowTooltip } from '@/components/ui/tooltip'
+import { useEffect, type ComponentPropsWithRef, type ReactElement, type ReactNode } from 'react'
+import { FlowTooltip, ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { Virtuoso } from 'react-virtuoso'
 import { Link2 } from 'lucide-react'
+import { useI18n } from '@/i18n/i18n'
 import { DetailsIcon, FilterIcon } from '@/components/my-issues/my-issues-icons'
 import { MyIssuesDisplayMenu, type MyIssuesDisplayMenuProps } from '@/components/my-issues/my-issues-display-menu'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
@@ -30,9 +31,11 @@ const VIEWS: { id: TeamIssuesRouteView; label: string }[] = [
 ]
 const SAVED_VIEW_VIRTUALIZATION_THRESHOLD = 40
 
+export type ViewEditorControls = { filterButton: ReactNode; displayButton: ReactNode; resourceTabs: ReactNode }
+
 export function IssueExplorerSurface({
-  children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, viewEditor, viewActions, displayOptions, detailsOpen, itemCount = 0,
-  creatingView = false, favorite = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false,
+  children, scopeName, scopeHref, scopeTeam, activeView, viewHref, filters, filterBar, footer, viewEditor, viewEditorMode, draftName, draftPlaceholder, draftVisual, viewActions, displayOptions, detailsOpen, itemCount = 0,
+  creatingView = false, favorite = false, filterActive = false, filterOpenSignal = 0, filterOptions, insightsOpen = false, savedView, savedViews = [], savedViewHref, onAddView, onAdvancedFilter, onSavedViewSelect, onToggleFavorite, onFilterToggle, onDisplayOptionsChange, onDetailsOpenChange, onInsightsOpenChange, onNavigateView, onNewViewResourceChange, onOpenSidebar, displayMenuProps, resourceHeader, className, insightsLabel = 'view insights', detailsShortcutTooltip = false,
 }: {
   children: ReactNode
   scopeName: string
@@ -42,7 +45,19 @@ export function IssueExplorerSurface({
   viewHref: (view: TeamIssuesRouteView) => string
   filters: MyIssuesAppliedFilter[]
   filterBar?: ReactNode
-  viewEditor?: ReactNode
+  /** Below the list (Linear's "N issues hidden by filters"). */
+  footer?: ReactNode
+  /** The view card; a function receives the card's own filter / display buttons. */
+  viewEditor?: ReactNode | ((controls: ViewEditorControls) => ReactNode)
+  viewEditorMode?: 'create' | 'edit'
+  /** Live name / icon from the editor for the header (Linear updates it as you type). */
+  draftName?: string
+  /** Faded breadcrumb text while the name is empty (the suggested name). */
+  draftPlaceholder?: string
+  draftVisual?: { icon?: string; color?: string }
+  /** Unsaved filters on a saved view: the funnel reads "Add another filter" with an active fill. */
+  filterActive?: boolean
+  onAdvancedFilter?: () => void
   viewActions?: ReactNode
   displayOptions: MyIssuesDisplayOptions
   detailsOpen: boolean
@@ -74,30 +89,61 @@ export function IssueExplorerSurface({
   /** Show the details toggle's ⌘ I shortcut in a tooltip instead of the native title. */
   detailsShortcutTooltip?: boolean
 }) {
+  const { t } = useI18n()
   const {changeDisplayOpen,changeFilterOpen,displayOpen,filterOpen}=useIssueSurfaceControls(filterOpenSignal,detailsOpen,onDetailsOpenChange)
+  const mode: 'view' | 'create' | 'edit' = viewEditor && viewEditorMode === 'edit' && savedView ? 'edit' : creatingView || (viewEditor && viewEditorMode !== 'edit') ? 'create' : 'view'
+  // Linear: F opens the filter menu, ⇧V the display options.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.defaultPrevented || event.repeat) return
+      const target = event.target as HTMLElement | null
+      if (target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]') || document.querySelector('[role="dialog"],[role="alertdialog"],[data-radix-popper-content-wrapper]')) return
+      const key = event.key.toLowerCase()
+      if (key === 'f' && !event.shiftKey) { event.preventDefault(); changeFilterOpen(true) }
+      else if (key === 'v' && event.shiftKey) { event.preventDefault(); changeDisplayOpen(true) }
+    }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  })
+  const filterMenu = (trigger: ReactElement, align: 'center' | 'end' = 'center') => <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} onAdvanced={onAdvancedFilter} align={align} trigger={trigger} />
+  const displayMenu = <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
+  const editorControls: ViewEditorControls = {
+    filterButton: <ScopedFlowTooltip label={t('Add Filter')} shortcut="F" disabled={filterOpen}><span className={styles.cardDisplay}>{filterMenu(<ToolbarButton label={t('Add filter')} className={styles.cardButton}><FilterIcon /></ToolbarButton>, 'end')}</span></ScopedFlowTooltip>,
+    displayButton: <ScopedFlowTooltip label={t('Show display options')} shortcut="⇧ V" disabled={displayOpen}><span className={styles.cardDisplay}>{displayMenu}</span></ScopedFlowTooltip>,
+    resourceTabs: <nav className={styles.resourceTabs} aria-label="View resource">
+      <button className={`${styles.resourceTab} ui-pill`} data-active="true" type="button" aria-current="page">{t('Issues')}</button>
+      <button className={`${styles.resourceTab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>{t('Projects')}</button>
+    </nav>,
+  }
+  const renderedEditor = typeof viewEditor === 'function' ? viewEditor(editorControls) : viewEditor
   const renderSavedView = (item: SavedView) => <a key={item.id} href={savedViewHref?.(item) ?? '#'} className={`${styles.savedTab} ui-pill`} onClick={event => { event.preventDefault(); onSavedViewSelect?.(item) }}><ViewGlyph color={item.color} icon={item.icon}/><span data-i18n-ignore>{item.name}</span></a>
 
   const header = (
     <ContentViewHeader compact onOpenSidebar={onOpenSidebar}>
-      {creatingView ? (
+      {mode === 'create' ? (
         <>
           <ContentViewHeaderBreadcrumb
             items={[
-              { id: 'views', label: 'Views' },
-              { id: 'all-issues', label: 'All issues', current: true },
+              { id: 'views', label: t('Views') },
+              { id: 'all-issues', label: <span className={draftName ? undefined : styles.draftPlaceholder} data-i18n-ignore>{draftName || draftPlaceholder || t('All issues')}</span>, current: true },
             ]}
           />
-          <button className={`${styles.headerAction} ${styles.copyUrl}`} type="button" aria-label="Copy URL" onClick={() => void navigator.clipboard.writeText(window.location.href)}>
-            <Link2 size={14} />
-          </button>
+          <span className={styles.headerEnd}>
+            <ScopedFlowTooltip label={t('Copy URL')}><button className={styles.headerAction} type="button" aria-label={t('Copy URL')} onClick={() => void navigator.clipboard.writeText(window.location.href)}>
+              <Link2 size={14} />
+            </button></ScopedFlowTooltip>
+            <ScopedFlowTooltip label={t(insightsOpen ? 'Close Insights' : 'Open Insights')}><button className={styles.headerAction} type="button" aria-label={t(insightsOpen ? 'Close Insights' : 'Open Insights')} aria-pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
+              <InsightsIcon />
+            </button></ScopedFlowTooltip>
+          </span>
         </>
       ) : savedView ? (
         <NewContentViewHeaderTitle
-          icon={<ViewGlyph className={styles.headerViewIcon} color={savedView.color} icon={savedView.icon} />}
-          title={<span data-i18n-ignore>{savedView.name}</span>}
+          icon={<ViewGlyph className={styles.headerViewIcon} color={(mode === 'edit' && draftVisual?.color) || savedView.color} icon={(mode === 'edit' && draftVisual?.icon) || savedView.icon} />}
+          title={<span data-i18n-ignore>{mode === 'edit' ? draftName || savedView.name : savedView.name}</span>}
           actions={
             <>
-              {onToggleFavorite ? (
+              {onToggleFavorite && mode !== 'edit' ? (
                 <ContentViewHeaderFavoriteActionButton favorited={favorite} onClick={onToggleFavorite} />
               ) : null}
               {viewActions ? <span className={styles.headerViewActions}>{viewActions}</span> : null}
@@ -126,12 +172,7 @@ export function IssueExplorerSurface({
     <ContentViewSubheader
       borderless
       start={
-        creatingView ? (
-          <nav className={styles.tabs} aria-label="View resource">
-            <button className={`${styles.tab} ui-pill`} data-active="true" type="button">Issues</button>
-            <button className={`${styles.tab} ui-pill`} type="button" onClick={() => onNewViewResourceChange?.('projects')}>Projects</button>
-          </nav>
-        ) : resourceHeader?.tabs ? (
+        resourceHeader?.tabs ? (
           <nav className={styles.tabs} aria-label="Views">
             {resourceHeader.tabs.map(tab => <a key={tab.id} href={tab.href} className={`${styles.tab} ui-pill`} data-active={tab.active} aria-current={tab.active ? 'page' : undefined} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); tab.onSelect() }}>{tab.label}</a>)}
           </nav>
@@ -173,12 +214,12 @@ export function IssueExplorerSurface({
       }
       end={
         <ToolbarButtonsNavigation className={styles.actions}>
-          <MyIssuesFilterMenu open={filterOpen} onOpenChange={changeFilterOpen} filters={filters} options={filterOptions} onToggle={onFilterToggle} trigger={<ToolbarButton label="Add filter"><FilterIcon /></ToolbarButton>} />
-          <MyIssuesDisplayMenu {...displayMenuProps} open={displayOpen} onOpenChange={changeDisplayOpen} options={displayOptions} onChange={onDisplayOptionsChange} />
+          {filterMenu(<ToolbarButton label={t(filterActive ? 'Add another filter' : 'Add filter')} pressed={filterActive || undefined} data-filter-active={filterActive || undefined}><FilterIcon /></ToolbarButton>)}
+          {displayMenu}
           <ToolbarButton label={`${insightsOpen ? 'Close' : 'Open'} ${insightsLabel}`} pressed={insightsOpen} onClick={() => onInsightsOpenChange?.(!insightsOpen)}>
             <InsightsIcon />
           </ToolbarButton>
-          {!creatingView && (detailsShortcutTooltip ? (
+          {mode === 'view' && (detailsShortcutTooltip ? (
             <FlowTooltip label={detailsOpen ? 'Close details' : 'Open details'} shortcut={isMacPlatform() ? '⌘ I' : 'Ctrl I'}>
               <ToolbarButton label={detailsOpen ? 'Close details' : 'Open details'} pressed={detailsOpen} onClick={() => onDetailsOpenChange(!detailsOpen)}>
                 <DetailsIcon open={detailsOpen} />
@@ -202,11 +243,14 @@ export function IssueExplorerSurface({
   return (
     <ContentViewContainer framed data-issue-explorer="true" className={className}>
       {header}
-      {viewEditor ? <div className={styles.createPanel}>{viewEditor}{toolbar}</div> : toolbar}
+      {mode === 'view' && toolbar}
+      {mode === 'edit' && <ContentViewSubheader borderless start={<span className={styles.viewCount}>{itemCount} {itemCount === 1 ? 'issue' : 'issues'}</span>} />}
+      {renderedEditor && <div className={styles.createPanel} data-mode={mode}>{renderedEditor}</div>}
       {filterBar}
-      <div className={styles.body} data-insights-open={insightsOpen} data-saved-panel-open={Boolean((savedView || creatingView) && (detailsOpen || insightsOpen))}>
+      <div className={styles.body} data-insights-open={insightsOpen} data-saved-panel-open={Boolean((savedView || mode === 'create') && (detailsOpen || insightsOpen))}>
         {children}
       </div>
+      {footer}
     </ContentViewContainer>
   )
 }

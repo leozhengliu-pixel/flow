@@ -271,6 +271,7 @@ func applyTriageRouting(data *domain.Bootstrap, issue *domain.Issue, now time.Ti
 		}
 		issue.Labels = append(issue.Labels, labelsByID(data, rule.LabelIDs)...)
 		data.TriageAssignments = append(data.TriageAssignments, domain.TriageAssignment{ID: fmt.Sprintf("triage_assignment_%d", now.UnixNano()), IssueID: issue.ID, RuleID: rule.ID, ResponsibilityID: resp.ID, AssigneeID: userID, CreatedAt: now})
+		applyTriageResponsibility(data, settings, issue, now)
 		return
 	}
 	if issue.Assignee == nil && settings.TriageAction == "creator" {
@@ -282,6 +283,45 @@ func applyTriageRouting(data *domain.Bootstrap, issue *domain.Issue, now time.Ti
 				issue.Assignee = userByID(data, member.UserID)
 				break
 			}
+		}
+	}
+	applyTriageResponsibility(data, settings, issue, now)
+}
+
+// triageResponsibilityActions are the team "When a new issue is added to triage"
+// actions: Linear's No action / Notify / Assign, plus Flow's earlier rule modes.
+var triageResponsibilityActions = []string{"none", "notify", "assign", "creator", "teamOwner", "responsibility"}
+
+// applyTriageResponsibility runs the team's triage responsibility for an issue
+// entering triage: "assign" gives an unassigned issue to the chosen member and
+// "notify" sends the chosen members a triage inbox notification. It only touches
+// the incoming issue and appends notifications, so it stays scoped at any size.
+func applyTriageResponsibility(data *domain.Bootstrap, settings domain.TeamSettings, issue *domain.Issue, now time.Time) {
+	if issue.State.Type != "backlog" || issue.TriagedAt != nil || len(settings.TriageActionUserIDs) == 0 {
+		return
+	}
+	switch settings.TriageAction {
+	case "assign":
+		if issue.Assignee == nil {
+			if user := userByID(data, settings.TriageActionUserIDs[0]); user != nil {
+				issue.Assignee = user
+			}
+		}
+	case "notify":
+		for _, recipientID := range settings.TriageActionUserIDs {
+			if recipientID == data.Viewer.ID || userByID(data, recipientID) == nil {
+				continue
+			}
+			preferences, ok := data.NotificationPreferences[recipientID]
+			if !ok {
+				preferences = defaultPreferences(recipientID)
+			}
+			if !preferences.Inbox.Enabled || !categoryEnabled(preferences.Inbox, "triage") {
+				continue
+			}
+			notification := domain.Notification{ID: fmt.Sprintf("notification_triage_%s_%s", issue.ID, recipientID), RecipientID: recipientID, Type: "triage", Category: "triage", GroupKey: recipientID + ":" + issue.ID + ":triage", OccurrenceCount: 1, LatestActorIDs: []string{data.Viewer.ID}, SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: data.Viewer, CreatedAt: now, UpdatedAt: now}
+			data.Notifications = append(data.Notifications, notification)
+			enqueueNotificationDeliveries(data, notification, preferences)
 		}
 	}
 }

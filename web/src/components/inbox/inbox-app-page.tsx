@@ -713,6 +713,7 @@ function notificationKind(notification: Notification): InboxNotificationKind {
 function describeNotification(notification: Notification, issue: Issue) {
   if (notification.type === 'assignment') return `${notification.actor.displayName} assigned the issue to you`
   if (notification.type === 'mention') return `${notification.actor.displayName} mentioned you in ${issue.identifier}`
+  if (notification.type === 'triage') return `New issue in triage from ${notification.actor.displayName}`
   return `${notification.actor.displayName} updated the issue`
 }
 

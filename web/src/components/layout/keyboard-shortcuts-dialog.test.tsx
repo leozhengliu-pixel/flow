@@ -13,6 +13,8 @@ it('shows supported shortcuts in a searchable Help panel', async () => {
   expect(screen.getByText('Go to settings')).toBeVisible()
   expect(screen.getByText('New project')).toBeVisible()
   expect(screen.queryByText('Customize in Settings')).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Triage' })).toBeVisible()
+  for (const label of ['Accept issue', 'Decline issue', 'Mark issue as duplicate of', 'Snooze issue until', 'Go to triage']) expect(screen.getByText(label)).toBeVisible()
 
   await user.type(screen.getByRole('textbox', { name: 'Search shortcuts' }), 'project')
   expect(screen.getByText('New project')).toBeVisible()

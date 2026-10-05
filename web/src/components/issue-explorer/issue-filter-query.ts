@@ -1,5 +1,7 @@
 import type { BootstrapData } from '@/types/flow'
-import { filterValues, type IssueQueryAstNode, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
+import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup, type IssueQueryAstNode, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
+import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
+import { DATE_FILTER_FIELDS, dateFilterThreshold, localDay, parseDateFilterValue } from './issue-date-filter'
 
 /**
  * Translate a filter-bar filter into the server query vocabulary (`compileIssueFilter`), so every
@@ -16,14 +18,31 @@ const any = (nodes: IssueQueryAstNode[]): IssueQueryAstNode => nodes.length === 
 const none: IssueQueryAstNode = { field: 'id', operator: 'in', values: [] }
 
 export function filterToQueryNode(filter: MyIssuesAppliedFilter, context: IssueFilterQueryContext): IssueQueryAstNode {
+  if (filter.field === 'advanced') return advancedGroupToQueryNode(advancedFilterTree(filter), context)
   const values = filterValues(filter).map(value => value.value)
-  const node = positiveNode(filter.field, values, context)
+  if (filter.operator === 'includesAll' || filter.operator === 'excludesAll') {
+    // Labels use the server's indexed "includes all" (one EXISTS per label); other fields AND one node per value.
+    const all: IssueQueryAstNode = !values.length ? none
+      : filter.field === 'labels' ? { field: 'labels', operator: 'includesAll', values }
+        : values.length === 1 ? positiveNode(filter.field, values, context) : { and: values.map(value => positiveNode(filter.field, [value], context)) }
+    return filter.operator === 'excludesAll' ? { not: all } : all
+  }
+  const node = positiveNode(filter.field, values, context, filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined)
   return filter.operator === 'isNot' ? { not: node } : node
 }
 
-function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], { data, now = Date.now() }: IssueFilterQueryContext): IssueQueryAstNode {
+/** The advanced tree as nested and/or; empty groups and value-less conditions do not constrain. */
+export function advancedGroupToQueryNode(group: AdvancedFilterGroup, context: IssueFilterQueryContext): IssueQueryAstNode {
+  const nodes = group.items.flatMap(item => isAdvancedGroup(item)
+    ? (item.items.length ? [advancedGroupToQueryNode(item, context)] : [])
+    : (item.values.length ? [filterToQueryNode(conditionAsFilter(item), context)] : []))
+  if (!nodes.length) return { and: [] }
+  return group.conjunction === 'or' ? { or: nodes } : { and: nodes }
+}
+
+function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], { data, now = Date.now() }: IssueFilterQueryContext, comparison?: 'before' | 'after'): IssueQueryAstNode {
   const since = (days: number) => new Date(now - days * DAY).toISOString()
-  const isoDay = (offset: number) => { const date = new Date(now + offset * DAY); date.setHours(0, 0, 0, 0); return date.toISOString().slice(0, 10) }
+  const isoDay = (offset: number) => localDay(now + offset * DAY)
   switch (field) {
     case 'status': return { field: 'status', operator: 'in', values }
     case 'priority': return { field: 'priority', operator: 'in', values }
@@ -74,6 +93,8 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
       }))
     }
     case 'dates': return any(values.map(value => {
+      const parsed = parseDateFilterValue(value)
+      if (parsed && isComparableDateValue(value)) return { field: DATE_FILTER_FIELDS[parsed.kind], operator: comparison ?? defaultDateOperator(value), values: [dateFilterThreshold(parsed, now)] }
       const window = value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30
       if (value.startsWith('created-past-')) return { field: 'createdAt', operator: 'after', values: [since(window)] }
       if (value.startsWith('updated-past-')) return { field: 'updatedAt', operator: 'after', values: [since(window)] }
@@ -103,7 +124,6 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
       : value === 'completed-last-month' ? { field: 'completedAt', operator: 'after', values: [since(30)] }
         : value === 'due-next-two-weeks' ? { field: 'dueDate', operator: 'lte', values: [isoDay(14)] }
           : value.startsWith('query:') ? { field: 'title', operator: 'contains', values: [value.slice(6)] } : none))
-    case 'advanced': return { and: values.map(value => { const [key, ...rest] = value.split(':'); const expected = rest.join(':'); return key === 'labels' ? { field: 'labels', values: [expected] } : ['status', 'assignee', 'priority', 'project'].includes(key) ? { field: key, values: [expected] } : { and: [] } }) }
     case 'customers': return { field: 'customerId', operator: 'in', values }
     default: return { and: [] }
   }
