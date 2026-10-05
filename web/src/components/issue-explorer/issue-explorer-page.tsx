@@ -32,6 +32,7 @@ import {
   stateIdForExplorerGroup, withMapKey, withoutMapKey,
 } from './issue-explorer-model'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
+import { MyIssuesSummaryCard } from '@/components/my-issues/my-issues-summary-card'
 import { labelGroups, PAGED_GROUPINGS, PAGED_ORDERINGS, groupSummaries, pagedDisplayQuery } from './issue-grouping'
 import { isActiveSubscription } from '@/lib/subscription-records'
 
@@ -437,8 +438,11 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       </>}
     >
       <IssuesSplitLayout
-        detailsOpen={((detailsOpen && ((!detailsPanel && !savedView) || Boolean(previewIssue))) || split) && !insightsOpen}
-        aside={savedView && detailsOpen && !previewIssue && !split && !insightsOpen ? <SavedViewDetailsPanel
+        detailsOpen={((detailsOpen && Boolean(previewIssue)) || split) && !insightsOpen}
+        // Linear: with no issue open, details sit beside the list — the view's
+        // card stack on saved views, the shared summary card elsewhere (same
+        // component as My issues); custom detailsPanel pages keep their own.
+        aside={detailsOpen && !previewIssue && !split && !insightsOpen && !detailsPanel && !savedView ? <MyIssuesSummaryCard summary={summary} onItemSelect={summaryFilter}/> : savedView && detailsOpen && !previewIssue && !split && !insightsOpen ? <SavedViewDetailsPanel
           inline
           belowFilterBar={Boolean(filters.length > 0 || viewEditor)}
           favorite={savedViewFavorite}
