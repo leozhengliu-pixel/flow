@@ -138,6 +138,8 @@ export type AppRoute =
       workspaceSlug: string;
       view: PulseRouteView;
       viewId?: string;
+      /** /pulse/view/new creates a custom feed; /pulse/view/:id/edit edits one. */
+      viewMode?: "new" | "edit";
     }
   | { kind: "my-issues"; workspaceSlug: string; view: MyIssuesRouteView }
   | { kind: "reviews"; workspaceSlug: string; view: "for-you" | "created" }
@@ -483,6 +485,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 3
   )
     return { kind: "pulse", workspaceSlug, view: third };
+  if (section === "pulse" && third === "view" && fourth === "new" && segments.length === 4)
+    return { kind: "pulse", workspaceSlug, view: "all", viewMode: "new" };
   if (
     section === "pulse" &&
     third === "view" &&
@@ -490,6 +494,8 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     segments.length === 4
   )
     return { kind: "pulse", workspaceSlug, view: "all", viewId: fourth };
+  if (section === "pulse" && third === "view" && fourth && segments[4] === "edit" && segments.length === 5)
+    return { kind: "pulse", workspaceSlug, view: "all", viewId: fourth, viewMode: "edit" };
   if (section === "my-issues" && !third)
     return { kind: "my-issues", workspaceSlug, view: "assigned" };
   if (
@@ -1619,8 +1625,11 @@ export function pulsePath(
 ) {
   return `${workspaceRootPath(workspaceSlug)}/pulse/${view}`;
 }
-export function pulseViewPath(workspaceSlug: string, viewId: string) {
-  return `${workspaceRootPath(workspaceSlug)}/pulse/view/${encode(viewId)}`;
+export function pulseViewPath(workspaceSlug: string, viewId: string, mode?: "edit") {
+  return `${workspaceRootPath(workspaceSlug)}/pulse/view/${encode(viewId)}${mode === "edit" ? "/edit" : ""}`;
+}
+export function pulseNewViewPath(workspaceSlug: string) {
+  return `${workspaceRootPath(workspaceSlug)}/pulse/view/new`;
 }
 export function myIssuesPath(
   workspaceSlug: string,

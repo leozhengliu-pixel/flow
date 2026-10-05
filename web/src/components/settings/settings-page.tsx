@@ -483,7 +483,7 @@ export function SettingsPage(props: SettingsPageProps) {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const searchResultsRef = useRef<HTMLDivElement | null>(null);
   const searchTargetRequestRef = useRef(0);
-  const sidebarCustomization = useSidebarCustomizationState();
+  const sidebarCustomization = useSidebarCustomizationState(props.data.viewer.id);
   const [settings, setSettings] = useUserStoredSettings(props.data);
   const isAdmin =
     props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
@@ -3686,8 +3686,12 @@ const FEATURE_COPY: Partial<
   },
   pulse: {
     title: "Pulse",
-    description: "Share and discover project and initiative updates.",
-    rows: [["Enable Pulse", "Show Pulse in the workspace sidebar"]],
+    description: "Pulse centralizes all your project and initiative updates into a single feed. Members can choose to receive summary notifications daily or weekly.",
+    rows: [
+      ["Enable Pulse", "Workspace-wide feed of updates with optional summary notifications"],
+      ["Default workspace schedule", "Applies to all members who haven’t set their own preference"],
+      ["Your personal schedule", "Only applies to you, overriding the workspace default"],
+    ],
   },
   asks: {
     title: "Asks",

@@ -29,6 +29,7 @@ type SQLiteStore struct {
 	// database round trip.
 	mu               sync.RWMutex
 	writeMu          sync.Mutex
+	pulseIndexes     pulseIndexCache
 	workspaces       map[string]domain.Bootstrap
 	lastWorkspaceKey string
 	viewer           domain.User
@@ -126,6 +127,27 @@ func (s *SQLiteStore) WorkerContext() context.Context {
 		return s.lifecycle
 	}
 	return context.Background()
+}
+
+// publishNotificationSignals sends notification.created for notifications a
+// committed transaction created. The paged realtime filter delivers it only
+// to the recipient (it resolves the record for the connected viewer).
+func (s *SQLiteStore) publishNotificationSignals(signals []notificationSignal) {
+	sink := s.realtime()
+	if sink == nil {
+		return
+	}
+	// Content records are written in map order; publish in a stable order.
+	signals = slices.Clone(signals)
+	slices.SortFunc(signals, func(a, b notificationSignal) int {
+		return strings.Compare(a.workspace+"\x00"+a.id, b.workspace+"\x00"+b.id)
+	})
+	signals = slices.CompactFunc(signals, func(a, b notificationSignal) bool { return a.workspace == b.workspace && a.id == b.id })
+	now := time.Now().UTC()
+	for index, signal := range signals {
+		payload, _ := json.Marshal(map[string]string{"id": signal.id, "recipientId": signal.recipient})
+		sink(signal.workspace, domain.RealtimeEvent{ID: fmt.Sprintf("evt_notification_%d_%d", now.UnixNano(), index), Type: "notification.created", AggregateID: signal.id, Payload: payload, CreatedAt: now})
+	}
 }
 
 func (s *SQLiteStore) SetRealtimeSink(sink func(string, domain.RealtimeEvent)) {
@@ -621,8 +643,10 @@ func normalize(data *domain.Bootstrap) {
 		}
 	}
 	for userID, settings := range data.UserSettings {
+		// An unset personal schedule follows the workspace default. (Older
+		// builds stored "never" here, which silently opted everyone out.)
 		if settings.PulseSchedule == "" {
-			settings.PulseSchedule = "never"
+			settings.PulseSchedule = "default"
 			data.UserSettings[userID] = settings
 		}
 		if settings.PersonalSettingsVersion < 1 {
@@ -1777,6 +1801,9 @@ func (s *SQLiteStore) persistWorkspaceTx(ctx context.Context, tx *sqlTx, workspa
 		}
 		if err := writeContentRecordRows(ctx, tx, rows); err != nil {
 			return err
+		}
+		for _, row := range rows {
+			tx.noteNotificationRow(row, nil, false)
 		}
 		notifications, deliveries = nil, nil
 	}

@@ -62,6 +62,7 @@ import {
 } from "./directory-menus";
 import { InviteMembersDialog } from "./invite-members-dialog";
 import { memberColumnIds, useMemberDirectoryPreferences, type MemberColumn, type MemberOrdering } from "./use-member-directory-preferences";
+import { isActiveSubscription } from "@/lib/subscription-records";
 
 type DirectoryKind = "members" | "customers" | "teams";
 type CustomerColumn =
@@ -997,7 +998,7 @@ function TeamsDirectory({
       const metric = metrics.get(favorite.resourceId);
       if (metric) metric.favorite = true;
     }
-    for (const subscription of data.subscriptions) if (subscription.userId === data.viewer.id && subscription.resourceType === "team") {
+    for (const subscription of data.subscriptions) if (subscription.userId === data.viewer.id && subscription.resourceType === "team" && isActiveSubscription(subscription)) {
       const metric = metrics.get(subscription.resourceId);
       if (metric) metric.subscribed = true;
     }

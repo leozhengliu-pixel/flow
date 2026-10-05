@@ -20,7 +20,7 @@ var teamIdentifierPattern = regexp.MustCompile(`^[A-Z][A-Z0-9]{1,4}$`)
 
 var notificationCategories = []string{
 	"assignments", "statusChanges", "comments", "mentions", "reactions", "subscriptions",
-	"documents", "updates", "reminders", "loops", "integrations", "customerRequests", "triage",
+	"documents", "updates", "reminders", "loops", "integrations", "customerRequests", "triage", "pulse",
 }
 
 func defaultPreferences(userID string) domain.NotificationPreferences {
@@ -257,12 +257,14 @@ func (s *server) dispatchNotificationEmails(ctx context.Context, key string) {
 						status, message = "failed", err.Error()
 					}
 				}
-			} else if notificationIndex >= 0 && recipient != nil && data.Notifications[notificationIndex].Type == "pulseSummary" {
-				body := fmt.Sprintf("%d project and initiative updates are ready in Pulse.", data.Notifications[notificationIndex].OccurrenceCount)
+			} else if notificationIndex >= 0 && recipient != nil && data.Notifications[notificationIndex].Title != "" && data.Notifications[notificationIndex].IssueID == "" {
+				// Pulse summaries and update activity carry their own title and text.
+				notification := data.Notifications[notificationIndex]
+				subject, body := readableNotificationLine(notification), "Open Flow to read it."
 				if data.WorkspaceSettings.HIPAACompliance {
-					body = "Open Flow to view your summary."
+					subject, body = "Flow notification", "Open Flow to view your notification."
 				}
-				if err := s.mailer.send(recipient.Email, "Flow Pulse summary", body, s.mailer.appURL+"/"+key+"/pulse"); err != nil {
+				if err := s.mailer.send(recipient.Email, subject, body, s.mailer.appURL+"/"+key+"/inbox"); err != nil {
 					status, message = "failed", err.Error()
 				}
 			} else if notificationIndex < 0 || recipient == nil || issueErr != nil {
@@ -2076,4 +2078,16 @@ func collectMentionIDs(value any, result *[]string) {
 			collectMentionIDs(decoded, result)
 		}
 	}
+}
+
+// readableNotificationLine renders a notification that carries its own title
+// and text as one line, e.g. "Daily Pulse: Update from Mobile app".
+func readableNotificationLine(notification domain.Notification) string {
+	if notification.Text == "" {
+		return notification.Title
+	}
+	if notification.Title == "" {
+		return notification.Text
+	}
+	return notification.Title + ": " + notification.Text
 }

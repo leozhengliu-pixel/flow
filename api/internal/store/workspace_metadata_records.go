@@ -8,11 +8,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync/atomic"
 
 	"flow/api/internal/domain"
 )
 
 const metadataCollectionsKey = "_flowCollections"
+
+// metadataGroupEvaluations counts record group lookups; tests use it to check
+// that a record sync stays linear in the number of records.
+var metadataGroupEvaluations atomic.Int64
 
 type metadataRecordKey struct{ field, key string }
 type metadataRecord struct {
@@ -259,37 +264,91 @@ func syncMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs 
 		}
 		previous[key] = value
 	}
-	groups := map[string][]metadataRecordKey{}
-	group := func(key metadataRecordKey, value metadataRecord) string {
-		if shapes[key.field] == "array" {
-			return key.field
+	return applyMetadataRecords(ctx, tx, workspace, refs, shapes, wanted, previous)
+}
+
+// metadataRecordGroup names the ordered collection a record belongs to: the
+// field of an entity list, or field:parent for one project's or initiative's
+// updates. Map entries and update parent markers have no order group.
+func metadataRecordGroup(shapes map[string]string, key metadataRecordKey, data []byte) string {
+	metadataGroupEvaluations.Add(1)
+	switch shapes[key.field] {
+	case "array":
+		return key.field
+	case "updates":
+		if parent, item := metadataUpdateParent(data); item {
+			return key.field + ":" + parent
 		}
-		if shapes[key.field] == "updates" {
-			var update metadataUpdate
-			if json.Unmarshal(value.data, &update) == nil && len(update.Item) > 0 {
-				return key.field + ":" + update.Parent
+	}
+	return ""
+}
+
+// metadataUpdateParent reads the parent of an update record and whether it
+// holds an item (rather than being the parent's marker). Records are written
+// by json.Marshal(metadataUpdate), so the parent is the first member and the
+// item, when present, the second: both are read from the prefix without
+// decoding the update itself. Anything else falls back to a full decode.
+func metadataUpdateParent(data []byte) (string, bool) {
+	const prefix = `{"parent":"`
+	if rest, ok := bytes.CutPrefix(data, []byte(prefix)); ok {
+		// Parents with escaped characters take the decode below.
+		if end := bytes.IndexAny(rest, "\"\\"); end >= 0 && rest[end] == '"' {
+			parent, tail := string(rest[:end]), rest[end+1:]
+			if bytes.HasPrefix(tail, []byte(`,"item":`)) {
+				return parent, true
+			}
+			if bytes.HasPrefix(tail, []byte(`}`)) || bytes.HasPrefix(tail, []byte(`,"null":`)) {
+				return parent, false
 			}
 		}
-		return ""
 	}
+	var update metadataUpdate
+	if json.Unmarshal(data, &update) != nil {
+		return "", false
+	}
+	return update.Parent, len(update.Item) > 0
+}
+
+// applyMetadataRecords writes wanted over previous (the stored rows of the
+// same records): it assigns collection orders that keep stored positions,
+// upserts rows whose order or data changed and deletes rows wanted lacks.
+// Each record's group is computed once, so the cost is linear in the number
+// of records.
+func applyMetadataRecords(ctx context.Context, tx *sqlTx, workspace string, refs issueReferences, shapes map[string]string, wanted, previous map[metadataRecordKey]metadataRecord) error {
+	groups := map[string][]metadataRecordKey{}
 	for key, value := range wanted {
-		if name := group(key, value); name != "" {
+		if name := metadataRecordGroup(shapes, key, value.data); name != "" {
 			groups[name] = append(groups[name], key)
 		}
 	}
+	positions := make(map[string]map[string]int, len(groups))
+	for name := range groups {
+		positions[name] = map[string]int{}
+	}
+	if len(groups) > 0 {
+		for key, value := range previous {
+			kind := shapes[key.field]
+			if kind != "array" && kind != "updates" {
+				continue
+			}
+			if kind == "array" {
+				if group, ok := positions[key.field]; ok {
+					group[key.key] = value.order
+				}
+				continue
+			}
+			if group, ok := positions[metadataRecordGroup(shapes, key, value.data)]; ok {
+				group[key.key] = value.order
+			}
+		}
+	}
 	for name, keys := range groups {
-		var items []domain.Issue
-		positions := map[string]int{}
+		items := make([]domain.Issue, 0, len(keys))
 		for _, key := range keys {
 			items = append(items, domain.Issue{ID: key.key, Number: wanted[key].order})
 		}
 		sort.Slice(items, func(i, j int) bool { return items[i].Number < items[j].Number })
-		for key, value := range previous {
-			if group(key, value) == name {
-				positions[key.key] = value.order
-			}
-		}
-		order := issueCollectionOrder(items, positions)
+		order := issueCollectionOrder(items, positions[name])
 		for _, key := range keys {
 			value := wanted[key]
 			value.order = order[key.key]

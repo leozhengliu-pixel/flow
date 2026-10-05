@@ -57,7 +57,8 @@ export function classifyInboxHost(input: {
   identifier?: string
 }): InboxHostKind {
   const type = input.type
-  if (input.identifier === 'pulseSummary') return 'other'
+  // Pulse summaries render the "Your Pulse" view, never an update host.
+  if (type === 'pulseSummary') return 'other'
   if (PROJECT_UPDATE_TYPES.has(type)) return 'project-updates'
   if (INITIATIVE_UPDATE_TYPES.has(type)) return 'initiative-updates'
   if (PROJECT_OVERVIEW_TYPES.has(type)) return 'project-overview'

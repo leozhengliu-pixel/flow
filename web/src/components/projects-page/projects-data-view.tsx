@@ -17,6 +17,9 @@ import { toggleGroupedLabelIds } from '@/lib/labels'
 import { PersonHover } from '@/components/property/person-info'
 import { usePeopleDirectory } from '@/components/property/people-context'
 import { directoryPerson, personMatchesQuery } from '@/lib/people'
+import { toast } from 'sonner'
+import { useI18n } from '@/i18n/i18n'
+import { PULSE_EVENT, sessionPulseChoice, usePulseSubscription } from '@/lib/pulse-subscriptions'
 import './projects-page.css'
 import './projects-bundle-parity.css'
 import { ProjectsPageEmptyIcon } from './projects-page-empty-icon'
@@ -668,7 +671,20 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
   const [nestedPosition, setNestedPosition] = useState({ top: 5, flip: false, maxHeight: 410 })
   const favorite = integration?.isFavorite(project.id) ?? false
   const subscriptionEvents = new Set(integration?.subscriptionEvents(project.id) ?? [])
-  const subscriptions = Object.fromEntries(Object.keys(SUBSCRIPTION_LABELS).map(event => [event, subscriptionEvents.has(event)]))
+  // "Subscribe to project updates in Pulse" is the Pulse subscription (explicit subscribe/unsubscribe via the Pulse API).
+  const pulse = usePulseSubscription('project', project.id, subscriptionEvents.has(PULSE_EVENT), nested === 'subscribe-menu')
+  const subscriptions = Object.fromEntries(Object.keys(SUBSCRIPTION_LABELS).map(event => [event, event === PULSE_EVENT ? pulse.subscribed : subscriptionEvents.has(event)]))
+  const { t } = useI18n()
+  const changeSubscriptions = (next: Record<string, boolean>) => {
+    if (next[PULSE_EVENT] !== subscriptions[PULSE_EVENT]) {
+      if (!pulse.saving) void pulse.toggle(next[PULSE_EVENT]).catch(error => toast.error(t('Could not update Pulse subscription'), { description: error instanceof Error ? error.message : undefined }))
+      return
+    }
+    // Inbox events keep the record's explicit Pulse subscribe so writing them never undoes it.
+    const keepPulse = (sessionPulseChoice('project', project.id) ?? subscriptionEvents.has(PULSE_EVENT)) === true
+    const events = Object.entries(next).filter(([event, enabled]) => enabled && event !== PULSE_EVENT).map(([event]) => event)
+    void integration?.onSubscriptionEventsChange(project.id, keepPulse ? [...events, PULSE_EVENT] : events)
+  }
   useEffect(() => { ref.current?.querySelector<HTMLInputElement>('.lp-project-context__search input')?.focus() }, [])
   useEffect(() => setNestedQuery(''), [nested])
   useDismissibleLayer({ open: true, refs: [ref], onDismiss: onClose, closeOnEscape: nested !== 'labels' })
@@ -752,7 +768,7 @@ function ProjectContextMenu({ integration, manualOrdering = false, point, onActi
         project={project}
         query={nestedQuery}
         setQuery={setNestedQuery}
-        setSubscriptions={next => { void integration?.onSubscriptionEventsChange(project.id, Object.entries(next).filter(([, enabled]) => enabled).map(([event]) => event)) }}
+        setSubscriptions={changeSubscriptions}
         onCreateReminder={integration ? remindAt => integration.onCreateReminder(project.id, remindAt) : undefined}
         subscriptions={subscriptions}
       />

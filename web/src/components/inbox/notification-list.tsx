@@ -3,7 +3,7 @@ import { Virtuoso, type Components, type VirtuosoHandle } from 'react-virtuoso'
 
 import { InboxNotificationRow, type InboxNotificationRowData, type InboxNotificationRowProps } from './notification-row'
 
-export interface InboxNotificationListProps extends Pick<InboxNotificationRowProps, 'onOpen' | 'onReadChange' | 'onDelete' | 'onSnooze' | 'onFavoriteChange' | 'onCopyLink' | 'onCopyIdentifier'> {
+export interface InboxNotificationListProps extends Pick<InboxNotificationRowProps, 'onOpen' | 'onReadChange' | 'onDelete' | 'onSnooze' | 'onFavoriteChange' | 'onCopyLink' | 'onCopyIdentifier' | 'pulseFrequency' | 'onPulseFrequencyChange'> {
   notifications: InboxNotificationRowData[]
   filterHiddenCount?: number
   onClearFilters?: () => void

@@ -4,6 +4,7 @@ import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Layers2, Link2, Pencil, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchProjectIssueSummary, type IssueRecordSummary } from '@/lib/api';
+import { projectPulseSubscribed } from '@/lib/pulse-subscriptions';
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { normalizeProjectIcon } from "@/components/views/project-icon";
 import { ProjectOverview } from "./project-overview";
@@ -87,6 +88,12 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const pulseSubscribed = useMemo(() => projectPulseSubscribed(project, {
+    viewerId: viewer.id,
+    subscriptions: props.issueData?.subscriptions ?? (props.subscription ? [props.subscription] : []),
+    teamMembers: props.issueData?.teamMembers,
+    initiatives: props.initiatives,
+  }), [project, viewer.id, props.issueData?.subscriptions, props.issueData?.teamMembers, props.subscription, props.initiatives]);
   const labelSelection = useLabelSelection(project.labelIds ?? []);
   const [issueSummary, setIssueSummary] = useState<IssueRecordSummary>();
   useEffect(() => {
@@ -431,6 +438,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           onUpdateSchedule={updateSchedule => save({ updateSchedule })}
           project={project}
           subscription={props.subscription}
+          pulseSubscribed={pulseSubscribed}
         />
         <div className="project-detail-page__header-spacer" />
         <FlowTooltip label={t("Copy project URL")} shortcut={shortcutLabels.copyUrl}>
@@ -452,6 +460,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           onUpdate={save}
           project={project}
           subscription={props.subscription}
+          pulseSubscribed={pulseSubscribed}
         />
       </header>
       <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={props.integrationConnections} onSave={save}/>

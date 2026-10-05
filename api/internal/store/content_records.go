@@ -161,11 +161,15 @@ func writeContentRecord[T any](ctx context.Context, tx *sqlTx, workspace, kind, 
 	if err == nil && version == 1 && bytes.Equal(previous, raw) {
 		return nil
 	}
+	existed := err == nil
 	row, err := buildContentRecordRow(workspace, kind, resource, raw)
 	if err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, contentRecordUpsertPrefix+contentRecordTuple+contentRecordUpsertSuffix, row.args()...)
+	if err == nil {
+		tx.noteNotificationRow(row, previous, existed)
+	}
 	if err == nil && row.actorID != "" {
 		_, err = tx.ExecContext(ctx, issueActorUpsertPrefix+issueActorTuple+issueActorUpsertSuffix, workspace, resource, row.actorID, row.actorAt)
 	}

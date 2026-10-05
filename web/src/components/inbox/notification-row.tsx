@@ -4,13 +4,16 @@ import { GitPullRequest } from 'lucide-react'
 import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
+import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import type { WorkflowState } from '@/types/flow'
 
+import { PulseFrequencyContextSubmenu } from './pulse-frequency-menu'
+import type { PulseFrequency } from './pulse-summary-model'
 import styles from './notification-row.module.css'
 import './inbox-date-control.css'
 
-export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'generic'
+export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
   kind: 'custom'
   snoozedUntil: string
@@ -48,6 +51,9 @@ export interface InboxNotificationRowProps {
   onFavoriteChange?: (notification: InboxNotificationRowData, favorite: boolean) => void | Promise<void>
   onCopyLink?: (notification: InboxNotificationRowData) => void | Promise<void>
   onCopyIdentifier?: (notification: InboxNotificationRowData) => void | Promise<void>
+  /** Pulse summaries only: the viewer's effective summary schedule ("Pulse frequency"). */
+  pulseFrequency?: PulseFrequency
+  onPulseFrequencyChange?: (notification: InboxNotificationRowData, frequency: PulseFrequency) => void | Promise<void>
   onMoveFocus?: (direction: -1 | 1, notification: InboxNotificationRowData) => void
   onFocus?: (notification: InboxNotificationRowData) => void
   onBlur?: (notification: InboxNotificationRowData) => void
@@ -147,7 +153,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
               ref={rowRef}
               className="flow-inbox-row"
               role="link"
-              aria-label={`${notification.actor} ${notification.identifier} ${notification.title} ${notification.body} ${notification.timeLabel}`}
+              aria-label={[notification.actor, notification.identifier, notification.title, notification.body, notification.timeLabel].filter(Boolean).join(' ')}
               aria-current={active ? 'page' : undefined}
               aria-disabled={disabled || undefined}
               aria-busy={pending || undefined}
@@ -168,7 +174,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
                 <div className="flow-inbox-row__content">
                   <div className="flow-inbox-row__headline" title={notification.title}>
                     <span className="flow-inbox-row__unread-dot" aria-hidden="true" data-visible={!notification.read || undefined} />
-                    <span className="flow-inbox-row__identifier">{notification.identifier}</span>
+                    {notification.identifier ? <span className="flow-inbox-row__identifier">{notification.identifier}</span> : null}
                     <span className="flow-inbox-row__title">{notification.title}</span>
                     {notification.issueState ? <span aria-label={notification.issueState.name} className="flow-inbox-row__issue-state" title={notification.issueState.name}><StatusIcon size={14} state={notification.issueState} /></span> : notification.reviewStatus ? <span aria-label={`Review ${notification.reviewStatus}`} className="flow-inbox-row__issue-state is-review" title={`Review ${notification.reviewStatus}`}><ReviewStatusIcon status={notification.reviewStatus} /></span> : null}
                   </div>
@@ -196,6 +202,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
           onFavoriteChange={props.onFavoriteChange ? () => toggleFavorite() : undefined}
           onCopyLink={props.onCopyLink ? () => invoke(() => props.onCopyLink?.(notification)) : undefined}
           onCopyIdentifier={props.onCopyIdentifier ? () => invoke(() => props.onCopyIdentifier?.(notification)) : undefined}
+          onPulseFrequencyChange={props.onPulseFrequencyChange ? (_, frequency) => invoke(() => props.onPulseFrequencyChange?.(notification, frequency)) : undefined}
         />
       </ContextMenu.Root>
       <Popover.Portal>
@@ -261,6 +268,13 @@ function InboxRowHoverActions({
 }
 
 function ActorVisual({ notification }: { notification: InboxNotificationRowData }) {
+  if (notification.kind === 'pulse') {
+    return (
+      <div className="flow-inbox-row__actor">
+        <span className="flow-inbox-row__avatar flow-inbox-row__avatar--pulse" data-testid="pulse-summary-avatar" aria-hidden="true"><PulseIcon size={16} /></span>
+      </div>
+    )
+  }
   return (
     <div className="flow-inbox-row__actor">
       {notification.actorAvatarUrl ? (
@@ -279,6 +293,10 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
 
 function NotificationContextMenu(props: InboxNotificationRowProps) {
   const { notification, disabled = false } = props
+  const pulse = notification.kind === 'pulse'
+  // Pulse summaries have no issue to link to or identify.
+  const onCopyLink = pulse ? undefined : props.onCopyLink
+  const onCopyIdentifier = pulse ? undefined : props.onCopyIdentifier
   return (
     <ContextMenu.Portal>
       <ContextMenu.Content data-flow-motion="floating" className="flow-inbox-menu flow-inbox-row-menu" aria-label="Notification actions" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -317,7 +335,14 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             {notification.favorite ? 'Unfavorite' : 'Favorite'}
           </RowMenuItem>
         ) : null}
-        {props.onCopyLink || props.onCopyIdentifier ? (
+        {pulse && props.onPulseFrequencyChange ? (
+          <PulseFrequencyContextSubmenu
+            value={props.pulseFrequency ?? 'daily'}
+            disabled={disabled}
+            onChange={frequency => props.onPulseFrequencyChange?.(notification, frequency)}
+          />
+        ) : null}
+        {onCopyLink || onCopyIdentifier ? (
           <ContextMenu.Sub>
             <ContextMenu.SubTrigger className="flow-inbox-menu__item" disabled={disabled}>
               <span className="flow-inbox-menu__item-icon"><CopyIcon /></span>
@@ -326,8 +351,8 @@ function NotificationContextMenu(props: InboxNotificationRowProps) {
             </ContextMenu.SubTrigger>
             <ContextMenu.Portal>
               <ContextMenu.SubContent data-flow-motion="floating" className="flow-inbox-menu flow-inbox-copy-menu" sideOffset={4}>
-                {props.onCopyLink ? <RowMenuItem disabled={disabled} onSelect={() => props.onCopyLink?.(notification)}>Copy link</RowMenuItem> : null}
-                {props.onCopyIdentifier ? <RowMenuItem disabled={disabled} onSelect={() => props.onCopyIdentifier?.(notification)}>Copy issue ID</RowMenuItem> : null}
+                {onCopyLink ? <RowMenuItem disabled={disabled} onSelect={() => onCopyLink(notification)}>Copy link</RowMenuItem> : null}
+                {onCopyIdentifier ? <RowMenuItem disabled={disabled} onSelect={() => onCopyIdentifier(notification)}>Copy issue ID</RowMenuItem> : null}
               </ContextMenu.SubContent>
             </ContextMenu.Portal>
           </ContextMenu.Sub>

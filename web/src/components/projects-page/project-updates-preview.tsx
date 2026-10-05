@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
+import { RichComment } from '@/components/activity/rich-comment'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
@@ -164,7 +165,7 @@ function ProjectUpdateArticle({ active, dataIndex, menuRef, onComment, onDelete,
     <div className="lp-project-update-reactions">{Object.entries(reactions).map(([emoji, userIds]) => <button aria-pressed={Boolean(viewer && userIds.includes(viewer.id))} key={emoji} onClick={() => onReact && void onReact(project.id, update.id, emoji)} type="button"><span>{emoji}</span>{userIds.length}</button>)}</div>
     <footer><button aria-expanded={commentsOpen} aria-label={`${comments.length} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={14}/>{comments.length > 0 && <span>{comments.length}</span>}</button><EmojiPicker align="start" contentRef={reactionRef} onSelect={async emoji => { await onReact?.(project.id, update.id, emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={14}/></button></EmojiPicker></footer>
     {commentsOpen && <section className="lp-project-update-comments">
-      {comments.map(item => <article key={item.id}><UpdateAuthorAvatar user={item.user}/><div><header><strong>{item.user.displayName}</strong><time>{formatRelative(item.createdAt)}</time></header><p>{item.body}</p></div></article>)}
+      {comments.map(item => <article key={item.id}><UpdateAuthorAvatar user={item.user}/><div><header><strong>{item.user.displayName}</strong><time>{formatRelative(item.createdAt)}</time></header><div className="project-updates-preview__comment-body"><RichComment body={item.body} data={item.bodyData} version={item.version}/></div></div></article>)}
       <div className="lp-project-update-comment-box"><UpdateAuthorAvatar user={viewer ?? update.user}/><textarea aria-label="Add comment" onChange={event => setComment(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submitComment() } }} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim() || posting || !onComment} onClick={() => void submitComment()} type="button">{posting ? 'Sending…' : 'Comment'}</button></div>
     </section>}
   </article>

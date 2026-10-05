@@ -9,6 +9,7 @@ import {
 import { Check, ChevronRight, Minus } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DocumentGlyph } from '@/components/documents/document-icon'
+import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { searchWorkspace } from '@/lib/api'
 import { ActionRegistry } from '@/lib/action-registry'
@@ -50,6 +51,8 @@ export function CommandMenu({
   onNavigateCustomers,
   onNavigateAgent,
   onNavigateReviews,
+  onNavigatePulse,
+  pulseToggle,
   onOpenResult,
   data,
   ...contextHandlers
@@ -72,6 +75,10 @@ export function CommandMenu({
   onNavigateCustomers: () => void
   onNavigateAgent: () => void
   onNavigateReviews?: () => void
+  /** "Go to pulse" (G then F); omitted when Pulse is off or for guests. */
+  onNavigatePulse?: () => void
+  /** Admins: "Enable Pulse" / "Disable Pulse". */
+  pulseToggle?: { enabled: boolean; run: () => void }
   onOpenResult: (result: SearchResult) => void
   /** Workspace data for context actions (issue page, peek pane, selection). */
   data?: BootstrapData
@@ -107,6 +114,8 @@ export function CommandMenu({
     { id: 'go-views', group: 'Navigation', label: 'Go to Views', icon: <Layers3/>, run: closeAnd(onNavigateViews) },
     { id: 'go-members', group: 'Navigation', label: 'Go to Members', icon: <UserRound/>, run: closeAnd(onNavigateMembers) },
     { id: 'go-agent', group: 'Agent chat', label: 'Go to Agent', icon: <Bot/>, shortcut: ['G', 'then', 'J'], run: closeAnd(onNavigateAgent) },
+    ...(onNavigatePulse ? [{ id: 'go-pulse', group: 'Navigation', label: 'Go to pulse', icon: <PulseIcon size={14}/>, shortcut: ['G', 'then', 'F'], keywords: 'feed updates', run: closeAnd(onNavigatePulse) }] : []),
+    ...(pulseToggle ? [{ id: 'toggle-pulse', group: 'Pulse', label: pulseToggle.enabled ? 'Disable Pulse' : 'Enable Pulse', icon: <PulseIcon size={14}/>, keywords: 'feed updates', run: closeAnd(pulseToggle.run) }] : []),
     ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Reviews', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
     { id: 'copy-url', group: 'Other', label: 'Copy current page link', icon: <Clipboard/>, run: closeAnd(() => void navigator.clipboard.writeText(window.location.href)) },
   ]
@@ -191,6 +200,7 @@ export function CommandMenu({
               <span className="command-item-icon">{action.icon}</span>
               <span>{t(action.label)}</span>
               {action.shortcut && <span className="command-shortcut">{action.shortcut.map((part, index) => <kbd key={index}>{part}</kbd>)}</span>}
+              {action.checked && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
             </Command.Item>)}
           </Command.Group>}
           {searchResults}

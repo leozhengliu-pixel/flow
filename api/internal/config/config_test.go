@@ -162,3 +162,56 @@ func TestLoadWebSearchConfig(t *testing.T) {
 		t.Fatalf("unknown provider error = %v", err)
 	}
 }
+
+func TestLoadTTSDefaultsFollowAgentProvider(t *testing.T) {
+	for _, key := range []string{"FLOW_TTS_ENABLED", "FLOW_TTS_BASE_URL", "FLOW_TTS_API_KEY", "FLOW_TTS_MODEL", "FLOW_TTS_VOICE"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("FLOW_AGENT_BASE_URL", "https://llm.example.test/v1/")
+	t.Setenv("FLOW_AGENT_API_KEY", "agent-key")
+	loaded, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.TTS.Enabled || loaded.TTS.BaseURL != "https://llm.example.test/v1" || loaded.TTS.APIKey != "agent-key" || loaded.TTS.Model != "gpt-4o-mini-tts" || loaded.TTS.Voice != "alloy" {
+		t.Fatalf("TTS defaults = %#v", loaded.TTS)
+	}
+	t.Setenv("FLOW_TTS_ENABLED", "true")
+	t.Setenv("FLOW_TTS_BASE_URL", "https://speech.example.test")
+	t.Setenv("FLOW_TTS_API_KEY", "speech-key")
+	t.Setenv("FLOW_TTS_VOICE", "nova")
+	loaded, err = Load()
+	if err != nil || !loaded.TTS.Enabled || loaded.TTS.BaseURL != "https://speech.example.test" || loaded.TTS.APIKey != "speech-key" || loaded.TTS.Voice != "nova" {
+		t.Fatalf("TTS overrides = %#v, %v", loaded.TTS, err)
+	}
+	t.Setenv("FLOW_TTS_BASE_URL", "speech.example.test")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_TTS_BASE_URL") {
+		t.Fatalf("invalid TTS URL error = %v", err)
+	}
+}
+
+// The Agent key goes only to the Agent host: a speech endpoint elsewhere
+// needs its own key, and without one Pulse audio is off with a warning.
+func TestLoadTTSKeyFallsBackOnlyToTheAgentHost(t *testing.T) {
+	for _, key := range []string{"FLOW_TTS_ENABLED", "FLOW_TTS_BASE_URL", "FLOW_TTS_API_KEY", "FLOW_TTS_MODEL", "FLOW_TTS_VOICE"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("FLOW_AGENT_BASE_URL", "https://llm.example.test/v1")
+	t.Setenv("FLOW_AGENT_API_KEY", "agent-key")
+	t.Setenv("FLOW_TTS_ENABLED", "true")
+	t.Setenv("FLOW_TTS_BASE_URL", "https://llm.example.test/v1/")
+	loaded, err := Load()
+	if err != nil || !loaded.TTS.Enabled || loaded.TTS.APIKey != "agent-key" || len(loaded.Warnings) != 0 {
+		t.Fatalf("same host TTS = %#v %v %v", loaded.TTS, loaded.Warnings, err)
+	}
+	t.Setenv("FLOW_TTS_BASE_URL", "https://speech.example.test/v1")
+	loaded, err = Load()
+	if err != nil || loaded.TTS.Enabled || loaded.TTS.APIKey != "" || len(loaded.Warnings) != 1 || !strings.Contains(loaded.Warnings[0], "FLOW_TTS_API_KEY") {
+		t.Fatalf("other host TTS without a key = %#v %v %v", loaded.TTS, loaded.Warnings, err)
+	}
+	t.Setenv("FLOW_TTS_API_KEY", "speech-key")
+	loaded, err = Load()
+	if err != nil || !loaded.TTS.Enabled || loaded.TTS.APIKey != "speech-key" || len(loaded.Warnings) != 0 {
+		t.Fatalf("other host TTS with a key = %#v %v %v", loaded.TTS, loaded.Warnings, err)
+	}
+}

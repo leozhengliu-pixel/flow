@@ -66,6 +66,11 @@ func (s *server) updateUserSettings(w http.ResponseWriter, r *http.Request) {
 		if !slices.Contains([]string{"default", "daily", "weekly", "never"}, input.PulseSchedule) {
 			return errInvalid
 		}
+		if input.Timezone = strings.TrimSpace(input.Timezone); input.Timezone != "" {
+			if _, err := time.LoadLocation(input.Timezone); err != nil || len(input.Timezone) > 64 {
+				return errInvalid
+			}
+		}
 		if err := validateCodingToolSettings(&input); err != nil {
 			return err
 		}

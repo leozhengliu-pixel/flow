@@ -90,3 +90,4 @@
 .project-resource-menu__team-icon svg{width:14px;height:14px}
 .project-resource-menu__check{margin-left:2px;border-color:transparent}
 .project-action-menu [role=menuitemcheckbox][data-highlighted] .project-resource-menu__check,.project-resource-menu__check[data-checked]{border-color:var(--theme-text-tertiary)}
+.project-action-menu__section-label{height:28px;display:flex;align-items:center;padding:0 14px;color:var(--action-menu-muted);font-size:12px;font-weight:500}

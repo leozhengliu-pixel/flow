@@ -120,3 +120,4 @@ body .feature-select-menu{z-index:500;box-sizing:border-box;min-width:93px;width
 .feature-row-link{width:100%;border:0;border-bottom:1px solid var(--theme-border);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .feature-row-link:hover,.feature-row-link:focus-visible{outline:0;background:var(--theme-surface-hover)}
 .feature-row-link>aside>svg{color:var(--theme-text-tertiary)}
+.feature-section.is-disabled{opacity:.5}

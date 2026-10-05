@@ -4,18 +4,19 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
-import { PulseNewViewEditor, PulseSubscriptionMenu, type PulseViewDraft } from './pulse-menus'
+import { PulseNewViewEditor, PulseSubscriptionMenu } from './pulse-menus'
+import type { PulseViewDraft } from './pulse-schedule'
 
 describe('Pulse header menus', () => {
   it('exposes the measured subscription listbox and filters options from the hidden search', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
-    render(<PulseSubscriptionMenu cadence="never" onChange={onChange}/>)
+    render(<I18nProvider><PulseSubscriptionMenu cadence="never" onChange={onChange}/></I18nProvider>)
 
     await user.click(screen.getByRole('button', { name: 'Subscription' }))
     expect(screen.getByRole('dialog')).toBeVisible()
-    expect(screen.getAllByRole('option')).toHaveLength(4)
-    expect(screen.getByRole('option', { name: 'Workspace default' })).toBeVisible()
+    expect(screen.getByText('Inbox notifications for Pulse summaries')).toBeVisible()
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Daily', 'Weekly', 'Never'])
     expect(screen.getByRole('option', { name: 'Never' })).toHaveAttribute('aria-checked', 'true')
 
     await user.type(screen.getByRole('searchbox', { name: 'Filter…' }), 'daily')
