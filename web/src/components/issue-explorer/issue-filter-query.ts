@@ -2,6 +2,8 @@ import type { BootstrapData } from '@/types/flow'
 import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup, type IssueQueryAstNode, type MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
 import { DATE_FILTER_FIELDS, dateFilterThreshold, localDay, parseDateFilterValue } from './issue-date-filter'
+import { triageIntelligenceQueryNode } from './triage-intelligence-filter'
+import { agentSessionStatesFor } from '@/lib/agent-members'
 
 /**
  * Translate a filter-bar filter into the server query vocabulary (`compileIssueFilter`), so every
@@ -9,7 +11,7 @@ import { DATE_FILTER_FIELDS, dateFilterThreshold, localDay, parseDateFilterValue
  * workspace data (initiatives, releases, project properties) are resolved to ids here.
  */
 export interface IssueFilterQueryContext {
-  data: Pick<BootstrapData, 'projects' | 'releases' | 'viewer'> & Partial<Pick<BootstrapData, 'labels'>>
+  data: Pick<BootstrapData, 'projects' | 'releases' | 'viewer'> & Partial<Pick<BootstrapData, 'labels' | 'users'>>
   now?: number
 }
 
@@ -46,7 +48,15 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
   switch (field) {
     case 'status': return { field: 'status', operator: 'in', values }
     case 'priority': return { field: 'priority', operator: 'in', values }
-    case 'assignee': return nullable('assignee', values)
+    case 'assignee': {
+      // Agents listed under Assignee match the issues delegated to them (Linear).
+      const agents = new Set((data.users ?? []).filter(user => user.app).map(user => user.id))
+      const delegates = values.filter(value => agents.has(value))
+      const people = values.filter(value => !agents.has(value))
+      if (!delegates.length) return nullable('assignee', values)
+      const delegated: IssueQueryAstNode = { field: 'delegateId', operator: 'in', values: delegates }
+      return people.length ? any([nullable('assignee', people), delegated]) : delegated
+    }
     case 'creator': return { field: 'creator', operator: 'in', values }
     case 'labels': return { field: 'labels', operator: 'in', values }
     case 'project': return nullable('project', values)
@@ -57,16 +67,28 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
     case 'externalSource': return nullable('externalSource', values)
     case 'addedToCycle': return { field: 'addedToCycle', operator: 'in', values }
     case 'agent': return values.includes('*') ? { field: 'delegateId', operator: 'isNotEmpty' } : nullable('delegateId', values)
-    case 'agentSession': return values.includes('*') ? { field: 'agentSessionId', operator: 'isNotEmpty' } : { field: 'agentSessionId', operator: 'isEmpty' }
+    case 'agentSession': {
+      if (values.includes('*')) return { field: 'agentSessionId', operator: 'isNotEmpty' }
+      const states = [...new Set(values.flatMap(agentSessionStatesFor))]
+      const nodes: IssueQueryAstNode[] = [
+        ...(values.includes('') ? [{ field: 'agentSessionId', operator: 'isEmpty' }] : []),
+        ...(states.length ? [{ field: 'agentSessionState', operator: 'in', values: states }] : []),
+      ]
+      return any(nodes.length ? nodes : [none])
+    }
+    case 'triageIntelligence': {
+      const nodes = values.map(triageIntelligenceQueryNode).filter((node): node is IssueQueryAstNode => Boolean(node))
+      return any(nodes.length ? nodes : [none])
+    }
     case 'autoClosed': return values.includes('true') ? { field: 'autoClosed', operator: 'isNotEmpty' } : { field: 'autoClosed', operator: 'isEmpty' }
     case 'links': return values.includes('has-links') ? { field: 'hasLinks', operator: 'isNotEmpty' } : { field: 'hasLinks', operator: 'isEmpty' }
     case 'relations': return values.includes('')
       ? { not: any(['blocks', 'blocked_by', 'related', 'duplicate'].map((type): IssueQueryAstNode => ({ field: `relation:${type}`, operator: 'isNotEmpty' }))) }
       : any(values.map(type => ({ field: `relation:${type}`, operator: 'isNotEmpty' })))
     case 'suggestedLabel': {
+      // Legacy chips; "No suggested label" is the indexed suggested:label presence row.
       const chosen: IssueQueryAstNode[] = values.filter(Boolean).map(id => ({ field: `suggestedLabel:${id}`, operator: 'isNotEmpty' }))
-      const known: IssueQueryAstNode[] = (data.labels ?? []).map(label => ({ field: `suggestedLabel:${label.id}`, operator: 'isNotEmpty' }))
-      const nodes: IssueQueryAstNode[] = [...chosen, ...(values.includes('') ? [{ not: any(known.length ? known : [none]) }] : [])]
+      const nodes: IssueQueryAstNode[] = [...chosen, ...(values.includes('') ? [{ field: 'suggested:label', operator: 'isEmpty' }] : [])]
       return any(nodes.length ? nodes : [none])
     }
     case 'content': return any(values.filter(value => value.startsWith('query:')).map(value => ({ field: 'title', operator: 'contains', values: [value.slice(6)] })))

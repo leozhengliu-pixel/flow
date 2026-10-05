@@ -141,6 +141,9 @@
   line-height:14.5px;
 }
 .card:has(.assigneeTrigger) .cardTop{padding-right:28px;min-width:0;overflow:hidden}
+.card:has(.delegateAvatar) .cardTop{padding-right:44px}
+/* The delegated agent sits just left of the assignee avatar (Linear). */
+.delegateAvatar{position:absolute;top:8px;right:26px;width:18px;height:18px;display:grid;place-items:center;border-radius:50%;box-shadow:0 0 0 1.5px var(--theme-surface-1)}
 .cardTop>span:first-child{flex:none}.cardFooter{display:flex;align-items:flex-end;gap:5px}.cardFooter>.cardMeta{min-width:0;flex:1}.cardFooter>button{margin-top:10px}
 .assigneeTrigger{
   position:absolute;

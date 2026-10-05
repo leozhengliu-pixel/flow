@@ -589,6 +589,9 @@ func (s *server) deleteWorkspaceLabel(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
 	}
+	s.pruneIssueSuggestionTargets(r.Context(), workspaceKey(r), func(item domain.IssueSuggestion) bool {
+		return item.Type == "label" && item.SuggestedLabelID == id
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 

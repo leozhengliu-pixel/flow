@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,11 +26,13 @@ var issueAttributeFields = map[string]bool{
 
 // Multi-valued properties are indexed as one presence row per value
 // ("relation:blocked_by", "suggestedLabel:<id>") so filters stay index lookups.
-var issueAttributePrefixes = []string{"relation:", "suggestedLabel:"}
+// Triage Intelligence targets are indexed per target ("suggestedAssignee:<id>")
+// plus one presence row per kind ("suggested:assignee") for "Any …" filters.
+var issueAttributePrefixes = []string{"relation:", "suggestedLabel:", "suggestedAssignee:", "suggestedProject:", "suggestedTeam:", "suggestedDuplicate:", "suggestedRelated:", "suggested:"}
 
 // issueAttributeVersion is stored in issue_attribute_migrations.complete; bump it
 // when issueAttributes gains fields so existing issues are re-indexed once.
-const issueAttributeVersion = 4
+const issueAttributeVersion = 5
 
 func isIssueAttributeField(field string) bool {
 	if issueAttributeFields[field] {
@@ -93,8 +96,13 @@ func issueAttributes(issue domain.Issue) map[string]string {
 	for _, relation := range issue.Relations {
 		values["relation:"+relation.Type] = "true"
 	}
-	for _, id := range issue.SuggestedLabelIDs {
-		values["suggestedLabel:"+id] = "true"
+	for kind, ids := range map[string][]string{"Label": issue.SuggestedLabelIDs, "Assignee": issue.SuggestedAssigneeIDs, "Project": issue.SuggestedProjectIDs, "Team": issue.SuggestedTeamIDs, "Duplicate": issue.SuggestedDuplicateIDs, "Related": issue.SuggestedRelatedIDs} {
+		for _, id := range ids {
+			if id != "" {
+				values["suggested"+kind+":"+id] = "true"
+				values["suggested:"+strings.ToLower(kind)] = "true"
+			}
+		}
 	}
 	return values
 }
@@ -376,4 +384,81 @@ func (s *SQLiteStore) migrateRecurrenceInstances(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// AgentSessionStates are the statuses of delegated agent tasks.
+var AgentSessionStates = []string{"pending", "active", "awaitingInput", "complete", "error", "canceled"}
+
+// compileAgentSessionState filters by the status of the issue's current agent
+// session (Linear's "Agent session" filter). The session id is the sparse
+// agentSessionId attribute and the status is read from the task row by its
+// primary key, so the predicate stays two index lookups per candidate issue.
+func compileAgentSessionState(node IssueFilter) (string, []any, error) {
+	op := strings.ToLower(node.Operator)
+	if op == "" {
+		op = "is"
+	}
+	if len(node.Values) == 0 || len(node.Values) > len(AgentSessionStates) {
+		return "", nil, ErrIssueQuery
+	}
+	for _, value := range node.Values {
+		if !slices.Contains(AgentSessionStates, value) {
+			return "", nil, ErrIssueQuery
+		}
+	}
+	statuses, args := bindList("t.status", node.Values)
+	condition := "EXISTS (SELECT 1 FROM issue_attribute_records a JOIN application_agent_tasks t ON t.id=a.value WHERE a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field='agentSessionId' AND t.workspace_key=i.workspace_key AND " + statuses + ")"
+	switch op {
+	case "is", "in":
+		return condition, args, nil
+	case "isnot", "notin":
+		return "NOT " + condition, args, nil
+	}
+	return "", nil, fmt.Errorf("%w: unsupported agent session operator", ErrIssueQuery)
+}
+
+// AgentSessionStates returns the status of each named agent task, so issue
+// reads can decorate Issue.AgentSessionState. Unknown ids are omitted.
+func (s *SQLiteStore) AgentSessionStates(ctx context.Context, workspace string, ids []string) (map[string]string, error) {
+	states := map[string]string{}
+	for start := 0; start < len(ids); start += 500 {
+		clause, args := bindList("id", ids[start:min(start+500, len(ids))])
+		rows, err := s.db.QueryContext(ctx, `SELECT id,status FROM application_agent_tasks WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id, status string
+			if err := rows.Scan(&id, &status); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			states[id] = status
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return states, nil
+}
+
+// WorkspaceAgentSessionStates returns every agent task status of a workspace
+// (bounded), for the in-memory issue query matcher.
+func (s *SQLiteStore) WorkspaceAgentSessionStates(ctx context.Context, workspace string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id,status FROM application_agent_tasks WHERE workspace_key=? LIMIT 100000`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	states := map[string]string{}
+	for rows.Next() {
+		var id, status string
+		if err := rows.Scan(&id, &status); err != nil {
+			return nil, err
+		}
+		states[id] = status
+	}
+	return states, rows.Err()
 }

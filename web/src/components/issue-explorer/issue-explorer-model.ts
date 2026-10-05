@@ -13,9 +13,11 @@ import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } fro
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
 import { confirmAction } from '@/components/ui/action-dialog-service'
+import { AGENT_OPTION_GROUP, AGENT_SESSION_STATE_FILTERS, agentSessionStatesFor, assigneeCandidates, assigneeUpdate, isAssignableAgent } from '@/lib/agent-members'
+import { countTriageSuggestions, emptyTriageCounts, matchesTriageIntelligence, triageIntelligenceFilterOptions } from './triage-intelligence-filter'
 
 export const ISSUE_FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = {
-  ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
+  ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template',
 }
 
 const PRIORITIES: MyIssuesContextOption[] = ['No priority', 'Urgent', 'High', 'Medium', 'Low'].map((label, id) => ({
@@ -56,7 +58,13 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     cycleName: issue.cycleId ? index?.cyclesById.get(issue.cycleId)?.name : undefined,
     addedToCycle:issue.addedToCycle,
     agentSessionId:issue.agentSessionId,
+    agentSessionState:issue.agentSessionState,
     suggestedLabelIds:issue.suggestedLabelIds??[],
+    suggestedAssigneeIds:issue.suggestedAssigneeIds??[],
+    suggestedProjectIds:issue.suggestedProjectIds??[],
+    suggestedTeamIds:issue.suggestedTeamIds??[],
+    suggestedDuplicateIds:issue.suggestedDuplicateIds??[],
+    suggestedRelatedIds:issue.suggestedRelatedIds??[],
     externalSource:issue.externalSource,
     autoClosed:issue.autoClosed,
     autoClosedAt:issue.autoClosedAt,
@@ -238,6 +246,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   const scopedStates = issueTeamIds.length === 1 && data.states.some(state => state.teamId === issueTeamIds[0]) ? data.states.filter(state => state.teamId === issueTeamIds[0]) : data.states
   const projectsById = new Map(data.projects.map(project => [project.id, project]))
   const statusCounts = new Map<string, number>(), priorityCounts = new Map<string, number>(), assigneeCounts = new Map<string, number>(), creatorCounts = new Map<string, number>(), agentCounts = new Map<string, number>(), labelCounts = new Map<string, number>(), projectCounts = new Map<string, number>(), initiativeCounts = new Map<string, number>(), cycleCounts = new Map<string, number>(), addedToCycleCounts = new Map<string, number>(), subscriberCounts = new Map<string, number>(), externalSourceCounts = new Map<string, number>(), templateCounts = new Map<string, number>(), suggestedLabelCounts = new Map<string, number>()
+  const agentSessionStateCounts = new Map<string, number>(), triageCounts = emptyTriageCounts()
   let noAssignee = 0, noAgent = 0, anyAgent = 0, noAgentSession = 0, anyAgentSession = 0, noProject = 0, noInitiative = 0, noCycle = 0, noSubscribers = 0, noExternalSource = 0, autoClosed = 0, notAutoClosed = 0, noTemplate = 0, noSuggestedLabel = 0, withLinks = 0
   for (const issue of issues) {
     incrementCount(statusCounts, issue.state.id)
@@ -246,6 +255,8 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     incrementCount(creatorCounts, issue.creator.id)
     if (issue.delegate) { incrementCount(agentCounts, issue.delegate.id); anyAgent += 1 } else noAgent += 1
     if (issue.agentSessionId) anyAgentSession += 1; else noAgentSession += 1
+    if (issue.agentSessionId && issue.agentSessionState) incrementCount(agentSessionStateCounts, issue.agentSessionState)
+    countTriageSuggestions(triageCounts, issue)
     for (const label of issue.labels ?? []) incrementCount(labelCounts, label.id)
     const project = projectsById.get(issue.project?.id ?? '')
     if (issue.project) incrementCount(projectCounts, issue.project.id); else noProject += 1
@@ -262,10 +273,13 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   return {
     status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
-    assignee: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],
+    // People, then the agents that accept delegation in their own section with the "Agent" pill (Linear).
+    assignee: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...assigneeCandidates(data.users.filter(user => user.active)).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: (user.app ? agentCounts : assigneeCounts).get(user.id) ?? 0, kind: 'assignee' as const, ...(user.app ? { agent: true, ...AGENT_OPTION_GROUP } : {}) }))],
     creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: creatorCounts.get(user.id) ?? 0, kind: 'creator' as const })),
-    agent: [{ id: '', label: 'No agent', count: noAgent }, { id: '*', label: 'Any agent', count: anyAgent }, ...data.users.filter(user => user.active && agentCounts.has(user.id)).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: agentCounts.get(user.id) ?? 0 }))],
-    agentSession:[{id:'',label:'No agent session',count:noAgentSession},{id:'*',label:'Any agent session',count:anyAgentSession}],
+    // Every agent that can take work, plus agents still delegated on loaded issues.
+    agent: [{ id: '', label: 'No agent', count: noAgent }, { id: '*', label: 'Any agent', count: anyAgent }, ...data.users.filter(user => user.app && (isAssignableAgent(user) || agentCounts.has(user.id))).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: agentCounts.get(user.id) ?? 0, kind: 'assignee', agent: true }))],
+    agentSession:[{id:'',label:'No agent session',count:noAgentSession},{id:'*',label:'Any agent session',count:anyAgentSession},...AGENT_SESSION_STATE_FILTERS.map(option=>({id:option.id,label:option.label,count:option.states.reduce((sum,state)=>sum+(agentSessionStateCounts.get(state)??0),0)}))],
+    triageIntelligence: triageIntelligenceFilterOptions(data, issueLabels, triageCounts),
     dueDate: explorerDueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
     dates: dateFilterCategories(issues),
     labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
@@ -297,7 +311,7 @@ export type ExplorerPropertyOptions = ReturnType<typeof explorerPropertyOptions>
 export function explorerFilterOptions(field: MyIssuesFilterKey, options: ExplorerPropertyOptions): MyIssuesFilterOption[] | undefined {
   if (field === 'ai') return [{id:'assigned-to-me',label:'assigned to me'},{id:'completed-last-month',label:'completed in the last month'},{id:'due-next-two-weeks',label:'due in the next 2 weeks'}]
   if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
-  if (field === 'status'||field==='assignee'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
+  if (field === 'status'||field==='assignee'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
 export function explorerBulkOptions(action: MyIssuesBulkAction, options: ExplorerPropertyOptions): MyIssuesBulkActionOption[] | undefined {
@@ -307,7 +321,7 @@ export function explorerBulkOptions(action: MyIssuesBulkAction, options: Explore
   if (action === 'project') return options.project
   if (action === 'labels') return options.labels
   if (action === 'dueDate') return explorerDueDateOptions()
-  if (action === 'subscribers') return options.assignee.filter(option => option.id)
+  if (action === 'subscribers') return options.assignee.filter(option => option.id && !('agent' in option && option.agent))
 }
 
 export async function executeExplorerBulkAction({ action, ids, value, data, issuesById, onUpdateIssue, onUpdateIssues, onDeleteIssues }: {
@@ -341,7 +355,7 @@ export function explorerUpdateForAction(action: MyIssuesBulkAction | MyIssuesCon
   if (value == null) return
   if (action === 'status') return { stateId: value }
   if (action === 'priority') return { priority: Number(value) }
-  if (action === 'assign' || action === 'assignee') return { assigneeId: value }
+  if (action === 'assign' || action === 'assignee') return assigneeUpdate(value)
   if (action === 'project') return { projectId: value }
   if (action === 'dueDate') return { dueDate: value }
 }
@@ -351,7 +365,7 @@ export function explorerUpdateForProperty(property: MyIssuesEditableProperty, va
   if (Array.isArray(value)) return
   if (property === 'status') return { stateId: value }
   if (property === 'priority') return { priority: Number(value) }
-  if (property === 'assignee') return { assigneeId: value }
+  if (property === 'assignee') return assigneeUpdate(value)
   if (property === 'project') return { projectId: value }
   if (property === 'dueDate') return { dueDate: value }
   if (property === 'cycle') return { cycleId: value }
@@ -374,6 +388,7 @@ export function optimisticExplorerRow(row: MyIssuesRowData, input: IssueUpdateIn
     state: input.stateId === undefined ? row.state : data.states.find(state => state.id === input.stateId) ?? row.state,
     priority: input.priority === undefined ? row.priority : clampPriority(input.priority),
     assignee: input.assigneeId === undefined ? row.assignee : input.assigneeId ? (() => { const user = data.users.find(item => item.id === input.assigneeId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.assignee })() : undefined,
+    delegate: input.delegateId === undefined ? row.delegate : input.delegateId ? (() => { const user = data.users.find(item => item.id === input.delegateId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.delegate })() : undefined,
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
     dueDate: input.dueDate === undefined ? row.dueDate : input.dueDate || undefined,
     cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
@@ -406,9 +421,11 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
   else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
-  else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '')
+  // An agent picked under Assignee matches the issues delegated to it (agents are never assignees).
+  else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '') || Boolean(issue.delegate && values.includes(issue.delegate.id))
   else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
-  else if (filter.field === 'agentSession') matched = values.includes('*') ? Boolean(issue.agentSessionId) : values.includes(issue.agentSessionId ?? '')
+  else if (filter.field === 'agentSession') matched = matchesAgentSessionFilter(issue, values)
+  else if (filter.field === 'triageIntelligence') matched = values.some(value => matchesTriageIntelligence(issue, value))
   else if (filter.field === 'creator') matched = values.includes(issue.creatorId ?? '')
   else if (filter.field === 'labels') matched = (values.includes('') && !issue.labels?.length) || Boolean(issue.labels?.some(label => values.includes(label.id)))
   else if (filter.field === 'suggestedLabel') matched = values.includes('') ? !issue.suggestedLabelIds?.length : Boolean(issue.suggestedLabelIds?.some(id => values.includes(id)))
@@ -626,3 +643,11 @@ async function copyIssues(action: MyIssuesBulkAction, ids: string[], issuesById:
 function clampPriority(value: number): 0 | 1 | 2 | 3 | 4 { return Math.max(0, Math.min(4, value)) as 0 | 1 | 2 | 3 | 4 }
 function isoDate(date: Date) { return date.toISOString().slice(0, 10) }
 function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) }
+
+/** Agent Session filter: "" none, "*" any, `state:<id>` the session status (Linear's Active, Error, …). */
+export function matchesAgentSessionFilter(issue: Pick<MyIssuesRowData, 'agentSessionId' | 'agentSessionState'>, values: string[]) {
+  return values.some(value => value === '*' ? Boolean(issue.agentSessionId)
+    : value === '' ? !issue.agentSessionId
+      : value.startsWith('state:') ? Boolean(issue.agentSessionId && issue.agentSessionState && agentSessionStatesFor(value).includes(issue.agentSessionState as never))
+        : issue.agentSessionId === value)
+}

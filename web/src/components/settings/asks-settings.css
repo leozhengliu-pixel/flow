@@ -98,96 +98,6 @@
   min-width: 0;
 }
 
-.asks-wizard {
-  width: 640px;
-  max-width: 100%;
-  margin: 0 auto;
-}
-.asks-wizard-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 16px 24px;
-}
-.asks-wizard-steps span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: var(--theme-surface-1);
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-  line-height: 16px;
-  box-shadow: 0 0 0 0.5px var(--theme-border);
-}
-.asks-wizard-steps span[data-active="true"] {
-  color: var(--theme-text-primary);
-  background: color-mix(in srgb, #5e6ad2 14%, transparent);
-  box-shadow: 0 0 0 0.5px color-mix(in srgb, #5e6ad2 40%, transparent);
-}
-.asks-wizard-steps span[data-done="true"] {
-  color: var(--theme-text-primary);
-}
-.asks-wizard-panel {
-  margin: 0 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.asks-wizard-panel label {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-}
-.asks-wizard-panel input,
-.asks-wizard-panel select {
-  box-sizing: border-box;
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--theme-border-strong);
-  border-radius: 8px;
-  outline: 0;
-  background: var(--theme-surface-1);
-  color: var(--theme-text-primary);
-  font: 13px/19px "Inter Variable", "SF Pro Display", system-ui, sans-serif;
-}
-.asks-wizard-panel input:focus,
-.asks-wizard-panel select:focus {
-  box-shadow: 0 0 0 2px var(--focus-ring);
-}
-.asks-wizard-dns {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--theme-border);
-  border-radius: 10px;
-  background: var(--theme-surface-1);
-}
-.asks-wizard-dns dt {
-  margin: 0;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.asks-wizard-dns dd {
-  margin: 2px 0 8px;
-  color: var(--theme-text-primary);
-  font: 450 13px/18px ui-monospace, SFMono-Regular, Menlo, monospace;
-  word-break: break-all;
-}
-.asks-wizard-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 .asks-clickable-row {
   width: 100%;
   display: flex;
@@ -217,4 +127,96 @@
 }
 :root[data-theme="light"] .asks-channel-row {
   border-color: var(--border);
+}
+
+/* Asks › Email list, matching Linear's email section card. */
+.asks-email-list-header,
+.asks-email-list-row {
+  box-sizing: border-box;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-bottom: 0.5px solid var(--set-sep, var(--theme-border));
+}
+.asks-email-list > :last-child {
+  border-bottom: 0;
+}
+.asks-email-list-header {
+  justify-content: space-between;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+.asks-email-list-header .is-muted {
+  color: var(--theme-text-secondary);
+  font-weight: 450;
+}
+.asks-email-list-header .asks-email-add {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  outline: 0;
+  background: transparent;
+  color: var(--theme-text-secondary);
+}
+.asks-email-list-header .asks-email-add:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+.asks-email-list-header .asks-email-add:disabled {
+  opacity: 0.45;
+}
+.asks-email-list-header .asks-email-add:hover:not(:disabled) {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+.asks-email-list-row {
+  width: 100%;
+  margin: 0;
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: inherit;
+  text-align: left;
+}
+button.asks-email-list-row {
+  cursor: pointer;
+}
+button.asks-email-list-row:hover {
+  background: var(--theme-surface-hover);
+}
+button.asks-email-list-row:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
+}
+.asks-email-list-row > span {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.asks-email-list-row strong {
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.asks-email-list-row small {
+  overflow: hidden;
+  color: var(--theme-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

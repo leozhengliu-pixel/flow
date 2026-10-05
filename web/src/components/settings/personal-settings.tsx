@@ -137,7 +137,7 @@ const PERSONAL_ZH: Record<string, string> = {
   "Code & reviews": "代码与评审",
   "Security & access": "安全与访问",
   "Connected accounts": "已连接账户",
-  "Agent personalization": "智能助手个性化",
+  "Agent personalization": "Agent 个性化",
   General: "通用",
   "Interface and theme": "界面与主题",
   "Desktop application": "桌面应用",

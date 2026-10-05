@@ -14,6 +14,8 @@ import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
 import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties, useIssueRowActions } from './issue-row-actions'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { AgentBadge, AgentLabel } from '@/components/agent/agent-badge'
+import { useI18n } from '@/i18n/i18n'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -30,7 +32,7 @@ import { IssueWidgetAdornments } from '@/components/issues-split-view'
 export type MyIssuesStateType = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 export type MyIssuesContextAction = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle' | 'moreProperties' | 'createRelated' | 'markAs' | 'copy' | 'copyUrl' | 'copyId' | 'copyTitle' | 'convertTo' | 'move' | 'openIn' | 'runLoop' | 'favorite' | 'remind' | 'delete'
 export type MyIssuesEditableProperty = 'status' | 'priority' | 'assignee' | 'dueDate' | 'labels' | 'project' | 'cycle'
-export interface MyIssuesContextOption { id: string; teamId?: string; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType }
+export interface MyIssuesContextOption { id: string; teamId?: string; /** An agent member: "Agent" pill, delegates instead of assigning. */ agent?: boolean; label: string; color?: string; description?: string; issueCount?: number; scope?: string; groupId?: string; groupLabel?: string; avatarUrl?: string; kind?: MyIssuesEditableProperty; priority?: 0 | 1 | 2 | 3 | 4; shortcut?: string; stateType?: MyIssuesStateType }
 export interface MyIssuesRowPropertyOptions {
   status: MyIssuesContextOption[]
   priority: MyIssuesContextOption[]
@@ -79,7 +81,13 @@ export interface MyIssuesRowData {
   cycleName?: string
   addedToCycle?: string
   agentSessionId?: string
+  agentSessionState?: string
   suggestedLabelIds?: string[]
+  suggestedAssigneeIds?: string[]
+  suggestedProjectIds?: string[]
+  suggestedTeamIds?: string[]
+  suggestedDuplicateIds?: string[]
+  suggestedRelatedIds?: string[]
   externalSource?: string
   autoClosed?: boolean
   autoClosedAt?: string
@@ -333,6 +341,7 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
             {displayProperties.has('dueDate') && issue.dueDate ? <DueDatePicker value={issue.dueDate} allowRemove={!issue.recurrence} onChange={value => change('dueDate', value)} ariaLabel={`Change due date. Current due date is ${formatDueDate(issue.dueDate)}`} triggerClassName={styles.propertyTrigger} trigger={<time className={styles.dueDate} dateTime={issue.dueDate}><CalendarIcon size={13}/>{formatDueDate(issue.dueDate)}</time>}/> : null}
             {displayProperties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
             {displayProperties.has('estimate') && issue.estimate != null && <span className={styles.badge} aria-label={`Estimate ${issue.estimate}`}>{issue.estimate}</span>}
+            {displayProperties.has('assignee') && issue.delegate ? <DelegateAvatar delegate={issue.delegate}/> : null}
             {displayProperties.has('assignee') && issue.assignee ? <RowCommandPicker propertyLabel="Assignee" label={`Assign to. Current assignee is ${issue.assignee.name}`} searchLabel="Assign to..." selectedIds={[issue.assignee.id]} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} trigger={<MyIssuesAssigneeAvatar assignee={issue.assignee}/>}/> : null}
             {mutationError && <button type="button" className={styles.rowError} title={mutationError} onClick={() => onRetryMutation?.(issue)}>Retry</button>}
           </span>
@@ -401,7 +410,7 @@ function RowStatusHover({ issue }: { issue: MyIssuesRowData }) {
 }
 
 export function RowCommandPicker({ propertyLabel, label, multi = false, onSelect, options, searchLabel, searchShortcut, selectedIds, trigger, triggerClassName, kind = 'standard', hoverContent, hoverClassName, hoverPlacement }: { propertyLabel: string; label: string; multi?: boolean; onSelect: (id: string) => void | Promise<void>; options: MyIssuesContextOption[]; searchLabel: string; searchShortcut?: string; selectedIds: string[]; trigger: ReactNode; triggerClassName?: string; kind?: PropertyMenuKind; hoverContent?: ReactNode; hoverClassName?: string; hoverPlacement?: 'left' | 'below' }) {
-  const commandOptions = options.map((option, index) => ({ ...option, icon: <MyIssuesOptionIcon option={option}/>, shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : option.shortcut }))
+  const commandOptions = options.map((option, index) => ({ ...option, icon: <MyIssuesOptionIcon option={option}/>, labelContent: option.agent ? <AgentLabel label={option.label}/> : undefined, shortcut: option.kind === 'priority' ? option.id : option.kind === 'status' ? String(index + 1) : option.shortcut }))
   return <PropertyMenu label={propertyLabel} value={options.find(option => selectedIds.includes(option.id))?.label} multiple={multi} selectedId={selectedIds[0]} selectedIds={selectedIds} options={commandOptions} kind={kind} searchPlaceholder={searchLabel} searchShortcut={searchShortcut} ariaLabel={label} triggerClassName={triggerClassName ?? styles.propertyTrigger} trigger={trigger} hoverContent={hoverContent} hoverClassName={hoverClassName} hoverPlacement={hoverPlacement} onChange={onSelect}/>
 }
 
@@ -435,7 +444,7 @@ function ContextPropertySub({ label, multi = false, onSelect, options, selectedI
   const sections = multi && label === 'Labels' ? groupContextOptions(options) : [{ id: 'all', options: people ? command.filteredOptions : options }]
   return <ContextMenu.Sub open={open} onOpenChange={setOpen}><ContextMenu.SubTrigger className={styles.menuItem}><ContextMenuIcon label={label}/><span>{label}</span>{shortcut && <kbd>{shortcut}</kbd>}<span className={styles.menuChevron} aria-hidden="true">▶</span></ContextMenu.SubTrigger><ContextMenu.Portal><ContextMenu.SubContent data-flow-motion="floating" className={styles.contextSubmenu} sideOffset={3} alignOffset={-5}>
     {people && <div className="property-command-search"><input ref={command.inputRef} aria-label="Search people" placeholder="Search people…" value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { event.stopPropagation(); command.onKeyDown(event) }}/></div>}
-    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => <PersonHover key={option.id || 'none'} userId={people ? option.id : undefined}>{multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span></ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>}</PersonHover>)}</ContextMenu.Group>)}
+    {sections.map(section => <ContextMenu.Group key={section.id}>{section.label && <ContextMenu.Label className={styles.groupLabel}>{section.label}</ContextMenu.Label>}{section.options.map(option => <PersonHover key={option.id || 'none'} userId={people ? option.id : undefined}>{multi ? <ContextMenu.CheckboxItem className={styles.submenuItem} checked={selected.has(option.id)} onSelect={event => event.preventDefault()} onCheckedChange={() => void onSelect(option.id)}><span className={styles.optionCheckbox}>{selected.has(option.id) && <CheckboxMark/>}</span><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{option.agent && <AgentBadge/>}</ContextMenu.CheckboxItem> : <ContextMenu.Item className={styles.submenuItem} onSelect={() => void onSelect(option.id)}><MyIssuesOptionIcon option={option}/><span>{option.label}</span>{option.agent && <AgentBadge/>}{selected.has(option.id) && <Check className={styles.optionCheck} size={13}/>}</ContextMenu.Item>}</PersonHover>)}</ContextMenu.Group>)}
   </ContextMenu.SubContent></ContextMenu.Portal></ContextMenu.Sub>
 }
 
@@ -461,6 +470,12 @@ function GroupStateIcon({ state, type }: { state?: MyIssuesRowData['state']; typ
 function PropertyBadge(props:{label:NonNullable<MyIssuesRowData['labels']>[number]}|{children:ReactNode;color:string}){
   if('label'in props){const{label}=props;return <LabelHoverPreview label={label} side="bottom" align="start"><span className={styles.badge}><i style={{backgroundColor:label.color}}/><span data-i18n-ignore>{label.name}</span></span></LabelHoverPreview>}
   return <span className={styles.badge}><i style={{backgroundColor:props.color}}/><span data-i18n-ignore>{props.children}</span></span>
+}
+/** Linear shows the delegated agent's avatar beside the assignee. */
+export function DelegateAvatar({ delegate, className }: { delegate: NonNullable<MyIssuesRowData['delegate']>; className?: string }) {
+  const { t } = useI18n()
+  const label = t('Delegated to {name}').replace('{name}', delegate.name)
+  return <span className={className ?? styles.delegateAvatar} role="img" aria-label={label} title={label} data-i18n-ignore><UserAvatar avatarUrl={delegate.avatarUrl} className={styles.avatar} color={delegate.color ?? 'var(--avatar-fallback)'} name={delegate.name}/></span>
 }
 function MyIssuesAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 

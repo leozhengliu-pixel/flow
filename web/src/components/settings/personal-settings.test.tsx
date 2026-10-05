@@ -243,7 +243,7 @@ describe('personal settings workflows', () => {
     ['profile', '个人资料'],
     ['account-security', '安全与访问'],
     ['connections', '已连接账户'],
-    ['agents', '智能助手个性化'],
+    ['agents', 'Agent 个性化'],
   ] as const)('localizes the %s page heading', async (page, heading) => {
     localStorage.setItem('flow:locale', 'zh-CN')
     render(<MemoryRouter><I18nProvider><PersonalSettings {...props(page)}/></I18nProvider></MemoryRouter>)

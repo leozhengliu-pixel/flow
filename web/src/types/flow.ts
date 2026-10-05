@@ -355,7 +355,15 @@ export interface Issue {
   cycleId?: UUID;
   addedToCycle?: "planned" | "during" | "after";
   agentSessionId?: UUID;
+  /** Status of the delegated agent's current session (decorated by the server). */
+  agentSessionState?: "pending" | "active" | "awaitingInput" | "complete" | "error" | "canceled";
   suggestedLabelIds?: UUID[];
+  /** Active Triage Intelligence suggestion targets (Linear "Triage Intelligence" filters). */
+  suggestedAssigneeIds?: UUID[];
+  suggestedProjectIds?: UUID[];
+  suggestedTeamIds?: UUID[];
+  suggestedDuplicateIds?: UUID[];
+  suggestedRelatedIds?: UUID[];
   externalSource?: string;
   autoClosed?: boolean;
   templateId?: UUID;
@@ -675,8 +683,27 @@ export interface EmailIntakeAddress {
   verifiedAt?: string;
   aliases: EmailIntakeAlias[];
   enabled: boolean;
+  /** "asks" for Asks email intake, "team" for a team's issue email. */
+  type?: "asks" | "team";
+  /** Generated on Flow's intake domain; receives mail without DNS. */
+  system?: boolean;
+  templateId?: string;
+  senderName?: string;
+  /** The customer's own address that forwards into this intake address. */
+  forwardingEmailAddress?: string;
+  forwardingDomainVerifiedAt?: string;
+  customerRequestsEnabled?: boolean;
+  /** Present on API responses (not bootstrap): records for the custom sending domain. */
+  dnsRecords?: EmailIntakeDnsRecord[];
+  outboundFromEmail?: string;
   createdAt: string;
   updatedAt: string;
+}
+export interface EmailIntakeDnsRecord {
+  type: string;
+  name: string;
+  content: string;
+  isVerified: boolean;
 }
 export interface EmailIntakeMessage {
   id: UUID;
@@ -1349,6 +1376,10 @@ export interface ReleasePipeline {
   production: boolean;
   stages: string[];
   stageStatuses: Record<string, Release["status"]>;
+  /** Custom hex colors for started stages, keyed by stage name. */
+  stageColors?: Record<string, string>;
+  /** Started stages that syncs won't automatically add issues to. */
+  frozenStages?: string[];
   position: number;
   pathFilters: string[];
   releaseNotesTemplate?: string;

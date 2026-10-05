@@ -6,20 +6,26 @@ import (
 )
 
 type ApplicationInstallation struct {
-	ID           string    `json:"id"`
-	WorkspaceKey string    `json:"workspaceKey"`
-	ClientID     string    `json:"clientId"`
-	Name         string    `json:"name"`
-	AvatarURL    string    `json:"avatarUrl,omitempty"`
-	UserID       string    `json:"userId"`
-	InstalledBy  string    `json:"installedBy"`
-	Scopes       []string  `json:"scopes"`
-	TeamIDs      []string  `json:"teamIds"`
-	Builtin      bool      `json:"builtin"`
-	Active       bool      `json:"active"`
-	WebhookURL   string    `json:"webhookUrl,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID           string   `json:"id"`
+	WorkspaceKey string   `json:"workspaceKey"`
+	ClientID     string   `json:"clientId"`
+	Name         string   `json:"name"`
+	AvatarURL    string   `json:"avatarUrl,omitempty"`
+	UserID       string   `json:"userId"`
+	InstalledBy  string   `json:"installedBy"`
+	Scopes       []string `json:"scopes"`
+	TeamIDs      []string `json:"teamIds"`
+	Builtin      bool     `json:"builtin"`
+	Active       bool     `json:"active"`
+	// AllTeams keeps the installation's teams in step with the workspace's
+	// teams (the built-in Flow agent works in every team, like Linear's).
+	AllTeams bool `json:"allTeams,omitempty"`
+	// ServerSuspended marks an installation deactivated because the server's
+	// agent is disabled; it is reactivated when the agent is enabled again.
+	ServerSuspended bool      `json:"serverSuspended,omitempty"`
+	WebhookURL      string    `json:"webhookUrl,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 func (a ApplicationInstallation) User() User {

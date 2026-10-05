@@ -13,7 +13,7 @@
 .body{display:flex;flex-direction:column;gap:8px}
 .row{display:flex;align-items:flex-start;gap:6px}
 .conjunction{width:32px;height:24px;flex:0 0 32px;display:flex;align-items:center;justify-content:flex-end}
-.conjunctionToggle{width:32px;height:24px;display:grid;place-items:center;padding:0;border:.5px solid var(--theme-border-strong);border-radius:7.5px;background:var(--theme-surface-2);color:var(--theme-text-primary);font:500 12px/1 inherit}
+.conjunctionToggle{width:32px;height:24px;display:grid;place-items:center;padding:0;border:.5px solid var(--theme-border-strong);border-radius:7.5px;background:var(--theme-surface-2);color:var(--theme-text-primary);font-family:inherit;font-size:12px;font-weight:500;line-height:1}
 .conjunctionToggle:hover{background:var(--theme-surface-hover)}
 .conjunctionText{width:32px;text-align:center;color:var(--theme-text-secondary);font-size:12px}
 .condition{min-width:0;display:flex}
@@ -22,7 +22,8 @@
 .group{position:relative;min-width:0;flex:1;display:flex;flex-direction:column;gap:8px;padding:8px 32px 8px 8px;border:.5px solid var(--summary-card-border);border-radius:8px;background:color-mix(in srgb,var(--summary-card-row-hover-bg) 50%,transparent)}
 .deleteGroup{position:absolute;top:8px;right:6px;width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--theme-text-secondary)}
 .deleteGroup:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
-.addFilter{height:24px;display:inline-flex;align-items:center;gap:4px;padding:0 9px 0 7px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:var(--theme-surface-2);color:var(--theme-text-primary);font:500 12px/1 inherit}
-.addFilter:hover,.addFilter[aria-expanded=true]{background:var(--theme-surface-hover)}
-.addFilter svg{color:var(--theme-text-secondary)}
+/* Linear's "+ Filter" pill: 24px, 0.5px hairline, 4/6/4/5 padding, 16px plus glyph, 5px gap, 12px/500. */
+.addFilter{box-sizing:border-box;height:24px;flex:none;align-self:flex-start;display:inline-flex;align-items:center;gap:5px;padding:4px 6px 4px 5px;border:.5px solid var(--theme-border-strong);border-radius:9999px;background:var(--pk-surface);color:var(--pk-text);font-family:inherit;font-size:12px;font-weight:500;line-height:normal;letter-spacing:0;white-space:nowrap;cursor:default}
+.addFilter:hover,.addFilter[aria-expanded=true]{background:var(--lx-control-hover,var(--pk-control-selected))}
+.addFilter svg{width:16px;height:16px;flex:0 0 16px;color:var(--pk-muted)}
 .conjunctionToggle:focus-visible,.addFilter:focus-visible,.deleteGroup:focus-visible,.chipSummary:focus-visible,.chipRemove:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}

@@ -2196,10 +2196,14 @@ func (s *server) suspendMember(w http.ResponseWriter, r *http.Request) {
 			respondMutation(w, err, http.StatusNoContent, nil)
 			return
 		}
+		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), userID)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	err := s.store.SuspendMember(r.Context(), data.Workspace.ID, r.PathValue("userId"))
+	if err == nil {
+		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), r.PathValue("userId"))
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -2264,10 +2268,14 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 			respondMutation(w, err, http.StatusNoContent, nil)
 			return
 		}
+		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), userID)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	err := s.store.RemoveMember(r.Context(), data.Workspace.ID, r.PathValue("userId"))
+	if err == nil {
+		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), r.PathValue("userId"))
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -2381,4 +2389,12 @@ func devAuthTokens() bool {
 }
 func secureCookie(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") || strings.EqualFold(os.Getenv("FLOW_COOKIE_SECURE"), "true")
+}
+
+// pruneSuggestedAssignee drops Triage Intelligence assignee suggestions for a
+// member who can no longer be assigned.
+func (s *server) pruneSuggestedAssignee(r *http.Request, workspace, userID string) {
+	s.pruneIssueSuggestionTargets(r.Context(), workspace, func(item domain.IssueSuggestion) bool {
+		return item.Type == "assignee" && item.SuggestedUserID == userID
+	})
 }

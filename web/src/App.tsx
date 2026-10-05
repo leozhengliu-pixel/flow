@@ -5034,6 +5034,23 @@ function App() {
               creating={route.creating}
               widgetId={route.widgetId}
               data={data}
+              dashboardsHref={
+                route.teamKey
+                  ? teamDashboardsPath(data.workspace.urlKey, route.teamKey)
+                  : dashboardsPath(data.workspace.urlKey)
+              }
+              resourceHref={(resource) =>
+                route.teamKey
+                  ? teamViewsPath(data.workspace.urlKey, route.teamKey, resource)
+                  : workspaceViewsPath(data.workspace.urlKey, resource)
+              }
+              onOpenResource={(resource) =>
+                navigateTo(
+                  route.teamKey
+                    ? teamViewsPath(data.workspace.urlKey, route.teamKey, resource)
+                    : workspaceViewsPath(data.workspace.urlKey, resource),
+                )
+              }
               onNavigate={(dashboardId) =>
                 navigateTo(
                   dashboardId
@@ -6062,6 +6079,18 @@ function App() {
                         resource,
                       )
                     : workspaceViewsPath(data.workspace.urlKey, resource)
+                }
+                dashboardsHref={
+                  viewsTeam
+                    ? teamDashboardsPath(data.workspace.urlKey, viewsTeam.key)
+                    : dashboardsPath(data.workspace.urlKey)
+                }
+                onOpenDashboards={() =>
+                  navigateTo(
+                    viewsTeam
+                      ? teamDashboardsPath(data.workspace.urlKey, viewsTeam.key)
+                      : dashboardsPath(data.workspace.urlKey),
+                  )
                 }
                 onUpdate={changeSavedView}
                 onToggleFavorite={toggleSavedViewFavorite}

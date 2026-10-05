@@ -90,22 +90,28 @@ export function DashboardsPage({
   creating = false,
   widgetId,
   data,
+  dashboardsHref,
   onNavigate,
   onExploreIssues,
+  onOpenResource,
   onOpenSidebar,
   onOpenCreate,
   onOpenWidget,
+  resourceHref,
   teamKey,
 }: {
   dashboardId?: string;
   creating?: boolean;
   widgetId?: string;
   data: BootstrapData;
+  dashboardsHref: string;
   onNavigate: (dashboardId?: string) => void;
   onExploreIssues: (filters: DashboardFilters) => void;
+  onOpenResource: (resource: "issues" | "projects") => void;
   onOpenSidebar: () => void;
   onOpenCreate: () => void;
   onOpenWidget: (dashboardId: string, widgetId: string) => void;
+  resourceHref: (resource: "issues" | "projects") => string;
   teamKey?: string;
 }) {
   const { t } = useI18n();
@@ -442,9 +448,13 @@ export function DashboardsPage({
             actionLabel="New dashboard"
             onAction={onOpenCreate}
             onOpenSidebar={onOpenSidebar}
-            // Dashboards is its own page in Linear (sidebar More menu), not a Views tab.
-            tabs={[]}
-            title="Dashboards"
+            // Dashboards (enterprise) is a tab of the Views page.
+            tabs={[
+              { resource: "issues", label: "Issues", href: resourceHref("issues"), onSelect: () => onOpenResource("issues") },
+              { resource: "projects", label: "Projects", href: resourceHref("projects"), onSelect: () => onOpenResource("projects") },
+              { resource: "dashboards", label: "Dashboards", href: dashboardsHref },
+            ]}
+            title="Views"
             toolbarEnd={<>
               <input
                 className="dashboard-search"

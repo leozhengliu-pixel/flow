@@ -2,15 +2,18 @@ import { cloneElement, Fragment, isValidElement, useMemo, useRef, useState, type
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
-import { Archive, Bot, Building2, CalendarDays, CircleDot, Diamond, ExternalLink, FileText, Flag, GitBranch, Layers3, Link2, ListFilter, Rocket, Sparkles, Tags, UserRound, Users } from 'lucide-react'
-import { ChevronRightIcon } from './my-issues-icons'
+import { Building2, Diamond, ExternalLink, Link2, Rocket } from 'lucide-react'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { useI18n } from '@/i18n/i18n'
+import { AgentBadge } from '@/components/agent/agent-badge'
 import styles from './my-issues-filter-menu.module.css'
-import { FilterGlyph } from '@/components/issue/filter-glyph'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { LinearGlyph, type LinearGlyphName } from '@/components/ui/linear-glyphs'
+import { SubscriptionIcon } from '@/components/ui/view-action-icons'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 
 export type IssueFilterScope = 'issues' | 'project'
@@ -47,7 +50,7 @@ const MY_ISSUES_FILTER_GROUPS = [
     { id: 'agent', label: 'Agent', submenu: true }, { id: 'agentSession', label: 'Agent Session', submenu: true },
     { id: 'creator', label: 'Creator', submenu: true }, { id: 'priority', label: 'Priority', submenu: true },
     { id: 'labels', label: 'Labels', submenu: true }, { id: 'relations', label: 'Relations', submenu: true },
-    { id: 'suggestedLabel', label: 'Suggested label', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
+    { id: 'triageIntelligence', label: 'Triage Intelligence', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
   ],
   [
     { id: 'projectMilestone', label: 'Project milestone', submenu: true },
@@ -70,6 +73,8 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
   const [aiPending, setAiPending] = useState(false)
   const [textCondition, setTextCondition] = useState<{ field: MyIssuesFilterKey; option: MyIssuesFilterOption }>()
   const hiddenFields = ISSUE_FILTER_SCOPE_HIDDEN[scope]
+  // The advanced editor's menu sits above the editor popover; every submenu stacks one level higher.
+  const rootLayer = variant === 'advanced' ? 700 : 600
   const close = (next: boolean) => {
     if (!next) { setActiveField(undefined); setQuery('') }
     onOpenChange(next)
@@ -129,7 +134,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
   return <><Popover.Root open={open} onOpenChange={close}>
     <Popover.Trigger asChild>{isValidElement(trigger) ? cloneElement(trigger, { 'aria-expanded': open } as object) : trigger}</Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-variant={variant} side="bottom" align={align} alignOffset={align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
+      <Popover.Content data-flow-motion="floating" className={`${styles.rootMenu} ${variant === 'advanced' ? styles.advancedMenu : ''}`} data-variant={variant} style={{ zIndex: rootLayer }} side="bottom" align={align} alignOffset={align === 'center' ? -15 : 0} sideOffset={3} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={() => close(false)} onKeyDownCapture={event=>{if(event.key==='Escape'&&!activeField){event.preventDefault();close(false)}}}>
         <Command className={styles.rootCommand} loop filter={(value, search, keywords) => value.startsWith('__ai__') ? 0.0001 : defaultFilter(value, search, keywords)}>
           <div className={styles.rootSearch}>
             <Command.Input aria-label={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} placeholder={t(variant === 'advanced' ? 'Filter' : 'Add Filter…')} autoFocus value={query} onValueChange={setQuery}/>
@@ -137,7 +142,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
           </div>
           <Command.List className={styles.rootList}>
             <Command.Empty className={styles.empty}>{t('No filters found')}</Command.Empty>
-            {onAddGroup && <><Command.Group className={styles.rootGroup}><Command.Item className={styles.rootItem} value="Add filter group" onSelect={() => { onAddGroup(); close(false) }}><span className={styles.rootIcon} aria-hidden="true">( )</span><span>{t('Add filter group')}</span></Command.Item></Command.Group><Command.Separator className={styles.rootSeparator}/></>}
+            {onAddGroup && <><Command.Group className={styles.rootGroup}><Command.Item className={styles.rootItem} data-add-group="" value="Add filter group" onMouseMove={() => setActiveField(undefined)} onSelect={() => { onAddGroup(); close(false) }}><span className={styles.rootIcon} aria-hidden="true"><LinearGlyph name="filterGroup"/></span><span>{t('Add filter group')}</span></Command.Item></Command.Group><Command.Separator className={styles.rootSeparator}/></>}
             {visibleGroups.map((visibleItems, groupIndex) => {
               return <Fragment key={groupIndex}>{groupIndex > 0 && <Command.Separator className={styles.rootSeparator}/>}<Command.Group className={styles.rootGroup}>
               {visibleItems.map(item => {
@@ -154,13 +159,13 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
                       data-unavailable={!hasValues ? '' : undefined}
                       disabled={!hasValues}
                       onFocus={() => { if (hasValues && !directApply) setActiveField(field) }}
-                      onMouseMove={() => { if (hasValues && !directApply) setActiveField(field) }}
+                      onMouseMove={() => setActiveField(hasValues && !directApply ? field : undefined)}
                       onSelect={() => { if (field === 'advanced') { close(false); onAdvanced?.() } else if (directApply) { const option=options?.(field)?.[0]; if(option){onToggle(field,option);close(false)} } else openValues(field) }}
                     >
-                      <span className={styles.rootIcon}><FilterGlyph label={item.label} fallback={<FilterFieldIcon field={field}/>}/></span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
+                      <span className={styles.rootIcon} aria-hidden="true"><FilterFieldIcon field={field}/></span><span>{t(item.label)}</span>{hasSubmenu && <span className={styles.rootChevron} aria-hidden="true">▶</span>}
                     </Command.Item>
                   </Popover.Anchor>
-                  {hasValues && !directApply && <ValueMenu field={field} filters={filters} label={item.label} options={options?.(field) ?? []} optionsFor={field => options?.(field)} onClose={() => setActiveField(undefined)} onToggle={choose} onToggleAny={onToggle}/>}
+                  {hasValues && !directApply && <ValueMenu field={field} filters={filters} label={item.label} options={options?.(field) ?? []} optionsFor={field => options?.(field)} layer={rootLayer + 1} onClose={() => setActiveField(undefined)} onToggle={choose} onToggleAny={onToggle}/>}
                 </Popover.Root>
               })}
             </Command.Group></Fragment>})}
@@ -173,7 +178,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
             </Command.Group></>}
             {aiAvailable && query.trim() && <Command.Group className={styles.rootGroup} forceMount>
               <Command.Item forceMount className={styles.rootItem} value={`__ai__ ${query}`} disabled={aiPending} onSelect={() => runAIQuery(query)}>
-                <span className={styles.rootIcon}><Sparkles size={15}/></span><span data-i18n-ignore>{t('AI filter')} “{query.trim()}”</span>
+                <span className={styles.rootIcon} aria-hidden="true"><LinearGlyph name="aiFilter"/></span><span data-i18n-ignore>{t('AI filter')} “{query.trim()}”</span>
               </Command.Item>
             </Command.Group>}
           </Command.List>
@@ -187,7 +192,7 @@ import { PersonHover } from '@/components/property/person-info'
 import { resolveAIFilter } from './natural-language-filter'
 import { isPeopleProperty } from '@/lib/people'
 
-function ValueMenu({ field, filters, label, onClose, onToggle, onToggleAny, options, optionsFor }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; onToggleAny: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[]; optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined }) {
+function ValueMenu({ field, filters, label, layer, onClose, onToggle, onToggleAny, options, optionsFor }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; layer: number; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; onToggleAny: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[]; optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined }) {
   const { t } = useI18n()
   const selectedIds = useMemo(() => filters.filter(filter => filter.field === field).flatMap(filter => filter.values?.map(value => value.value) ?? [filter.value]), [field, filters])
   const command = usePropertyCommand({ personOptions: isPeopleProperty(field), closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: option => onToggle(field, option), open: true, options, selectedIds })
@@ -209,37 +214,67 @@ function ValueMenu({ field, filters, label, onClose, onToggle, onToggleAny, opti
     }).finally(() => setAiPending(false))
   }
 
+  const hideSearch = isCategoryList(field, options)
   return <Popover.Portal>
-    <Popover.Content data-flow-motion="floating" className={styles.valueMenu} data-field={field} side="left" align="start" alignOffset={-43} sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
-      <div className={styles.valueSearch}>
+    <Popover.Content data-flow-motion="floating" className={styles.valueMenu} data-field={field} data-level={1} style={{ zIndex: layer }} side="left" align="start" alignOffset={submenuAlignOffset(hideSearch)} sideOffset={SUBMENU_SIDE_OFFSET} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={command.onKeyDown}>
+      <div className={styles.valueSearch} data-hidden={hideSearch || undefined}>
         <input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={field==='content'?t('Filter by content…'):field==='ai'?t('AI filter'):t('Filter…')} value={command.query} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event=>{if(event.key!=='Enter'||!command.query.trim())return;if(field==='content'){event.preventDefault();event.stopPropagation();onToggle(field,{id:`query:${command.query.trim()}`,label:command.query.trim()})}else if(field==='ai'){event.preventDefault();event.stopPropagation();if(!aiPending)runAIFilter(command.query)}}}/>
       </div>
       <div className={styles.valueList} role="listbox" aria-label={label} aria-multiselectable="true">
         {aiPending ? <div className={styles.empty} role="status">{t('Building filters…')}</div> : !command.filteredOptions.length && <div className={styles.empty}>{t('No results')}</div>}
-        <FilterValueItems field={field} options={command.filteredOptions} activeId={command.activeId} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={next=>next.id==='content-prompt'?command.inputRef.current?.focus():command.choose(next)}/>
+        <FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} isSelected={command.isSelected} onActive={command.setActiveId} onChoose={next=>next.id==='content-prompt'?command.inputRef.current?.focus():command.choose(next)}/>
       </div>
     </Popover.Content>
   </Popover.Portal>
 }
 
-function FilterValueItems({ activeId, field, isSelected = () => false, onActive = () => {}, onChoose, options }: { activeId?: string; field: MyIssuesFilterKey; isSelected?: (id: string) => boolean; onActive?: (id: string) => void; onChoose: (option: MyIssuesFilterOption) => void; options: MyIssuesFilterOption[] }) {
+/** Submenus overlap their parent's edge by 2px and line their first row up with the hovered row (Linear). */
+const SUBMENU_SIDE_OFFSET = -1.5
+/** Border + 6px list padding, plus the 36.5px search band when it is shown. */
+function submenuAlignOffset(hideSearch: boolean) { return hideSearch ? -6.5 : -43 }
+
+type ValueRowKind = 'check' | 'icon' | 'plain'
+/** Linear's three value-row layouts: selectable values (checkbox column + icon), categories and one-click entries (icon first), presets (text only). */
+function valueRowKind(field: MyIssuesFilterKey, option: MyIssuesFilterOption): ValueRowKind {
+  if (option.textConditionPrefix || option.kind === 'dueDate' || option.kind === 'dateCustom' || option.kind === 'textCondition') return 'plain'
+  if (option.children?.length) return categoryGlyph(field, option) === undefined && !option.kind ? 'plain' : 'icon'
+  if (field === 'relations' || (field === 'triageIntelligence' && (option.id === 'related' || option.id === 'duplicate'))) return 'icon'
+  return 'check'
+}
+/** Category menus (Dates, Relations, Project properties, Triage Intelligence) show no search band. */
+function isCategoryList(field: MyIssuesFilterKey, options: MyIssuesFilterOption[]) {
+  return options.length > 0 && options.every(option => valueRowKind(field, option) === 'icon')
+}
+/** Labels Flow defines (presets, "No …", categories) are translated; names users typed are not. */
+function isSystemOption(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
+  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || valueRowKind(field, option) !== 'check'
+}
+
+function FilterValueItems({ activeId, field, isSelected = () => false, layer, onActive = () => {}, onChoose, options }: { activeId?: string; field: MyIssuesFilterKey; isSelected?: (id: string) => boolean; layer: number; onActive?: (id: string) => void; onChoose: (option: MyIssuesFilterOption) => void; options: MyIssuesFilterOption[] }) {
   const [openId, setOpenId] = useState<string>()
-  return <>{options.map(option => <FilterValueItem field={field} key={option.id || 'none'} option={option} active={activeId === option.id} selected={isSelected(option.id)} nestedOpen={openId === option.id} onActive={() => onActive(option.id)} onNestedOpen={next => setOpenId(next ? option.id : undefined)} onChoose={onChoose}/>)}</>
+  // Hovering any other row closes an open nested submenu (Linear opens exactly one per level).
+  return <>{options.map(option => <FilterValueItem field={field} key={option.id || 'none'} layer={layer} option={option} active={activeId === option.id} selected={isSelected(option.id)} nestedOpen={openId === option.id} onActive={() => { onActive(option.id); if (!option.children?.length) setOpenId(undefined) }} onNestedOpen={next => setOpenId(next ? option.id : current => current === option.id ? undefined : current)} onChoose={onChoose}/>)}</>
 }
 
-function FilterValueItem({ field, option, active, selected, nestedOpen, onActive, onNestedOpen, onChoose }: { field: MyIssuesFilterKey; option: MyIssuesFilterOption; active:boolean; selected:boolean; nestedOpen:boolean; onActive:()=>void; onNestedOpen:(open:boolean)=>void; onChoose:(option:MyIssuesFilterOption)=>void }) {
+function FilterValueItem({ field, layer, option, active, selected, nestedOpen, onActive, onNestedOpen, onChoose }: { field: MyIssuesFilterKey; layer: number; option: MyIssuesFilterOption; active:boolean; selected:boolean; nestedOpen:boolean; onActive:()=>void; onNestedOpen:(open:boolean)=>void; onChoose:(option:MyIssuesFilterOption)=>void }) {
   const {t}=useI18n()
-  if(option.children?.length)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} onMouseMove={()=>{onActive();onNestedOpen(true)}}><span className={styles.optionSpacer}/><OptionMark field={field} option={option}/><span className={styles.valueLabel}>{t(option.label)}</span><ChevronRightIcon/></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
-  if(option.textConditionPrefix)return <button type="button" role="option" aria-selected={active} className={`${styles.valueItem} ${styles.textConditionItem}`} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.optionSpacer}/><span className={styles.valueLabel}>{t(option.label)}</span></button>
-  return <PersonHover userId={isPeopleProperty(option.kind ?? field) ? option.id : undefined}><button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span><OptionMark field={field} option={option}/><span className={styles.valueLabel} data-i18n-ignore>{option.label}</span>{(optionCount(option)??0)>0&&<span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span>}</button></PersonHover>
+  const kind = valueRowKind(field, option)
+  const label = isSystemOption(field, option) ? t(option.label) : option.label
+  const mark = kind === 'plain' ? null : <span className={styles.optionSlot} aria-hidden="true"><OptionMark field={field} option={option}/></span>
+  // Linear shows counts on selectable values only (not on categories or one-click relation rows).
+  const count = (optionCount(option)??0)>0 && kind === 'check' ? <span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span> : null
+  if(option.children?.length)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
+  if(kind!=='check')return <button type="button" role="option" aria-selected={active} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{count}</button>
+  return <PersonHover userId={isPeopleProperty(option.kind ?? field) ? option.id : undefined}><button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{option.agent&&<AgentBadge/>}{count}</button></PersonHover>
 }
 
-function NestedValueMenu({ field, label, onChoose, onClose, options }: { field: MyIssuesFilterKey; label: string; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
+function NestedValueMenu({ field, label, layer, onChoose, onClose, options }: { field: MyIssuesFilterKey; label: string; layer: number; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
   const { t } = useI18n()
   const command = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options })
-  return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} side="left" align="start" sideOffset={-2} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
-    <div className={styles.valueSearch}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t('Filter…')} value={command.query} onChange={event=>command.onQueryChange(event.target.value)}/></div>
-    <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>
+  const hideSearch = isCategoryList(field, options)
+  return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} data-level={2} style={{ zIndex: layer }} side="left" align="start" alignOffset={submenuAlignOffset(hideSearch)} sideOffset={SUBMENU_SIDE_OFFSET} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
+    <div className={styles.valueSearch} data-hidden={hideSearch || undefined}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t('Filter…')} value={command.query} onChange={event=>command.onQueryChange(event.target.value)}/></div>
+    <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>
   </Popover.Content>
 }
 
@@ -267,9 +302,14 @@ function TextConditionDialog({ condition, onApply, onClose }: { condition?: { fi
 
 export function OptionMark({ field, option }: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }) {
   const kind=option.kind??field
+  const glyph=categoryGlyph(field,option)
+  if(glyph)return glyph
+  if((field==='agent'||field==='agentSession')&&!option.id)return <LinearGlyph name="noAgent"/>
+  if((field==='agent'||field==='agentSession')&&option.id==='*')return <LinearGlyph name="agent"/>
+  if(field==='agent'&&!option.kind)return <span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>
   if(kind==='status'&&option.stateType)return <StatusIcon state={{id:option.id,name:option.label,type:option.stateType,color:option.color??'var(--theme-text-secondary)'}} size={14}/>
   if(kind==='priority'){const priority=(option.priority??Number(option.id))||0;return <PriorityIcon priority={priority} size={14} style={{color:priorityColor(priority)}}/>}
-  if(kind==='assignee')return option.id?<span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>:<NoAssigneeIcon size={14}/>
+  if(kind==='assignee'||kind==='creator')return option.id?<span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>:<LinearGlyph name="owner"/>
   if(kind==='project')return option.id?<ProjectIcon size={14} style={{color:option.color}}/>:<NoProjectIcon size={14}/>
   if(kind==='labels')return option.color?<i className={styles.optionMark} style={{backgroundColor:option.color}}/>:<LabelIcon size={14}/>
   if(kind==='dueDate')return <CalendarIcon size={14}/>
@@ -300,7 +340,54 @@ function ProjectPropertyCategoryIcon({ kind }: { kind: 'status'|'statusType'|'pr
   return <svg className={styles.categoryIcon} width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M7.3406 2.32C7.68741 1.89333 8.31259 1.89333 8.6594 2.32L12.7903 7.402C13.0699 7.74597 13.0699 8.25403 12.7903 8.598L8.6594 13.68C8.31259 14.1067 7.68741 14.1067 7.3406 13.68L3.2097 8.598C2.9301 8.25403 2.9301 7.74597 3.2097 7.402L7.3406 2.32Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/></svg>
 }
 
-export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){const props={size:15};if(field==='ai')return <Sparkles {...props}/>;if(field==='advanced')return <ListFilter {...props}/>;if(field==='status')return <CircleDot {...props}/>;if(field==='assignee'||field==='creator')return <UserRound {...props}/>;if(field==='agent'||field==='agentSession')return <Bot {...props}/>;if(field==='priority')return <Flag {...props}/>;if(field==='labels'||field==='suggestedLabel')return <Tags {...props}/>;if(field==='relations')return <GitBranch {...props}/>;if(field==='dates'||field==='addedToCycle')return <CalendarDays {...props}/>;if(field==='projectMilestone')return <Diamond {...props}/>;if(field==='project')return <ProjectIcon {...props}/>;if(field==='projectProperties'||field==='initiative')return <Layers3 {...props}/>;if(field==='cycle')return <CycleIcon {...props}/>;if(field==='releases')return <Rocket {...props}/>;if(field==='customers')return <Building2 {...props}/>;if(field==='subscribers')return <Users {...props}/>;if(field==='externalSource'||field==='links')return <ExternalLink {...props}/>;if(field==='autoClosed')return <Archive {...props}/>;if(field==='content')return <FileText {...props}/>;if(field==='template')return <FileText {...props}/>;return <Link2 {...props}/>}
+const FIELD_GLYPHS: Partial<Record<MyIssuesFilterKey, LinearGlyphName>> = {
+  ai: 'aiFilter', advanced: 'advancedFilter', status: 'status', assignee: 'assignee', agent: 'agent', agentSession: 'agent', creator: 'creator',
+  labels: 'labels', suggestedLabel: 'labels', relations: 'relations', triageIntelligence: 'triage', dates: 'dates', addedToCycle: 'dates',
+  projectProperties: 'projectProperties', autoClosed: 'autoClosed', content: 'content', links: 'links',
+}
+/** Linear's filter-menu glyph for a field (16px; Status and Auto-closed are 14px glyphs centred in the slot). */
+export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
+  const glyph=FIELD_GLYPHS[field]
+  if(glyph)return <LinearGlyph name={glyph}/>
+  if(field==='priority')return <ProjectPropertyCategoryIcon kind="priority"/>
+  if(field==='projectMilestone')return <ProjectPropertyCategoryIcon kind="milestone"/>
+  if(field==='project')return <ViewGlyph icon="Project" color="currentColor" style={{width:16,height:16}}/>
+  if(field==='initiative')return <ViewGlyph icon="Initiative" color="currentColor" style={{width:16,height:16}}/>
+  if(field==='cycle')return <CycleIcon noCycle size={16}/>
+  if(field==='releases')return <IssueActionGlyph label="Release" fallback={<Rocket size={16}/>}/>
+  if(field==='customers')return <IssueActionGlyph label="Add customer request…" fallback={<Building2 size={16}/>}/>
+  if(field==='subscribers')return <SubscriptionIcon/>
+  if(field==='template')return <IssueActionGlyph label="Template…" fallback={<Diamond size={16}/>}/>
+  if(field==='externalSource')return <ExternalLink size={16}/>
+  return <Link2 size={16}/>
+}
+
+const DATE_CATEGORY_GLYPHS: Record<string, LinearGlyphName> = { 'due-date': 'dates', 'created-date': 'dates', 'started-date': 'dates', 'updated-date': 'updatedDate', 'completed-date': 'updatedDate', 'auto-closed-date': 'autoClosed', 'triaged-date': 'triagedDate' }
+const RELATION_GLYPHS: Record<string, LinearGlyphName> = { sub_issue_of: 'subIssues', recurring: 'dates', 'recurring-any': 'dates', 'recurring-none': 'dates', 'has-relations': 'relations', duplicate: 'duplicates' }
+const RELATION_ACTION_GLYPHS: Record<string, string> = { parent_of: 'Parent issue…', blocked_by: 'Blocked issue…', blocks: 'Blocking issue…' }
+const TRIAGE_GLYPHS: Record<string, LinearGlyphName> = { 'triage-label': 'labels', 'triage-team': 'moveTo', related: 'relations', duplicate: 'duplicates' }
+/** Icons for Linear's category rows (Dates ▸ Due date…, Relations, Triage Intelligence ▸ Suggested …). */
+function categoryGlyph(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
+  if (field === 'dates') {
+    if (option.id === 'time-current-status') return <ViewGlyph icon="Stopwatch" color="currentColor" style={{ width: 16, height: 16 }}/>
+    const name = DATE_CATEGORY_GLYPHS[option.id]
+    return name ? <LinearGlyph name={name}/> : undefined
+  }
+  if (field === 'relations') {
+    const action = RELATION_ACTION_GLYPHS[option.id]
+    if (action) return <IssueActionGlyph label={action} fallback={<LinearGlyph name="relations"/>}/>
+    const name = RELATION_GLYPHS[option.id]
+    return name ? <LinearGlyph name={name}/> : undefined
+  }
+  if (field === 'triageIntelligence') {
+    if (option.id === 'triage-project') return <ViewGlyph icon="Project" color="currentColor" style={{ width: 16, height: 16 }}/>
+    if (option.id.endsWith(':*')) return <LinearGlyph name="triage"/>
+    if (option.id.startsWith('team:')) return <LinearGlyph name="moveTo"/>
+    const name = TRIAGE_GLYPHS[option.id]
+    return name ? <LinearGlyph name={name}/> : undefined
+  }
+  return undefined
+}
 function priorityColor(priority:number|undefined){return ['var(--theme-text-tertiary)','var(--priority-urgent)','var(--priority-high)','var(--priority-medium)','var(--priority-low)'][priority??0]}
 function initials(value:string){return value.split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]).join('').toUpperCase()}
 

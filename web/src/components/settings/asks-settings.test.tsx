@@ -8,9 +8,11 @@ import type { WorkspaceSettings } from "@/types/flow";
 import {
   createEmailIntakeAddress,
   deleteEmailIntakeAddress,
+  listEmailIntakeAddresses,
+  updateEmailIntakeAddress,
   updateWorkspacePreferences,
-  verifyEmailIntakeAddress,
 } from "@/lib/api";
+import { confirmAction } from "@/components/ui/action-dialog-service";
 import {
   AsksEmailIntakeDetailPage,
   AsksSettingsPage,
@@ -23,9 +25,16 @@ vi.mock("@/lib/api", async (original) => ({
   updateWorkspacePreferences: vi.fn(),
   createEmailIntakeAddress: vi.fn(),
   verifyEmailIntakeAddress: vi.fn(),
+  updateEmailIntakeAddress: vi.fn(),
+  listEmailIntakeAddresses: vi.fn().mockResolvedValue([]),
   deleteEmailIntakeAddress: vi.fn(),
   authorizeIntegration: vi.fn(),
   disconnectIntegration: vi.fn(),
+}));
+
+vi.mock("@/components/ui/action-dialog-service", async (original) => ({
+  ...(await original<typeof import("@/components/ui/action-dialog-service")>()),
+  confirmAction: vi.fn(),
 }));
 
 beforeEach(() => {
@@ -142,99 +151,127 @@ it("maps Slack channels to teams without billing upgrade copy", async () => {
   );
 });
 
-it("walks the email intake wizard through DNS verification", async () => {
-  vi.mocked(createEmailIntakeAddress).mockResolvedValue({
-    address: {
-      id: "addr-1",
-      teamId: "team-1",
-      localPart: "asks",
-      domain: "mail.example.com",
-      address: "asks@mail.example.com",
-      verificationState: "pending",
-      aliases: [],
-      enabled: true,
-      createdAt: "2026-01-01T00:00:00Z",
-      updatedAt: "2026-01-01T00:00:00Z",
-    },
-    inboundToken: "token",
-    dnsRecord: {
-      type: "TXT",
-      name: "_flow-intake.mail.example.com",
-      value: "flow-verification=abc",
-    },
-  });
-  vi.mocked(verifyEmailIntakeAddress).mockResolvedValue({
-    id: "addr-1",
-    teamId: "team-1",
-    localPart: "asks",
-    domain: "mail.example.com",
-    address: "asks@mail.example.com",
-    verificationState: "verified",
-    aliases: [],
-    enabled: true,
-    createdAt: "2026-01-01T00:00:00Z",
-    updatedAt: "2026-01-01T00:00:00Z",
-  });
-  vi.mocked(updateWorkspacePreferences).mockResolvedValue(settings);
+const intake = {
+  id: "addr-1",
+  teamId: "team-1",
+  localPart: "x7k2p9q4mz",
+  domain: "intake.flow.app",
+  address: "x7k2p9q4mz@intake.flow.app",
+  verificationState: "verified" as const,
+  aliases: [],
+  enabled: true,
+  type: "asks" as const,
+  system: true,
+  customerRequestsEnabled: true,
+  dnsRecords: [],
+  outboundFromEmail: "issues@flow.app",
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
+};
+
+it("walks Linear's email intake wizard: team, address, then optional domain", async () => {
+  const user = userEvent.setup();
+  vi.mocked(createEmailIntakeAddress).mockResolvedValue({ address: intake, inboundToken: "token", dnsRecord: { type: "TXT", name: "_flow-intake.intake.flow.app", value: "flow-verification=abc" } });
+  vi.mocked(updateEmailIntakeAddress)
+    .mockResolvedValueOnce({ ...intake, senderName: "Helpdesk", forwardingEmailAddress: "helpdesk@acme.com", dnsRecords: [{ type: "TXT", name: "_flow-intake.acme.com", content: "flow-verification=abc", isVerified: false }] })
+    .mockResolvedValueOnce({ ...intake, senderName: "Helpdesk", forwardingEmailAddress: "helpdesk@acme.com" });
   const data = makeBootstrap({
     viewerRole: "admin",
     workspaceSettings: settings,
     teams: [{ id: "team-1", name: "Engineering", key: "ENG", color: "#5e6ad2" }],
   });
-  const onBack = vi.fn();
+  const onOpenAddress = vi.fn();
   const onReload = vi.fn().mockResolvedValue(undefined);
   render(
     <I18nProvider>
-      <NewAsksEmailIntakePage data={data} onBack={onBack} onReload={onReload} />
+      <NewAsksEmailIntakePage data={data} onBack={vi.fn()} onReload={onReload} onOpenAddress={onOpenAddress} />
     </I18nProvider>,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-  fireEvent.change(screen.getByLabelText("Email domain"), {
-    target: { value: "mail.example.com" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Create address" }));
-  await waitFor(() =>
-    expect(screen.getByText("_flow-intake.mail.example.com")).toBeVisible(),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Verify domain" }));
-  await waitFor(() =>
-    expect(screen.getByRole("button", { name: "Finish" })).toBeVisible(),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Finish" }));
-  await waitFor(() => expect(onBack).toHaveBeenCalled());
-  expect(updateWorkspacePreferences).toHaveBeenCalledWith(
-    { featureSettings: { asksEmailAddresses: ["asks@mail.example.com"] } },
-    "workspace",
-  );
+  expect(screen.getByRole("heading", { name: "Add email intake" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Connect to Flow team" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Configure email address" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "Asks" })).toHaveAttribute("href", "/workspace/settings/asks");
+  // Like Linear, the team is required before the address is created.
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Please select a team");
+  expect(createEmailIntakeAddress).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("combobox", { name: "Team" }));
+  await user.click(screen.getByRole("option", { name: "Engineering" }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() => expect(createEmailIntakeAddress).toHaveBeenCalledWith("team-1", { type: "asks", templateId: undefined }));
+  expect(await screen.findByText("x7k2p9q4mz@intake.flow.app")).toBeVisible();
+  // Step 2 requires a sender name and validates the custom address.
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Please enter a name");
+  await user.type(screen.getByLabelText("Sender name"), "Helpdesk");
+  await user.type(screen.getByPlaceholderText("e.g. helpdesk@acme.com"), "not-an-email");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(screen.getByRole("alert")).toHaveTextContent("Please enter a valid email address");
+  await user.clear(screen.getByPlaceholderText("e.g. helpdesk@acme.com"));
+  await user.type(screen.getByPlaceholderText("e.g. helpdesk@acme.com"), "helpdesk@acme.com");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await waitFor(() => expect(updateEmailIntakeAddress).toHaveBeenCalledWith("team-1", "addr-1", { teamId: "team-1", templateId: "", senderName: "Helpdesk", forwardingEmailAddress: "helpdesk@acme.com" }));
+  // Step 3 shows the DNS records for the custom domain.
+  expect(await screen.findByText("_flow-intake.acme.com")).toBeVisible();
+  expect(screen.getByText("Unverified")).toBeVisible();
+  expect(screen.getByText("issues@flow.app")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Done" }));
+  await waitFor(() => expect(onOpenAddress).toHaveBeenCalledWith("addr-1"));
 });
 
-it("manages an Asks email address from its detail page", async () => {
+it("manages an Asks email address from its settings page", async () => {
+  const user = userEvent.setup();
   const onBack = vi.fn();
   const onReload = vi.fn().mockResolvedValue(undefined);
-  vi.mocked(updateWorkspacePreferences).mockResolvedValue(settings);
+  vi.mocked(listEmailIntakeAddresses).mockResolvedValue([{ ...intake, senderName: "Helpdesk", forwardingEmailAddress: "help@acme.dev", dnsRecords: [{ type: "TXT", name: "_flow-intake.acme.dev", content: "flow-verification=abc", isVerified: true }] }]);
+  vi.mocked(updateEmailIntakeAddress).mockResolvedValue({ ...intake, customerRequestsEnabled: false });
   vi.mocked(deleteEmailIntakeAddress).mockResolvedValue(undefined);
+  vi.mocked(confirmAction).mockResolvedValue(true);
   const data = makeBootstrap({
     viewerRole: "admin",
-    workspaceSettings: {
-      ...settings,
-      featureSettings: { ...settings.featureSettings, asksEmailAddresses: ["help@acme.dev"] },
-    } as WorkspaceSettings,
+    workspaceSettings: { ...settings, featureFlags: { asks: true, "customer-requests": true } } as WorkspaceSettings,
     teams: [{ id: "team-1", name: "Engineering", key: "ENG", color: "#5e6ad2" }],
-    emailIntakeAddresses: [
-      { id: "addr-1", teamId: "team-1", localPart: "help", domain: "acme.dev", address: "help@acme.dev", verificationState: "verified", aliases: [], enabled: true, createdAt: "", updatedAt: "" },
-    ],
+    emailIntakeAddresses: [{ ...intake, senderName: "Helpdesk", forwardingEmailAddress: "help@acme.dev", dnsRecords: undefined, outboundFromEmail: undefined }],
   } as never);
   render(
     <I18nProvider>
       <AsksEmailIntakeDetailPage data={data} addressId="addr-1" onBack={onBack} onReload={onReload} />
     </I18nProvider>,
   );
-  expect(screen.getByRole("heading", { name: "help@acme.dev" })).toBeVisible();
-  expect(screen.getByText("Engineering (ENG)")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  expect(screen.getByRole("heading", { name: "Helpdesk" })).toBeVisible();
+  expect(screen.getByText("help@acme.dev")).toBeVisible();
+  expect(await screen.findByText("DNS Active")).toBeVisible();
+  expect(screen.getByRole("combobox", { name: "Team" })).toHaveTextContent("Engineering");
+  await user.click(screen.getByRole("checkbox", { name: "Link incoming emails as customer requests" }));
+  await waitFor(() => expect(updateEmailIntakeAddress).toHaveBeenCalledWith("team-1", "addr-1", { customerRequestsEnabled: false }));
+  await user.click(screen.getByRole("button", { name: "Open menu" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
   await waitFor(() => expect(deleteEmailIntakeAddress).toHaveBeenCalledWith("team-1", "addr-1"));
-  expect(updateWorkspacePreferences).toHaveBeenCalledWith({
-    featureSettings: expect.objectContaining({ asksEmailAddresses: [] }),
-  });
+  expect(confirmAction).toHaveBeenCalledWith("Delete Helpdesk (help@acme.dev)?", expect.objectContaining({ description: "You cannot undo this action.", danger: true }));
   await waitFor(() => expect(onBack).toHaveBeenCalled());
+});
+
+it("lists Asks email addresses like Linear and opens the wizard or an address", async () => {
+  const user = userEvent.setup();
+  const onOpenEmailIntake = vi.fn();
+  const data = makeBootstrap({
+    viewerRole: "admin",
+    workspaceSettings: settings,
+    integrationConnections: [],
+    emailIntakeAddresses: [
+      { ...intake, senderName: "Helpdesk", forwardingEmailAddress: "help@acme.dev" },
+      { ...intake, id: "team-addr", type: "team", address: "team@intake.flow.app" },
+    ],
+  } as never);
+  render(
+    <I18nProvider>
+      <AsksSettingsPage data={data} settings={settings} busy={false} setEnabled={vi.fn()} setFeature={vi.fn()} onReload={vi.fn()} onOpenEmailIntake={onOpenEmailIntake} />
+    </I18nProvider>,
+  );
+  expect(screen.getByText("1 email")).toBeVisible();
+  expect(screen.queryByText("team@intake.flow.app")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Helpdesk settings" }));
+  expect(onOpenEmailIntake).toHaveBeenCalledWith("addr-1");
+  await user.click(screen.getByRole("button", { name: "Add email" }));
+  expect(onOpenEmailIntake).toHaveBeenLastCalledWith();
 });

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"path"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -12,17 +13,24 @@ import (
 )
 
 type releasePipelineInput struct {
-	Name                        *string            `json:"name,omitempty"`
-	TeamIDs                     *[]string          `json:"teamIds,omitempty"`
-	Type                        *string            `json:"type,omitempty"`
-	Production                  *bool              `json:"production,omitempty"`
-	Stages                      *[]string          `json:"stages,omitempty"`
-	StageStatuses               *map[string]string `json:"stageStatuses,omitempty"`
+	Name          *string            `json:"name,omitempty"`
+	TeamIDs       *[]string          `json:"teamIds,omitempty"`
+	Type          *string            `json:"type,omitempty"`
+	Production    *bool              `json:"production,omitempty"`
+	Stages        *[]string          `json:"stages,omitempty"`
+	StageStatuses *map[string]string `json:"stageStatuses,omitempty"`
+	StageColors   *map[string]string `json:"stageColors,omitempty"`
+	FrozenStages  *[]string          `json:"frozenStages,omitempty"`
+	// StageRenames maps a current stage name to its new name so releases in the
+	// renamed stage follow it instead of blocking the stage update.
+	StageRenames                *map[string]string `json:"stageRenames,omitempty"`
 	PathFilters                 *[]string          `json:"pathFilters,omitempty"`
 	ReleaseNotesTemplate        *string            `json:"releaseNotesTemplate,omitempty"`
 	AutoGenerateReleaseNotes    *bool              `json:"autoGenerateReleaseNotes,omitempty"`
 	MoveOpenIssuesToNextRelease *bool              `json:"moveOpenIssuesToNextRelease,omitempty"`
 }
+
+var releaseStageColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
 func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipeline, input releasePipelineInput) error {
 	if input.Name != nil {
@@ -52,6 +60,40 @@ func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipel
 		stages := normalizedStrings(*input.Stages)
 		if len(stages) == 0 {
 			return errInvalid
+		}
+		if input.StageRenames != nil {
+			renames := map[string]string{}
+			for from, to := range *input.StageRenames {
+				from, to = strings.TrimSpace(from), strings.TrimSpace(to)
+				if from == to || from == "" {
+					continue
+				}
+				if !slices.Contains(item.Stages, from) || !slices.Contains(stages, to) || slices.Contains(stages, from) {
+					return errInvalid
+				}
+				renames[from] = to
+			}
+			for index := range data.Releases {
+				if data.Releases[index].PipelineID != item.ID {
+					continue
+				}
+				if to, ok := renames[data.Releases[index].Stage]; ok {
+					data.Releases[index].Stage = to
+				}
+			}
+			for from, to := range renames {
+				if status, ok := item.StageStatuses[from]; ok {
+					item.StageStatuses[to] = status
+				}
+				if color, ok := item.StageColors[from]; ok {
+					item.StageColors[to] = color
+				}
+				for index, frozen := range item.FrozenStages {
+					if frozen == from {
+						item.FrozenStages[index] = to
+					}
+				}
+			}
 		}
 		if slices.ContainsFunc(data.Releases, func(release domain.Release) bool {
 			return release.PipelineID == item.ID && release.Stage != "" && !slices.Contains(stages, release.Stage)
@@ -87,6 +129,43 @@ func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipel
 			}
 		}
 		item.StageStatuses = statuses
+	}
+	if input.StageColors != nil {
+		colors := map[string]string{}
+		for stage, color := range *input.StageColors {
+			color = strings.ToLower(strings.TrimSpace(color))
+			if !slices.Contains(item.Stages, stage) || !releaseStageColorPattern.MatchString(color) {
+				return errInvalid
+			}
+			colors[stage] = color
+		}
+		item.StageColors = colors
+	}
+	if input.FrozenStages != nil {
+		item.FrozenStages = normalizedStrings(*input.FrozenStages)
+	}
+	// Drop settings for stages that no longer exist, then enforce Linear's rule
+	// that only started stages freeze and one started stage stays open.
+	for stage := range item.StageColors {
+		if !slices.Contains(item.Stages, stage) {
+			delete(item.StageColors, stage)
+		}
+	}
+	item.FrozenStages = slices.DeleteFunc(item.FrozenStages, func(stage string) bool { return !slices.Contains(item.Stages, stage) })
+	if len(item.FrozenStages) > 0 {
+		open := false
+		for _, stage := range item.Stages {
+			frozen := slices.Contains(item.FrozenStages, stage)
+			if frozen && item.StageStatuses[stage] != "inProgress" {
+				return errInvalid
+			}
+			if !frozen && item.StageStatuses[stage] == "inProgress" {
+				open = true
+			}
+		}
+		if !open {
+			return errInvalid
+		}
 	}
 	if input.PathFilters != nil {
 		filters := normalizedStrings(*input.PathFilters)

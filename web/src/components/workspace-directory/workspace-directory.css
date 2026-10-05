@@ -1480,160 +1480,6 @@
   height: 14px;
 }
 
-.workspace-customer-dialog footer button {
-  height: 31px;
-  padding: 0 13px;
-  border: 0.5px solid #727be0;
-  border-radius: 16px;
-  background: #6872dc;
-  color: white;
-  font-size: 11px;
-}
-.workspace-customer-dialog {
-  top: 91px;
-  width: min(580px, calc(100vw - 28px));
-  padding: 0;
-  transform: translateX(-50%);
-  color: var(--theme-text-primary);
-  background: var(--theme-control);
-  border: 0.5px solid var(--theme-border-strong);
-  border-radius: 11px;
-  box-shadow: 0 24px 80px #000d;
-}
-.workspace-customer-dialog > .dialog-close {
-  top: 18px;
-  right: 18px;
-  color: var(--theme-text-tertiary);
-}
-.workspace-customer-dialog h2 {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  margin: 0;
-  padding: 0 24px;
-  border-bottom: 0.5px solid var(--theme-control-hover);
-  font-size: 14px;
-  font-weight: 500;
-}
-.workspace-customer-dialog form {
-  padding: 16px 20px 0;
-}
-.workspace-customer-logo {
-  height: 64px;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-}
-.workspace-customer-logo > button,
-.workspace-customer-logo > img,
-.workspace-customer-logo > span:first-child {
-  width: 50px;
-  height: 50px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0.5px solid var(--theme-border-strong);
-  border-radius: 7px;
-  background: var(--theme-surface-1);
-  color: var(--theme-text-tertiary);
-}
-.workspace-customer-logo > img {
-  object-fit: cover;
-}
-.workspace-customer-logo > span:first-child {
-  flex: 0 0 50px;
-  background: #2a7f62;
-  color: #fff;
-  font-size: 18px;
-}
-.workspace-customer-logo svg {
-  width: 16px;
-}
-.workspace-customer-logo > span:last-child {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding-top: 4px;
-}
-.workspace-customer-logo strong {
-  font-size: 12px;
-  font-weight: 500;
-}
-.workspace-customer-logo small {
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-}
-.workspace-customer-form-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 25px 16px;
-  margin-top: 9px;
-}
-.workspace-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 24px;
-  color: var(--theme-text-primary);
-  font-size: 12px;
-}
-.workspace-field > span {
-  height: 24px;
-  align-items: center;
-  display: flex;
-  justify-content: space-between;
-}
-.workspace-field > span button {
-  height: 24px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--theme-text-secondary);
-  font-size: 11px;
-}
-.workspace-field > span button:hover {
-  background: var(--theme-control-hover);
-}
-.workspace-customer-form-grid .workspace-field {
-  margin-top: 0;
-}
-.workspace-field input,
-.workspace-money-input {
-  width: 100%;
-  height: 30px;
-  padding: 0 11px;
-  border: 0.5px solid var(--theme-border-strong);
-  border-radius: 6px;
-  outline: 0;
-  color: var(--theme-text-primary);
-  background: var(--theme-surface-1);
-  font-size: 12px;
-}
-.workspace-field input:focus,
-.workspace-money-input:focus-within {
-  border-color: #5e6ad2;
-  box-shadow: 0 0 0 1px #5e6ad233;
-}
-.workspace-field input::placeholder {
-  color: var(--theme-text-secondary);
-}
-.workspace-field .select-control{width:100%;height:30px;border-radius:8px;font-size:12px}
-.workspace-money-input {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.workspace-money-input > span {
-  color: var(--theme-text-secondary);
-}
-.workspace-money-input input {
-  height: 28px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none !important;
-}
 .workspace-status-select {
   position: relative;
 }
@@ -1650,30 +1496,6 @@
 }
 .workspace-status-select > i[data-active="true"] {
   background: #5e6ad2;
-}
-.workspace-customer-dialog footer {
-  height: 53px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 9px;
-  margin: 14px -20px 0;
-  padding: 0 13px;
-  border-top: 0.5px solid var(--theme-control-hover);
-}
-.workspace-customer-dialog footer button {
-  height: 29px;
-  border-color: var(--theme-control-active);
-  background: var(--theme-control);
-  color: var(--theme-text-secondary);
-}
-.workspace-customer-dialog footer .is-primary {
-  border-color: #6b74dd;
-  background: #5e6ad2;
-  color: white;
-}
-.workspace-customer-dialog footer button:disabled {
-  opacity: 0.45;
 }
 
 .workspace-new-team {
@@ -2034,7 +1856,6 @@
   color: var(--muted);
 }
 :root[data-theme="light"] .workspace-directory__menu,
-:root[data-theme="light"] .workspace-customer-dialog,
 :root[data-theme="light"] .workspace-directory-display-menu {
   border-color: var(--border-strong);
   background: var(--theme-surface-2);
@@ -2070,10 +1891,6 @@
 :root[data-theme="light"] .workspace-customers-toolbar label,
 :root[data-theme="light"] .workspace-customers-toolbar label > button,
 :root[data-theme="light"] .workspace-customer-empty p,
-:root[data-theme="light"] .workspace-customer-logo small,
-:root[data-theme="light"] .workspace-customer-dialog > .dialog-close,
-:root[data-theme="light"] .workspace-customer-logo > button,
-:root[data-theme="light"] .workspace-customer-logo > img,
 :root[data-theme="light"] .workspace-settings-card > label > span svg,
 :root[data-theme="light"] .workspace-settings-card label > button {
   color: var(--text-label);
@@ -2082,7 +1899,6 @@
 :root[data-theme="light"] .workspace-customer-row small,
 :root[data-theme="light"] :is(.workspace-members-toolbar,.workspace-teams-toolbar) input::placeholder,
 :root[data-theme="light"] .workspace-customers-toolbar input::placeholder,
-:root[data-theme="light"] .workspace-field input::placeholder,
 :root[data-theme="light"] .workspace-filter-bar__clear:disabled {
   color: var(--text-placeholder);
 }
@@ -2122,22 +1938,7 @@
   border-top-color: var(--border-strong);
   border-bottom-color: var(--border-strong);
 }
-:root[data-theme="light"] .workspace-customer-dialog h2,
-:root[data-theme="light"] .workspace-customer-dialog footer {
-  border-color: var(--border);
-}
-:root[data-theme="light"] .workspace-customer-logo > button,
-:root[data-theme="light"] .workspace-customer-logo > img {
-  border-color: var(--border-strong);
-  color: var(--text-label);
-}
-:root[data-theme="light"] .workspace-customer-logo > span:first-child {
-  border-color: var(--border-strong);
-  color: var(--on-accent);
-}
-:root[data-theme="light"] .workspace-customer-dialog footer button {
-  border-color: var(--border-strong);
-}
+
 :root[data-theme="light"] .workspace-directory__mobile span {
   background: var(--text-label);
 }
@@ -2209,8 +2010,7 @@
 :root[data-theme="light"] .workspace-directory-filter-menu,
 :root[data-theme="light"] .workspace-directory-filter-submenu,
 :root[data-theme="light"] .workspace-directory-ordering-menu,
-:root[data-theme="light"] .workspace-directory-display-menu,
-:root[data-theme="light"] .workspace-customer-dialog {
+:root[data-theme="light"] .workspace-directory-display-menu {
   border: 0.5px solid var(--theme-border);
   border-radius: 12px;
   background: #fff;
@@ -2269,7 +2069,6 @@
 }
 :root[data-theme="light"] .workspace-customer-empty > div:last-child button,
 :root[data-theme="light"] .workspace-new-team__submit,
-:root[data-theme="light"] .workspace-customer-dialog footer .is-primary,
 :root[data-theme="light"] .workspace-directory-filtered-empty__notice button:first-child {
   height: 28px;
   padding: 0 10px;
@@ -2281,8 +2080,7 @@
   font: 500 12px/normal inherit;
 }
 :root[data-theme="light"] .workspace-customer-empty > div:last-child button:hover,
-:root[data-theme="light"] .workspace-new-team__submit:hover,
-:root[data-theme="light"] .workspace-customer-dialog footer .is-primary:hover {
+:root[data-theme="light"] .workspace-new-team__submit:hover {
   background: var(--accent-primary-hover);
 }
 :root[data-theme="light"] .workspace-directory-display-menu__properties button:not([aria-pressed="true"]) {
@@ -2517,3 +2315,7 @@
   height: 16px;
   flex: 0 0 16px;
 }
+
+/* Linear's Teams "Membership" chip: grey 12px/500 chip with a 14px check (measured). */
+:root .workspace-team-joined.workspace-team-joined.workspace-team-joined { padding: 1px 3px; border-color: var(--team-joined-border); background: var(--team-joined-bg); font-size: 12px; line-height: 14.5px; }
+:root[data-theme] span.workspace-team-joined.workspace-team-joined { border-color: var(--team-joined-border); background: var(--team-joined-bg); }

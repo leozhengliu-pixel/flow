@@ -42,4 +42,13 @@ describe('sidebar order written by older builds', () => {
     expect(result.current.order.workspace.slice(0, 4)).toEqual(['initiatives', 'projects', 'loops', 'views'])
     expect(localStorage.getItem('flow.sidebar.order:usr_appended')).toBeNull()
   })
+
+  it('drops the Dashboards entry older builds stored (it is a Views tab now)', () => {
+    localStorage.setItem('flow.sidebar.preference-overrides:usr_dash', JSON.stringify({ dashboards: 'always', loops: 'never' }))
+    localStorage.setItem('flow.sidebar.order:usr_dash', JSON.stringify({ workspace: ['views', 'dashboards', 'projects', 'initiatives'] }))
+    const { result } = renderHook(() => useSidebarCustomizationState('usr_dash'))
+    expect(result.current.preferences).not.toHaveProperty('dashboards')
+    expect(result.current.order.workspace).not.toContain('dashboards')
+    expect(JSON.parse(localStorage.getItem('flow.sidebar.preference-overrides:usr_dash') ?? '{}')).toEqual({ loops: 'never' })
+  })
 })

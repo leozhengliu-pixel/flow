@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -816,158 +815,6 @@ func (s *server) startWorkflowScheduler() {
 	}()
 }
 
-type emailIntakeInput struct {
-	LocalPart, Domain string
-	Enabled           *bool `json:"enabled,omitempty"`
-}
-
-func (s *server) listEmailIntakeAddresses(w http.ResponseWriter, r *http.Request) {
-	data := s.workspaceData(r)
-	teamID := r.PathValue("id")
-	result := make([]domain.EmailIntakeAddress, 0)
-	for _, item := range data.EmailIntakeAddresses {
-		if item.TeamID == teamID {
-			item.InboundTokenHash = ""
-			for index := range item.Aliases {
-				item.Aliases[index].TokenHash = ""
-			}
-			result = append(result, item)
-		}
-	}
-	writeJSON(w, http.StatusOK, result)
-}
-func (s *server) createEmailIntakeAddress(w http.ResponseWriter, r *http.Request) {
-	var input emailIntakeInput
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	teamID := r.PathValue("id")
-	input.LocalPart = strings.ToLower(strings.TrimSpace(input.LocalPart))
-	input.Domain = strings.ToLower(strings.TrimSpace(input.Domain))
-	if _, err := mail.ParseAddress(input.LocalPart + "@" + input.Domain); err != nil {
-		writeError(w, http.StatusBadRequest, "valid localPart and domain are required")
-		return
-	}
-	var created domain.EmailIntakeAddress
-	var inboundToken string
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "email_intake.created", input, func(data *domain.Bootstrap) (string, error) {
-		if !teamExists(data, teamID) {
-			return "", errNotFound
-		}
-		if slices.ContainsFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool {
-			return strings.EqualFold(item.Address, input.LocalPart+"@"+input.Domain) && item.Enabled
-		}) {
-			return "", errConflict
-		}
-		now := time.Now().UTC()
-		inboundToken = randomURLToken(24)
-		verification := randomURLToken(18)
-		created = domain.EmailIntakeAddress{ID: fmt.Sprintf("email_intake_%d", now.UnixNano()), TeamID: teamID, LocalPart: input.LocalPart, Domain: input.Domain, Address: input.LocalPart + "@" + input.Domain, InboundTokenHash: secretHash(inboundToken), VerificationToken: verification, VerificationState: "pending", Aliases: []domain.EmailIntakeAlias{}, Enabled: true, CreatedAt: now, UpdatedAt: now}
-		if input.Enabled != nil {
-			created.Enabled = *input.Enabled
-		}
-		data.EmailIntakeAddresses = append(data.EmailIntakeAddresses, created)
-		return created.ID, nil
-	})
-	if err == nil {
-		publicAddress := created
-		publicAddress.InboundTokenHash = ""
-		writeJSON(w, http.StatusCreated, map[string]any{"address": publicAddress, "inboundToken": inboundToken, "dnsRecord": map[string]string{"type": "TXT", "name": "_flow-intake." + created.Domain, "value": "flow-verification=" + created.VerificationToken}})
-		return
-	}
-	respondMutation(w, err, http.StatusCreated, nil)
-}
-func (s *server) verifyEmailIntakeAddress(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		TXTValue string `json:"txtValue"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	teamID, id := r.PathValue("id"), r.PathValue("addressId")
-	metadata := s.workspaceData(r)
-	addressIndex := slices.IndexFunc(metadata.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool { return item.ID == id && item.TeamID == teamID })
-	if addressIndex < 0 {
-		writeError(w, http.StatusNotFound, "intake address not found")
-		return
-	}
-	expectedToken := metadata.EmailIntakeAddresses[addressIndex].VerificationToken
-	expectedTXT := "flow-verification=" + expectedToken
-	verified := s.authDisabled && strings.TrimSpace(input.TXTValue) == expectedTXT
-	if !verified {
-		records, err := net.DefaultResolver.LookupTXT(r.Context(), "_flow-intake."+metadata.EmailIntakeAddresses[addressIndex].Domain)
-		verified = err == nil && slices.Contains(records, expectedTXT)
-	}
-	if !verified {
-		writeError(w, http.StatusBadRequest, "TXT verification record was not found")
-		return
-	}
-	var updated domain.EmailIntakeAddress
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "email_intake.verified", id, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool { return item.ID == id && item.TeamID == teamID })
-		if index < 0 {
-			return errNotFound
-		}
-		item := &data.EmailIntakeAddresses[index]
-		if item.VerificationToken != expectedToken {
-			return errConflict
-		}
-		now := time.Now().UTC()
-		item.VerificationState = "verified"
-		item.VerifiedAt = &now
-		item.VerificationToken = ""
-		item.UpdatedAt = now
-		updated = *item
-		return nil
-	})
-	respondMutation(w, err, http.StatusOK, updated)
-}
-func (s *server) rotateEmailIntakeAddress(w http.ResponseWriter, r *http.Request) {
-	teamID, id := r.PathValue("id"), r.PathValue("addressId")
-	var result map[string]any
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "email_intake.rotated", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool { return item.ID == id && item.TeamID == teamID })
-		if index < 0 {
-			return errNotFound
-		}
-		item := &data.EmailIntakeAddresses[index]
-		now := time.Now().UTC()
-		expires := now.Add(7 * 24 * time.Hour)
-		item.Aliases = append(item.Aliases, domain.EmailIntakeAlias{Address: item.Address, TokenHash: item.InboundTokenHash, ExpiresAt: expires})
-		token := randomURLToken(24)
-		suffix := strconv.FormatInt(now.Unix()%100000, 36)
-		item.LocalPart = strings.TrimSuffix(item.LocalPart, "-"+suffix) + "-" + suffix
-		item.Address = item.LocalPart + "@" + item.Domain
-		item.InboundTokenHash = secretHash(token)
-		item.UpdatedAt = now
-		publicAddress := *item
-		publicAddress.InboundTokenHash = ""
-		for index := range publicAddress.Aliases {
-			publicAddress.Aliases[index].TokenHash = ""
-		}
-		result = map[string]any{"address": publicAddress, "inboundToken": token}
-		return nil
-	})
-	if err == nil {
-		writeJSON(w, http.StatusOK, result)
-		return
-	}
-	respondMutation(w, err, http.StatusOK, nil)
-}
-func (s *server) deleteEmailIntakeAddress(w http.ResponseWriter, r *http.Request) {
-	teamID, id := r.PathValue("id"), r.PathValue("addressId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "email_intake.deleted", id, nil, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.EmailIntakeAddresses, func(item domain.EmailIntakeAddress) bool { return item.ID == id && item.TeamID == teamID })
-		if index < 0 {
-			return errNotFound
-		}
-		data.EmailIntakeAddresses[index].Enabled = false
-		data.EmailIntakeAddresses[index].UpdatedAt = time.Now().UTC()
-		return nil
-	})
-	respondMutation(w, err, http.StatusNoContent, nil)
-}
-
 func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	token := r.PathValue("token")
@@ -1027,6 +874,12 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 	}
 	// Remove identity before constructing the persisted event payload as well as
 	// the intake record. The message body is retained as submitted.
+	// Customer matching reads the sender before the personal-info reduction
+	// below; only the matched customer is stored, never the address.
+	senderEmail := ""
+	if sender, err := mail.ParseAddress(input.From); err == nil {
+		senderEmail = sender.Address
+	}
 	if metadata, ok := s.store.WorkspaceMetadata(key); ok && (metadata.WorkspaceSettings.ReduceSupportPersonalInfo || metadata.WorkspaceSettings.HIPAACompliance) {
 		input.From = ""
 	}
@@ -1064,12 +917,30 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 			return "", errNotFound
 		}
 		address := data.EmailIntakeAddresses[addressIndex]
-		teamIndex := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == address.TeamID })
+		teamID := address.TeamID
+		var template *domain.IssueTemplate
+		if address.TemplateID != "" {
+			if index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == address.TemplateID }); index >= 0 {
+				template = &data.IssueTemplates[index]
+				// Like Linear, a template from another team creates issues there.
+				if template.TeamID != "" {
+					teamID = template.TeamID
+				}
+			}
+		}
+		teamIndex := slices.IndexFunc(data.Teams, func(item domain.Team) bool { return item.ID == teamID })
 		if teamIndex < 0 {
 			return "", errNotFound
 		}
-		settings := teamSettings(data, address.TeamID)
-		state := stateForTeam(data, address.TeamID, settings.DefaultStateID)
+		settings := teamSettings(data, teamID)
+		state := stateForTeam(data, teamID, settings.DefaultStateID)
+		priority := settings.DefaultPriority
+		if template != nil {
+			if templateState := stateForTeam(data, teamID, template.StateID); template.StateID != "" && templateState != nil {
+				state = templateState
+			}
+			priority = template.Priority
+		}
 		if state == nil {
 			return "", errInvalid
 		}
@@ -1079,23 +950,47 @@ func (s *server) receiveEmailIntake(w http.ResponseWriter, r *http.Request) {
 		if len(input.Attachments) > 0 {
 			description += "\n\nAttachments:\n- " + strings.Join(input.Attachments, "\n- ")
 		}
-		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", data.Teams[teamIndex].Key, number), Number: number, Title: strings.TrimSpace(input.Subject), Description: description, Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: data.Teams[teamIndex], State: *state, Creator: data.Viewer, Labels: []domain.IssueLabel{}, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+		// The email subject and body always override the template's title and description.
+		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", data.Teams[teamIndex].Key, number), Number: number, Title: strings.TrimSpace(input.Subject), Description: description, Priority: priority, PriorityLabel: priorityLabel(priority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: data.Teams[teamIndex], State: *state, Creator: data.Viewer, Labels: []domain.IssueLabel{}, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+		if template != nil {
+			update := domain.IssueUpdateInput{}
+			if template.AssigneeID != "" {
+				update.AssigneeID = &template.AssigneeID
+			}
+			if template.ProjectID != "" {
+				update.ProjectID = &template.ProjectID
+			}
+			if len(template.LabelIDs) > 0 {
+				labelIDs := slices.Clone(template.LabelIDs)
+				update.LabelIDs = &labelIDs
+			}
+			if _, err := applyUpdate(data, &created, update); err != nil {
+				return "", err
+			}
+		}
 		applyTriageRouting(data, &created, now)
 		data.Issues = append([]domain.Issue{created}, data.Issues...)
 		data.EmailIntakeMessages = append(data.EmailIntakeMessages, domain.EmailIntakeMessage{ID: fmt.Sprintf("email_message_%d", now.UnixNano()), AddressID: address.ID, MessageID: input.MessageID, From: input.From, Subject: input.Subject, IssueID: created.ID, Status: "processed", ReceivedAt: now, ProcessedAt: &now})
-		if slices.ContainsFunc(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, func(value string) bool { return strings.EqualFold(value, address.Address) }) {
-			requester := domain.User{ID: "email_requester", Name: "Email requester", DisplayName: "Email requester"}
-			if !data.WorkspaceSettings.ReduceSupportPersonalInfo && !data.WorkspaceSettings.HIPAACompliance && input.From != "" {
-				if sender, err := mail.ParseAddress(input.From); err == nil {
-					requester.Email = sender.Address
-					requester.Name = sender.Name
-					requester.DisplayName = sender.Name
-					if requester.DisplayName == "" {
-						requester.DisplayName = sender.Address
-					}
+		requester := domain.User{ID: "email_requester", Name: "Email requester", DisplayName: "Email requester"}
+		if !data.WorkspaceSettings.ReduceSupportPersonalInfo && !data.WorkspaceSettings.HIPAACompliance && input.From != "" {
+			if sender, err := mail.ParseAddress(input.From); err == nil {
+				requester.Email = sender.Address
+				requester.Name = sender.Name
+				requester.DisplayName = sender.Name
+				if requester.DisplayName == "" {
+					requester.DisplayName = sender.Address
 				}
 			}
-			data.Asks = append(data.Asks, domain.Ask{ID: fmt.Sprintf("ask_email_%d", now.UnixNano()), Title: created.Title, Body: created.Description, Source: "email", TeamID: address.TeamID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
+		}
+		if address.Type == "asks" || slices.ContainsFunc(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, func(value string) bool { return strings.EqualFold(value, address.Address) }) {
+			data.Asks = append(data.Asks, domain.Ask{ID: fmt.Sprintf("ask_email_%d", now.UnixNano()), Title: created.Title, Body: created.Description, Source: "email", TeamID: teamID, TemplateID: address.TemplateID, Requester: requester, Status: "approved", IssueID: created.ID, Approvals: []domain.AskApproval{}, CreatedAt: now, UpdatedAt: now})
+		}
+		// "Link incoming emails as customer requests": attach the email to the
+		// customer whose domain matches the sender.
+		if address.CustomerRequestsEnabled && customerRequestsFeatureEnabled(data) && senderEmail != "" {
+			if customer, ok := customerForEmailSender(data, senderEmail); ok {
+				data.CustomerRequests = append([]domain.CustomerRequest{{ID: fmt.Sprintf("customer_request_email_%d", now.UnixNano()), CustomerID: customer.ID, Body: created.Description, Source: "email", Creator: requester, IssueID: created.ID, Attachments: []domain.Attachment{}, CreatedAt: now, UpdatedAt: now}}, data.CustomerRequests...)
+			}
 		}
 		return created.ID, nil
 	})

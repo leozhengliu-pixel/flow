@@ -1,9 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { PeopleMenuItems } from '@/components/property/people-menu-items'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { AgentBadge } from '@/components/agent/agent-badge'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bell, Building2, ChevronRight, Copy, Download, Ellipsis, Layers3, LockKeyhole, Pencil, Trash2, UserRound } from 'lucide-react'
-import { TeamIcon } from '@/components/issue/issue-icons'
-import { DEFAULT_VIEW_COLOR, DEFAULT_VIEW_ICON, ViewIconPicker, type ViewVisual } from '@/components/views/view-icon-picker'
+import { Building2, Check, Ellipsis, LockKeyhole } from 'lucide-react'
+import { SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { AddViewIcon, SubscriptionIcon } from '@/components/ui/view-action-icons'
+import { LinearGlyph } from '@/components/ui/linear-glyphs'
+import { AppLink } from '@/components/ui/app-link'
+import { DEFAULT_VIEW_COLOR, DEFAULT_VIEW_ICON, ViewGlyph, ViewIconPicker, type ViewVisual } from '@/components/views/view-icon-picker'
 import type { SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import styles from './saved-view-editor.module.css'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
@@ -111,29 +116,45 @@ export function SavedViewEditor({ actions, ariaLabel = 'New view', mode = 'creat
 
 function targetKey(target: SavedViewTarget) { return `${target.scope}:${target.teamId ?? ''}` }
 
-export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents = [], onEdit, onDuplicate, onUpdate, onSetSubscriptionEvents, onShare, onCopy, onExport, onDelete }: { view: SavedView; users?: User[]; teams?: Team[]; subscriptionEvents?: string[]; onEdit: () => void; onDuplicate?: () => void; onUpdate?: (input: SavedViewMutationInput) => void; onSetSubscriptionEvents?: (events: string[]) => void; onShare?: () => void; onCopy?: () => void; onExport?: () => void; onDelete: () => void }) {
+export function SavedViewMenu({ view, users = [], teams = [], subscriptionEvents = [], onEdit, onDuplicate, onUpdate, onSetSubscriptionEvents, onCopy, onExport, onDelete }: { view: SavedView; users?: User[]; teams?: Team[]; subscriptionEvents?: string[]; onEdit: () => void; onDuplicate?: () => void; onUpdate?: (input: SavedViewMutationInput) => void; onSetSubscriptionEvents?: (events: string[]) => void; onCopy?: () => void; onExport?: () => void; onDelete: () => void }) {
+  const { t } = useI18n()
   const owner = users.find(user => user.id === view.ownerId) ?? users[0]
   const events = new Set(subscriptionEvents)
   const entity = view.resource === 'projects' ? 'A project' : 'An issue'
+  const workspaceSlug = typeof location === 'undefined' ? '' : location.pathname.split('/').filter(Boolean)[0] ?? ''
   const toggleEvent = (value: string) => {
     const next = new Set(events)
     if (next.has(value)) next.delete(value); else next.add(value)
     onSetSubscriptionEvents?.([...next])
   }
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.menuTrigger} type="button" aria-label={view.resource === 'projects' ? 'Project view options' : 'Issue view options'}><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={styles.menu} align="end" collisionPadding={8} sideOffset={4}>
-    <DropdownMenu.Item className={styles.menuItem} onSelect={onEdit}><Pencil/>Edit…</DropdownMenu.Item>
-    {onDuplicate && <DropdownMenu.Item className={styles.menuItem} onSelect={onDuplicate}><Copy/>Duplicate…</DropdownMenu.Item>}
-    {onUpdate && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><UserRound/><span>Owner</span><ChevronRight className={styles.trailing}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.ownerMenu}`} sideOffset={-4}><PeopleMenuItems users={users} selectedId={owner?.id} itemClassName={styles.menuItem} onSelect={id => onUpdate({ ownerId: id })}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
-    {onUpdate && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Layers3/><span>Move to</span><ChevronRight className={styles.trailing}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={styles.menu} sideOffset={-4}><DropdownMenu.Item className={styles.menuItem} onSelect={() => onUpdate({ scope: 'personal', teamId: '' })}><LockKeyhole/>Personal</DropdownMenu.Item><DropdownMenu.Item className={styles.menuItem} onSelect={() => onUpdate({ scope: 'workspace', teamId: '' })}><Building2/>Workspace</DropdownMenu.Item>{teams.length > 0 && <DropdownMenu.Separator className={styles.separator}/>} {teams.map(team => <DropdownMenu.Item className={styles.menuItem} key={team.id} onSelect={() => onUpdate({ scope: 'team', teamId: team.id })}><TeamIcon team={team}/><span data-i18n-ignore>{team.name}</span></DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
+  // Linear's view menu: Edit… · Duplicate… · Owner ▸ · Move to ▸ | Subscribe ▸ · Configure custom view Slack notifications… | Copy link · Export … as CSV… | Delete.
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={styles.menuTrigger} type="button" aria-label={t(view.resource === 'projects' ? 'Project view options' : 'Issue view options')}><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" data-i18n-ignore className={styles.menu} align="end" collisionPadding={8} sideOffset={4}>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={onEdit}><MenuRow icon={<IssueActionGlyph label="Edit" fallback={null}/>} label={t('Edit…')}/></DropdownMenu.Item>
+    {onDuplicate && <DropdownMenu.Item className={styles.menuItem} onSelect={onDuplicate}><MenuRow icon={<AddViewIcon/>} label={t('Duplicate…')}/></DropdownMenu.Item>}
+    {onUpdate && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><MenuRow icon={<LinearGlyph name="owner"/>} label={t('Owner')} submenu/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu} ${styles.ownerMenu}`} sideOffset={SUBMENU_SIDE_OFFSET} alignOffset={SUBMENU_ALIGN_OFFSET} collisionPadding={8}>{users.map(user => <DropdownMenu.Item key={user.id} className={styles.menuItem} onSelect={() => onUpdate({ ownerId: user.id })}><span className={styles.menuIcon} aria-hidden="true"><UserAvatar className={`people-menu-avatar ${styles.avatar}`} avatarUrl={user.avatarUrl} name={user.displayName || user.name}/></span><span className={styles.menuLabel} data-i18n-ignore>{user.displayName || user.name}</span>{user.app && <AgentBadge/>}{owner?.id === user.id && <Check className={styles.menuCheck} size={16} aria-hidden="true"/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
+    {onUpdate && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><MenuRow icon={<LinearGlyph name="moveTo"/>} label={t('Move to')} submenu/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu}`} sideOffset={SUBMENU_SIDE_OFFSET} alignOffset={SUBMENU_ALIGN_OFFSET} collisionPadding={8}>
+      <DropdownMenu.Item className={styles.menuItem} onSelect={() => onUpdate({ scope: 'personal', teamId: '' })}><MenuRow icon={<ViewGlyph icon="Lock" color="currentColor"/>} label={t('Personal')}/></DropdownMenu.Item>
+      <DropdownMenu.Item className={styles.menuItem} onSelect={() => onUpdate({ scope: 'workspace', teamId: '' })}><MenuRow icon={<LinearGlyph name="workspace"/>} label={t('Workspace')}/></DropdownMenu.Item>
+      {teams.length > 0 && <DropdownMenu.Separator className={styles.separator}/>}
+      {teams.map(team => <DropdownMenu.Item className={styles.menuItem} key={team.id} onSelect={() => onUpdate({ scope: 'team', teamId: team.id })}><MenuRow icon={<span className={styles.teamIcon}><TeamIcon team={team} size={14}/></span>} label={team.name}/></DropdownMenu.Item>)}
+    </DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
     <DropdownMenu.Separator className={styles.separator}/>
-    {onSetSubscriptionEvents && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><Bell/><span>Subscribe</span><ChevronRight className={styles.trailing}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subscriptionMenu}`} sideOffset={-4}><SubscriptionItem checked={events.has('issue-added')} label={`${entity} is added to the view`} onSelect={() => toggleEvent('issue-added')}/><SubscriptionItem checked={events.has('issue-completed')} label={`${entity} is marked completed or canceled`} onSelect={() => toggleEvent('issue-completed')}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
-    {onShare && <DropdownMenu.Item className={styles.menuItem} onSelect={onShare}><Copy/><span>{view.shareToken ? 'Disable public link' : 'Share view'}</span></DropdownMenu.Item>}
+    {onSetSubscriptionEvents && <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}><MenuRow icon={<SubscriptionIcon/>} label={t('Subscribe')} submenu/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu}`} sideOffset={SUBMENU_SIDE_OFFSET} alignOffset={SUBMENU_ALIGN_OFFSET} collisionPadding={8}><SubscriptionItem checked={events.has('issue-added')} label={t(`${entity} is added to the view`)} onSelect={() => toggleEvent('issue-added')}/><SubscriptionItem checked={events.has('issue-completed')} label={t(`${entity} is marked completed or canceled`)} onSelect={() => toggleEvent('issue-completed')}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>}
+    <DropdownMenu.Item className={styles.menuItem} asChild><AppLink href={`/${workspaceSlug}/settings/integrations/slack`}><MenuRow icon={<SlackIcon/>} label={t('Configure custom view Slack notifications…')}/></AppLink></DropdownMenu.Item>
     {(onCopy || onExport) && <DropdownMenu.Separator className={styles.separator}/>}
-    {onCopy && <DropdownMenu.Item className={styles.menuItem} onSelect={onCopy}><Copy/>Copy link</DropdownMenu.Item>}
-    {onExport && <DropdownMenu.Item className={styles.menuItem} onSelect={onExport}><Download/><span>{`Export ${view.resource === 'projects' ? 'projects' : 'issues'} as CSV…`}</span></DropdownMenu.Item>}
+    {onCopy && <DropdownMenu.Item className={styles.menuItem} onSelect={onCopy}><MenuRow icon={<IssueActionGlyph label="Copy link" fallback={null}/>} label={t('Copy link')}/></DropdownMenu.Item>}
+    {onExport && <DropdownMenu.Item className={styles.menuItem} onSelect={onExport}><MenuRow icon={<LinearGlyph name="exportCsv"/>} label={t(view.resource === 'projects' ? 'Export projects as CSV…' : 'Export issues as CSV…')}/></DropdownMenu.Item>}
     <DropdownMenu.Separator className={styles.separator}/>
-    <DropdownMenu.Item className={styles.menuItem} data-danger onSelect={onDelete}><Trash2/>Delete</DropdownMenu.Item>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={onDelete}><MenuRow icon={<IssueActionGlyph label="Delete" fallback={null}/>} label={t('Delete')}/></DropdownMenu.Item>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-function SubscriptionItem({ checked, label, onSelect }: { checked: boolean; label: string; onSelect: () => void }) { return <DropdownMenu.CheckboxItem checked={checked} className={styles.menuItem} onSelect={event => { event.preventDefault(); onSelect() }}><span className={styles.checkbox}>{checked && <CheckboxMark/>}</span><span>{label}</span></DropdownMenu.CheckboxItem> }
+/** Submenus overlap their parent's edge by 2px and line their first row up with the trigger row (Linear). */
+const SUBMENU_SIDE_OFFSET = -1.5, SUBMENU_ALIGN_OFFSET = -6.5
+
+/** Icon slot, label and Linear's ▶ submenu marker. Labels are always wrapped so the highlight never covers them. */
+function MenuRow({ icon, label, submenu = false }: { icon?: ReactNode; label: string; submenu?: boolean }) {
+  return <>{icon && <span className={styles.menuIcon} aria-hidden="true">{icon}</span>}<span className={styles.menuLabel}>{label}</span>{submenu && <span className={styles.submenuMarker} aria-hidden="true">▶</span>}</>
+}
+
+function SubscriptionItem({ checked, label, onSelect }: { checked: boolean; label: string; onSelect: () => void }) { return <DropdownMenu.CheckboxItem checked={checked} className={`${styles.menuItem} ${styles.checkItem}`} onSelect={event => { event.preventDefault(); onSelect() }}><span className={styles.checkbox} aria-hidden="true">{checked && <CheckboxMark/>}</span><span className={styles.menuLabel}>{label}</span></DropdownMenu.CheckboxItem> }

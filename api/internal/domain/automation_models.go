@@ -100,8 +100,27 @@ type EmailIntakeAddress struct {
 	VerifiedAt        *time.Time         `json:"verifiedAt,omitempty"`
 	Aliases           []EmailIntakeAlias `json:"aliases"`
 	Enabled           bool               `json:"enabled"`
-	CreatedAt         time.Time          `json:"createdAt"`
-	UpdatedAt         time.Time          `json:"updatedAt"`
+	// Type is "asks" for Asks email intake, "team" for a team's issue email,
+	// and empty for legacy custom-domain addresses.
+	Type string `json:"type,omitempty"`
+	// System addresses live on Flow's intake domain and need no DNS to receive.
+	System     bool   `json:"system,omitempty"`
+	TemplateID string `json:"templateId,omitempty"`
+	SenderName string `json:"senderName,omitempty"`
+	// ForwardingEmailAddress is the customer's own address that forwards into
+	// this intake address; its domain is verified to send replies from it.
+	ForwardingEmailAddress   string     `json:"forwardingEmailAddress,omitempty"`
+	ForwardingDomainVerified *time.Time `json:"forwardingDomainVerifiedAt,omitempty"`
+	CustomerRequestsEnabled  bool       `json:"customerRequestsEnabled,omitempty"`
+	CreatedAt                time.Time  `json:"createdAt"`
+	UpdatedAt                time.Time  `json:"updatedAt"`
+}
+
+type EmailIntakeDNSRecord struct {
+	Type       string `json:"type"`
+	Name       string `json:"name"`
+	Content    string `json:"content"`
+	IsVerified bool   `json:"isVerified"`
 }
 
 type EmailIntakeMessage struct {

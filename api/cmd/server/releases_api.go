@@ -48,7 +48,7 @@ func (s *server) setIssueReleases(w http.ResponseWriter, r *http.Request) {
 			if index < 0 {
 				return errInvalid
 			}
-			if data.Releases[index].StageFrozenAt != nil && !slices.Contains(data.Releases[index].IssueIDs, issueID) {
+			if releaseStageFrozen(data, data.Releases[index]) && !slices.Contains(data.Releases[index].IssueIDs, issueID) {
 				return errConflict
 			}
 		}
@@ -124,6 +124,16 @@ func releasePipelineByID(data *domain.Bootstrap, id string) *domain.ReleasePipel
 		return nil
 	}
 	return &data.ReleasePipelines[index]
+}
+
+// releaseStageFrozen reports whether issues may no longer be added to a
+// release, either because the release itself or its pipeline stage is frozen.
+func releaseStageFrozen(data *domain.Bootstrap, release domain.Release) bool {
+	if release.StageFrozenAt != nil {
+		return true
+	}
+	pipeline := releasePipelineByID(data, release.PipelineID)
+	return pipeline != nil && release.Stage != "" && slices.Contains(pipeline.FrozenStages, release.Stage)
 }
 
 func publicReleasePipeline(item domain.ReleasePipeline) domain.ReleasePipeline {
@@ -409,7 +419,9 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 		status := ""
 		for _, candidate := range pipeline.Stages {
 			candidateStatus := pipeline.StageStatuses[candidate]
-			if strings.EqualFold(stage, candidate) || strings.EqualFold(stage, candidateStatus) {
+			// A status alias resolves to the first stage of that type that is not
+			// frozen, so syncs never land new releases in frozen stages.
+			if strings.EqualFold(stage, candidate) || strings.EqualFold(stage, candidateStatus) && !slices.Contains(pipeline.FrozenStages, candidate) {
 				stage, status = candidate, candidateStatus
 				break
 			}

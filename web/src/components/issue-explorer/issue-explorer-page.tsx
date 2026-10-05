@@ -75,6 +75,7 @@ export interface IssueExplorerPageProps {
   onDeleteSavedView?: (view: SavedView) => Promise<void>
   onToggleSavedViewFavorite?: (view: SavedView) => Promise<void>
   onSetSavedViewSubscriptionEvents?: (view: SavedView, events: string[]) => Promise<void>
+  /** Public sharing lives in the Views list row menu; the view header menu matches Linear (no share item). */
   onShareSavedView?: (view: SavedView) => Promise<string | undefined>
   onDuplicateSavedView?: (view: SavedView) => void
   onCancelCreateSavedView?: () => void
@@ -100,7 +101,7 @@ export interface IssueExplorerPageProps {
   insightsLabel?: string
 }
 
-export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onShareSavedView, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
+export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourceHeader, scopeFilter, scopeConditions, defaultDisplayOverrides, data, initialLabelId, initialStatusId, initialInsightFilters, scope, view, viewHref, savedView, duplicateFrom, creatingView = false, editingView = false, defaultSaveScope, savedViews = [], savedViewHref, onNavigateView, onNavigateSavedView, onCreateSavedView, onUpdateSavedView, onDeleteSavedView, onToggleSavedViewFavorite, onSetSavedViewSubscriptionEvents, onDuplicateSavedView, onCancelCreateSavedView, onBeginEditSavedView, onFinishEditSavedView, onNewViewResourceChange, onOpenIssue, renderIssuePreview, onOpenSidebar, onCreateIssue, onUpdateIssue, onUpdateIssues, onDeleteIssues, detailsPanel, detailsStorageKey, emptyState, className, insightsLabel }: IssueExplorerPageProps) {
   const storageScope = scope.kind === 'team' ? `team:${scope.team.id}` : 'workspace'
   const preferencesKey = `${data.workspace.urlKey}:issue-explorer:${preferenceScope ?? storageScope}:${boardRoute ? 'board' : view}`
   const sourceView = savedView ?? duplicateFrom
@@ -499,7 +500,6 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
     onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
     onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
-    onShare={onShareSavedView ? () => { void onShareSavedView(savedView).then(path => { if (path) void navigator.clipboard.writeText(`${location.origin}${path}`) }) } : undefined}
     onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
     onExport={() => exportIssuesCsv(rows, savedView.name)}
     onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}

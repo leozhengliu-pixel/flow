@@ -412,64 +412,75 @@ type DocumentTemplate struct {
 
 // Issue follows Flow's public GraphQL entity naming and relationship shape.
 type Issue struct {
-	IsSummary              bool                `json:"isSummary,omitempty"`
-	ID                     string              `json:"id"`
-	Version                int64               `json:"version"`
-	Identifier             string              `json:"identifier"`
-	Number                 int                 `json:"number"`
-	Title                  string              `json:"title"`
-	Icon                   string              `json:"icon,omitempty"` // recurring issue icon (issue template icon format)
-	Description            string              `json:"description"`
-	DescriptionState       string              `json:"descriptionState,omitempty"`
-	DocumentContent        *DocumentContent    `json:"documentContent,omitempty"`
-	Priority               int                 `json:"priority"`
-	PriorityLabel          string              `json:"priorityLabel"`
-	SortOrder              float64             `json:"sortOrder"`
-	Estimate               *float64            `json:"estimate,omitempty"`
-	DueDate                *string             `json:"dueDate,omitempty"`
-	SLABreachesAt          *time.Time          `json:"slaBreachesAt,omitempty"`
-	SLAType                string              `json:"slaType,omitempty"`
-	CreatedAt              time.Time           `json:"createdAt"`
-	UpdatedAt              time.Time           `json:"updatedAt"`
-	CompletedAt            *time.Time          `json:"completedAt,omitempty"`
-	StartedAt              *time.Time          `json:"startedAt,omitempty"`
-	TriagedAt              *time.Time          `json:"triagedAt,omitempty"`
-	SuggestionsGeneratedAt *time.Time          `json:"suggestionsGeneratedAt,omitempty"`
-	SuggestionsSource      string              `json:"suggestionsSource,omitempty"`
-	SuggestionsThinking    string              `json:"suggestionsThinking,omitempty"`
-	StatusChangedAt        *time.Time          `json:"statusChangedAt,omitempty"`
-	AutoClosedAt           *time.Time          `json:"autoClosedAt,omitempty"`
-	CanceledAt             *time.Time          `json:"canceledAt,omitempty"`
-	ArchivedAt             *time.Time          `json:"archivedAt,omitempty"`
-	ShareToken             string              `json:"shareToken,omitempty"`
-	SharedAt               *time.Time          `json:"sharedAt,omitempty"`
-	Team                   Team                `json:"team"`
-	State                  WorkflowState       `json:"state"`
-	Assignee               *User               `json:"assignee,omitempty"`
-	Delegate               *User               `json:"delegate,omitempty"`
-	Creator                User                `json:"creator"`
-	Labels                 []IssueLabel        `json:"labels"`
-	Project                *ProjectSummary     `json:"project,omitempty"`
-	ProjectMilestoneID     *string             `json:"projectMilestoneId,omitempty"`
-	CycleID                *string             `json:"cycleId,omitempty"`
-	AddedToCycle           string              `json:"addedToCycle,omitempty"`
-	AgentSessionID         string              `json:"agentSessionId,omitempty"`
-	SuggestedLabelIDs      []string            `json:"suggestedLabelIds,omitempty"`
-	ExternalSource         string              `json:"externalSource,omitempty"`
-	AutoClosed             bool                `json:"autoClosed,omitempty"`
-	TemplateID             string              `json:"templateId,omitempty"`
-	ParentID               *string             `json:"parentId,omitempty"`
-	Recurrence             string              `json:"recurrence,omitempty"`
-	NextOccurrenceAt       *time.Time          `json:"nextOccurrenceAt,omitempty"`
-	RecurrenceSeriesID     string              `json:"recurrenceSeriesId,omitempty"`
-	RecurrenceOccurrence   string              `json:"recurrenceOccurrence,omitempty"`
-	SnoozedUntil           *time.Time          `json:"snoozedUntil,omitempty"`
-	SubscriberIDs          []string            `json:"subscriberIds"`
-	Reactions              map[string][]string `json:"reactions"`
-	SubIssueIDs            []string            `json:"subIssueIds"`
-	Relations              []IssueRelation     `json:"relations"`
-	Attachments            []Attachment        `json:"attachments"`
-	Permissions            []IssuePermission   `json:"permissions,omitempty"`
+	IsSummary              bool             `json:"isSummary,omitempty"`
+	ID                     string           `json:"id"`
+	Version                int64            `json:"version"`
+	Identifier             string           `json:"identifier"`
+	Number                 int              `json:"number"`
+	Title                  string           `json:"title"`
+	Icon                   string           `json:"icon,omitempty"` // recurring issue icon (issue template icon format)
+	Description            string           `json:"description"`
+	DescriptionState       string           `json:"descriptionState,omitempty"`
+	DocumentContent        *DocumentContent `json:"documentContent,omitempty"`
+	Priority               int              `json:"priority"`
+	PriorityLabel          string           `json:"priorityLabel"`
+	SortOrder              float64          `json:"sortOrder"`
+	Estimate               *float64         `json:"estimate,omitempty"`
+	DueDate                *string          `json:"dueDate,omitempty"`
+	SLABreachesAt          *time.Time       `json:"slaBreachesAt,omitempty"`
+	SLAType                string           `json:"slaType,omitempty"`
+	CreatedAt              time.Time        `json:"createdAt"`
+	UpdatedAt              time.Time        `json:"updatedAt"`
+	CompletedAt            *time.Time       `json:"completedAt,omitempty"`
+	StartedAt              *time.Time       `json:"startedAt,omitempty"`
+	TriagedAt              *time.Time       `json:"triagedAt,omitempty"`
+	SuggestionsGeneratedAt *time.Time       `json:"suggestionsGeneratedAt,omitempty"`
+	SuggestionsSource      string           `json:"suggestionsSource,omitempty"`
+	SuggestionsThinking    string           `json:"suggestionsThinking,omitempty"`
+	StatusChangedAt        *time.Time       `json:"statusChangedAt,omitempty"`
+	AutoClosedAt           *time.Time       `json:"autoClosedAt,omitempty"`
+	CanceledAt             *time.Time       `json:"canceledAt,omitempty"`
+	ArchivedAt             *time.Time       `json:"archivedAt,omitempty"`
+	ShareToken             string           `json:"shareToken,omitempty"`
+	SharedAt               *time.Time       `json:"sharedAt,omitempty"`
+	Team                   Team             `json:"team"`
+	State                  WorkflowState    `json:"state"`
+	Assignee               *User            `json:"assignee,omitempty"`
+	Delegate               *User            `json:"delegate,omitempty"`
+	Creator                User             `json:"creator"`
+	Labels                 []IssueLabel     `json:"labels"`
+	Project                *ProjectSummary  `json:"project,omitempty"`
+	ProjectMilestoneID     *string          `json:"projectMilestoneId,omitempty"`
+	CycleID                *string          `json:"cycleId,omitempty"`
+	AddedToCycle           string           `json:"addedToCycle,omitempty"`
+	AgentSessionID         string           `json:"agentSessionId,omitempty"`
+	SuggestedLabelIDs      []string         `json:"suggestedLabelIds,omitempty"`
+	// Active Triage Intelligence suggestion targets (Linear's "Suggested
+	// assignee/project/team", "Suggested duplicates/relations" filters). They
+	// mirror the active IssueSuggestions so filters stay indexed lookups.
+	SuggestedAssigneeIDs  []string `json:"suggestedAssigneeIds,omitempty"`
+	SuggestedProjectIDs   []string `json:"suggestedProjectIds,omitempty"`
+	SuggestedTeamIDs      []string `json:"suggestedTeamIds,omitempty"`
+	SuggestedDuplicateIDs []string `json:"suggestedDuplicateIds,omitempty"`
+	SuggestedRelatedIDs   []string `json:"suggestedRelatedIds,omitempty"`
+	// AgentSessionState is the delegated agent task's status, decorated on
+	// read (never persisted): pending, active, awaitingInput, complete, error, canceled.
+	AgentSessionState    string              `json:"agentSessionState,omitempty"`
+	ExternalSource       string              `json:"externalSource,omitempty"`
+	AutoClosed           bool                `json:"autoClosed,omitempty"`
+	TemplateID           string              `json:"templateId,omitempty"`
+	ParentID             *string             `json:"parentId,omitempty"`
+	Recurrence           string              `json:"recurrence,omitempty"`
+	NextOccurrenceAt     *time.Time          `json:"nextOccurrenceAt,omitempty"`
+	RecurrenceSeriesID   string              `json:"recurrenceSeriesId,omitempty"`
+	RecurrenceOccurrence string              `json:"recurrenceOccurrence,omitempty"`
+	SnoozedUntil         *time.Time          `json:"snoozedUntil,omitempty"`
+	SubscriberIDs        []string            `json:"subscriberIds"`
+	Reactions            map[string][]string `json:"reactions"`
+	SubIssueIDs          []string            `json:"subIssueIds"`
+	Relations            []IssueRelation     `json:"relations"`
+	Attachments          []Attachment        `json:"attachments"`
+	Permissions          []IssuePermission   `json:"permissions,omitempty"`
 }
 
 type Cycle struct {
@@ -1293,6 +1304,8 @@ type ReleasePipeline struct {
 	Production                  bool              `json:"production"`
 	Stages                      []string          `json:"stages"`
 	StageStatuses               map[string]string `json:"stageStatuses"`
+	StageColors                 map[string]string `json:"stageColors,omitempty"`
+	FrozenStages                []string          `json:"frozenStages,omitempty"`
 	Position                    float64           `json:"position"`
 	PathFilters                 []string          `json:"pathFilters"`
 	ReleaseNotesTemplate        string            `json:"releaseNotesTemplate,omitempty"`

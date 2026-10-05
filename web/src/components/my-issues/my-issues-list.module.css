@@ -83,3 +83,7 @@
 .statusTrigger svg{transition:filter .15s ease}.statusTrigger:hover svg,.statusTrigger[data-state=open] svg{filter:brightness(1.32)}
 :global(:root[data-theme="light"]) .statusTrigger:hover svg,:global(:root[data-theme="light"]) .statusTrigger[data-state=open] svg{filter:brightness(.82)}
 
+
+/* Delegated agent beside the assignee (Linear). */
+.delegateAvatar{display:inline-flex;flex:none;align-items:center;margin-right:-4px;opacity:.95}
+.delegateAvatar .avatar{box-shadow:0 0 0 1.5px var(--bg-panel)}

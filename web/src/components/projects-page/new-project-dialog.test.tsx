@@ -222,4 +222,35 @@ describe('NewProjectDialog', () => {
     await user.click(within(screen.getByRole('alertdialog', { name: 'Discard changes?' })).getByRole('button', { name: 'Discard' }))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('renders the property row with the shared create-pill style, like Linear', () => {
+    const previousLocale = localStorage.getItem('flow:locale')
+    localStorage.setItem('flow:locale', 'zh-CN')
+    try {
+      render(
+        <I18nProvider>
+          <NewProjectDialog
+            leads={[{ id: 'user-1', label: 'Zheng Liu', email: 'zheng@example.com' }]}
+            open
+            onClose={vi.fn()}
+            onCreate={vi.fn()}
+            statuses={[{ id: 'backlog', label: 'Backlog' }]}
+            teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]}
+          />
+        </I18nProvider>,
+      )
+      const row = document.querySelector('.lp-new-project__properties')
+      expect(row).toHaveClass('create-pill-row')
+      const pills = [...(row?.querySelectorAll('button') ?? [])]
+      expect(pills.length).toBeGreaterThanOrEqual(8)
+      for (const pill of pills) expect(pill).toHaveClass('create-pill')
+      // Status and priority show set values; Lead, Members, Start, Target, Labels and Dependencies are placeholders.
+      expect(pills.filter(pill => !pill.classList.contains('is-placeholder')).map(pill => pill.getAttribute('aria-label'))).toEqual(['更改项目状态', '更改项目优先级'])
+      // Priority is a fixed choice, so it is translated (statuses are workspace data).
+      expect(screen.getByRole('combobox', { name: '更改项目优先级' })).toHaveTextContent('无优先级')
+    } finally {
+      if (previousLocale === null) localStorage.removeItem('flow:locale')
+      else localStorage.setItem('flow:locale', previousLocale)
+    }
+  })
 })

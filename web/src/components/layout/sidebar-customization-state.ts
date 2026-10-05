@@ -11,7 +11,6 @@ export type SidebarEntry =
   | "projects"
   | "documents"
   | "views"
-  | "dashboards"
   | "members"
   | "customers"
   | "teams"
@@ -29,7 +28,6 @@ const SIDEBAR_ENTRY_FEATURES: Partial<Record<SidebarEntry, string>> = {
   customers: "customer-requests",
   releases: "releases",
   loops: "loops",
-  dashboards: "dashboards",
   pulse: "pulse",
   agent: "ai",
 };
@@ -56,21 +54,21 @@ const defaultPersonalOrder: SidebarEntry[] = [
 ];
 const defaultWorkspaceOrder: SidebarEntry[] = [
   "initiatives", "projects", "loops", "views", "members", "releases",
-  "teams", "dashboards", "customers",
+  "teams", "customers",
 ];
 const legacyWorkspaceOrder: SidebarEntry[] = [
   "members", "initiatives", "projects", "teams", "views",
-  "dashboards", "releases", "loops", "customers",
+  "releases", "loops", "customers",
 ];
 // Like Linear: the Workspace section shows Initiatives, Projects, Loops and
-// Views; Members, Teams, Releases (and Dashboards, Customers) live under More.
+// Views; Members, Teams, Releases (and Customers) live under More. Dashboards
+// is a tab of the Views page, not a sidebar entry.
 const defaultPreferences: SidebarPreferences = {
   inbox: "always", reviews: "always", myIssues: "always", pulse: "always",
   drafts: "always", agent: "always", initiatives: "always",
   projects: "always", documents: "always", views: "always",
   members: "never", customers: "never", teams: "never",
   releases: "never", loops: "always",
-  dashboards: "never",
 };
 // Defaults before the Linear-parity change. Builds up to then saved the whole
 // preference object, so values equal to these were never explicit choices.
@@ -135,11 +133,15 @@ function readPreferences(userId?: string): SidebarPreferences {
 function readPreferenceOverrides(userId?: string): Partial<SidebarPreferences> {
   try {
     const stored = readStored(PREFERENCE_OVERRIDES_KEY, userId)
-    if (stored !== null) return JSON.parse(stored) as Partial<SidebarPreferences>
+    if (stored !== null) return knownEntries(JSON.parse(stored) as Partial<SidebarPreferences>)
     const legacy = JSON.parse(readStored("flow.sidebar.preferences", userId) ?? "{}") as Partial<SidebarPreferences>
     const legacyDefaults: Partial<SidebarPreferences> = { ...defaultPreferences, ...legacyDefaultPreferences }
-    return Object.fromEntries(Object.entries(legacy).filter(([key, value]) => legacyDefaults[key as SidebarEntry] !== value)) as Partial<SidebarPreferences>
+    return knownEntries(Object.fromEntries(Object.entries(legacy).filter(([key, value]) => legacyDefaults[key as SidebarEntry] !== value)) as Partial<SidebarPreferences>)
   } catch { return {} }
+}
+/** Drops entries older builds stored that are no longer sidebar items (Dashboards). */
+function knownEntries(preferences: Partial<SidebarPreferences>): Partial<SidebarPreferences> {
+  return Object.fromEntries(Object.entries(preferences).filter(([key]) => key in defaultPreferences)) as Partial<SidebarPreferences>
 }
 function preferenceOverrides(preferences: SidebarPreferences): Partial<SidebarPreferences> {
   return Object.fromEntries(Object.entries(preferences).filter(([key, value]) => defaultPreferences[key as SidebarEntry] !== value)) as Partial<SidebarPreferences>
@@ -165,7 +167,7 @@ function readOrder(userId?: string): SidebarOrder {
  */
 function sameOrder(stored: SidebarEntry[] | undefined, reference: SidebarEntry[]) {
   if (!stored?.length) return false
-  const appendedLater = new Set<SidebarEntry>(["loops", "dashboards", "customers"])
+  const appendedLater = new Set<string>(["loops", "dashboards", "customers"])
   const core = stored.filter(entry => !appendedLater.has(entry))
   if (core.some(entry => !reference.includes(entry))) return false
   return core.every((entry, index) => index === 0 || reference.indexOf(core[index - 1]) < reference.indexOf(entry))

@@ -99,7 +99,18 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 	scope.Filter = store.IssueFilter{}
 	scope.Text = ""
 	scope.Cursor = ""
+	var sessionStates map[string]string
+	if root.references("agentsessionstate") {
+		// Resolved before the walk, which holds the read connection.
+		if sessionStates, err = s.store.WorkspaceAgentSessionStates(ctx, data.Workspace.URLKey); err != nil {
+			issueRecordsError(w, err)
+			return
+		}
+	}
 	err = s.store.WalkIssueRecords(ctx, scope, func(issue domain.Issue) error {
+		if issue.AgentSessionID != "" && sessionStates != nil {
+			issue.AgentSessionState = sessionStates[issue.AgentSessionID]
+		}
 		if !issueArchiveMatches(issue, query.Get("archived")) || !issueScopeMatches(issue, query) || !issueTextMatches(issue, query.Get("q")) || !root.matches(issue, data) {
 			return nil
 		}
@@ -215,6 +226,21 @@ func decodeIssueQuery(raw string) (issueQueryNode, error) {
 		return issueQueryNode{}, store.ErrIssueQuery
 	}
 	return node, nil
+}
+
+// references reports whether any node filters on field (case-insensitive).
+func (node issueQueryNode) references(field string) bool {
+	if strings.EqualFold(strings.TrimSpace(node.Field), field) {
+		return true
+	}
+	for _, children := range [][]issueQueryNode{node.And, node.Or} {
+		for _, child := range children {
+			if child.references(field) {
+				return true
+			}
+		}
+	}
+	return node.Not != nil && node.Not.references(field)
 }
 
 func (node issueQueryNode) empty() bool {
@@ -439,6 +465,44 @@ func issueFieldValues(issue domain.Issue, field string, data domain.Bootstrap) [
 		return issue.SubscriberIDs
 	case "suggestedlabel", "suggestedlabelid":
 		return issue.SuggestedLabelIDs
+	case "suggestedassignee", "suggestedassigneeid":
+		return issue.SuggestedAssigneeIDs
+	case "suggestedproject", "suggestedprojectid":
+		return issue.SuggestedProjectIDs
+	case "suggestedteam", "suggestedteamid":
+		return issue.SuggestedTeamIDs
+	case "suggestedduplicate", "suggestedduplicates":
+		return issue.SuggestedDuplicateIDs
+	case "suggestedrelated", "suggestedrelations":
+		return issue.SuggestedRelatedIDs
+	case "triageintelligence":
+		// The filter-bar vocabulary: "<kind>:*", "<kind>:<id>", "related", "duplicate".
+		values := []string{}
+		for kind, ids := range map[string][]string{"assignee": issue.SuggestedAssigneeIDs, "project": issue.SuggestedProjectIDs, "label": issue.SuggestedLabelIDs, "team": issue.SuggestedTeamIDs} {
+			if len(ids) > 0 {
+				values = append(values, kind+":*")
+			}
+			for _, id := range ids {
+				values = append(values, kind+":"+id)
+			}
+		}
+		if len(issue.SuggestedRelatedIDs) > 0 {
+			values = append(values, "related")
+		}
+		if len(issue.SuggestedDuplicateIDs) > 0 {
+			values = append(values, "duplicate")
+		}
+		return values
+	case "delegateid":
+		if issue.Delegate == nil {
+			return nil
+		}
+		return []string{issue.Delegate.ID}
+	case "agentsessionstate":
+		if issue.AgentSessionID == "" || issue.AgentSessionState == "" {
+			return nil
+		}
+		return []string{issue.AgentSessionState}
 	case "agent", "agentid":
 		if issue.Delegate == nil {
 			return nil
@@ -528,8 +592,41 @@ func issueFieldValues(issue domain.Issue, field string, data domain.Bootstrap) [
 		return []string{value.UTC().Format(time.RFC3339)}
 	default:
 		_ = data // reserved for relationship-backed fields added by clients
+		return issueAttributeFieldValues(issue, field)
+	}
+}
+
+// issueAttributeFieldValues matches the sparse attribute vocabulary of the
+// SQL store ("suggestedAssignee:<id>", "suggested:duplicate",
+// "relation:blocks"): present attributes read "true", absent ones are empty,
+// so isEmpty/isNotEmpty behave as in compileIssueAttribute.
+func issueAttributeFieldValues(issue domain.Issue, field string) []string {
+	kind, target, ok := strings.Cut(strings.TrimSpace(field), ":")
+	if !ok || target == "" {
 		return nil
 	}
+	present := false
+	targets := map[string][]string{"suggestedlabel": issue.SuggestedLabelIDs, "suggestedassignee": issue.SuggestedAssigneeIDs, "suggestedproject": issue.SuggestedProjectIDs, "suggestedteam": issue.SuggestedTeamIDs, "suggestedduplicate": issue.SuggestedDuplicateIDs, "suggestedrelated": issue.SuggestedRelatedIDs}
+	switch kind = strings.ToLower(kind); kind {
+	case "suggested":
+		present = len(targets["suggested"+strings.ToLower(target)]) > 0
+	case "relation":
+		for _, relation := range issue.Relations {
+			present = present || relation.Type == target
+		}
+	default:
+		ids, known := targets[kind]
+		if !known {
+			return nil
+		}
+		for _, id := range ids {
+			present = present || id == target
+		}
+	}
+	if !present {
+		return nil
+	}
+	return []string{"true"}
 }
 
 func dateMatch(actual []string, operator string, values []string) bool {

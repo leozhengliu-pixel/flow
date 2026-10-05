@@ -508,6 +508,9 @@ func (s *server) getIssueRecordContext(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.Bootstrap, query store.IssueRecordQuery, issues []domain.Issue) ([]domain.Issue, error) {
+	if err := s.decorateAgentSessionStates(r.Context(), firstNonEmpty(query.Workspace, metadata.Workspace.URLKey), issues); err != nil {
+		return nil, err
+	}
 	if (query.Access == nil || query.Access.Admin) && query.AllowedTeamIDs == nil {
 		return issues, nil
 	}
@@ -525,14 +528,19 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 		for _, relation := range issue.Relations {
 			ids = append(ids, relation.RelatedIssueID)
 		}
+		ids = append(ids, issue.SuggestedDuplicateIDs...)
+		ids = append(ids, issue.SuggestedRelatedIDs...)
 	}
 	visible, err := s.store.VisibleIssueRecordIDs(r.Context(), query, ids)
 	if err != nil {
 		return nil, err
 	}
-	projects, labels := map[string]bool{}, map[string]bool{}
+	projects, labels, teams := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, project := range metadata.Projects {
 		projects[project.ID] = true
+	}
+	for _, team := range metadata.Teams {
+		teams[team.ID] = true
 	}
 	for _, label := range metadata.Labels {
 		labels[label.ID] = true
@@ -545,6 +553,12 @@ func (s *server) projectIssueRecordReferences(r *http.Request, metadata domain.B
 		issue.SubIssueIDs = slices.DeleteFunc(issue.SubIssueIDs, func(id string) bool { return !visible[id] })
 		issue.Relations = slices.DeleteFunc(issue.Relations, func(relation domain.IssueRelation) bool { return !visible[relation.RelatedIssueID] })
 		issue.Labels = slices.DeleteFunc(issue.Labels, func(label domain.IssueLabel) bool { return !labels[label.ID] })
+		// Suggestion targets the viewer cannot see are not disclosed.
+		issue.SuggestedLabelIDs = slices.DeleteFunc(issue.SuggestedLabelIDs, func(id string) bool { return !labels[id] })
+		issue.SuggestedProjectIDs = slices.DeleteFunc(issue.SuggestedProjectIDs, func(id string) bool { return !projects[id] })
+		issue.SuggestedTeamIDs = slices.DeleteFunc(issue.SuggestedTeamIDs, func(id string) bool { return !teams[id] })
+		issue.SuggestedDuplicateIDs = slices.DeleteFunc(issue.SuggestedDuplicateIDs, func(id string) bool { return !visible[id] })
+		issue.SuggestedRelatedIDs = slices.DeleteFunc(issue.SuggestedRelatedIDs, func(id string) bool { return !visible[id] })
 		if issue.Project != nil && !projects[issue.Project.ID] {
 			issue.Project = nil
 			issue.ProjectMilestoneID = nil
@@ -705,4 +719,28 @@ func issueUpdateIsNoop(issue domain.Issue, input domain.IssueUpdateInput) bool {
 		}
 	}
 	return true
+}
+
+// decorateAgentSessionStates sets Issue.AgentSessionState from the delegated
+// task rows (one batched primary-key lookup; sessions are sparse).
+func (s *server) decorateAgentSessionStates(ctx context.Context, workspace string, issues []domain.Issue) error {
+	ids := []string{}
+	for _, issue := range issues {
+		if issue.AgentSessionID != "" {
+			ids = append(ids, issue.AgentSessionID)
+		}
+	}
+	if len(ids) == 0 || workspace == "" {
+		return nil
+	}
+	states, err := s.store.AgentSessionStates(ctx, workspace, ids)
+	if err != nil {
+		return err
+	}
+	for index := range issues {
+		if issues[index].AgentSessionID != "" {
+			issues[index].AgentSessionState = states[issues[index].AgentSessionID]
+		}
+	}
+	return nil
 }

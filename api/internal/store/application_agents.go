@@ -2,8 +2,10 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -88,6 +90,12 @@ func (s *SQLiteStore) installApplicationTx(ctx context.Context, tx *sqlTx, lock 
 	if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, current.Workspace.ID, a.InstalledBy).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
 		return current, a, ErrAuthForbidden
 	}
+	return s.writeApplicationInstallationTx(ctx, tx, lock, current, a, secret)
+}
+
+// writeApplicationInstallationTx persists an installation and its principal,
+// workspace membership, team memberships and user record. Callers authorize.
+func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sqlTx, lock string, current domain.Bootstrap, a domain.ApplicationInstallation, secret string) (domain.Bootstrap, domain.ApplicationInstallation, error) {
 	a.WorkspaceKey = current.Workspace.URLKey
 	if a.ClientID == "" || a.Name == "" || len(a.Name) > 200 || len(a.TeamIDs) == 0 {
 		return current, a, ErrIssueQuery
@@ -237,4 +245,113 @@ func (s *SQLiteStore) oauthClientInTransaction(ctx context.Context, tx *sqlTx, i
 		}
 	}
 	return client, ErrAuthForbidden
+}
+
+// BuiltinApplicationClientID is the reserved client of the built-in Flow agent.
+const BuiltinApplicationClientID = "builtin-flow-agent"
+
+// EnsureBuiltinApplication keeps the built-in "Flow" agent member in step with
+// the server's agent configuration, like Linear's always-present agent: when
+// the agent is enabled the member exists, is active and can be delegated to
+// in every team; when it is disabled a server-managed member is suspended (not
+// deleted) so it leaves pickers but keeps its history. An administrator's own
+// choice to deactivate it is respected. It is idempotent.
+func (s *SQLiteStore) EnsureBuiltinApplication(ctx context.Context, workspace string, enabled bool) (bool, error) {
+	changed := false
+	var event domain.DomainEvent
+	err := s.oauthMetadataTransaction(ctx, workspace, func(tx *sqlTx, lock string, current domain.Bootstrap) (domain.Bootstrap, error) {
+		var raw []byte
+		var existing *domain.ApplicationInstallation
+		err := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND client_id=?`+lock, current.Workspace.URLKey, BuiltinApplicationClientID).Scan(&raw)
+		if err == nil {
+			var old domain.ApplicationInstallation
+			if err := json.Unmarshal(raw, &old); err != nil {
+				return current, err
+			}
+			existing = &old
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return current, err
+		}
+		teams, err := builtinApplicationTeams(ctx, tx, current.Workspace.URLKey)
+		if err != nil {
+			return current, err
+		}
+		var next domain.ApplicationInstallation
+		switch {
+		case !enabled && (existing == nil || !existing.Active):
+			return current, nil
+		case !enabled:
+			next = *existing
+			next.Active, next.ServerSuspended = false, true
+		case existing == nil:
+			var installer string
+			err := tx.QueryRowContext(ctx, `SELECT user_id FROM workspace_memberships WHERE workspace_id=? AND status='active' AND role IN ('owner','admin') ORDER BY joined_at,user_id LIMIT 1`, current.Workspace.ID).Scan(&installer)
+			if errors.Is(err, sql.ErrNoRows) || len(teams) == 0 {
+				return current, nil
+			}
+			if err != nil {
+				return current, err
+			}
+			next = domain.ApplicationInstallation{ClientID: BuiltinApplicationClientID, Name: "Flow", AvatarURL: "/favicon.svg", InstalledBy: installer, Builtin: true, Active: true, AllTeams: true}
+		case !existing.Active && !existing.ServerSuspended:
+			return current, nil
+		default:
+			next = *existing
+			next.Active, next.ServerSuspended = true, false
+		}
+		next.Scopes = []string{"app:assignable", "app:mentionable", "read", "write"}
+		if next.AllTeams || len(next.TeamIDs) == 0 {
+			next.AllTeams = true
+			next.TeamIDs = teams
+		}
+		if existing != nil && existing.Active == next.Active && existing.ServerSuspended == next.ServerSuspended && slices.Equal(existing.TeamIDs, next.TeamIDs) && slices.Equal(existing.Scopes, next.Scopes) {
+			return current, nil
+		}
+		if len(next.TeamIDs) == 0 {
+			return current, nil
+		}
+		secret := ""
+		if existing == nil {
+			buffer := make([]byte, 24)
+			if _, err := rand.Read(buffer); err != nil {
+				return current, err
+			}
+			secret = "flow_webhook_" + hex.EncodeToString(buffer)
+		}
+		updated, installed, err := s.writeApplicationInstallationTx(ctx, tx, lock, current, next, secret)
+		if err != nil {
+			return current, err
+		}
+		event, err = oauthRecordEvent(ctx, tx, "application.updated", installed.ID)
+		changed = err == nil
+		return updated, err
+	})
+	if err == nil && changed {
+		s.publishOAuthRecordEvent(workspace, event)
+	}
+	return changed, err
+}
+
+// builtinApplicationTeams lists the workspace's non-archived teams in id order.
+func builtinApplicationTeams(ctx context.Context, tx *sqlTx, workspace string) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' ORDER BY record_key`, workspace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if err := rows.Scan(&id, &raw); err != nil {
+			return nil, err
+		}
+		var team struct {
+			ArchivedAt *time.Time `json:"archivedAt"`
+		}
+		if json.Unmarshal(raw, &team) == nil && team.ArchivedAt == nil {
+			ids = append(ids, id)
+		}
+	}
+	return ids, rows.Err()
 }

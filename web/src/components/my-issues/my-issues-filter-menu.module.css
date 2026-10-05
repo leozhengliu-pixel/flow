@@ -1,35 +1,70 @@
-.rootMenu,.valueMenu{z-index:700;overflow:hidden;outline:0;border:.5px solid var(--theme-border-strong);border-radius:12px;background:var(--theme-surface-2);color:var(--theme-text-primary);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;box-shadow:0 3px 8px var(--shadow-color-heavy),0 2px 5px var(--shadow-color-heavy),0 1px 1px var(--shadow-color-heavy);animation:filterPopoverIn 120ms cubic-bezier(.2,.8,.2,1)}
-.rootMenu{width:207px;height:min(622px,calc(100vh - 103px))}.rootCommand{height:100%;display:flex;flex-direction:column;background:transparent}.rootSearch{height:36.5px;flex:0 0 36.5px;display:grid;grid-template-columns:minmax(0,1fr) 22px;align-items:center;padding:0 12px 0 14px;border-bottom:.5px solid var(--theme-border)}.rootSearch input,.valueSearch input{min-width:0;width:100%;height:36px;padding:10px 0 9px;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:13px/normal inherit}.rootSearch input::placeholder,.valueSearch input::placeholder{color:var(--issue-muted)}.rootSearch kbd{width:18px;height:18px;display:grid;place-items:center;border:.5px solid var(--theme-border-strong);border-radius:4px;background:var(--theme-control);color:var(--issue-muted);font:10px/1 inherit}
-.rootList{min-height:0;flex:1;margin:0;padding:5px 0;overflow:auto;scrollbar-width:none}.rootGroup{padding:0}.rootGroup+.rootGroup{margin-top:5px;padding-top:6px;border-top:.5px solid var(--theme-border)}.rootItem{height:32px;display:flex;align-items:center;gap:8px;padding:0 18px 0 14px;outline:0;color:var(--theme-text-primary);font-size:13px;font-weight:400;line-height:19.5px;cursor:default}.rootItem>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rootItem svg{width:10px;height:10px;margin-left:auto;color:var(--issue-muted)}.rootItem[data-selected=true],.rootItem[aria-selected=true]{background:var(--bg-active)}.rootItem[data-unavailable]{color:var(--theme-text-secondary)}
-.valueMenu{width:184px;max-height:min(430px,calc(100vh - 22px));box-shadow:0 4px 40px var(--shadow-color),0 3px 20px var(--shadow-color-heavy),0 3px 12px var(--shadow-color-heavy),0 2px 8px var(--shadow-color-heavy),0 1px 1px var(--shadow-color-heavy)}.valueSearch{height:42.5px;display:flex;align-items:center;padding:0 14px;border-bottom:.5px solid var(--theme-border)}.valueList{max-height:387px;overflow:auto;padding:5px 0;scrollbar-width:none}.valueItem{width:100%;height:32px;display:grid;grid-template-columns:16px 14px minmax(0,1fr) auto;align-items:center;gap:6px;padding:0 12px;border:0;outline:0;background:transparent;color:var(--theme-text-primary);font:400 13px/19.5px inherit;text-align:left}.valueItem[aria-selected=true],.valueItem:hover{background:var(--bg-active)}.checkbox{width:14px;height:14px;display:grid;place-items:center;border:1px solid var(--checkbox-border);border-radius:3px;color:var(--on-accent)}.valueItem[aria-checked=true] .checkbox{border-color:var(--accent-primary);background:var(--accent-primary)}.optionMark{width:10px;height:10px;display:block;border-radius:50%;background:var(--theme-text-tertiary)}.valueLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.count{color:var(--issue-muted);font-size:11px;white-space:nowrap}.empty{height:44px;display:grid;place-items:center;color:var(--issue-muted);font-size:12px}
-@keyframes filterPopoverIn{from{opacity:0;transform:translateY(-2px) scale(.985)}to{opacity:1;transform:none}}
-@media(max-width:600px){.rootMenu{width:min(260px,calc(100vw - 22px))}.valueMenu{width:min(220px,calc(100vw - 22px))}}
-:global(:root[data-theme="light"]) .rootMenu,:global(:root[data-theme="light"]) .valueMenu{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-control)}
-.rootMenu,.valueMenu{z-index:600}
-:global(:root[data-locale="en-US"]) .rootMenu{width:207px}
-.rootMenu,.valueMenu{border-color:var(--popover-border)}
-:global(:root[data-theme="light"]) .rootSearch kbd{background:var(--theme-surface-0)}
-:global(:root[data-theme="light"]) .rootItem[data-selected=true],:global(:root[data-theme="light"]) .rootItem[aria-selected=true],:global(:root[data-theme="light"]) .valueItem[aria-selected=true],:global(:root[data-theme="light"]) .valueItem:hover{background:var(--theme-surface-hover)}
-.rootMenu{height:auto;max-height:min(calc(100dvh - 20px),var(--radix-popover-content-available-height,100dvh))}
-.rootCommand{min-height:0;max-height:inherit}
-.rootList{padding:0}
-.rootGroup+.rootGroup{margin-top:0;padding-top:0;border-top:0}
-.rootSeparator{position:relative;height:12px}
-.rootSeparator:after{content:"";position:absolute;top:5.5px;right:0;left:0;height:.5px;background:var(--theme-border)}
-.valueMenu{width:max-content;min-width:175px;max-width:min(395px,calc(100vw - 22px));max-height:min(430px,calc(100dvh - 22px));box-shadow:var(--shadow-dialog)}
-.valueSearch{height:36.5px}
-.valueList{max-height:393px;padding:6px 0}
-.valueItem{min-width:174px;padding-right:18px;padding-left:14px}
-.valueMenu[data-field="status"]{width:204px}.valueMenu[data-field="assignee"],.valueMenu[data-field="creator"],.valueMenu[data-field="subscribers"]{width:231px}.valueMenu[data-field="agent"]{width:190px}.valueMenu[data-field="priority"],.valueMenu[data-field="releases"]{width:199px}.valueMenu[data-field="labels"]{width:263px}.valueMenu[data-field="relations"]{width:184px}.valueMenu[data-field="dates"]{width:216px}.valueMenu[data-field="project"]{width:395px}.valueMenu[data-field="customers"]{width:242px}.valueMenu[data-field="projectMilestone"]{width:216px}.valueMenu[data-field="cycle"],.valueMenu[data-field="content"],.valueMenu[data-field="links"]{width:175px}
-.optionSpacer{width:14px;height:14px}.valueItem>svg:last-child{width:10px;height:10px;margin-left:auto;color:var(--issue-muted)}.nestedValueMenu{width:204px}
-.rootIcon{width:16px;height:16px;display:grid;place-items:center;flex:0 0 16px;color:var(--theme-text-secondary);overflow:visible!important}
-.rootItem>.rootIcon svg{width:16px;height:16px;margin-left:0;color:currentColor}
-.rootItem>svg:last-child{width:10px;height:10px;margin-left:auto;color:var(--issue-muted)}
+/*
+ * Linear's filter menus (root "Add Filter…", value pickers and nested submenus), both themes via the
+ * `--pk-*` reference tokens. Rows span the full menu width and paint their highlight as an inset
+ * 8px-radius layer *behind* their content, so submenus anchored to a row line up with the menu edge.
+ */
+.rootMenu,.valueMenu{box-sizing:border-box;overflow:hidden;outline:0;border:.5px solid var(--pk-border);border-radius:12px;background:var(--pk-surface);color:var(--pk-text);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;animation:filterPopoverIn 120ms cubic-bezier(.2,.8,.2,1)}
+/* Each deeper level stacks above its parent. */
+.rootMenu{z-index:600;width:var(--filter-root-width);max-height:min(calc(100dvh - 20px),var(--radix-popover-content-available-height,100dvh));box-shadow:var(--pk-shadow)}
+.valueMenu{z-index:601;width:max-content;min-width:175px;max-width:min(395px,calc(100vw - 22px));max-height:min(430px,calc(100dvh - 22px));box-shadow:var(--pk-card-shadow)}
+.nestedValueMenu{z-index:602}
+.advancedMenu{z-index:700;width:194px}
+.rootCommand{height:100%;min-height:0;max-height:inherit;display:flex;flex-direction:column;background:transparent}
+
+/* Search: 36.5px band with a hairline, Linear's "F" key hint on the root menu. */
+.rootSearch,.valueSearch{box-sizing:border-box;height:36.5px;flex:0 0 36.5px;display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:0 12px 0 14px;border-bottom:.5px solid var(--pk-divider)}
+.rootSearch input,.valueSearch input{min-width:0;width:100%;height:36px;padding:10px 0 9px;border:0;outline:0;background:transparent;color:var(--pk-text);font-family:inherit;font-size:13px;font-weight:400;line-height:normal}
+.rootSearch input::placeholder{color:var(--pk-muted)}
+.valueSearch input::placeholder{color:var(--pk-faint)}
+.rootSearch kbd{box-sizing:border-box;justify-self:end;min-width:18px;height:17px;padding:2px 4px;border:.5px solid var(--pk-divider);border-radius:4px;background:transparent;color:var(--pk-muted);font-family:inherit;font-size:11px;font-weight:400;line-height:12px;text-align:center}
+/* Category submenus (Dates, Relations, Project properties…) keep type-to-filter but show no search band. */
+.valueSearch[data-hidden]{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);border:0;white-space:nowrap}
+
+.rootList{min-height:0;flex:1;margin:0;padding:6px 0;overflow:auto;scrollbar-width:none}
+.rootGroup{padding:0}
+.rootSeparator,.valueSeparator{position:relative;height:12px;flex:none}
+.rootSeparator:after,.valueSeparator:after{content:"";position:absolute;top:6px;right:0;left:0;height:.5px;background:var(--pk-divider)}
+
+/* Rows: 32px, 14px start / 18px end padding, 16px icon slot + 8px gap (text starts at 38.5px). */
+.rootItem,.valueItem{position:relative;isolation:isolate;box-sizing:border-box;width:100%;height:32px;display:flex;align-items:center;gap:8px;margin:0;padding:0 18px 0 14px;border:0;border-radius:0;outline:0;background:transparent;color:var(--pk-text);font-family:inherit;font-size:13px;font-weight:450;line-height:19.5px;text-align:left;white-space:nowrap;cursor:default;user-select:none}
+.rootItem:before,.valueItem:before{content:"";position:absolute;z-index:-1;inset:0 6px;border-radius:8px}
+.rootItem[data-selected=true]:before,.rootItem[aria-selected=true]:before,.valueItem[aria-selected=true]:before,.valueItem[aria-expanded=true]:before,.valueItem:hover:before{background:var(--pk-hover)}
+.rootItem.rootItem:focus-visible,.valueItem.valueItem:focus-visible{outline:0;box-shadow:none}
+.rootItem[data-unavailable]{color:var(--pk-muted)}
+.rootItem>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rootIcon,.optionSlot{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;overflow:visible!important;color:var(--pk-muted)}
+.rootIcon svg,.optionSlot>svg{max-width:16px;max-height:16px;color:currentColor}
+/* Linear's ▶ submenu marker: 6px glyph centred in a 16px box at the row end. */
+.rootChevron,.submenuMarker{width:16px;flex:0 0 16px;margin-left:auto;color:var(--pk-faint);font-size:6px;line-height:7.5px;text-align:center}
+
+/* Value rows. `check` rows reserve Linear's checkbox column (shown on hover/selection), then a 16px
+   icon slot (text at 60.5px); `icon` rows (categories, relations) put the icon first (text at 38.5px);
+   `plain` rows (date presets, text conditions) start their text at 14.5px. */
+.valueList{max-height:393px;overflow:auto;padding:6px 0;scrollbar-width:none}
+.valueItem{font-family:inherit}
+.valueLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.valueItem .count{flex:none;margin-left:auto;padding-left:4px;color:var(--pk-faint);font-size:12px;font-weight:450;white-space:nowrap}
+.valueItem>[data-agent-badge]{margin-left:0}
+.checkbox{box-sizing:border-box;width:14px;height:14px;flex:0 0 14px;display:grid;place-items:center;border:1px solid var(--sub-checkbox-border);border-radius:3px;color:var(--on-accent);opacity:0}
+.checkbox svg{width:10px;height:8px}
+.valueItem:hover .checkbox,.valueItem[aria-selected=true] .checkbox,.valueItem[aria-checked=true] .checkbox{opacity:1}
+.valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
+.optionMark{width:10px;height:10px;display:block;border-radius:50%;background:var(--pk-faint)}
 .optionAvatar{width:16px;height:16px;display:grid;place-items:center;overflow:hidden;border-radius:50%;background-color:var(--avatar-option-fallback);background-position:center;background-size:cover;color:var(--on-accent);font-size:7px}
-.optionIcon{width:14px;height:14px;display:grid;place-items:center;color:var(--theme-text-secondary)}
-.optionIcon svg,.valueItem>svg:not(:last-child){width:14px;height:14px;color:currentColor}
-.categoryIcon{width:16px!important;height:16px!important;color:var(--theme-text-secondary)}
-.textConditionItem{grid-template-columns:14px minmax(0,1fr);padding-right:18px}
+.optionIcon{width:16px;height:16px;display:grid;place-items:center;color:var(--pk-muted)}
+.optionIcon svg{max-width:16px;max-height:16px;color:currentColor}
+.categoryIcon{width:16px!important;height:16px!important;color:var(--pk-muted)}
+.empty{height:44px;display:grid;place-items:center;color:var(--pk-muted);font-size:12px}
+
+/* Deep search results: "Priority › Urgent  1 issue". */
+.deepItem>.deepPath{flex:1;min-width:0;color:var(--pk-muted)}
+.deepItem>.deepPath b{font-weight:450;color:var(--pk-text)}
+.deepItem>.count{flex:none;margin-left:auto;color:var(--pk-faint);font-size:12px}
+
+@keyframes filterPopoverIn{from{opacity:0;transform:translateY(-2px) scale(.985)}to{opacity:1;transform:none}}
+@media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}.valueMenu{max-width:calc(100vw - 22px)}}
+
+/* Text-condition dialog ("Milestone name contains…", custom dates). */
 .conditionOverlay{position:fixed;z-index:700;inset:0;background:var(--overlay-modal);animation:conditionFadeIn .15s ease-out}
 .conditionDialog{position:fixed;z-index:701;top:24%;left:50%;width:min(480px,calc(100vw - 32px));transform:translateX(-50%);overflow:hidden;border:.5px solid var(--popover-border);border-radius:12px;outline:0;background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary);animation:conditionDialogIn .19s cubic-bezier(.16,1,.3,1)}
 .conditionDialog form{display:flex;flex-direction:column}
@@ -44,41 +79,4 @@
 .conditionDialog footer .conditionApply:hover:not(:disabled){background:var(--accent-primary-hover)}
 @keyframes conditionFadeIn{from{opacity:0}to{opacity:1}}
 @keyframes conditionDialogIn{from{opacity:0;transform:translateX(-50%) translateY(4px) scale(.985)}to{opacity:1;transform:translateX(-50%)}}
-@media(max-width:600px){.rootMenu{width:207px;max-width:calc(100vw - 22px)}.valueMenu{width:max-content;max-width:calc(100vw - 22px)}}
-:global(:root[data-theme="light"]) .valueMenu{box-shadow:var(--shadow-dialog)}
-:global(:root[data-theme="light"]) .checkbox{border-color:var(--checkbox-border)}
-:global(:root[data-theme="light"]) .conditionDialog{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary)}
-@media(prefers-reduced-motion:reduce){.conditionOverlay,.conditionDialog{animation:none}}
-.valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
-
-/* Keep filter geometry aligned with Linear across every issue surface. */
-.rootMenu{width:var(--filter-root-width)}
-.rootMenu,.valueMenu{border-color:var(--popover-border);box-shadow:var(--shadow-control)}
-.valueItem[aria-checked=true] .checkbox{border-color:var(--checkbox-selected-border);background:var(--checkbox-selected-fill)}
-@media(max-width:600px){.rootMenu{width:min(var(--filter-root-width),calc(100vw - 22px))}}
-/* Reference filter menus (both themes). `:not(#_)` outranks the theme-scoped rules above. */
-.rootMenu:not(#_),.valueMenu:not(#_){border:.5px solid var(--pk-border);background:var(--pk-surface);color:var(--pk-text)}
-.rootMenu:not(#_){box-shadow:var(--pk-shadow)}
-.valueMenu:not(#_){min-width:175px;box-shadow:var(--pk-card-shadow)}
-.rootSearch:not(#_),.valueSearch:not(#_){height:36.5px;flex:0 0 36.5px;padding:0 12px 0 14px;border-bottom:.5px solid var(--pk-divider)}
-.rootSearch:not(#_) input,.valueSearch:not(#_) input{color:var(--pk-text);font:400 13px/normal var(--font)}
-.rootSearch:not(#_) input::placeholder{color:var(--pk-muted)}
-.valueSearch:not(#_) input::placeholder{color:var(--pk-faint)}
-.rootSearch:not(#_) kbd{box-sizing:border-box;justify-self:end;width:auto;min-width:18px;height:17px;padding:2px 4px;border:.5px solid var(--pk-divider);background:transparent;color:var(--pk-muted);font:400 11px/12px var(--font)}
-.rootSeparator:not(#_):after{background:var(--pk-divider)}
-.rootItem:not(#_){margin:0 6px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
-.rootItem:not(#_)[data-selected=true],.rootItem:not(#_)[aria-selected=true]{background:var(--pk-hover)}
-.rootItem:not(#_)>.rootIcon{width:14px;height:14px;flex:0 0 14px;margin-left:1px;margin-right:1px;color:var(--pk-text)}
-.rootItem:not(#_)>.rootIcon svg{width:14px;height:14px}
-.rootChevron{margin-left:auto;margin-right:10px;color:var(--pk-faint);font-size:6px;line-height:1}
-.valueList:not(#_){padding:6px 0}
-.valueItem:not(#_){width:calc(100% - 12px);margin:0 6px;grid-template-columns:16px 14px minmax(0,1fr) auto;gap:8px;padding:0 12px 0 8px;border-radius:8px;color:var(--pk-text);font-weight:450}
-.valueItem:not(#_)[aria-selected=true],.valueItem:not(#_):hover{background:var(--pk-hover)}
-.valueItem:not(#_):not([aria-checked=true]):not(:hover):not([aria-selected=true]) .checkbox{opacity:0}
-.valueItem:not(#_) .count{color:var(--pk-faint);font-size:12px;font-weight:450}
-.advancedMenu,:global(:root[data-locale="en-US"]) .advancedMenu{width:194px;z-index:700}
-.deepItem{gap:8px}
-.deepItem>.deepPath{flex:1;min-width:0;color:var(--theme-text-secondary)}
-.deepItem>.deepPath b{font-weight:400;color:var(--theme-text-primary)}
-.deepItem>.count{flex:none;margin-left:auto;color:var(--theme-text-tertiary);font-size:12px}
-.rootIcon>svg{margin-left:0!important}
+@media(prefers-reduced-motion:reduce){.rootMenu,.valueMenu,.conditionOverlay,.conditionDialog{animation:none}}

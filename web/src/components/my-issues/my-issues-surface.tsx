@@ -72,8 +72,9 @@ export interface MyIssuesSurfaceProps {
   displayMenuProps?: Partial<Omit<MyIssuesDisplayMenuProps, 'open' | 'onOpenChange' | 'options' | 'onChange'>>
 }
 
-export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id']
-export interface MyIssuesFilterOption { id: string; label: string; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string; textConditionInput?: 'text' | 'date' }
+/** `suggestedLabel` is the pre-Triage-Intelligence field, kept so saved filters still apply. */
+export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id'] | 'suggestedLabel'
+export interface MyIssuesFilterOption { id: string; label: string; /** Agent member: rendered with Linear's "Agent" pill. */ agent?: boolean; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string; textConditionInput?: 'text' | 'date' }
 
 const views: { id: MyIssuesView; label: string }[] = [
   { id: 'assigned', label: 'Assigned' },
@@ -91,7 +92,7 @@ const filterGroups = [
     { id: 'agent', label: 'Agent', submenu: true }, { id: 'agentSession', label: 'Agent Session', submenu: true },
     { id: 'creator', label: 'Creator', submenu: true }, { id: 'priority', label: 'Priority', submenu: true },
     { id: 'labels', label: 'Labels', submenu: true }, { id: 'relations', label: 'Relations', submenu: true },
-    { id: 'suggestedLabel', label: 'Suggested label', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
+    { id: 'triageIntelligence', label: 'Triage Intelligence', submenu: true }, { id: 'dates', label: 'Dates', submenu: true },
   ] },
   { items: [
     { id: 'projectMilestone', label: 'Project milestone', submenu: true },

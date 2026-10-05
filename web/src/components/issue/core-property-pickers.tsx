@@ -10,6 +10,8 @@ import { useI18n } from '@/i18n/i18n'
 import { PersonIdentityDetails } from '@/components/property/person-info'
 import { personDisplayName, personSearchText } from '@/lib/people'
 import { displayUserName, useUserPreferences } from '@/lib/runtime-preferences'
+import { AgentLabel } from '@/components/agent/agent-badge'
+import { AGENT_OPTION_GROUP, assigneeCandidates } from '@/lib/agent-members'
 
 /** `triage` shows Linear's orange "Triage" status for an issue still in the team's triage queue. */
 export function StatusPicker({ value, states, onChange, hoverHistory, triage = false }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string; triagedAt?: string | null }; triage?: boolean }) {
@@ -51,6 +53,8 @@ export function PriorityPicker({ value, onChange }: { value: number; onChange: (
 
 export type PersonPickerOption = {
   searchOnly?: boolean
+  /** Agent members render with Linear's "Agent" pill. */
+  app?: boolean
   id: string
   userId?: string
   label: string
@@ -140,6 +144,7 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
       return {
         id: person.id,
         label: person.label,
+        labelContent: person.app ? <AgentLabel label={person.label}/> : undefined,
         keywords: personSearchText(person),
         person,
         searchOnly: person.searchOnly,
@@ -195,7 +200,15 @@ export function avatarColor(value: string) {
   return colors[[...value].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length]
 }
 
-export function AssigneePicker({ value, users, onChange, hoverContext }: { value?: User; users: User[]; onChange: (id: string) => void | Promise<void>; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary } }) {
+/**
+ * Linear's assignee picker: people, then the agents that can work in the issue's team (own "Agents"
+ * section, "Agent" pill). Choosing an agent delegates the issue (`onDelegate`, else `onChange`, which
+ * the server also turns into a delegation) and keeps the human assignee.
+ */
+export function AssigneePicker({ value, users, onChange, onDelegate, teamId, hoverContext }: { value?: User; users: User[]; onChange: (id: string) => void | Promise<void>; onDelegate?: (id: string) => void | Promise<void>; teamId?: string; hoverContext?: { member?: WorkspaceMember; online?: boolean; workspaceName: string; project?: ProjectSummary } }) {
+  const people = assigneeCandidates(users, teamId).map(user => ({ ...user, label: user.displayName, ...(user.app ? AGENT_OPTION_GROUP : {}) }))
+  const agentIds = new Set(people.filter(person => person.app).map(person => person.id))
+  const change = (id: string) => agentIds.has(id) && onDelegate ? onDelegate(id) : onChange(id)
   return <div className="core-property-picker"><PersonPicker
     ariaLabel={`Change assignee. ${value ? `${value.displayName} is assigned` : 'Currently no one is assigned.'}`}
     emptyOptionLabel="No assignee"
@@ -203,8 +216,8 @@ export function AssigneePicker({ value, users, onChange, hoverContext }: { value
     hoverContent={value&&hoverContext?<AssigneeHoverPreview user={value} {...hoverContext}/>:undefined}
     hoverClassName="property-rich-hover assignee-hover-surface"
     label="Assignee"
-    onChange={onChange}
-    people={users.filter(user => !user.app).map(user => ({ ...user, label: user.displayName }))}
+    onChange={change}
+    people={people}
     searchPlaceholder="Change assignee…"
     searchShortcut="A"
     selectedId={value?.id}

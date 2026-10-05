@@ -13,7 +13,6 @@ import {
   ChevronRight,
   Copy,
   GitBranch,
-  Mail,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -41,7 +40,6 @@ import {
   createTriageRule,
   createWorkflowState,
   deleteDocumentTemplate,
-  deleteEmailIntakeAddress,
   deleteGitAutomation,
   deleteTargetBranch,
   deleteTeam,
@@ -54,6 +52,7 @@ import {
   setTeamMembership,
   updateCycleSettings,
   rotateEmailIntakeAddress,
+  updateEmailIntakeAddress,
   updateDocumentTemplate,
   updateStructuredTeamSettings,
   updateTeam,
@@ -857,138 +856,85 @@ function EmailIntakeSettings({
   onReload: () => Promise<void>;
 }) {
   const { t } = useI18n();
-  const addresses = data.emailIntakeAddresses.filter(
-    (item) => item.teamId === team.id && item.enabled,
+  const asksEmails = data.workspaceSettings.featureSettings?.asksEmailAddresses ?? [];
+  // Linear keeps one team email address (team.teamEmailIntakeAddresses.first);
+  // Asks addresses live under Settings › Asks.
+  const candidates = data.emailIntakeAddresses.filter(
+    (item) => item.teamId === team.id && item.type !== "asks" && !asksEmails.includes(item.address),
   );
-  const [configuring, setConfiguring] = useState(false),
-    [localPart, setLocalPart] = useState(team.key.toLowerCase()),
-    [domain, setDomain] = useState("");
-  const create = async () => {
-    if (!localPart.trim() || !domain.trim()) return;
+  const address = candidates.find((item) => item.enabled) ?? candidates[0];
+  const enabled = Boolean(address?.enabled);
+  const [busy, setBusy] = useState(false);
+  const run = async (action: () => Promise<unknown>) => {
+    setBusy(true);
     try {
-      await createEmailIntakeAddress(team.id, {
-        localPart: localPart.trim(),
-        domain: domain.trim(),
-      });
-      await save({ issueEmailEnabled: true });
-      setConfiguring(false);
+      await action();
       await onReload();
-      toast.success(t("Issue intake email created"));
     } catch (error) {
       toast.error(message(error));
+    } finally {
+      setBusy(false);
     }
   };
-  const disable = async () => {
-    try {
-      await Promise.all(
-        addresses.map((item) => deleteEmailIntakeAddress(team.id, item.id)),
-      );
-      await save({ issueEmailEnabled: false });
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    }
+  const toggle = (value: boolean) =>
+    void run(async () => {
+      if (address && (address.system || !value)) await updateEmailIntakeAddress(team.id, address.id, { enabled: value });
+      else if (value) await createEmailIntakeAddress(team.id, { type: "team" });
+      if (settings.issueEmailEnabled !== value) await save({ issueEmailEnabled: value });
+    });
+  const reset = async () => {
+    if (!address) return;
+    const subject = `${t("team")} "${team.name}"`;
+    const confirmed = await confirmAction(t("Reset the email address?"), {
+      description: t("A new email address will be generated for {subject} and the previous address will be permanently disabled.").replace("{subject}", subject),
+      confirmLabel: t("Reset address"),
+      danger: true,
+    });
+    if (!confirmed) return;
+    await run(async () => {
+      await rotateEmailIntakeAddress(team.id, address.id);
+      toast.success(t("Email address reset"), { description: t("The email address for {subject} has been reset.").replace("{subject}", subject) });
+    });
   };
   return (
-    <TeamSection title="Create issues by email">
-      <TeamRow
-        title="Enable issue creation by email"
-        description="Use a team-specific email address to create and collaborate on issues via email"
-      >
+    <TeamSection
+      title="Create issues by email"
+      description="Use a team-specific email address to create and collaborate on issues via email"
+    >
+      <TeamRow title="Enable issue creation by email">
         <SettingsToggle
-          checked={settings.issueEmailEnabled}
+          checked={enabled}
+          disabled={busy}
           label={t("Enable issue creation by email")}
-          onChange={(value) => {
-            if (value) {
-              setConfiguring(true);
-              return;
-            }
-            void disable();
-          }}
+          onChange={toggle}
         />
       </TeamRow>
-      {addresses.map((item) => (
-        <div className="email-intake-row" key={item.id}>
-          <Mail size={16} />
-          <span>
-            <strong data-i18n-ignore>{item.address}</strong>
-            <small>
-              {item.verificationState === "verified"
-                ? t("Ready to receive email")
-                : t("Domain verification pending")}
-            </small>
-          </span>
+      {enabled && address && (
+        <div className="email-intake-row">
+          <span className="email-intake-copy-text" data-i18n-ignore>{address.address}</span>
           <button
+            type="button"
             className="settings-icon-action"
             aria-label={t("Reset email address")}
-            onClick={() =>
-              void rotateEmailIntakeAddress(team.id, item.id)
-                .then(onReload)
-                .then(() => toast.success(t("Email address reset")))
-                .catch((error) => toast.error(message(error)))
-            }
+            title={t("Reset email address")}
+            disabled={busy}
+            onClick={() => void reset()}
           >
             <RefreshCw size={14} />
           </button>
           <button
+            type="button"
             className="settings-action"
             onClick={() =>
               void navigator.clipboard
-                .writeText(item.address)
-                .then(() =>
-                  toast.success(
-                    t("Email address successfully copied to clipboard"),
-                  ),
-                )
+                .writeText(address.address)
+                .then(() => toast.success(t("Email address successfully copied to clipboard")))
             }
           >
             <Copy size={14} />
             {t("Copy")}
           </button>
         </div>
-      ))}
-      {configuring && (
-        <form
-          className="workflow-rule-create"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void create();
-          }}
-        >
-          <input
-            autoFocus
-            className="settings-input"
-            aria-label={t("Email local part")}
-            placeholder="issues"
-            value={localPart}
-            onChange={(event) =>
-              setLocalPart(
-                event.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""),
-              )
-            }
-          />
-          <span className="email-at">@</span>
-          <input
-            className="settings-input"
-            aria-label={t("Email domain")}
-            placeholder="mail.example.com"
-            value={domain}
-            onChange={(event) => setDomain(event.target.value)}
-          />
-          <button
-            type="button"
-            className="settings-action"
-            onClick={() => setConfiguring(false)}
-          >
-            {t("Cancel")}
-          </button>
-          <button
-            className="settings-action primary"
-            disabled={!localPart.trim() || !domain.trim()}
-          >
-            {t("Create")}
-          </button>
-        </form>
       )}
     </TeamSection>
   );

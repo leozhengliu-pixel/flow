@@ -107,6 +107,7 @@ export type ProjectsPageProps = {
   onDeleteSavedView?: (view: SavedView) => Promise<void>
   savedViewSubscription?: Subscription
   onSetSavedViewSubscriptionEvents?: (view: SavedView, events: string[]) => Promise<void>
+  /** Public sharing lives in the Views list row menu; the view header menu matches Linear (no share item). */
   onShareSavedView?: (view: SavedView) => Promise<string | undefined>
   onDuplicateSavedView?: (view: SavedView) => void
   onBeginEditSavedView?: () => void
@@ -180,7 +181,6 @@ export function ProjectsPage({
   onDeleteSavedView,
   savedViewSubscription,
   onSetSavedViewSubscriptionEvents,
-  onShareSavedView,
   onDuplicateSavedView,
   onBeginEditSavedView,
   onFinishEditSavedView,
@@ -573,7 +573,6 @@ export function ProjectsPage({
       onDuplicate={onDuplicateSavedView ? () => onDuplicateSavedView(savedView) : undefined}
       onUpdate={onUpdateSavedView ? input => { void onUpdateSavedView(savedView.id, input) } : undefined}
       onSetSubscriptionEvents={onSetSavedViewSubscriptionEvents ? events => { void onSetSavedViewSubscriptionEvents(savedView, events) } : undefined}
-      onShare={onShareSavedView ? () => { void onShareSavedView(savedView).then(path => { if (path) void navigator.clipboard.writeText(`${location.origin}${path}`) }) } : undefined}
       onCopy={() => { void navigator.clipboard.writeText(window.location.href) }}
       onExport={() => exportProjectsCsv(leadScopedVisibleItems, savedView.name)}
       onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}

@@ -81,17 +81,7 @@
 .li-create-fields>input:first-child {font-size:14px;font-weight:500; height: 23px; align-self:center; padding: 0; border: 0; color: var(--theme-text-primary); font: 500 14px/23px var(--font); }
 .li-create-fields>input:nth-child(2) {font-size:12px; height: 22px; align-self:center; padding: 0; border: 0; color: var(--theme-text-secondary); font: 400 12px/22px var(--font); }
 .li-create-fields>input::placeholder { color: var(--theme-text-secondary); }
-.li-create-properties {flex-wrap:wrap;margin-top:5px; height: 24px; display: flex; align-items: center; gap: 6px; margin:0!important; overflow: visible; }
-.li-create-fields .li-create-properties .li-properties { display: contents; margin: 0; }
-.li-create-fields .li-create-properties .lp-project-property-trigger,
-.li-create-fields .li-label-picker--compact .label-project-trigger { box-sizing: border-box; height: 24px!important; display: flex; align-items: center; gap: 3px; padding: 0 8px 0 6px!important; border: .5px solid transparent!important; border-radius: 9999px!important; background: color-mix(in lch,var(--theme-surface-hover) 56%,transparent)!important; color: var(--theme-text-secondary)!important; font: 500 12px/12px var(--font)!important; white-space: nowrap; }
-.li-create-fields .li-create-properties .lp-project-property-trigger { gap:3px; }
-.li-create-fields .li-create-properties [aria-label="Change status"] { padding-right:6.5px!important; }
-.li-create-fields .li-label-picker--compact { padding:0; }
-.li-create-fields .li-create-properties .lp-project-property-trigger:hover,
-.li-create-fields .li-label-picker--compact .label-project-trigger:hover { background: var(--theme-surface-hover)!important; color: var(--theme-text-primary)!important; }
-.li-create-fields .li-label-picker--compact .label-project-trigger>span { display: inline; font-size: 0; }
-.li-create-fields .li-label-picker--compact .label-project-trigger>span:after { content: "Labels"; font-size: 12px; }
+.li-create-properties { height: 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; overflow: visible; }
 .li-create-row footer { height: 24px; align-self: end; display: flex; align-items: center; gap: 6px; }
 .li-create-row footer button {font-size:12px; box-sizing: border-box; height: 24px; padding: 0 8px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--theme-text-primary); font: 500 12px var(--font); }
 .li-create-row footer button:last-child { background: var(--accent-primary); color: white; box-shadow: var(--shadow); }

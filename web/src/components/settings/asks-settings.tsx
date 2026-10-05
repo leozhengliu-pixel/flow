@@ -11,7 +11,6 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Copy,
   Mail,
   MessageSquare,
   Plus,
@@ -20,7 +19,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,20 +28,17 @@ import {
 import { useI18n } from "@/i18n/i18n";
 import {
   authorizeIntegration,
-  createEmailIntakeAddress,
-  deleteEmailIntakeAddress,
   disconnectIntegration,
   updateWorkspacePreferences,
-  verifyEmailIntakeAddress,
 } from "@/lib/api";
 import type {
   AsksSlackChannelMapping,
   BootstrapData,
-  EmailIntakeAddress,
   FeatureSettings,
   WorkspaceSettings,
 } from "@/types/flow";
 import { SettingsToggle as BaseSettingsToggle } from "./settings-primitives";
+import { intakeDescription, intakeTitle } from "./email-intake-format";
 
 import "./feature-settings.css";
 import "./asks-settings.css";
@@ -93,15 +88,13 @@ export function AsksSettingsPage({
   onOpenEmailIntake?: (addressId?: string) => void;
 }) {
   const { t } = useI18n();
-  const [emailOpen, setEmailOpen] = useState(false);
   const slack = asksSlack(data);
   const emails = settings.featureSettings.asksEmailAddresses ?? [];
-  const available = data.emailIntakeAddresses.filter(
-    (item) =>
-      item.enabled &&
-      item.verificationState === "verified" &&
-      !emails.includes(item.address),
-  );
+  // Asks addresses, plus legacy custom-domain addresses opted in by address.
+  const emailIntakes = data.emailIntakeAddresses
+    .filter((item) => item.enabled && (item.type === "asks" || emails.includes(item.address)))
+    .sort((a, b) => intakeTitle(a).localeCompare(intakeTitle(b)));
+  const legacyEmails = emails.filter((email) => !data.emailIntakeAddresses.some((item) => item.enabled && item.address === email));
 
   const toggleSlack = async () => {
     if (busy) return;
@@ -188,80 +181,55 @@ export function AsksSettingsPage({
         title="Email"
         description="Allow anyone to submit Asks by emailing a custom address"
       >
-        {emails.length ? (
-          <FeatureCard>
-            {emails.map((email) => {
-              const intake = data.emailIntakeAddresses.find((item) => item.address === email);
-              return (
-              <FeatureRow key={email} icon={Mail} title={email} businessTitle>
-                {intake && onOpenEmailIntake && (
-                  <FeatureButton disabled={busy} onClick={() => onOpenEmailIntake(intake.id)}>
-                    Manage
-                  </FeatureButton>
-                )}
-                <FeatureButton
-                  danger
-                  disabled={busy}
-                  onClick={() =>
-                    setFeature(
-                      "asksEmailAddresses",
-                      emails.filter((value) => value !== email),
-                    )
-                  }
-                >
-                  Remove
-                </FeatureButton>
-              </FeatureRow>
-              );
-            })}
-          </FeatureCard>
-        ) : (
-          <FeatureEmpty
-            icon={Mail}
-            title="No email addresses configured"
-            action={
-              <FeatureButton
-                aria-label={t("Add email")}
-                disabled={busy}
-                onClick={() =>
-                  onOpenEmailIntake ? onOpenEmailIntake() : setEmailOpen(true)
-                }
-              >
-                <Plus size={14} />
-              </FeatureButton>
-            }
-          />
-        )}
-        <div className="feature-section-action">
-          {emails.length > 0 && (
-            <FeatureButton
-              disabled={busy}
-              onClick={() =>
-                onOpenEmailIntake ? onOpenEmailIntake() : setEmailOpen(true)
-              }
+        <div className="feature-card asks-email-list">
+          <div className="asks-email-list-header">
+            <span className={emailIntakes.length || legacyEmails.length ? "" : "is-muted"}>
+              {emailIntakes.length + legacyEmails.length
+                ? (emailIntakes.length + legacyEmails.length === 1 ? t("1 email") : t("{count} emails").replace("{count}", String(emailIntakes.length + legacyEmails.length)))
+                : t("No email addresses configured")}
+            </span>
+            <button
+              type="button"
+              aria-label={t("Add email")}
+              title={t("Add email")}
+              className="asks-email-add"
+              disabled={busy || !onOpenEmailIntake}
+              onClick={() => onOpenEmailIntake?.()}
             >
               <Plus size={14} />
-              Add email
-            </FeatureButton>
-          )}
-          {available.length > 0 && (
-            <FeatureButton disabled={busy} onClick={() => setEmailOpen(true)}>
-              Use existing address
-            </FeatureButton>
-          )}
+            </button>
+          </div>
+          {emailIntakes.map((intake) => (
+            <button
+              type="button"
+              key={intake.id}
+              className="asks-email-list-row"
+              aria-label={t("{name} settings").replace("{name}", intakeTitle(intake))}
+              onClick={() => onOpenEmailIntake?.(intake.id)}
+            >
+              <Mail size={16} />
+              <span>
+                <strong data-i18n-ignore>{intakeTitle(intake)}</strong>
+                {intakeDescription(intake) && <small data-i18n-ignore>{intakeDescription(intake)}</small>}
+              </span>
+              <ChevronRight size={14} />
+            </button>
+          ))}
+          {legacyEmails.map((email) => (
+            <div key={email} className="asks-email-list-row">
+              <Mail size={16} />
+              <span><strong data-i18n-ignore>{email}</strong></span>
+              <FeatureButton
+                danger
+                disabled={busy}
+                onClick={() => setFeature("asksEmailAddresses", emails.filter((value) => value !== email))}
+              >
+                Remove
+              </FeatureButton>
+            </div>
+          ))}
         </div>
       </FeatureSection>
-
-      {emailOpen && (
-        <EmailDialog
-          addresses={available.map((item) => item.address)}
-          onClose={() => setEmailOpen(false)}
-          onSave={(email) => {
-            setFeature("asksEmailAddresses", [...new Set([...emails, email])]);
-            setEmailOpen(false);
-          }}
-        />
-      )}
     </FeatureShell>
   );
 }
@@ -557,341 +525,7 @@ export function AsksSlackSettingsPage({
   );
 }
 
-type WizardStep = "team" | "address" | "dns" | "template";
-
-export function NewAsksEmailIntakePage({
-  data,
-  onBack,
-  onReload,
-}: {
-  data: BootstrapData;
-  onBack: () => void;
-  onReload: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const settings = data.workspaceSettings;
-  const teams = data.teams.filter((team) => !team.retiredAt);
-  const [step, setStep] = useState<WizardStep>("team");
-  const [teamId, setTeamId] = useState(teams[0]?.id ?? "");
-  const [localPart, setLocalPart] = useState(
-    () => teams[0]?.key.toLowerCase() || "asks",
-  );
-  const [domain, setDomain] = useState("");
-  const [templateId, setTemplateId] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<{
-    address: EmailIntakeAddress;
-    dnsRecord: { type: string; name: string; value: string };
-  }>();
-
-  const templates = (data.issueTemplates ?? []).filter(
-    (item) => !item.teamId || item.teamId === teamId || item.scope === "workspace",
-  );
-
-  const steps: { id: WizardStep; label: string }[] = [
-    { id: "team", label: "Connect team" },
-    { id: "address", label: "Address" },
-    { id: "dns", label: "DNS" },
-    { id: "template", label: "Template" },
-  ];
-
-  const createAddress = async () => {
-    if (!teamId || !localPart.trim() || !domain.trim()) return;
-    setBusy(true);
-    try {
-      const result = await createEmailIntakeAddress(teamId, {
-        localPart: localPart.trim(),
-        domain: domain.trim(),
-      });
-      setCreated({ address: result.address, dnsRecord: result.dnsRecord });
-      setStep("dns");
-      await onReload();
-      toast.success(t("Intake address created"));
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const verify = async () => {
-    if (!created) return;
-    setBusy(true);
-    try {
-      const verified = await verifyEmailIntakeAddress(
-        created.address.teamId,
-        created.address.id,
-        created.dnsRecord.value,
-      );
-      setCreated({ ...created, address: verified });
-      toast.success(t("Domain verified"));
-      setStep("template");
-      await onReload();
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const finish = async (withTemplate: boolean) => {
-    if (!created) return;
-    setBusy(true);
-    try {
-      if (created.address.verificationState !== "verified") {
-        toast.error(t("Verify DNS before finishing"));
-        setBusy(false);
-        return;
-      }
-      const emails = [
-        ...new Set([
-          ...(settings.featureSettings.asksEmailAddresses ?? []),
-          created.address.address,
-        ]),
-      ];
-      await updateWorkspacePreferences(
-        { featureSettings: { asksEmailAddresses: emails } },
-        data.workspace.urlKey,
-      );
-      if (withTemplate && templateId) {
-        toast.success(t("Email intake added with template preference saved locally"));
-      } else {
-        toast.success(t("Email intake added to Asks"));
-      }
-      await onReload();
-      onBack();
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="asks-wizard">
-      <FeatureShell
-        title="Add email intake"
-        description="Create issues by emailing a custom email address."
-      >
-        <button type="button" className="asks-settings-back" onClick={onBack}>
-          <ChevronLeft size={14} />
-          {t("Back to Asks")}
-        </button>
-
-        <div className="asks-wizard-steps" aria-label={t("Wizard steps")}>
-          {steps.map((item, index) => {
-            const active = item.id === step;
-            const done =
-              steps.findIndex((value) => value.id === step) > index;
-            return (
-              <span
-                key={item.id}
-                data-active={active}
-                data-done={done}
-              >
-                {index + 1}. {t(item.label)}
-              </span>
-            );
-          })}
-        </div>
-
-        <div className="asks-wizard-panel">
-          {step === "team" && (
-            <>
-              <header>
-                <h2>{t("Connect to Flow team")}</h2>
-                <p>
-                  {t("Each intake email is connected to a single Flow team")}
-                </p>
-              </header>
-              <label>
-                {t("Select a team")}
-                <select
-                  aria-label={t("Select a team")}
-                  value={teamId}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    setTeamId(next);
-                    const team = teams.find((item) => item.id === next);
-                    if (team) setLocalPart(team.key.toLowerCase());
-                  }}
-                >
-                  {!teamId && <option value="">{t("Select a team")}</option>}
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="asks-wizard-actions">
-                <FeatureButton onClick={onBack}>Cancel</FeatureButton>
-                <FeatureButton
-                  primary
-                  disabled={!teamId}
-                  onClick={() => setStep("address")}
-                >
-                  Continue
-                </FeatureButton>
-              </div>
-            </>
-          )}
-
-          {step === "address" && (
-            <>
-              <header>
-                <h2>{t("Configure email address")}</h2>
-                <p>{t("Choose the local part and domain for this intake.")}</p>
-              </header>
-              <label>
-                {t("Email local part")}
-                <input
-                  aria-label={t("Email local part")}
-                  value={localPart}
-                  onChange={(event) =>
-                    setLocalPart(
-                      event.target.value
-                        .toLowerCase()
-                        .replace(/[^a-z0-9._-]/g, ""),
-                    )
-                  }
-                />
-              </label>
-              <label>
-                {t("Email domain")}
-                <input
-                  aria-label={t("Email domain")}
-                  placeholder="mail.example.com"
-                  value={domain}
-                  onChange={(event) => setDomain(event.target.value)}
-                />
-              </label>
-              <p>
-                <Mail size={14} />{" "}
-                <span data-i18n-ignore>
-                  {localPart || "asks"}@{domain || "mail.example.com"}
-                </span>
-              </p>
-              <div className="asks-wizard-actions">
-                <FeatureButton onClick={() => setStep("team")}>Back</FeatureButton>
-                <FeatureButton
-                  primary
-                  disabled={busy || !localPart.trim() || !domain.trim()}
-                  onClick={() => void createAddress()}
-                >
-                  Create address
-                </FeatureButton>
-              </div>
-            </>
-          )}
-
-          {step === "dns" && created && (
-            <>
-              <header>
-                <h2>{t("Configure email domain")}</h2>
-                <p>
-                  {t(
-                    "Add this TXT record at your DNS provider, then verify the domain.",
-                  )}
-                </p>
-              </header>
-              <dl className="asks-wizard-dns">
-                <dt>{t("Type")}</dt>
-                <dd data-i18n-ignore>{created.dnsRecord.type}</dd>
-                <dt>{t("Name")}</dt>
-                <dd data-i18n-ignore>{created.dnsRecord.name}</dd>
-                <dt>{t("Value")}</dt>
-                <dd data-i18n-ignore>{created.dnsRecord.value}</dd>
-              </dl>
-              <div className="asks-wizard-actions">
-                <FeatureButton
-                  onClick={() =>
-                    void navigator.clipboard
-                      .writeText(created.dnsRecord.value)
-                      .then(() => toast.success(t("DNS value copied")))
-                  }
-                >
-                  <Copy size={14} />
-                  Copy value
-                </FeatureButton>
-                <FeatureButton
-                  primary
-                  disabled={busy}
-                  onClick={() => void verify()}
-                >
-                  Verify domain
-                </FeatureButton>
-              </div>
-              {created.address.verificationState === "verified" && (
-                <div className="asks-wizard-actions">
-                  <FeatureButton primary onClick={() => setStep("template")}>
-                    Continue
-                  </FeatureButton>
-                </div>
-              )}
-            </>
-          )}
-
-          {step === "template" && created && (
-            <>
-              <header>
-                <h2>{t("Apply template")}</h2>
-                <p>
-                  {t("Optionally use a template to fill issue properties")}
-                </p>
-              </header>
-              <FeatureCard>
-                <FeatureRow
-                  icon={Mail}
-                  title={created.address.address}
-                  businessTitle
-                  description={
-                    created.address.verificationState === "verified"
-                      ? "Ready to receive email"
-                      : "Domain verification pending"
-                  }
-                />
-              </FeatureCard>
-              <label>
-                {t("Template")}
-                <select
-                  aria-label={t("Template")}
-                  value={templateId}
-                  onChange={(event) => setTemplateId(event.target.value)}
-                >
-                  <option value="">{t("No template")}</option>
-                  {templates.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="asks-coming-soon">
-                <strong>{t("Template binding")}</strong>
-                <span>
-                  {t(
-                    "Template preference is recorded when you finish; deep per-address template settings arrive in a later Asks email page.",
-                  )}
-                </span>
-              </div>
-              <div className="asks-wizard-actions">
-                <FeatureButton onClick={() => setStep("dns")}>Back</FeatureButton>
-                <FeatureButton
-                  primary
-                  disabled={busy}
-                  onClick={() => void finish(Boolean(templateId))}
-                >
-                  Finish
-                </FeatureButton>
-              </div>
-            </>
-          )}
-        </div>
-      </FeatureShell>
-    </div>
-  );
-}
+export { AsksEmailIntakeDetailPage, NewAsksEmailIntakePage } from "./asks-email-intake";
 
 function FeatureShell({
   className,
@@ -1063,170 +697,5 @@ function FeatureEmpty({
       <h3>{t(title)}</h3>
       {action}
     </div>
-  );
-}
-function FeatureDialog({
-  open,
-  onClose,
-  title,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: ReactNode;
-}) {
-  const { t } = useI18n();
-  return (
-    <Dialog open={open} onOpenChange={(value) => !value && onClose()}>
-      <DialogContent className="feature-dialog">
-        <DialogTitle>{t(title)}</DialogTitle>
-        {children}
-      </DialogContent>
-    </Dialog>
-  );
-}
-function FeatureDialogFooter({ children }: { children: ReactNode }) {
-  return <footer className="feature-dialog-footer">{children}</footer>;
-}
-function EmailDialog({
-  addresses,
-  onClose,
-  onSave,
-}: {
-  addresses: string[];
-  onClose: () => void;
-  onSave: (email: string) => void;
-}) {
-  const { t } = useI18n();
-  const [email, setEmail] = useState(addresses[0] ?? "");
-  return (
-    <FeatureDialog open onClose={onClose} title="Add Ask email">
-      {addresses.length ? (
-        <label>
-          {t("Verified email address")}
-          <FeatureSelect
-            label="Verified email address"
-            value={email}
-            onChange={setEmail}
-            options={addresses.map((address) => ({
-              value: address,
-              label: address,
-              translate: false,
-            }))}
-          />
-        </label>
-      ) : (
-        <p>{t("No verified team email addresses available")}</p>
-      )}
-      <FeatureDialogFooter>
-        <span />
-        <FeatureButton onClick={onClose}>Cancel</FeatureButton>
-        <FeatureButton
-          primary
-          disabled={!addresses.includes(email)}
-          onClick={() => onSave(email)}
-        >
-          Add email
-        </FeatureButton>
-      </FeatureDialogFooter>
-    </FeatureDialog>
-  );
-}
-
-
-/** Detail page for one Asks email address: status, team, verification, removal. */
-export function AsksEmailIntakeDetailPage({
-  data,
-  addressId,
-  onBack,
-  onReload,
-}: {
-  data: BootstrapData;
-  addressId: string;
-  onBack: () => void;
-  onReload: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [busy, setBusy] = useState(false);
-  const intake = data.emailIntakeAddresses.find((item) => item.id === addressId);
-  const team = intake && data.teams.find((item) => item.id === intake.teamId);
-  const admin = ["admin", "owner"].includes(data.viewerRole);
-  const asksEmails = data.workspaceSettings.featureSettings?.asksEmailAddresses ?? [];
-  const run = async (action: () => Promise<unknown>, success: string, leave = false) => {
-    setBusy(true);
-    try {
-      await action();
-      await onReload();
-      toast.success(t(success));
-      if (leave) onBack();
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-  const back = (
-    <button type="button" className="asks-settings-back" onClick={onBack}>
-      <ChevronLeft size={14} />
-      {t("Back to Asks")}
-    </button>
-  );
-  if (!intake)
-    return (
-      <FeatureShell title="Email address not found">
-        {back}
-        <FeatureEmpty icon={Mail} title="This address may have been removed" />
-      </FeatureShell>
-    );
-  const removeFromAsks = () =>
-    updateWorkspacePreferences({
-      featureSettings: {
-        ...data.workspaceSettings.featureSettings,
-        asksEmailAddresses: asksEmails.filter((value) => value !== intake.address),
-      },
-    });
-  return (
-    <FeatureShell title={intake.address} description="Asks sent to this address create issues in the team below.">
-      {back}
-      <FeatureCard>
-        <FeatureRow icon={Mail} title="Status" description={intake.verificationState === "verified" ? "Verified and receiving email" : "Waiting for DNS verification"}>
-          {intake.verificationState !== "verified" && (
-            <FeatureButton
-              disabled={busy || !admin}
-              onClick={() => void run(() => verifyEmailIntakeAddress(intake.teamId, intake.id), "Address verified")}
-            >
-              Verify
-            </FeatureButton>
-          )}
-        </FeatureRow>
-        <FeatureRow title="Team" description={team ? `${team.name} (${team.key})` : t("Unknown team")} />
-      </FeatureCard>
-      <FeatureSection title="Danger zone">
-        <FeatureCard>
-          {asksEmails.includes(intake.address) && (
-            <FeatureRow title="Stop using for Asks" description="The address keeps working for team email intake">
-              <FeatureButton disabled={busy || !admin} onClick={() => void run(removeFromAsks, "Removed from Asks", true)}>
-                Remove
-              </FeatureButton>
-            </FeatureRow>
-          )}
-          <FeatureRow title="Delete address" description="Email sent to this address will no longer create issues">
-            <FeatureButton
-              danger
-              disabled={busy || !admin}
-              onClick={() =>
-                void run(async () => {
-                  if (asksEmails.includes(intake.address)) await removeFromAsks();
-                  await deleteEmailIntakeAddress(intake.teamId, intake.id);
-                }, "Email address deleted", true)
-              }
-            >
-              Delete
-            </FeatureButton>
-          </FeatureRow>
-        </FeatureCard>
-      </FeatureSection>
-    </FeatureShell>
   );
 }

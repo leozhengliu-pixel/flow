@@ -500,7 +500,7 @@ func (s *server) deleteMCPLabel(ctx context.Context, actor mcpActor, data domain
 
 var mcpViewFilterLabels = map[string]string{
 	"status": "Status", "assignee": "Assignee", "agent": "Agent", "agentSession": "Agent Session", "creator": "Creator",
-	"priority": "Priority", "labels": "Labels", "relations": "Relations", "suggestedLabel": "Suggested label", "dates": "Dates",
+	"priority": "Priority", "labels": "Labels", "relations": "Relations", "suggestedLabel": "Suggested label", "triageIntelligence": "Triage Intelligence", "dates": "Dates",
 	"projectMilestone": "Project milestone", "project": "Project", "projectProperties": "Project properties", "initiative": "Initiative",
 	"cycle": "Cycle", "addedToCycle": "Added to cycle", "releases": "Releases", "customers": "Customers", "subscribers": "Subscribers",
 	"externalSource": "External source", "autoClosed": "Auto-closed", "content": "Content", "links": "Links", "template": "Template",

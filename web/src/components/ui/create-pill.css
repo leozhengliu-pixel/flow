@@ -1,0 +1,51 @@
+/*
+ * Property pills of create panels (New project dialog, New initiative panel),
+ * like Linear's: 24px, fully rounded, white with a hairline ring, 14px icon
+ * 6.5px from the left, 4px to the 12px/450 label. Set values use the strong
+ * label colour, unset placeholders ("Lead", "Target", "Labels") the muted one.
+ */
+.create-pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 24px; }
+
+button.create-pill {
+  position: relative;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 8px 0 6px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: var(--create-pill-bg);
+  box-shadow: var(--create-pill-ring);
+  color: var(--create-pill-icon-fg);
+  font: 450 12px/normal var(--font);
+  letter-spacing: 0;
+  white-space: nowrap;
+  cursor: default;
+  transition: background-color .15s, box-shadow .15s, color .15s;
+}
+button.create-pill:hover,
+button.create-pill[data-state="open"],
+button.create-pill[aria-expanded="true"] {
+  background: var(--create-pill-hover-bg);
+  box-shadow: var(--create-pill-hover-ring);
+  transition-duration: 0s;
+}
+button.create-pill:focus-visible { outline: none; box-shadow: var(--create-pill-hover-ring), 0 0 0 1px var(--focus-ring); }
+button.create-pill:disabled { opacity: .6; }
+button.create-pill > svg,
+button.create-pill > .create-pill__icon { flex: 0 0 14px; width: 14px; height: 14px; }
+button.create-pill > .avatar,
+button.create-pill > .create-pill__avatar { flex: 0 0 14px; width: 14px; height: 14px; font-size: 7px; }
+button.create-pill > span:not(.avatar):not(.create-pill__icon):not(.create-pill__avatar) {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--create-pill-value-fg);
+  text-overflow: ellipsis;
+}
+button.create-pill.is-placeholder > span:not(.avatar):not(.create-pill__icon):not(.create-pill__avatar) { color: var(--create-pill-placeholder-fg); }
+button.create-pill > .create-pill__label-dot { flex-basis: 8px; width: 8px; height: 8px; margin: 0 3px; border-radius: 50%; }
