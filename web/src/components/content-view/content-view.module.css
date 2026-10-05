@@ -202,7 +202,7 @@
   border-bottom:.5px solid var(--border);
   min-width:0;
 }
-.subheader[data-borderless=true]{border-bottom:0;height:43px;flex-basis:43px}
+.subheader[data-borderless=true]{border-bottom:0;height:43.5px;flex-basis:43.5px}
 .subheaderStart,
 .subheaderEnd{
   display:flex;

@@ -115,6 +115,7 @@ export function MyIssuesSurface({
       <ContentViewHeaderTitle title="My issues" />
     </ContentViewHeader>
     <ContentViewSubheader
+      borderless
       start={
         <nav className={styles.tabs} aria-label="My issues views">
           {views.map(view => <a key={view.id} href={viewHref?.(view.id) ?? `#${view.id}`} className={`${styles.tab} ui-pill`} data-active={activeView === view.id} data-disabled={activeView === view.id} aria-current={activeView === view.id ? 'page' : undefined} aria-label={viewCounts?.[view.id] == null ? view.label : `${view.label}, ${viewCounts[view.id]} issues`} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); onViewChange?.(view.id) }}>{view.label}</a>)}
