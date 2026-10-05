@@ -76,3 +76,9 @@
 .valueItem:not(#_)[aria-selected=true],.valueItem:not(#_):hover{background:var(--pk-hover)}
 .valueItem:not(#_):not([aria-checked=true]):not(:hover):not([aria-selected=true]) .checkbox{opacity:0}
 .valueItem:not(#_) .count{color:var(--pk-faint);font-size:12px;font-weight:450}
+.advancedMenu,:global(:root[data-locale="en-US"]) .advancedMenu{width:194px;z-index:700}
+.deepItem{gap:8px}
+.deepItem>.deepPath{flex:1;min-width:0;color:var(--theme-text-secondary)}
+.deepItem>.deepPath b{font-weight:400;color:var(--theme-text-primary)}
+.deepItem>.count{flex:none;margin-left:auto;color:var(--theme-text-tertiary);font-size:12px}
+.rootIcon>svg{margin-left:0!important}

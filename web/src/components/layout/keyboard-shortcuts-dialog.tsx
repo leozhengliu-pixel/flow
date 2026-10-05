@@ -18,9 +18,19 @@ const groups: { title: string; shortcuts: Shortcut[] }[] = [
     { label: 'Go to my issues', keys: ['G', 'then', 'M'] },
     { label: 'Go to reviews', keys: ['G', 'then', 'R'] },
     { label: 'Go to settings', keys: ['G', 'then', 'S'] },
+    { label: 'Go to triage', keys: ['G', 'then', 'T'] },
   ] },
   { title: 'Issues', shortcuts: [
     { label: 'New issue', keys: ['C'] },
+  ] },
+  { title: 'Triage', shortcuts: [
+    { label: 'Accept issue', keys: ['1'] },
+    { label: 'Decline issue', keys: ['2'] },
+    { label: 'Mark issue as duplicate of', keys: ['3'] },
+    { label: 'Snooze issue until', keys: ['H'] },
+    { label: 'Next issue', keys: ['J'] },
+    { label: 'Previous issue', keys: ['K'] },
+    { label: 'Back to triage', keys: ['Esc'] },
   ] },
   { title: 'Projects', shortcuts: [
     { label: 'New project', keys: ['N', 'then', 'P'] },

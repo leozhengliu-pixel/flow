@@ -21,6 +21,8 @@ import { fetchIssueRecord } from '@/lib/api'
 import { toast } from 'sonner'
 import { IssuesSplitLayout, IssueViewSplitPage } from '@/components/issues-split-view'
 import { MyIssuesSummaryCard } from './my-issues-summary-card'
+import { AdvancedFilterChip } from '@/components/issue-explorer/advanced-filter-editor'
+import { createAdvancedFilter } from '@/components/issue-explorer/advanced-filter'
 
 export interface MyIssuesPageProps {
   data: BootstrapData
@@ -49,6 +51,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const [projectedView, setProjectedView] = useState(initialView)
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
+  const [openAdvancedId, setOpenAdvancedId] = useState<string>()
   const [insightsOpen,setInsightsOpen]=useState(false)
   const [drillRows,setDrillRows]=useState<MyIssuesRowData[]>()
   const [insightsConfig,setInsightsConfig]=useState<Record<string,unknown>>(()=>readInsights(`${workspaceSlug}:my-issues:${initialView}:insights`))
@@ -219,6 +222,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
       onInsightsOpenChange={open=>{setInsightsOpen(open);if(open){controller.setDetailsOpen(false);setInsightsConfig(readInsights(`${workspaceSlug}:my-issues:${controller.view}:insights`))}}}
       onDisplayOptionsChange={controller.changeDisplay}
       onFilterSelect={addFilter}
+      onAdvancedFilter={() => { const chip = createAdvancedFilter(); setOpenAdvancedId(chip.id); controller.addFilter(chip) }}
       onFilterToggle={(field, option) => { const fieldLabel = FILTER_LABELS[field]; if (fieldLabel) controller.toggleFilter(field, fieldLabel, option) }}
       onOpenSidebar={onOpenSidebar}
       onViewChange={view => { setProjectedView(view); controller.changeView(view) }}
@@ -232,6 +236,7 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onRemove={controller.removeFilter}
         onSave={onPersistFilters ? controller.saveFilters : undefined}
         onValuesChange={controller.changeFilterValues}
+        renderFilter={filter => filter.field === 'advanced' ? <AdvancedFilterChip key={filter.id} defaultOpen={filter.id === openAdvancedId} filter={filter} filterOptions={field => explorerFilterOptions(field, rowOptions)} onChange={tree => controller.setFilterTree(filter.id, tree)} onOpenChange={open => { if (!open) setOpenAdvancedId(undefined) }} onRemove={() => controller.removeFilter(filter.id)}/> : undefined}
       />}
     >
       <IssuesSplitLayout

@@ -572,6 +572,9 @@ type TeamSettings struct {
 	InheritProjectStatuses   bool                 `json:"inheritProjectStatuses"`
 	InheritCycles            bool                 `json:"inheritCycles"`
 	ParentTeamID             string               `json:"parentTeamId,omitempty"`
+	// TriageActionUserIDs are the members notified or assigned by the triage
+	// responsibility action ("notify" / "assign").
+	TriageActionUserIDs []string `json:"triageActionUserIds"`
 	// IssueViewDefaults holds team default display options per issue view
 	// ("all", "active", "backlog", "board"); opaque to the server.
 	IssueViewDefaults map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
@@ -2481,6 +2484,7 @@ type TeamSettingsMutationInput struct {
 	TriageEnabled                       *bool                      `json:"triageEnabled,omitempty"`
 	TriageRequirePriority               *bool                      `json:"triageRequirePriority,omitempty"`
 	TriageAction                        *string                    `json:"triageAction,omitempty"`
+	TriageActionUserIDs                 *[]string                  `json:"triageActionUserIds,omitempty"`
 	TriageRules                         *[]TeamAutomationRule      `json:"triageRules,omitempty"`
 	AgentSkills                         *[]TeamAgentSkill          `json:"agentSkills,omitempty"`
 	AgentConnectors                     *[]TeamAgentConnector      `json:"agentConnectors,omitempty"`

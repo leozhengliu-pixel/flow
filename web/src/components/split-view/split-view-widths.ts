@@ -18,7 +18,7 @@ export const SPLIT_VIEW_DEFAULT_LIST_WIDTH: Record<SplitViewSurface, number> = {
   inbox: 400,
   reviews: 360,
   search: 360,
-  triage: 320,
+  triage: 400,
   agents: 340,
   issueView: 360,
 }

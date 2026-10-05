@@ -19,7 +19,8 @@ var issueAttributeFields = map[string]bool{
 	"templateId": true, "externalSource": true, "delegateId": true,
 	"firstLabel": true, "agentSessionId": true, "addedToCycle": true,
 	"hasLinks": true, "autoClosed": true, "triagedAt": true, "statusChangedAt": true,
-	"nextOccurrenceAt": true, "recurrenceInstance": true,
+	"nextOccurrenceAt": true, "recurrenceInstance": true, "snoozedUntil": true,
+	"autoClosedAt": true,
 }
 
 // Multi-valued properties are indexed as one presence row per value
@@ -28,7 +29,7 @@ var issueAttributePrefixes = []string{"relation:", "suggestedLabel:"}
 
 // issueAttributeVersion is stored in issue_attribute_migrations.complete; bump it
 // when issueAttributes gains fields so existing issues are re-indexed once.
-const issueAttributeVersion = 3
+const issueAttributeVersion = 4
 
 func isIssueAttributeField(field string) bool {
 	if issueAttributeFields[field] {
@@ -49,7 +50,7 @@ func issueAttributes(issue domain.Issue) map[string]string {
 			values[field] = *value
 		}
 	}
-	for field, value := range map[string]*time.Time{"completedAt": issue.CompletedAt, "canceledAt": issue.CanceledAt, "startedAt": issue.StartedAt} {
+	for field, value := range map[string]*time.Time{"completedAt": issue.CompletedAt, "canceledAt": issue.CanceledAt, "startedAt": issue.StartedAt, "autoClosedAt": issue.AutoClosedAt} {
 		if value != nil {
 			values[field] = value.UTC().Format(issueRecordTimestamp)
 		}
@@ -84,7 +85,7 @@ func issueAttributes(issue domain.Issue) map[string]string {
 	if key := RecurrenceInstanceKey(issue.RecurrenceSeriesID, issue.RecurrenceOccurrence); key != "" {
 		values["recurrenceInstance"] = key
 	}
-	for field, value := range map[string]*time.Time{"triagedAt": issue.TriagedAt, "statusChangedAt": issue.StatusChangedAt, "nextOccurrenceAt": issue.NextOccurrenceAt} {
+	for field, value := range map[string]*time.Time{"triagedAt": issue.TriagedAt, "statusChangedAt": issue.StatusChangedAt, "nextOccurrenceAt": issue.NextOccurrenceAt, "snoozedUntil": issue.SnoozedUntil} {
 		if value != nil {
 			values[field] = value.UTC().Format(issueRecordTimestamp)
 		}
@@ -195,7 +196,7 @@ func compileIssueAttribute(node IssueFilter) (string, []any, error) {
 		if value == "" {
 			continue
 		}
-		if strings.HasSuffix(node.Field, "At") || node.Field == "dueDate" {
+		if strings.HasSuffix(node.Field, "At") || node.Field == "dueDate" || node.Field == "snoozedUntil" {
 			date, err := time.Parse(time.RFC3339Nano, value)
 			if err != nil {
 				date, err = time.Parse("2006-01-02", value)

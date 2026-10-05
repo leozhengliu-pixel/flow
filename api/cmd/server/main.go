@@ -1229,7 +1229,7 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 			return visibleInitiative(id)
 		case "document":
 			return slices.ContainsFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
-		case "team":
+		case "team", "triage":
 			return allowed(id)
 		case "cycle":
 			return slices.ContainsFunc(data.Cycles, func(item domain.Cycle) bool { return item.ID == id })
@@ -5628,6 +5628,9 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 		view.View = *input.View
 	}
 	if input.Filters != nil {
+		if !validSavedViewFilters(input.Filters) {
+			return errInvalid
+		}
 		view.Filters = slices.Clone(input.Filters)
 	}
 	if input.Display != nil {

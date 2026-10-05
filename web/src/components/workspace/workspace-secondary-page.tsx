@@ -1,5 +1,5 @@
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Check,
   ChevronRight,
@@ -40,7 +40,7 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { useI18n } from "@/i18n/i18n";
 import { MeetingPage } from "@/components/meetings/meeting-page";
 import { DiaryPage } from "@/components/diary/diary-page";
-import { TriagePage } from "@/components/triage";
+import { TriagePage, type TriageSelectOptions } from "@/components/triage";
 import { filterLabelItems, LabelPageToolbar } from "./label-page-toolbar";
 import { resourceDisplayTitle, resourceLinkName } from "@/components/project-detail/project-resource-link-name";
 import "./workspace-secondary-page.css";
@@ -78,6 +78,10 @@ type Props = {
   /** Metadata refresh; triage passes the issue it just settled. */
   onReload: (issue?: Issue) => Promise<void>;
   onCreateIssue?: () => void;
+  /** Triage: the issue selected through the URL, the host's full issue view for it, and selection. */
+  triageSelectedIdentifier?: string;
+  triageDetail?: ReactNode;
+  onTriageSelect?: (issue: Issue | null, options: TriageSelectOptions) => void;
 };
 
 export function WorkspaceSecondaryPage(props: Props) {
@@ -93,7 +97,7 @@ export function WorkspaceSecondaryPage(props: Props) {
   if (kind === "team-triage" && team) {
     return (
       <main className="secondary-page flow-triage-host" aria-label={title}>
-        <TriagePage data={data} team={team} onReload={props.onReload} onCreateIssue={props.onCreateIssue} />
+        <TriagePage data={data} team={team} onReload={props.onReload} onCreateIssue={props.onCreateIssue} onNavigate={props.onNavigate} selectedIdentifier={props.triageSelectedIdentifier} detail={props.triageDetail} onSelectIssue={props.onTriageSelect} />
       </main>
     );
   }

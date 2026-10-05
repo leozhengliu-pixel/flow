@@ -6,7 +6,9 @@ import type { MyIssuesContextAction, MyIssuesContextOption, MyIssuesEditableProp
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-issues/my-issues-surface'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
-import { filterValues } from '@/components/my-issues/my-issues-filter-types'
+import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup } from '@/components/my-issues/my-issues-filter-types'
+import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue } from './issue-date-filter'
+import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
@@ -294,13 +296,6 @@ export type ExplorerPropertyOptions = ReturnType<typeof explorerPropertyOptions>
 
 export function explorerFilterOptions(field: MyIssuesFilterKey, options: ExplorerPropertyOptions): MyIssuesFilterOption[] | undefined {
   if (field === 'ai') return [{id:'assigned-to-me',label:'assigned to me'},{id:'completed-last-month',label:'completed in the last month'},{id:'due-next-two-weeks',label:'due in the next 2 weeks'}]
-  if (field === 'advanced') return [{id:'new-group',label:'Add filter group',children:[
-    {id:'advanced-status',label:'Status',children:options.status.map(option=>({...option,id:`status:${option.id}`}))},
-    {id:'advanced-assignee',label:'Assignee',children:options.assignee.map(option=>({...option,id:`assignee:${option.id}`}))},
-    {id:'advanced-priority',label:'Priority',children:options.priority.map(option=>({...option,id:`priority:${option.id}`}))},
-    {id:'advanced-labels',label:'Labels',children:options.labels.map(option=>({...option,id:`labels:${option.id}`}))},
-    {id:'advanced-project',label:'Project',children:options.project.map(option=>({...option,id:`project:${option.id}`}))},
-  ]}]
   if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
   if (field === 'status'||field==='assignee'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
@@ -399,8 +394,15 @@ export function applyExplorerFilters(issues: Issue[], filters: MyIssuesAppliedFi
   return issues.filter(issue => filters.every(filter => matchesExplorerFilter(issueToExplorerRow(issue, workspaceSlug, allIssues, data), filter)))
 }
 
-export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAppliedFilter) {
+export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAppliedFilter, now = Date.now()): boolean {
+  if (filter.field === 'advanced') return matchesAdvancedGroup(issue, advancedFilterTree(filter), now)
   const values = filterValues(filter).map(value => value.value)
+  // "include all of" / "exclude if all": every value must match on its own.
+  if (filter.operator === 'includesAll' || filter.operator === 'excludesAll') {
+    const all = values.length > 0 && values.every(value => matchesExplorerFilter(issue, { ...filter, operator: 'is', value, values: [{ value, valueLabel: value }] }, now))
+    return filter.operator === 'includesAll' ? all : !all
+  }
+  const comparison = filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
   else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
@@ -408,7 +410,7 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
   else if (filter.field === 'agentSession') matched = values.includes('*') ? Boolean(issue.agentSessionId) : values.includes(issue.agentSessionId ?? '')
   else if (filter.field === 'creator') matched = values.includes(issue.creatorId ?? '')
-  else if (filter.field === 'labels') matched = Boolean(issue.labels?.some(label => values.includes(label.id)))
+  else if (filter.field === 'labels') matched = (values.includes('') && !issue.labels?.length) || Boolean(issue.labels?.some(label => values.includes(label.id)))
   else if (filter.field === 'suggestedLabel') matched = values.includes('') ? !issue.suggestedLabelIds?.length : Boolean(issue.suggestedLabelIds?.some(id => values.includes(id)))
   else if (filter.field === 'project') matched = values.includes(issue.project?.id ?? '')
   else if (filter.field === 'projectMilestone') matched = values.includes(issue.projectMilestoneId ?? '')
@@ -418,7 +420,7 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   else if (filter.field === 'addedToCycle') matched = values.includes(issue.addedToCycle ?? '')
   else if (filter.field === 'releases') matched = matchesReleaseFilter(issue, values)
   else if (filter.field === 'customers') matched = matchesCustomerFilter(issue, values)
-  else if (filter.field === 'dates') matched = values.some(value => matchesDateFilter(issue, value))
+  else if (filter.field === 'dates') matched = values.some(value => matchesDateFilter(issue, value, comparison, now))
   else if (filter.field === 'subscribers') matched = values.includes('') ? !issue.subscriberIds?.length : Boolean(issue.subscriberIds?.some(id => values.includes(id)))
   else if (filter.field === 'relations') matched = values.includes('') ? !issue.relationTypes?.length : Boolean(issue.relationTypes?.some(type => values.includes(type)))
   else if (filter.field === 'links') matched = values.includes(issue.hasLinks ? 'has-links' : 'no-links')
@@ -427,8 +429,16 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   else if (filter.field === 'autoClosed') matched = values.includes(String(Boolean(issue.autoClosed)))
   else if (filter.field === 'template') matched = values.includes(issue.templateId ?? '')
   else if (filter.field === 'ai') matched = matchesAIFilter(issue, values)
-  else if (filter.field === 'advanced') matched = values.every(value => matchesAdvancedFilter(issue, value))
-  return filter.operator === 'is' ? matched : !matched
+  return filter.operator === 'isNot' ? !matched : matched
+}
+
+/** AND / OR over the tree; empty groups and value-less conditions do not constrain. */
+export function matchesAdvancedGroup(issue: MyIssuesRowData, group: AdvancedFilterGroup, now = Date.now()): boolean {
+  const results = group.items.flatMap(item => isAdvancedGroup(item)
+    ? (item.items.length ? [matchesAdvancedGroup(issue, item, now)] : [])
+    : (item.values.length ? [matchesExplorerFilter(issue, conditionAsFilter(item), now)] : []))
+  if (!results.length) return true
+  return group.conjunction === 'or' ? results.some(Boolean) : results.every(Boolean)
 }
 
 function matchesProjectProperties(issue: MyIssuesRowData, values: string[]) {
@@ -455,19 +465,21 @@ function matchesCustomerFilter(issue: MyIssuesRowData, values: string[]) {
     return false
   })
 }
-function matchesDateFilter(issue: MyIssuesRowData, value: string) {
-  const now = Date.now(); const age = (input: string | undefined, days: number) => Boolean(input && Date.parse(input) >= now - days * 86_400_000)
+function matchesDateFilter(issue: MyIssuesRowData, value: string, comparison?: 'before' | 'after', now = Date.now()) {
+  const parsed = parseDateFilterValue(value)
+  if (parsed && isComparableDateValue(value)) return compareDateFilter(issue[DATE_FILTER_FIELDS[parsed.kind]], parsed, comparison ?? defaultDateOperator(value), now)
+  const age = (input: string | undefined, days: number) => Boolean(input && Date.parse(input) >= now - days * 86_400_000)
   if (value === 'created-past-day' || value === 'created-past-week' || value === 'created-past-month') return age(issue.createdAt, value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30)
   if (value === 'updated-past-day' || value === 'updated-past-week' || value === 'updated-past-month') return age(issue.updatedAt, value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30)
   if (value === 'started-any') return Boolean(issue.startedAt)
   if (value === 'completed-any') return Boolean(issue.completedAt)
-  if (value === 'auto-closed-any') return Boolean(issue.autoClosedAt)
+  if (value === 'auto-closed-any') return Boolean(issue.autoClosed)
   if (value === 'triaged-any') return Boolean(issue.triagedAt)
   if (value === 'status-over-week') return Boolean(issue.statusChangedAt && Date.parse(issue.statusChangedAt) < now - 7 * 86_400_000)
   if (value === 'has-due-date') return Boolean(issue.dueDate)
   if (value === 'no-due-date') return !issue.dueDate
   if (!issue.dueDate) return false
-  const due = Date.parse(`${issue.dueDate.slice(0, 10)}T00:00:00`); const today = new Date(); today.setHours(0, 0, 0, 0)
+  const due = Date.parse(`${issue.dueDate.slice(0, 10)}T00:00:00`); const today = new Date(now); today.setHours(0, 0, 0, 0)
   if (value === 'overdue') return due < today.getTime()
   if (value === 'today') return due === today.getTime()
   if (value === 'next-week') return due >= today.getTime() && due <= today.getTime() + 7 * 86_400_000
@@ -476,12 +488,6 @@ function matchesDateFilter(issue: MyIssuesRowData, value: string) {
 function matchesAIFilter(issue: MyIssuesRowData, values: string[]) {
   return values.some(value => value === 'assigned-to-me' ? Boolean(issue.isAssignedToViewer) : value === 'completed-last-month' ? Boolean(issue.completedAt && Date.parse(issue.completedAt) >= Date.now() - 30 * 86_400_000) : value === 'due-next-two-weeks' ? Boolean(issue.dueDate && Date.parse(`${issue.dueDate.slice(0, 10)}T00:00:00`) <= Date.now() + 14 * 86_400_000) : value.startsWith('query:') ? `${issue.title} ${issue.description ?? ''}`.toLocaleLowerCase().includes(value.slice(6).toLocaleLowerCase()) : false)
 }
-function matchesAdvancedFilter(issue: MyIssuesRowData, value: string) {
-  const separator = value.indexOf(':'); if (separator < 0) return true
-  const field = value.slice(0, separator), expected = value.slice(separator + 1)
-  return field === 'status' ? issue.state.id === expected || issue.state.type === expected : field === 'assignee' ? issue.assignee?.id === expected : field === 'priority' ? String(issue.priority) === expected : field === 'labels' ? Boolean(issue.labels?.some(label => label.id === expected)) : field === 'project' ? issue.project?.id === expected : true
-}
-
 export function buildExplorerIssueGroups(issues: MyIssuesRowData[], display: MyIssuesDisplayOptions, data: BootstrapData, view: TeamIssuesRouteView = 'all', manualOrder: string[] = []): MyIssuesGroupData[] {
   // Active / Backlog tabs already exclude closed issues; the completed window only applies to "All".
   const scoped = view === 'all' ? issues : issues.filter(issue => issue.state.type !== 'completed' && issue.state.type !== 'canceled')
@@ -502,24 +508,7 @@ export function explorerDueDateOptions(): MyIssuesBulkActionOption[] {
   return [{ id: '', label: 'No due date' }, { id: isoDate(date), label: 'Today' }, { id: isoDate(new Date(date.getTime() + day)), label: 'Tomorrow' }, { id: isoDate(new Date(date.getTime() + day * 7)), label: 'In one week' }]
 }
 
-function issueDateFilterOptions(issues: Issue[]): MyIssuesFilterOption[] {
-  const definitions = [
-    { id: 'overdue', label: 'Overdue' }, { id: 'today', label: 'Due today' }, { id: 'next-week', label: 'Due in the next week' },
-    { id: 'has-due-date', label: 'Has due date' }, { id: 'no-due-date', label: 'No due date' },
-  ]
-  return definitions.map(option => ({ ...option, count: issues.filter(issue => matchesDateFilter(issueToExplorerRow(issue, ''), option.id)).length }))
-}
-function dateFilterCategories(issues:Issue[]):MyIssuesFilterOption[]{const simple=issueDateFilterOptions(issues);const common=[{id:'overdue',label:'Overdue'},{id:'today',label:'Due today'},{id:'next-week',label:'Due in the next week'},{id:'has-due-date',label:'Has due date'},{id:'no-due-date',label:'No due date'}].map(item=>simple.find(option=>option.id===item.id)??item);return[
-  {id:'due-date',label:'Due date',children:common},
-  {id:'created-date',label:'Created date',children:[{id:'created-past-day',label:'Past day'},{id:'created-past-week',label:'Past week'},{id:'created-past-month',label:'Past month'}]},
-  {id:'updated-date',label:'Updated date',children:[{id:'updated-past-day',label:'Past day'},{id:'updated-past-week',label:'Past week'},{id:'updated-past-month',label:'Past month'}]},
-  {id:'started-date',label:'Started date',children:[{id:'started-any',label:'Has started date'}]},
-  {id:'completed-date',label:'Completed date',children:[{id:'completed-any',label:'Has completed date'}]},
-  {id:'auto-closed-date',label:'Auto-closed date',children:[{id:'auto-closed-any',label:'Has auto-closed date'}]},
-  {id:'released-date',label:'Released date',children:[{id:'released-any',label:'Has released date'}]},
-  {id:'triaged-date',label:'Triaged date',children:[{id:'triaged-any',label:'Has triaged date'}]},
-  {id:'time-current-status',label:'Time in current status',children:[{id:'status-over-week',label:'More than one week'}]},
-]}
+function dateFilterCategories(_issues: Issue[]): MyIssuesFilterOption[] { return dateFilterMenu() }
 function releaseFilterCategories(data:BootstrapData,issues:Issue[]):MyIssuesFilterOption[]{const issueIds=new Set(issues.map(issue=>issue.id)),releaseCounts=new Map<string,number>(),pipelineIssues=new Map<string,Set<string>>(),stageIssues=new Map<string,Set<string>>(),statusIssues=new Map<string,Set<string>>(),releasedIssueIds=new Set<string>();for(const release of data.releases){for(const issueId of release.issueIds){if(!issueIds.has(issueId))continue;incrementCount(releaseCounts,release.id);releasedIssueIds.add(issueId);addToSetMap(pipelineIssues,release.pipelineId,issueId);addToSetMap(stageIssues,release.stage,issueId);addToSetMap(statusIssues,release.status,issueId)}}return[
   {id:'release',label:'Release',children:data.releases.map(release=>({id:`release:${release.id}`,label:release.name,count:releaseCounts.get(release.id)??0}))},
   {id:'release-pipeline',label:'Release pipeline',children:data.releasePipelines.map(pipeline=>({id:`release-pipeline:${pipeline.id}`,label:pipeline.name,count:pipelineIssues.get(pipeline.id)?.size??0}))},

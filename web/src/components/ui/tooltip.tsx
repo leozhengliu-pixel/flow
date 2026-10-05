@@ -64,3 +64,8 @@ export function FlowTooltip({ label, shortcut, children, side = 'bottom', align 
     </TooltipRoot>
   )
 }
+
+/** FlowTooltip for components that may render outside the app's TooltipProvider (shared bars, tests). */
+export function ScopedFlowTooltip(props: FlowTooltipProps) {
+  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><FlowTooltip {...props}/></TooltipProvider>
+}

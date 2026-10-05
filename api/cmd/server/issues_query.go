@@ -271,6 +271,24 @@ func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bo
 		}
 		return matched == (operator == "contains")
 	}
+	if operator == "includesall" || operator == "excludesall" {
+		// Every value must be present ("" = no values at all), like the SQL store.
+		all := len(values) > 0
+		for _, right := range values {
+			found := right == "" && len(actual) == 0
+			for _, left := range actual {
+				if right != "" && strings.EqualFold(left, right) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				all = false
+				break
+			}
+		}
+		return all == (operator == "includesall")
+	}
 	matched := false
 	if strings.EqualFold(node.Field, "content") {
 		for _, right := range values {
@@ -502,6 +520,12 @@ func issueFieldValues(issue domain.Issue, field string, data domain.Bootstrap) [
 		return []string{issue.CreatedAt.UTC().Format(time.RFC3339)}
 	case "updatedat":
 		return []string{issue.UpdatedAt.UTC().Format(time.RFC3339)}
+	case "startedat", "completedat", "triagedat", "statuschangedat", "autoclosedat":
+		value := map[string]*time.Time{"startedat": issue.StartedAt, "completedat": issue.CompletedAt, "triagedat": issue.TriagedAt, "statuschangedat": issue.StatusChangedAt, "autoclosedat": issue.AutoClosedAt}[strings.ToLower(strings.TrimSpace(field))]
+		if value == nil {
+			return nil
+		}
+		return []string{value.UTC().Format(time.RFC3339)}
 	default:
 		_ = data // reserved for relationship-backed fields added by clients
 		return nil
