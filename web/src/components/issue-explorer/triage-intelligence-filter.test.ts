@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { User } from '@/types/flow'
 import type { MyIssuesAppliedFilter } from '@/components/my-issues/my-issues-filter-types'
-import { chipValueOptions } from '@/components/my-issues/my-issues-filter-chips'
+import { chipValueOptions, filterChipItem } from '@/components/my-issues/my-issues-filter-chips'
 import { label, makeBootstrap, makeIssue, project, teammate, viewer } from '@/test/fixtures'
 import { explorerFilterOptions, explorerPropertyOptions, explorerUpdateForAction, explorerUpdateForProperty, issueToExplorerRow, matchesExplorerFilter, optimisticExplorerRow } from './issue-explorer-model'
 import { filterToQueryNode } from './issue-filter-query'
@@ -81,15 +81,37 @@ describe('agents in assignee and agent filters', () => {
     expect(optimistic.assignee?.id).toBe(row(plain).assignee?.id)
   })
 
-  it('filters agent sessions by state', () => {
+  it('filters agent sessions by Linear\'s four states', () => {
     const { data, delegated, suggested, row } = fixture()
-    const states = explorerPropertyOptions(data).agentSession
-    expect(states.map(option => option.label)).toEqual(['No agent session', 'Any agent session', 'Active', 'Awaiting input', 'Error', 'Complete', 'Dismissed'])
-    expect(states.find(option => option.id === 'state:error')?.count).toBe(1)
-    expect(matchesExplorerFilter(row(delegated), filter('agentSession', ['state:error']))).toBe(true)
-    expect(matchesExplorerFilter(row(delegated), filter('agentSession', ['state:active']))).toBe(false)
-    expect(matchesExplorerFilter(row(suggested), filter('agentSession', ['']))).toBe(true)
-    expect(filterToQueryNode(filter('agentSession', ['state:active', 'state:awaitingInput']), { data })).toEqual({ field: 'agentSessionState', operator: 'in', values: ['pending', 'active', 'awaitingInput'] })
+    const awaiting = makeIssue({ id: 'issue-4', identifier: 'TST-4', delegate: agent, agentSessionId: 'task-2', agentSessionState: 'awaitingInput' })
+    const merged = makeIssue({ id: 'issue-5', identifier: 'TST-5', delegate: agent, agentSessionId: 'task-3', agentSessionState: 'merged' })
+    const dismissed = makeIssue({ id: 'issue-6', identifier: 'TST-6', delegate: agent, agentSessionId: 'task-4', agentSessionState: 'canceled' })
+    const complete = makeIssue({ id: 'issue-7', identifier: 'TST-7', delegate: agent, agentSessionId: 'task-5', agentSessionState: 'complete' })
+    const states = explorerPropertyOptions({ ...data, issues: [...data.issues, awaiting, merged, dismissed, complete] }).agentSession
+    expect(states.map(option => option.label)).toEqual(['Active', 'Error', 'Dismissed', 'Merged'])
+    expect(states.map(option => [option.id, option.count])).toEqual([['state:active', 1], ['state:error', 1], ['state:canceled', 1], ['state:merged', 1]])
+    const matches = (issue: typeof delegated, values: string[]) => matchesExplorerFilter(row(issue), filter('agentSession', values))
+    expect(matches(delegated, ['state:error'])).toBe(true)
+    expect(matches(delegated, ['state:active'])).toBe(false)
+    expect(matches(awaiting, ['state:active'])).toBe(true)
+    expect(matches(merged, ['state:merged'])).toBe(true)
+    expect(matches(merged, ['state:active'])).toBe(false)
+    expect(matches(dismissed, ['state:canceled'])).toBe(true)
+    expect(matches(complete, ['state:active', 'state:error', 'state:canceled', 'state:merged'])).toBe(false)
+    // Saved views keep working: Awaiting input is Active, Complete is dropped, none/any still match.
+    expect(matches(awaiting, ['state:awaitingInput'])).toBe(true)
+    expect(matches(complete, ['state:complete'])).toBe(false)
+    expect(matches(suggested, [''])).toBe(true)
+    expect(matches(delegated, ['*'])).toBe(true)
+    // Chips show the Linear label for a legacy value and keep its stored id.
+    expect(filterChipItem(filter('agentSession', ['state:awaitingInput']), states).values[0]).toMatchObject({ id: 'state:awaitingInput', label: 'Active' })
+    expect(filterChipItem(filter('agentSession', ['state:merged']), states).values[0]).toMatchObject({ id: 'state:merged', label: 'Merged' })
+    // The paged query sends the same states, so server and client agree.
+    expect(filterToQueryNode(filter('agentSession', ['state:active']), { data })).toEqual({ field: 'agentSessionState', operator: 'in', values: ['pending', 'active', 'awaitingInput'] })
+    expect(filterToQueryNode(filter('agentSession', ['state:awaitingInput', 'state:active']), { data })).toEqual({ field: 'agentSessionState', operator: 'in', values: ['pending', 'active', 'awaitingInput'] })
+    expect(filterToQueryNode(filter('agentSession', ['state:canceled', 'state:merged']), { data })).toEqual({ field: 'agentSessionState', operator: 'in', values: ['canceled', 'merged'] })
     expect(filterToQueryNode(filter('agentSession', ['', 'state:error']), { data })).toEqual({ or: [{ field: 'agentSessionId', operator: 'isEmpty' }, { field: 'agentSessionState', operator: 'in', values: ['error'] }] })
+    expect(filterToQueryNode(filter('agentSession', ['*']), { data })).toEqual({ field: 'agentSessionId', operator: 'isNotEmpty' })
+    expect(filterToQueryNode(filter('agentSession', ['state:complete']), { data })).toEqual({ field: 'id', operator: 'in', values: [] })
   })
 })

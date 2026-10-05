@@ -55,3 +55,35 @@ describe('filter menu Triage Intelligence submenu', () => {
     expect(onToggle).toHaveBeenCalledWith('triageIntelligence', expect.objectContaining({ id: `assignee:${teammate.id}`, filterLabel: 'Suggested assignee' }))
   })
 })
+
+describe('filter menu Agent Session submenu', () => {
+  const sessions = () => {
+    const issue = makeIssue({ delegate: flow, agentSessionId: 'task-1', agentSessionState: 'merged' })
+    const options = explorerPropertyOptions(makeBootstrap({ users: [viewer, teammate, flow], issues: [issue] }))
+    return (field: Parameters<typeof explorerFilterOptions>[0]) => explorerFilterOptions(field, options)
+  }
+
+  it("lists exactly Linear's four session states with their glyphs and a search band", async () => {
+    const onToggle = vi.fn()
+    render(<I18nProvider><MyIssuesFilterMenu open onOpenChange={vi.fn()} onToggle={onToggle} options={sessions()} trigger={<button type="button">Filter</button>}/></I18nProvider>)
+    fireEvent.mouseMove(screen.getByRole('option', { name: 'Agent Session' }))
+    const submenu = await screen.findByRole('listbox', { name: 'Agent Session' })
+    const rows = within(submenu).getAllByRole('option')
+    expect(rows.map(row => row.querySelector('[data-i18n-ignore]')?.textContent)).toEqual(['Active', 'Error', 'Dismissed', 'Merged'])
+    expect(rows.map(row => row.querySelector('[data-linear-glyph]')?.getAttribute('data-linear-glyph'))).toEqual(['agentSessionActive', 'agentSessionError', 'agentSessionDismissed', 'agentSessionMerged'])
+    expect(rows[0].querySelector('svg')).toHaveStyle({ color: 'var(--agent-session-active)' })
+    for (const row of rows) expect(row).toHaveAttribute('data-row-kind', 'check')
+    expect(rows[3]).toHaveTextContent('1 issue')
+    expect(screen.getByRole('searchbox', { name: 'Filter Agent Session' })).toBeInTheDocument()
+    fireEvent.click(rows[3])
+    expect(onToggle).toHaveBeenCalledWith('agentSession', expect.objectContaining({ id: 'state:merged', label: 'Merged' }))
+  })
+
+  it('translates the states but keeps "Agent" untranslated', async () => {
+    localStorage.setItem('flow:locale', 'zh-CN')
+    render(<I18nProvider><MyIssuesFilterMenu open onOpenChange={vi.fn()} onToggle={vi.fn()} options={sessions()} trigger={<button type="button">Filter</button>}/></I18nProvider>)
+    fireEvent.mouseMove(screen.getByRole('option', { name: 'Agent 会话' }))
+    const submenu = await screen.findByRole('listbox', { name: 'Agent 会话' })
+    expect(within(submenu).getAllByRole('option').map(row => row.querySelector('[data-i18n-ignore]')?.textContent)).toEqual(['进行中', '错误', '已忽略', '已合并'])
+  })
+})

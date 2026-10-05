@@ -355,8 +355,8 @@ export interface Issue {
   cycleId?: UUID;
   addedToCycle?: "planned" | "during" | "after";
   agentSessionId?: UUID;
-  /** Status of the delegated agent's current session (decorated by the server). */
-  agentSessionState?: "pending" | "active" | "awaitingInput" | "complete" | "error" | "canceled";
+  /** Status of the delegated agent's current session, or "merged" once a linked pull request merged (decorated by the server). */
+  agentSessionState?: "pending" | "active" | "awaitingInput" | "complete" | "error" | "canceled" | "merged";
   suggestedLabelIds?: UUID[];
   /** Active Triage Intelligence suggestion targets (Linear "Triage Intelligence" filters). */
   suggestedAssigneeIds?: UUID[];

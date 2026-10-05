@@ -389,25 +389,52 @@ func (s *SQLiteStore) migrateRecurrenceInstances(ctx context.Context) error {
 // AgentSessionStates are the statuses of delegated agent tasks.
 var AgentSessionStates = []string{"pending", "active", "awaitingInput", "complete", "error", "canceled"}
 
-// compileAgentSessionState filters by the status of the issue's current agent
-// session (Linear's "Agent session" filter). The session id is the sparse
-// agentSessionId attribute and the status is read from the task row by its
-// primary key, so the predicate stays two index lookups per candidate issue.
+// AgentSessionMerged is the reported session state once a pull request linked
+// to the session's issue was merged (task merged_at set). It takes precedence
+// over the task status, so the filter states are mutually exclusive.
+const AgentSessionMerged = "merged"
+
+// agentSessionState is the state an issue read reports for a task row.
+func agentSessionState(status, mergedAt string) string {
+	if mergedAt != "" {
+		return AgentSessionMerged
+	}
+	return status
+}
+
+// compileAgentSessionState filters by the state of the issue's current agent
+// session (Linear's "Agent session" filter): a task status, or "merged". The
+// session id is the sparse agentSessionId attribute and the state is read from
+// the task row by its primary key, so the predicate stays two index lookups per
+// candidate issue.
 func compileAgentSessionState(node IssueFilter) (string, []any, error) {
 	op := strings.ToLower(node.Operator)
 	if op == "" {
 		op = "is"
 	}
-	if len(node.Values) == 0 || len(node.Values) > len(AgentSessionStates) {
+	if len(node.Values) == 0 || len(node.Values) > len(AgentSessionStates)+1 {
 		return "", nil, ErrIssueQuery
 	}
+	statuses, merged := []string{}, false
 	for _, value := range node.Values {
-		if !slices.Contains(AgentSessionStates, value) {
+		switch {
+		case value == AgentSessionMerged:
+			merged = true
+		case slices.Contains(AgentSessionStates, value):
+			statuses = append(statuses, value)
+		default:
 			return "", nil, ErrIssueQuery
 		}
 	}
-	statuses, args := bindList("t.status", node.Values)
-	condition := "EXISTS (SELECT 1 FROM issue_attribute_records a JOIN application_agent_tasks t ON t.id=a.value WHERE a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field='agentSessionId' AND t.workspace_key=i.workspace_key AND " + statuses + ")"
+	states, args := []string{}, []any{}
+	if len(statuses) > 0 {
+		clause, values := bindList("t.status", statuses)
+		states, args = append(states, "("+clause+" AND t.merged_at='')"), append(args, values...)
+	}
+	if merged {
+		states = append(states, "t.merged_at<>''")
+	}
+	condition := "EXISTS (SELECT 1 FROM issue_attribute_records a JOIN application_agent_tasks t ON t.id=a.value WHERE a.workspace_key=i.workspace_key AND a.issue_id=i.id AND a.field='agentSessionId' AND t.workspace_key=i.workspace_key AND (" + strings.Join(states, " OR ") + "))"
 	switch op {
 	case "is", "in":
 		return condition, args, nil
@@ -417,23 +444,60 @@ func compileAgentSessionState(node IssueFilter) (string, []any, error) {
 	return "", nil, fmt.Errorf("%w: unsupported agent session operator", ErrIssueQuery)
 }
 
-// AgentSessionStates returns the status of each named agent task, so issue
+// MarkAgentSessionsMerged records that a pull request linked to these issues
+// was merged: each issue's current agent session (the indexed agentSessionId
+// attribute) gets merged_at, once. Primary-key lookups and updates only.
+func (s *SQLiteStore) MarkAgentSessionsMerged(ctx context.Context, workspace string, issueIDs []string, at time.Time) error {
+	if workspace == "" || len(issueIDs) == 0 {
+		return nil
+	}
+	sessions := []string{}
+	for start := 0; start < len(issueIDs); start += 500 {
+		clause, args := bindList("issue_id", issueIDs[start:min(start+500, len(issueIDs))])
+		rows, err := s.db.QueryContext(ctx, `SELECT value FROM issue_attribute_records WHERE workspace_key=? AND field='agentSessionId' AND `+clause, append([]any{workspace}, args...)...)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			sessions = append(sessions, id)
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return err
+		}
+	}
+	stamp := at.UTC().Format(time.RFC3339Nano)
+	for _, id := range sessions {
+		if _, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET merged_at=? WHERE workspace_key=? AND id=? AND merged_at=''`, stamp, workspace, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// AgentSessionStates returns the state of each named agent task, so issue
 // reads can decorate Issue.AgentSessionState. Unknown ids are omitted.
 func (s *SQLiteStore) AgentSessionStates(ctx context.Context, workspace string, ids []string) (map[string]string, error) {
 	states := map[string]string{}
 	for start := 0; start < len(ids); start += 500 {
 		clause, args := bindList("id", ids[start:min(start+500, len(ids))])
-		rows, err := s.db.QueryContext(ctx, `SELECT id,status FROM application_agent_tasks WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
+		rows, err := s.db.QueryContext(ctx, `SELECT id,status,merged_at FROM application_agent_tasks WHERE workspace_key=? AND `+clause, append([]any{workspace}, args...)...)
 		if err != nil {
 			return nil, err
 		}
 		for rows.Next() {
-			var id, status string
-			if err := rows.Scan(&id, &status); err != nil {
+			var id, status, mergedAt string
+			if err := rows.Scan(&id, &status, &mergedAt); err != nil {
 				rows.Close()
 				return nil, err
 			}
-			states[id] = status
+			states[id] = agentSessionState(status, mergedAt)
 		}
 		err = rows.Err()
 		rows.Close()
@@ -447,18 +511,18 @@ func (s *SQLiteStore) AgentSessionStates(ctx context.Context, workspace string, 
 // WorkspaceAgentSessionStates returns every agent task status of a workspace
 // (bounded), for the in-memory issue query matcher.
 func (s *SQLiteStore) WorkspaceAgentSessionStates(ctx context.Context, workspace string) (map[string]string, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id,status FROM application_agent_tasks WHERE workspace_key=? LIMIT 100000`, workspace)
+	rows, err := s.db.QueryContext(ctx, `SELECT id,status,merged_at FROM application_agent_tasks WHERE workspace_key=? LIMIT 100000`, workspace)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	states := map[string]string{}
 	for rows.Next() {
-		var id, status string
-		if err := rows.Scan(&id, &status); err != nil {
+		var id, status, mergedAt string
+		if err := rows.Scan(&id, &status, &mergedAt); err != nil {
 			return nil, err
 		}
-		states[id] = status
+		states[id] = agentSessionState(status, mergedAt)
 	}
 	return states, rows.Err()
 }

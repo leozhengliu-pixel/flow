@@ -91,6 +91,8 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	var mergedNow bool
+	var mergedWorkspace string
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), favoriteMutationEvent("review.updated", input), id, input, func(data *domain.Bootstrap) error {
 		index := reviewIndex(*data, id)
 		if index < 0 {
@@ -98,6 +100,7 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		}
 		review := data.Reviews[index]
 		previousIssueIDs := slices.Clone(review.IssueIDs)
+		mergedNow, mergedWorkspace = input.Status != nil && *input.Status == "merged" && review.Status != "merged", data.Workspace.URLKey
 		if input.Title != nil {
 			review.Title = strings.TrimSpace(*input.Title)
 			if review.Title == "" {
@@ -162,6 +165,10 @@ func (s *server) updateReview(w http.ResponseWriter, r *http.Request) {
 		data.Reviews[index], updated = review, review
 		return nil
 	})
+	if err == nil && mergedNow {
+		// The session state "Merged" (Linear): stamped after the review commits.
+		err = s.store.MarkAgentSessionsMerged(r.Context(), mergedWorkspace, updated.IssueIDs, time.Now())
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 

@@ -191,6 +191,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
 import { PersonHover } from '@/components/property/person-info'
 import { resolveAIFilter } from './natural-language-filter'
 import { isPeopleProperty } from '@/lib/people'
+import { agentSessionStateOption } from '@/lib/agent-members'
 
 function ValueMenu({ field, filters, label, layer, onClose, onToggle, onToggleAny, options, optionsFor }: { field: MyIssuesFilterKey; filters: MyIssuesAppliedFilter[]; label: string; layer: number; onClose: () => void; onToggle: MyIssuesFilterMenuProps['onToggle']; onToggleAny: MyIssuesFilterMenuProps['onToggle']; options: MyIssuesFilterOption[]; optionsFor: (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefined }) {
   const { t } = useI18n()
@@ -304,8 +305,10 @@ export function OptionMark({ field, option }: { field: MyIssuesFilterKey; option
   const kind=option.kind??field
   const glyph=categoryGlyph(field,option)
   if(glyph)return glyph
-  if((field==='agent'||field==='agentSession')&&!option.id)return <LinearGlyph name="noAgent"/>
-  if((field==='agent'||field==='agentSession')&&option.id==='*')return <LinearGlyph name="agent"/>
+  if(field==='agent'&&!option.id)return <LinearGlyph name="noAgent"/>
+  if(field==='agent'&&option.id==='*')return <LinearGlyph name="agent"/>
+  // Linear's session state glyphs: Active in yellow, the rest in the menu's secondary text colour.
+  if(field==='agentSession'){const state=agentSessionStateOption(option.id);if(state)return <LinearGlyph name={state.glyph} style={state.id==='state:active'?{color:'var(--agent-session-active)'}:undefined}/>}
   if(field==='agent'&&!option.kind)return <span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>
   if(kind==='status'&&option.stateType)return <StatusIcon state={{id:option.id,name:option.label,type:option.stateType,color:option.color??'var(--theme-text-secondary)'}} size={14}/>
   if(kind==='priority'){const priority=(option.priority??Number(option.id))||0;return <PriorityIcon priority={priority} size={14} style={{color:priorityColor(priority)}}/>}

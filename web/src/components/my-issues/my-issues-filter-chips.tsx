@@ -5,6 +5,7 @@ import { dateFilterValueLabel } from '@/components/issue-explorer/issue-date-fil
 import { filterOperatorChoices, filterValues, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from './my-issues-filter-types'
 import type { MyIssuesFilterOption } from './my-issues-surface'
 import { OptionMark } from './my-issues-filter-menu'
+import { agentSessionFilterValue } from '@/lib/agent-members'
 
 export type ChipOption = MyIssuesFilterOption & { icon?: ReactNode }
 export type NormalizedFilter = AppliedFilterItem<ChipOption, MyIssuesFilterOperator> & { field: MyIssuesAppliedFilter['field'] }
@@ -18,7 +19,9 @@ export function flattenFilterOptions(options: MyIssuesFilterOption[] = []): MyIs
 export function filterChipItem(filter: Pick<MyIssuesAppliedFilter, 'id' | 'field' | 'fieldLabel' | 'operator' | 'operatorLabel' | 'negativeOperatorLabel' | 'value' | 'valueLabel' | 'color' | 'values'>, options: MyIssuesFilterOption[] | undefined): NormalizedFilter {
   const known = new Map(flattenFilterOptions(options).map(option => [option.id, option]))
   const values = filterValues(filter as MyIssuesAppliedFilter).map(value => {
-    const option = known.get(value.value)
+    // Legacy Agent Session values (Awaiting input) show as the Linear state they now match.
+    const legacy = filter.field === 'agentSession' && !known.has(value.value) ? known.get(agentSessionFilterValue(value.value) ?? '') : undefined
+    const option = known.get(value.value) ?? (legacy && { ...legacy, id: value.value })
     const base: MyIssuesFilterOption = option ?? { id: value.value, label: filter.field === 'dates' ? dateFilterValueLabel(value.value) ?? value.valueLabel : value.valueLabel, color: value.color }
     return { ...base, label: base.label || value.valueLabel, icon: <OptionMark field={filter.field} option={base}/> }
   })

@@ -464,7 +464,8 @@ type Issue struct {
 	SuggestedDuplicateIDs []string `json:"suggestedDuplicateIds,omitempty"`
 	SuggestedRelatedIDs   []string `json:"suggestedRelatedIds,omitempty"`
 	// AgentSessionState is the delegated agent task's status, decorated on
-	// read (never persisted): pending, active, awaitingInput, complete, error, canceled.
+	// read (never persisted): pending, active, awaitingInput, complete, error, canceled,
+	// or merged once a pull request linked to the issue merged during the session.
 	AgentSessionState    string              `json:"agentSessionState,omitempty"`
 	ExternalSource       string              `json:"externalSource,omitempty"`
 	AutoClosed           bool                `json:"autoClosed,omitempty"`

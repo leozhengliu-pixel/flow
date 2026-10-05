@@ -247,14 +247,13 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   const projectsById = new Map(data.projects.map(project => [project.id, project]))
   const statusCounts = new Map<string, number>(), priorityCounts = new Map<string, number>(), assigneeCounts = new Map<string, number>(), creatorCounts = new Map<string, number>(), agentCounts = new Map<string, number>(), labelCounts = new Map<string, number>(), projectCounts = new Map<string, number>(), initiativeCounts = new Map<string, number>(), cycleCounts = new Map<string, number>(), addedToCycleCounts = new Map<string, number>(), subscriberCounts = new Map<string, number>(), externalSourceCounts = new Map<string, number>(), templateCounts = new Map<string, number>(), suggestedLabelCounts = new Map<string, number>()
   const agentSessionStateCounts = new Map<string, number>(), triageCounts = emptyTriageCounts()
-  let noAssignee = 0, noAgent = 0, anyAgent = 0, noAgentSession = 0, anyAgentSession = 0, noProject = 0, noInitiative = 0, noCycle = 0, noSubscribers = 0, noExternalSource = 0, autoClosed = 0, notAutoClosed = 0, noTemplate = 0, noSuggestedLabel = 0, withLinks = 0
+  let noAssignee = 0, noAgent = 0, anyAgent = 0, noProject = 0, noInitiative = 0, noCycle = 0, noSubscribers = 0, noExternalSource = 0, autoClosed = 0, notAutoClosed = 0, noTemplate = 0, noSuggestedLabel = 0, withLinks = 0
   for (const issue of issues) {
     incrementCount(statusCounts, issue.state.id)
     incrementCount(priorityCounts, String(issue.priority))
     if (issue.assignee) incrementCount(assigneeCounts, issue.assignee.id); else noAssignee += 1
     incrementCount(creatorCounts, issue.creator.id)
     if (issue.delegate) { incrementCount(agentCounts, issue.delegate.id); anyAgent += 1 } else noAgent += 1
-    if (issue.agentSessionId) anyAgentSession += 1; else noAgentSession += 1
     if (issue.agentSessionId && issue.agentSessionState) incrementCount(agentSessionStateCounts, issue.agentSessionState)
     countTriageSuggestions(triageCounts, issue)
     for (const label of issue.labels ?? []) incrementCount(labelCounts, label.id)
@@ -278,7 +277,8 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: creatorCounts.get(user.id) ?? 0, kind: 'creator' as const })),
     // Every agent that can take work, plus agents still delegated on loaded issues.
     agent: [{ id: '', label: 'No agent', count: noAgent }, { id: '*', label: 'Any agent', count: anyAgent }, ...data.users.filter(user => user.app && (isAssignableAgent(user) || agentCounts.has(user.id))).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: agentCounts.get(user.id) ?? 0, kind: 'assignee', agent: true }))],
-    agentSession:[{id:'',label:'No agent session',count:noAgentSession},{id:'*',label:'Any agent session',count:anyAgentSession},...AGENT_SESSION_STATE_FILTERS.map(option=>({id:option.id,label:option.label,count:option.states.reduce((sum,state)=>sum+(agentSessionStateCounts.get(state)??0),0)}))],
+    // Linear offers exactly the four session states (no "No/Any agent session" rows).
+    agentSession:AGENT_SESSION_STATE_FILTERS.map(option=>({id:option.id,label:option.label,count:option.states.reduce((sum,state)=>sum+(agentSessionStateCounts.get(state)??0),0)})),
     triageIntelligence: triageIntelligenceFilterOptions(data, issueLabels, triageCounts),
     dueDate: explorerDueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
     dates: dateFilterCategories(issues),
@@ -644,7 +644,10 @@ function clampPriority(value: number): 0 | 1 | 2 | 3 | 4 { return Math.max(0, Ma
 function isoDate(date: Date) { return date.toISOString().slice(0, 10) }
 function slug(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) }
 
-/** Agent Session filter: "" none, "*" any, `state:<id>` the session status (Linear's Active, Error, …). */
+/**
+ * Agent Session filter: `state:<id>` is Linear's Active, Error, Dismissed or Merged (legacy saved state values map
+ * onto them). "" (none) and "*" (any) are no longer offered but still match for saved views.
+ */
 export function matchesAgentSessionFilter(issue: Pick<MyIssuesRowData, 'agentSessionId' | 'agentSessionState'>, values: string[]) {
   return values.some(value => value === '*' ? Boolean(issue.agentSessionId)
     : value === '' ? !issue.agentSessionId

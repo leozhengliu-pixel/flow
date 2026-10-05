@@ -26,17 +26,31 @@ export function assigneeCandidates(users: User[], teamId?: string) {
 export type AgentSessionState = NonNullable<Issue['agentSessionState']>
 
 /**
- * Linear's agent session filter states mapped onto Flow task statuses: Active (pending or working),
- * Awaiting input, Error, Complete and Dismissed (canceled). Values are `state:<id>`.
+ * Linear's Agent Session filter values mapped onto Flow session states (values are `state:<id>`):
+ * Active (pending, working or awaiting input), Error, Dismissed (canceled) and Merged (a pull request
+ * linked to the issue merged; the server reports it over the task status).
  */
-export const AGENT_SESSION_STATE_FILTERS: { id: string; label: string; states: AgentSessionState[] }[] = [
-  { id: 'state:active', label: 'Active', states: ['pending', 'active'] },
-  { id: 'state:awaitingInput', label: 'Awaiting input', states: ['awaitingInput'] },
-  { id: 'state:error', label: 'Error', states: ['error'] },
-  { id: 'state:complete', label: 'Complete', states: ['complete'] },
-  { id: 'state:canceled', label: 'Dismissed', states: ['canceled'] },
+export const AGENT_SESSION_STATE_FILTERS: { id: string; label: string; glyph: 'agentSessionActive' | 'agentSessionError' | 'agentSessionDismissed' | 'agentSessionMerged'; states: AgentSessionState[] }[] = [
+  { id: 'state:active', label: 'Active', glyph: 'agentSessionActive', states: ['pending', 'active', 'awaitingInput'] },
+  { id: 'state:error', label: 'Error', glyph: 'agentSessionError', states: ['error'] },
+  { id: 'state:canceled', label: 'Dismissed', glyph: 'agentSessionDismissed', states: ['canceled'] },
+  { id: 'state:merged', label: 'Merged', glyph: 'agentSessionMerged', states: ['merged'] },
 ]
 
+/** Values saved by earlier Flow versions: "Awaiting input" is now part of Active; "Complete" has no Linear equivalent. */
+const LEGACY_AGENT_SESSION_VALUES: Record<string, string | undefined> = { 'state:awaitingInput': 'state:active', 'state:complete': undefined }
+
+/** The offered filter value a stored value stands for (legacy values map onto Linear's four). */
+export function agentSessionFilterValue(value: string): string | undefined {
+  return value in LEGACY_AGENT_SESSION_VALUES ? LEGACY_AGENT_SESSION_VALUES[value] : value
+}
+
 export function agentSessionStatesFor(value: string): AgentSessionState[] {
-  return AGENT_SESSION_STATE_FILTERS.find(option => option.id === value)?.states ?? []
+  return agentSessionStateOption(value)?.states ?? []
+}
+
+/** The Linear Agent Session option a (possibly legacy) stored value shows as: label and glyph. */
+export function agentSessionStateOption(value: string) {
+  const current = agentSessionFilterValue(value)
+  return AGENT_SESSION_STATE_FILTERS.find(option => option.id === current)
 }

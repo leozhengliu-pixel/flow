@@ -653,3 +653,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Release pipeline stage editor and Asks email intake (Linear Settings parity). */
 :root{--release-stage-items-bg:lch(7.4% .6 272);--release-stage-badge-bg:lch(16.706% .979 272);--intake-step-line:lch(25.68% 1.93 272);--intake-status-loading:lch(36.975% 1.2 272);--intake-error-text:lch(62% 62 25);--intake-warning-text:lch(80% 70 85);--intake-success-text:lch(68% 50 150)}
 :root[data-theme="light"]{--release-stage-items-bg:lch(96.5% 0 282);--release-stage-badge-bg:lch(93% 0 282);--intake-step-line:lch(88.49% 0 282);--intake-status-loading:lch(64.64% 1.25 282);--intake-error-text:lch(48% 68 30);--intake-warning-text:lch(55% 60 75);--intake-success-text:lch(52% 50 150)}
+/* Agent Session filter: the Active state glyph (Linear yellow, both themes). */
+:root{--agent-session-active:#f2c94c}
+:root[data-theme="light"]{--agent-session-active:#f2c94c}

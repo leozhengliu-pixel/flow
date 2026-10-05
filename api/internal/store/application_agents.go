@@ -33,8 +33,12 @@ func (s *SQLiteStore) ensureApplicationAgents(ctx context.Context) error {
 			return err
 		}
 	}
-	if _, err := s.db.ExecContext(ctx, `ALTER TABLE application_agent_tasks ADD COLUMN created_at VARCHAR(64) NOT NULL DEFAULT ''`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
-		return err
+	// merged_at records when a pull request linked to the session's issue was
+	// merged (Linear's "Merged" agent session state).
+	for _, column := range []string{"created_at", "merged_at"} {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE application_agent_tasks ADD COLUMN `+column+` VARCHAR(64) NOT NULL DEFAULT ''`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
+			return err
+		}
 	}
 	for _, statement := range []string{
 		`CREATE INDEX IF NOT EXISTS application_agent_issue ON application_agent_tasks(workspace_key,issue_id)`,
