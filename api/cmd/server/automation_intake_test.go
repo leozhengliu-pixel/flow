@@ -114,3 +114,63 @@ func TestPushSubscriptionOwnershipAndNotificationBulkLifecycle(t *testing.T) {
 	requestJSON[map[string]int](t, handler, http.MethodPost, "/api/notifications/batch", map[string]any{"action": "archiveAll"}, http.StatusOK)
 	requestJSON[any](t, handler, http.MethodDelete, "/api/push-subscriptions/"+subscription.ID, nil, http.StatusNoContent)
 }
+
+func TestTriageResponsibilityNotifiesAndAssigns(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	bootstrap := repository.Bootstrap()
+	team := bootstrap.Teams[0]
+	backlog := ""
+	for _, state := range statesForTeam(&bootstrap, team.ID) {
+		if state.Type == "backlog" {
+			backlog = state.ID
+			break
+		}
+	}
+	if backlog == "" || len(bootstrap.Users) < 2 {
+		t.Fatal("fixture needs a backlog status and two users")
+	}
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+	path := "/api/teams/" + team.ID + "/settings"
+	requestJSON[map[string]any](t, handler, http.MethodPatch, path, map[string]any{"triageAction": "escalate"}, http.StatusBadRequest)
+	requestJSON[map[string]any](t, handler, http.MethodPatch, path, map[string]any{"triageActionUserIds": []string{"missing-user"}}, http.StatusBadRequest)
+	requestJSON[map[string]any](t, handler, http.MethodPatch, path, map[string]any{"triageAction": "assign", "triageActionUserIds": []string{bootstrap.Users[0].ID, bootstrap.Users[1].ID}}, http.StatusBadRequest)
+	other := bootstrap.Users[1]
+	settings := requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, path, map[string]any{"triageEnabled": true, "triageAction": "notify", "triageActionUserIds": []string{other.ID, other.ID}}, http.StatusOK)
+	if settings.TriageAction != "notify" || len(settings.TriageActionUserIDs) != 1 || settings.TriageActionUserIDs[0] != other.ID {
+		t.Fatalf("triage responsibility not saved: %#v %#v", settings.TriageAction, settings.TriageActionUserIDs)
+	}
+	notified := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Incoming", "teamId": team.ID, "stateId": backlog}, http.StatusCreated)
+	found := false
+	if err := repository.MutateWorkspace(t.Context(), bootstrap.Workspace.URLKey, "test.read", team.ID, nil, func(data *domain.Bootstrap) error {
+		for _, notification := range data.Notifications {
+			if notification.IssueID == notified.ID && notification.RecipientID == other.ID && notification.Category == "triage" {
+				found = true
+			}
+		}
+		return store.ErrNoMutation
+	}); err != nil && err != store.ErrNoMutation {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("notify did not create a triage notification for the responsible member")
+	}
+	requestJSON[domain.TeamSettings](t, handler, http.MethodPatch, path, map[string]any{"triageAction": "assign", "triageActionUserIds": []string{other.ID}}, http.StatusOK)
+	assigned := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Incoming two", "teamId": team.ID, "stateId": backlog}, http.StatusCreated)
+	if assigned.Assignee == nil || assigned.Assignee.ID != other.ID {
+		t.Fatalf("assign did not set the responsible member: %#v", assigned.Assignee)
+	}
+	started := ""
+	for _, state := range statesForTeam(&bootstrap, team.ID) {
+		if state.Type == "started" {
+			started = state.ID
+		}
+	}
+	outside := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "Not triage", "teamId": team.ID, "stateId": started}, http.StatusCreated)
+	if outside.Assignee != nil && outside.Assignee.ID == other.ID {
+		t.Fatal("issues created outside triage must not be assigned by triage responsibility")
+	}
+}

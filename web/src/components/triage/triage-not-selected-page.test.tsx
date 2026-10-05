@@ -22,6 +22,6 @@ describe('TriageNotSelectedPage (LS-0381)', () => {
         <TriageNotSelectedPage issueCount={0} />
       </I18nProvider>,
     )
-    expect(screen.getByText('Nothing to triage')).toBeTruthy()
+    expect(screen.getByText('No issues to triage')).toBeTruthy()
   })
 })

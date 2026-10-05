@@ -102,7 +102,7 @@ import {
   loopsPath,
   teamTriagePath,
 } from "@/lib/app-routes";
-import { isIssueInTriage, isSnoozed } from "@/components/triage/triage-model";
+import { useTriageCount } from "@/components/triage/use-triage-count";
 import { useI18n } from "@/i18n/i18n";
 import type {
   AccountBootstrap,
@@ -776,7 +776,6 @@ export function Sidebar({
                       featureEnabled("initiatives") && data.teamSettings[team.id]?.showInitiatives !== false
                     }
                     team={team}
-                    triageCount={data.teamSettings[team.id]?.triageEnabled ? data.issues.filter(issue => issue.team.id === team.id && !issue.archivedAt && isIssueInTriage(issue, data.teamSettings) && !isSnoozed(issue)).length : undefined}
                     activeIssues={navigationRoute.kind === 'team-issues' && navigationRoute.teamKey.toLowerCase() === team.key.toLowerCase()}
                     workspaceSlug={workspaceSlug}
                     page={page}
@@ -1225,6 +1224,16 @@ function favoriteDescriptor(
         title: team.name,
       };
   }
+  if (favorite.resourceType === "triage") {
+    const team = data.teams.find((item) => item.id === favorite.resourceId);
+    if (team)
+      return {
+        favorite,
+        href: teamTriagePath(workspaceSlug, team.key),
+        icon: <TriageIcon />,
+        title: `${team.name} › Triage`,
+      };
+  }
   if (favorite.resourceType === "document") {
     const document = data.documents.find(
       (item) => item.id === favorite.resourceId,
@@ -1517,7 +1526,6 @@ function TeamNavigation({
   workspaceSlug,
   page,
   activeIssues,
-  triageCount,
   cyclesEnabled,
   current,
   upcoming,
@@ -1530,7 +1538,6 @@ function TeamNavigation({
   workspaceSlug: string;
   page: PageId | "not-found";
   activeIssues: boolean;
-  triageCount?: number;
   cyclesEnabled: boolean;
   current: boolean;
   upcoming: boolean;
@@ -1540,6 +1547,7 @@ function TeamNavigation({
   const [expanded, setExpanded] = useState(() =>
     readExpandedSection(`team.${team.id}`),
   );
+  const triageCount = useTriageCount(data, team);
   useEffect(() => persistPreference(`flow.sidebar.section.team.${team.id}`, expanded), [expanded, team.id]);
   const overviewPath = teamHomePath(workspaceSlug, team.key);
   const onOverview =

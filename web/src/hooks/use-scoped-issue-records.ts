@@ -10,10 +10,11 @@ const MAX_ISSUES = 2500
  * predicate is used; in server-paged workspaces the scope is loaded from `/api/issue-records`
  * (all pages up to MAX_ISSUES) and fresher local copies win, so edits show immediately.
  */
-export function useScopedIssueRecords(data: BootstrapData, query: IssueQueryInput, predicate: (issue: Issue) => boolean) {
-  const paged = Boolean(data.issueCollectionPaged)
+export function useScopedIssueRecords(data: BootstrapData, query: IssueQueryInput, predicate: (issue: Issue) => boolean, enabled = true) {
+  const paged = Boolean(data.issueCollectionPaged) && enabled
   const [remote, setRemote] = useState<Issue[]>([])
   const [loading, setLoading] = useState(paged)
+  const [loadedKey, setLoadedKey] = useState<string>()
   const key = JSON.stringify(query)
   useEffect(() => {
     if (!paged) return
@@ -27,19 +28,21 @@ export function useScopedIssueRecords(data: BootstrapData, query: IssueQueryInpu
         items.push(...page.items)
         cursor = page.nextCursor
       } while (cursor && items.length < MAX_ISSUES && !controller.signal.aborted)
-      if (!controller.signal.aborted) { setRemote(items); setLoading(false) }
-    })().catch(() => { if (!controller.signal.aborted) setLoading(false) })
+      if (!controller.signal.aborted) { setRemote(items); setLoading(false); setLoadedKey(key) }
+    })().catch(() => { if (!controller.signal.aborted) { setLoading(false); setLoadedKey(key) } })
     return () => controller.abort()
     // The serialized query is the dependency; the object identity changes every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.workspace.urlKey, key, paged])
   const issues = useMemo(() => {
+    if (!enabled) return []
     const local = data.issues.filter(predicate)
     if (!paged) return local
     const byId = new Map(remote.map(issue => [issue.id, issue]))
     for (const issue of data.issues) if (byId.has(issue.id)) byId.set(issue.id, issue)
     for (const issue of local) byId.set(issue.id, issue)
     return [...byId.values()].filter(predicate)
-  }, [data.issues, paged, predicate, remote])
-  return { issues, loading }
+  }, [data.issues, enabled, paged, predicate, remote])
+  // A new scope shows its loading state until its own first page arrives.
+  return { issues, loading: paged && (loading || loadedKey !== key) }
 }
