@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { BarChart3, Bot, CalendarDays, Check, ChevronDown, CircleDot, Clock3, Copy, Download, Ellipsis, Expand, Flame, FolderKanban, History, Layers3, Link2, Palette, RefreshCw, Search, SlidersHorizontal, Tag, UserRound, X } from 'lucide-react'
+import { BarChart3, ChevronDown, Palette, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { CycleIcon } from '@/components/issue/issue-icons'
+import { FlowOptionsIcon, FlowUrlIcon } from '@/components/issue/flow-header-icons'
 import { MyIssuesList, type MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import type { MyIssuesProperty } from '@/components/my-issues/my-issues-surface'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
@@ -12,17 +12,20 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-is
 import type { BootstrapData, SavedView } from '@/types/flow'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
-import { usePropertyCommand } from '@/components/property/use-property-command'
-import { SelectControl } from '@/components/ui/select-control'
+import { confirmAction } from '@/components/ui/action-dialog-service'
+import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
 import { Toggle } from '@/components/ui/toggle'
-import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
-import { FilterIcon, SidebarIcon } from '@/components/ui/view-action-icons'
+import { FlowTooltip, TooltipContent, TooltipProvider, TooltipRoot, TooltipTrigger } from '@/components/ui/tooltip'
+import { DisplayIcon, FilterIcon, InsightsIcon, SidebarIcon } from '@/components/ui/view-action-icons'
 import type { IssueQueryInput } from '@/lib/api'
 import { useInsightSource } from './use-insight-source'
-import { aggregateInsightValues, aggregationLabels, insightTargetMatches, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
+import { aggregateInsightValues, insightTargetMatches, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
 import { buildInsightData, formatMetric, isEmptyInsightValue, titleCase, type InsightData } from './insight-data'
-import { hideableDimension, insightsConfigKey, parseInsightsConfig, type SavedViewInsightDimension, type SavedViewInsightMeasure, type SavedViewInsightsConfig } from './insight-config'
+import { emptyDimensionLabel, insightsConfigKey, parseInsightsConfig, percentileLabel, percentileShare, selectedAggregations, type SavedViewInsightDimension, type SavedViewInsightMeasure, type SavedViewInsightsConfig } from './insight-config'
 import { InsightExplorer, InsightValueIcon } from './insight-explorer'
+import { InsightCheckIcon, InsightCloseIcon, InsightCopyIcon, InsightExpandIcon, InsightRefreshIcon, InsightSelectChevron, InsightTreeBranch } from './insight-icons'
+import { INSIGHT_MENU_POSITION, INSIGHTS_FULLSCREEN_SHORTCUT, MEASURE_OPTIONS, dimensionOptions, timeInStatusTree, type InsightOption, type StatusNode } from './insight-options'
 import styles from './insights-panel.module.css'
 
 /** The page's filter menu, mirrored by the fullscreen view's round filter button (Linear). */
@@ -34,7 +37,6 @@ export interface InsightFilterControl {
 }
 
 const DOCS_URL = 'https://flow.app/docs/insights'
-
 export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, view, query, onDrillChange, onOpenIssue, viewTitle, viewIcon, canSetDefault = true, filterControl }: {
   allRows: MyIssuesRowData[]
   data: BootstrapData
@@ -56,6 +58,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const { t } = useI18n()
   const sharedSource = JSON.stringify(view.insights ?? {})
   const shared = useMemo(() => parseInsightsConfig(JSON.parse(sharedSource) as Record<string, unknown>), [sharedSource])
+  const hasSharedDefault = sharedSource !== '{}'
   // Linear: each person's own Measure/Slice/Segment choices override the view's shared default.
   const personalKey = `flow:saved-view:${view.id}:insights`
   const readPersonal = useCallback(() => {
@@ -76,24 +79,39 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
     try { if (insightsConfigKey(next) === sharedKey) localStorage.removeItem(personalKey); else localStorage.setItem(personalKey, JSON.stringify(next)) } catch { /* private mode: the choice lasts for this visit */ }
     return next
   })
-  const patchConfig = (patch: Partial<SavedViewInsightsConfig>) => setConfig(value => ({ ...value, ...patch }))
+  // Linear resets "Hide <No value>" whenever the slice or segment it belongs to changes.
+  const patchConfig = (patch: Partial<SavedViewInsightsConfig>) => setConfig(value => ({
+    ...value,
+    ...(patch.slice !== undefined && patch.slice !== value.slice ? { hideEmptySlice: false } : {}),
+    ...(patch.segment !== undefined && patch.segment !== value.segment ? { hideEmptySegment: false } : {}),
+    ...patch,
+  }))
   const remote = useInsightSource(data, query ? { ...query, archived: config.showArchived ? 'all' : 'false', includeStatusHistory: config.measure === 'timeInStatus' } : undefined, refreshKey)
   const source = query ? remote.rows : config.showArchived ? allRows : rows
   const insight = useMemo(() => { void refreshKey; return buildInsightData(source, config, data) }, [config, data, refreshKey, source])
-  const dirty = insightsConfigKey(config) !== sharedKey
+  const personal = insightsConfigKey(config) !== sharedKey
   const save = async () => {
+    // Linear asks before publishing the configuration to everyone.
+    if (!await confirmAction(t('Save insight'), { description: t('Publishing the configuration will make it the default for this view for everyone in the workspace.'), confirmLabel: t('Save'), danger: false })) return
     setSaving(true)
     try { await onSave(config); try { localStorage.removeItem(personalKey) } catch { /* ignore */ } toast.success(t('Insight saved as the default for everyone')) }
     catch { toast.error(t('Could not save the insight default')) }
     finally { setSaving(false) }
   }
+  const reset = () => { try { localStorage.removeItem(personalKey) } catch { /* ignore */ } setConfigState(shared) }
   const dismissIntro = () => { localStorage.setItem(introKey, 'dismissed'); setShowIntro(false) }
   const copyLink = () => void navigator.clipboard.writeText(window.location.href).then(() => toast.success(t('View link copied')))
   const sliceLabel = dimensionLabel(config.slice, data)
   const copyMarkdown = () => void navigator.clipboard.writeText(insightsMarkdown(insight, config, t(sliceLabel), t)).then(() => toast.success(t('Insights copied as Markdown')))
   const exportCsv = () => exportInsightsCsv(insight, config, view.name)
   const refresh = () => setRefreshKey(value => value + 1)
-  const updateMeasure = (value: string) => setConfig(current => ({ ...current, ...(value.startsWith('timeInStatus:') ? { measure: 'timeInStatus' as const, timeInStatusIds: toggleValue(current.timeInStatusIds, value.slice(13)) } : { measure: value as SavedViewInsightMeasure }) }))
+  // Linear: picking another measure clears the "Time in status" statuses; ticking a status switches to that measure.
+  const selectMeasure = (measure: SavedViewInsightMeasure) => setConfig(current => current.measure === measure ? current : { ...current, measure, timeInStatusIds: [] })
+  const toggleStatuses = (values: string[]) => setConfig(current => {
+    const selected = current.measure === 'timeInStatus' ? current.timeInStatusIds : []
+    const all = values.every(value => selected.includes(value))
+    return { ...current, measure: 'timeInStatus', timeInStatusIds: all ? selected.filter(value => !values.includes(value)) : [...new Set([...selected, ...values])] }
+  })
   const selectedSlice = insight.rows.find(item => item.id === target?.slice)
   const selectedSegment = insight.segments.find(item => item.id === target?.segment)
   const selectedRows = useMemo(() => insight.samples.filter(sample => !target || insightTargetMatches(sample, target)).map(sample => sample.item), [insight, target])
@@ -112,6 +130,16 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   }, [insight, target, remote.loading, remote.error])
   useEffect(() => { onDrillChange?.(target && !remote.loading && !remote.error ? selectedRows : undefined) }, [target, selectedRows, onDrillChange, remote.loading, remote.error])
   useEffect(() => () => onDrillChange?.(undefined), [onDrillChange])
+  // Linear's Ctrl ⇧ F toggles fullscreen from anywhere outside a text field.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || !event.shiftKey || event.metaKey || event.altKey || event.code !== 'KeyF' || event.defaultPrevented || isTextEntry(event.target)) return
+      event.preventDefault()
+      setExpanded(value => !value)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
   // Fullscreen: Escape first returns from a selection to the settings panel, then closes fullscreen.
   useEffect(() => {
     if (!expanded) { document.body.style.overflow = ''; return }
@@ -132,9 +160,16 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
     : remote.loading ? <div role="status" className={styles.state}>{t('Loading…')}</div>
     : !insight.rows.length ? <div role="status" className={styles.state}><span className={styles.emptyMark} aria-hidden="true"><BarChart3/></span><span>{t('No matching issues')}</span></div>
     : <InsightExplorer onOpenIssue={onOpenIssue} sliceLabel={sliceLabel} config={config} data={data} insight={insight} expanded={expanded} target={target} onSelect={selectTarget} onClear={() => setTarget(undefined)}/>
-  const actions = <InsightActionsMenu copyLink={copyLink} copyMarkdown={copyMarkdown} exportCsv={exportCsv} onRefresh={refresh}/>
-  const setDefault = canSetDefault && <footer className={styles.footer}><button type="button" className={styles.setDefault} aria-label={t('Save current insight')} disabled={!dirty || saving} onClick={() => void save()}>{t(saving ? 'Saving…' : 'Set default for everyone')}</button></footer>
+  const actions = <InsightActionsMenu align={expanded ? 'start' : 'end'} copyLink={copyLink} copyMarkdown={copyMarkdown} exportCsv={exportCsv} onRefresh={refresh}/>
+  // Linear's footer: "Set default for everyone" while the view has no shared default or you changed it, "Reset" to drop your own changes.
+  const showSetDefault = canSetDefault && (personal || !hasSharedDefault)
+  const showReset = personal && hasSharedDefault
+  const setDefault = (showSetDefault || showReset) && <footer className={styles.footer}>
+    {showReset && <button type="button" className={styles.resetDefault} onClick={reset}>{t('Reset')}</button>}
+    {showSetDefault && <button type="button" className={styles.setDefault} aria-label={t('Save current insight')} disabled={saving} onClick={() => void save()}>{t(saving ? 'Saving…' : 'Set default for everyone')}</button>}
+  </footer>
   const icon = viewIcon ?? <ViewGlyph color={view.color} icon={view.icon}/>
+  const controls = (layout: 'row' | 'column') => <InsightControls config={config} data={data} layout={layout} onMeasure={selectMeasure} onToggleStatuses={toggleStatuses} onChange={patchConfig}/>
 
   if (expanded) return <TooltipProvider delayDuration={450} skipDelayDuration={300}><aside aria-label={t('View insights')} className={styles.fullscreen} data-selection={target ? true : undefined}>
     <header className={styles.fullscreenHeader}>
@@ -146,7 +181,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
       </div>
       {actions}
       <span className={styles.spacer}/>
-      <FlowTooltip label={t('Close fullscreen')}><button aria-label={t('Close fullscreen')} className={styles.iconButton} onClick={() => setExpanded(false)} type="button"><X size={14}/></button></FlowTooltip>
+      <FlowTooltip label={t('Close fullscreen')} shortcut="Esc" align="end"><button aria-label={t('Close fullscreen')} className={styles.iconButton} onClick={() => setExpanded(false)} type="button"><InsightCloseIcon/></button></FlowTooltip>
     </header>
     <div className={styles.fullscreenBody}>
       <section className={styles.fullscreenMain} aria-label={t('Insight chart')}>
@@ -162,7 +197,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
             {selectedSlice && <><InsightValueIcon dimension={config.slice} id={selectedSlice.id} color={selectedSlice.color} data={data}/><span data-i18n-ignore>{t(selectedSlice.label)}</span></>}
             {selectedSlice && (selectedSegment || target.aggregation) && <span aria-hidden="true">·</span>}
             {selectedSegment && config.segment !== 'none' && <><InsightValueIcon dimension={config.segment} id={selectedSegment.id} color={selectedSegment.color} data={data} size={16}/><span data-i18n-ignore>{t(selectedSegment.label)}</span></>}
-            {target.aggregation && <span>{`${aggregationLabels[target.aggregation as InsightAggregation]} ${target.operator === 'gt' ? '>' : '≤'} ${formatMetric(target.threshold ?? 0, config.measure)}`}</span>}
+            {target.aggregation && <span>{`${percentileLabel(target.aggregation as InsightAggregation)} ${target.operator === 'gt' ? '>' : '≤'} ${formatMetric(target.threshold ?? 0, config.measure)}`}</span>}
           </div>
           <span className={styles.spacer}/>
           <FlowTooltip label={t('Close panel')} shortcut="Esc"><button aria-label={t('Close panel')} className={styles.iconButton} onClick={() => setTarget(undefined)} type="button"><SidebarIcon width={14} height={14}/></button></FlowTooltip>
@@ -170,9 +205,9 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
         <div className={styles.selectionList}><MyIssuesList hideGroupHeaders groups={[{ id: 'insight-selection', label: t('Selected issues'), issues: selectedRows }]} displayProperties={SELECTION_PROPERTIES} onOpenIssue={onOpenIssue}/></div>
       </section> : <aside className={styles.settings} aria-label={t('Insight settings')}>
         <div className={styles.settingsBody}>
-          <InsightControls config={config} data={data} layout="row" onMeasure={updateMeasure} onChange={patchConfig}/>
+          {controls('row')}
           <div className={styles.settingsDivider}/>
-          <div className={styles.settingsToggles}><InsightOptions config={config} data={data} onChange={patchConfig}/></div>
+          <div className={styles.settingsToggles}><InsightOptions config={config} onChange={patchConfig}/></div>
         </div>
         {setDefault}
       </aside>}
@@ -187,15 +222,15 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
     </section>}
     <section className={styles.card}>
       <header className={styles.cardHeader}>
-        <strong aria-live="polite">{remote.loading ? <span className={styles.summaryNoun}>{t('Loading…')}</span> : <><span className={styles.summaryCount}>{issueCount}</span>{' '}<span className={styles.summaryNoun}>{phrase ? `${noun} ${phrase}` : noun}</span></>}</strong>
+        <strong aria-live="polite">{remote.loading ? <span className={styles.summaryNoun}>{t('Loading…')}</span> : <><span className={styles.summaryCount}>{issueCount}</span>{' '}<span className={styles.summaryNoun}>{noun}</span>{phrase && <span className={styles.summaryPhrase}>{` ${phrase}`}</span>}</>}</strong>
         <div className={styles.cardActions}>
-          <ScopedTooltip label={t('Expand to fullscreen')}><button aria-label={t('Expand to fullscreen')} className={styles.iconButton} type="button" onClick={() => setExpanded(true)}><Expand size={14}/></button></ScopedTooltip>
-          <InsightDisplayMenu config={config} data={data} onChange={patchConfig}/>
+          <ScopedTooltip label={t('Expand to fullscreen')} shortcut={INSIGHTS_FULLSCREEN_SHORTCUT}><button aria-label={t('Expand to fullscreen')} className={styles.iconButton} type="button" onClick={() => setExpanded(true)}><InsightExpandIcon/></button></ScopedTooltip>
+          <InsightDisplayMenu config={config} onChange={patchConfig}/>
           {actions}
           <button aria-label={t('Close view insights')} className={`${styles.iconButton} ${styles.panelClose}`} onClick={onClose} type="button"><X size={14}/></button>
         </div>
       </header>
-      <div className={styles.controls}><InsightControls config={config} data={data} layout="column" onMeasure={updateMeasure} onChange={patchConfig}/></div>
+      <div className={styles.controls}>{controls('column')}</div>
       <div className={styles.cardBody}>{content}</div>
       {setDefault}
     </section>
@@ -204,8 +239,12 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
 
 const SELECTION_PROPERTIES = new Set<MyIssuesProperty>(['priority', 'id', 'status', 'assignee'])
 
-function ScopedTooltip({ label, children }: { label: string; children: ReactElement }) {
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><FlowTooltip label={label}>{children}</FlowTooltip></TooltipProvider>
+function isTextEntry(target: EventTarget | null) {
+  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+}
+
+function ScopedTooltip({ label, shortcut, children }: { label: string; shortcut?: string; children: ReactElement }) {
+  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><FlowTooltip label={label} shortcut={shortcut} align="end">{children}</FlowTooltip></TooltipProvider>
 }
 
 export function InsightHiddenNotice({ hidden, onShow }: { hidden: number; onShow: () => void }) {
@@ -221,115 +260,182 @@ function InsightFilterButton({ control, onAdvanced }: { control: InsightFilterCo
     trigger={<button type="button" aria-label={t('Add filter')} className={styles.filterButton}><FilterIcon size={14}/></button>}/>
 }
 
-function InsightControls({ config, data, layout, onMeasure, onChange }: { config: SavedViewInsightsConfig; data: BootstrapData; layout: 'row' | 'column'; onMeasure: (value: string) => void; onChange: (patch: Partial<SavedViewInsightsConfig>) => void }) {
+function InsightControls({ config, data, layout, onMeasure, onToggleStatuses, onChange }: { config: SavedViewInsightsConfig; data: BootstrapData; layout: 'row' | 'column'; onMeasure: (measure: SavedViewInsightMeasure) => void; onToggleStatuses: (values: string[]) => void; onChange: (patch: Partial<SavedViewInsightsConfig>) => void }) {
+  const { t } = useI18n()
+  const measure = measureDisplay(config, data, t)
+  const segment = config.segment === 'none' ? { label: 'No value' } : undefined
   return <>
-    <InsightPicker layout={layout} label="Measure" value={config.measure} options={measureOptions(data, config)} onChange={onMeasure}/>
+    <InsightPicker layout={layout} label="Measure" value={config.measure} display={measure} options={MEASURE_OPTIONS} onChange={value => onMeasure(value as SavedViewInsightMeasure)}
+      submenu={id => id === 'timeInStatus' ? <TimeInStatusMenu config={config} data={data} onToggle={onToggleStatuses}/> : undefined}/>
     <InsightPicker layout={layout} label="Slice" value={config.slice} options={dimensionOptions(data, true)} onChange={slice => onChange({ slice: slice as SavedViewInsightDimension })}/>
     {config.measure === 'issueCount'
-      ? <InsightPicker layout={layout} label="Segment" value={config.segment} options={segmentOptions(data)} onChange={segment => onChange({ segment: segment as SavedViewInsightsConfig['segment'] })}/>
+      ? <InsightPicker layout={layout} label="Segment" value={config.segment} display={segment} options={segmentOptions(data)} onChange={value => onChange({ segment: value as SavedViewInsightsConfig['segment'] })}/>
       : <InsightAggregationPicker layout={layout} config={config} onChange={aggregations => onChange({ aggregations })}/>}
   </>
 }
 
-/** Linear's display options: archived issues, hiding the empty segment value, and the chart scale/colours. */
-function InsightOptions({ config, data, onChange }: { config: SavedViewInsightsConfig; data: BootstrapData; onChange: (patch: Partial<SavedViewInsightsConfig>) => void }) {
+/** Linear's display options: archived issues, "Hide" per dimension with an empty value, the log scale and the chart colours. */
+function InsightOptions({ config, onChange }: { config: SavedViewInsightsConfig; onChange: (patch: Partial<SavedViewInsightsConfig>) => void }) {
   const { t } = useI18n()
-  const hideable = hideableDimension(config)
+  const emptySlice = emptyDimensionLabel(config.slice)
+  const emptySegment = config.measure === 'issueCount' ? emptyDimensionLabel(config.segment) : undefined
+  const hideRow = (empty: string, checked: boolean, change: (value: boolean) => void) => <label className={styles.option}><span>{t('Hide')}<span className={styles.chip}>{t(empty)}</span></span><Toggle label={`${t('Hide')} ${t(empty)}`} checked={checked} onChange={change}/></label>
   return <>
     <label className={styles.option}><span>{t('Show archived issues')}</span><Toggle label={t('Show archived issues')} checked={config.showArchived} onChange={showArchived => onChange({ showArchived })}/></label>
-    {hideable && <label className={styles.option}><span>{t('Hide')}<span className={styles.chip}>{t('No {value}').replace('{value}', t(dimensionLabel(hideable, data)))}</span></span><Toggle label={`${t('Hide')} ${t('No {value}').replace('{value}', t(dimensionLabel(hideable, data)))}`} checked={Boolean(config.hideEmptySegment)} onChange={hideEmptySegment => onChange({ hideEmptySegment })}/></label>}
-    {config.measure !== 'issueCount' && <div className={styles.option}><span>{t('Y-axis scale')}</span><SelectControl className={styles.optionSelect} label={t('Y-axis scale')} value={config.latencyScale ?? 'log'} options={[{ value: 'log', label: t('Log scale') }, { value: 'linear', label: t('Linear scale') }]} onChange={value => onChange({ latencyScale: value as 'log' | 'linear' })}/></div>}
-    {config.segment === 'none' && config.measure === 'issueCount' && <div className={styles.option}><span>{t('Colors')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Colors')} className={styles.optionSelect} role="combobox" type="button"><Palette/>{t(config.colors === 'status' ? 'Status colors' : 'Auto-color')}<ChevronDown/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className={styles.menu} sideOffset={4}><DropdownMenu.RadioGroup value={config.colors} onValueChange={colors => onChange({ colors: colors as SavedViewInsightsConfig['colors'] })}><DropdownMenu.RadioItem className={styles.menuItem} value="status">{t('Status colors')}{config.colors === 'status' && <Check className={styles.trailingCheck}/>}</DropdownMenu.RadioItem><DropdownMenu.RadioItem className={styles.menuItem} value="auto">{t('Auto-color')}{config.colors === 'auto' && <Check className={styles.trailingCheck}/>}</DropdownMenu.RadioItem></DropdownMenu.RadioGroup></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>}
+    {emptySlice && hideRow(emptySlice, Boolean(config.hideEmptySlice), hideEmptySlice => onChange({ hideEmptySlice }))}
+    {emptySegment && hideRow(emptySegment, Boolean(config.hideEmptySegment), hideEmptySegment => onChange({ hideEmptySegment }))}
+    {config.measure !== 'issueCount' && <label className={styles.option}><span>{t('Use log scale')}</span><Toggle label={t('Use log scale')} checked={config.latencyScale !== 'linear'} onChange={log => onChange({ latencyScale: log ? 'log' : 'linear' })}/></label>}
+    {config.segment === 'none' && config.measure === 'issueCount' && <div className={styles.option}><span>{t('Colors')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Colors')} className={styles.optionSelect} role="combobox" type="button"><Palette/>{t(config.colors === 'status' ? 'Status colors' : 'Auto-color')}<ChevronDown/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop data-flow-motion="floating" align="end" className={styles.menu} sideOffset={4}><DropdownMenu.RadioGroup value={config.colors} onValueChange={colors => onChange({ colors: colors as SavedViewInsightsConfig['colors'] })}>{(['status', 'auto'] as const).map(value => <DropdownMenu.RadioItem className={styles.menuItem} data-selected={config.colors === value || undefined} key={value} value={value}><span className={styles.menuLabel}>{t(value === 'status' ? 'Status colors' : 'Auto-color')}</span>{config.colors === value && <InsightCheckIcon className={styles.menuCheck}/>}</DropdownMenu.RadioItem>)}</DropdownMenu.RadioGroup></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>}
   </>
 }
 
-function InsightDisplayMenu({ config, data, onChange }: { config: SavedViewInsightsConfig; data: BootstrapData; onChange: (patch: Partial<SavedViewInsightsConfig>) => void }) {
+function InsightDisplayMenu({ config, onChange }: { config: SavedViewInsightsConfig; onChange: (patch: Partial<SavedViewInsightsConfig>) => void }) {
   const { t } = useI18n()
-  return <Popover.Root><ScopedTooltip label={t('Insights display options')}><Popover.Trigger asChild><button aria-label={t('Insights display options')} className={styles.iconButton} type="button"><SlidersHorizontal size={14}/></button></Popover.Trigger></ScopedTooltip><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className={styles.displayPopover} collisionPadding={8} sideOffset={4}>
-    <InsightOptions config={config} data={data} onChange={onChange}/>
+  // Linear gives this button no tooltip.
+  return <Popover.Root><Popover.Trigger asChild><button aria-label={t('Insights display options')} className={styles.iconButton} type="button"><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className={styles.displayPopover} collisionPadding={8} sideOffset={4}>
+    <InsightOptions config={config} onChange={onChange}/>
   </Popover.Content></Popover.Portal></Popover.Root>
+}
+
+/** A row's description tooltip, shown under the row like Linear's menu item tooltips. */
+function MenuRowTooltip({ label }: { label?: string }) {
+  const { t } = useI18n()
+  if (!label) return null
+  return <TooltipRoot><TooltipTrigger asChild><span aria-hidden="true" className={styles.menuTipArea}/></TooltipTrigger><TooltipContent side="bottom" sideOffset={0}><span className="flow-tooltip-copy">{t(label)}</span></TooltipContent></TooltipRoot>
 }
 
 function InsightAggregationPicker({ config, layout, onChange }: { config: SavedViewInsightsConfig; layout: 'row' | 'column'; onChange: (values: InsightAggregation[]) => void }) {
   const { t } = useI18n()
-  const selected = config.aggregations ?? (config.aggregation ? [config.aggregation] : ['median', 'p75', 'p95'] as InsightAggregation[])
-  return <label className={styles.picker} data-layout={layout}><span>{t('Aggregations')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Aggregations')} className={styles.select}><span>{t('Percentiles')}</span><SelectChevron/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className={styles.menu} sideOffset={4}>{(['median', 'p75', 'p95'] as const).map(id => <DropdownMenu.CheckboxItem className={styles.menuItem} key={id} checked={selected.includes(id)} disabled={selected.length === 1 && selected.includes(id)} onSelect={event => event.preventDefault()} onCheckedChange={checked => onChange(checked ? [...selected, id] : selected.filter(value => value !== id))}><span>{id === 'median' ? 'P50' : aggregationLabels[id]}</span>{selected.includes(id) && <Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></label>
+  const selected = selectedAggregations(config)
+  const label = selected.length ? selected.map(percentileLabel).join(', ') : t('None')
+  return <label className={styles.picker} data-layout={layout}><span>{t('Aggregations')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Aggregations')} className={styles.select}><span>{label}</span><span className={styles.selectChevron}><InsightSelectChevron/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop data-flow-motion="floating" {...INSIGHT_MENU_POSITION} className={styles.menu} collisionPadding={8}><TooltipProvider delayDuration={450} skipDelayDuration={300}>
+    {(['median', 'p75', 'p95'] as const).map(id => {
+      const checked = selected.includes(id)
+      return <DropdownMenu.CheckboxItem className={`${styles.menuItem} ${styles.treeItem}`} key={id} checked={checked} onSelect={event => event.preventDefault()} onCheckedChange={next => onChange(next ? [...selected, id] : selected.filter(value => value !== id))}>
+        <MenuCheckbox/><span className={styles.treeLabel}><span className={styles.menuLabel}>{percentileLabel(id)}</span></span>
+        <MenuRowTooltip label={t('{value}% of issues are at or below this point').replace('{value}', String(percentileShare(id)))}/>
+      </DropdownMenu.CheckboxItem>
+    })}
+  </TooltipProvider></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></label>
 }
 
-function InsightActionsMenu({ copyLink, copyMarkdown, exportCsv, onRefresh }: { copyLink: () => void; copyMarkdown: () => void; exportCsv: () => void; onRefresh: () => void }) {
+function MenuCheckbox() { return <span className={styles.treeCheck} aria-hidden="true"><i><CheckboxMark/></i></span> }
+
+function InsightActionsMenu({ align, copyLink, copyMarkdown, exportCsv, onRefresh }: { align: 'start' | 'end'; copyLink: () => void; copyMarkdown: () => void; exportCsv: () => void; onRefresh: () => void }) {
   const { t } = useI18n()
-  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Open menu')} className={styles.iconButton} type="button"><Ellipsis size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className={styles.menu} collisionPadding={8} sideOffset={4}>
-    <DropdownMenu.Item className={styles.menuItem} onSelect={copyLink}><Link2/>{t('Copy link')}</DropdownMenu.Item>
-    <DropdownMenu.Item className={styles.menuItem} onSelect={copyMarkdown}><Copy/>{t('Copy insights as Markdown')}</DropdownMenu.Item>
-    <DropdownMenu.Item className={styles.menuItem} onSelect={exportCsv}><Download/>{t('Export insights as CSV…')}</DropdownMenu.Item>
-    <DropdownMenu.Item className={styles.menuItem} onSelect={() => window.open(DOCS_URL, '_blank', 'noopener,noreferrer')}><BarChart3/>{t('Insights documentation')}</DropdownMenu.Item>
+  // Linear: no tooltip; the menu hangs from the button's right edge in the panel and its left edge in fullscreen.
+  return <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Open menu')} className={styles.iconButton} type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop data-flow-motion="floating" align={align} className={styles.menu} collisionPadding={8} sideOffset={4}>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={copyLink}><FlowUrlIcon/><span className={styles.menuLabel}>{t('Copy link')}</span></DropdownMenu.Item>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={copyMarkdown}><InsightCopyIcon/><span className={styles.menuLabel}>{t('Copy insights as Markdown')}</span></DropdownMenu.Item>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={exportCsv}><LinearGlyph name="exportCsv"/><span className={styles.menuLabel}>{t('Export insights as CSV…')}</span></DropdownMenu.Item>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={() => window.open(DOCS_URL, '_blank', 'noopener,noreferrer')}><InsightsIcon/><span className={styles.menuLabel}>{t('Insights documentation')}</span></DropdownMenu.Item>
     <DropdownMenu.Separator className={styles.menuSeparator}/>
-    <DropdownMenu.Item className={styles.menuItem} onSelect={onRefresh}><RefreshCw/>{t('Refresh')}</DropdownMenu.Item>
+    <DropdownMenu.Item className={styles.menuItem} onSelect={onRefresh}><InsightRefreshIcon/><span className={styles.menuLabel}>{t('Refresh')}</span></DropdownMenu.Item>
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }
 
-type InsightOption = { id: string; label: string; description?: string; separatorBefore?: boolean; icon?: ReactNode; checked?: boolean; children?: InsightOption[] }
-
-function SelectChevron() { return <span className={styles.selectChevron} aria-hidden="true"><svg width="10" height="5" viewBox="0 0 10 5"><path d="M1 .5 5 4.5 9 .5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.25"/></svg></span> }
-
-function InsightPicker({ label, layout, onChange, options, value }: { label: string; layout: 'row' | 'column'; onChange: (value: string) => void; options: InsightOption[]; value: string }) {
+function InsightPicker({ label, layout, onChange, options, value, display, submenu }: {
+  label: string; layout: 'row' | 'column'; onChange: (value: string) => void; options: InsightOption[]; value: string
+  /** The trigger's text and icon when they differ from the selected option (Linear: "Time in Backlog", "No value"). */
+  display?: { label: string; icon?: ReactNode }
+  /** A custom submenu for an option (Linear's "Time in status" tree). */
+  submenu?: (id: string) => ReactNode
+}) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
-  const command = usePropertyCommand({ open, options, selectedIds: [value], onOpenChange: setOpen, onSelect: option => onChange(option.id) })
-  const selected = findInsightOption(options, value)?.label ?? value
-  return <label className={styles.picker} data-layout={layout}><span>{t(label)}</span><DropdownMenu.Root open={open} onOpenChange={setOpen}><DropdownMenu.Trigger asChild><button aria-label={t(label)} className={styles.select} type="button"><span>{t(selected)}</span><SelectChevron/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className={`${styles.menu} ${styles.selectMenu}`} collisionPadding={8} onKeyDown={command.onKeyDown} sideOffset={4}>
-    <div className={styles.menuSearch}><Search/><input aria-label={t('Filter…')} autoFocus ref={command.inputRef} onChange={event => command.onQueryChange(event.target.value)} onKeyDown={event => { command.onKeyDown(event); event.stopPropagation() }} placeholder={t('Filter…')} value={command.query}/></div>
-    <div className={styles.menuScroll} role="listbox">{command.filteredOptions.map(option => <InsightPickerOption key={option.id} onChange={next => { onChange(next); if (!option.children?.length) setOpen(false) }} option={option} value={value}/>)}</div>
-    {!command.filteredOptions.length && <div className={styles.menuEmpty}>{t('No results')}</div>}
-  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></label>
+  const [query, setQuery] = useState('')
+  const content = useRef<HTMLDivElement>(null)
+  useEffect(() => { if (open) setQuery('') }, [open])
+  const normalized = query.trim().toLocaleLowerCase()
+  const visible = normalized ? options.filter(option => t(option.label).toLocaleLowerCase().includes(normalized) || option.label.toLocaleLowerCase().includes(normalized) || option.children?.some(child => child.label.toLocaleLowerCase().includes(normalized))) : options
+  const firstFocus = useRef(true)
+  useEffect(() => {
+    if (!open) { firstFocus.current = true; return }
+    // Linear highlights the selected row when the menu opens, and the first match while you type.
+    const frame = requestAnimationFrame(() => {
+      const root = content.current
+      const row = (firstFocus.current && root?.querySelector<HTMLElement>('[data-selected]')) || root?.querySelector<HTMLElement>('[role^="menuitem"]')
+      firstFocus.current = false
+      row?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [open, normalized])
+  // Linear's menus filter as you type (the field itself stays hidden).
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof HTMLInputElement) return
+    if (event.key.length === 1 && event.key !== ' ' && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); setQuery(current => current + event.key) }
+    else if (event.key === 'Backspace' && query) { event.preventDefault(); setQuery(current => current.slice(0, -1)) }
+  }
+  const selected = display ?? { label: findInsightOption(options, value)?.label ?? value }
+  return <label className={styles.picker} data-layout={layout}><span>{t(label)}</span><DropdownMenu.Root open={open} onOpenChange={setOpen}><DropdownMenu.Trigger asChild><button aria-label={t(label)} className={styles.select} type="button">{selected.icon && <span className={styles.selectIcon} aria-hidden="true">{selected.icon}</span>}<span data-i18n-ignore>{t(selected.label)}</span><span className={styles.selectChevron}><InsightSelectChevron/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop ref={content} data-flow-motion="floating" {...INSIGHT_MENU_POSITION} className={`${styles.menu} ${styles.selectMenu}`} collisionPadding={8} onKeyDown={onKeyDown} onCloseAutoFocus={event => event.preventDefault()}><TooltipProvider delayDuration={450} skipDelayDuration={300}>
+    <span className={styles.menuSearch} role="status">{normalized ? `${visible.length} ${t('results')}` : t('Showing all items')}</span>
+    {visible.map((option, index) => <InsightPickerOption key={option.id} first={index === 0} onChange={next => { onChange(next); if (!option.children?.length && !submenu?.(option.id)) setOpen(false) }} option={option} submenu={submenu?.(option.id)} value={value}/>)}
+    {!visible.length && <div className={styles.menuEmpty}>{t('No results')}</div>}
+  </TooltipProvider></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></label>
 }
 
-function InsightPickerOption({ onChange, option, value }: { onChange: (value: string) => void; option: InsightOption; value: string }) {
+function InsightPickerOption({ first, onChange, option, submenu, value }: { first: boolean; onChange: (value: string) => void; option: InsightOption; submenu?: ReactNode; value: string }) {
   const { t } = useI18n()
-  const item = <><span className={styles.menuCopy} title={option.description ? t(option.description) : undefined}><b>{t(option.label)}</b></span>{option.id === value && <Check className={styles.trailingCheck}/>}</>
-  return <>{option.separatorBefore && <DropdownMenu.Separator className={styles.menuSeparator}/>}{option.children?.length ? <DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}>{item}<span className={styles.menuChevron}>▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu}`} sideOffset={4}>{option.children.map(child => <DropdownMenu.CheckboxItem checked={child.checked ?? child.id === value} className={styles.menuItem} key={child.id} onSelect={event => { if (child.id.startsWith('timeInStatus:')) event.preventDefault(); onChange(child.id) }}>{child.icon && <span className={styles.menuIcon}>{child.icon}</span>}<span data-i18n-ignore>{child.label}</span>{(child.checked ?? child.id === value) && <Check className={styles.trailingCheck}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub> : <DropdownMenu.Item className={styles.menuItem} onSelect={() => onChange(option.id)}>{item}</DropdownMenu.Item>}</>
+  const isSelected = option.id === value
+  const text = <span className={styles.menuLabel}>{t(option.label)}</span>
+  const separator = option.separatorBefore && !first && <DropdownMenu.Separator className={styles.menuSeparator}/>
+  if (submenu || option.children?.length) return <>{separator}<DropdownMenu.Sub><DropdownMenu.SubTrigger className={styles.menuItem}>{text}<span className={styles.menuChevron} aria-hidden="true">▶</span><MenuRowTooltip label={option.description}/></DropdownMenu.SubTrigger><DropdownMenu.Portal>
+    {submenu ?? <DropdownMenu.SubContent loop data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu}`} collisionPadding={8} sideOffset={4}><div className={styles.subList}>{option.children!.map(child => <DropdownMenu.Item className={styles.menuItem} data-selected={child.id === value || undefined} key={child.id} onSelect={() => onChange(child.id)}>{child.icon && <span className={styles.menuIcon}>{child.icon}</span>}<span className={styles.menuLabel} data-i18n-ignore>{child.label}</span>{child.id === value && <InsightCheckIcon className={styles.menuCheck}/>}</DropdownMenu.Item>)}</div></DropdownMenu.SubContent>}
+  </DropdownMenu.Portal></DropdownMenu.Sub></>
+  return <>{separator}<DropdownMenu.Item className={styles.menuItem} data-selected={isSelected || undefined} onSelect={() => onChange(option.id)}>{text}{isSelected && <InsightCheckIcon className={styles.menuCheck}/>}<MenuRowTooltip label={option.description}/></DropdownMenu.Item></>
 }
 
-function measureOptions(data: BootstrapData, config: SavedViewInsightsConfig): InsightOption[] {
-  const stateTypes = [...new Set(data.states.map(state => state.type))]
-  return [
-    { id: 'issueCount', label: 'Issue count', description: 'Number of individual issues', icon: <CircleDot/> },
-    { id: 'cycleTime', label: 'Cycle time', description: 'Time from started to completed', separatorBefore: true, icon: <History/> },
-    { id: 'leadTime', label: 'Lead time', description: 'Time from created to completed', icon: <Clock3/> },
-    { id: 'issueAge', label: 'Issue age', description: 'Time from created to now (not completed)', icon: <CalendarDays/> },
-    { id: 'timeInStatus', label: 'Time in status', description: 'Time spent in status', icon: <Layers3/>, children: [
-      ...stateTypes.map(type => ({ id: `timeInStatus:type:${type}`, label: titleCase(type), checked: config.timeInStatusIds.includes(`type:${type}`), icon: <CircleDot/> })),
-      ...data.states.map(state => ({ id: `timeInStatus:${state.id}`, label: state.name, checked: config.timeInStatusIds.includes(state.id), icon: <i className={styles.optionDot} style={{ backgroundColor: state.color }}/> })),
-    ] },
-  ]
+/** Linear's Measure trigger: "Time in status", a single status or type with its icon, or "N statuses" / "N status types". */
+function measureDisplay(config: SavedViewInsightsConfig, data: BootstrapData, t: (source: string) => string): { label: string; icon?: ReactNode } {
+  if (config.measure !== 'timeInStatus') return { label: MEASURE_OPTIONS.find(option => option.id === config.measure)?.label ?? config.measure }
+  const nodes = timeInStatusTree(data).filter(node => node.values.length && node.values.every(value => config.timeInStatusIds.includes(value)))
+  if (!nodes.length) return { label: 'Time in status' }
+  if (nodes.length > 1) return { label: t(nodes.every(node => node.depth === 0) ? '{count} status types' : '{count} statuses').replace('{count}', String(nodes.length)) }
+  return { label: nodes[0].label, icon: nodes[0].icon }
 }
 
-function dimensionOptions(data: BootstrapData, includeDates: boolean): InsightOption[] {
-  const issueGroups = data.labelGroups.filter(group => group.resourceType === 'issue' && !group.archivedAt)
-  const projectGroups = data.labelGroups.filter(group => group.resourceType === 'project' && !group.archivedAt)
-  const options: InsightOption[] = [
-    { id: 'status', label: 'Status', icon: <CircleDot/> }, { id: 'statusType', label: 'Status type', icon: <CircleDot/> },
-    { id: 'assignee', label: 'Assignee', icon: <UserRound/> }, { id: 'agent', label: 'Agent', icon: <Bot/> },
-    { id: 'agentSession', label: 'Agent session', icon: <Bot/> }, { id: 'creator', label: 'Creator', icon: <UserRound/> },
-    { id: 'priority', label: 'Priority', icon: <Flame/> }, { id: 'label', label: 'Label', icon: <Tag/> },
-    { id: 'labelGroup', label: 'Label group', icon: <Layers3/>, children: issueGroups.map(group => ({ id: `labelGroup:${group.id}`, label: group.name, icon: <i className={styles.optionDot} style={{ backgroundColor: group.color }}/> })) },
-    { id: 'template', label: 'Template', icon: <Copy/> }, { id: 'externalSource', label: 'External source', icon: <Link2/> },
-    { id: 'project', label: 'Project', separatorBefore: true, icon: <FolderKanban/> }, { id: 'initiative', label: 'Initiative', icon: <Layers3/> },
-    { id: 'projectLabel', label: 'Project label', icon: <Tag/> },
-    { id: 'projectLabelGroup', label: 'Project label group', icon: <Layers3/>, children: projectGroups.map(group => ({ id: `projectLabelGroup:${group.id}`, label: group.name, icon: <i className={styles.optionDot} style={{ backgroundColor: group.color }}/> })) },
-    { id: 'cycle', label: 'Cycle', icon: <CycleIcon/> }, { id: 'addedToCycle', label: 'Added to cycle', icon: <CalendarDays/> },
-  ]
-  if (includeDates) options.push(
-    { id: 'createdDate', label: 'Created date', separatorBefore: true, icon: <CalendarDays/> }, { id: 'completedDate', label: 'Completed date', icon: <CalendarDays/> },
-    { id: 'canceledDate', label: 'Canceled date', icon: <CalendarDays/> }, { id: 'startedDate', label: 'Started date', icon: <CalendarDays/> },
-    { id: 'dueDate', label: 'Due date', icon: <CalendarDays/> }, { id: 'burnUp', label: 'Burn-up', separatorBefore: true, icon: <BarChart3/> },
-  )
-  return options
+function TimeInStatusMenu({ config, data, onToggle }: { config: SavedViewInsightsConfig; data: BootstrapData; onToggle: (values: string[]) => void }) {
+  const { t } = useI18n()
+  const [query, setQuery] = useState('')
+  const input = useRef<HTMLInputElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+  const tree = useMemo(() => timeInStatusTree(data), [data])
+  const selected = config.measure === 'timeInStatus' ? config.timeInStatusIds : []
+  const normalized = query.trim().toLocaleLowerCase()
+  const matches = (node: StatusNode) => t(node.label).toLocaleLowerCase().includes(normalized) || node.label.toLocaleLowerCase().includes(normalized)
+  const visible = normalized ? tree.filter((node, index) => {
+    if (matches(node)) return true
+    if (node.depth === 1) { const parent = tree.slice(0, index).reverse().find(item => item.depth === 0); return parent ? matches(parent) : false }
+    const children = tree.slice(index + 1); const end = children.findIndex(item => item.depth === 0)
+    return (end < 0 ? children : children.slice(0, end)).some(matches)
+  }) : tree
+  useEffect(() => { const frame = requestAnimationFrame(() => input.current?.focus()); return () => cancelAnimationFrame(frame) }, [])
+  return <DropdownMenu.SubContent loop data-flow-motion="floating" className={`${styles.menu} ${styles.subMenu}`} collisionPadding={8} sideOffset={4} alignOffset={-6}>
+    <div className={styles.subSearch}><input ref={input} aria-label={t('Filter…')} placeholder={t('Filter…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); list.current?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus() }
+      else if (event.key !== 'Escape' && event.key !== 'ArrowLeft' && event.key !== 'Tab') event.stopPropagation()
+    }}/></div>
+    <TooltipProvider delayDuration={450}><div ref={list} className={styles.subList}>
+      {visible.map(node => {
+        const checked = node.values.every(value => selected.includes(value))
+        return <DropdownMenu.CheckboxItem className={`${styles.menuItem} ${styles.treeItem}`} data-depth={node.depth} key={node.key} checked={checked} onSelect={event => event.preventDefault()} onCheckedChange={() => onToggle(node.values)}>
+          <MenuCheckbox/>
+          <span className={styles.treeLabel}>
+            {node.depth === 1 && <span className={styles.treeBranch} aria-hidden="true"><InsightTreeBranch/></span>}
+            <span className={styles.menuIcon}>{node.icon}</span>
+            <span className={styles.menuLabel} data-i18n-ignore>{t(node.label)}</span>
+          </span>
+        </DropdownMenu.CheckboxItem>
+      })}
+      {!visible.length && <div className={styles.menuEmpty}>{t('No results')}</div>}
+    </div></TooltipProvider>
+  </DropdownMenu.SubContent>
 }
 
 function segmentOptions(data: BootstrapData): InsightOption[] {
   const allowed = new Set(['assignee', 'agent', 'agentSession', 'creator', 'priority', 'label', 'labelGroup', 'template', 'externalSource', 'project', 'initiative', 'projectLabel', 'projectLabelGroup', 'addedToCycle'])
-  return [{ id: 'none', label: 'No value' }, ...dimensionOptions(data, false).filter(option => allowed.has(option.id)).map((option, index) => ({ ...option, separatorBefore: index === 0 || option.id === 'project' }))]
+  // Linear's menu says "No Value"; the select then reads "No value".
+  return [{ id: 'none', label: 'No Value' }, ...dimensionOptions(data, false).filter(option => allowed.has(option.id)).map((option, index) => ({ ...option, separatorBefore: index === 0 || option.id === 'project' }))]
 }
 
 /** Linear's header sentence: "4 issues in Todo without priority", "1 issue in Backlog in low priority". */
@@ -342,19 +448,18 @@ function selectionPhrase(target: InsightTarget, config: SavedViewInsightsConfig,
     else if (config.segment === 'priority' && segmentLabel) parts.push(t('in {value} priority').replace('{value}', t(segmentLabel).toLowerCase()))
     else if (segmentLabel) parts.push(t('with {value}').replace('{value}', t(segmentLabel)))
   }
-  if (target.aggregation) parts.push(`${aggregationLabels[target.aggregation as InsightAggregation]} ${target.operator === 'gt' ? '>' : '≤'} ${formatMetric(target.threshold ?? 0, config.measure)}`)
+  if (target.aggregation) parts.push(`${percentileLabel(target.aggregation as InsightAggregation)} ${target.operator === 'gt' ? '>' : '≤'} ${formatMetric(target.threshold ?? 0, config.measure)}`)
   return parts.join(' ')
 }
 
 function measureLabel(value: SavedViewInsightMeasure) { return ({ issueCount: 'Issue count', cycleTime: 'Cycle time', leadTime: 'Lead time', issueAge: 'Issue age', timeInStatus: 'Time in status' })[value] }
-function dimensionLabel(value: SavedViewInsightDimension, data: BootstrapData) { return findInsightOption(dimensionOptions(data, true), value)?.label ?? value }
+function dimensionLabel(value: SavedViewInsightDimension, data: BootstrapData) { return findInsightOption(dimensionOptions(data, true), value)?.label ?? (value.startsWith('labelGroup:') ? 'Label group' : value.startsWith('projectLabelGroup:') ? 'Project label group' : value) }
 function findInsightOption(options: InsightOption[], value: string): InsightOption | undefined { for (const option of options) { if (option.id === value) return option; const child = findInsightOption(option.children ?? [], value); if (child) return child } }
-function toggleValue(values: string[], value: string) { return values.includes(value) ? values.filter(item => item !== value) : [...values, value] }
 
 function insightTableLines(insight: InsightData, config: SavedViewInsightsConfig, sliceHeader: string) {
   const latency = config.measure !== 'issueCount'
-  const aggregations = config.aggregations ?? (config.aggregation ? [config.aggregation] : ['median', 'p75', 'p95'] as const)
-  const headers = [sliceHeader, 'Issue count', ...(latency ? aggregations.map(aggregation => `${measureLabel(config.measure)} (${aggregationLabels[aggregation]})`) : config.segment === 'none' ? [] : insight.segments.map(segment => segment.label))]
+  const aggregations = selectedAggregations(config)
+  const headers = [sliceHeader, 'Issue count', ...(latency ? aggregations.map(aggregation => `${measureLabel(config.measure)} (${percentileLabel(aggregation)})`) : config.segment === 'none' ? [] : insight.segments.map(segment => segment.label))]
   return [headers, ...insight.rows.map(row => [row.label, String(latency ? row.values.length : row.total), ...(latency ? aggregations.map(aggregation => formatMetric(row.aggregations[aggregation] ?? 0, config.measure)) : config.segment === 'none' ? [] : insight.segments.map(segment => String(row.segments[segment.id] ?? 0)))])]
 }
 

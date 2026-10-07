@@ -16,6 +16,13 @@ describe('insights panel and fullscreen strings', () => {
       'Priority', 'Label', 'Label group', 'Template', 'External source', 'Project', 'Initiative', 'Project label', 'Project label group', 'Cycle',
       'Added to cycle', 'Created date', 'Completed date', 'Canceled date', 'Started date', 'Due date', 'Burn-up',
       'No priority', 'Urgent', 'High', 'Medium', 'Low',
+      'No Value', 'Reset', 'Save', 'None', 'Save insight', 'Publishing the configuration will make it the default for this view for everyone in the workspace.',
+      'Use log scale', 'Number of individual issues', 'Time from started to completed', 'Time from created to completed', 'Time from created to now (not completed)',
+      'Time spent in status', 'Triage', 'Unstarted', 'Started', 'Completed', 'Canceled', 'Duplicate', 'Showing all items', 'results',
+      'Unassigned', 'No Agent', 'External', 'No Initiative', 'No Project', 'No Cycle', 'No Label', 'No label', 'No Project Label', 'No Priority', 'No Template',
+      'No Source', 'No session', 'Across all status types', 'Across all assignees', 'Across all agents', 'Across all creators', 'Across all labels',
+      'Across all label groups', 'Across all cycles', 'Across all projects', 'Across all priorities', 'Across all initiatives', 'Across all templates',
+      'Across all external sources', 'Across all agent sessions', 'Across all project labels', 'Across all project label groups', 'Across all dates',
     ]
     for (const source of strings) expect(translateToChinese(source), source).not.toBe(source)
     expect(translateToChinese('Agent')).toBe('Agent')
@@ -24,5 +31,8 @@ describe('insights panel and fullscreen strings', () => {
     expect(translateToChinese('without {value}')).toContain('{value}')
     expect(translateToChinese('in {value} priority')).toContain('{value}')
     expect(translateToChinese('with {value}')).toContain('{value}')
+    expect(translateToChinese('{value}% of issues are at or below this point')).toContain('{value}')
+    expect(translateToChinese('{count} statuses')).toContain('{count}')
+    expect(translateToChinese('{count} status types')).toContain('{count}')
   })
 })

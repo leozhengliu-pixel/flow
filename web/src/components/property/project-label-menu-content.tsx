@@ -9,7 +9,7 @@ import { projectLabelEntries, type ProjectLabelEntry } from './project-label-men
 import './project-label-picker.css'
 import { LabelHoverPreview } from './label-hover-preview'
 
-export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoose, onClose, onCreate, submenuPortalContainer }: {
+export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoose, onClose, onCreate, submenuPortalContainer, searchShortcut = true }: {
   options: PropertyOption[]
   selectedIds: string[]
   groupId?: string
@@ -17,6 +17,8 @@ export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoos
   onClose: () => void
   onCreate?: (name: string, groupId?: string) => void | Promise<unknown>
   submenuPortalContainer?: HTMLElement | null
+  /** The "P then L" hint in the filter field; Linear's row context menu shows none. */
+  searchShortcut?: boolean
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
@@ -70,7 +72,7 @@ export function ProjectLabelMenuContent({ options, selectedIds, groupId, onChoos
   return <div onKeyDown={onKeyDown}>
     <div className={`project-label-search${groupId && !query ? ' is-hidden' : ''}`}>
       <input ref={inputRef} aria-label={placeholder} aria-controls={listId} aria-activedescendant={active ? `${listId}-${active.id}` : undefined} value={query} placeholder={placeholder} onChange={event => { setQuery(event.target.value); setActiveId(undefined); setSubmenuId(undefined) }} autoComplete="off" spellCheck={false}/>
-      {!groupId && <span className="property-command-search-shortcut"><kbd>P</kbd><span data-i18n-ignore>then</span><kbd>L</kbd></span>}
+      {!groupId && searchShortcut && <span className="property-command-search-shortcut"><kbd>P</kbd><span data-i18n-ignore>then</span><kbd>L</kbd></span>}
     </div>
     <div className="project-label-options" id={listId} ref={listRef} role="listbox" aria-label={placeholder} aria-multiselectable={!groupId}>
       {entries.map((entry, index) => <div key={entry.id}>

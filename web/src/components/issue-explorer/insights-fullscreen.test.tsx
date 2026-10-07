@@ -8,6 +8,8 @@ import { SavedViewInsightsPanel } from './saved-view-panels'
 import type { SavedView } from '@/types/flow'
 
 vi.mock('@/lib/api', () => ({ listIssueRecords: vi.fn() }))
+const confirm = vi.hoisted(() => vi.fn(async () => true))
+vi.mock('@/components/ui/action-dialog-service', () => ({ confirmAction: confirm }))
 const issues = [
   makeIssue({ id: 'one', identifier: 'TST-1', title: 'First urgent', priority: 1, assignee: viewer, state: backlog }),
   makeIssue({ id: 'two', identifier: 'TST-2', title: 'Second unprioritised', priority: 0, assignee: teammate, state: backlog }),
@@ -42,7 +44,8 @@ describe('insights fullscreen (Linear parity)', () => {
     expect(within(settings).getByRole('button', { name: 'Segment' })).toHaveTextContent('Priority')
     expect(within(settings).getByRole('checkbox', { name: 'Show archived issues' })).not.toBeChecked()
     expect(within(settings).getByRole('checkbox', { name: 'Hide No Priority' })).not.toBeChecked()
-    expect(within(settings).getByRole('button', { name: 'Save current insight' })).toHaveTextContent('Set default for everyone')
+    // Linear hides the footer while you follow the view's shared default.
+    expect(within(settings).queryByRole('button', { name: 'Save current insight' })).toBeNull()
     expect(within(panel).queryByRole('list', { name: 'Issues' })).toBeNull()
     expect(panel.querySelector('[aria-live="polite"]')).toHaveTextContent('3 issues')
   })
@@ -97,7 +100,10 @@ describe('insights fullscreen (Linear parity)', () => {
     const { onSave } = setup()
     openFullscreen()
     expect(screen.getByRole('checkbox', { name: 'Hide No Priority' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save current insight' })).toHaveTextContent('Set default for everyone')
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Save current insight' })) })
+    expect(confirm).toHaveBeenCalledWith('Save insight', expect.objectContaining({ confirmLabel: 'Save', danger: false }))
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ slice: 'status', segment: 'priority', hideEmptySegment: true }))
     expect(localStorage.getItem('flow:saved-view:fullscreen-insight:insights')).toBeNull()
   })

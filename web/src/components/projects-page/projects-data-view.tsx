@@ -1,25 +1,18 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bell, Box, CalendarPlus, ChevronDown, Clipboard, FileText, LayoutGrid, Link2, MessageCirclePlus, MoreHorizontal, Move, Package, Search, Star, Tag, Trash2, UserRound } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { ChevronDown, MoreHorizontal } from 'lucide-react'
+import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
-import { CalendarIcon, MembersIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
+import { CalendarIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
 import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
 import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
 import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
-import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from './project-property-picker'
-import { ProjectDatePicker, ProjectTargetDatePicker } from './project-target-date-picker'
+import { ProjectTargetDatePicker } from './project-target-date-picker'
 import { projectLabelGroupProperty } from './projects-display-model'
-import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'
-import { toggleGroupedLabelIds } from '@/lib/labels'
-import { PersonHover } from '@/components/property/person-info'
-import { usePeopleDirectory } from '@/components/property/people-context'
-import { directoryPerson, personMatchesQuery } from '@/lib/people'
-import { toast } from 'sonner'
-import { useI18n } from '@/i18n/i18n'
-import { PULSE_EVENT, sessionPulseChoice, usePulseSubscription } from '@/lib/pulse-subscriptions'
+import { ProjectRowMenu } from './project-row-menu'
+import { useProjectRowShortcuts } from './project-row-shortcuts'
 import './projects-page.css'
 import './projects-bundle-parity.css'
 import { ProjectsPageEmptyIcon } from './projects-page-empty-icon'
@@ -122,7 +115,7 @@ export type ProjectMenuIntegration = {
 
 export type ProjectProperty = 'health' | 'priority' | 'lead' | 'members' | 'labels' | 'startDate' | 'targetDate' | 'status'
 export type ProjectSortColumn = 'name' | 'health' | 'priority' | 'targetDate' | 'status'
-export type ProjectAction = 'copy' | 'move' | 'moveDown' | 'moveBottom' | 'favorite' | 'subscribe' | 'comment' | 'delete' | 'rename' | 'initiatives' | 'dependencies' | 'schedule' | 'customerRequest'
+export type ProjectAction = 'copy' | 'move' | 'moveTop' | 'moveUp' | 'moveDown' | 'moveBottom' | 'favorite' | 'subscribe' | 'comment' | 'delete' | 'rename' | 'initiatives' | 'dependencies' | 'schedule' | 'customerRequest'
 export type ProjectPropertyOptions = Partial<Record<ProjectProperty, ProjectPropertyOption[]>>
 
 const PROPERTY_OPTIONS: Record<ProjectProperty, ProjectPropertyOption[]> = {
@@ -198,6 +191,7 @@ export function ProjectsDataView({
   onOpenMilestone,
   onCreateProjectDependency,
 }: ProjectsDataViewProps) {
+  useProjectRowShortcuts(layout !== 'timeline')
   const [collapsed, setCollapsed] = useState<string[]>([])
   const [hiddenGroupIds, setHiddenGroupIds] = useState<string[]>([])
   const [sort, setSort] = useState<{ column: ProjectSortColumn, direction: 'asc' | 'desc' }>(externalSort ?? { column: 'name', direction: 'asc' })
@@ -484,7 +478,6 @@ type ProjectItemActions = {
 }
 
 function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelect, propertyOptions, projectMenu, labelGroupProperties = [], visible }: ProjectItemActions & { selected: boolean; onSelect: (id: string, range?: boolean) => void }) {
-  const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
   const rowKey = (event: KeyboardEvent<HTMLAnchorElement>) => {
     if (event.target !== event.currentTarget) return
@@ -494,17 +487,14 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
       onSelect(project.id, event.shiftKey)
     }
   }
-  return <>
+  return <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} project={project} projectMenu={projectMenu}>
     <a
       aria-label={project.name}
       aria-selected={selected}
       className={`lp-project-row ${selected ? 'is-selected' : ''}`}
+      data-linear-menu-row=""
       href={project.href}
       onClick={event => openProjectLink(event, project, onOpen)}
-      onContextMenu={event => {
-        event.preventDefault()
-        setMenuPoint({ x: event.clientX, y: event.clientY })
-      }}
       onKeyDown={rowKey}
       role="row"
       tabIndex={0}
@@ -526,11 +516,10 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
       <div aria-hidden={!visible.has('Issues') || undefined} data-column-hidden={!visible.has('Issues') || undefined} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
       <div aria-hidden={!visible.has('Status') || undefined} className="lp-project-row__status" data-column-hidden={!visible.has('Status') || undefined} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
       {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(group => <div className="lp-project-row__label-group" data-i18n-ignore key={group.id} role="gridcell">{(project.labelsByGroup?.[group.id] ?? []).map(label => <span key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}</div>)}
-      <button aria-label={`Project actions for ${project.name}`} className="lp-project-row__more" onClick={event => { event.preventDefault(); event.stopPropagation(); setMenuPoint({ x: event.clientX, y: event.clientY }) }} type="button"><MoreHorizontal size={14}/></button>
+      <button aria-label={`Project actions for ${project.name}`} className="lp-project-row__more" onClick={openRowMenu} type="button"><MoreHorizontal size={14}/></button>
       <span />
     </a>
-    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} projectMenu={projectMenu} setPoint={setMenuPoint}/>
-  </>
+  </ProjectItemMenu>
 }
 
 function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProject, onHide, onKeyboardMove, onOpenProject, onOpenProjectIssues, onOpenProjectUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, onSelectAll, propertyOptions, projectMenu, labelGroupProperties, selectedIds, showStatus, visible }: {
@@ -573,24 +562,20 @@ function ProjectBoardColumn({ group, manualOrdering, onCreateProject, onDropProj
 }
 
 function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onOpenIssues, onOpenUpdates, onProjectAction, onProjectVisualChange, onPropertyChange, projectMenu, propertyOptions, labelGroupProperties = [], selected = false, showStatus, visible }: ProjectItemActions & { onKeyboardMove: (direction: -1 | 1) => void; selected?: boolean; showStatus: boolean }) {
-  const [menuPoint, setMenuPoint] = useState<{ x: number, y: number } | null>(null)
   const statusOption = (propertyOptions?.status ?? PROPERTY_OPTIONS.status).find(option => option.value === project.status)
   const overdue = isTargetDateOverdue(project.rawTargetDate ?? project.targetDate)
   const metaLabels = labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).flatMap(group => project.labelsByGroup?.[group.id] ?? [])
   const showDate = visible.has('Target date') && Boolean(project.targetDate)
   const showMeta = showDate || (visible.has('Initiatives') && Boolean(project.initiativeNames?.length)) || metaLabels.length > 0 || Boolean(project.milestone)
-  return <>
+  return <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} project={project} projectMenu={projectMenu}>
     <a
       aria-label={project.name}
       className="lp-project-card"
+      data-linear-menu-row=""
       data-selected={selected || undefined}
       draggable={Boolean(onPropertyChange)}
       href={project.href}
       onClick={event => openProjectLink(event, project, onOpen)}
-      onContextMenu={event => {
-        event.preventDefault()
-        setMenuPoint({ x: event.clientX, y: event.clientY })
-      }}
       onDragEnd={event => { event.currentTarget.removeAttribute('data-dragging') }}
       onDragStart={event => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData(PROJECT_DRAG_TYPE, project.id); event.currentTarget.setAttribute('data-dragging', 'true') }}
       onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') onOpen?.(project); if (event.altKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) { event.preventDefault(); onKeyboardMove(event.key === 'ArrowLeft' ? -1 : 1) } }}
@@ -612,8 +597,7 @@ function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onO
       </div>}
       {visible.has('Issues') && <div className="lp-project-card__footer"><button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{issueCountLabel(project.issueCount)}</button></div>}
     </a>
-    <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} point={menuPoint} project={project} projectMenu={projectMenu} setPoint={setMenuPoint}/>
-  </>
+  </ProjectItemMenu>
 }
 
 const PROJECT_DRAG_TYPE = 'application/x-flow-project-id'
@@ -640,8 +624,16 @@ function openProjectLink(event: MouseEvent<HTMLAnchorElement>, project: ProjectP
   if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); onOpen(project) }
 }
 
-function ProjectItemMenu({ manualOrdering, onProjectAction, onPropertyChange, options, point, project, projectMenu, setPoint }: Pick<ProjectItemActions,'manualOrdering'|'onProjectAction'|'onPropertyChange'|'project'|'projectMenu'> & { options?: ProjectPropertyOptions; point: {x:number;y:number}|null; setPoint: (point:{x:number;y:number}|null)=>void }) {
-  return point ? <ProjectContextMenu integration={projectMenu} manualOrdering={manualOrdering} options={options} project={project} onPropertyChange={(property,value)=>onPropertyChange?.(project,property,value)} onAction={action=>{setPoint(null);onProjectAction?.(project,action)}} onClose={()=>setPoint(null)} point={point}/> : null
+function ProjectItemMenu({ children, manualOrdering, onProjectAction, onPropertyChange, options, project, projectMenu }: Pick<ProjectItemActions,'manualOrdering'|'onProjectAction'|'onPropertyChange'|'project'|'projectMenu'> & { children: ReactElement; options?: ProjectPropertyOptions }) {
+  const resolved = useMemo(() => ({ ...PROPERTY_OPTIONS, ...options }), [options])
+  return <ProjectRowMenu integration={projectMenu} manualOrdering={manualOrdering} options={resolved} project={project} onAction={action => onProjectAction?.(project, action)} onPropertyChange={(property, value) => onPropertyChange?.(project, property, value)}>{children}</ProjectRowMenu>
+}
+
+/** The row "…" button opens the row's context menu where it was clicked, like Linear. */
+function openRowMenu(event: MouseEvent<HTMLButtonElement>) {
+  event.preventDefault()
+  event.stopPropagation()
+  event.currentTarget.closest('[data-linear-menu-row]')?.dispatchEvent(new globalThis.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: event.clientX, clientY: event.clientY }))
 }
 
 function LeadPropertyButton({ lead, onChange, options }: {
@@ -661,263 +653,6 @@ function LeadPropertyButton({ lead, onChange, options }: {
       </Tooltip.Portal>
     </Tooltip.Root>
   </Tooltip.Provider>
-}
-
-type ProjectContextKind = ProjectProperty | 'copy-menu' | 'move-menu' | 'subscribe-menu' | 'remind-menu' | 'more-menu'
-type ProjectContextItem = { label: string; icon: ReactNode; action?: ProjectAction; kind?: ProjectContextKind; shortcut?: string; danger?: boolean; date?: 'startDate' | 'targetDate' }
-
-function ProjectContextMenu({ integration, manualOrdering = false, point, onAction, onClose, onPropertyChange, options, project }: { integration?: ProjectMenuIntegration; manualOrdering?: boolean; point: { x: number, y: number }, onAction: (action: ProjectAction) => void, onClose: () => void, onPropertyChange: (property: ProjectProperty, value: string) => void, options?: ProjectPropertyOptions, project: ProjectPageItem }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const nestedRef = useRef<HTMLDivElement>(null)
-  const [nested, setNested] = useState<ProjectContextKind | null>(null)
-  const [query, setQuery] = useState('')
-  const [nestedQuery, setNestedQuery] = useState('')
-  const [nestedPosition, setNestedPosition] = useState({ top: 5, flip: false, maxHeight: 410 })
-  const favorite = integration?.isFavorite(project.id) ?? false
-  const subscriptionEvents = new Set(integration?.subscriptionEvents(project.id) ?? [])
-  // "Subscribe to project updates in Pulse" is the Pulse subscription (explicit subscribe/unsubscribe via the Pulse API).
-  const pulse = usePulseSubscription('project', project.id, subscriptionEvents.has(PULSE_EVENT), nested === 'subscribe-menu')
-  const subscriptions = Object.fromEntries(Object.keys(SUBSCRIPTION_LABELS).map(event => [event, event === PULSE_EVENT ? pulse.subscribed : subscriptionEvents.has(event)]))
-  const { t } = useI18n()
-  const changeSubscriptions = (next: Record<string, boolean>) => {
-    if (next[PULSE_EVENT] !== subscriptions[PULSE_EVENT]) {
-      if (!pulse.saving) void pulse.toggle(next[PULSE_EVENT]).catch(error => toast.error(t('Could not update Pulse subscription'), { description: error instanceof Error ? error.message : undefined }))
-      return
-    }
-    // Inbox events keep the record's explicit Pulse subscribe so writing them never undoes it.
-    const keepPulse = (sessionPulseChoice('project', project.id) ?? subscriptionEvents.has(PULSE_EVENT)) === true
-    const events = Object.entries(next).filter(([event, enabled]) => enabled && event !== PULSE_EVENT).map(([event]) => event)
-    void integration?.onSubscriptionEventsChange(project.id, keepPulse ? [...events, PULSE_EVENT] : events)
-  }
-  useEffect(() => { ref.current?.querySelector<HTMLInputElement>('.lp-project-context__search input')?.focus() }, [])
-  useEffect(() => setNestedQuery(''), [nested])
-  useDismissibleLayer({ open: true, refs: [ref], onDismiss: onClose, closeOnEscape: nested !== 'labels' })
-  useDismissibleLayer({ open: nested !== null, refs: nested === 'labels' ? [nestedRef, ref] : [nestedRef], onDismiss: () => setNested(null), closeOnEscape: nested !== 'labels' })
-
-  const items: ProjectContextItem[][] = [
-    [
-      { label: 'Status', icon: <Box/>, kind: 'status', shortcut: 'P then S' },
-      { label: 'Priority', icon: <LayoutGrid/>, kind: 'priority', shortcut: 'P then P' },
-      { label: 'Project lead', icon: <UserRound/>, kind: 'lead', shortcut: 'P then A' },
-      { label: 'Members', icon: <MembersIcon/>, kind: 'members', shortcut: 'P then M' },
-      { label: 'Start date…', icon: <CalendarPlus/>, date: 'startDate', shortcut: 'Ctrl ⌥ S' },
-      { label: 'Target date…', icon: <CalendarPlus/>, date: 'targetDate', shortcut: 'Ctrl ⌥ D' },
-      { label: 'Labels', icon: <Tag/>, kind: 'labels', shortcut: 'P then L' },
-      { label: 'More properties', icon: <Package/>, kind: 'more-menu' },
-    ],
-    [{ label: 'Copy', icon: <Clipboard/>, kind: 'copy-menu' }, { label: 'Move', icon: <Move/>, kind: 'move-menu' }],
-    [{ label: favorite ? 'Unfavorite' : 'Favorite', icon: <Star/>, shortcut: '⌥ F' }, { label: 'Subscribe', icon: <Bell/>, kind: 'subscribe-menu' }, { label: 'Remind me', icon: <Bell/>, kind: 'remind-menu', shortcut: '⇧ H' }],
-    [{ label: 'New comment…', icon: <MessageCirclePlus/>, action: 'comment', shortcut: 'N then C' }],
-    [{ label: 'Delete', icon: <Trash2/>, action: 'delete', danger: true }],
-  ]
-  const normalized = query.trim().toLowerCase()
-  const left = Math.max(8, Math.min(point.x, window.innerWidth - 244))
-  const top = Math.max(8, Math.min(point.y, window.innerHeight - 536))
-
-  const openNested = (kind: ProjectContextKind | null, anchor: HTMLElement) => {
-    if (kind && ref.current) {
-      const root = ref.current.getBoundingClientRect()
-      const row = anchor.getBoundingClientRect()
-      const width = kind === 'labels' ? 252 : kind === 'lead' || kind === 'members' ? 280 : 248
-      const spaceRight = window.innerWidth - root.right - 8
-      const spaceLeft = root.left - 8
-      const flip = spaceRight < width && spaceLeft >= spaceRight
-      const top = Math.max(5, row.top - root.top - 6.5)
-      setNestedPosition({ top, flip, maxHeight: Math.max(80, window.innerHeight - (root.top + top) - 8) })
-    }
-    setNested(kind)
-  }
-  const invoke = (item: ProjectContextItem, anchor: HTMLElement) => {
-    if (item.kind) { openNested(item.kind, anchor); return }
-    if (item.label === 'Favorite' || item.label === 'Unfavorite') {
-      void integration?.onFavoriteChange(project.id, !favorite)
-      onClose()
-      return
-    }
-    if (item.action) onAction(item.action)
-  }
-
-  return <div className="lp-project-context" ref={ref} role="menu" style={{ left, top }} onKeyDown={event => menuKeyboard(event, () => setNested(null))}>
-    <label className="lp-project-context__search"><Search size={13}/><input aria-label="Filter…" onChange={event => setQuery(event.target.value)} placeholder="Filter…" value={query}/></label>
-    {items.map((group, index) => {
-      const filtered = group.filter(item => item.label.toLowerCase().includes(normalized))
-      if (!filtered.length) return null
-      return <div key={index} role="group">{filtered.map(item => item.date ? <ProjectDatePicker
-        buttonClassName="lp-project-context__item"
-        displayValue={item.date === 'startDate' ? project.startDate : project.targetDate}
-        key={item.label}
-        label={item.date === 'startDate' ? 'Start date' : 'Target date'}
-        onChange={value => { onPropertyChange(item.date!, value); onClose() }}
-        portalled={false}
-        value={item.date === 'startDate' ? project.rawStartDate : project.rawTargetDate}
-      ><ContextItemContent item={item}/></ProjectDatePicker> : <button
-        aria-haspopup={item.kind ? 'menu' : undefined}
-        className={`lp-project-context__item ${item.danger ? 'is-danger' : ''}`}
-        key={item.label}
-        onClick={event => invoke(item, event.currentTarget)}
-        onMouseEnter={event => openNested(item.kind ?? null, event.currentTarget)}
-        role="menuitem"
-        type="button"
-      ><ContextItemContent item={item}/></button>)}</div>
-    })}
-    {nested && <div className={`lp-project-context__nested${nested === 'labels' ? ' is-project-labels' : ''}${nestedPosition.flip ? ' is-start' : ''}`} style={{ top: nestedPosition.top, maxHeight: nestedPosition.maxHeight }} onKeyDown={event => menuKeyboard(event, () => setNested(null))} ref={nestedRef} role="menu">
-      <ProjectContextSubmenu
-        submenuPortalContainer={ref.current}
-        kind={nested}
-        manualOrdering={manualOrdering}
-        onAction={onAction}
-        onClose={onClose}
-        onPropertyChange={onPropertyChange}
-        options={options}
-        project={project}
-        query={nestedQuery}
-        setQuery={setNestedQuery}
-        setSubscriptions={changeSubscriptions}
-        onCreateReminder={integration ? remindAt => integration.onCreateReminder(project.id, remindAt) : undefined}
-        subscriptions={subscriptions}
-      />
-    </div>}
-  </div>
-}
-
-function ContextItemContent({ item }: { item: ProjectContextItem }) {
-  return <><span className="lp-project-context__icon">{item.icon}</span><span className="lp-project-context__label">{item.label}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}{(item.kind || item.date) && <ChevronRightIcon />}</>
-}
-
-function ProjectContextSubmenu({ kind, manualOrdering, onAction, onClose, onPropertyChange, options, project, query, setQuery, setSubscriptions, subscriptions, onCreateReminder, submenuPortalContainer }: {
-  kind: ProjectContextKind
-  manualOrdering: boolean
-  onAction: (action: ProjectAction) => void
-  onClose: () => void
-  onPropertyChange: (property: ProjectProperty, value: string) => void
-  options?: ProjectPropertyOptions
-  project: ProjectPageItem
-  query: string
-  setQuery: (value: string) => void
-  setSubscriptions: (value: Record<string, boolean>) => void
-  subscriptions: Record<string, boolean>
-  onCreateReminder?: (remindAt: string) => Promise<unknown>
-  submenuPortalContainer?: HTMLElement | null
-}) {
-  const directory = usePeopleDirectory()
-  if (kind === 'copy-menu') return <SimpleSubmenu searchable items={[
-    { icon: <Link2/>, label: 'Copy URL', shortcut: '⌘ ⇧ ,' },
-    { icon: <Clipboard/>, label: 'Copy title', shortcut: "⌘ ⇧ '" },
-    { icon: <Link2/>, label: 'Copy title as link', shortcut: '⌘ C' },
-    { icon: <FileText/>, label: 'Copy overview as Markdown', shortcut: '⌘ ⌥ C' },
-    { icon: <MessageCirclePlus/>, label: 'Copy latest project update' },
-  ]} onChoose={label => { void copyProjectValue(project, label); onClose() }} query={query} setQuery={setQuery}/>
-
-  if (kind === 'move-menu') return <SimpleSubmenu searchable items={[{ icon: <Move/>, label: 'Move down', shortcut: '⌥ ↓', disabled: !manualOrdering }, { icon: <Move/>, label: 'Move to bottom', shortcut: '⌥ ⇧ ↓', disabled: !manualOrdering }]} onChoose={label => { onAction(label === 'Move down' ? 'moveDown' : 'moveBottom'); onClose() }} query={query} setQuery={setQuery}/>
-
-  if (kind === 'subscribe-menu') return <SimpleSubmenu searchable items={Object.entries(SUBSCRIPTION_LABELS).map(([id, label]) => ({ checked: subscriptions[id], id, label }))} onChoose={(_label, id) => setSubscriptions({ ...subscriptions, [id]: !subscriptions[id] })} query={query} setQuery={setQuery}/>
-
-  if (kind === 'remind-menu') return <SimpleSubmenu searchable items={reminderChoices()} onChoose={(_label, id) => { void onCreateReminder?.(reminderTimestamp(id)); onClose() }} query={query} setQuery={setQuery}/>
-
-  if (kind === 'more-menu') return <SimpleSubmenu searchable items={[
-    { label: 'Initiatives', shortcut: 'P then N' }, { label: 'Dependencies' }, { label: 'Add customer request…', shortcut: 'Ctrl R' }, { label: 'Change update schedule…' }, { label: 'Configure Slack notifications…', disabled: true }, { label: 'Rename…', shortcut: '⇧ R' },
-  ]} onChoose={label => {
-    const action = ({ 'Initiatives': 'initiatives', 'Dependencies': 'dependencies', 'Add customer request…': 'customerRequest', 'Change update schedule…': 'schedule', 'Rename…': 'rename' } as Partial<Record<string, ProjectAction>>)[label]
-    if (action) onAction(action)
-    onClose()
-  }} query={query} setQuery={setQuery}/>
-
-  const property = kind as ProjectProperty
-  const propertyOptions = options?.[property] ?? PROPERTY_OPTIONS[property]
-  if (property === 'labels') {
-    const labels = propertyOptions.map(option => ({ id: option.value, label: option.label, color: option.color, groupId: option.groupId, groupLabel: option.group, groupColor: option.groupColor }))
-    return <ProjectLabelMenuContent options={labels} selectedIds={project.labelIds ?? []} onChoose={id => onPropertyChange('labels', toggleGroupedLabelIds(project.labelIds ?? [], id, labels).join(','))} onClose={onClose} submenuPortalContainer={submenuPortalContainer}/>
-  }
-  const multiple = property === 'members'
-  const selected = new Set(property === 'members' ? project.memberIds ?? [] : [contextPropertyValue(project, property)])
-  const filtered = propertyOptions.filter(option => { const person = property === 'lead' || property === 'members' ? directoryPerson(directory.users, option.value) : undefined; return person ? personMatchesQuery(person, query) : `${option.label} ${option.keywords ?? ''}`.toLowerCase().includes(query.trim().toLowerCase()) })
-  const sections: Array<{ id: string; label?: string; options: ProjectPropertyOption[] }> = [{ id: 'all', options: filtered }]
-  return <>
-    <label className="lp-project-context__nested-search"><Search size={13}/><input autoFocus aria-label={contextSearchPlaceholder(property)} onChange={event => setQuery(event.target.value)} placeholder={contextSearchPlaceholder(property)} value={query}/></label>
-    <div className="lp-project-context__nested-list">{sections.map(section => <div key={section.id}>{section.label && <div className="lp-project-context__group-label">{section.label}</div>}{section.options.map(option => <PersonHover key={option.value || '__empty'} userId={property === 'lead' || property === 'members' ? option.value : undefined}><button aria-checked={selected.has(option.value)} onClick={() => {
-      if (multiple) {
-        const next = new Set(selected)
-        if (next.has(option.value)) next.delete(option.value); else next.add(option.value)
-        onPropertyChange(property, [...next].join(','))
-      } else {
-        onPropertyChange(property, option.value)
-        onClose()
-      }
-    }} role={multiple ? 'menuitemcheckbox' : 'menuitemradio'} type="button">
-      {multiple && <span className={`lp-project-context__checkbox ${selected.has(option.value) ? 'is-checked' : ''}`}>{selected.has(option.value) && <CheckIcon/>}</span>}
-      <ContextOptionIcon option={option} property={property}/><span className="lp-project-context__label">{option.label}</span>{!multiple && selected.has(option.value) && <CheckIcon/>}
-    </button></PersonHover>)}</div>)}</div>
-  </>
-}
-
-type SimpleItem = { id?: string; label: string; icon?: ReactNode; shortcut?: string; checked?: boolean; disabled?: boolean; detail?: string }
-function SimpleSubmenu({ items, onChoose, query, searchable, setQuery }: { items: SimpleItem[]; onChoose: (label: string, id: string) => void; query: string; searchable?: boolean; setQuery: (value: string) => void }) {
-  const filtered = items.filter(item => item.label.toLowerCase().includes(query.trim().toLowerCase()))
-  return <>{searchable && <label className="lp-project-context__nested-search"><Search size={13}/><input autoFocus aria-label="Filter…" onChange={event => setQuery(event.target.value)} placeholder="Filter…" value={query}/></label>}<div className="lp-project-context__nested-list">{filtered.map(item => <button aria-checked={item.checked} disabled={item.disabled} key={item.id ?? item.label} onClick={() => onChoose(item.label, item.id ?? item.label)} role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'} type="button">{item.checked !== undefined && <span className={`lp-project-context__checkbox ${item.checked ? 'is-checked' : ''}`}>{item.checked && <CheckIcon/>}</span>}{item.icon && <span className="lp-project-context__icon">{item.icon}</span>}<span className="lp-project-context__label">{item.label}{item.detail && <small>{item.detail}</small>}</span>{item.shortcut && <kbd>{item.shortcut}</kbd>}</button>)}</div></>
-}
-
-function ContextOptionIcon({ option, property }: { option: ProjectPropertyOption; property: ProjectProperty }) {
-  if (property === 'priority') return <DataViewPriorityIcon value={option.value as ProjectPageItem['priority']}/>
-  if (property === 'lead' || property === 'members') {
-    if (!option.value) return <NoAssigneeIcon size={15}/>
-    if (option.avatarUrl) return <img alt="" className="lp-project-avatar" src={option.avatarUrl}/>
-    return <span className="lp-project-avatar" style={{ background: '#c65b5b' }}>{initials(option.label)}</span>
-  }
-  if (property === 'status') return <ProjectStatusGlyph color={option.color} name={option.label} type={option.statusType}/>
-  if (property === 'labels') return <span className="lp-project-context__label-dot" style={{ background: option.color ?? '#77777c' }}/>
-  return <CalendarPlus size={14}/>
-}
-
-function contextPropertyValue(project: ProjectPageItem, property: ProjectProperty) {
-  if (property === 'priority') return project.priority
-  if (property === 'lead') return project.lead?.id ?? ''
-  if (property === 'status') return project.status
-  if (property === 'startDate') return project.rawStartDate ?? ''
-  if (property === 'targetDate') return project.rawTargetDate ?? ''
-  return project.health
-}
-function contextSearchPlaceholder(property: ProjectProperty) {
-  if (property === 'members') return 'Change members…'
-  if (property === 'labels') return 'Add labels…'
-  if (property === 'lead') return 'Set lead…'
-  if (property === 'priority') return 'Change priority…'
-  if (property === 'status') return 'Change status…'
-  return 'Filter…'
-}
-
-function menuKeyboard(event: KeyboardEvent<HTMLDivElement>, closeNested: () => void) {
-  if ((event.target as HTMLElement).tagName === 'INPUT' && !['ArrowDown', 'ArrowUp', 'Escape'].includes(event.key)) return
-  const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>(':scope > div > button:not(:disabled), :scope > button:not(:disabled)')]
-  const index = buttons.indexOf(document.activeElement as HTMLButtonElement)
-  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-    event.preventDefault()
-    const delta = event.key === 'ArrowDown' ? 1 : -1
-    buttons[(index + delta + buttons.length) % buttons.length]?.focus()
-  } else if (event.key === 'Home' || event.key === 'End') {
-    event.preventDefault(); buttons[event.key === 'Home' ? 0 : buttons.length - 1]?.focus()
-  } else if (event.key === 'ArrowRight') {
-    const active = document.activeElement as HTMLButtonElement
-    if (active?.getAttribute('aria-haspopup') === 'menu') { event.preventDefault(); active.click() }
-  } else if (event.key === 'ArrowLeft') {
-    event.preventDefault(); closeNested()
-  }
-}
-
-const SUBSCRIPTION_LABELS: Record<string, string> = {
-  issueAdded: 'An issue is added to the project',
-  issueCompleted: 'An issue is marked completed or canceled',
-  descriptionChanged: 'Comments and changes to project description',
-  customerRequest: 'A customer request is added',
-  updatePosted: 'New project update is posted',
-  pulse: 'Subscribe to project updates in Pulse',
-}
-function reminderChoices(): SimpleItem[] { return [{ id: 'hour', label: 'An hour from now', detail: formatReminder(60) }, { id: 'tomorrow', label: 'Tomorrow', detail: formatReminder(24 * 60) }, { id: 'week', label: 'Next week', detail: formatReminder(7 * 24 * 60) }, { id: 'month', label: 'A month from now', detail: formatReminder(30 * 24 * 60) }, { id: 'custom', label: 'Custom…' }] }
-function reminderTimestamp(id: string) { const minutes = ({ hour: 60, tomorrow: 1440, week: 10080, month: 43200, custom: 1440 } as Record<string, number>)[id] ?? 1440; return new Date(Date.now() + minutes * 60_000).toISOString() }
-function formatReminder(minutes: number) { return new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(Date.now() + minutes * 60_000)) }
-async function copyProjectValue(project: ProjectPageItem, label: string) {
-  const url = project.href ? new URL(project.href, window.location.origin).href : window.location.href
-  const value = label === 'Copy URL' ? url : label === 'Copy title' ? project.name : label === 'Copy title as link' ? `[${project.name}](${url})` : label === 'Copy overview as Markdown' ? `# ${project.name}\n\n${project.summary ?? ''}` : project.summary ?? project.name
-  await navigator.clipboard?.writeText(value)
 }
 
 function DataViewProjectIcon({ color = '#8b8b90', icon }: { color?: string, icon?: string }) {

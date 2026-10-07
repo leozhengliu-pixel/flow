@@ -5,8 +5,8 @@ import { StatusIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData } from '@/types/flow'
 import { formatMetric, insightColor, type InsightData, type InsightRow } from './insight-data'
-import type { SavedViewInsightDimension, SavedViewInsightsConfig } from './insight-config'
-import { aggregateInsightValues, aggregationLabels, durationAxis, insightAxis, insightHighlight, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
+import { acrossAllLabel, percentileLabel, selectedAggregations, type SavedViewInsightDimension, type SavedViewInsightsConfig } from './insight-config'
+import { aggregateInsightValues, durationAxis, insightAxis, insightHighlight, sameInsightTarget, type InsightTarget, type InsightAggregation } from './insight-interaction'
 import styles from './insight-explorer.module.css'
 
 /** Status / priority glyphs where Linear shows them; a colour mark for every other value. */
@@ -64,7 +64,7 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
     })
   }, [insight, sort, latency])
   useEffect(() => { setHover(undefined); setSort(undefined) }, [config.slice, config.segment, config.measure])
-  const columns = useMemo(() => latency ? (config.aggregations ?? (config.aggregation ? [config.aggregation] : ['median', 'p75', 'p95'] as const)).map(id => ({ id, label: id === 'median' ? 'P50' : aggregationLabels[id], color: undefined as string | undefined })) : config.segment === 'none' ? [] : insight.segments, [latency, config.aggregations, config.aggregation, config.segment, insight.segments])
+  const columns = useMemo(() => latency ? selectedAggregations(config).map(id => ({ id, label: percentileLabel(id), color: undefined as string | undefined })) : config.segment === 'none' ? [] : insight.segments, [latency, config, insight.segments])
   // Linear sizes every value column to its content (20px padding each side) and gives the rest to the first column.
   const uniform = columns.length > 30
   const widths = useMemo(() => {
@@ -133,7 +133,7 @@ export function InsightExplorer({ config, data, insight, expanded, target, onSel
     })}
   </div>
   const totalRow = latency && <div role="row" className={`${styles.row} ${styles.total}`}>
-    {renderCell(t(config.slice === 'status' ? 'Across all statuses' : 'Across all groups'), {})}
+    {renderCell(t(acrossAllLabel(config.slice)), {})}
     {visibleColumns.map((column, index) => <div className={styles.columnCell} style={{ gridColumn: columnStart + index + cellOffset }} key={column.id}>{renderCell(formatMetric(aggregateInsightValues(insight.samples.map(sample => sample.value), column.id as InsightAggregation) ?? 0, config.measure), { aggregation: column.id, operator, threshold: aggregateInsightValues(insight.samples.map(sample => sample.value), column.id as InsightAggregation) ?? 0 })}</div>)}
   </div>
   return <div className={styles.explorer} data-expanded={expanded} onKeyDown={event => { if (event.key === 'Escape' && target) { event.stopPropagation(); onClear() } }}>
@@ -232,8 +232,7 @@ function LatencyGraph({ rows, insight, config, highlight, onHover, onSelect, onO
   const points = useRef<{ x: number; y: number; sample: InsightData['samples'][number]; slice: string }[]>([])
   const lines = useRef<{ x: number; y: number; target: InsightTarget }[]>([])
   const frame = useRef<number | undefined>(undefined)
-  const selectedAggregations = config.aggregations ?? (config.aggregation ? [config.aggregation] : ['median', 'p75', 'p95'] as const)
-  const aggregationKey = selectedAggregations.join(',')
+  const aggregationKey = selectedAggregations(config).join(',')
   const axis = useMemo(() => durationAxis(insight.samples.map(sample => sample.value), config.latencyScale !== 'linear'), [insight, config.latencyScale])
   const grouped = useMemo(() => {
     const result = new Map<string, InsightData['samples']>()
@@ -278,7 +277,7 @@ function LatencyGraph({ rows, insight, config, highlight, onHover, onSelect, onO
           ctx.beginPath(); ctx.arc(point.x, point.y, highlight?.issueId === sample.item.id ? 3.5 : 2, 0, Math.PI * 2); ctx.fill()
         }
         ctx.globalAlpha = 1
-        for (const aggregation of aggregationKey.split(',') as InsightAggregation[]) {
+        for (const aggregation of (aggregationKey ? aggregationKey.split(',') : []) as InsightAggregation[]) {
           const threshold = row.aggregations[aggregation]
           if (threshold === undefined) continue
           const line = { x, y: yPosition(threshold), target: { slice: row.id, aggregation, threshold, operator: 'lte' as const } }

@@ -56,7 +56,7 @@
   border: 0;
   background: var(--ix-chart-bg);
   color: var(--ix-muted);
-  font: 450 var(--ix-axis-font)/16px inherit;
+  font: 450 var(--ix-axis-font)/16px var(--font);
   white-space: nowrap;
   transform: translateX(-50%);
   pointer-events: auto;
@@ -99,8 +99,8 @@
 .tooltip > i { width: 6px; height: 6px; flex: 0 0 6px; margin-right: 10px; border-radius: 1px; }
 .tooltip > span { font-weight: 450; }
 .tooltip > b { margin-left: 16px; color: var(--insight-text); font-size: 12px; font-weight: 500; }
-.tooltip > small { margin-left: 15px; font-size: 12px; font-weight: 450; }
-.table { --insight-min-width: 256px; min-height: 0; overflow: auto; background: var(--ix-chart-bg); color: var(--insight-text); font-size: 12px; }
+.tooltip > small { margin-left: 16px; font-size: 12px; font-weight: 450; }
+.table { --insight-min-width: 256px; min-height: 0; overflow: auto; background: var(--ix-chart-bg); color: var(--insight-text); font: 12px/normal var(--font); }
 .row { display: grid; grid-template-columns: var(--insight-columns); min-width: var(--insight-min-width); width: 100%; height: 38px; }
 .row > [role="cell"], .row > [role="columnheader"], .columnCell > [role="cell"], .columnCell > [role="columnheader"] {
   position: relative;
@@ -113,7 +113,7 @@
 }
 .row > :last-child, .row > .columnCell:last-child > [role] { border-right: 0; }
 .row > :first-child { position: sticky; left: 0; z-index: 1; background: var(--ix-chart-bg); }
-.row button { display: flex; align-items: center; gap: 6px; width: 100%; height: 100%; min-width: 0; padding: 0 20px; border: 0; background: transparent; color: var(--text); font: 450 12px inherit; text-align: left; cursor: pointer; }
+.row button { display: flex; align-items: center; gap: 6px; width: 100%; height: 100%; min-width: 0; padding: 0 20px; border: 0; background: transparent; color: var(--insight-value-text); font: 450 12px/normal var(--font); text-align: left; cursor: pointer; }
 .row [data-label] button { color: var(--insight-text); font-weight: 500; }
 .row button > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .row button > svg, .row button > i { flex-shrink: 0; }

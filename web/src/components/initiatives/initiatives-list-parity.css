@@ -127,10 +127,6 @@
 .li-filter-values [role=menuitem]:last-child { margin-bottom:6px; }
 .li-filter-checkbox { box-sizing:border-box; width:14px; height:14px; display:grid; place-items:center; border:.5px solid var(--theme-border-strong); border-radius:3px; }
 .li-filter-values small { color:var(--theme-text-secondary); font-size:11px; white-space:nowrap; }
-.li-row-context { box-sizing:border-box; width:240px; max-height:min(509px,calc(100dvh - 20px)); padding:6px 0; overflow:auto; border:.5px solid var(--theme-border-strong); border-radius:12px; background:var(--theme-surface-2); box-shadow:var(--shadow-control); }
-.li-row-context .li-menu-search { position:fixed; left:-100000px; width:1px; height:1px; padding:0; border:0; overflow:hidden; }
-.li-row-context [role=menuitem] { box-sizing:border-box; height:32px; padding:0 18px 0 14px; border-radius:0; font-size:13px; }
-.li-row-context [role=separator] { box-sizing:border-box; height:12px; margin:0; background:linear-gradient(transparent 5.5px,var(--theme-border) 5.5px,var(--theme-border) 6px,transparent 6px); }
 
 .li-display-menu { box-sizing: border-box; width: 301px; height: 324.5px; max-height: none; padding: 0; border: .5px solid var(--theme-border-strong); border-radius: 12px; background: var(--theme-surface-2); box-shadow: var(--shadow-control); overflow: hidden; }
 .li-display-menu.has-footer { height:360.5px; }
@@ -166,8 +162,7 @@
 :root[data-theme="light"] .li-filter-values,
 :root[data-theme="light"] .li-display-menu,
 :root[data-theme="light"] .li-initiative-command,
-:root[data-theme="light"] .li-initiative-label-command,
-:root[data-theme="light"] .li-row-context { border-color: var(--theme-border); background: var(--theme-surface-2); box-shadow: 0 6px 18px var(--shadow-color-faint),0 3px 9px var(--shadow-color-soft),0 1px 1px var(--shadow-color-soft); }
+:root[data-theme="light"] .li-initiative-label-command{ border-color: var(--theme-border); background: var(--theme-surface-2); box-shadow: 0 6px 18px var(--shadow-color-faint),0 3px 9px var(--shadow-color-soft),0 1px 1px var(--shadow-color-soft); }
 :root[data-theme="light"] .li-page-header h1,
 :root[data-theme="light"] .li-page-header h2 { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
 :root[data-theme="light"] .li-new-initiative { color: var(--ui-pill-fg); font: 500 12px var(--font); }

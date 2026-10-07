@@ -1,17 +1,25 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Bell, CalendarClock, Check, ChevronRight, Clipboard, Clock3, Download, FileClock, Link2, Plus, Search, Star, Trash2, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Bell, Check, Link2, Plus, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { usePropertyCommand } from '@/components/property/use-property-command'
-import type { Initiative, InitiativeMutationInput, InitiativeUpdateSchedule, Project } from '@/types/flow'
+import type { Initiative, InitiativeMutationInput, InitiativeUpdateSchedule, IssueLabel, Project, Team, User } from '@/types/flow'
 import { NotificationCheckbox, NotificationOptionSection } from '@/components/ui/notification-controls'
 import { SelectControl } from '@/components/ui/select-control'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import { useI18n } from '@/i18n/i18n'
+import { LinearDropdownMenuContent, LinearMenuItem, LinearMenuSeparator } from '@/components/ui/row-context-menu'
+import { queueLinearMenuShortcut, useLinearHotkeys } from '@/components/ui/menu-shortcuts'
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { SlackIcon } from '@/components/issue/issue-icons'
+import { InitiativeCopySubmenu, InitiativeHierarchySubmenus, InitiativeRemindSubmenu, InitiativeSubscribeSubmenu } from './initiative-row-menu'
+import { initiativeGraph } from './initiative-hierarchy'
+import { InitiativeCreateRow } from './initiatives-page'
 import { usePulseSubscription } from '@/lib/pulse-subscriptions'
 import './initiative-controls.css'
 
@@ -49,36 +57,77 @@ export function InitiativeNotificationMenu({ initiative, pulseSubscribed, onUpda
   </>
 }
 
-export function InitiativeActionsMenu({ initiative, pulseSubscribed, onCreateReminder, onDelete, onNewUpdate, onShowActivity, onUpdate }: { initiative: Initiative; pulseSubscribed?: boolean; onCreateReminder: (remindAt: string) => Promise<unknown>; onDelete: () => void; onNewUpdate: () => void; onShowActivity: () => void; onUpdate: Update }) {
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
-  const pulse = useInitiativePulse(initiative, pulseSubscribed, menuOpen)
+export type InitiativeActionsMenuProps = {
+  initiative: Initiative
+  initiatives: Initiative[]
+  users: User[]
+  teams: Team[]
+  labels: IssueLabel[]
+  viewer: User
+  pulseSubscribed?: boolean
+  onCreateInitiative: (input: InitiativeMutationInput & { name: string }) => Promise<unknown>
+  onCreateLabel: (name: string) => Promise<IssueLabel>
+  onCreateReminder: (remindAt: string) => Promise<unknown>
+  onDelete: () => void
+  onNewUpdate: () => void
+  onShowActivity: () => void
+  onUpdate: Update
+  onUpdateInitiative: (id: string, input: InitiativeMutationInput) => Promise<unknown>
+}
+
+/**
+ * The initiative page's "…" menu (Linear's initiative header menu), built from the same rows and
+ * submenus as the initiative list's row menu. Its key hints also work anywhere on the page.
+ */
+export function InitiativeActionsMenu({ initiative, initiatives, users, teams, labels, viewer, pulseSubscribed, onCreateInitiative, onCreateLabel, onCreateReminder, onDelete, onNewUpdate, onShowActivity, onUpdate, onUpdateInitiative }: InitiativeActionsMenuProps) {
   const { t } = useI18n()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [reminderOpen, setReminderOpen] = useState(false)
-  const rules = initiative.notificationRules ?? DEFAULT_RULES
-  const remind = async (date: Date) => { await onCreateReminder(date.toISOString()); toast.success('Reminder created') }
+  const [creatingChild, setCreatingChild] = useState(false)
+  const graph = useMemo(() => initiativeGraph(initiatives), [initiatives])
+  const openMenuWith = (shortcut: string) => { queueLinearMenuShortcut(shortcut); setMenuOpen(true) }
+  const copy = (value: string) => void navigator.clipboard?.writeText(value).then(() => toast.success(t('Copied to clipboard')), () => toast.error(t('Could not copy to clipboard')))
+  useLinearHotkeys({
+    '⌘ ⇧ P': () => openMenuWith('⌘ ⇧ P'),
+    '⌥ F': () => void onUpdate({ favorite: !initiative.favorite }),
+    '⇧ H': () => openMenuWith('⇧ H'),
+    'N then U': onNewUpdate,
+    '⌘ U': onShowActivity,
+    '⌘ .': () => copy(initiative.slugId || initiative.id),
+    '⌘ ⇧ ,': () => copy(location.href),
+    "⌘ ⇧ '": () => copy(initiative.name),
+    '⌘ ⌥ C': () => copy(overviewMarkdown(initiative)),
+  })
   return <>
-    <DropdownMenu.Root onOpenChange={setMenuOpen}><DropdownMenu.Trigger asChild><button aria-label="Initiative actions" type="button"><span className="li-ellipsis">•••</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="li-menu li-actions-menu" sideOffset={4}>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger><Clipboard size={14}/>Copy<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu" sideOffset={5}><DropdownMenu.Item onSelect={() => copyText(location.href, 'Initiative URL copied')}><Link2 size={14}/>Copy URL</DropdownMenu.Item><DropdownMenu.Item onSelect={() => copyText(initiative.name, 'Initiative title copied')}><Clipboard size={14}/>Copy title</DropdownMenu.Item><DropdownMenu.Item onSelect={() => copyText(`[${initiative.name}](${location.href})`, 'Linked title copied')}><Link2 size={14}/>Copy title as link</DropdownMenu.Item><DropdownMenu.Item onSelect={() => copyText(overviewMarkdown(initiative), 'Overview copied as Markdown')}><Clipboard size={14}/>Copy overview as Markdown</DropdownMenu.Item></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-      <DropdownMenu.Separator/>
-      <DropdownMenu.Item onSelect={() => onUpdate({ favorite: !initiative.favorite })}><Star fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/>{initiative.favorite ? 'Unfavorite' : 'Favorite'}<kbd>⌥ F</kbd></DropdownMenu.Item>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger><Bell size={14}/>Subscribe<ChevronRight className="li-menu-end" size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu li-subscription-menu" sideOffset={5}><DropdownMenu.CheckboxItem checked={rules.descriptionChanges} onCheckedChange={value => onUpdate({ notificationRules: { ...rules, descriptionChanges: value === true } })}>{rules.descriptionChanges && <Check size={12}/>}Comments and description changes</DropdownMenu.CheckboxItem><DropdownMenu.CheckboxItem checked={rules.newUpdate} onCheckedChange={value => onUpdate({ notificationRules: { ...rules, newUpdate: value === true }, subscribed: value === true })}>{rules.newUpdate && <Check size={12}/>}New initiative updates</DropdownMenu.CheckboxItem><DropdownMenu.Separator/><DropdownMenu.Label className="li-menu-section-label">{t('Pulse updates')}</DropdownMenu.Label><DropdownMenu.CheckboxItem checked={pulse.subscribed} disabled={pulse.saving} onSelect={event => event.preventDefault()} onCheckedChange={value => void pulse.change(value === true)}>{pulse.subscribed && <Check size={12}/>}{t('Subscribe to initiative updates')}</DropdownMenu.CheckboxItem></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-      <DropdownMenu.Sub><DropdownMenu.SubTrigger><Clock3 size={14}/>Remind me<kbd>⇧ H</kbd><ChevronRight size={13}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu" sideOffset={5}><DropdownMenu.Item onSelect={() => void remind(addHours(new Date(), 1))}>In one hour</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void remind(atMorning(addDays(new Date(), 1)))}>Tomorrow</DropdownMenu.Item><DropdownMenu.Item onSelect={() => void remind(atMorning(addDays(new Date(), 7)))}>Next week</DropdownMenu.Item><DropdownMenu.Item onSelect={() => { const date = new Date(); date.setMonth(date.getMonth() + 1); void remind(atMorning(date)) }}>Next month</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={() => setReminderOpen(true)}><CalendarClock size={14}/>Custom…</DropdownMenu.Item></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
-      <DropdownMenu.Separator/>
-      <DropdownMenu.Item onSelect={onNewUpdate}><InitiativeUpdateGlyph/>New initiative update<kbd>N then U</kbd></DropdownMenu.Item>
-      <DropdownMenu.Item onSelect={() => setScheduleOpen(true)}><Clock3 size={14}/>Change update schedule…</DropdownMenu.Item>
-      <DropdownMenu.Item disabled title="Connect Slack from workspace integrations first"><ViewGlyph color="currentColor" icon="Slack"/>Configure Slack notifications…</DropdownMenu.Item>
-      <DropdownMenu.Separator/>
-      <DropdownMenu.Item onSelect={() => setHistoryOpen(true)}><FileClock size={14}/>Show description history</DropdownMenu.Item>
-      <DropdownMenu.Item onSelect={onShowActivity}><InitiativeUpdateGlyph/>Show updates and activity<kbd>⌘ U</kbd></DropdownMenu.Item>
-      <DropdownMenu.Item onSelect={() => downloadProjectsCSV(initiative)}><Download size={14}/>Export projects as CSV…</DropdownMenu.Item>
-      <DropdownMenu.Separator/>
-      <DropdownMenu.Item className="danger" onSelect={onDelete}><Trash2 size={14}/>Delete</DropdownMenu.Item>
-    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+    <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}><DropdownMenu.Trigger asChild><button aria-label={t('Initiative actions')} type="button"><span className="li-ellipsis">•••</span></button></DropdownMenu.Trigger><DropdownMenu.Portal>
+      <LinearDropdownMenuContent label={t('Initiative actions')}>
+        <InitiativeHierarchySubmenus initiative={initiative} initiatives={initiatives} canParent={graph.canParent} onCreateSubInitiative={() => setCreatingChild(true)} onUpdate={onUpdate} onUpdateInitiative={onUpdateInitiative}/>
+        <LinearMenuSeparator/>
+        <InitiativeCopySubmenu initiative={initiative} url={location.href}/>
+        <LinearMenuSeparator/>
+        <LinearMenuItem icon={<LinearGlyph name="favorite"/>} label={initiative.favorite ? 'Unfavorite' : 'Favorite'} shortcut="⌥ F" onSelect={() => void onUpdate({ favorite: !initiative.favorite })}/>
+        <InitiativeSubscribeSubmenu initiative={initiative} pulseSubscribed={pulseSubscribed} onUpdate={onUpdate}/>
+        <InitiativeRemindSubmenu onCreateReminder={onCreateReminder} onCustom={() => setReminderOpen(true)}/>
+        <LinearMenuSeparator/>
+        <LinearMenuItem icon={<LinearGlyph name="initiativeUpdate"/>} label="New initiative update" shortcut="N then U" onSelect={onNewUpdate}/>
+        <LinearMenuItem icon={<ViewGlyph icon="ClockOutline" color="currentColor"/>} label="Change update schedule…" onSelect={() => setScheduleOpen(true)}/>
+        <LinearMenuItem icon={<SlackIcon size={16}/>} label="Configure Slack notifications…" href={`/${location.pathname.split('/').filter(Boolean)[0] ?? ''}/settings/integrations/slack`}/>
+        <LinearMenuSeparator/>
+        <LinearMenuItem icon={<IssueActionGlyph label="Show description history" fallback={null}/>} label="Show description history" onSelect={() => setHistoryOpen(true)}/>
+        <LinearMenuItem icon={<LinearGlyph name="initiativeUpdate"/>} label="Show updates and activity" shortcut="⌘ U" onSelect={onShowActivity}/>
+        <LinearMenuItem icon={<LinearGlyph name="exportCsv"/>} label="Export projects as CSV…" onSelect={() => downloadProjectsCSV(initiative)}/>
+        <LinearMenuSeparator/>
+        <LinearMenuItem icon={<LinearGlyph name="delete"/>} label="Delete" onSelect={onDelete}/>
+      </LinearDropdownMenuContent>
+    </DropdownMenu.Portal></DropdownMenu.Root>
     <InitiativeDescriptionHistoryDialog initiative={initiative} onOpenChange={setHistoryOpen} onUpdate={onUpdate} open={historyOpen}/>
     <UpdateScheduleDialog initiative={initiative} onOpenChange={setScheduleOpen} onUpdate={onUpdate} open={scheduleOpen}/>
     <ReminderDialog onCreate={onCreateReminder} onOpenChange={setReminderOpen} open={reminderOpen}/>
+    <Dialog.Root open={creatingChild} onOpenChange={setCreatingChild}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="li-dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="li-subinitiative-dialog"><Dialog.Title>{t('New sub-initiative')}</Dialog.Title>
+      <InitiativeCreateRow initialLeadTeamId={initiative.leadTeamId} labels={labels} teams={teams} users={users} viewer={viewer} view="planned" onCancel={() => setCreatingChild(false)} onCreateLabel={onCreateLabel} onCreate={async input => { try { await onCreateInitiative({ ...input, parentInitiativeIds: [initiative.id] }); setCreatingChild(false) } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not create initiative')) } }}/>
+    </Dialog.Content></Dialog.Portal></Dialog.Root>
   </>
 }
 
@@ -110,13 +159,9 @@ function ReminderDialog({ open, onOpenChange, onCreate }: { open: boolean; onOpe
   return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="li-dialog-overlay"/><Dialog.Content data-flow-motion="dialog" className="li-reminder-dialog"><Dialog.Title>Set reminder</Dialog.Title><Dialog.Description>Choose a date and time in your local timezone.</Dialog.Description><label>Remind me at<DateTimeControl label="Remind me at" min={toLocalInput(new Date())} mode="datetime" value={value} onChange={setValue}/></label><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button disabled={saving || !value || new Date(value) <= new Date()} onClick={() => { setSaving(true); onCreate(new Date(value).toISOString()).then(() => { toast.success('Reminder created'); onOpenChange(false) }).finally(() => setSaving(false)) }} type="button">Create reminder</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
-function InitiativeUpdateGlyph() { return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 16 16"><path d="M12.1 6.45a.75.75 0 0 0-1.2-.9L8.917 8.193 7.6 6.882a1.1 1.1 0 0 0-1.898.158L3.891 9.563a.75.75 0 1 0 1.218.874l1.64-2.284 1.315 1.307a1.1 1.1 0 0 0 1.881-.137L12.1 6.45Z"/><path fillRule="evenodd" d="M1 7.4c0-2.24 0-3.36.436-4.216a4 4 0 0 1 1.748-1.748C4.04 1 5.16 1 7.4 1h1.2c2.24 0 3.36 0 4.216.436a4 4 0 0 1 1.748 1.748C15 4.04 15 5.16 15 7.4v1.2c0 2.24 0 3.36-.436 4.216a4 4 0 0 1-1.748 1.748C11.96 15 10.84 15 8.6 15H7.4c-2.24 0-3.36 0-4.216-.436a4 4 0 0 1-1.748-1.748C1 11.96 1 10.84 1 8.6V7.4Zm6.4-4.9h1.2c1.145 0 1.913.001 2.505.05.574.046.848.13 1.03.222.47.24.852.622 1.092 1.093.092.181.176.456.223 1.03.048.592.05 1.36.05 2.505v1.2c0 1.145-.002 1.913-.05 2.505-.047.574-.131.849-.223 1.03a2.5 2.5 0 0 1-1.092 1.092c-.182.093-.456.176-1.03.223-.592.048-1.36.05-2.505.05H7.4c-1.145 0-1.913-.002-2.505-.05-.574-.047-.849-.13-1.03-.223a2.5 2.5 0 0 1-1.092-1.092c-.093-.181-.176-.456-.223-1.03-.048-.592-.05-1.36-.05-2.505V7.4c0-1.145.002-1.913.05-2.505.047-.574.13-.849.223-1.03A2.5 2.5 0 0 1 3.865 2.77c.181-.092.456-.176 1.03-.222.592-.049 1.36-.05 2.505-.05Z" clipRule="evenodd"/></svg> }
 function scheduleLabel(schedule: InitiativeUpdateSchedule) { return schedule.cadence === 'custom' ? `Custom · ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][schedule.weekday]} ${schedule.timeRange}` : scheduleCadenceLabel(schedule.cadence) }
 function scheduleCadenceLabel(cadence: InitiativeUpdateSchedule['cadence']) { return ({ none: 'No expectation for updates', weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly', custom: 'Custom schedule', never: 'Never' })[cadence] }
 function downloadProjectsCSV(initiative: Initiative) { const blob = new Blob([`initiative,projectId\n${initiative.projectIds.map(id => `"${initiative.name.replaceAll('"', '""')}",${id}`).join('\n')}`], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${initiative.slugId}-projects.csv`; anchor.click(); URL.revokeObjectURL(url) }
 function overviewMarkdown(initiative: Initiative) { return `# ${initiative.name}\n\n${initiative.summary ? `${initiative.summary}\n\n` : ''}${initiative.description}` }
-function copyText(value: string, message: string) { void navigator.clipboard.writeText(value).then(() => toast.success(message)) }
 function addHours(date: Date, hours: number) { const result = new Date(date); result.setHours(result.getHours() + hours); return result }
-function addDays(date: Date, days: number) { const result = new Date(date); result.setDate(result.getDate() + days); return result }
-function atMorning(date: Date) { const result = new Date(date); result.setHours(9, 0, 0, 0); return result }
 function toLocalInput(date: Date) { const offset = date.getTimezoneOffset() * 60000; return new Date(date.getTime() - offset).toISOString().slice(0, 16) }

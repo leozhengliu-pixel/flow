@@ -14,6 +14,11 @@ a.project-creation-agent__create-skill { text-decoration: none; }
   outline-offset: -2px;
 }
 
+/* Inside a menu the highlighted row's background is the focus indicator (Linear shows no outline). */
+[role="menu"] [role="menuitem"]:focus-visible,
+[role="menu"] [role="menuitemcheckbox"]:focus-visible,
+[role="menu"] [role="menuitemradio"]:focus-visible { outline: none; }
+
 /* Selected rows are intentionally one step deeper than a hover row. */
 .flow-inbox-row[data-selected="true"] { background: var(--theme-surface-active); }
 

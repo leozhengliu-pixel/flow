@@ -19,7 +19,7 @@ describe('ProjectsDataView project menu', () => {
     const onPropertyChange = vi.fn()
     render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [{ ...project, labelIds: ['alpha', 'plain'] }] }]} propertyOptions={{ labels: [{ value: 'alpha', label: 'Alpha', group: 'Delivery', groupId: 'delivery' }, { value: 'beta', label: 'Beta', group: 'Delivery', groupId: 'delivery' }, { value: 'plain', label: 'Public' }] }} onPropertyChange={onPropertyChange}/></I18nProvider>)
     fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 40, clientY: 40 })
-    await user.hover(screen.getByRole('menuitem', { name: /Labels/ }))
+    await user.click(screen.getByRole('menuitem', { name: /Labels/ }))
     await user.click(screen.getByRole('option', { name: 'Delivery Alpha' }))
     await user.click(screen.getByRole('option', { name: 'Beta' }))
     expect(onPropertyChange).toHaveBeenCalledWith(expect.objectContaining({ id: project.id }), 'labels', 'plain,beta')
@@ -32,17 +32,81 @@ describe('ProjectsDataView project menu', () => {
       expect(errors.mock.calls.flat().join(' ')).not.toContain('same key')
     } finally { errors.mockRestore() }
   })
-  it('opens nested context menus to the left when the row menu is against the right edge', async () => {
+  it('shows Linear\'s project row menu: order, left-aligned rows, key hints and ▶ markers', async () => {
+    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [{ ...project, startDate: 'Sep 28', rawStartDate: '2026-09-28' }] }]} projectMenu={{ isFavorite: () => true, subscriptionEvents: () => [], onFavoriteChange: vi.fn(), onSubscriptionEventsChange: vi.fn(), onCreateReminder: vi.fn() }}/></I18nProvider>)
+    fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 40, clientY: 40 })
+    const menu = screen.getByRole('menu', { name: 'Project actions' })
+    expect(menu).toHaveClass('linear-menu')
+    expect(menu.querySelector('input')).toBeNull()
+    const rows = [...menu.querySelectorAll<HTMLElement>(':scope > [role=menuitem], :scope > [role=separator]')]
+    expect(rows.map(row => row.getAttribute('role') === 'separator' ? '—' : row.dataset.menuItem)).toEqual([
+      'Status', 'Priority', 'Project lead', 'Members', 'Start date…', 'Target date…', 'Labels', 'More properties', '—',
+      'Copy', '—', 'Unfavorite', 'Subscribe', 'Remind me', '—', 'New comment…', '—', 'Delete',
+    ])
+    for (const row of rows.filter(row => row.getAttribute('role') === 'menuitem')) {
+      expect(row).toHaveClass('linear-menu__row')
+      expect(row.firstElementChild).toHaveClass('linear-menu__icon')
+    }
+    const hint = (name: string) => rows.find(row => row.dataset.menuItem === name)?.querySelector('[data-shortcut]')?.getAttribute('data-shortcut')
+    expect(hint('Status')).toBe('P then S')
+    expect(hint('Start date…')).toBe('Ctrl ⌥ S')
+    expect(hint('Unfavorite')).toBe('⌥ F')
+    expect(hint('Remind me')).toBe('⇧ H')
+    expect(hint('Delete')).toBeUndefined()
+    expect(rows.find(row => row.dataset.menuItem === 'Status')?.textContent).toContain('then')
+    expect(rows.find(row => row.dataset.menuItem === 'Start date…')?.querySelector('.linear-menu__detail')?.textContent).toBe('Sep 28')
+    const markers = rows.filter(row => row.querySelector('.linear-menu__marker'))
+    expect(markers.map(row => row.dataset.menuItem)).toEqual(['Status', 'Priority', 'Project lead', 'Members', 'Labels', 'More properties', 'Copy', 'Subscribe', 'Remind me'])
+    expect(markers[0].querySelector('.linear-menu__marker')?.textContent).toBe('▶')
+    expect(rows.find(row => row.dataset.menuItem === 'Delete')?.className).not.toMatch(/danger/)
+  })
+
+  it('uses the shared filter field for Labels, Linear glyphs in More properties and links Slack to its settings', async () => {
     const user = userEvent.setup()
-    const box = (x: number, y: number, w: number, h: number) => ({ x, y, left: x, top: y, right: x + w, bottom: y + h, width: w, height: h, toJSON() { return this } })
-    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]}/></I18nProvider>)
-    fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 900, clientY: 80 })
-    const menu = document.querySelector('.lp-project-context') as HTMLElement
-    vi.spyOn(menu, 'getBoundingClientRect').mockReturnValue(box(window.innerWidth - 240, 80, 232, 420))
-    const status = screen.getByRole('menuitem', { name: /Status/ })
-    vi.spyOn(status, 'getBoundingClientRect').mockReturnValue(box(window.innerWidth - 228, 124, 220, 30))
-    await user.hover(status)
-    expect(document.querySelector('.lp-project-context__nested')).toHaveClass('is-start')
+    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]} propertyOptions={{ labels: [{ value: 'plain', label: 'Public' }] }}/></I18nProvider>)
+    fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 40, clientY: 40 })
+    await user.click(screen.getByRole('menuitem', { name: /Labels/ }))
+    const labels = screen.getByRole('menu', { name: 'Labels' })
+    expect(labels.querySelector('.project-label-search input')).toHaveAttribute('placeholder', 'Add labels…')
+    expect(labels.querySelector('.property-command-search-shortcut, kbd')).toBeNull()
+    await user.keyboard('{Escape}')
+    fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 40, clientY: 40 })
+    await user.click(screen.getByRole('menuitem', { name: /More properties/ }))
+    const more = screen.getByRole('menu', { name: 'More properties' })
+    expect(more.querySelector('[data-menu-item="Dependencies"] [data-linear-glyph]')).toHaveAttribute('data-linear-glyph', 'dependencies')
+    expect(more.querySelector('[data-menu-item="Configure Slack notifications…"]')).toHaveAttribute('href', expect.stringContaining('/settings/integrations/slack'))
+  })
+
+  it('opens Move only for manually ordered lists and runs every move action', async () => {
+    const user = userEvent.setup()
+    const onProjectAction = vi.fn()
+    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]} manualOrdering onProjectAction={onProjectAction}/></I18nProvider>)
+    fireEvent.contextMenu(screen.getByRole('row', { name: 'Project one' }), { clientX: 40, clientY: 40 })
+    await user.click(screen.getByRole('menuitem', { name: /^Move/ }))
+    expect(screen.getAllByRole('menuitem').map(item => item.getAttribute('data-menu-item'))).toEqual(expect.arrayContaining(['Move to top', 'Move up', 'Move down', 'Move to bottom']))
+    await user.click(screen.getByRole('menuitem', { name: /Move to top/ }))
+    expect(onProjectAction).toHaveBeenCalledWith(expect.objectContaining({ id: project.id }), 'moveTop')
+  })
+
+  it('applies a status from its submenu and runs key hints inside the menu', async () => {
+    const user = userEvent.setup()
+    const onPropertyChange = vi.fn()
+    const onFavoriteChange = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><ProjectsDataView groups={[{ id: 'status-progress', name: 'In Progress', projects: [project] }]} onPropertyChange={onPropertyChange} projectMenu={{ isFavorite: () => false, subscriptionEvents: () => [], onFavoriteChange, onSubscriptionEventsChange: vi.fn(), onCreateReminder: vi.fn() }}/></I18nProvider>)
+    const row = screen.getByRole('row', { name: 'Project one' })
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 40 })
+    const menu = screen.getByRole('menu', { name: 'Project actions' })
+    fireEvent.keyDown(menu, { key: 'p', code: 'KeyP' })
+    fireEvent.keyDown(menu, { key: 's', code: 'KeyS' })
+    const status = await screen.findByRole('menu', { name: 'Status' })
+    expect(status.querySelector('input')).toHaveAttribute('placeholder', 'Change status…')
+    expect(screen.getByRole('menuitem', { name: /In Progress/ })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('menuitem', { name: /Completed/ }))
+    expect(onPropertyChange).toHaveBeenCalledWith(expect.objectContaining({ id: project.id }), 'status', 'Completed')
+
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 40 })
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Project actions' }), { key: 'ƒ', code: 'KeyF', altKey: true })
+    expect(onFavoriteChange).toHaveBeenCalledWith('project-1', true)
   })
 
   it('keeps hidden table columns in the subgrid so later columns do not shift', () => {
