@@ -2225,6 +2225,8 @@ export interface TeamSettings {
   triageEnabled: boolean;
   /** Team default display options per issue view (all / active / backlog / board). */
   issueViewDefaults?: Record<string, Record<string, unknown>>;
+  /** Shared Insights configuration per issue view ("Set default for everyone"; admins and team owners). */
+  issueViewInsights?: Record<string, Record<string, unknown>>;
   triageRequirePriority: boolean;
   /** "none" | "notify" | "assign" (Linear) or the earlier "creator" | "teamOwner" | "responsibility". */
   triageAction: string;
@@ -2243,10 +2245,12 @@ export interface TeamSettings {
   parentTeamId?: UUID;
 }
 export interface TeamSettingsMutationInput extends Partial<
-  Omit<TeamSettings, "teamId" | "issueViewDefaults">
+  Omit<TeamSettings, "teamId" | "issueViewDefaults" | "issueViewInsights">
 > {
   /** null clears a view's team default. */
   issueViewDefaults?: Record<string, Record<string, unknown> | null>;
+  /** null clears a view's shared Insights default. */
+  issueViewInsights?: Record<string, Record<string, unknown> | null>;
   identifier?: string;
   applyToSubTeams?: boolean;
 }

@@ -65,3 +65,15 @@ export function durationAxis(values: number[], logarithmic = true) {
   const start = transform(low), span = transform(high) - start
   return { ticks, fraction: (value: number) => (transform(value) - start) / span }
 }
+
+/** Linear's y axis: ~5 "nice" integer steps (d3 tick increments), a dashed gridline every half step, half a step of headroom. */
+export function insightAxis(max: number) {
+  const raw = Math.max(1, max) / 5
+  const power = 10 ** Math.floor(Math.log10(raw))
+  const error = raw / power
+  const step = Math.max(1, (error >= Math.sqrt(50) ? 10 : error >= Math.sqrt(10) ? 5 : error >= Math.sqrt(2) ? 2 : 1) * power)
+  const top = Math.max(1, Math.ceil(max / step)) * step
+  const labels = Array.from({ length: top / step + 1 }, (_, index) => index * step)
+  const lines = Array.from({ length: top / step * 2 + 2 }, (_, index) => index * step / 2)
+  return { labels, lines, max: top + step / 2 }
+}

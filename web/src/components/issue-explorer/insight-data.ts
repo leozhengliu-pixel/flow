@@ -1,6 +1,6 @@
 import type { BootstrapData } from '@/types/flow'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import type { SavedViewInsightsConfig, SavedViewInsightDimension, SavedViewInsightMeasure } from './saved-view-panels'
+import { hideableDimension, type SavedViewInsightsConfig, type SavedViewInsightDimension, type SavedViewInsightMeasure } from './insight-config'
 import { aggregateInsightValues, insightAggregations, type InsightSample, type InsightAggregation } from './insight-interaction'
 
 export type InsightValue = { id: string; label: string; color?: string }
@@ -13,11 +13,16 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
   const segmentMap = new Map<string, InsightValue & { count: number }>()
   const samples: InsightSample<MyIssuesRowData>[] = []
   const now = Date.now()
+  const hidden = config.hideEmptySegment ? hideableDimension(config) : undefined
   for (const row of rows) {
     const metric = metricValue(row, config, now)
     if (metric == null || !Number.isFinite(metric)) continue
-    const slices = dimensionValues(row, config.slice, data)
-    const segments = config.segment === 'none' ? [{ id: 'all', label: 'No Value' }] : dimensionValues(row, config.segment, data)
+    let slices = dimensionValues(row, config.slice, data)
+    let segments = config.segment === 'none' ? [{ id: 'all', label: 'No value' }] : dimensionValues(row, config.segment, data)
+    // "Hide <No value>": the empty value leaves the chart, the table and the counts.
+    if (hidden && config.segment !== 'none') segments = segments.filter(value => !isEmptyInsightValue(config.segment as SavedViewInsightDimension, value.id))
+    else if (hidden) slices = slices.filter(value => !isEmptyInsightValue(config.slice, value.id))
+    if (!slices.length || !segments.length) continue
     samples.push({ item: row, value: metric, slices: slices.map(value => value.id), segments: config.segment === 'none' ? [] : segments.map(value => value.id) })
     for (const segmentValue of segments) {
       const current = segmentMap.get(segmentValue.id)
@@ -40,7 +45,8 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
   const statusOrder = new Map([...data.states].sort((a, b) => a.position - b.position).map((state, index) => [state.id, index]))
   return {
     rows: [...rowMap.values()].sort((left, right) => config.slice === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : config.slice === 'priority' ? Number(left.id) - Number(right.id) : config.slice.endsWith('Date') || config.slice === 'burnUp' ? left.id.localeCompare(right.id) : right.total - left.total || left.label.localeCompare(right.label)),
-    segments: [...segmentMap.values()].sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
+    // Priority and status segments keep their natural order (Linear: No priority, Urgent … Low); others rank by size.
+    segments: [...segmentMap.values()].sort((left, right) => config.segment === 'priority' ? Number(left.id) - Number(right.id) : config.segment === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : right.count - left.count || left.label.localeCompare(right.label)),
     samples,
   }
 }
@@ -89,6 +95,8 @@ function metricValue(row: MyIssuesRowData, config: SavedViewInsightsConfig, now:
 
 export function insightColor(config: SavedViewInsightsConfig, segmentColor: string | undefined, sliceColor: string | undefined, index: number) { return config.colors === 'status' ? segmentColor || sliceColor || 'var(--data-vis-neutral)' : ['var(--data-vis-neutral)', 'var(--data-vis-1)', 'var(--data-vis-2)', 'var(--data-vis-3)', 'var(--data-vis-4)', 'var(--data-vis-5)'][index % 6] }
 function noValue(kind: string): InsightValue { return { id: 'none', label: `No ${kind}` } }
+/** Priority's empty value is "0" (No priority); every other dimension uses "none". */
+export function isEmptyInsightValue(dimension: SavedViewInsightDimension, id: string) { return dimension === 'priority' ? id === '0' : id === 'none' }
 function dateValue(value: string | undefined, kind: string): InsightValue { return value ? { id: value.slice(0, 10), label: value.slice(0, 10) } : noValue(kind) }
 function dateMs(value: string | undefined) { return value === undefined ? Date.now() : Date.parse(value) }
 function elapsed(start: string | undefined, end: string | undefined) { if (!start || !end) return null; const duration = dateMs(end) - dateMs(start); return Number.isFinite(duration) ? Math.max(0, duration) : null }

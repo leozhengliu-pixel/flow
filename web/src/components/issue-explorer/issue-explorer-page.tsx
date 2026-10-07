@@ -27,6 +27,7 @@ import { AdvancedFilterChip } from './advanced-filter-editor'
 import { createAdvancedFilter, decodeFiltersParam, encodeFiltersParam, normalizeStoredFilters, savableFilters } from './advanced-filter'
 import { suggestView } from './view-suggestions'
 import { useI18n } from '@/i18n/i18n'
+import { TeamIcon } from '@/components/issue/issue-icons'
 import type { ViewEditorControls } from './issue-explorer-surface'
 import { InsightHiddenNotice, SavedViewDetailsPanel, SavedViewInsightsPanel, type SavedViewInsightsConfig } from './saved-view-panels'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -97,7 +98,7 @@ export interface IssueExplorerPageProps {
   emptyState?: ReactNode
   /** Extra class on the explorer container. */
   className?: string
-  /** Noun for the insights toolbar button ("Open {label}"); defaults to "view insights". */
+  /** Noun for the insights toolbar button ("Open {label}"); Linear says "insights" on team/workspace issues and "view insights" on saved views. */
   insightsLabel?: string
 }
 
@@ -116,6 +117,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [insightsOpen, setInsightsOpen] = useState(false)
   const [drillRows, setDrillRows] = useState<MyIssuesRowData[]>()
   const [draftInsights, setDraftInsights] = useState<SavedViewInsightsConfig>()
+  // "Set default for everyone" on a team issue view (Linear): the team's shared Insights default.
+  const [teamInsightDefault, setTeamInsightDefault] = useState<Record<string, unknown> | undefined>(() => scope.kind === 'team' ? data.teamSettings?.[scope.team.id]?.issueViewInsights?.[teamViewKey] : undefined)
   const [detailsWidth, setDetailsWidth] = useState(350)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [filterOpenSignal, setFilterOpenSignal] = useState(0)
@@ -136,7 +139,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   const [editorDraft, setEditorDraft] = useState<SavedViewDraft>()
   const [bandCreateRestore, setBandCreateRestore] = useState<{ filters: MyIssuesAppliedFilter[]; extra: MyIssuesAppliedFilter[] }>()
   const [baseTotal, setBaseTotal] = useState<number>()
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
   const hydratedSavedViewId = useRef(savedView?.id)
   const mutationSequence = useRef(new Map<string, number>())
   const mutationQueues = useRef(new Map<string, Promise<Issue>>())
@@ -402,7 +405,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   }
   const savedViewSnapshot = (): SavedViewMutationInput => ({ resource: 'issues', scope: scope.kind, teamId: scope.kind === 'team' ? scope.team.id : '', ownerId: data.viewer.id, view, filters: savableFilters(filters), display: displaySnapshot(display), ...(draftInsights ? { insights: draftInsights as unknown as Record<string, unknown> } : {}) })
   const previewTarget = initialSaveTarget ?? (scope.kind === 'team' ? { scope: 'team' as const, teamId: scope.team.id, label: scope.team.name, team: scope.team } : { scope: 'workspace' as const, label: data.workspace.name })
-  const insightsView: SavedView = savedView ?? { id: creatingView ? '__new-view' : preferencesKey, name: scope.kind === 'team' ? scope.team.name : 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters: effectiveFilters, display: displaySnapshot(display), insights: draftInsights as unknown as Record<string, unknown> | undefined, createdAt: '', updatedAt: '' }
+  const insightsView: SavedView = savedView ?? { id: creatingView ? '__new-view' : preferencesKey, name: scope.kind === 'team' ? scope.team.name : 'All issues', description: '', resource: 'issues', scope: previewTarget.scope, teamId: previewTarget.scope === 'team' ? previewTarget.teamId : '', ownerId: data.viewer.id, view, filters: effectiveFilters, display: displaySnapshot(display), insights: (draftInsights as unknown as Record<string, unknown> | undefined) ?? teamInsightDefault, createdAt: '', updatedAt: '' }
   const saveViewEditor = async (name: string, description: string, target: SavedViewTarget | undefined, visual: ViewVisual) => {
     if (viewSaving) return
     setViewSaving(true)
@@ -505,6 +508,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     onDelete={() => { if (onDeleteSavedView) void confirmAction(`Delete view “${savedView.name}”?`,{confirmLabel:'Delete view'}).then(confirmed=>{if(confirmed)return onDeleteSavedView(savedView)}) }}
   />
 
+  const canSetInsightsDefault = savedView ? Boolean(onUpdateSavedView) : creatingView || scope.kind === 'team' && (['admin', 'owner'].includes(data.viewerRole) || data.teamMembers.some(member => member.teamId === scope.team.id && member.userId === data.viewer.id && member.role === 'owner'))
+  const saveInsightsDefault = async (config: SavedViewInsightsConfig) => {
+    const value = config as unknown as Record<string, unknown>
+    if (savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: value })
+    else if (scope.kind === 'team' && !creatingView) { await updateStructuredTeamSettings(scope.team.id, { issueViewInsights: { [teamViewKey]: value } }); setTeamInsightDefault(value) }
+    else setDraftInsights(config)
+  }
   const rowActions = { data, onUpdateIssue, onDeleteIssues, onOpenIssue: (issue: Issue) => onOpenIssue(issue), onCreateIssue }
   return <IssueRowActionsProvider value={rowActions}>
     <IssueExplorerSurface
@@ -539,7 +549,7 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
       displayMenuProps={displayMenuProps}
       resourceHeader={resourceHeader}
       className={className}
-      insightsLabel={insightsLabel}
+      insightsLabel={insightsLabel ?? (savedView ? 'view insights' : 'insights')}
       detailsShortcutTooltip={Boolean(detailsPanel)}
       viewEditor={editorCard || undefined}
       viewEditorMode={editorMode}
@@ -693,7 +703,11 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
         allRows={insightRows}
         data={data}
         onClose={() => changeInsights(false)}
-        onSave={async (config: SavedViewInsightsConfig) => { if (savedView && onUpdateSavedView) await onUpdateSavedView(savedView.id, { insights: config as unknown as Record<string, unknown> }); else setDraftInsights(config) }}
+        onSave={saveInsightsDefault}
+        canSetDefault={canSetInsightsDefault}
+        viewTitle={savedView ? savedView.name : creatingView ? t('New view') : scope.kind === 'team' ? t(view === 'active' ? 'Active' : view === 'backlog' ? 'Backlog' : 'All issues') : t('All issues')}
+        viewIcon={!savedView && scope.kind === 'team' ? <TeamIcon team={scope.team} size={14}/> : undefined}
+        filterControl={{ filters: filterTarget === 'extra' ? extraFilters : filters, options: field => explorerFilterOptions(field, rowOptions), onToggle: addFilter, onAdvanced: addAdvancedFilter }}
         rows={activeInsightRows}
         query={data.issueCollectionPaged ? insightQuery : undefined}
         onDrillChange={setDrillRows}
