@@ -590,6 +590,9 @@ type TeamSettings struct {
 	// IssueViewDefaults holds team default display options per issue view
 	// ("all", "active", "backlog", "board"); opaque to the server.
 	IssueViewDefaults map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
+	// IssueViewInsights holds the team's shared Insights configuration per
+	// issue view ("Set default for everyone"); validated by the server.
+	IssueViewInsights map[string]json.RawMessage `json:"issueViewInsights,omitempty"`
 }
 
 type TeamAutomationRule struct {
@@ -2510,6 +2513,7 @@ type TeamSettingsMutationInput struct {
 	InheritProjectStatuses              *bool                      `json:"inheritProjectStatuses,omitempty"`
 	InheritCycles                       *bool                      `json:"inheritCycles,omitempty"`
 	IssueViewDefaults                   map[string]json.RawMessage `json:"issueViewDefaults,omitempty"`
+	IssueViewInsights                   map[string]json.RawMessage `json:"issueViewInsights,omitempty"`
 	ParentTeamID                        *string                    `json:"parentTeamId,omitempty"`
 }
 

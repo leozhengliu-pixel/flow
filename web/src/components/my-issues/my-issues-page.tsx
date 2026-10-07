@@ -13,6 +13,7 @@ import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
 import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
+import { useI18n } from '@/i18n/i18n'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
 import { IssueBoard } from '@/components/issue-explorer/issue-board'
 import type { SavedView } from '@/types/flow'
@@ -47,6 +48,7 @@ export interface MyIssuesPageProps {
 const FILTER_LABELS: Partial<Record<MyIssuesFilterKey, string>> = { ai:'AI filter',advanced:'Advanced filter',status:'Status',assignee:'Assignee',agent:'Agent',agentSession:'Agent Session',creator:'Creator',priority:'Priority',labels:'Labels',relations:'Relations',triageIntelligence:'Triage Intelligence',suggestedLabel:'Suggested label',dates:'Dates',projectMilestone:'Project milestone',project:'Project',projectProperties:'Project properties',initiative:'Initiative',cycle:'Cycle',addedToCycle:'Added to cycle',releases:'Releases',customers:'Customers',subscribers:'Subscribers',externalSource:'External source',autoClosed:'Auto-closed',content:'Content',links:'Links',template:'Template' }
 
 export function MyIssuesPage({ data, initialView = 'assigned', loading = false, error, workspaceSlug = data.workspace.urlKey, onClearError, onCreateIssue, onDeleteIssues, onNavigateView, onOpenIssue, onOpenSidebar, renderIssuePreview, onPersistDisplay, onPersistFilters, onUpdateIssue, onUpdateIssues }: MyIssuesPageProps) {
+  const { t } = useI18n()
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [projectedView, setProjectedView] = useState(initialView)
   const [pagedIssues, setPagedIssues] = useState<Issue[]>([])
@@ -331,6 +333,9 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
         onOpenIssue={openRow}
         view={insightsView}
         onClose={() => setInsightsOpen(false)}
+        viewTitle={t('My issues')}
+        canSetDefault={false}
+        filterControl={{ filters: controller.filters, options: field => explorerFilterOptions(field, rowOptions), onToggle: (field, option) => { const fieldLabel = FILTER_LABELS[field]; if (fieldLabel) controller.toggleFilter(field, fieldLabel, option) }, onAdvanced: () => { const chip = createAdvancedFilter(); setOpenAdvancedId(chip.id); controller.addFilter(chip) } }}
         onSave={async (config: SavedViewInsightsConfig) => {
           const value = config as unknown as Record<string, unknown>
           setInsightsConfig(value)

@@ -822,6 +822,38 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 				settings.IssueViewDefaults[view] = slices.Clone(value)
 			}
 		}
+		if input.IssueViewInsights != nil {
+			// Shared Insights defaults ("Set default for everyone") are an admin
+			// decision: workspace admins and team owners only.
+			if !s.authDisabled && !canManageTeamHierarchy(data, teamID, data.Viewer.ID) {
+				return store.ErrAuthForbidden
+			}
+			if len(input.IssueViewInsights) > 8 {
+				return errInvalid
+			}
+			next := maps.Clone(settings.IssueViewInsights)
+			if next == nil {
+				next = map[string]json.RawMessage{}
+			}
+			for view, value := range input.IssueViewInsights {
+				if !slices.Contains([]string{"all", "active", "backlog", "board"}, view) {
+					return errInvalid
+				}
+				if len(value) == 0 || string(value) == "null" {
+					delete(next, view)
+					continue
+				}
+				normalized, ok := normalizeInsightsConfig(value)
+				if !ok {
+					return errInvalid
+				}
+				next[view] = normalized
+			}
+			if len(next) == 0 {
+				next = nil
+			}
+			settings.IssueViewInsights = next
+		}
 		if input.TriageEnabled != nil {
 			settings.TriageEnabled = *input.TriageEnabled
 		}
