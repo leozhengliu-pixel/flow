@@ -182,6 +182,8 @@ export interface MyIssuesListProps {
   onEndReached?: () => void
   /** Replaces the default empty state. */
   emptyState?: ReactNode
+  /** A flat list without group headers (e.g. an Insights selection). */
+  hideGroupHeaders?: boolean
 }
 
 type MyIssuesListEntry =
@@ -197,15 +199,16 @@ function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
   return context.loadingMore ? <div className={styles.loadingMore}>Loading more…</div> : null
 }
 
-export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState }: MyIssuesListProps) {
+export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
   const entries = useMemo<MyIssuesListEntry[]>(() => groups.flatMap((group, index) => {
     const collapsed = collapsedGroupIds.has(group.id)
     const header: MyIssuesListEntry = { key: `group:${group.id}`, kind: 'group', group, collapsed }
     const parent: MyIssuesListEntry[] = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId ? [{ key: `parent:${group.parentGroupId}`, kind: 'parent', label: group.parentLabel ?? '', count: groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0) }] : []
     if (collapsed) return [...parent, header]
+    if (hideGroupHeaders) return group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))
     const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
     return [...parent, header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
-  }), [collapsedGroupIds, groups, nestedSubIssues])
+  }), [collapsedGroupIds, groups, hideGroupHeaders, nestedSubIssues])
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
   if (loading) return <MyIssuesListSkeleton/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
@@ -235,9 +238,9 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
       const collapsed = collapsedGroupIds.has(group.id)
       const nestedLines = nestedSubIssues ? nestedLinesByIssue(group.issues) : EMPTY_LINE_MAP
       const parentHeader = group.parentGroupId && groups[index - 1]?.parentGroupId !== group.parentGroupId
-      return <section className={styles.group} key={group.id} aria-labelledby={`my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
+      return <section className={styles.group} key={group.id} aria-labelledby={hideGroupHeaders ? undefined : `my-issues-group-${group.id}`} data-subgroup={group.parentGroupId ? true : undefined}>
         {parentHeader && <MyIssuesParentGroupHeader label={group.parentLabel ?? ''} count={groups.filter(item => item.parentGroupId === group.parentGroupId).reduce((total, item) => total + item.issues.length, 0)}/>}
-        <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>
+        {!hideGroupHeaders && <MyIssuesGroupHeader collapsed={collapsed} createIssueLabel={createIssueLabel} group={group} onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
         {!collapsed && <div>{group.issues.map(issue => <MyIssuesRow key={issue.id} issue={issue} active={activeIssueId === issue.id} selected={selectedIds.has(issue.id)} displayProperties={displayProperties} nestedLines={nestedLines.get(issue.id)??EMPTY_LINES} showSubIssueProgress={!nestedSubIssues} propertyOptions={propertyOptions} mutationError={mutationErrors.get(issue.id)} onContextAction={onContextAction} onOpen={onOpenIssue} onPropertyChange={onPropertyChange} onRetryMutation={onRetryMutation} onSelect={onSelectIssue}/>)}</div>}
       </section>
     })}

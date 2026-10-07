@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -487,6 +488,12 @@ func cloneMutationTeamSettings(settings domain.TeamSettings) domain.TeamSettings
 	if len(settings.AgentSkills) > 0 {
 		settings.AgentSkills = slices.Clone(settings.AgentSkills)
 	}
+	if len(settings.IssueViewDefaults) > 0 {
+		settings.IssueViewDefaults = maps.Clone(settings.IssueViewDefaults)
+	}
+	if len(settings.IssueViewInsights) > 0 {
+		settings.IssueViewInsights = maps.Clone(settings.IssueViewInsights)
+	}
 	return settings
 }
 
@@ -963,7 +970,12 @@ func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 		a.ProjectUpdatePrompt == b.ProjectUpdatePrompt && a.ResolvedSummaries == b.ResolvedSummaries &&
 		a.ShowInitiatives == b.ShowInitiatives && a.InheritIssueEstimation == b.InheritIssueEstimation &&
 		a.InheritWorkflowStatuses == b.InheritWorkflowStatuses && a.InheritProjectStatuses == b.InheritProjectStatuses &&
-		a.InheritCycles == b.InheritCycles && a.ParentTeamID == b.ParentTeamID
+		a.InheritCycles == b.InheritCycles && a.ParentTeamID == b.ParentTeamID &&
+		rawMessageMapEqual(a.IssueViewDefaults, b.IssueViewDefaults) && rawMessageMapEqual(a.IssueViewInsights, b.IssueViewInsights)
+}
+
+func rawMessageMapEqual(a, b map[string]json.RawMessage) bool {
+	return maps.EqualFunc(a, b, func(left, right json.RawMessage) bool { return bytes.Equal(left, right) })
 }
 
 func boolPointerEqual(a, b *bool) bool {

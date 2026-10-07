@@ -1,5 +1,6 @@
 import { pulseZhCN } from './translations-pulse';
 import { viewFiltersZhCN } from './translations-view-filters';
+import { insightsZhCN } from './translations-insights';
 import { agentTriageZhCN } from './translations-agent-triage';
 import { releaseIntakeZhCN } from './translations-release-intake';
 
@@ -5720,5 +5721,6 @@ Object.assign(zhCN, {
 
 Object.assign(zhCN, pulseZhCN);
 Object.assign(zhCN, viewFiltersZhCN);
+Object.assign(zhCN, insightsZhCN);
 Object.assign(zhCN, agentTriageZhCN);
 Object.assign(zhCN, releaseIntakeZhCN);

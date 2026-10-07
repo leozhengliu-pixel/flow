@@ -5670,7 +5670,11 @@ func applySavedViewUpdate(data *domain.Bootstrap, view *domain.SavedView, input 
 		view.Display = slices.Clone(input.Display)
 	}
 	if input.Insights != nil {
-		view.Insights = slices.Clone(input.Insights)
+		normalized, ok := normalizeInsightsConfig(input.Insights)
+		if !ok {
+			return errInvalid
+		}
+		view.Insights = normalized
 	}
 	if view.Scope == "" {
 		view.Scope = "workspace"
