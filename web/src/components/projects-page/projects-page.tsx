@@ -19,12 +19,21 @@ import { ProjectsBulkActionBar, type ProjectBulkAction } from './projects-bulk-a
 import { ViewGlyph, type ViewVisual } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { ProjectUpdatesPreview } from './project-updates-preview'
+import { ProjectUpdateScheduleDialog } from '@/components/project-detail/project-update-schedule-dialog'
 import { labelsForResource } from '@/lib/labels'
 import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 import { listProjectRecords } from '@/lib/api'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
+
+/** The row's one-line summary falls back to the description as plain text (descriptions are stored as HTML). */
+function descriptionPreview(description: string | undefined) {
+  if (!description) return ''
+  if (!/[<&]/.test(description)) return description
+  const text = typeof DOMParser === 'undefined' ? description.replace(/<[^>]*>/g, ' ') : new DOMParser().parseFromString(description, 'text/html').body.textContent ?? ''
+  return text.replace(/\s+/g, ' ').trim()
+}
 
 export type ProjectMutationInput = {
   templateId?: string
@@ -329,6 +338,7 @@ export function ProjectsPage({
   const [createOpen, setCreateOpen] = useState(false)
   const [createStatus, setCreateStatus] = useState(defaultCreateStatus)
   const [updatesProjectId, setUpdatesProjectId] = useState<string>()
+  const [scheduleProjectId, setScheduleProjectId] = useState<string>()
   useRequestEntityUpdates('project', [updatesProjectId])
   const [viewEditor, setViewEditor] = useState<'create' | 'edit' | undefined>(creatingView ? 'create' : editingView ? 'edit' : undefined)
   const [viewSaving, setViewSaving] = useState(false)
@@ -381,20 +391,18 @@ export function ProjectsPage({
       const name = (await promptAction('Rename project', project.name))?.trim()
       if (name && name !== project.name) await onUpdateProject(project.id, { name })
     }
-    if ((action === 'moveDown' || action === 'moveBottom') && onUpdateProject) {
+    if ((action === 'moveTop' || action === 'moveUp' || action === 'moveDown' || action === 'moveBottom') && onUpdateProject) {
       const group = view.groups.flatMap(value => value.subgroups?.length ? value.subgroups : [value]).find(value => value.projects.some(candidate => candidate.id === item.id))
       const ordered = [...(group?.projects ?? [])].sort((left, right) => (left.position ?? 0) - (right.position ?? 0))
       const index = ordered.findIndex(candidate => candidate.id === item.id)
       if (index >= 0) {
         const [moved] = ordered.splice(index, 1)
-        ordered.splice(action === 'moveBottom' ? ordered.length : Math.min(index + 1, ordered.length), 0, moved)
+        const target = action === 'moveTop' ? 0 : action === 'moveUp' ? Math.max(0, index - 1) : action === 'moveBottom' ? ordered.length : Math.min(index + 1, ordered.length)
+        ordered.splice(target, 0, moved)
         await Promise.all(ordered.map((candidate, position) => candidate.position === position ? Promise.resolve() : onUpdateProject(candidate.id, { position })))
       }
     }
-    if (action === 'schedule' && onUpdateProject) {
-      const schedule = (await promptAction('Project update schedule', project.updateCadence,{description:'Use none, weekly, biweekly, or monthly.'}))?.trim().toLowerCase()
-      if (schedule && ['none', 'weekly', 'biweekly', 'monthly'].includes(schedule)) await onUpdateProject(project.id, { updateCadence: schedule as Project['updateCadence'] })
-    }
+    if (action === 'schedule' && onUpdateProject) setScheduleProjectId(project.id)
     if (action === 'initiatives' || action === 'dependencies' || action === 'customerRequest') onOpenProject?.(project)
   }
 
@@ -642,6 +650,12 @@ export function ProjectsPage({
       /></div>
       {sidebarOpen && <ProjectsInsightsSidebar activeFilter={insightFilter} mode={insightMode} onChangeFilter={setInsightFilter} onChangeMode={setInsightMode} projects={leadScopedItems} />}
     </div>
+    {scheduleProjectId && projectById.get(scheduleProjectId) && onUpdateProject && <ProjectUpdateScheduleDialog
+      open
+      onOpenChange={open => { if (!open) setScheduleProjectId(undefined) }}
+      project={projectById.get(scheduleProjectId)!}
+      onSave={async updateSchedule => { await onUpdateProject(scheduleProjectId, { updateSchedule }) }}
+    />}
     {updatesProjectId && projectById.get(updatesProjectId) && <ProjectUpdatesPreview
       onClose={() => setUpdatesProjectId(undefined)}
       onCreate={onCreateProjectUpdate}
@@ -724,7 +738,7 @@ function toPageItem(project: Project, href: string | undefined, indexes: Project
     statusType: project.status.type,
     statusColor: project.status.color,
     startDate: project.startDate ? formatMonth(project.startDate) : undefined,
-    summary: project.description || project.summary,
+    summary: project.summary || descriptionPreview(project.description),
     team: project.teamIds[0] ? indexes.teams.get(project.teamIds[0]) : undefined,
     // Flow records a project's lead (primary) team as the first of its teams.
     leadTeamId: project.teamIds[0],
@@ -792,16 +806,21 @@ function isoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+/** Row dates follow the app locale (the provider mirrors it onto <html data-locale>). */
+function rowDateLocale() {
+  return typeof document !== 'undefined' && document.documentElement.dataset.locale === 'zh-CN' ? 'zh-CN' : 'en'
+}
+
 function formatMonth(value: string) {
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('en', { month: 'short', year: 'numeric' }).format(date)
+  return new Intl.DateTimeFormat(rowDateLocale(), { month: 'short', year: 'numeric' }).format(date)
 }
 
 function formatDay(value: string) {
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date)
+  return new Intl.DateTimeFormat(rowDateLocale(), { month: 'short', day: 'numeric' }).format(date)
 }
 
 function uniqueStatuses(items: ProjectStatus[]) { return items.filter((item, index) => items.findIndex(candidate => candidate.id === item.id) === index) }
