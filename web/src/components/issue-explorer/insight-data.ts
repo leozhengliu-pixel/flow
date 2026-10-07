@@ -1,6 +1,6 @@
 import type { BootstrapData } from '@/types/flow'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
-import { hideableDimension, type SavedViewInsightsConfig, type SavedViewInsightDimension, type SavedViewInsightMeasure } from './insight-config'
+import { emptyDimensionLabel, type SavedViewInsightsConfig, type SavedViewInsightDimension, type SavedViewInsightMeasure } from './insight-config'
 import { aggregateInsightValues, insightAggregations, type InsightSample, type InsightAggregation } from './insight-interaction'
 
 export type InsightValue = { id: string; label: string; color?: string }
@@ -13,15 +13,16 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
   const segmentMap = new Map<string, InsightValue & { count: number }>()
   const samples: InsightSample<MyIssuesRowData>[] = []
   const now = Date.now()
-  const hidden = config.hideEmptySegment ? hideableDimension(config) : undefined
+  const hideSlice = Boolean(config.hideEmptySlice && emptyDimensionLabel(config.slice))
+  const hideSegment = Boolean(config.hideEmptySegment && emptyDimensionLabel(config.segment))
   for (const row of rows) {
     const metric = metricValue(row, config, now)
     if (metric == null || !Number.isFinite(metric)) continue
     let slices = dimensionValues(row, config.slice, data)
     let segments = config.segment === 'none' ? [{ id: 'all', label: 'No value' }] : dimensionValues(row, config.segment, data)
     // "Hide <No value>": the empty value leaves the chart, the table and the counts.
-    if (hidden && config.segment !== 'none') segments = segments.filter(value => !isEmptyInsightValue(config.segment as SavedViewInsightDimension, value.id))
-    else if (hidden) slices = slices.filter(value => !isEmptyInsightValue(config.slice, value.id))
+    if (hideSegment) segments = segments.filter(value => !isEmptyInsightValue(config.segment as SavedViewInsightDimension, value.id))
+    if (hideSlice) slices = slices.filter(value => !isEmptyInsightValue(config.slice, value.id))
     if (!slices.length || !segments.length) continue
     samples.push({ item: row, value: metric, slices: slices.map(value => value.id), segments: config.segment === 'none' ? [] : segments.map(value => value.id) })
     for (const segmentValue of segments) {

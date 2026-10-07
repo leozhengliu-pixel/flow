@@ -244,7 +244,7 @@
 .sidebar-favorite-folder-popover,.sidebar-favorite-move-menu { width: 180px; }
 .sidebar-favorite-context-menu { width: 190px; }
 .sidebar-favorite-context-menu [role="menuitem"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-favorite-context-menu [role="menuitem"] > svg:last-child { width: 13px; height: 13px; margin-left: auto; }
+.sidebar-favorite-context-menu [role="menuitem"] > svg:last-child:not(:first-child) { width: 13px; height: 13px; margin-left: auto; }
 
 .sidebar-more-trigger { color: #99999d; }
 .sidebar-more-trigger > svg { flex: 0 0 15px; }
