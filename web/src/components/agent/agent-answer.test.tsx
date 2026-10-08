@@ -5,7 +5,7 @@ import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import type { AgentSession } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn() }))
+const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn() }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)

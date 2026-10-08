@@ -10,6 +10,7 @@ import { customerRequestsZhCN } from './translations-customer-requests';
 import { customerFiltersZhCN } from './translations-customer-filters';
 import { initiativeHierarchyZhCN } from './translations-initiative-hierarchy';
 import { labelSettingsZhCN } from './translations-label-settings';
+import { agentHistoryZhCN } from './translations-agent-history';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -5750,3 +5751,4 @@ Object.assign(zhCN, customerRequestsZhCN);
 Object.assign(zhCN, customerFiltersZhCN);
 Object.assign(zhCN, initiativeHierarchyZhCN);
 Object.assign(zhCN, labelSettingsZhCN);
+Object.assign(zhCN, agentHistoryZhCN);

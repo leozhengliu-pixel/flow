@@ -302,6 +302,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/agent/sessions/{id}/approvals/{approvalId}", s.resolveAgentApproval)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/elicitations/{elicitationId}", s.resolveAgentElicitation)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/stop", s.stopAgentSession)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/read", s.markAgentSessionRead)
 	mux.HandleFunc("GET /api/agent/skills", s.listAgentSkillsHTTP)
 	mux.HandleFunc("POST /api/agent/skills", s.createAgentSkill)
 	mux.HandleFunc("PATCH /api/agent/skills/{id}", s.updateAgentSkill)

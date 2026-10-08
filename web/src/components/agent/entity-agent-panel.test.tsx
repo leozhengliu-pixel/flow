@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   listAgentSessions: vi.fn(),
   getAgentSession: vi.fn(),
   resolveAgentApproval: vi.fn(),
+  markAgentSessionRead: vi.fn(),
 }))
 const streams = vi.hoisted(() => ({
   streamNewAgentSession: vi.fn(),

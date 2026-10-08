@@ -16,6 +16,7 @@ import { AgentPanel } from './agent-panel'
 import { EntityAgentThread, clearEntityThreadDraft, type AgentContextEntity } from './entity-agent-thread'
 import styles from './agent-chat-panel.module.css'
 import { conversationDraftKeyFor } from './agent-drafts'
+import { useMarkAgentSessionRead } from './agent-read-state'
 
 /** The entity the user is looking at; attached to the first message of a new conversation. */
 export type AgentPageContext = { type: 'project' | 'document' | 'issue'; id: string; label: string }
@@ -73,6 +74,13 @@ export function AgentChatPanel({
   const [fullscreen, setFullscreen] = useState(false)
   const [approvalBusy, setApprovalBusy] = useState<string>()
   const abortRef = useRef<AbortController | undefined>(undefined)
+  // Seeing the chat here (once its reply has settled) clears its unread dot on the Agent page too.
+  useMarkAgentSessionRead(open ? session : undefined, loading, (read, lastReadAt) => {
+    if (!session || session.id !== read.id) return
+    const next = { ...session, lastReadAt }
+    setSession(next)
+    onSessionChange?.(next)
+  })
   const [mentions, setMentions] = useState<AgentMention[]>([])
   const [skillIds, setSkillIds] = useState<string[]>([])
   const [removedContext, setRemovedContext] = useState<string[]>([])
