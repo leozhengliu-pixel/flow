@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { ArrowRight, ArrowUp, FileText, LoaderCircle, Paperclip } from "lucide-react";
+import { ArrowRight, ArrowUp, FileText, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
@@ -10,6 +10,7 @@ import type { BootstrapData, Loop, LoopAttachment, LoopTemplate } from "@/types/
 import { markLoopAgentAutostart, useLoopTemplates } from "./loop-data";
 import { LoopGlyph, LoopIcon, loopIconColor } from "./loop-glyph";
 import { LoopLocationPicker, type LoopLocation } from "./loop-pickers";
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Entry = { kind: "scratch" } | { kind: "prompt"; prompt: string; attachmentIds: string[] } | { kind: "template"; template: LoopTemplate };
 
@@ -127,7 +128,7 @@ export function LoopCreateHub({
                 {item.uploaded ? (
                   item.contentType.startsWith("image/") ? <img alt="" src={item.uploaded.url} /> : <FileText size={13} />
                 ) : (
-                  <LoaderCircle aria-label={t("Uploading…")} className="loops-hub-attachment-spinner" size={13} />
+                  <GridLoader label={t("Uploading…")} className="loops-hub-attachment-spinner" size={13} />
                 )}
                 <span data-i18n-ignore>{item.name}</span>
                 <AttachmentRemoveButton label={`${t("Remove attachment")} ${item.name}`} onClick={() => setAttachments((items) => items.filter((other) => other.key !== item.key))} />

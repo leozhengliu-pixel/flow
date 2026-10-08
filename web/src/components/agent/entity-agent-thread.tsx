@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Check, Copy, LoaderCircle, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import { ArrowUp, Check, Copy, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
 import { AgentRichText } from './agent-rich-text'
@@ -20,6 +20,7 @@ import {
   writeAgentDraft,
 } from './agent-drafts'
 import styles from './entity-agent-thread.module.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 export type EntityAgentThreadProps = {
   messages: AgentMessage[]
@@ -271,7 +272,7 @@ export function EntityAgentThread({
         {/* A custom body shows its own progress once the reply has started. */}
         {loading && !streamWork.length && !(renderAssistantBody && messages.at(-1)?.role === 'assistant') && (
           <div className={styles.thinking} data-state="loading">
-            <LoaderCircle />
+            <GridLoader variant="agent" size={14} />
             {t('Thinking…')}
           </div>
         )}

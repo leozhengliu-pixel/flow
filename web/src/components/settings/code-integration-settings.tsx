@@ -34,11 +34,25 @@ import {
   isGithubEnterpriseCloudConnection,
   type GitHubSettingsMetadataItem,
 } from "@/lib/github-settings-metadata";
+import { GitLabIntegrationSettings } from "./gitlab-integration-settings";
 import { SettingsSelect } from "./settings-primitives";
 
 import "./code-integration-settings.css";
 
-export function CodeIntegrationSettings({
+export function CodeIntegrationSettings(props: {
+  provider: "github" | "gitlab";
+  data: BootstrapData;
+  onBack: () => void;
+  onReload: () => Promise<void>;
+}) {
+  return props.provider === "gitlab" ? (
+    <GitLabIntegrationSettings data={props.data} onBack={props.onBack} onReload={props.onReload} />
+  ) : (
+    <ProviderIntegrationSettings {...props} />
+  );
+}
+
+function ProviderIntegrationSettings({
   provider,
   data,
   onBack,

@@ -12,6 +12,7 @@ import { InboxCustomSnoozeForm, type InboxNotificationRowData, type InboxSnoozeP
 import { PulseFrequencyDropdownSubmenu } from './pulse-frequency-menu'
 import type { PulseFrequency } from './pulse-summary-model'
 import './inbox.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 export interface InboxDetailPreviewProps {
   notification: InboxNotificationRowData
@@ -92,7 +93,7 @@ export function InboxDetailPreview(props: InboxDetailPreviewProps) {
       </header>
       <div className={`flow-inbox-detail__body ${props.fullBleed ? 'flow-inbox-detail__body--full-bleed' : ''}`}>
         {props.fullBleed ? props.children : <div className="flow-inbox-detail__scroll">{props.children}</div>}
-        {props.pending ? <div className="flow-inbox-detail__pending" role="status" aria-label="Updating notification"><i /></div> : null}
+        {props.pending ? <div className="flow-inbox-detail__pending" role="status" aria-label="Updating notification"><GridLoader size={14} /></div> : null}
       </div>
       {relationType && props.issue && props.issues && props.onCreateRelation ? <RelationPicker open onOpenChange={open => { if (!open) setRelationType(null) }} type={relationType} issueId={props.issue.id} issues={props.issues} onSelect={relatedIssueId => props.onCreateRelation?.(relationType, relatedIssueId)}/>: null}
       <InboxDescriptionHistoryDialog issue={props.issue} open={historyOpen} onOpenChange={setHistoryOpen}/>

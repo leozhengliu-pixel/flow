@@ -1673,13 +1673,17 @@ func (s *server) connectIntegration(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "clientSecret must be provided through FLOW_INTEGRATION_<PROVIDER>_CLIENT_SECRET or clientSecretEnv")
 		return
 	}
+	if provider == "gitlab" && input.Config["mode"] != "oauth" {
+		// GitLab connects with an access token that is validated against the
+		// GitLab API and kept only in encrypted connector storage. The
+		// deployment-configured OAuth path ({"mode":"oauth"} followed by
+		// /oauth/start) still creates a pending connection below.
+		s.connectGitLabToken(w, r, input.Name, input.Config)
+		return
+	}
 	secret := strings.TrimSpace(input.Config["apiToken"])
 	if provider == "github" && strings.TrimSpace(input.Config["organization"]) == "" {
 		writeError(w, http.StatusBadRequest, "organization is required")
-		return
-	}
-	if provider == "gitlab" && secret == "" {
-		writeError(w, http.StatusBadRequest, "API access token is required")
 		return
 	}
 	if provider == "jira" {

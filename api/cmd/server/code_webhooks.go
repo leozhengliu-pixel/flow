@@ -1,11 +1,11 @@
 package main
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -309,20 +309,44 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 		if host == "" && connection != nil {
 			host = strings.TrimSpace(connection.Config["host"])
 		}
+		if token == "" && connection != nil {
+			// Token connections keep the credential in encrypted storage.
+			if credential, err := s.gitlabCredential(r.Context(), data.Workspace.URLKey, connection.ID); err == nil {
+				token = credential.Token
+				if strings.TrimSpace(input.Host) == "" {
+					host = credential.URL
+				}
+			}
+		}
 		if token == "" {
 			persistIntegrationTestError(s, r, provider, id, "GitLab API token is not available")
 			writeError(w, http.StatusUnprocessableEntity, "GitLab API token is required to test the connection")
 			return
 		}
-		username, err := probeGitLabConnection(r.Context(), host, token)
+		base, err := normalizeGitLabURL(host, s.authDisabled)
 		if err != nil {
 			persistIntegrationTestError(s, r, provider, id, err.Error())
+			writeError(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		probe, err := s.probeGitLabToken(r.Context(), base, token)
+		if err != nil {
+			persistIntegrationTestError(s, r, provider, id, err.Error())
+			var apiErr *gitlabAPIError
+			if errors.As(err, &apiErr) {
+				payload := map[string]any{"error": apiErr.Message}
+				if details := apiErr.details(); len(details) > 0 {
+					payload["current"] = details
+				}
+				writeJSON(w, http.StatusBadGateway, payload)
+				return
+			}
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		now := time.Now().UTC()
 		persistIntegrationTestSuccess(s, r, provider, id, now)
-		writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "connectionId": id, "status": "ready", "username": username, "testedAt": now})
+		writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "connectionId": id, "status": "ready", "username": probe.Username, "testedAt": now})
 		return
 	}
 	// GitHub connections are installed through OAuth/app setup. Until an OAuth
@@ -343,37 +367,6 @@ func (s *server) testIntegrationConnection(w http.ResponseWriter, r *http.Reques
 	now := time.Now().UTC()
 	persistIntegrationTestSuccess(s, r, provider, id, now)
 	writeJSON(w, http.StatusOK, map[string]any{"provider": provider, "connectionId": id, "status": "ready", "testedAt": now})
-}
-
-func probeGitLabConnection(ctx context.Context, host, token string) (string, error) {
-	if strings.TrimSpace(host) == "" {
-		host = "https://gitlab.com"
-	}
-	host = strings.TrimRight(strings.TrimSpace(host), "/")
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, host+"/api/v4/user", nil)
-	if err != nil {
-		return "", fmt.Errorf("invalid GitLab URL")
-	}
-	request.Header.Set("PRIVATE-TOKEN", token)
-	request.Header.Set("Accept", "application/json")
-	response, err := (&http.Client{Timeout: 8 * time.Second}).Do(request)
-	if err != nil {
-		return "", fmt.Errorf("GitLab connection failed: %w", err)
-	}
-	defer response.Body.Close()
-	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
-		return "", fmt.Errorf("GitLab token was rejected")
-	}
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("GitLab API returned %s", response.Status)
-	}
-	var user struct {
-		Username string `json:"username"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&user); err != nil {
-		return "", fmt.Errorf("GitLab returned an invalid response")
-	}
-	return user.Username, nil
 }
 
 func persistIntegrationTestError(s *server, r *http.Request, provider, id, message string) {

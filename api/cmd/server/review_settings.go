@@ -20,7 +20,7 @@ type reviewProvider struct {
 	allowLocal                      bool
 }
 
-func (s *server) reviewProvider(data domain.Bootstrap, review domain.CodeReview) (*reviewProvider, error) {
+func (s *server) reviewProvider(ctx context.Context, data domain.Bootstrap, review domain.CodeReview) (*reviewProvider, error) {
 	if review.Provider != "github" && review.Provider != "gitlab" {
 		return nil, nil
 	}
@@ -32,6 +32,16 @@ func (s *server) reviewProvider(data domain.Bootstrap, review domain.CodeReview)
 			continue
 		}
 		token := connection.OAuthAccessToken
+		if token == "" && review.Provider == "gitlab" {
+			// Token connections: the validated access token and its GitLab URL
+			// live in encrypted connector storage.
+			if credential, err := s.gitlabCredential(ctx, data.Workspace.URLKey, connection.ID); err == nil {
+				if connection.Config["readonly"] == "true" {
+					return nil, fmt.Errorf("the GitLab access token is read-only (read_api scope)")
+				}
+				return &reviewProvider{base: credential.URL + "/api/v4", token: credential.Token, resource: fmt.Sprintf("/projects/%s/merge_requests/%d", url.PathEscape(review.RepositoryOwner+"/"+review.RepositoryName), review.Number), provider: "gitlab", allowLocal: s.authDisabled}, nil
+			}
+		}
 		if token == "" {
 			token = os.Getenv("FLOW_INTEGRATION_" + strings.ToUpper(review.Provider) + "_ACCESS_TOKEN")
 		}
@@ -109,7 +119,7 @@ func (provider *reviewProvider) request(ctx context.Context, method, path string
 }
 
 func (s *server) syncReviewStatus(ctx context.Context, data domain.Bootstrap, review domain.CodeReview, status, method string) error {
-	provider, err := s.reviewProvider(data, review)
+	provider, err := s.reviewProvider(ctx, data, review)
 	if err != nil || provider == nil {
 		return err
 	}
@@ -171,7 +181,7 @@ func (s *server) markReviewReady(ctx context.Context, data domain.Bootstrap, rev
 	if !review.Draft {
 		return nil
 	}
-	provider, err := s.reviewProvider(data, review)
+	provider, err := s.reviewProvider(ctx, data, review)
 	if err != nil || provider == nil {
 		return err
 	}

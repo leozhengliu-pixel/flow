@@ -71,8 +71,10 @@ func TestGitLabMergeRequestWebhookAndConnectionProbe(t *testing.T) {
 	}
 	defer repository.Close()
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
-	gitlab := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/gitlab?workspace=test-workspace", map[string]any{
-		"name": "self-hosted", "config": map[string]string{"apiToken": "glpat-configured", "webhookSecret": "hook-secret"},
+	enableConnectorSecrets(t)
+	api := newFakeGitLab(t)
+	gitlab := requestJSON[gitlabConnectResponse](t, handler, http.MethodPut, "/api/integrations/gitlab?workspace=test-workspace", map[string]any{
+		"name": "self-hosted", "config": map[string]string{"apiToken": "glpat-fake-api", "host": api.URL},
 	}, http.StatusOK)
 	seed := repository.Bootstrap()
 	if len(seed.Issues) == 0 || len(seed.Users) < 2 {
@@ -81,7 +83,7 @@ func TestGitLabMergeRequestWebhookAndConnectionProbe(t *testing.T) {
 	payload := []byte(fmt.Sprintf(`{"object_kind":"merge_request","event_type":"merge_request","user":{"username":"dependabot"},"project":{"path_with_namespace":"acme/platform/api","web_url":"https://gitlab.example.com/acme/platform/api"},"object_attributes":{"id":44001,"iid":27,"title":"Fix checkout %s","description":"Please review","url":"https://gitlab.example.com/acme/platform/api/-/merge_requests/27","state":"opened","action":"open","source_branch":"feature/checkout","target_branch":"main","last_commit":{"id":"abc"}},"reviewers":[{"username":"%s"}]}`, seed.Issues[0].Identifier, strings.SplitN(seed.Users[1].Email, "@", 2)[0]))
 	request := func(eventID string) *http.Request {
 		req := httptest.NewRequest(http.MethodPost, "/api/integrations/gitlab/webhook?workspace=test-workspace", bytes.NewReader(payload))
-		req.Header.Set("X-Gitlab-Token", "hook-secret")
+		req.Header.Set("X-Gitlab-Token", gitlab.WebhookSecret)
 		req.Header.Set("X-Gitlab-Event-UUID", eventID)
 		return req
 	}
@@ -114,16 +116,7 @@ func TestGitLabMergeRequestWebhookAndConnectionProbe(t *testing.T) {
 		t.Fatalf("GitLab webhook retry was not idempotent: status=%d notifications=%d", rec.Code, len(repository.Bootstrap().Notifications))
 	}
 
-	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v4/user" || r.Header.Get("PRIVATE-TOKEN") != "glpat-test" {
-			w.WriteHeader(http.StatusUnauthorized)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"username":"flow-bot"}`))
-	}))
-	defer api.Close()
-	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/integrations/gitlab/"+gitlab.ID+"/test?workspace=test-workspace", map[string]string{"token": "glpat-test", "host": api.URL}, http.StatusOK)
+	requestJSON[map[string]any](t, handler, http.MethodPost, "/api/integrations/gitlab/"+gitlab.ID+"/test?workspace=test-workspace", map[string]string{"token": "glpat-fake-read", "host": api.URL}, http.StatusOK)
 	if status := repository.Bootstrap().IntegrationConnections[0].LastTestStatus; status != "ready" {
 		t.Fatalf("successful GitLab connection test was not persisted: %q", status)
 	}

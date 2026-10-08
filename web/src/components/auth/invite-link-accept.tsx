@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { LoaderCircle } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import {
@@ -13,6 +12,7 @@ import { LanguageSelect } from "@/i18n/i18n";
 import "./auth-page.css";
 import "./invite-link-accept.css";
 import { FlowLogo } from '@/components/ui/flow-logo'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Props = {
   session: AuthSession | null;
@@ -114,7 +114,7 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
             : "Workspace invite"}
         </h1>
         {pending && !preview ? (
-          <LoaderCircle className="auth-spinner" aria-label="Loading" />
+          <GridLoader className="auth-spinner" label="Loading" />
         ) : null}
         {preview && !preview.alreadyMember ? (
           <>
@@ -128,7 +128,7 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
                 onClick={() => void join()}
               >
                 {joining ? (
-                  <LoaderCircle className="auth-spinner" />
+                  <GridLoader className="auth-spinner" />
                 ) : (
                   "Join workspace"
                 )}

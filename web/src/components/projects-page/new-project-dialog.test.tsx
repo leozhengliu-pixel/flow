@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -72,6 +72,9 @@ describe('NewProjectDialog', () => {
         />
       </I18nProvider>,
     )
+    // The dialog focuses the name field on the next animation frame; opening a picker before that
+    // moves focus outside the popover and dismisses it, so wait for the dialog to settle first.
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Project name' })).toHaveFocus())
     await user.click(screen.getByRole('combobox', { name: 'Change project initiatives' }))
     const option = await screen.findByRole('option', { name: 'Favorite perf initiative' })
     expect(option.closest('.lp-new-project-picker__initiatives')).toBeTruthy()

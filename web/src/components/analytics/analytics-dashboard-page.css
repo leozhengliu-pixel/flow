@@ -270,12 +270,6 @@
 .insights-spin {
   display: block;
   margin: 30vh auto;
-  animation: insights-spin 1s linear infinite;
-}
-@keyframes insights-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 @media (max-width: 700px) {
   .insights-page {

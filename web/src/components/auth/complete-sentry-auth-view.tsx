@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LoaderCircle } from 'lucide-react'
 
 import { finishSentryAuth } from '@/lib/finish-sentry-auth'
 import { OAuthCompleteShell } from './complete-oauth-view'
 
 import './complete-oauth-views.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 /** LS-0128 CompleteSentryAuthView — honest MCP-only until App OAuth exists. */
 export function CompleteSentryAuthView() {
@@ -38,7 +38,7 @@ export function CompleteSentryAuthView() {
     return (
       <OAuthCompleteShell>
         <div className="oauth-complete-card" data-state="loading" role="status">
-          <LoaderCircle className="oauth-complete-spinner" aria-hidden />
+          <GridLoader className="oauth-complete-spinner" size={22} />
           <p>Checking Sentry authorization…</p>
         </div>
       </OAuthCompleteShell>

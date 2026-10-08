@@ -7,7 +7,7 @@ export function configuredIssueBranch(issue:Issue,data?:BootstrapData) {
   const identifier=issue.identifier.toLowerCase()
   const integration=data?.integrationConnections?.find(item=>['github','gitlab'].includes(item.provider)&&item.config?.branchFormat)
   const format=integration?.config?.branchFormat??data?.userSettings?.[data.viewer.id]?.branchFormat??'username/identifier-title'
-  const templates:Record<string,string>={'username/identifier-title':'{username}/{identifier}-{title}','identifier-title':'{identifier}-{title}','identifier/title':'{identifier}/{title}'}
+  const templates:Record<string,string>={'username/identifier-title':'{username}/{identifier}-{title}','username/identifier':'{username}/{identifier}','username-identifier-title':'{username}-{identifier}-{title}','username-identifier':'{username}-{identifier}','identifier-title':'{identifier}-{title}','title-identifier':'{title}-{identifier}','identifier':'{identifier}','feature/identifier-title':'feature/{identifier}-{title}','feature/identifier':'feature/{identifier}','identifier/title':'{identifier}/{title}'}
   return (templates[format]??format).replace(/\{(username|identifier|title)\}/g,(_,key)=>({username,identifier,title})[key as 'username'|'identifier'|'title']).replace(/[^\p{L}\p{N}_/-]+/gu,'-').replace(/\/+/g,'/').replace(/^[-/]+|[-/]+$/g,'').slice(0,160)
 }
 

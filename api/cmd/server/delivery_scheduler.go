@@ -80,6 +80,7 @@ func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error 
 				return err
 			}
 			s.runDueLoops(key, now)
+			s.rotateDueGitLabTokens(ctx, key, now)
 			if err := s.purgeExpiredTeams(ctx, key, now); err != nil {
 				log.Printf("Team purge workspace=%s: %v", key, err)
 			}

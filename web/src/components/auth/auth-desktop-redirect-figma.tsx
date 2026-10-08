@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LoaderCircle } from 'lucide-react'
 
 import { startIntegrationOAuth } from '@/lib/api'
 import {
@@ -11,6 +10,7 @@ import {
 import { OAuthCompleteShell } from './complete-oauth-view'
 
 import './complete-oauth-views.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 /**
  * LS-0078 AuthDesktopRedirectFigma
@@ -63,7 +63,7 @@ export function AuthDesktopRedirectFigma() {
     <OAuthCompleteShell>
       <div className="oauth-complete-card" data-state={error ? 'error' : 'loading'} role={error ? 'alert' : 'status'}>
         <span className="oauth-complete-badge">Figma · browser</span>
-        {!error && <LoaderCircle className="oauth-complete-spinner" aria-hidden />}
+        {!error && <GridLoader className="oauth-complete-spinner" size={22} />}
         <h1>{message}</h1>
         <p>
           {error

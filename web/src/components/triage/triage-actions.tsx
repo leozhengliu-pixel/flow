@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Command } from 'cmdk'
-import { AlarmClockOff, CircleCheck, CircleX, Clock3, Copy, CornerDownLeft, LoaderCircle } from 'lucide-react'
+import { AlarmClockOff, CircleCheck, CircleX, Clock3, Copy, CornerDownLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { createComment, createRelation, updateIssue } from '@/lib/api'
 import { PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
@@ -14,6 +14,7 @@ import type { BootstrapData, Issue, IssueRelationType, Team } from '@/types/flow
 import { canceledState, duplicateState, formatSnoozeDate, isSnoozed, parseSnoozeInput, resolveAcceptState, snoozePresets, teamStates, TRIAGE_SHORTCUTS, type TriageActionKind } from './triage-model'
 import { useTriageShortcuts } from './use-triage-shortcuts'
 import './triage.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 /** Decline / Mark as duplicate / Snooze work shared by the triage list, the issue header and the context menu. */
 function useTriageWork(issue: Issue, data: BootstrapData, team: Pick<Team, 'id'>, onDone: (issue: Issue) => void, onSettled: () => void) {
@@ -147,7 +148,7 @@ function AcceptDialog({ issue, data, team, onOpenChange, onDone }: { issue: Issu
       <textarea className="triage-action-dialog__comment" aria-label={t('Comment for accepting issue')} placeholder={t('Add an optional comment…')} rows={3} value={comment} onChange={event => setComment(event.target.value)}/>
       <footer>
         <button type="button" onClick={() => onOpenChange(false)}>{t('Cancel')}</button>
-        <button type="button" className="primary" disabled={busy || !selected || needsPriority} onClick={() => void accept()}>{busy ? <LoaderCircle className="spin" size={14}/> : null}{t('Accept')}</button>
+        <button type="button" className="primary" disabled={busy || !selected || needsPriority} onClick={() => void accept()}>{busy ? <GridLoader size={14}/> : null}{t('Accept')}</button>
       </footer>
     </DialogContent>
   </Dialog>
@@ -167,7 +168,7 @@ function DeclineDialog({ issue, work, onOpenChange }: { issue: Issue; work: Tria
       <textarea className="triage-action-dialog__comment" aria-label={t('Comment for declining issue')} placeholder={t('Add an optional comment…')} rows={3} value={comment} onChange={event => setComment(event.target.value)}/>
       <footer>
         <button type="button" onClick={() => onOpenChange(false)}>{t('Cancel')}</button>
-        <button type="button" className="danger" disabled={work.busy || !work.canceled} onClick={decline}>{work.busy ? <LoaderCircle className="spin" size={14}/> : null}{t('Decline')}</button>
+        <button type="button" className="danger" disabled={work.busy || !work.canceled} onClick={decline}>{work.busy ? <GridLoader size={14}/> : null}{t('Decline')}</button>
       </footer>
     </DialogContent>
   </Dialog>

@@ -1,5 +1,4 @@
 import { useEffect } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
@@ -11,6 +10,7 @@ import type { AuthSession } from '@/types/flow'
 
 import './auth-page.css'
 import { FlowLogo } from '@/components/ui/flow-logo'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Props = {
   onAuthenticated?: (session: AuthSession, returnTo?: string) => Promise<void>
@@ -93,7 +93,7 @@ export function AuthGoogleCallbackPage({ onAuthenticated }: Props) {
         Flow
       </div>
       <section className="auth-panel">
-        <LoaderCircle className="auth-spinner" />
+        <GridLoader className="auth-spinner" />
         <h1>Signing in…</h1>
         <p>Finishing Google authentication.</p>
       </section>

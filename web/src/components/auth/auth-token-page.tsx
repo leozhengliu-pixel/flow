@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from 'react'
-import { LoaderCircle } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { tokenAuthLogin } from '@/lib/api'
@@ -7,6 +6,7 @@ import type { AuthSession } from '@/types/flow'
 
 import './auth-page.css'
 import { FlowLogo } from '@/components/ui/flow-logo'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Props = {
   onAuthenticated: (session: AuthSession, returnTo?: string) => Promise<void>
@@ -89,7 +89,7 @@ export function AuthTokenPage({ onAuthenticated }: Props) {
         Flow
       </div>
       <section className="auth-panel">
-        <LoaderCircle className="auth-spinner" />
+        <GridLoader className="auth-spinner" />
         <h1>{message}</h1>
         <p>Completing your sign-in link…</p>
       </section>

@@ -111,7 +111,6 @@
 .oauth-complete-spinner {
   width: 22px;
   height: 22px;
-  animation: oauth-complete-spin 0.8s linear infinite;
   color: var(--muted, #8a8b90);
 }
 
@@ -128,11 +127,6 @@
   font-weight: 520;
 }
 
-@keyframes oauth-complete-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 :root[data-theme="light"] .oauth-complete-page {
   background: var(--bg-panel, #f7f8f8);

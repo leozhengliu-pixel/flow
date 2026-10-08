@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
   ChevronRight,
-  LoaderCircle,
   Plus,
   Users,
 } from "lucide-react";
@@ -16,6 +15,7 @@ import type { BootstrapData, Meeting, User } from "@/types/flow";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
 import "./meeting-page.css";
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Props = {
   data: BootstrapData;
@@ -80,7 +80,7 @@ export function MeetingPage({ data, meetingId, onNavigate }: Props) {
       return (
         <section className="secondary-content meeting-content">
           <div className="secondary-loading">
-            <LoaderCircle className="spin" size={16} />
+            <GridLoader size={16} />
             {t("Loading…")}
           </div>
         </section>
@@ -131,7 +131,7 @@ export function MeetingPage({ data, meetingId, onNavigate }: Props) {
           onClick={() => void create()}
         >
           {creating ? (
-            <LoaderCircle className="spin" size={14} />
+            <GridLoader size={14} />
           ) : (
             <Plus size={14} />
           )}
@@ -145,7 +145,7 @@ export function MeetingPage({ data, meetingId, onNavigate }: Props) {
       ) : null}
       {loading ? (
         <div className="secondary-loading">
-          <LoaderCircle className="spin" size={16} />
+          <GridLoader size={16} />
           {t("Loading…")}
         </div>
       ) : (
@@ -264,7 +264,7 @@ function MeetingDetail({
         <span data-i18n-ignore>{title || t("Untitled meeting")}</span>
         {saving ? (
           <span className="meeting-detail-saving">
-            <LoaderCircle className="spin" size={12} />
+            <GridLoader size={12} />
             {t("Saving…")}
           </span>
         ) : null}
