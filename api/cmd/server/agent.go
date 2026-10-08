@@ -378,7 +378,7 @@ func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (do
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
 	title := agentSessionTitle(input.Message)
-	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now}
+	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
@@ -432,6 +432,7 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, CreatedAt: now})
 		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
 		session.UpdatedAt = now
+		session.LastReadAt = agentReadStamp(now) // the owner is in the conversation they just wrote to
 		return nil
 	})
 }
@@ -466,6 +467,7 @@ func (s *server) replaceAgentSessionMessage(r *http.Request, id, messageID, mess
 				message.Content = input["message"]
 				session.Messages = session.Messages[:index+1]
 				session.UpdatedAt = time.Now().UTC()
+				session.LastReadAt = agentReadStamp(session.UpdatedAt)
 				return nil
 			}
 		}
@@ -506,11 +508,46 @@ func (s *server) updateAgentSession(w http.ResponseWriter, r *http.Request) {
 		if input.Location != nil {
 			session.Location = *input.Location
 		}
+		// The owner's own rename, favorite or move never makes the chat unread.
+		wasRead := agentSessionRead(*session)
 		session.UpdatedAt = time.Now().UTC()
+		if wasRead {
+			session.LastReadAt = agentReadStamp(session.UpdatedAt)
+		}
 		updated = *session
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// markAgentSessionRead records that the owner has seen the conversation up to
+// its latest change. It never moves UpdatedAt, so history order is unchanged.
+func (s *server) markAgentSessionRead(w http.ResponseWriter, r *http.Request) {
+	var updated domain.AgentSession
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_read", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+		session, err := ownedAgentSession(data, r.PathValue("id"))
+		if err != nil {
+			return err
+		}
+		readAt := time.Now().UTC()
+		if session.UpdatedAt.After(readAt) {
+			readAt = session.UpdatedAt
+		}
+		session.LastReadAt = agentReadStamp(readAt)
+		updated = *session
+		return nil
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// agentReadStamp copies the time so LastReadAt never aliases another field.
+func agentReadStamp(at time.Time) *time.Time {
+	return &at
+}
+
+// agentSessionRead reports whether the owner has seen the conversation's latest change.
+func agentSessionRead(session domain.AgentSession) bool {
+	return session.LastReadAt == nil || !session.UpdatedAt.After(*session.LastReadAt)
 }
 
 func (s *server) deleteAgentSession(w http.ResponseWriter, r *http.Request) {

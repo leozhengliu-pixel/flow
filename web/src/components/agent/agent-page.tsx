@@ -52,6 +52,9 @@ import {
   useDeferredHydratedConversation,
 } from '@/hooks/use-deferred-hydrated-conversation';
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue';
+import { FlowLogo } from '@/components/ui/flow-logo';
+import { AgentHistoryList } from './agent-history-list';
+import { agentSessionUnread, formatAgentHistoryTime, useMarkAgentSessionRead } from './agent-read-state';
 
 export function AgentPage({
   chatSlug,
@@ -166,6 +169,12 @@ export function AgentPage({
     };
   }, [awaitingReply, current?.id]);
   const replyRunning = busy || Boolean(live) || awaitingReply;
+  // Seeing a chat (once its reply has settled) clears its unread dot here and in the history list.
+  useMarkAgentSessionRead(current, replyRunning, (read, lastReadAt) => {
+    const listed = sessions.find((item) => item.id === read.id);
+    setSessions((list) => list.map((item) => (item.id === read.id ? { ...item, lastReadAt } : item)));
+    onSessionChange(read.id, listed ? { ...listed, lastReadAt } : read);
+  });
   const shown = pending ?? (awaitingReply && current ? withReplyPlaceholder(current) : current);
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
@@ -335,7 +344,7 @@ export function AgentPage({
     onNavigate(agentPath(data.workspace.urlKey));
   };
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page}${shown ? "" : ` ${styles.emptyPage}`}`}>
       <header>
         <button
           className={styles.mobileMenu}
@@ -403,10 +412,10 @@ export function AgentPage({
                         role="option"
                         type="button"
                       >
-                        <i aria-hidden="true" />
+                        <i aria-hidden="true" data-unread={agentSessionUnread(item) || undefined} />
                         <strong data-i18n-ignore>{item.title}</strong>
                         <span>{current?.id === item.id ? t("Current") : ""}</span>
-                        <time>{relative(item.updatedAt)}</time>
+                        <time>{formatAgentHistoryTime(item.updatedAt, t)}</time>
                       </button>;
                     })}
                   </Fragment>
@@ -525,6 +534,11 @@ export function AgentPage({
             </button>
           </div>
         )}
+        {/* Before a chat starts, Linear stacks its faint mark, the composer and the recent chats in one centred column. */}
+        <div className={shown ? styles.stagePassthrough : styles.emptyStage}>
+        <div className={shown ? styles.stagePassthrough : styles.emptyColumn}>
+        <div className={shown ? styles.stagePassthrough : styles.emptyComposerSlot}>
+        {!shown && <FlowLogo className={styles.emptyLogo} variant="outline" />}
         <div className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}>
           {attachments.length > 0 && (
             <div className={styles.attachments}>
@@ -603,6 +617,15 @@ export function AgentPage({
               {error}
             </span>
           )}
+        </div>
+        </div>
+        {!shown && <AgentHistoryList
+          sessions={sessions}
+          hrefFor={(session) => agentPath(data.workspace.urlKey, session.slugId)}
+          onOpen={(session) => onNavigate(agentPath(data.workspace.urlKey, session.slugId))}
+          onOpenInToolbar={(session) => void updateAgentSession(session.id, { location: "toolbar" }).then(saveSession)}
+        />}
+        </div>
         </div>
       </section>
       {deleteTarget && (
@@ -814,16 +837,6 @@ function groupAgentHistory(sessions: AgentSession[]) {
     .map(label => ({ label, sessions: groups.get(label)! }));
 }
 
-function relative(value: string) {
-  const seconds = Math.max(
-    0,
-    Math.round((Date.now() - Date.parse(value)) / 1000),
-  );
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  return `${Math.floor(seconds / 86400)}d`;
-}
 function markdown(session: AgentSession) {
   return session.messages
     .map(

@@ -211,6 +211,10 @@ type AgentSession struct {
 	Messages    []AgentMessage `json:"messages"`
 	CreatedAt   time.Time      `json:"createdAt"`
 	UpdatedAt   time.Time      `json:"updatedAt"`
+	// LastReadAt is when the owner last saw the conversation. It is unread while
+	// UpdatedAt is later (a reply landed after they looked); conversations from
+	// before read tracking have no LastReadAt and count as read.
+	LastReadAt *time.Time `json:"lastReadAt,omitempty"`
 }
 
 type PersonalAgentSkill struct {

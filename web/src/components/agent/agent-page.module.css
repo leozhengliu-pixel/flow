@@ -103,6 +103,151 @@
   background: var(--agent-composer-bg);
   box-shadow: var(--agent-composer-shadow);
 }
+/* Linear's Agent page before a chat starts: the faint mark, the composer and the recent chats share one
+   712px column (rows: minmax(220px, 1fr) / composer / history / 1fr) over a top-to-bottom panel fade. */
+.page.emptyPage,
+:global(:root[data-theme="light"]) .page.emptyPage {
+  background: linear-gradient(var(--agent-empty-bg-top), var(--agent-empty-bg-bottom));
+}
+.stagePassthrough {
+  display: contents;
+}
+.emptyStage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+.emptyColumn {
+  width: 100%;
+  max-width: 712px;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(220px, 1fr) min-content minmax(0, max-content) minmax(0, 1fr);
+  isolation: isolate;
+}
+.emptyComposerSlot {
+  position: relative;
+  grid-row: 2;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.emptyComposerSlot > .composer {
+  position: relative;
+  z-index: 1;
+  top: auto;
+  left: auto;
+  width: 100%;
+  transform: none;
+}
+/* The mark sits 208px above the composer and fades out by 60% of its height, so it dissolves behind it. */
+.emptyLogo {
+  --flow-logo-outline-fill: var(--agent-empty-logo-fill);
+  --flow-logo-outline-stroke: var(--agent-empty-logo-stroke);
+  position: absolute;
+  z-index: 0;
+  top: -168px;
+  left: 50%;
+  width: min(336px, 100%);
+  height: auto;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -40px);
+  pointer-events: none;
+  mask-image: linear-gradient(black, transparent 60%);
+}
+.history {
+  grid-row: 3;
+  width: 100%;
+  min-height: 0;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.history > nav {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+}
+.historyScroll {
+  min-height: 0;
+  flex-grow: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 24px;
+}
+.historyList {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.historyRow {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px 8px 18px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--agent-history-text);
+  font-size: 13px;
+  font-weight: 450;
+  line-height: normal;
+  text-decoration: none;
+  cursor: default;
+  scroll-margin-block: 24px;
+}
+.historyRow[data-unread],
+.historyRow:hover,
+.historyRow[data-state="open"] {
+  color: var(--agent-history-text-unread);
+}
+.historyRow:hover,
+.historyRow[data-state="open"] {
+  background: var(--agent-history-row-hover);
+}
+.historyRow:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: -1px;
+}
+.historyDot {
+  position: absolute;
+  top: 50%;
+  left: 18px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--agent-history-unread);
+  transform: translateY(-50%);
+}
+.historyTitle {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.historyRow[data-unread] .historyTitle {
+  margin-left: 18px;
+}
+.historyTime {
+  flex-shrink: 0;
+  margin-left: 16px;
+  color: var(--agent-history-text);
+  white-space: nowrap;
+}
 .conversationComposer {
   top: auto;
   bottom: 12px;
@@ -645,12 +790,16 @@
   color: var(--theme-text-secondary);
   font-size: 11px;
 }
+/* Like Linear's switcher, only unread chats carry the accent dot. */
 .historyMenu [role="option"] > i {
   width: 6px;
   height: 6px;
   justify-self: center;
   border-radius: 50%;
-  background: var(--theme-text-tertiary);
+  background: transparent;
+}
+.historyMenu [role="option"] > i[data-unread] {
+  background: var(--agent-history-unread);
 }
 .historyGroup {
   height: 30px;

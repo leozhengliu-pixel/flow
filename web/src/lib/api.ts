@@ -2201,6 +2201,10 @@ export function getAgentSession(
 ): Promise<import("@/types/flow").AgentSession> {
   return request(`/api/agent/sessions/${encodeURIComponent(id)}`);
 }
+/** Records that the viewer has seen the chat up to its latest change (Linear's unread dot clears). */
+export function markAgentSessionRead(id: string): Promise<import("@/types/flow").AgentSession> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/read`, { method: "POST" });
+}
 /** Stops the reply running for a chat (it keeps running on the server when the page goes away). */
 export function stopAgentSession(id: string): Promise<void> {
   return request(`/api/agent/sessions/${encodeURIComponent(id)}/stop`, { method: "POST" });

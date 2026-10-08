@@ -2621,6 +2621,8 @@ export interface AgentSession {
   messages: AgentMessage[];
   createdAt: string;
   updatedAt: string;
+  /** When the owner last saw the chat; it is unread while `updatedAt` is later. Missing on chats from before read tracking. */
+  lastReadAt?: string;
 }
 export interface PersonalAgentSkill {
   id: UUID;
