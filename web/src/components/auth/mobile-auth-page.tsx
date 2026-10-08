@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import './auth-page.css'
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 /**
  * Mobile-ready auth handoff stub (LS-0412/0413 adjacent).
@@ -16,7 +17,7 @@ export function MobileAuthPage() {
   return (
     <main className="auth-page">
       <div className="auth-brand">
-        <span className="auth-brand-mark" />
+        <FlowLogo className="auth-brand-mark" />
         Flow
       </div>
       <section className="auth-panel">

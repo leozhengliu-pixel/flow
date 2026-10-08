@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import './auth-page.css'
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 /** Unified /auth/error surface for OIDC / token / SSO bounce failures (LS-0081 / LS-0083). */
 export function AuthErrorPage() {
@@ -20,7 +21,7 @@ export function AuthErrorPage() {
   return (
     <main className="auth-page">
       <div className="auth-brand">
-        <span className="auth-brand-mark" />
+        <FlowLogo className="auth-brand-mark" />
         Flow
       </div>
       <section className="auth-panel">

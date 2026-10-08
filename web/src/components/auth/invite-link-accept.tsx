@@ -12,6 +12,7 @@ import { LanguageSelect } from "@/i18n/i18n";
 
 import "./auth-page.css";
 import "./invite-link-accept.css";
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 type Props = {
   session: AuthSession | null;
@@ -96,7 +97,7 @@ export function InviteLinkAccept({ session, onJoined }: Props) {
     <main className="auth-page invite-link-accept">
       <LanguageSelect className="auth-language" />
       <div className="auth-brand">
-        <span className="auth-brand-mark" />
+        <FlowLogo className="auth-brand-mark" />
         Flow
       </div>
       <section className="auth-panel">
