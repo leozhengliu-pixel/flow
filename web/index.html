@@ -29,7 +29,7 @@
       .flow-startup { position: fixed; inset: 0; display: grid; place-items: center; background: #121213; color: #6b6f76; font: 13px/20px system-ui, sans-serif; }
       [data-theme="light"] .flow-startup { background: #f9f9fa; color: #b0b5c0; }
       .flow-startup__content { position: relative; width: 64px; height: 64px; display: grid; place-items: center; }
-      .flow-startup__mark { width: 32px; height: 32px; }
+      .flow-startup__mark { width: 26px; height: 26px; }
       .flow-startup__pulse { position: absolute; inset: 0; border: 1px solid currentColor; border-radius: 50%; opacity: 0; animation: flow-startup-pulse 3.2s ease-out infinite; }
       .flow-startup__text { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); white-space: nowrap; opacity: 0; animation: flow-startup-text .4s ease-out 8s forwards; }
       .flow-startup__zh { display: none; }
@@ -46,7 +46,7 @@
       <div class="flow-startup" role="status" aria-live="polite" aria-busy="true">
         <div class="flow-startup__content">
           <span class="flow-startup__pulse" aria-hidden="true"></span>
-          <svg class="flow-startup__mark" viewBox="0 0 48 48" fill="currentColor" aria-hidden="true"><path d="M12 8a4 4 0 0 0-4 4v24a4 4 0 0 0 8 0v-6h13a4 4 0 0 0 0-8H16v-6h20a4 4 0 0 0 0-8H12Z"/><circle cx="35" cy="36" r="4"/></svg>
+          <svg class="flow-startup__mark" viewBox="4 4 40 40" fill="currentColor" aria-hidden="true"><mask id="flow-startup-ridge" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48"><rect width="48" height="48" fill="#fff"/><path d="M0 33C11 33 14 13 24 13C31 13 33 26 37 26C40.5 26 42.5 20 48 17" fill="none" stroke="#000" stroke-width="5"/></mask><rect x="4" y="4" width="40" height="40" rx="10" mask="url(#flow-startup-ridge)"/></svg>
           <span class="flow-startup__accessible"><span class="flow-startup__en">Loading Flow</span><span class="flow-startup__zh">正在加载 Flow</span></span>
           <span class="flow-startup__text" aria-hidden="true"><span class="flow-startup__en">Loading…</span><span class="flow-startup__zh">加载中…</span></span>
         </div>

@@ -19,6 +19,7 @@ import { LanguageSelect } from '@/i18n/i18n'
 import { createGoogleLoginState, withClientKey } from '@/lib/google-login-state'
 
 import './auth-page.css'
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 type Props = {
   session: AuthSession | null
@@ -160,7 +161,7 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
 }
 
 function AuthShell({ children }: { children: React.ReactNode }) {
-  return <main className="auth-page"><LanguageSelect className="auth-language"/><div className="auth-brand"><span className="auth-brand-mark"/>Flow</div><section className="auth-panel">{children}</section><footer><a href="https://flow.app/privacy" rel="noreferrer" target="_blank">Privacy</a><span>·</span><a href="https://flow.app/terms" rel="noreferrer" target="_blank">Terms</a></footer></main>
+  return <main className="auth-page"><LanguageSelect className="auth-language"/><div className="auth-brand"><FlowLogo className="auth-brand-mark"/>Flow</div><section className="auth-panel">{children}</section><footer><a href="https://flow.app/privacy" rel="noreferrer" target="_blank">Privacy</a><span>·</span><a href="https://flow.app/terms" rel="noreferrer" target="_blank">Terms</a></footer></main>
 }
 
 function initials(value: string) { return value.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'L' }

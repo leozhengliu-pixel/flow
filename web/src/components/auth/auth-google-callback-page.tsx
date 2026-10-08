@@ -10,6 +10,7 @@ import { fetchAuthSession } from '@/lib/api'
 import type { AuthSession } from '@/types/flow'
 
 import './auth-page.css'
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 type Props = {
   onAuthenticated?: (session: AuthSession, returnTo?: string) => Promise<void>
@@ -88,7 +89,7 @@ export function AuthGoogleCallbackPage({ onAuthenticated }: Props) {
   return (
     <main className="auth-page">
       <div className="auth-brand">
-        <span className="auth-brand-mark" />
+        <FlowLogo className="auth-brand-mark" />
         Flow
       </div>
       <section className="auth-panel">
