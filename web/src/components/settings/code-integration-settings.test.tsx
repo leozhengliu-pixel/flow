@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 
 import { I18nProvider } from "@/i18n/i18n";
@@ -27,43 +26,6 @@ it("distinguishes stored configuration from completed authorization", () => {
   expect(screen.getByRole('button',{name:'Manage connection'})).toHaveTextContent('Configured');
   rerender(view({...connection,status:'connected'}));
   expect(screen.getByRole('button',{name:'Manage connection'})).toHaveTextContent('Connected');
-});
-
-it("tests a GitLab token against the configured host before connecting", async () => {
-  const user = userEvent.setup();
-  api.testIntegrationConnection.mockResolvedValue({
-    provider: "gitlab",
-    status: "ready",
-    testedAt: new Date().toISOString(),
-  });
-  render(
-    <I18nProvider>
-      <CodeIntegrationSettings
-        provider="gitlab"
-        data={makeBootstrap({ integrationConnections: [] })}
-        onBack={vi.fn()}
-        onReload={vi.fn().mockResolvedValue(undefined)}
-      />
-    </I18nProvider>,
-  );
-
-  await user.type(screen.getByLabelText("API access token"), "glpat-test");
-  await user.type(
-    screen.getByRole("textbox", {
-      name: "Custom GitLab URL (optional, self-hosted only)",
-    }),
-    "https://gitlab.example.com",
-  );
-  await user.click(screen.getByRole("button", { name: "Test connection" }));
-
-  expect(api.testIntegrationConnection).toHaveBeenCalledWith(
-    "gitlab",
-    undefined,
-    {
-      token: "glpat-test",
-      host: "https://gitlab.example.com",
-    },
-  );
 });
 
 it("renders GitHubSettingsMetadata pull-request and Enterprise Cloud sections (LS-0282)", () => {

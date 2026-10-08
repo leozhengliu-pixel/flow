@@ -25,6 +25,7 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import type { NewProjectDraft } from "./new-project-dialog";
 import { parseProjectAgentDraft, projectAgentPrompt, splitProjectAgentReply } from "./project-agent-draft";
 import "./project-creation-agent.css";
+import { GridLoader } from '@/components/ui/grid-loader'
 
 export type ProjectCreationAgentProps = {
   agentSkills?: PersonalAgentSkill[];
@@ -361,7 +362,7 @@ export function ProjectCreationAgent({
             </div>
             {busy && (
               <div className="project-creation-agent__thinking" aria-live="polite">
-                <span className="project-creation-agent__spinner" />
+                <GridLoader variant="agent" className="project-creation-agent__spinner" size={14} />
                 {t("Thinking…")}
               </div>
             )}

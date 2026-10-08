@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRight, Cable, ChevronDown, CircleAlert, LoaderCircle, ShieldCheck } from 'lucide-react'
+import { ArrowLeftRight, Cable, ChevronDown, CircleAlert, ShieldCheck } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
@@ -10,6 +10,7 @@ import { request as apiRequest } from '@/lib/api-client'
 
 import './oauth-authorize-page.css'
 import { FlowLogo } from '@/components/ui/flow-logo'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Props = { account: AccountBootstrap }
 
@@ -97,7 +98,7 @@ function OAuthConsentPage({ account }: Props) {
   }
 
   if (!request) return <OAuthShell workspaceName={account.workspaces[0]?.workspace.name}>
-    {error?<section className="oauth-invalid" role="alert"><CircleAlert/><h1>Authorization request unavailable</h1><p>{oauthErrorMessage(error)}</p><button onClick={()=>navigate('/')}>Back to Flow</button></section>:<div aria-label="Loading authorization request" className="oauth-loading"><LoaderCircle/></div>}
+    {error?<section className="oauth-invalid" role="alert"><CircleAlert/><h1>Authorization request unavailable</h1><p>{oauthErrorMessage(error)}</p><button onClick={()=>navigate('/')}>Back to Flow</button></section>:<div aria-label="Loading authorization request" className="oauth-loading"><GridLoader size={22}/></div>}
   </OAuthShell>
 
   if (selecting) return <OAuthShell workspaceName={account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)?.workspace.name}>
@@ -139,7 +140,7 @@ function OAuthConsentPage({ account }: Props) {
       {error && <div className="oauth-error">{error}</div>}
       <footer>
         <button className="oauth-cancel" disabled={pending} onClick={() => void submit(false)}>Cancel</button>
-        <button className="oauth-approve" disabled={pending || isApplication && !teamIds.length} onClick={() => void submit(true)}>{pending ? <LoaderCircle/> : <ShieldCheck/>}{isApplication ? 'Install application' : 'Approve'}</button>
+        <button className="oauth-approve" disabled={pending || isApplication && !teamIds.length} onClick={() => void submit(true)}>{pending ? <GridLoader/> : <ShieldCheck/>}{isApplication ? 'Install application' : 'Approve'}</button>
       </footer>
     </section>
   </OAuthShell>

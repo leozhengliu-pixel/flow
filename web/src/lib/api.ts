@@ -1011,6 +1011,48 @@ export function connectIntegration(
 ): Promise<IntegrationConnection> {
   return request(`/api/integrations/${provider}`, jsonRequest("PUT", input));
 }
+/** Connection returned by a GitLab token connect; the webhook secret is only ever returned here. */
+export type GitLabConnectResult = IntegrationConnection & {
+  webhookSecret?: string;
+  webhookPath?: string;
+};
+export function connectGitLab(input: {
+  name?: string;
+  token: string;
+  url?: string;
+}): Promise<GitLabConnectResult> {
+  return request(
+    "/api/integrations/gitlab",
+    jsonRequest("PUT", {
+      name: input.name ?? "GitLab",
+      config: { apiToken: input.token, host: input.url ?? "" },
+    }),
+  );
+}
+export function updateGitLabToken(
+  id: string,
+  token: string,
+): Promise<IntegrationConnection> {
+  return request(
+    `/api/integrations/gitlab/${encodeURIComponent(id)}/token`,
+    jsonRequest("POST", { token }),
+  );
+}
+export function rotateGitLabToken(id: string): Promise<IntegrationConnection> {
+  return request(
+    `/api/integrations/gitlab/${encodeURIComponent(id)}/token/rotate`,
+    { method: "POST" },
+  );
+}
+export function setGitLabTokenRotation(
+  id: string,
+  enabled: boolean,
+): Promise<IntegrationConnection> {
+  return request(
+    `/api/integrations/gitlab/${encodeURIComponent(id)}/token/rotation`,
+    jsonRequest("PUT", { enabled }),
+  );
+}
 export function startIntegrationOAuth(provider: string): Promise<{
   provider: string;
   connectionId: string;

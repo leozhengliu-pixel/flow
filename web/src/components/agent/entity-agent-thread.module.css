@@ -31,7 +31,7 @@
 .messageDocument pre{overflow:auto;margin:9px 0 0;padding:8px;border:.5px solid var(--theme-border);border-radius:6px;background:var(--theme-surface-1)}
 .messageDocument pre code{padding:0;border:0;background:transparent}
 .thinking{display:flex;align-items:center;gap:7px;color:var(--theme-text-secondary);font-size:12px}
-.thinking svg{width:14px;height:14px;animation:agentSpin .8s linear infinite}
+.thinking svg{width:14px;height:14px}
 .composer{margin:0 8px 8px;padding:10px 10px 8px;border:.5px solid var(--popover-border);border-radius:16px;background:var(--theme-surface-2);box-shadow:var(--shadow-dialog)}
 .context{max-height:82px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
 .context>span{height:25px;display:grid;grid-template-columns:16px auto minmax(0,1fr);align-items:center;gap:6px;padding:0 7px;border-radius:6px;background:var(--theme-surface-hover);color:var(--theme-text-secondary)}
@@ -50,7 +50,7 @@
 .approvalActions button:last-child{border-color:var(--accent-primary);background:var(--accent-primary);color:var(--on-accent)}
 .approvalActions button:hover:not(:disabled){filter:brightness(1.08)}
 .approvalActions button:disabled{cursor:wait;opacity:.55}
-@keyframes agentSpin{to{transform:rotate(360deg)}}
+
 @media(prefers-reduced-motion:reduce){.thinking svg{animation:none}}
 :global(:root[data-theme="light"]) .empty{color:var(--muted);font-size:13px}
 :global(:root[data-theme="light"]) .messageDocument code,:global(:root[data-theme="light"]) .messageDocument pre{border-color:var(--theme-border);background:var(--theme-surface-1)}

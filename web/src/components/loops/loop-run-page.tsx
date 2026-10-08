@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Link2, LoaderCircle, Paperclip, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Link2, Paperclip, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -25,13 +25,14 @@ import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration, runTriggerLabel } from "./loop-model";
+import { GridLoader } from '@/components/ui/grid-loader'
 
 const POLL_MS = 1500;
 /** Loop runs never wait for approvals in the transcript. */
 const ignoreApproval = () => undefined;
 
 function RunStatusIcon({ status }: { status: LoopRun["status"] }) {
-  if (status === "running") return <LoaderCircle aria-label="Running" className="loops-run-status is-running" size={14} />;
+  if (status === "running") return <GridLoader variant="agent" label="Running" className="loops-run-status is-running" size={14} />;
   if (status === "failed") return <AlertTriangle aria-label="Failed" className="loops-run-status is-failed" size={14} />;
   return <CheckCircle2 aria-label="Completed" className="loops-run-status is-completed" size={14} />;
 }
@@ -501,7 +502,7 @@ function RunReplyComposer({
           }}
         />
         <button type="submit" className="loops-run-send" aria-label={t("Send message")} title={t("Send message")} disabled={!canSend}>
-          {sending ? <LoaderCircle size={14} className="loops-run-status is-running" /> : <ArrowUp size={14} />}
+          {sending ? <GridLoader variant="agent" size={14} className="loops-run-status is-running" /> : <ArrowUp size={14} />}
         </button>
       </div>
     </form>

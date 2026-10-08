@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { ArrowLeft, Check, Eye, EyeOff, LoaderCircle, Mail } from 'lucide-react'
+import { ArrowLeft, Check, Eye, EyeOff, Mail } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import {
@@ -20,6 +20,7 @@ import { createGoogleLoginState, withClientKey } from '@/lib/google-login-state'
 
 import './auth-page.css'
 import { FlowLogo } from '@/components/ui/flow-logo'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Props = {
   session: AuthSession | null
@@ -103,12 +104,12 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
     return <AuthShell>
       <div className="auth-invite-mark">{initials(invitation?.workspace.name ?? '')}</div>
       <h1>{invitation ? `Join ${invitation.workspace.name}` : 'Workspace invitation'}</h1>
-      {pending && !invitation ? <LoaderCircle className="auth-spinner"/> : invitation && <>
+      {pending && !invitation ? <GridLoader className="auth-spinner"/> : invitation && <>
         <p><strong>{invitation.email}</strong> was invited as {invitation.role === 'guest' ? 'a guest' : invitation.role === 'admin' ? 'an admin' : 'a member'}.</p>
         {session ? <button className="auth-primary" disabled={pending || session.user.email.toLowerCase() !== invitation.email.toLowerCase()} onClick={() => void run(async () => {
           await acceptInvitation(inviteToken)
           await onInvitationAccepted(invitation.workspace.urlKey)
-        })}>{pending ? <LoaderCircle className="auth-spinner"/> : 'Join workspace'}</button> : <div className="auth-invite-actions">
+        })}>{pending ? <GridLoader className="auth-spinner"/> : 'Join workspace'}</button> : <div className="auth-invite-actions">
           <button className="auth-primary" onClick={() => navigate(`/signup?email=${encodeURIComponent(invitation.email)}&returnTo=${encodeURIComponent(location.pathname)}`)}>Create account</button>
           <button className="auth-secondary" onClick={() => navigate(`/login?email=${encodeURIComponent(invitation.email)}&returnTo=${encodeURIComponent(location.pathname)}`)}>Sign in</button>
         </div>}
@@ -124,7 +125,7 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
       <div className="auth-mail-icon"><Mail/></div>
       <h1>Verify your email</h1>
       <p>We sent a verification link to <strong>{params.get('email')}</strong>.</p>
-      {token && !message && <button className="auth-primary" disabled={pending} onClick={() => void run(async () => { await verifyEmail(token); setMessage('Email verified. You can now sign in.') })}>{pending ? <LoaderCircle className="auth-spinner"/> : 'Verify email'}</button>}
+      {token && !message && <button className="auth-primary" disabled={pending} onClick={() => void run(async () => { await verifyEmail(token); setMessage('Email verified. You can now sign in.') })}>{pending ? <GridLoader className="auth-spinner"/> : 'Verify email'}</button>}
       {message && <div className="auth-success" role="status"><Check/>{message}</div>}
       <button className="auth-text-button" onClick={() => navigate(`/login?email=${encodeURIComponent(params.get('email') ?? '')}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ''}`)}>Continue to login</button>
       <button className="auth-text-button" disabled={pending} onClick={() => void run(async () => { const result = await resendVerification(params.get('email') ?? ''); if (result.verificationToken) navigate(`/verify-email?email=${encodeURIComponent(params.get('email') ?? '')}&token=${encodeURIComponent(result.verificationToken)}`); else setMessage('A new verification email has been sent.'); })}>Resend verification email</button>
@@ -150,7 +151,7 @@ export function AuthPage({ session, onAuthenticated, onInvitationAccepted }: Pro
       {!isReset && <label>Email address<input name="email" autoFocus={!isSignup} type="email" autoComplete="email" value={email} onChange={event => setEmail(event.target.value)} placeholder="name@company.com" required/></label>}
       {!isForgot && <label>Password<div className="auth-password"><input name="password" autoFocus={isReset} type={showPassword ? 'text' : 'password'} autoComplete={isSignup ? 'new-password' : 'current-password'} value={password} onChange={event => setPassword(event.target.value)} placeholder={isSignup || isReset ? 'At least 8 characters' : 'Enter your password'} minLength={8} required/><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff/> : <Eye/>}</button></div></label>}
       {!isSignup && !isForgot && !isReset && <button type="button" className="auth-forgot" onClick={() => navigate(`/forgot-password?email=${encodeURIComponent(email)}`)}>Forgot password?</button>}
-      <button className="auth-primary" disabled={pending}>{pending ? <LoaderCircle className="auth-spinner"/> : isSignup ? 'Create account' : isForgot ? 'Send reset link' : isReset ? 'Update password' : 'Continue'}</button>
+      <button className="auth-primary" disabled={pending}>{pending ? <GridLoader className="auth-spinner"/> : isSignup ? 'Create account' : isForgot ? 'Send reset link' : isReset ? 'Update password' : 'Continue'}</button>
     </form>}
     {message && <div className="auth-success" role="status"><Check/>{message}</div>}
     {isReset&&message&&<button className="auth-primary auth-continue" onClick={()=>navigate('/login')}>Continue to login</button>}

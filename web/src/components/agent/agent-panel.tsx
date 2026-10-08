@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { LoaderCircle, Maximize2, Minimize2, Minus, PanelLeft, PanelRight, Plus, X } from 'lucide-react'
+import { Maximize2, Minimize2, Minus, PanelLeft, PanelRight, Plus, X } from 'lucide-react'
 import { useI18n } from '@/i18n/i18n'
 import { AgentPanelLayout } from './agent-panel-layout'
 import styles from './agent-panel.module.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 export type AgentPanelDock = 'left' | 'right'
 export type AgentPanelVariant = 'floating' | 'sidebar'
@@ -240,7 +241,7 @@ export function AgentPanel({
           <div className={styles.body}>
             {loading ? (
               <div className={styles.loading} role="status">
-                <LoaderCircle />
+                <GridLoader variant="agent" size={16} />
                 {t('Loading conversation…')}
               </div>
             ) : (
@@ -275,7 +276,7 @@ export function AgentPanelToggleButton({
       title={t(open ? 'Close chat' : 'Open chat')}
       type="button"
     >
-      {working ? <LoaderCircle size={14} /> : open ? <PanelRight size={15} /> : <PanelRight size={15} />}
+      {working ? <GridLoader variant="agent" size={14} /> : open ? <PanelRight size={15} /> : <PanelRight size={15} />}
       <span>{t('Chat')}</span>
     </button>
   )

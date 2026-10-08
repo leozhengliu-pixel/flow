@@ -53,8 +53,10 @@ func TestReviewLifecycleAndCodeConnections(t *testing.T) {
 	requestJSON[any](t, handler, http.MethodPost, "/api/reviews/"+review.ID+"/submit", map[string]string{"decision": "approve"}, http.StatusConflict)
 
 	github := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/github", map[string]any{"name": "heliumlabz", "config": map[string]string{"organization": "heliumlabz"}}, http.StatusOK)
-	gitlab := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/gitlab", map[string]any{"name": "GitLab", "config": map[string]string{"apiToken": "glpat-secret-1234", "host": "https://gitlab.example.com"}}, http.StatusOK)
-	if github.ID == gitlab.ID || gitlab.Config["tokenHint"] != "1234" || gitlab.SecretHash != "" {
+	enableConnectorSecrets(t)
+	fakeGitLab := newFakeGitLab(t)
+	gitlab := requestJSON[domain.IntegrationConnection](t, handler, http.MethodPut, "/api/integrations/gitlab", map[string]any{"name": "GitLab", "config": map[string]string{"apiToken": "glpat-fake-api", "host": fakeGitLab.URL}}, http.StatusOK)
+	if github.ID == gitlab.ID || gitlab.Config["tokenHint"] != "-api" || gitlab.SecretHash != "" {
 		t.Fatalf("code connections were not safely persisted: github=%#v gitlab=%#v", github, gitlab)
 	}
 	connections := requestJSON[[]domain.IntegrationConnection](t, handler, http.MethodGet, "/api/integrations", nil, http.StatusOK)

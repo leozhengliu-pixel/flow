@@ -1,8 +1,8 @@
 import { useMemo, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LoaderCircle } from 'lucide-react'
 
 import './complete-oauth-views.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 const PROVIDER_LABELS: Record<string, string> = {
   github: 'GitHub',
@@ -75,7 +75,7 @@ export function CompleteOAuthView() {
   return (
     <OAuthCompleteShell>
       <div className="oauth-complete-card" data-state="loading" role="status">
-        <LoaderCircle className="oauth-complete-spinner" aria-hidden />
+        <GridLoader className="oauth-complete-spinner" size={22} />
         <p>Completing {label} authorization…</p>
       </div>
     </OAuthCompleteShell>

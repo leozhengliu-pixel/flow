@@ -574,12 +574,6 @@
 .dashboard-spin {
   display: block;
   margin: 28vh auto;
-  animation: dashboard-spin 1s linear infinite;
-}
-@keyframes dashboard-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 .dashboard-menu {
   z-index: 1100;
