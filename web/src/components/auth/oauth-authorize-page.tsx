@@ -9,6 +9,7 @@ import type { Team } from '@/types/flow'
 import { request as apiRequest } from '@/lib/api-client'
 
 import './oauth-authorize-page.css'
+import { FlowLogo } from '@/components/ui/flow-logo'
 
 type Props = { account: AccountBootstrap }
 
@@ -152,7 +153,7 @@ function OAuthShell({ workspaceName, onWorkspace, children }: { workspaceName?: 
 }
 
 function OAuthMarks({ clientName }: { clientName: string }) {
-  return <div className="oauth-marks"><span className="oauth-client-mark" aria-label="MCP client"><Cable/></span><ArrowLeftRight/><span className="oauth-flow-mark" aria-label="Flow"><i/><i/><i/></span><span className="oauth-client-name" data-i18n-ignore>{clientName}</span></div>
+  return <div className="oauth-marks"><span className="oauth-client-mark" aria-label="MCP client"><Cable/></span><ArrowLeftRight/><span className="oauth-flow-mark" aria-label="Flow"><FlowLogo/></span><span className="oauth-client-name" data-i18n-ignore>{clientName}</span></div>
 }
 
 function WorkspaceMark({ name, color }: { name: string; color?: string }) {

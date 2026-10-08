@@ -1,5 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <rect width="48" height="48" rx="12" fill="#5E6AD2"/>
-  <path fill="#FFF" d="M12 8a4 4 0 0 0-4 4v24a4 4 0 0 0 8 0v-6h13a4 4 0 0 0 0-8H16v-6h20a4 4 0 0 0 0-8H12Z"/>
-  <circle cx="35" cy="36" r="4" fill="#54D2A0"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 40 40">
+  <style>rect.mark{fill:#111113}@media (prefers-color-scheme:dark){rect.mark{fill:#f4f4f5}}</style>
+  <mask id="ridge" maskUnits="userSpaceOnUse" x="0" y="0" width="48" height="48">
+    <rect width="48" height="48" fill="#fff"/>
+    <path d="M0 33C11 33 14 13 24 13C31 13 33 26 37 26C40.5 26 42.5 20 48 17" fill="none" stroke="#000" stroke-width="5"/>
+  </mask>
+  <rect class="mark" x="4" y="4" width="40" height="40" rx="10" mask="url(#ridge)"/>
 </svg>
