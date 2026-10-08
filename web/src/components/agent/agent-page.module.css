@@ -138,6 +138,8 @@
   flex-direction: column;
 }
 .emptyComposerSlot > .composer {
+  --agent-composer-border-width: var(--agent-empty-composer-border-width);
+  --agent-composer-shadow: var(--agent-empty-composer-shadow);
   position: relative;
   z-index: 1;
   top: auto;
@@ -145,7 +147,8 @@
   width: 100%;
   transform: none;
 }
-/* The mark sits 208px above the composer and fades out by 60% of its height, so it dissolves behind it. */
+/* The mark sits 208px above the composer and is fully faded 205.5px down (Linear's mask runs over its 342.5px box),
+   so it dissolves right where the composer starts. */
 .emptyLogo {
   --flow-logo-outline-fill: var(--agent-empty-logo-fill);
   --flow-logo-outline-stroke: var(--agent-empty-logo-stroke);
@@ -158,7 +161,7 @@
   aspect-ratio: 1 / 1;
   transform: translate(-50%, -40px);
   pointer-events: none;
-  mask-image: linear-gradient(black, transparent 60%);
+  mask-image: linear-gradient(black, transparent 61.2%);
 }
 .history {
   grid-row: 3;
@@ -207,6 +210,7 @@
   line-height: normal;
   text-decoration: none;
   cursor: default;
+  transition: color 0.15s ease-out;
   scroll-margin-block: 24px;
 }
 .historyRow[data-unread],
@@ -219,8 +223,8 @@
   background: var(--agent-history-row-hover);
 }
 .historyRow:focus-visible {
-  outline: 1px solid var(--focus-ring);
-  outline-offset: -1px;
+  outline: 1px solid var(--agent-history-focus-ring);
+  outline-offset: 1px;
 }
 .historyDot {
   position: absolute;
@@ -243,9 +247,14 @@
   margin-left: 18px;
 }
 .historyTime {
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  min-width: 33.18px;
   margin-left: 16px;
   color: var(--agent-history-text);
+  /* A fixed line box keeps the Chinese unit glyph from making the row taller than the Latin "8d" does. */
+  line-height: 15.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
   white-space: nowrap;
 }
 .conversationComposer {
