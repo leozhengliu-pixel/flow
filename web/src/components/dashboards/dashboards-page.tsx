@@ -15,7 +15,6 @@ import {
   Filter,
   LayoutDashboard,
   Link2,
-  LoaderCircle,
   MoreHorizontal,
   Plus,
   RefreshCw,
@@ -78,6 +77,7 @@ import {
 } from "./widget-actions";
 import { useWidgetInsight } from "@/components/insights/use-widget-insight";
 import { workspaceIssuesPath } from "@/lib/app-routes";
+import { GridLoader } from '@/components/ui/grid-loader'
 
 
 type DashboardFilters = NonNullable<Dashboard["filters"]>;
@@ -538,7 +538,7 @@ export function DashboardsPage({
               </>
             )}
             {loading && !directoryError ? (
-              <LoaderCircle className="dashboard-spin" />
+              <GridLoader className="dashboard-spin" size={24} />
             ) : directoryError ? (
               <div className="dashboard-state dashboard-state-error" role="alert">
                 <strong>{directoryError}</strong>
@@ -649,7 +649,7 @@ export function DashboardsPage({
               </button>
             </div>
           ) : loading ? (
-            <LoaderCircle className="dashboard-spin" />
+            <GridLoader className="dashboard-spin" size={24} />
           ) : selected.widgets.length && results.length ? (
             <div className="dashboard-grid dashboard-layout" data-dashboard-layout="rows">
               {widgetsToLayout(selected.widgets).rows.map((row) => (
@@ -1519,8 +1519,8 @@ function InsightEditorPage({
           <InsightFilterBuilder data={data} filters={draft.filters} onChange={(filters) => update("filters", filters)} />
         </aside>
         <section className="dashboard-insight-preview" aria-label={t("Insight preview")}>
-          <header><strong>{draft.title.trim() || t(insightDefaultTitle(draft))}</strong>{previewing && <LoaderCircle className="dashboard-spin" />}<button aria-label={t("Explore issues")} type="button" onClick={() => onExplore(draft.filters)}><Expand /></button></header>
-          <div>{previewError ? <span className="metric-muted">{previewError}</span> : preview ? <WidgetValue result={preview} display={draft.display} /> : <LoaderCircle className="dashboard-spin" />}</div>
+          <header><strong>{draft.title.trim() || t(insightDefaultTitle(draft))}</strong>{previewing && <GridLoader className="dashboard-spin" size={24} />}<button aria-label={t("Explore issues")} type="button" onClick={() => onExplore(draft.filters)}><Expand /></button></header>
+          <div>{previewError ? <span className="metric-muted">{previewError}</span> : preview ? <WidgetValue result={preview} display={draft.display} /> : <GridLoader className="dashboard-spin" size={24} />}</div>
         </section>
       </div>
     </section>

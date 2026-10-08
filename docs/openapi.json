@@ -6489,6 +6489,96 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/integrations/gitlab/{id}/token": {
+      "post": {
+        "operationId": "post_integrations_gitlab_id_token",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/gitlab/{id}/token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/gitlab/{id}/token/rotate": {
+      "post": {
+        "operationId": "post_integrations_gitlab_id_token_rotate",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "POST /api/integrations/gitlab/{id}/token/rotate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/gitlab/{id}/token/rotation": {
+      "put": {
+        "operationId": "put_integrations_gitlab_id_token_rotation",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "PUT /api/integrations/gitlab/{id}/token/rotation",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/invitations/accept": {
       "post": {
         "operationId": "post_invitations_accept",

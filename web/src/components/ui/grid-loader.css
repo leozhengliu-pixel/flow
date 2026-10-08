@@ -1,0 +1,11 @@
+:where(.gli) { display: inline-block; flex: none; overflow: hidden; vertical-align: middle; }
+.gli-sprite { transform-box: fill-box; animation-name: gli-sprite; animation-iteration-count: infinite; }
+.gli[data-paused] .gli-sprite { animation-play-state: paused; }
+.gli-static { display: none; }
+.gli:not([data-sprite]) .gli-static { display: inline; }
+.gli[data-frames="1"] .gli-sprite { animation: none; }
+@keyframes gli-sprite { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .gli-sprite { display: none; }
+  .gli .gli-static { display: inline; }
+}

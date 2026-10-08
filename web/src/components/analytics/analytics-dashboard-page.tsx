@@ -7,7 +7,6 @@ import {
   Download,
   Expand,
   LayoutDashboard,
-  LoaderCircle,
   Minimize2,
   MoreHorizontal,
   RefreshCw,
@@ -26,6 +25,7 @@ import { useI18n } from "@/i18n/i18n";
 import type { ExportJob } from "@/types/flow";
 import { InsightBar, InsightLine } from "./flow-insight-graph";
 import "./analytics-dashboard-page.css";
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type Overview = {
   issues?: { total?: number; active?: number };
@@ -121,7 +121,7 @@ export function AnalyticsDashboardPage() {
   if (loading && !overview)
     return (
       <main className="main-panel insights-page">
-        <LoaderCircle className="insights-spin" />
+        <GridLoader className="insights-spin" size={24} />
       </main>
     );
   return (

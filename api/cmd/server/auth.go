@@ -562,6 +562,11 @@ func adminOnlyRequest(r *http.Request) bool {
 	if strings.HasPrefix(path, "/api/integrations/") && strings.HasSuffix(path, "/configure") {
 		return true
 	}
+	// Connecting GitLab or replacing/rotating its access token handles a
+	// workspace credential, so only administrators may do it.
+	if (path == "/api/integrations/gitlab" && r.Method == http.MethodPut) || (strings.HasPrefix(path, "/api/integrations/gitlab/") && strings.Contains(path, "/token")) {
+		return true
+	}
 	if path == "/api/workspace/agent-guidance" {
 		return false
 	}

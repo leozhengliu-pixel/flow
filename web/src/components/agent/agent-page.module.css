@@ -693,12 +693,6 @@
   color: inherit;
 }
 .partError > button:hover { background: var(--theme-surface-hover); }
-.spin {
-  animation: agent-spin 900ms linear infinite;
-}
-@keyframes agent-spin {
-  to { transform: rotate(360deg); }
-}
 .editing {
   position: absolute;
   z-index: 3;

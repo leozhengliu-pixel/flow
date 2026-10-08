@@ -19,6 +19,7 @@ import type { ProjectAgentDraft } from './project-agent-draft'
 import { AgentPointerIcon } from '@/components/agent/agent-icons'
 import './projects-page.css'
 import '@/components/ui/create-pill.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 export type NewProjectDraft = {
   templateId?: string
@@ -241,7 +242,7 @@ export function NewProjectDialog({
       </div>
       <footer className="lp-new-project__footer">
         <button disabled={submitting} onClick={requestClose} type="button">Cancel</button>
-        <button className="is-primary" disabled={submitting} type="submit">{submitting ? <span className="lp-new-project__spinner" /> : null}{submitting ? 'Creating…' : 'Create project'}</button>
+        <button className="is-primary" disabled={submitting} type="submit">{submitting ? <GridLoader className="lp-new-project__spinner" size={12} /> : null}{submitting ? 'Creating…' : 'Create project'}</button>
       </footer>
     </form>
     <ProjectCreationAgent agentSkills={agentSkills} draft={draft} hidden={!agentOpen} onApplyDraft={patch => setDraft(current => mergeAgentDraft(current, patch, statuses, { dependencies, initiatives, labels, leads, members, teams }))} onClose={requestClose} onHide={() => setAgentOpen(false)} workspaceName={workspaceName ?? teamLabel} />

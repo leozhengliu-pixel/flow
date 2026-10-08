@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { LoaderCircle } from 'lucide-react'
 
 import { finishFigmaAuth } from '@/lib/finish-figma-auth'
 import { OAuthCompleteShell } from './complete-oauth-view'
 
 import './complete-oauth-views.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 /** LS-0126 CompleteFigmaAuthView */
 export function CompleteFigmaAuthView() {
@@ -81,7 +81,7 @@ export function CompleteFigmaAuthView() {
     return (
       <OAuthCompleteShell>
         <div className="oauth-complete-card" data-state="loading" role="status">
-          <LoaderCircle className="oauth-complete-spinner" aria-hidden />
+          <GridLoader className="oauth-complete-spinner" size={22} />
           <p>Completing Figma authorization…</p>
         </div>
       </OAuthCompleteShell>

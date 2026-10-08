@@ -280,16 +280,7 @@
   font-size: 12px;
 }
 
-.project-creation-agent__spinner {
-  width: 14px;
-  height: 14px;
-  border: 1.5px solid var(--theme-border-strong);
-  border-top-color: var(--theme-text-primary);
-  border-radius: 50%;
-  animation: project-agent-spin .8s linear infinite;
-}
-
-@keyframes project-agent-spin { to { transform: rotate(360deg); } }
+.project-creation-agent__spinner { color: var(--theme-text-primary); }
 
 .project-creation-agent__composer {
   position: relative;
@@ -502,8 +493,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .project-creation-agent__spinner { animation: none; }
-}
+  }
 
 /* "Updated project draft" step — Linear: 12px label, then a 41px bordered card with the project glyph and name. */
 .project-creation-agent__draft-update {

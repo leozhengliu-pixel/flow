@@ -12,6 +12,7 @@ import { PulseFrequencyContextSubmenu } from './pulse-frequency-menu'
 import type { PulseFrequency } from './pulse-summary-model'
 import styles from './notification-row.module.css'
 import './inbox-date-control.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
@@ -189,7 +190,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
                 pending={pending}
                 onSnooze={() => setKeyboardSnoozeOpen(true)}
               />
-              {pending ? <span className="flow-inbox-row__pending" aria-hidden="true" /> : null}
+              {pending ? <span className="flow-inbox-row__pending" aria-hidden="true"><GridLoader size={14} /></span> : null}
               {actionError ? <span id={`${notification.id}-action-error`} className={styles.actionError} role="alert">{actionError}</span> : null}
             </div>
           </ContextMenu.Trigger>

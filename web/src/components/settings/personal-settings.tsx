@@ -19,7 +19,6 @@ import {
   Ellipsis,
   GitFork,
   KeyRound,
-  LoaderCircle,
   Mail,
   Pencil,
   MessageCircle,
@@ -79,6 +78,7 @@ import type {
 import { translateToChinese, useI18n } from "@/i18n/i18n";
 import { resolveFirstDay } from "@/lib/runtime-preferences";
 import { TeamIcon } from "@/components/issue/issue-icons";
+import { GridLoader } from '@/components/ui/grid-loader'
 import {
   SettingsPageTitle,
   SettingsRow,
@@ -3295,7 +3295,7 @@ function APIKeyCreatePage({
                 disabled={busy}
                 aria-busy={busy}
               >
-                {busy && <LoaderCircle aria-hidden="true" />}
+                {busy && <GridLoader />}
                 {editing ? p("Save") : p("Create")}
               </button>
             </footer>

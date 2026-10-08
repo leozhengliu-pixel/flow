@@ -1,0 +1,143 @@
+/*
+ * GitLab integration settings. Sizes, type and spacing are measured from the
+ * reference app at 1470px wide; colours come from the --set-* settings tokens
+ * and the --integration-* tokens in styles/tokens.css (light and dark).
+ */
+.gitlab-settings{width:640px;max-width:100%;margin:0 auto;padding:12px 0 16px;color:var(--set-text);font-family:var(--font);letter-spacing:0}
+.gitlab-settings button{font-family:inherit}
+
+.gitlab-settings-back{position:absolute;top:10px;left:8px;z-index:2;height:28px;display:inline-flex;align-items:center;gap:6px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--set-group-desc);font:500 13px/normal var(--font);cursor:pointer}
+.gitlab-settings-back:hover{background:var(--bg-hover);color:var(--set-text)}
+.gitlab-settings-back:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.gitlab-settings-back svg{width:14px;height:14px;flex:none}
+
+.gitlab-settings-hero{display:flex;align-items:flex-start;gap:16px;margin-bottom:24px}
+.gitlab-settings-logo{box-sizing:border-box;width:48px;height:48px;flex:none;display:grid;place-items:center;border:1px solid var(--integration-logo-border);border-radius:8px;background:var(--integration-logo-tile)}
+.gitlab-settings-hero h2{margin:0;color:var(--set-text);font-size:18px;font-weight:500;line-height:22px}
+.gitlab-settings-hero h3{margin:0;color:var(--set-group-desc);font-size:15px;font-weight:450;line-height:23px}
+
+.gitlab-settings-about{box-sizing:border-box;padding:16px;border:.5px solid var(--popover-border);border-radius:10px;background:var(--set-card)}
+.gitlab-settings-status{min-height:35px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.gitlab-settings-meta{min-width:0;display:flex;align-items:center;gap:31px;margin:0;padding:0;list-style:none}
+.gitlab-settings-meta li{min-width:0;height:35px;display:flex;flex-direction:column}
+.gitlab-settings-meta li>span:first-child,.gitlab-settings-meta-enabled div>span{color:var(--set-desc);font-size:11px;font-weight:500;line-height:16.5px;text-transform:uppercase}
+.gitlab-settings-meta a,.gitlab-settings-meta-value{margin-top:-1px;display:flex;align-items:center;gap:4px;color:var(--set-control-text);font-size:13px;font-weight:500;line-height:19.5px;text-decoration:none}
+.gitlab-settings-meta a:hover{color:var(--set-text)}
+.gitlab-settings-meta svg{width:12px;height:12px;flex:none}
+.gitlab-settings-meta li.gitlab-settings-meta-enabled{flex-direction:row;align-items:center;gap:8px}
+.gitlab-settings-meta-enabled div{min-width:0;display:flex;flex-direction:column;gap:2px}
+.gitlab-settings-meta-enabled strong{display:flex;align-items:baseline;gap:4px;color:var(--set-control-text);font-size:13px;font-weight:500;line-height:16px;white-space:nowrap}
+.gitlab-settings-meta-enabled b{font-weight:500}
+.gitlab-settings-meta-enabled small{overflow:hidden;color:var(--set-desc);font-size:12px;font-weight:450;text-overflow:ellipsis}
+.gitlab-settings-avatar{width:24px;height:24px;flex:none;font-size:10px}
+
+.gitlab-settings-status-actions{display:flex;align-items:center;gap:4px}
+.gitlab-settings-progress{display:inline-flex;align-items:center;gap:8px;color:var(--form-control-placeholder);font-size:13px;font-weight:450;line-height:16px;white-space:nowrap}
+.gitlab-settings-progress .gli{color:var(--set-text)}
+
+.gitlab-settings-button{box-sizing:border-box;height:32px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:var(--set-button);box-shadow:0 0 0 .5px var(--set-search-border),var(--set-primary-shadow);color:var(--set-button-text);font-size:13px;font-weight:500;line-height:normal;white-space:nowrap;cursor:pointer;transition:background-color var(--fade),opacity var(--fade)}
+.gitlab-settings-button:hover{background:var(--bg-hover)}
+.gitlab-settings-button:focus-visible,.gitlab-settings-icon-button:focus-visible,.gitlab-settings-status-button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.gitlab-settings-button.primary{background:var(--set-primary);box-shadow:var(--set-primary-shadow);color:var(--set-primary-text)}
+.gitlab-settings-button.primary:hover{background:var(--set-primary);filter:brightness(1.06)}
+.gitlab-settings-button.borderless{background:transparent;box-shadow:none;color:var(--set-control-text)}
+.gitlab-settings-button.borderless:hover{background:var(--bg-hover)}
+.gitlab-settings-button:disabled{opacity:.5;cursor:default}
+.gitlab-settings-button svg{width:16px;height:16px;flex:none}
+.gitlab-settings-icon-button{width:32px;height:32px;display:grid;place-items:center;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--set-desc);cursor:pointer}
+.gitlab-settings-icon-button:hover,.gitlab-settings-icon-button[aria-expanded=true]{background:var(--bg-hover);color:var(--set-text)}
+.gitlab-settings-icon-button svg{width:16px;height:16px}
+
+.gitlab-settings-about hr{height:0;margin:16px 0;border:0;border-top:.5px solid var(--set-sep)}
+.gitlab-settings-overview h2{margin:0 0 3px;color:var(--set-text);font-size:15px;font-weight:500;line-height:18.75px}
+.gitlab-settings-overview p{margin:0;color:var(--set-desc);font-size:15px;font-weight:400;line-height:25.5px}
+.gitlab-settings-overview p+h2{margin-top:16px}
+.gitlab-settings-read-more{margin:12px 0 0;padding:0;border:0;background:transparent;color:var(--form-control-placeholder);font-size:15px;font-weight:400;line-height:normal;cursor:pointer}
+.gitlab-settings-read-more:hover{color:var(--set-desc)}
+
+.gitlab-settings-card{position:relative;margin-top:16px;border-radius:10px;background:var(--set-card);box-shadow:var(--set-card-shadow)}
+.gitlab-settings-card>header{padding:16px;border-bottom:.5px solid var(--set-sep)}
+.gitlab-settings-card>header h3{margin:0;color:var(--set-label);font-size:13px;font-weight:500;line-height:16px}
+.gitlab-settings-card>header>span{display:block;margin-top:1px;color:var(--set-desc);font-size:12px;font-weight:450;line-height:18px}
+.gitlab-settings-card>header b{color:var(--set-label);font-weight:500}
+.gitlab-settings-shortcut{white-space:nowrap}
+.gitlab-settings-shortcut>span{display:inline-flex;align-items:center;gap:3px;vertical-align:top}
+.gitlab-settings-shortcut kbd{box-sizing:border-box;min-width:18px;height:17px;display:inline-grid;place-items:center;padding:2px;border:.5px solid var(--popover-border);border-radius:4px;color:var(--set-desc);font:450 11px/12.1px var(--font)}
+
+.gitlab-settings-row{position:relative;box-sizing:border-box;min-height:60px;display:flex;align-items:center;gap:12px;padding:16px}
+.gitlab-settings-row:not(:last-child)::after{content:"";position:absolute;left:16px;right:16px;bottom:0;border-bottom:.5px solid var(--set-sep)}
+.gitlab-settings-row>div{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.gitlab-settings-row strong{color:var(--set-label);font-size:13px;font-weight:500;line-height:16px;overflow-wrap:break-word}
+.gitlab-settings-row strong label{cursor:pointer}
+.gitlab-settings-row>div>span{color:var(--set-desc);font-size:12px;font-weight:450;line-height:15px}
+.gitlab-settings-row-title{display:inline-flex;align-items:center;gap:6px}
+.gitlab-settings-row-image{width:16px;height:16px;flex:none}
+.gitlab-settings-warning-icon{width:14px;height:14px;flex:none;color:var(--integration-status-warn)}
+.gitlab-settings-toggle{display:inline-flex;flex:none;margin-right:6px}
+.gitlab-settings-row .settings-select{height:30px}
+.gitlab-settings-sections .settings-select:disabled{opacity:1}
+.gitlab-settings-card-footer{padding:0 16px 16px}
+
+.gitlab-settings-status-button{height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border:0;border-radius:9999px;background:transparent;color:var(--set-control-text);font-size:13px;font-weight:450;line-height:normal;cursor:pointer}
+.gitlab-settings-status-button:hover,.gitlab-settings-status-button[data-state=open]{background:var(--bg-hover)}
+.gitlab-settings-status-button i{width:8px;height:8px;flex:none;border-radius:50%;background:var(--integration-status-ok)}
+.gitlab-settings-status-button i[data-state=warning]{background:var(--integration-status-warn)}
+.gitlab-settings-status-button svg{width:12px;height:12px;flex:none}
+.gitlab-settings-menu{min-width:180px}
+
+.gitlab-settings-sections{margin-top:16px}
+.gitlab-settings-sections>.gitlab-settings-card{margin-top:12px}
+.gitlab-settings-sections>.gitlab-settings-card:first-child{margin-top:0}
+.gitlab-settings-sections[aria-disabled=true]{opacity:.5;pointer-events:none}
+
+.gitlab-settings-setup form{padding:21px 16px 16px}
+.gitlab-settings-field{display:flex;flex-direction:column}
+.gitlab-settings-field+.gitlab-settings-field{margin-top:29px}
+.gitlab-settings-field>label{color:var(--set-control-text);font-size:13px;font-weight:500;line-height:16px}
+.gitlab-settings-field>input,.gitlab-settings-dialog-body>input,.gitlab-settings-copy input{box-sizing:border-box;width:100%;height:32px;margin-top:7px;padding:6px 12px;border:.5px solid var(--form-control-border);border-radius:8px;outline:0;background:var(--form-control-bg);color:var(--set-label);font:400 13px/normal var(--font)}
+.gitlab-settings-field>input::placeholder,.gitlab-settings-dialog-body>input::placeholder{color:var(--form-control-placeholder)}
+.gitlab-settings-field>input:focus,.gitlab-settings-dialog-body>input:focus,.gitlab-settings-copy input:focus{border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
+.gitlab-settings-help{margin-top:3px;padding-left:2px;color:var(--set-desc);font-size:13px;font-weight:450;line-height:19.5px}
+.gitlab-settings-help+input{margin-top:13px}
+.gitlab-settings-help a{color:var(--integration-link);font-weight:500;text-decoration:none}
+.gitlab-settings-help a:hover{text-decoration:underline;text-underline-offset:2px}
+.gitlab-settings-help b{color:var(--set-control-text);font-weight:500}
+.gitlab-settings-help ul{margin:6px 0 0;padding-left:24px;list-style:circle}
+.gitlab-settings-field-error{margin:8px 0 -8px;color:var(--integration-error-text);font-size:12px;font-weight:450;line-height:12px}
+.gitlab-settings-setup footer,.gitlab-settings-webhook footer,.gitlab-settings-dialog footer{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}
+
+.gitlab-settings-connection-error{display:flex;flex-direction:column;gap:8px;padding:0 16px 16px;color:var(--integration-error-text);font-size:13px;font-weight:450;line-height:19.5px}
+.gitlab-settings-card-footer .gitlab-settings-connection-error{padding:0}
+.gitlab-settings-connection-error>p{margin:0}
+.gitlab-settings-details{color:var(--set-desc)}
+.gitlab-settings-details summary{width:max-content;font-size:12px;font-weight:450;line-height:18px;cursor:pointer}
+.gitlab-settings-details>div{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.gitlab-settings-details-label{display:flex;align-items:center;justify-content:space-between;font-size:12px;line-height:18px}
+.gitlab-settings-details-label button,.gitlab-settings-copy button{width:24px;height:24px;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:transparent;color:var(--set-desc);cursor:pointer}
+.gitlab-settings-details-label button:hover,.gitlab-settings-copy button:hover{background:var(--bg-hover);color:var(--set-text)}
+.gitlab-settings-details-label svg,.gitlab-settings-copy svg{width:14px;height:14px}
+.gitlab-settings-details pre{max-height:160px;margin:0;padding:8px;overflow:auto;border-radius:6px;background:var(--bg-hover);color:var(--set-control-text);font:400 11px/16px var(--font-monospace);white-space:pre-wrap;word-break:break-all}
+
+.gitlab-settings-webhook{padding:16px}
+.gitlab-settings-webhook h4{margin:0 0 16px;color:var(--set-text);font-size:15px;font-weight:500;line-height:20px}
+.gitlab-settings-webhook .gitlab-settings-field>p{margin:3px 0 0;color:var(--set-desc);font-size:13px;font-weight:450;line-height:19.5px}
+.gitlab-settings-webhook .gitlab-settings-field>p b{color:var(--set-control-text);font-weight:500}
+.gitlab-settings-webhook .gitlab-settings-copy+p{margin-top:19.5px}
+.gitlab-settings-webhook .gitlab-settings-copy+.gitlab-settings-help{margin-top:19.5px}
+.gitlab-settings-copy{position:relative;display:flex;align-items:center;margin-top:7px}
+.gitlab-settings-copy input{margin-top:0;padding-right:40px;font-family:var(--font-monospace);font-size:12px}
+.gitlab-settings-copy button{position:absolute;right:4px}
+
+.gitlab-settings-dialog{width:min(480px,calc(100vw - 32px));padding:0}
+.gitlab-settings-dialog form{padding:20px}
+.gitlab-settings-dialog h2{margin:0;color:var(--set-text);font-size:15px;font-weight:500;line-height:20px}
+.gitlab-settings-dialog-body{display:flex;flex-direction:column;margin-top:16px}
+.gitlab-settings-dialog-body .gitlab-settings-help{margin-top:0}
+.gitlab-settings-dialog-body>input{margin-top:16px}
+
+@media(max-width:720px){
+  .gitlab-settings{padding:44px 0 16px}
+  .gitlab-settings-status{flex-wrap:wrap}
+  .gitlab-settings-meta{flex-wrap:wrap;gap:16px 24px}
+  .gitlab-settings-row{flex-wrap:wrap}
+}

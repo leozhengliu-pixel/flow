@@ -12,6 +12,7 @@ import { teamArchivePath, type TeamArchiveTab } from '@/lib/app-routes'
 import { useArchivedModelsLoader } from '@/hooks/use-archived-models-loader'
 import { FilterIcon } from '@/components/ui/view-action-icons'
 import './workspace-operations.css'
+import { GridLoader } from '@/components/ui/grid-loader'
 
 type ArchiveTabDefinition = { id: TeamArchiveTab; label: string; title: string; empty: string; resource?: string }
 
@@ -96,7 +97,7 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}
       {trash.map(item=><ArchiveRow icon={archiveIcon(item.resourceType)} key={item.id} title={<span data-i18n-ignore>{item.title}</span>} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)} onPurge={()=>purge(item)}/>)}
-      {tab.id==='issues' && archivedLoader.loading && <div className="archive-row archive-loading-row"><span/><span/><div><strong>{t('Loading…')}</strong></div></div>}
+      {tab.id==='issues' && archivedLoader.loading && <div className="archive-row archive-loading-row"><GridLoader size={14}/><span/><div><strong>{t('Loading…')}</strong></div></div>}
       {tab.id==='issues' && archivedLoader.hasMore && !archivedLoader.loading && <div className="archive-row"><span/><span/><div><button type="button" className="ui-pill" onClick={()=>archivedLoader.loadMore(0)}>{t('Load more')}</button></div></div>}
     </div>}
     {!count&&!(tab.id==='issues'&&archivedLoader.loading)&&<div className="archive-empty"><ArchiveEmptyIllustration/><strong>{t(tab.empty)}</strong></div>}

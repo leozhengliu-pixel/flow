@@ -139,7 +139,6 @@
 .loading svg {
   width: 16px;
   height: 16px;
-  animation: agentSpin 0.8s linear infinite;
 }
 
 @keyframes agentPanelIn {
@@ -150,11 +149,6 @@
   to {
     opacity: 1;
     transform: none;
-  }
-}
-@keyframes agentSpin {
-  to {
-    transform: rotate(360deg);
   }
 }
 @media (max-width: 700px) {
@@ -172,9 +166,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .panel[data-variant='floating'] {
-    animation: none;
-  }
-  .loading svg {
     animation: none;
   }
 }

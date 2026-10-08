@@ -414,7 +414,7 @@ html:root[data-theme="light"] body .dialog-content .loops-hub-composer textarea 
 .loops-hub-attachments li.is-uploading { color: var(--theme-text-secondary); }
 .loops-hub-attachments li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loops-hub-attachments img { width: 16px; height: 16px; flex: none; border-radius: 3px; object-fit: cover; }
-.loops-hub-attachment-spinner { flex: none; animation: spin 1s linear infinite; }
+.loops-hub-attachment-spinner { flex: none; }
 .loops-hub-file-input { display: none; }
 .loops-hub-composer footer { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 12px 12px; }
 .loops-hub-attach,
@@ -805,7 +805,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-status { flex: none; }
 .loops-run-status.is-completed { color: var(--semantic-success); }
 .loops-run-status.is-failed { color: var(--priority-high); }
-.loops-run-status.is-running { color: var(--accent-primary); animation: spin 1s linear infinite; }
+.loops-run-status.is-running { color: var(--accent-primary); }
 .loops-run-detail { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .loops-run-scroll { min-height: 0; flex: 1; overflow: auto; }
 /* Linear's ↓/↑ run navigation: two half-pill buttons in one group. */
