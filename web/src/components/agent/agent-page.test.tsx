@@ -7,7 +7,7 @@ import type { AgentSession } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
   createAgentSession: vi.fn(), createAgentSessionMessage: vi.fn(), deleteAgentSession: vi.fn(),
-  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), stopAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
+  fetchAgentStatus: vi.fn(), getAgentSession: vi.fn(), markAgentSessionRead: vi.fn(), stopAgentSession: vi.fn(), updateAgentSession: vi.fn(), updateAgentSessionMessage: vi.fn(),
 }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn(), streamAgentSessionMessageEdit: vi.fn() }))
 vi.mock('@/lib/api', () => api)
@@ -39,7 +39,7 @@ describe('agent page composer', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Submit comment' })).toBeDisabled())
   })
 
-  it('keeps Agent empty state minimal without watermark or example cards', async () => {
+  it('keeps Agent empty state free of example cards', async () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
     render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     expect(await screen.findByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveAttribute('data-placeholder', 'Ask Flow…')

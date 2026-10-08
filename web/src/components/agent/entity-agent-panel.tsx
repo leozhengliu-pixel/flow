@@ -12,6 +12,7 @@ import {
   EntityAgentThread,
 } from './entity-agent-thread'
 import { conversationDraftKeyFor } from './agent-drafts'
+import { useMarkAgentSessionRead } from './agent-read-state'
 import styles from './entity-agent-panel.module.css'
 
 export type EntityAgentEntityType = 'issue' | 'document' | 'initiative' | 'project'
@@ -77,6 +78,13 @@ export function EntityAgentPanel({
   const [hydration, setHydration] = useState<HydrationState>({ isHydrated: false, observing: false })
   const [draftEpoch, setDraftEpoch] = useState(0)
   const abortRef = useRef<AbortController | undefined>(undefined)
+  // Seeing the chat here (once its reply has settled) clears its unread dot on the Agent page too.
+  useMarkAgentSessionRead(open ? session : undefined, loading, (read, lastReadAt) => {
+    if (!session || session.id !== read.id) return
+    const next = { ...session, lastReadAt }
+    setSession(next)
+    onSessionChange?.(next)
+  })
   const entityKey = `${target.type}:${target.id}`
 
   const conversationDraftKey = useMemo(() => {
