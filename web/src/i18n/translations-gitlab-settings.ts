@@ -34,6 +34,7 @@ export const gitlabSettingsZhCN: Record<string, string> = {
   "Please enter a valid HTTPS URL.": "请输入有效的 HTTPS URL。",
   "Please enter a valid access token.": "请输入有效的访问令牌。",
   "Connecting…": "正在连接…",
+  "Updating…": "正在更新…",
   "See below for more details.": "详情见下方。",
   "Response details": "响应详情",
   "Request:": "请求：",
