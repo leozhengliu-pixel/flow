@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Initiative, Project, TeamSettings } from '@/types/flow'
-import { initiativeGraph, initiativeTreeRows, initiativesForTeam } from './initiative-hierarchy'
+import { initiativeGraph, initiativeTreeRows, initiativesForTeam, MAX_INITIATIVE_NESTING } from './initiative-hierarchy'
 const item = (id: string, parents: string[] = [], projectIds: string[] = [], leadTeamId?: string) => ({ id, name: id, parentInitiativeIds: parents, projectIds, leadTeamId, contributingTeamIds: [] }) as unknown as Initiative
 describe('initiative graph', () => {
   const items = [item('a', [], ['direct']), item('b', [], []), item('child', ['a', 'b'], ['shared']), item('leaf', ['child'], ['shared', 'nested'])]
@@ -30,5 +30,19 @@ describe('initiative graph', () => {
     expect(initiativesForTeam(initiatives, projects, teams, settings, 'team').map(i => i.id)).toEqual(['parent', 'sub'])
     expect(initiativesForTeam(initiatives, projects, teams, settings, 'team', false).map(i => i.id)).toEqual(['parent'])
     expect(initiativesForTeam(initiatives, projects, teams, settings, 'project-team').map(i => i.id)).toEqual(['parent', 'sub'])
+  })
+  it('enforces Linear\'s five-level nesting limit for new and moved sub-initiatives', () => {
+    expect(MAX_INITIATIVE_NESTING).toBe(5)
+    const chain = [item('l1'), item('l2', ['l1']), item('l3', ['l2']), item('l4', ['l3']), item('l5', ['l4']), item('tree'), item('tree-child', ['tree']), item('solo')]
+    const graph = initiativeGraph(chain)
+    expect(graph.ancestorDepth('l5')).toBe(4)
+    expect(graph.descendantDepth('l1')).toBe(4)
+    expect(graph.canCreateChild('l4')).toBe(true)
+    expect(graph.canCreateChild('l5')).toBe(false)
+    expect(graph.canParent('solo', 'l4')).toBe(true)
+    expect(graph.canParent('solo', 'l5')).toBe(false)
+    // A two-level subtree fits under the third level but not under the fourth.
+    expect(graph.canParent('tree', 'l3')).toBe(true)
+    expect(graph.canParent('tree', 'l4')).toBe(false)
   })
 })

@@ -1,0 +1,232 @@
+/* Customer request row (Linear's EmbeddedCustomerNeedRow, "removed background" design). */
+.customer-request-row {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  outline: none;
+  background: transparent;
+  scroll-margin-top: 24px;
+  color: var(--pk-text);
+}
+.customer-request-row:not(.is-expanded):hover,
+.customer-request-row.is-expanded,
+.customer-request-row.is-menu-open { background: var(--theme-surface-hover); }
+.customer-request-row:focus-visible { box-shadow: inset 0 0 0 1px var(--focus-ring); }
+.customer-request-row.is-archived { opacity: .7; }
+
+.customer-request-row__header {
+  box-sizing: border-box;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 0 8px;
+  cursor: pointer;
+}
+.customer-request-row__lead {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+}
+.customer-request-row__spacer { flex: 1; }
+
+/* Customer: 16px logo and 13px medium name; a link highlights on hover. */
+.customer-request-row__customer {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 50%;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  outline-offset: 4px;
+  background: transparent;
+  color: var(--pk-text-strong);
+  font: 500 13px/24px var(--font);
+  text-decoration: none;
+  cursor: pointer;
+}
+.customer-request-row__customer > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.customer-request-row__customer.is-link,
+.customer-request-row__customer.is-unknown {
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.customer-request-row__customer.is-link:hover,
+.customer-request-row__customer.is-unknown:hover,
+.customer-request-row__customer[data-state=open] { background: var(--theme-surface-active); }
+.customer-request-row__customer.is-unknown { color: var(--pk-muted); }
+
+.customer-request-row__preview,
+.customer-request-row__added-by,
+.customer-request-row__muted,
+.customer-request-row__date {
+  color: var(--pk-muted);
+  font: 450 13px/normal var(--font);
+  white-space: nowrap;
+}
+.customer-request-row__preview {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.customer-request-row__added-by {
+  min-width: 0;
+  display: inline-flex;
+  overflow: hidden;
+}
+.customer-request-row__creator {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Count of the customer's requests: Linear's count badge (micro text on a shaded chip). */
+.customer-request-row__count {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--pk-chip-on);
+  color: var(--pk-muted);
+  font: 450 11px/normal var(--font);
+}
+.customer-request-row__important {
+  width: 24px;
+  display: inline-flex;
+  flex: none;
+  justify-content: center;
+  color: var(--customer-important);
+}
+.customer-request-row__important.is-small { width: auto; }
+
+/* Date and hover actions share one grid cell; actions replace the date on hover / when expanded. */
+.customer-request-row__trailing {
+  min-width: 56px;
+  display: grid;
+  flex: none;
+  justify-items: end;
+}
+.customer-request-row__trailing > * { grid-area: 1 / 1; }
+.customer-request-row__date {
+  min-width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  text-align: right;
+}
+.customer-request-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  visibility: hidden;
+}
+.customer-request-row:hover > .customer-request-row__header .customer-request-row__date,
+.customer-request-row:focus-within > .customer-request-row__header .customer-request-row__date,
+.customer-request-row.is-menu-open .customer-request-row__date,
+.customer-request-row__trailing.is-expanded .customer-request-row__date { visibility: hidden; }
+.customer-request-row:hover > .customer-request-row__header .customer-request-row__actions,
+.customer-request-row:focus-within > .customer-request-row__header .customer-request-row__actions,
+.customer-request-row.is-menu-open .customer-request-row__actions,
+.customer-request-row__trailing.is-expanded .customer-request-row__actions { visibility: visible; }
+
+.customer-request-row__icon-button {
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--pk-muted);
+  cursor: default;
+}
+.customer-request-row__icon-button:hover,
+.customer-request-row__icon-button[data-state=open] { background: var(--theme-surface-active); color: var(--pk-text); }
+
+/* Expanded requests: 8px 10px 8px 20px, the last one 16px from the bottom. */
+.customer-request-row__details {
+  display: flex;
+  flex-direction: column;
+  cursor: auto;
+}
+.customer-request-row__need {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px 8px 20px;
+  scroll-margin-top: 24px;
+}
+.customer-request-row__need:last-child { padding-bottom: 16px; }
+.customer-request-row__new-form { padding: 8px 10px 0 20px; }
+.customer-request-row__need-header {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.customer-request-row__need-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.customer-request-row__body {
+  max-width: 76ch;
+  color: var(--pk-text);
+  font: 450 15px/24px var(--font);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.customer-request-row__sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.customer-request-row__source,
+.customer-request-row__issue {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--pk-muted);
+  font: 450 13px/24px var(--font);
+  text-decoration: none;
+}
+.customer-request-row__source > span,
+.customer-request-row__issue > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.customer-request-row__source:hover,
+.customer-request-row__issue:hover { color: var(--pk-text); }
+.customer-request-row__issue {
+  align-self: flex-start;
+  padding: 2px 4px;
+  border-radius: 8px;
+  color: var(--pk-text);
+  font-weight: 500;
+}
+.customer-request-row__issue:hover { background: var(--theme-surface-active); }
+.customer-request-row__issue-id { color: var(--pk-muted); font-weight: 450; }
+
+.customer-request-menu { min-width: 220px; }

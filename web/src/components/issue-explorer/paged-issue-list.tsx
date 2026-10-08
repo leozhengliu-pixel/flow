@@ -9,6 +9,8 @@ import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type Issu
 import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
 import { IssueBoardCard, IssueBoardGroupHeader } from './issue-board'
+/** The server's customer group for requests whose customer no longer exists. */
+const UNKNOWN_CUSTOMER_GROUP = '__unknown__'
 
 const PAGE_SIZE = 100
 type Group = { value: string; count: number; loaded: number; hasMore: boolean }
@@ -65,6 +67,12 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
     void listIssueRecordGroups(initialQuery, request.abort.signal).then(async result => {
       if (request.abort.signal.aborted) return
       const groups = result.groups.map(group => ({ ...group, loaded: 0, hasMore: group.count > 0 }))
+      if (queryRef.current.groupBy === 'customer') {
+        // Customer groups: alphabetical, Unknown customer then No customer last (Linear).
+        const rank = (value: string) => value === '' ? 2 : value === UNKNOWN_CUSTOMER_GROUP ? 1 : 0
+        const names = new Map((dataRef.current.customers ?? []).map(customer => [customer.id, customer.name]))
+        groups.sort((a, b) => rank(a.value) - rank(b.value) || (names.get(a.value) ?? '').localeCompare(names.get(b.value) ?? ''))
+      }
       if (queryRef.current.groupBy === 'status') {
         const order = new Map(stateOrderRef.current.map((state, index) => [state.id, index]))
         groups.sort((a, b) => (order.get(a.value) ?? 999) - (order.get(b.value) ?? 999))
@@ -148,9 +156,9 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const descriptor = useCallback((group: Group): MyIssuesGroupData => {
     const field = query.groupBy ?? 'status'
     const state = field === 'status' ? data.states.find(state => state.id === group.value) : undefined
-    const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : field === 'label' ? data.labels.find(label => label.id === group.value)?.name : field === 'milestone' ? data.projects.flatMap(project => project.milestones ?? []).find(milestone => milestone.id === group.value)?.name : undefined) ?? (group.value || `No ${field}`)
+    const label = state?.name ?? (field === 'none' ? 'All issues' : field === 'priority' ? ['No priority', 'Urgent', 'High', 'Medium', 'Low'][Number(group.value)] : field === 'assignee' || field === 'creator' ? data.users.find(user => user.id === group.value)?.displayName : field === 'project' ? data.projects.find(project => project.id === group.value)?.name : field === 'team' ? data.teams.find(team => team.id === group.value)?.name : field === 'cycle' ? data.cycles.find(cycle => cycle.id === group.value)?.name : field === 'label' ? data.labels.find(label => label.id === group.value)?.name : field === 'milestone' ? data.projects.flatMap(project => project.milestones ?? []).find(milestone => milestone.id === group.value)?.name : field === 'customer' ? (group.value === UNKNOWN_CUSTOMER_GROUP ? 'Unknown customer' : group.value ? data.customers?.find(customer => customer.id === group.value)?.name ?? 'Unknown customer' : 'No customer') : undefined) ?? (group.value || `No ${field}`)
     return { id: group.value, label, state, stateType: state?.type, issues: [], totalCount: group.count, createContext: state ? { stateId: state.id } : field === 'priority' ? { priority: Number(group.value) as 0|1|2|3|4 } : field === 'project' ? { projectId: group.value } : field === 'assignee' ? { assigneeId: group.value } : field === 'team' ? { teamId: group.value } : field === 'cycle' ? { cycleId: group.value } : field === 'label' ? { labelIds: group.value ? [group.value] : [] } : undefined }
-  }, [data.states, data.users, data.projects, data.teams, data.cycles, data.labels, query.groupBy])
+  }, [data.states, data.users, data.projects, data.teams, data.cycles, data.labels, data.customers, query.groupBy])
   const counts = groups.map(group => collapsedGroupIds?.has(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }

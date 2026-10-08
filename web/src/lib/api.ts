@@ -415,7 +415,7 @@ export type IssueQueryInput = {
   filter?: Record<string, unknown>;
   cursor?: string;
   limit?: number;
-  sort?: "priority" | "createdAt" | "updatedAt" | "title" | "sortOrder";
+  sort?: "priority" | "createdAt" | "updatedAt" | "title" | "sortOrder" | "customerCount" | "customerRevenue" | "customerImportantCount";
   direction?: "asc" | "desc";
   groupBy?: string;
   groupValue?: string;
@@ -433,7 +433,9 @@ export function listIssueRecords(filters: IssueQueryInput = {}, signal?: AbortSi
   return request<IssueQueryPage>(`/api/issue-records?${params}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
 
-export type ProjectQueryPage = { items: Project[]; nextCursor?: string; hasMore: boolean; total: number }
+/** Linear's per-project customers (requests on the project and its issues), sent with each page. */
+export type ProjectCustomerSummary = { customers: Array<{ id: string; important?: boolean }>; unknownCustomer?: boolean }
+export type ProjectQueryPage = { items: Project[]; nextCursor?: string; hasMore: boolean; total: number; customerSummaries?: Record<string, ProjectCustomerSummary>; customers?: Customer[] }
 export type ProjectQueryInput = { q?: string; teamId?: string | string[]; archived?: 'true' | 'false' | 'all'; filter?: Array<{ field: string; operator: string; values: string[] }>; cursor?: string; limit?: number; includeTotal?: boolean }
 
 export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: AbortSignal): Promise<ProjectQueryPage> {
@@ -713,6 +715,10 @@ export function updateLabelGroup(
 }
 export function deleteLabelGroup(id: string): Promise<void> {
   return request(`/api/label-groups/${id}`, { method: "DELETE" });
+}
+/** Deletes a team-owned label group (and its labels) from that team's label settings. */
+export function deleteTeamLabelGroup(teamId: string, id: string): Promise<void> {
+  return request(`/api/teams/${teamId}/label-groups/${id}`, { method: "DELETE" });
 }
 export function createProjectStatus(input: {
   name: string;
@@ -1269,8 +1275,11 @@ export function deleteCustomer(id: string): Promise<void> {
   return request(`/api/customers/${id}`, { method: "DELETE" });
 }
 export function createCustomerRequest(input: {
-  customerId: string;
-  body: string;
+  /** Omitted (with no customerName) for an "Unknown customer" request. */
+  customerId?: string;
+  /** Creates a customer with this name for the request in the same write. */
+  customerName?: string;
+  body?: string;
   source?: string;
   sourceUrl?: string;
   issueId?: string;
@@ -1284,11 +1293,15 @@ export function updateCustomerRequest(
   input: Partial<
     Pick<
       CustomerRequest,
-      "body" | "source" | "sourceUrl" | "issueId" | "projectId" | "priority"
+      "body" | "source" | "sourceUrl" | "issueId" | "projectId" | "priority" | "customerId"
     >
-  >,
+  > & { customerName?: string },
 ): Promise<CustomerRequest> {
   return request(`/api/customer-requests/${id}`, jsonRequest("PATCH", input));
+}
+/** Merges `sourceId` into `targetId`: requests move over, domains combine, the source is deleted. */
+export function mergeCustomer(sourceId: string, targetId: string): Promise<Customer> {
+  return request(`/api/customers/${sourceId}/merge`, jsonRequest("POST", { targetCustomerId: targetId }));
 }
 export function deleteCustomerRequest(id: string): Promise<void> {
   return request(`/api/customer-requests/${id}`, { method: "DELETE" });
@@ -3215,6 +3228,14 @@ export function deleteTeamLabel(
     method: "DELETE",
   });
 }
+/** Linear's "Merge labels…": re-points everything carrying `fromLabelIds` to the target and deletes them. */
+export function mergeLabels(
+  toLabelId: string,
+  fromLabelIds: string[],
+): Promise<IssueLabel> {
+  return request("/api/labels/merge", jsonRequest("POST", { toLabelId, fromLabelIds }));
+}
+
 export function moveWorkspaceLabelToTeams(
   labelId: string,
 ): Promise<IssueLabel[]> {

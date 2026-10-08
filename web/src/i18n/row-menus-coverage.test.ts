@@ -11,6 +11,8 @@ const sources = import.meta.glob(
     '../components/projects-page/project-row-menu.tsx',
     '../components/initiatives/initiative-row-menu.tsx',
     '../components/initiatives/initiative-header-menus.tsx',
+    '../components/initiatives/initiative-hierarchy-section.tsx',
+    '../components/initiatives/initiative-hierarchy-actions.tsx',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>

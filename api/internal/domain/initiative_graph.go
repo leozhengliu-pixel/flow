@@ -41,3 +41,45 @@ func InitiativeParentCycle(parents map[string][]string, child string, candidates
 	}
 	return false
 }
+
+// MaxInitiativeNesting is Linear's max-sub-initiative-nesting limit: an initiative tree has at most
+// five levels.
+const MaxInitiativeNesting = 5
+
+// InitiativeNestingTooDeep reports whether making child a sub-initiative of any candidate would take
+// the tree past MaxInitiativeNesting levels. Like Linear's canMoveInitiative it adds the longest chain
+// above the candidate to the longest chain below the child (both counted in edges) plus the two
+// initiatives themselves.
+func InitiativeNestingTooDeep(parents map[string][]string, child string, candidates []string) bool {
+	if len(candidates) == 0 {
+		return false
+	}
+	children := map[string][]string{}
+	for id, ids := range parents {
+		for _, parent := range ids {
+			children[parent] = append(children[parent], id)
+		}
+	}
+	below := longestInitiativeChain(children, child, map[string]bool{})
+	for _, candidate := range candidates {
+		if longestInitiativeChain(parents, candidate, map[string]bool{child: true})+below+2 > MaxInitiativeNesting {
+			return true
+		}
+	}
+	return false
+}
+
+func longestInitiativeChain(edges map[string][]string, id string, visiting map[string]bool) int {
+	visiting[id] = true
+	defer delete(visiting, id)
+	longest := 0
+	for _, next := range edges[id] {
+		if visiting[next] {
+			continue
+		}
+		if depth := longestInitiativeChain(edges, next, visiting) + 1; depth > longest {
+			longest = depth
+		}
+	}
+	return longest
+}

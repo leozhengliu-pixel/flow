@@ -73,7 +73,7 @@ it('omits Move to group when an ungrouped label has no valid destinations', asyn
   } as never)} onReload={vi.fn().mockResolvedValue(undefined)}/></I18nProvider>)
 
   await userEvent.setup().click(screen.getByRole('button', { name: 'Open Strategy menu' }))
-  expect(screen.queryByRole('menuitem', { name: 'Move to group' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('menuitem', { name: 'Move to group…' })).not.toBeInTheDocument()
 })
 
 it('shows Remove from group when a grouped label has no other destination', async () => {
@@ -85,7 +85,7 @@ it('shows Remove from group when a grouped label has no other destination', asyn
 
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name: 'Open Strategy menu' }))
-  await user.hover(screen.getByRole('menuitem', { name: 'Move to group' }))
+  await user.hover(screen.getByRole('menuitem', { name: 'Change group' }))
   expect(await screen.findByRole('menuitem', { name: 'Remove from group' })).toBeVisible()
   expect(screen.queryByRole('menuitem', { name: 'Strategy type' })).not.toBeInTheDocument()
 })
@@ -104,7 +104,7 @@ it('only lists active destination groups from the same label resource', async ()
 
   const user = userEvent.setup()
   await user.click(screen.getByRole('button', { name: 'Open Strategy menu' }))
-  await user.hover(screen.getByRole('menuitem', { name: 'Move to group' }))
+  await user.hover(screen.getByRole('menuitem', { name: 'Change group' }))
   expect(await screen.findByRole('menuitem', { name: 'Delivery type' })).toBeVisible()
   expect(screen.getByRole('menuitem', { name: 'Remove from group' })).toBeVisible()
   expect(screen.queryByRole('menuitem', { name: 'Strategy type' })).not.toBeInTheDocument()

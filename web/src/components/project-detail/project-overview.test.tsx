@@ -59,13 +59,6 @@ describe('project overview workflow', () => {
     await user.keyboard('{Enter}')
     await waitFor(() => expect(onCreateMilestone).toHaveBeenCalledWith(project.id, expect.objectContaining({ name: 'Launch' })))
 
-    expect(screen.queryByText('Customers')).toBeNull()
-    await user.click(screen.getByRole('button', { name: 'More project properties' }))
-    await user.click(await screen.findByText('Customer request…'))
-    const customer = await screen.findByRole('textbox', { name: 'Add customer request' })
-    await user.type(customer, 'Acme request')
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    expect(save).toHaveBeenCalledWith({ customers: ['Acme request'] })
 
     await user.click(screen.getByRole('button', { name: 'Add document or link…' }))
     await user.click(await screen.findByText('Create new document…'))
@@ -80,7 +73,8 @@ describe('project overview workflow', () => {
     const { rerender } = render(<I18nProvider><ProjectOverview {...({ ...base, project: { ...project, milestones: [], resources: [], customers: [], initiatives: [], labelIds: [] }, initiatives: [initiative], labels: [label] } as unknown as ComponentProps<typeof ProjectOverview>)}/></I18nProvider>)
     expect(screen.queryByRole('heading', { name: 'Initiatives' })).toBeNull()
     expect(screen.queryByRole('heading', { name: 'Labels' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'Customers' })).toBeNull()
+    // Linear keeps the Customers row on every overview (with "Add customer request" when empty).
+    expect(screen.getByRole('heading', { name: 'Customers' })).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Resources' })).toBeVisible()
     rerender(<I18nProvider><ProjectOverview {...({ ...base, project: { ...project, milestones: [], resources: [], customers: ['Acme'], initiatives: ['initiative-1'], labelIds: ['label-1'] }, initiatives: [initiative], labels: [label] } as unknown as ComponentProps<typeof ProjectOverview>)}/></I18nProvider>)
     expect(screen.getByRole('heading', { name: 'Initiatives' })).toBeVisible()

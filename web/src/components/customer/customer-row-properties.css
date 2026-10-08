@@ -1,0 +1,54 @@
+/* Customers / Customer revenue display properties on issue and project rows (Linear rounded badges). */
+.customer-row-chip {
+  height: 24px;
+  max-width: 220px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 6px;
+  overflow: hidden;
+  border: .5px solid var(--theme-border);
+  border-radius: 48px;
+  background: var(--bg-panel);
+  color: var(--issue-muted, var(--theme-text-secondary));
+  font-size: 12px;
+  font-weight: 450;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.customer-row-chip:hover,
+.customer-row-chip[data-state=delayed-open],
+.customer-row-chip[data-state=instant-open] {
+  border-color: var(--theme-border-strong);
+  background: var(--bg-active, var(--theme-surface-hover));
+}
+:root[data-theme="light"] .customer-row-chip { border-color: var(--theme-border-strong); background: var(--theme-surface-1); }
+:root[data-theme="light"] .customer-row-chip:hover { background: var(--theme-surface-hover); }
+.customer-row-chip__important { display: inline-flex; align-items: center; gap: 3px; color: var(--customer-important); }
+.customer-row-chip__divider { width: .5px; height: 12px; background: var(--theme-border-strong); }
+.customer-row-chip__customers { min-width: 0; display: inline-flex; align-items: center; gap: 4px; }
+.customer-row-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.customer-row-chip__revenue-icon { flex: none; color: var(--theme-text-tertiary); }
+.customer-row-chip__revenue { display: inline-flex; align-items: baseline; gap: 1px; }
+.customer-row-chip__suffix { color: var(--theme-text-tertiary); font-size: 11px; }
+
+.flow-tooltip-content.customer-row-popover { height: auto; min-width: 220px; max-width: 300px; display: block; padding: 0; white-space: normal; user-select: text; }
+.customer-row-popover__body { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.customer-row-popover__data { display: flex; flex-direction: column; gap: 4px; padding: 0 4px 8px; border-bottom: .5px solid var(--theme-border); }
+.customer-row-popover__counts { height: 24px; display: flex; align-items: center; gap: 6px; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.customer-row-popover__dot { color: var(--theme-text-tertiary); }
+.customer-row-popover__important { color: var(--customer-important); }
+.customer-row-popover__revenue { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.customer-row-popover__revenue-label { color: var(--theme-text-secondary); font-size: 12px; font-weight: 450; }
+.customer-row-popover__list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.customer-row-popover__list li { height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 4px; border-radius: 6px; color: var(--theme-text-primary); font-size: 12px; }
+.customer-row-popover__name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.customer-row-popover__flag { flex: none; margin-right: -3px; }
+.customer-row-popover__amount,
+.customer-row-popover__unknown-count { flex: none; min-width: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+.customer-row-chip[data-variant=square] { height: 22px; gap: 4px; padding: 0 6px 0 4px; border-radius: 5px; }
+/* Project list cells (Linear): plain text, no badge chrome. */
+.customer-row-chip[data-variant=plain] { padding: 0 4px; border-color: transparent; background: transparent; color: var(--theme-text-primary); }
+:root[data-theme="light"] .customer-row-chip[data-variant=plain] { border-color: transparent; background: transparent; }
+.customer-row-chip[data-variant=plain]:hover { border-color: transparent; background: var(--theme-surface-hover); }

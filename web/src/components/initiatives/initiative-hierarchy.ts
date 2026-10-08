@@ -23,9 +23,32 @@ export function initiativeGraph(initiatives: Initiative[]) {
     if (!projectCache.has(id)) projectCache.set(id, new Set([id, ...walk(id, 'children')].flatMap(key => byId.get(key)?.projectIds ?? [])))
     return projectCache.get(id)!
   }
-  return { byId, children, ancestors: (id: string) => walk(id, 'parents'), descendants: (id: string) => walk(id, 'children'), projectIds,
-    canParent: (child: string, parent: string) => child !== parent && byId.has(parent) && !walk(child, 'children').includes(parent) }
+  // Longest chain of levels above (parents) or below (children) an initiative; a root or leaf is 0.
+  const depthCache = { parents: new Map<string, number>(), children: new Map<string, number>() }
+  const depth = (id: string, direction: 'parents' | 'children', visiting = new Set<string>()): number => {
+    const cached = depthCache[direction].get(id)
+    if (cached !== undefined) return cached
+    visiting.add(id)
+    let result = 0
+    for (const next of direction === 'children' ? children.get(id) ?? [] : byId.get(id)?.parentInitiativeIds ?? []) {
+      if (visiting.has(next) || !byId.has(next)) continue
+      result = Math.max(result, depth(next, direction, visiting) + 1)
+    }
+    visiting.delete(id)
+    depthCache[direction].set(id, result)
+    return result
+  }
+  const ancestorDepth = (id: string) => depth(id, 'parents'), descendantDepth = (id: string) => depth(id, 'children')
+  return { byId, children, ancestors: (id: string) => walk(id, 'parents'), descendants: (id: string) => walk(id, 'children'), projectIds, ancestorDepth, descendantDepth,
+    /** Linear's `canCreateSubInitiative`: a new child would still fit within MAX_INITIATIVE_NESTING levels. */
+    canCreateChild: (parent: string) => ancestorDepth(parent) + 2 <= MAX_INITIATIVE_NESTING,
+    /** Linear's `canMoveInitiative`: no cycle, and the parent's chain plus the child's subtree fit the nesting limit. */
+    canParent: (child: string, parent: string) => child !== parent && byId.has(parent) && !walk(child, 'children').includes(parent)
+      && ancestorDepth(parent) + descendantDepth(child) + 2 <= MAX_INITIATIVE_NESTING }
 }
+
+/** Linear's `max-sub-initiative-nesting` quota: an initiative tree has at most five levels. */
+export const MAX_INITIATIVE_NESTING = 5
 
 export function initiativeProjectIds(initiative: Initiative, initiatives: Initiative[]) { return initiativeGraph(initiatives).projectIds(initiative.id) }
 

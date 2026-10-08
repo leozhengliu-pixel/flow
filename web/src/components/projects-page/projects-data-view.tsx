@@ -1,4 +1,8 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
+import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
+import { revenueSuffix } from '@/components/issue-explorer/customer-filter'
+import { currencySymbol } from '@/lib/customer-settings'
+import type { FeatureSettings } from '@/types/flow'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, MoreHorizontal } from 'lucide-react'
 import { useEffect, useMemo, useState, type ChangeEvent, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactElement } from 'react'
@@ -61,6 +65,18 @@ export type ProjectPageItem = {
   startDate?: string
   createdAt?: string
   updatedAt?: string
+  /** Requesting customers (project requests and requests on its issues). */
+  customers?: Array<{ id: string; name: string; logoUrl?: string; annualRevenue?: number }>
+  customerCount?: number
+  importantCustomerIds?: string[]
+  customerSettings?: Partial<FeatureSettings>
+  hasUnknownCustomer?: boolean
+  customerIds?: string[]
+  customerOwnerIds?: string[]
+  customerStatuses?: string[]
+  customerTiers?: string[]
+  customerRevenues?: number[]
+  customerSizes?: number[]
 }
 
 export type ProjectDataGroup = {
@@ -291,6 +307,7 @@ export function ProjectsDataView({
 
   if (layout === 'timeline') return <div className="lp-project-timeline-shell"><ProjectTimeline groupCount={projectCount} groups={groups} onCreateDependency={onCreateProjectDependency} onOpenMilestone={onOpenMilestone} onOpenProject={onOpenProject} onUpdateMilestone={onUpdateMilestone} onUpdateProject={onUpdateProject} onZoomChange={onTimelineZoomChange} renderGroupIcon={group => <ProjectGroupStatus color={group.color} compact name={group.name} propertyOptions={propertyOptions}/>} zoom={timelineZoom}/>{hasMore && <button className="lp-project-timeline__load-more" disabled={loadingMore} onClick={onLoadMore} type="button">{loadingMore ? 'Loading…' : 'Load more projects'}</button>}</div>
 
+  const customerSettings = groups.flatMap(group => [...group.projects, ...(group.subgroups ?? []).flatMap(subgroup => subgroup.projects)]).find(project => project.customerSettings)?.customerSettings
   const renderProject = (project: ProjectPageItem) => <ProjectListRow
     onOpen={onOpenProject}
     onOpenIssues={onOpenProjectIssues}
@@ -310,7 +327,7 @@ export function ProjectsDataView({
 
   if (listEntries.length > PROJECT_VIRTUALIZATION_THRESHOLD) return <div className="lp-project-table is-virtual" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
     <VirtualColumnList
-      header={<ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible}/>}
+      header={<ProjectTableHeader customerSettings={customerSettings} labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible}/>}
       className="lp-project-table__virtual"
       data={listEntries}
       computeItemKey={(_index, entry) => entry.key}
@@ -333,7 +350,7 @@ export function ProjectsDataView({
   </div>
 
   return <div className="lp-project-table" role="grid" style={{ '--lp-project-grid': projectGrid(visible, labelGroupProperties) } as CSSProperties}>
-    <ProjectTableHeader labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
+    <ProjectTableHeader customerSettings={customerSettings} labelGroupProperties={labelGroupProperties} sort={sort} onSort={changeSort} visible={visible} />
     {groups.map(group => {
       const isCollapsed = collapsed.includes(group.id)
     return <section aria-label={group.name} className="lp-project-group" key={group.id} role="rowgroup">
@@ -422,7 +439,7 @@ function ProjectSubgroup({ group, manualOrdering, onOpen, onOpenIssues, onOpenUp
   </div>
 }
 
-function ProjectTableHeader({ labelGroupProperties, sort, onSort, visible }: { labelGroupProperties: Array<{ id: string; name: string }>; sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
+function ProjectTableHeader({ customerSettings, labelGroupProperties, sort, onSort, visible }: { customerSettings?: Partial<FeatureSettings>; labelGroupProperties: Array<{ id: string; name: string }>; sort: { column: ProjectSortColumn, direction: 'asc' | 'desc' }, onSort: (column: ProjectSortColumn) => void, visible: Set<string> }) {
   const header = (column: ProjectSortColumn, label: string) => <button
     aria-label={`${sort.column === column ? sort.direction === 'asc' ? 'A–Z' : 'Z–A' : 'Order by'} ${label}`}
     className={sort.column === column ? 'is-sorted' : ''}
@@ -440,6 +457,8 @@ function ProjectTableHeader({ labelGroupProperties, sort, onSort, visible }: { l
     <div aria-hidden={!visible.has('Target date') || undefined} data-column-hidden={!visible.has('Target date') || undefined} role="columnheader">{header('targetDate', 'Target date')}</div>
     <div aria-hidden={!visible.has('Issues') || undefined} data-column-hidden={!visible.has('Issues') || undefined} role="columnheader"><span>Issues</span></div>
     <div aria-hidden={!visible.has('Status') || undefined} data-column-hidden={!visible.has('Status') || undefined} role="columnheader">{header('status', 'Status')}</div>
+    <div aria-hidden={!visible.has('Customers') || undefined} data-column-hidden={!visible.has('Customers') || undefined} role="columnheader"><span>Customers</span></div>
+    <div aria-hidden={!visible.has('Customer revenue') || undefined} className="lp-project-table__revenue-header" data-column-hidden={!visible.has('Customer revenue') || undefined} role="columnheader"><span>Revenue</span><span className="lp-project-table__revenue-unit" data-i18n-ignore>{revenueColumnUnit(customerSettings)}</span></div>
     {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(group => <div data-i18n-ignore key={group.id} role="columnheader"><span>{group.name}</span></div>)}
     <span />
   </div>
@@ -515,6 +534,8 @@ function ProjectListRow({ project, selected, manualOrdering, onOpen, onOpenIssue
       <div aria-hidden={!visible.has('Target date') || undefined} data-column-hidden={!visible.has('Target date') || undefined} role="gridcell"><ProjectTargetDatePicker buttonClassName="lp-project-row__date" displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}>{project.targetDate || <span className="lp-project-row__date-placeholder">Set date</span>}</ProjectTargetDatePicker></div>
       <div aria-hidden={!visible.has('Issues') || undefined} data-column-hidden={!visible.has('Issues') || undefined} role="gridcell"><button aria-label={`Open ${project.name} issues`} className="lp-project-row__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{project.issueCount}</button></div>
       <div aria-hidden={!visible.has('Status') || undefined} className="lp-project-row__status" data-column-hidden={!visible.has('Status') || undefined} role="gridcell"><ProjectPropertyPicker buttonClassName="lp-project-row__progress" label={`${project.progress}%`} onChange={value => onPropertyChange?.(project, 'status', value)} options={propertyOptions?.status ?? PROPERTY_OPTIONS.status} property="status" value={project.status}><ProjectStatusGlyph color={statusOption?.color} name={project.status} progress={project.progress / 100} type={statusOption?.statusType}/><span>{project.progress}%</span></ProjectPropertyPicker><ProjectProgressSparkline createdAt={project.createdAt} progress={project.progress} startDate={project.rawStartDate} targetDate={project.rawTargetDate}/></div>
+      <div aria-hidden={!visible.has('Customers') || undefined} className="lp-project-row__customers" data-column-hidden={!visible.has('Customers') || undefined} role="gridcell">{visible.has('Customers') && project.customerCount ? <CustomersRowChip variant="plain" customers={project.customers ?? []} customerCount={project.customerCount} importantCustomerIds={project.importantCustomerIds ?? []} settings={project.customerSettings}/> : null}</div>
+      <div aria-hidden={!visible.has('Customer revenue') || undefined} className="lp-project-row__revenue" data-column-hidden={!visible.has('Customer revenue') || undefined} role="gridcell">{visible.has('Customer revenue') && project.customers?.length ? <CustomerRevenueRowChip variant="plain" customers={project.customers} settings={project.customerSettings}/> : null}</div>
       {labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(group => <div className="lp-project-row__label-group" data-i18n-ignore key={group.id} role="gridcell">{(project.labelsByGroup?.[group.id] ?? []).map(label => <span key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}</div>)}
       <button aria-label={`Project actions for ${project.name}`} className="lp-project-row__more" onClick={openRowMenu} type="button"><MoreHorizontal size={14}/></button>
       <span />
@@ -566,7 +587,9 @@ function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onO
   const overdue = isTargetDateOverdue(project.rawTargetDate ?? project.targetDate)
   const metaLabels = labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).flatMap(group => project.labelsByGroup?.[group.id] ?? [])
   const showDate = visible.has('Target date') && Boolean(project.targetDate)
-  const showMeta = showDate || (visible.has('Initiatives') && Boolean(project.initiativeNames?.length)) || metaLabels.length > 0 || Boolean(project.milestone)
+  const showCustomers = visible.has('Customers') && Boolean(project.customerCount)
+  const showRevenue = visible.has('Customer revenue') && Boolean(project.customers?.some(customer => (customer.annualRevenue ?? 0) > 0))
+  const showMeta = showDate || (visible.has('Initiatives') && Boolean(project.initiativeNames?.length)) || metaLabels.length > 0 || Boolean(project.milestone) || showCustomers || showRevenue
   return <ProjectItemMenu manualOrdering={manualOrdering} onProjectAction={onProjectAction} onPropertyChange={onPropertyChange} options={propertyOptions} project={project} projectMenu={projectMenu}>
     <a
       aria-label={project.name}
@@ -593,6 +616,8 @@ function ProjectBoardCard({ project, manualOrdering, onKeyboardMove, onOpen, onO
         {showDate && <ProjectTargetDatePicker buttonClassName={`lp-project-card__date${overdue ? ' is-overdue' : ''}`} displayValue={project.targetDate} onChange={value => onPropertyChange?.(project, 'targetDate', value)} value={project.rawTargetDate}><BoardTargetDateIcon overdue={overdue}/><span>{project.targetDate}</span></ProjectTargetDatePicker>}
         {visible.has('Initiatives') && project.initiativeNames?.map(name => <span className="lp-project-card__initiative" data-i18n-ignore key={name}>{name}</span>)}
         {metaLabels.map(label => <span className="lp-project-card__initiative" data-i18n-ignore key={label.id}><i style={{ background: label.color }}/>{label.name}</span>)}
+        {showCustomers && <CustomersRowChip variant="square" customers={project.customers ?? []} customerCount={project.customerCount ?? 0} importantCustomerIds={project.importantCustomerIds ?? []} settings={project.customerSettings}/>}
+        {showRevenue && <CustomerRevenueRowChip variant="square" customers={project.customers ?? []} settings={project.customerSettings}/>}
         {project.milestone && <button className="lp-project-card__milestone" onClick={stopPropagation} type="button"><MilestoneProgressIcon className="lp-project-card__milestone-icon" label={`Milestone ${project.milestone}. Progress: ${project.milestoneProgress ?? 0}%.`} overdue={isMilestoneDateOverdue(project.rawMilestoneDate)} progress={project.milestoneProgress ?? 0} /><span className="lp-project-card__milestone-name">{project.milestone}</span>{project.milestoneDate && <span className="lp-project-card__milestone-date">{project.milestoneDate}</span>}</button>}
       </div>}
       {visible.has('Issues') && <div className="lp-project-card__footer"><button className="lp-project-card__issues" onClick={event => { stopPropagation(event); onOpenIssues?.(project) }} type="button">{issueCountLabel(project.issueCount)}</button></div>}
@@ -803,7 +828,14 @@ function projectGrid(visible: Set<string>, labelGroupProperties: Array<{ id: str
     visible.has('Target date') ? '92px' : '0px',
     visible.has('Issues') ? '49px' : '0px',
     visible.has('Status') ? '120px' : '0px',
+    visible.has('Customers') ? '140px' : '0px',
+    visible.has('Customer revenue') ? '110px' : '0px',
     ...labelGroupProperties.filter(group => visible.has(projectLabelGroupProperty(group.id))).map(() => '120px'),
     '8px',
   ].join(' ')
+}
+
+/** Linear's revenue column header unit: "Revenue ($/yr)" in the workspace currency and revenue unit. */
+function revenueColumnUnit(settings?: Partial<FeatureSettings>) {
+  return ` (${currencySymbol(settings?.customerRevenueCurrency || 'USD')}${revenueSuffix(settings)})`
 }

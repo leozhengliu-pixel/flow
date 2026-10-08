@@ -54,6 +54,8 @@ export function dimensionOptions(data: BootstrapData, includeDates: boolean): In
     { id: 'status', label: 'Status' }, { id: 'statusType', label: 'Status type' }, { id: 'assignee', label: 'Assignee' }, { id: 'agent', label: 'Agent' },
     { id: 'agentSession', label: 'Agent session' }, { id: 'creator', label: 'Creator' }, { id: 'priority', label: 'Priority' }, { id: 'label', label: 'Label' },
     ...issueGroups.length ? [{ id: 'labelGroup', label: 'Label group', children: issueGroups.map(group => ({ id: `labelGroup:${group.id}`, label: group.name, icon: dot(group.color) })) }] : [],
+    // Linear offers Customer when Customer requests is enabled.
+    ...data.workspaceSettings?.featureFlags?.['customer-requests'] !== false ? [{ id: 'customer', label: 'Customer' }] : [],
     { id: 'template', label: 'Template' }, { id: 'externalSource', label: 'External source' },
     { id: 'project', label: 'Project', separatorBefore: true }, { id: 'initiative', label: 'Initiative' }, { id: 'projectLabel', label: 'Project label' },
     ...projectGroups.length ? [{ id: 'projectLabelGroup', label: 'Project label group', children: projectGroups.map(group => ({ id: `projectLabelGroup:${group.id}`, label: group.name, icon: dot(group.color) })) }] : [],

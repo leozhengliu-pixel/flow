@@ -1,0 +1,4 @@
+/* ⌘K "Display options › Grouping › Customer": breadcrumb parts with muted separators (Linear). */
+.command-dialog .command-path { min-width: 0; display: inline-flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; }
+.command-dialog .command-path > span { display: inline-flex; align-items: center; gap: 4px; }
+.command-dialog .command-path svg { flex: none; width: 12px; height: 12px; color: var(--theme-text-tertiary); }

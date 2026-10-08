@@ -1,0 +1,113 @@
+/* Settings › Customer requests. Metrics measured from the reference app at 1470px (light and dark). */
+.crs-page{color:var(--set-text)}
+.crs-header{margin:0 16px 32px}
+.crs-header h1{margin:0;color:var(--set-text);font:500 24px/32px var(--font);letter-spacing:-.16px}
+.crs-header p{margin:4px 0 0;color:var(--set-group-desc);font:450 13px/22px var(--font)}
+.crs-docs-link{padding:1px 4px;border-radius:8px;color:var(--set-text);text-decoration:none;white-space:nowrap}
+.crs-docs-link:after{content:"↗";margin-left:4px}
+.crs-docs-link:hover{background:var(--bg-hover)}
+.crs-docs-link:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+
+/* Cards and rows */
+.crs-card{position:relative;overflow:hidden;border-radius:10px;background:var(--set-card);box-shadow:var(--set-card-shadow)}
+.crs-card+.crs-card{margin-top:12px}
+.crs-row{position:relative;box-sizing:border-box;min-height:60px;display:flex;align-items:center;gap:12px;padding:16px}
+.crs-card>.crs-row:not(:last-child):after,.crs-source-row:not(:last-child):after,.crs-list-body>.crs-option-row:not(:last-child):after{content:"";position:absolute;left:16px;right:16px;bottom:0;border-bottom:.5px solid var(--set-sep);pointer-events:none}
+.crs-row-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.crs-row-copy strong{overflow:hidden;color:var(--set-label);font:500 13px/16px var(--font);text-overflow:ellipsis;white-space:nowrap}
+.crs-row-copy span{color:var(--set-desc);font:450 12px/15px var(--font)}
+.crs-muted-value{padding-right:6px;color:var(--set-desc);font:500 13px/16px var(--font);outline:0;cursor:default}
+
+/* Manage customers: the whole row links to the customers page */
+.crs-link-row{min-height:65px}
+.crs-row-link{position:absolute;inset:0;z-index:1;border-radius:10px}
+.crs-row-link:hover,.crs-row-link:focus-visible{outline:0;background:var(--dropdown-hover)}
+.crs-row-link~*{position:relative;z-index:2;pointer-events:none}
+.crs-row-icon{width:32px;height:32px;flex:0 0 32px;display:grid;place-items:center;border-radius:6px;background:var(--bg-subtle);color:var(--set-desc)}
+.crs-row-detail{color:var(--set-desc);font:450 12px/15px var(--font);white-space:nowrap}
+.crs-row-chevron{flex:0 0 16px;color:var(--set-desc)}
+.crs-link-card.is-disabled{opacity:.5}
+.crs-link-card.is-disabled .crs-row-link{cursor:default}
+.crs-link-card.is-disabled .crs-row-link:hover{background:none}
+
+/* Sections */
+.crs-section{margin-top:48px}
+.crs-section>header{margin:0 16px 16px}
+.crs-section>header h3{margin:0;color:var(--set-text);font:500 15px/23px var(--font)}
+.crs-section-description{margin-top:2px;color:var(--set-group-desc);font:450 13px/22px var(--font)}
+.crs-section.is-subsection>header{margin-bottom:12px}
+.crs-subsection-title{display:block;color:var(--set-group-title);font:500 13px/16px var(--font)}
+.crs-section.is-subsection .crs-section-description{margin-top:3px}
+.crs-section.is-disabled .crs-card{opacity:.5;pointer-events:none}
+
+/* Selects */
+html:root[data-theme] body .crs-page .settings-select:not(.settings-select--bare){height:30px}
+.crs-row:has(>.settings-select){min-height:64px}
+.crs-page .settings-select-value{gap:5px}
+.crs-option-icon{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;color:var(--set-desc)}
+.crs-option-icon.is-team{width:18px;height:18px;flex-basis:18px}
+.crs-select-menu .settings-select-option-content{gap:5px}
+.crs-currency-menu{max-height:min(420px,var(--radix-select-content-available-height))}
+.settings-select-separator{height:.5px;margin:4px 0;background:var(--set-sep)}
+
+/* Status / tier lists */
+.crs-list-header{position:relative;box-sizing:border-box;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px}
+.crs-list-card>.crs-list-header,.crs-source-card>.crs-list-header:not(:last-child){border-bottom:.5px solid var(--set-sep)}
+.crs-list-title{color:var(--set-control-text);font:500 13px/16px var(--font)}
+.crs-list-empty{color:var(--set-desc);font:450 13px/16px var(--font)}
+.crs-source-title{margin:0;font:inherit;line-height:16px}
+.crs-list-body{padding-bottom:4px}
+.crs-list-body:empty{display:none}
+.crs-icon-button{width:24px;height:24px;flex:0 0 24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--set-desc);cursor:pointer}
+.crs-icon-button:hover:not(:disabled),.crs-icon-button[data-state=open]{background:var(--bg-hover);color:var(--set-control-text)}
+.crs-icon-button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.crs-icon-button:disabled{cursor:default;opacity:.45}
+.crs-option-row{position:relative;box-sizing:border-box;height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:3px;outline:0}
+.crs-option-row.is-dragging{opacity:.5}
+.crs-option-row:focus-visible{box-shadow:inset 0 0 0 2px var(--focus-ring)}
+.crs-drag-handle{position:absolute;left:-2px;top:0;bottom:0;width:20px;display:flex;align-items:center;justify-content:center;color:var(--set-desc);opacity:0;cursor:grab;transition:opacity .15s}
+.crs-drag-handle svg{fill:currentColor}
+.crs-option-row:hover .crs-drag-handle{opacity:1}
+.crs-option-content{min-width:0;flex:1;display:flex;align-items:center;gap:8px}
+.crs-option-swatch{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center}
+.crs-option-name{flex:none;color:var(--set-control-text);font:500 13px/16px var(--font);white-space:nowrap}
+.crs-option-description{min-width:0;overflow:hidden;color:var(--set-desc);font:450 12px/15px var(--font);text-overflow:ellipsis;white-space:nowrap}
+.crs-row-menu-button{opacity:0}
+.crs-option-row:hover .crs-row-menu-button,.crs-option-row:focus-within .crs-row-menu-button,.crs-option-row.is-menu-open .crs-row-menu-button{opacity:1}
+.crs-menu-icon{width:16px;height:16px;flex:0 0 16px;display:grid;place-items:center;color:var(--set-desc)}
+.crs-menu-icon svg{width:16px;height:16px;fill:currentColor}
+body .crs-row-menu{width:174px;min-width:174px}
+body .crs-row-menu .menu-item>.crs-menu-icon{flex:0 0 16px}
+
+/* Inline editors */
+.crs-option-editor{box-sizing:border-box;min-height:48px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:8px 16px}
+.crs-option-editor-fields{min-width:0;display:flex;align-items:center;gap:12px}
+.crs-option-editor input,.crs-source-field input{box-sizing:border-box;width:173px;height:32px;padding:6px 12px;border:.5px solid var(--border-strong);border-radius:8px;outline:0;background:var(--set-card);color:var(--set-label);font:400 13px var(--font)}
+.crs-option-editor input::placeholder,.crs-source-field input::placeholder{color:var(--set-desc)}
+.crs-option-editor input:focus,.crs-source-field input:focus{border-color:var(--focus-ring)}
+.crs-option-editor .ip-status-color{background:var(--set-card)}
+.crs-editor-actions{display:flex;align-items:center;gap:8px;align-self:flex-end}
+.crs-button{height:32px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--set-control-text);font:500 13px var(--font);white-space:nowrap;cursor:pointer}
+.crs-button:hover:not(:disabled){background:var(--bg-hover)}
+.crs-button:focus-visible{outline:0;box-shadow:0 0 0 2px var(--focus-ring)}
+.crs-button.is-primary{background:var(--set-primary);box-shadow:var(--set-primary-shadow);color:var(--set-primary-text)}
+.crs-button.is-primary:hover:not(:disabled){background:color-mix(in lch,var(--set-primary) 88%,white)}
+.crs-button:disabled{opacity:.45;cursor:default}
+.crs-source-form{align-items:flex-start;gap:8px;min-height:64px}
+.crs-source-form .crs-editor-actions{align-self:flex-start}
+.crs-source-field{min-width:0;flex:1;display:flex;flex-direction:column;gap:6px}
+.crs-source-field input{width:100%}
+.crs-source-field input[aria-invalid=true]{border-color:var(--semantic-danger)}
+.crs-field-error{color:var(--semantic-danger);font:450 12px/15px var(--font)}
+
+@media(max-width:760px){
+  .crs-header{margin:0 4px 24px}
+  .crs-section>header{margin-left:4px;margin-right:4px}
+  .crs-row{flex-wrap:wrap}
+  .crs-option-editor-fields{flex-wrap:wrap;width:100%}
+  .crs-option-editor input{flex:1 1 140px;width:auto}
+  .crs-source-form{flex-direction:column;align-items:stretch}
+}
+/* The reference wraps each switch in a 36px box with 6px trailing padding, and pulls inline doc links 3px left. */
+.crs-page [data-control="toggle"]{margin-right:6px}
+.crs-docs-link{margin-left:-3px}

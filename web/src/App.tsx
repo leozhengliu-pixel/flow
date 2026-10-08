@@ -468,6 +468,8 @@ function App() {
   }, [closedAgentSessionIds]);
   const [selected, setSelected] = useState(new Set<string>()),
     [commandOpen, setCommandOpen] = useState(false),
+    // "O then Q" opens the command menu on its "Open customer…" picker.
+    [commandCustomerPicker, setCommandCustomerPicker] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
     [createDraftId, setCreateDraftId] = useState<string>(),
     [createTeamId, setCreateTeamId] = useState<string>(),
@@ -856,13 +858,29 @@ function App() {
           navigateTo(pulseSidebarPath(data.workspace.urlKey, pulseUnread.state.count));
         return;
       }
+      if (inSequence && sequence.key === "g" && pressed === "q" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        if (data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "customer-requests"))
+          navigateTo(customersPath(data.workspace.urlKey));
+        return;
+      }
+      if (inSequence && sequence.key === "o" && pressed === "q" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        if (data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "customer-requests")) {
+          setCommandCustomerPicker(true);
+          setCommandOpen(true);
+        }
+        return;
+      }
       if (inSequence && sequence.key === "g" && pressed === "s" && data) {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
         navigateTo(settingsPath(data.workspace.urlKey, data.viewerRole === "admin" ? "workspace" : "preferences"));
         return;
       }
-      if (pressed === "n" || pressed === "g") {
+      if (pressed === "n" || pressed === "g" || pressed === "o") {
         shortcutSequence.current = { key: pressed, at: now };
         return;
       }
@@ -3890,9 +3908,12 @@ function App() {
     );
   };
   const removeCustomer = async (customer: Customer) => {
+    // Linear's confirmation: "Delete <customer>", and a warning when its requests go too.
+    const hasRequests = (data?.customerRequests ?? []).some((request) => request.customerId === customer.id);
     if (
-      !(await confirmAction(`Delete ${customer.name}?`, {
-        confirmLabel: "Delete customer",
+      !(await confirmAction(`Delete ${customer.name}`, {
+        description: `Are you sure you want to delete this customer?${hasRequests ? " This will also delete all associated customer requests." : ""}`,
+        confirmLabel: "Delete",
       }))
     )
       return;
@@ -3903,6 +3924,9 @@ function App() {
             ...current,
             customers: (current.customers ?? []).filter(
               (item) => item.id !== customer.id,
+            ),
+            customerRequests: (current.customerRequests ?? []).filter(
+              (request) => request.customerId !== customer.id,
             ),
           }
         : current,
@@ -5265,6 +5289,12 @@ function App() {
             }}
           />
         )}
+        {page === "customer-detail" && customerRequestsEnabled && !selectedCustomer && workspaceValid && (
+          <RouteNotFound
+            title="Customer not found"
+            description="This customer does not exist or has been deleted."
+          />
+        )}
         {!workspaceValid && (
           <OrganizationNotFound
             orgKey={requestedWorkspaceKey || data.workspace.urlKey}
@@ -6193,6 +6223,7 @@ function App() {
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 issues={data.issues}
+                customerData={data}
                 projectRelations={data.projectRelations}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={viewsTeam?.id}
@@ -6316,6 +6347,7 @@ function App() {
                 labels={data.labels}
                 labelGroups={data.labelGroups}
                 issues={data.issues}
+                customerData={data}
                 projectRelations={data.projectRelations}
                 workspaceKey={data.workspace.urlKey}
                 scopeTeamId={projectTeam?.id}
@@ -6640,7 +6672,8 @@ function App() {
         {commandOpen && (
           <CommandMenu
             open={commandOpen}
-            onOpenChange={setCommandOpen}
+            onOpenChange={open => { setCommandOpen(open); if (!open) setCommandCustomerPicker(false); }}
+            initialCustomerPicker={commandCustomerPicker}
             onCreateIssue={() => openCreateIssue()}
             onCreateDocument={() =>
               void run(
@@ -6685,6 +6718,8 @@ function App() {
             onNavigateCustomers={() =>
               navigateTo(`${customersPath(data.workspace.urlKey)}?create=1`)
             }
+            onGoToCustomers={data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "customer-requests") ? () => navigateTo(customersPath(data.workspace.urlKey)) : undefined}
+            onOpenCustomer={(customer) => navigateTo(customerPath(data.workspace.urlKey, customer))}
             onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
             onNavigateReviews={() => navigateTo(reviewsPath(data.workspace.urlKey))}
             onNavigatePulse={data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse") ? () => navigateTo(pulseSidebarPath(data.workspace.urlKey, pulseUnread.state.count)) : undefined}

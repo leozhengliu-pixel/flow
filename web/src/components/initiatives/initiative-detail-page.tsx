@@ -26,15 +26,17 @@ import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
 import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import type { Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import type { InitiativeRouteTab } from '@/lib/app-routes'
-import { InitiativeLabelsPicker, InitiativeProperties, ProjectAssociationPicker } from './initiative-shared'
+import { InitiativeLabelsPicker, InitiativeProperties } from './initiative-shared'
 import { DisplayIcon as SlidersHorizontal, FilterIcon as Filter } from '@/components/ui/view-action-icons'
 import { AddProjectMenu, InitiativeActionsMenu, InitiativeNotificationMenu } from './initiative-header-menus'
 import { InitiativeResources } from './initiative-resources'
 import { formatTarget, titleCase } from './initiative-model'
-import { InitiativeHierarchySection } from './initiative-hierarchy-section'
+import { InitiativeContributesTo, InitiativeSubInitiatives } from './initiative-hierarchy-section'
 import { InitiativePageChrome, InitiativePageChromeActions } from './initiative-page-chrome'
 import { initiativeProjectIds } from './initiative-hierarchy'
 import { labelsForResource } from '@/lib/labels'
+import { useI18n } from '@/i18n/i18n'
+import { ProjectsPageEmptyIcon } from '@/components/projects-page/projects-page-empty-icon'
 import './initiatives.css'
 import './initiative-detail-overrides.css'
 
@@ -96,6 +98,21 @@ type TimelineZoom = 'Year' | 'Quarter' | 'Month' | 'Week'
 type InitiativeStoredView = SavedView & { slugId: string; icon: string; color: string; zoom: TimelineZoom; query: string; health?: Project['health']; properties: { health: boolean; priority: boolean; lead: boolean } }
 type InitiativeViewDraft = Pick<InitiativeStoredView, 'name'|'description'|'icon'|'color'|'zoom'|'query'|'health'|'properties'> & { slugId?: string; favorite?: boolean }
 
+
+const PROJECT_STATUS_ORDER: Record<string, number> = { backlog: 0, planned: 1, started: 2, paused: 3, completed: 4, canceled: 5 }
+
+/** The initiative's projects grouped by status, in status order (Linear groups this list by project status). */
+function projectStatusGroups<T extends { status: { id?: string; name: string; type: string } }>(projects: T[]) {
+  const groups = new Map<string, { key: string; name: string; type: string; projects: T[] }>()
+  for (const project of projects) {
+    const key = project.status.id || project.status.name
+    const group = groups.get(key) ?? { key, name: project.status.name, type: project.status.type, projects: [] }
+    group.projects.push(project)
+    groups.set(key, group)
+  }
+  return [...groups.values()].sort((a, b) => (PROJECT_STATUS_ORDER[a.type] ?? 9) - (PROJECT_STATUS_ORDER[b.type] ?? 9))
+}
+
 export function InitiativeDetailPage(props: Props) {
   const { initiative, tab, onTabChange, onUpdate } = props
   const onlineUserIds = useMemo(() => {
@@ -109,6 +126,10 @@ export function InitiativeDetailPage(props: Props) {
   const [updatesOpen, setUpdatesOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [projectCreateOpen, setProjectCreateOpen] = useState(false)
+  // Linear's create-sub-initiative signal: the overview's Sub-initiatives section shows an inline create row.
+  const [subInitiativeDraft, setSubInitiativeDraft] = useState<{ initiativeId: string; parentId: string }>()
+  const creatingSubParentId = subInitiativeDraft?.initiativeId === initiative.id ? subInitiativeDraft.parentId : undefined
+  const setCreatingSubParentId = (parentId?: string) => setSubInitiativeDraft(parentId ? { initiativeId: initiative.id, parentId } : undefined)
   const [roadmapQuery, setRoadmapQuery] = useState('')
   const [roadmapZoom, setRoadmapZoom] = useState<TimelineZoom>('Year')
   const [roadmapHealth, setRoadmapHealth] = useState<Project['health']>()
@@ -171,11 +192,11 @@ export function InitiativeDetailPage(props: Props) {
       <button className="li-detail-all" onClick={props.onBack} type="button">Initiatives</button><ChevronRight className="li-detail-separator" size={12}/>
       <button className="li-detail-crumb" data-i18n-ignore onClick={() => onTabChange('overview')} type="button"><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><strong>{initiative.name}</strong></button>
       <button aria-checked={initiative.favorite} aria-label="Add to favorites" className={initiative.favorite ? 'is-active' : ''} onClick={() => update({ favorite: !initiative.favorite })} role="switch" type="button"><Star fill={initiative.favorite ? 'currentColor' : 'none'} size={14}/></button>
-      <InitiativeActionsMenu initiative={initiative} initiatives={props.initiatives} users={props.users} teams={props.teams} labels={props.labels} viewer={props.viewer} onCreateInitiative={props.onCreateInitiative} onCreateLabel={props.onCreateLabel} onUpdateInitiative={props.onUpdate} pulseSubscribed={pulseSubscribed} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => setUpdatesOpen(true)} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
+      <InitiativeActionsMenu initiative={initiative} initiatives={props.initiatives} users={props.users} teams={props.teams} labels={props.labels} viewer={props.viewer} onCreateInitiative={props.onCreateInitiative} onCreateLabel={props.onCreateLabel} onUpdateInitiative={props.onUpdate} pulseSubscribed={pulseSubscribed} onCreateReminder={remindAt => props.onCreateReminder(initiative.id, remindAt)} onCreateSubInitiative={() => { if (tab !== 'overview') onTabChange('overview'); setCreatingSubParentId(initiative.id) }} onDelete={() => setDeleteOpen(true)} onNewUpdate={() => setUpdatesOpen(true)} onShowActivity={() => onTabChange('activity')} onUpdate={update}/>
       <span/>
       <button aria-label="Copy page URL" onClick={() => void navigator.clipboard.writeText(window.location.href).then(() => toast.success('Initiative URL copied'))} type="button"><Link2 size={14}/></button>
       <InitiativeNotificationMenu initiative={initiative} pulseSubscribed={pulseSubscribed} onUpdate={update}/>
-      {tab !== 'activity' && <AddProjectMenu initiative={initiative} projects={props.projects} onCreateNew={() => setProjectCreateOpen(true)} onUpdate={update}/>} 
+      {tab !== 'activity' && <AddProjectMenu initiative={initiative} projects={props.projects} onCreateNew={() => setProjectCreateOpen(true)} onUpdate={update} hierarchy={tab === 'overview' ? { initiatives: props.initiatives, onCreateSubInitiative: () => setCreatingSubParentId(initiative.id), onUpdateInitiative: props.onUpdate } : undefined}/>} 
     </header>
     <div className="li-detail-toolbar"><nav>{(['overview', 'activity', 'projects'] as InitiativeRouteTab[]).map(item => <a aria-current={tab === item ? 'page' : undefined} href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/${item}`)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onTabChange(item) }}>{titleCase(item)}</a>)}{storedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><a aria-current={activeView?.id === view.id ? 'page' : undefined} aria-label={view.name} className="li-saved-view-tab" data-i18n-ignore href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onOpenView(view.slugId) }}><ViewGlyph color={view.color} icon={view.icon}/><span>{view.name}</span></a></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="li-menu li-saved-view-menu"><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)}`)}><Copy size={14}/>Copy link</ContextMenu.Item><ContextMenu.Item onSelect={() => void updateStoredView({ ...view, favorite: !view.favorite })}><Star fill={view.favorite ? 'currentColor' : 'none'} size={14}/>{view.favorite ? 'Unfavorite' : 'Favorite'}</ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item onSelect={() => setEditingView(view)}><Edit3 size={14}/>Edit…</ContextMenu.Item><ContextMenu.Item onSelect={() => void duplicateStoredView(view)}><Copy size={14}/>Duplicate…</ContextMenu.Item><ContextMenu.Item className="danger" onSelect={() => setDeletingView(view)}><Trash2 size={14}/>Delete</ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}{tab === 'new' ? <a aria-current="page" className="li-new-view-tab" href={location.pathname}><ViewGlyph color="#8a8f98" icon="CustomView"/><span>New view</span><Edit3 size={11}/></a> : <button aria-label="Add new view" onClick={() => onTabChange('new')} type="button"><ViewGlyph color="#8a8f98" icon="CustomView"/></button>}</nav><div>
       {tab === 'activity' && <ActivityDisplayMenu value={activityDisplay} onChange={setActivityDisplay}/>} 
@@ -209,7 +230,7 @@ export function InitiativeDetailPage(props: Props) {
       onUpdate={update}
       detailsSidebar={<InitiativeSidebar {...props} labels={initiativeLabels} update={update}/>}
     >
-      {tab === 'overview' && <InitiativeOverview {...props} update={update}/>}
+      {tab === 'overview' && <InitiativeOverview {...props} update={update} creatingSubParentId={creatingSubParentId} onCreatingSubParentIdChange={setCreatingSubParentId} onCreateNewProject={() => setProjectCreateOpen(true)}/>}
       {tab === 'activity' && <InitiativeActivity {...props} display={activityDisplay}/>}
       {(tab === 'projects' || tab === 'view') && <InitiativeRoadmap {...props} healthFilter={roadmapHealth} properties={roadmapProperties} query={roadmapQuery} zoom={roadmapZoom} onZoom={changeRoadmapZoom}/>}
       {tab === 'new' && <InitiativeNewView {...props} onCancel={() => onTabChange('projects')} onSave={createStoredView}/>}
@@ -252,10 +273,13 @@ export function InitiativeDetailPage(props: Props) {
   </main>
 }
 
-function InitiativeOverview(props: Props & { update: (input: InitiativeMutationInput) => Promise<Initiative> }) {
+function InitiativeOverview(props: Props & { update: (input: InitiativeMutationInput) => Promise<Initiative>; creatingSubParentId?: string; onCreatingSubParentIdChange: (parentId?: string) => void; onCreateNewProject: () => void }) {
   const { initiative, projects, projectUpdates, users, update, onOpenProject, onTabChange } = props
+  const { t } = useI18n()
+  const initiativeLabels = useMemo(() => labelsForResource(props.labels, 'initiative', props.labelGroups), [props.labelGroups, props.labels])
   const [projectProperties, setProjectProperties] = useState(() => new Set(['health', 'priority', 'lead', 'target', 'status']))
   const [projectSort, setProjectSort] = useState<'name' | 'health' | 'priority' | 'target' | 'status'>('name')
+  const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(() => new Set())
   const effectiveProjects = initiativeProjectIds(initiative, props.initiatives)
   const linked = projects.filter(project => effectiveProjects.has(project.id)).sort((a, b) => {
     if (projectSort === 'name') return a.name.localeCompare(b.name)
@@ -268,11 +292,20 @@ function InitiativeOverview(props: Props & { update: (input: InitiativeMutationI
   const projectGrid = { gridTemplateColumns: `minmax(200px,1fr) ${projectColumns.map(property => property === 'health' ? '115px' : property === 'priority' ? '90px' : property === 'lead' ? '80px' : '105px').join(' ')}` }
   return <div className="li-overview">
     <div className="li-overview-title"><ViewIconPicker color={initiative.color} icon={initiative.icon || 'Initiative'} onChange={update} triggerClassName="li-overview-icon"/><InitiativeEditableText className="li-title-input" label="Initiative name" value={initiative.name} onCommit={name => update({ name })}/><InitiativeEditableText className="li-summary-input" label="Initiative summary" placeholder="Add a short summary…" value={initiative.summary} onCommit={summary => update({ summary })}/></div>
+    <InitiativeContributesTo initiative={initiative} initiatives={props.initiatives} onOpen={props.onOpenInitiative} onUpdate={props.onUpdate}/>
     <section><h3>Properties</h3><InitiativeProperties initiative={initiative} teams={props.teams} users={users} onUpdate={update}/><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="More properties" className="li-more-properties" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="li-menu"><DropdownMenu.Item onSelect={() => document.querySelector<HTMLElement>('.li-detail-sidebar [aria-label="Add labels"]')?.click()}>Labels</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></section>
     <InitiativeResources documents={props.documents} initiativeId={initiative.id} resources={initiative.resources} onCreate={props.onCreateResource} onUpdate={props.onUpdateResource} onDelete={props.onDeleteResource}/>
     <button className="li-first-update" onClick={() => onTabChange('activity')} type="button"><Send size={15}/>{props.initiativeUpdates.length ? 'View initiative updates' : 'Write first initiative update'}</button>
     <section className="li-description"><h3>Description</h3><EditableArea label="Initiative description" placeholder="Add description…" value={initiative.description} onCommit={description => update({ description })}/></section>
-    <InitiativeHierarchySection initiative={initiative} initiatives={props.initiatives} teams={props.teams} users={users} labels={props.labels} viewer={props.viewer} onOpen={props.onOpenInitiative} onCreate={props.onCreateInitiative} onUpdate={props.onUpdate} onCreateLabel={props.onCreateLabel}/><section className="li-overview-projects"><header><h3>Projects</h3><span/><OverviewProjectDisplayMenu properties={projectProperties} onChange={setProjectProperties}/><ProjectAssociationPicker initiative={initiative} projects={projects} onUpdate={update}><button type="button"><Plus size={14}/> Add a project</button></ProjectAssociationPicker></header>{linked.length ? <><div className="li-project-columns" style={projectGrid}><button onClick={() => setProjectSort('name')} type="button">Name</button>{projectColumns.map(property => property === 'lead' ? <span key={property}>Lead</span> : <button key={property} onClick={() => setProjectSort(property as typeof projectSort)} type="button">{property === 'target' ? 'Target date' : titleCase(property)}</button>)}</div><div className="li-project-group"><button aria-label="Collapse group" type="button"><ChevronDown size={12}/>In Progress</button>{linked.map(project => <button className="li-detail-project-row" key={project.id} onClick={() => onOpenProject(project)} style={projectGrid} type="button"><span className="li-project-primary"><i><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/></i><strong data-i18n-ignore>{project.name}</strong>{!initiative.projectIds.includes(project.id) && <small title="Included through a sub-initiative">Inherited</small>}</span>{projectColumns.map(property => property === 'health' ? <span className={`li-health is-${project.health}`} key={property}><i/>{projectUpdates[project.id]?.length ? healthLabel(project.health) : 'No updates'}</span> : property === 'priority' ? <span key={property}><PriorityIcon priority={project.priority} size={13}/>{project.priorityLabel}</span> : property === 'lead' ? <span key={property}>{project.lead ? <Avatar name={project.lead.displayName || project.lead.name}/> : ''}</span> : property === 'target' ? <span key={property}>{project.targetDate ? formatTarget(project.targetDate) : ''}</span> : <span key={property}><ProjectStatusGlyph name={project.status.name} type={project.status.type}/><span data-i18n-ignore>{project.status.name}</span></span>)}</button>)}</div></> : <div className="li-overview-projects-empty">No projects in this initiative</div>}</section>
+    <div className="li-overview-lists">
+      <InitiativeSubInitiatives initiative={initiative} initiatives={props.initiatives} projects={projects} projectUpdates={projectUpdates} users={users} teams={props.teams} labels={initiativeLabels} viewer={props.viewer}
+        creatingParentId={props.creatingSubParentId} onCreatingParentIdChange={props.onCreatingSubParentIdChange} onOpen={props.onOpenInitiative} onCreate={props.onCreateInitiative} onCreateLabel={props.onCreateLabel}
+        onCreateReminder={props.onCreateReminder} onDelete={props.onDelete} onUpdate={props.onUpdate}/>
+      <section aria-labelledby="initiative-projects" className="li-overview-list li-initiative-projects">
+        <header><h2 id="initiative-projects">{t('Projects')}</h2>{linked.length > 0 && <><OverviewProjectDisplayMenu properties={projectProperties} onChange={setProjectProperties}/><AddProjectMenu initiative={initiative} projects={projects} onCreateNew={props.onCreateNewProject} onUpdate={update} trigger={<button aria-label={t('Add a project')} className="li-overview-add" type="button"><Plus size={14}/></button>}/></>}</header>
+        {linked.length ? <div className="li-initiative-projects__list"><div className="li-project-columns" style={projectGrid}><button onClick={() => setProjectSort('name')} type="button">{t('Name')}</button>{projectColumns.map(property => property === 'lead' ? <span key={property}>{t('Lead')}</span> : <button key={property} onClick={() => setProjectSort(property as typeof projectSort)} type="button">{t(property === 'target' ? 'Target date' : titleCase(property))}</button>)}</div>{projectStatusGroups(linked).map(group => <div className="li-project-group" key={group.key}><button aria-expanded={!collapsedProjectGroups.has(group.key)} aria-label={t(collapsedProjectGroups.has(group.key) ? 'Expand group' : 'Collapse group')} type="button" onClick={() => setCollapsedProjectGroups(current => { const next = new Set(current); if (next.has(group.key)) next.delete(group.key); else next.add(group.key); return next })}><ChevronDown size={12} style={collapsedProjectGroups.has(group.key) ? { transform: 'rotate(-90deg)' } : undefined}/><ProjectStatusGlyph name={group.name} type={group.type}/><span data-i18n-ignore>{group.name}</span><span className="li-project-group__count">{group.projects.length}</span></button>{!collapsedProjectGroups.has(group.key) && group.projects.map(project => <button className="li-detail-project-row" key={project.id} onClick={() => onOpenProject(project)} style={projectGrid} type="button"><span className="li-project-primary"><i><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/></i><strong data-i18n-ignore>{project.name}</strong>{!initiative.projectIds.includes(project.id) && <small title="Included through a sub-initiative">Inherited</small>}</span>{projectColumns.map(property => property === 'health' ? <span className={`li-health is-${project.health}`} key={property}><i/>{projectUpdates[project.id]?.length ? healthLabel(project.health) : 'No updates'}</span> : property === 'priority' ? <span key={property}><PriorityIcon priority={project.priority} size={13}/>{project.priorityLabel}</span> : property === 'lead' ? <span key={property}>{project.lead ? <Avatar name={project.lead.displayName || project.lead.name}/> : ''}</span> : property === 'target' ? <span key={property}>{project.targetDate ? formatTarget(project.targetDate) : ''}</span> : <span key={property}><ProjectStatusGlyph name={project.status.name} type={project.status.type}/><span data-i18n-ignore>{project.status.name}</span></span>)}</button>)}</div>)}</div> : <div className="li-projects-empty"><div className="li-projects-empty__art"><ProjectsPageEmptyIcon/></div><span className="li-projects-empty__text">{t('No projects in this initiative')}</span><AddProjectMenu align="start" initiative={initiative} projects={projects} onCreateNew={props.onCreateNewProject} onUpdate={update} trigger={<button className="li-projects-empty__add" type="button"><Plus size={14}/>{t('Add project to initiative')}</button>}/></div>}
+      </section>
+    </div>
   </div>
 }
 

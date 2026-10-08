@@ -130,13 +130,18 @@ func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
 }
 
 type customerRequestInput struct {
-	CustomerID string   `json:"customerId,omitempty"`
-	Body       *string  `json:"body,omitempty"`
-	Source     *string  `json:"source,omitempty"`
-	SourceURL  *string  `json:"sourceUrl,omitempty"`
-	IssueID    *string  `json:"issueId,omitempty"`
-	ProjectID  *string  `json:"projectId,omitempty"`
-	Priority   *float64 `json:"priority,omitempty"`
+	// CustomerID links the request to a customer; "" on update removes the
+	// customer (an "Unknown customer" request, like the reference app).
+	CustomerID *string `json:"customerId,omitempty"`
+	// CustomerName creates a new customer with this name for the request in
+	// the same write (the composer's deferred "Create new customer" option).
+	CustomerName *string  `json:"customerName,omitempty"`
+	Body         *string  `json:"body,omitempty"`
+	Source       *string  `json:"source,omitempty"`
+	SourceURL    *string  `json:"sourceUrl,omitempty"`
+	IssueID      *string  `json:"issueId,omitempty"`
+	ProjectID    *string  `json:"projectId,omitempty"`
+	Priority     *float64 `json:"priority,omitempty"`
 }
 
 type releaseInput struct {
@@ -739,13 +744,34 @@ func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Re
 
 func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 	var input customerRequestInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.CustomerID) == "" || input.Body == nil || strings.TrimSpace(*input.Body) == "" {
-		writeError(w, http.StatusBadRequest, "customerId and body are required")
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	customerID, customerName := trimmedValue(input.CustomerID), trimmedValue(input.CustomerName)
+	if customerID != "" {
+		customerName = ""
+	}
+	body, sourceURL := trimmedValue(input.Body), trimmedValue(input.SourceURL)
+	// The reference composer accepts a request with any one of a customer, a
+	// body or a source: "Please select a customer, provide a request, or
+	// specify a source."
+	if customerID == "" && customerName == "" && body == "" && sourceURL == "" {
+		writeError(w, http.StatusBadRequest, "select a customer, provide a request, or specify a source")
+		return
+	}
+	if customerName != "" && !s.allowManualCustomerEdit(w, r) {
 		return
 	}
 	var created domain.CustomerRequest
 	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "customer_request.created", input, func(data *domain.Bootstrap) (string, error) {
-		if !slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == input.CustomerID }) {
+		now := time.Now().UTC()
+		if customerName != "" {
+			customer := domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Name: customerName, Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
+			data.Customers = append(data.Customers, customer)
+			appendAudit(data, "created", "customer", customer.ID, map[string]any{"name": customer.Name})
+			customerID = customer.ID
+		}
+		if customerID != "" && !slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == customerID }) {
 			return "", errNotFound
 		}
 		if input.IssueID != nil && *input.IssueID != "" && !validateResourceIDs(data, "issue", []string{*input.IssueID}) {
@@ -754,43 +780,63 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		if input.ProjectID != nil && *input.ProjectID != "" && !validateResourceIDs(data, "project", []string{*input.ProjectID}) {
 			return "", errInvalid
 		}
-		now := time.Now().UTC()
 		source := "manual"
 		if input.Source != nil && *input.Source != "" {
 			source = *input.Source
 		}
-		created = domain.CustomerRequest{ID: fmt.Sprintf("customer_request_%d", now.UnixNano()), CustomerID: input.CustomerID, Body: strings.TrimSpace(*input.Body), Source: source, Creator: data.Viewer, Attachments: []domain.Attachment{}, CreatedAt: now, UpdatedAt: now}
-		if input.SourceURL != nil {
-			created.SourceURL = *input.SourceURL
-		}
+		created = domain.CustomerRequest{ID: fmt.Sprintf("customer_request_%d", now.UnixNano()), CustomerID: customerID, Body: body, Source: source, SourceURL: sourceURL, Creator: data.Viewer, Attachments: []domain.Attachment{}, CreatedAt: now, UpdatedAt: now}
 		if input.IssueID != nil {
-			created.IssueID = *input.IssueID
+			created.IssueID = strings.TrimSpace(*input.IssueID)
 		}
-		if input.ProjectID != nil {
-			created.ProjectID = *input.ProjectID
+		if input.ProjectID != nil && created.IssueID == "" {
+			created.ProjectID = strings.TrimSpace(*input.ProjectID)
 		}
 		if input.Priority != nil {
 			created.Priority = *input.Priority
 		}
-		data.CustomerRequests = append([]domain.CustomerRequest{created}, data.CustomerRequests...)
-		for _, customer := range data.Customers {
-			if customer.ID == created.CustomerID {
-				for _, domain := range customer.Domains {
-					if customerDomainMatches(domain, data.WorkspaceSettings.FeatureSettings.CustomerExcludedDomains) {
-						return "", fmt.Errorf("%w: customer domain is excluded from requests", errInvalid)
-					}
-				}
-			}
+		if customerExcludedFromRequests(data, created.CustomerID) {
+			return "", fmt.Errorf("%w: customer domain is excluded from requests", errInvalid)
 		}
+		data.CustomerRequests = append([]domain.CustomerRequest{created}, data.CustomerRequests...)
 		appendAudit(data, "created", "customer_request", created.ID, map[string]any{"customerId": created.CustomerID})
 		return created.ID, nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
+// customerExcludedFromRequests reports whether one of the customer's domains
+// is on the workspace's excluded domains list.
+func customerExcludedFromRequests(data *domain.Bootstrap, customerID string) bool {
+	if customerID == "" {
+		return false
+	}
+	for _, customer := range data.Customers {
+		if customer.ID != customerID {
+			continue
+		}
+		for _, value := range customer.Domains {
+			if customerDomainMatches(value, data.WorkspaceSettings.FeatureSettings.CustomerExcludedDomains) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func trimmedValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
 func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 	var input customerRequestInput
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	customerName := trimmedValue(input.CustomerName)
+	if customerName != "" && trimmedValue(input.CustomerID) == "" && !s.allowManualCustomerEdit(w, r) {
 		return
 	}
 	id := r.PathValue("id")
@@ -801,31 +847,65 @@ func (s *server) updateCustomerRequest(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := &data.CustomerRequests[index]
-		if input.Body != nil && strings.TrimSpace(*input.Body) != "" {
+		now := time.Now().UTC()
+		if input.CustomerID != nil || customerName != "" {
+			customerID := trimmedValue(input.CustomerID)
+			if customerID == "" && customerName != "" {
+				customer := domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Name: customerName, Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
+				data.Customers = append(data.Customers, customer)
+				appendAudit(data, "created", "customer", customer.ID, map[string]any{"name": customer.Name})
+				customerID = customer.ID
+			}
+			if customerID != "" && !slices.ContainsFunc(data.Customers, func(customer domain.Customer) bool { return customer.ID == customerID }) {
+				return errNotFound
+			}
+			if customerExcludedFromRequests(data, customerID) {
+				return fmt.Errorf("%w: customer domain is excluded from requests", errInvalid)
+			}
+			item.CustomerID = customerID
+		}
+		if input.Body != nil {
 			item.Body = strings.TrimSpace(*input.Body)
 		}
 		if input.Source != nil {
 			item.Source = *input.Source
 		}
 		if input.SourceURL != nil {
-			item.SourceURL = *input.SourceURL
+			item.SourceURL = strings.TrimSpace(*input.SourceURL)
 		}
-		if input.IssueID != nil {
-			if *input.IssueID != "" && !validateResourceIDs(data, "issue", []string{*input.IssueID}) {
-				return errInvalid
-			}
-			item.IssueID = *input.IssueID
+		issueID, projectID := trimmedValue(input.IssueID), trimmedValue(input.ProjectID)
+		if issueID != "" && !validateResourceIDs(data, "issue", []string{issueID}) {
+			return errInvalid
 		}
-		if input.ProjectID != nil {
-			if *input.ProjectID != "" && !validateResourceIDs(data, "project", []string{*input.ProjectID}) {
-				return errInvalid
+		if projectID != "" && !validateResourceIDs(data, "project", []string{projectID}) {
+			return errInvalid
+		}
+		// A request belongs to an issue or, project-only, to a project: moving
+		// it to one clears the other unless both are given.
+		switch {
+		case input.IssueID != nil && input.ProjectID != nil:
+			item.IssueID, item.ProjectID = issueID, projectID
+			if issueID != "" {
+				item.ProjectID = ""
 			}
-			item.ProjectID = *input.ProjectID
+		case input.IssueID != nil:
+			item.IssueID = issueID
+			if issueID != "" {
+				item.ProjectID = ""
+			}
+		case input.ProjectID != nil:
+			item.ProjectID = projectID
+			if projectID != "" {
+				item.IssueID = ""
+			}
 		}
 		if input.Priority != nil {
 			item.Priority = *input.Priority
 		}
-		item.UpdatedAt = time.Now().UTC()
+		if item.CustomerID == "" && item.Body == "" && item.SourceURL == "" && len(item.Attachments) == 0 {
+			return fmt.Errorf("%w: select a customer, provide a request, or specify a source", errInvalid)
+		}
+		item.UpdatedAt = now
 		updated = *item
 		appendAudit(data, "updated", "customer_request", id, nil)
 		return nil

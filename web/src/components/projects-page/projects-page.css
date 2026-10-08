@@ -1823,3 +1823,7 @@
 .lp-projects__editor-actions{display:flex;align-items:center;gap:6px}
 .lp-projects__header > .lp-projects__copy-url:not(:last-child) { margin-left: auto; }
 .lp-projects__header > .lp-projects__copy-url:not(:last-child) + .lp-projects__icon-button { margin-left: 6px; }
+/* Customers / Revenue columns (Linear): revenue is right-aligned. */
+.lp-project-row__customers { min-width: 0; overflow: hidden; }
+.lp-project-row__revenue, .lp-project-table__revenue-header { justify-content: flex-end; }
+.lp-project-table__revenue-unit { white-space: pre; }

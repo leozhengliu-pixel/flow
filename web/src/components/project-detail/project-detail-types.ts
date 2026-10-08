@@ -33,7 +33,7 @@ import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-lis
 import type { ProjectMutationInput } from "@/components/projects-page/projects-page";
 import type { IssueRecordSummary } from '@/lib/api';
 
-export type ProjectDetailTab = "overview" | "activity" | "issues" | "new";
+export type ProjectDetailTab = "overview" | "activity" | "issues" | "requests" | "new";
 
 export type ProjectDetailProps = {
   issueData?: BootstrapData;

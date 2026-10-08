@@ -60,4 +60,18 @@ func TestCustomerFilterHTTPGroupedPagination(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("wrong group counts: %+v", grouped)
 	}
+	// Linear's Customer grouping and customer orderings work on the paged list.
+	params.Set("groupBy", "customer")
+	get("/api/issue-records/groups?"+params.Encode(), &grouped)
+	if len(grouped.Groups) != 1 || grouped.Groups[0].Value != "customer-contract" || grouped.Groups[0].Count != 2 {
+		t.Fatalf("wrong customer groups: %+v", grouped)
+	}
+	params.Set("groupValue", "customer-contract")
+	params.Set("sort", "customerRevenue")
+	params.Set("direction", "desc")
+	params.Set("filter", `{"and":[{"field":"customerId","operator":"is","values":["customer-count:gte:1","customer-revenue:gte:50"]}]}`)
+	get("/api/issue-records?"+params.Encode(), &page)
+	if page.Total != 2 || len(page.Items) != 1 {
+		t.Fatalf("customer number filter/sort page: %+v", page)
+	}
 }

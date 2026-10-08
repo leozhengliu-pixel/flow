@@ -117,7 +117,7 @@ describe('IssueViewSplitPage / SplitViewIssueView', () => {
 })
 
 describe('SplitIssueView + IssueDetailsPaneSidebar', () => {
-  it('renders preview, properties, customer needs, and agent slot', () => {
+  it('renders preview, properties and agent slot (no customers section, like Linear)', () => {
     renderWithI18n(
       <SplitIssueView
         issue={sampleIssue}
@@ -129,8 +129,7 @@ describe('SplitIssueView + IssueDetailsPaneSidebar', () => {
     expect(screen.getByText('Wire IssuesSplitViewPage')).toBeInTheDocument()
     expect(screen.getByLabelText('Issue details sidebar')).toBeInTheDocument()
     expect(screen.getByText('Entity agent')).toBeInTheDocument()
-    expect(screen.getByLabelText('Customer needs')).toBeInTheDocument()
-    expect(screen.getByText('Acme')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Customer needs')).toBeNull()
   })
 
   it('toggles agent panel when host provides open state', () => {

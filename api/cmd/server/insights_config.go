@@ -13,7 +13,7 @@ import (
 // everyone's panel.
 var (
 	insightMeasures     = []string{"issueCount", "cycleTime", "leadTime", "issueAge", "timeInStatus"}
-	insightDimensions   = []string{"status", "statusType", "assignee", "agent", "agentSession", "creator", "priority", "label", "template", "externalSource", "project", "initiative", "projectLabel", "cycle", "addedToCycle", "createdDate", "completedDate", "canceledDate", "startedDate", "dueDate", "burnUp"}
+	insightDimensions   = []string{"status", "statusType", "assignee", "agent", "agentSession", "creator", "priority", "label", "customer", "template", "externalSource", "project", "initiative", "projectLabel", "cycle", "addedToCycle", "createdDate", "completedDate", "canceledDate", "startedDate", "dueDate", "burnUp"}
 	insightAggregations = []string{"average", "p25", "median", "p75", "p95", "min", "max"}
 )
 
@@ -47,10 +47,13 @@ func normalizeInsightsConfig(raw json.RawMessage) (json.RawMessage, bool) {
 		Segment          *string   `json:"segment,omitempty"`
 		ShowArchived     *bool     `json:"showArchived,omitempty"`
 		HideEmptySegment *bool     `json:"hideEmptySegment,omitempty"`
-		Colors           *string   `json:"colors,omitempty"`
-		Aggregation      *string   `json:"aggregation,omitempty"`
-		Aggregations     *[]string `json:"aggregations,omitempty"`
-		LatencyScale     *string   `json:"latencyScale,omitempty"`
+		HideEmptySlice   *bool     `json:"hideEmptySlice,omitempty"`
+		// HideUnknownCustomer is Linear's "Hide Unknown customer" for a Customer slice or segment.
+		HideUnknownCustomer *bool     `json:"hideUnknownCustomer,omitempty"`
+		Colors              *string   `json:"colors,omitempty"`
+		Aggregation         *string   `json:"aggregation,omitempty"`
+		Aggregations        *[]string `json:"aggregations,omitempty"`
+		LatencyScale        *string   `json:"latencyScale,omitempty"`
 	}
 	if err := decoder.Decode(&config); err != nil || decoder.More() {
 		return nil, false

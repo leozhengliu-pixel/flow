@@ -818,8 +818,11 @@ type CustomerRequest struct {
 	Attachments []Attachment `json:"attachments"`
 	Priority    float64      `json:"priority,omitempty"`
 	ArchivedAt  *time.Time   `json:"archivedAt,omitempty"`
-	CreatedAt   time.Time    `json:"createdAt"`
-	UpdatedAt   time.Time    `json:"updatedAt"`
+	// ArchivedByExclusion is the excluded domain/email entry that archived
+	// this request; removing that entry from the exclusion list restores it.
+	ArchivedByExclusion string    `json:"archivedByExclusion,omitempty"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 type Release struct {

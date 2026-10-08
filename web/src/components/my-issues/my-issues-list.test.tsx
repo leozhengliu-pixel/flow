@@ -62,6 +62,10 @@ describe('MyIssuesList virtualization', () => {
         milestoneName: '车商城316迭代',
         customerNames: ['Acme'],
         customerRevenues: [12000],
+        customers: [{ id: 'c1', name: 'Acme', annualRevenue: 12000 }],
+        customerCount: 1,
+        importantCustomerIds: ['c1'],
+        customerRevenueSettings: { customerRevenueFormat: 'monthly', customerRevenueCurrency: 'EUR' },
       }],
     }]
     const { getByText, getByLabelText } = render(
@@ -70,7 +74,10 @@ describe('MyIssuesList virtualization', () => {
       </I18nProvider>,
     )
     expect(getByLabelText('Milestone 车商城316迭代')).toBeVisible()
+    // Linear's Customers chip: ▲ important count, the logo pile and the single customer's name.
     expect(getByText('Acme')).toBeVisible()
-    expect(getByLabelText(/Customer revenue/)).toBeVisible()
+    expect(getByLabelText('1 customer').textContent).toContain('1')
+    // Customer revenue follows the workspace format (monthly → /12) and currency.
+    expect(getByLabelText(/Customer revenue/).getAttribute('aria-label')).toMatch(/€1(\.0)?K\/mo/)
   })
 })

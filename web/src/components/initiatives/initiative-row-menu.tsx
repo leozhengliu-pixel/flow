@@ -15,6 +15,8 @@ import { usePulseSubscription } from '@/lib/pulse-subscriptions'
 import type { Initiative, InitiativeMutationInput, InitiativeStatus, IssueLabel, Team, User } from '@/types/flow'
 import { formatTarget } from './initiative-model'
 import { InitiativeStatusIcon } from './initiative-shared'
+import { initiativeGraph } from './initiative-hierarchy'
+import { showNestingLimitError } from './initiative-hierarchy-actions'
 
 
 const STATUSES: Array<[InitiativeStatus, string]> = [['proposed', 'Proposed'], ['planned', 'Planned'], ['active', 'Active'], ['completed', 'Completed'], ['canceled', 'Canceled']]
@@ -137,6 +139,7 @@ const initiativeOption = (item: Initiative): LinearMenuOption => ({ id: item.id,
 
 /** Parent initiatives (⌘ ⇧ P) and Sub-initiatives ▸ Create new… / Add existing…, shared by the row and header menus. */
 export function InitiativeHierarchySubmenus({ initiative, initiatives, canParent, onCreateSubInitiative, onUpdate, onUpdateInitiative }: { initiative: Initiative; initiatives: Initiative[]; canParent: (child: string, parent: string) => boolean; onCreateSubInitiative: () => void; onUpdate: (input: InitiativeMutationInput) => void | Promise<unknown>; onUpdateInitiative: (id: string, input: InitiativeMutationInput) => void | Promise<unknown> }) {
+  const { t } = useI18n()
   const parents = new Set(initiative.parentInitiativeIds ?? [])
   const current = initiatives.filter(item => item.parentInitiativeIds?.includes(initiative.id))
   const candidates = initiatives.filter(item => item.id !== initiative.id && !item.parentInitiativeIds?.includes(initiative.id) && canParent(item.id, initiative.id))
@@ -147,7 +150,7 @@ export function InitiativeHierarchySubmenus({ initiative, initiatives, canParent
         onChoose={id => { const next = new Set(parents); if (next.has(id)) next.delete(id); else next.add(id); void onUpdate({ parentInitiativeIds: [...next] }) }}/>
     </LinearSubmenu>
     <LinearSubmenu icon={<LinearGlyph name="subInitiatives"/>} label="Sub-initiatives">
-      <LinearMenuItem icon={<LinearGlyph name="subInitiatives"/>} label="Create new…" onSelect={onCreateSubInitiative}/>
+      <LinearMenuItem icon={<LinearGlyph name="subInitiatives"/>} label="Create new…" onSelect={() => initiativeGraph(initiatives).canCreateChild(initiative.id) ? onCreateSubInitiative() : showNestingLimitError(t)}/>
       <LinearSubmenu icon={<ViewGlyph icon="Initiative" color="currentColor"/>} label="Add existing…" search>
         <LinearMenuOptions multiple placeholder="Add existing sub-initiative…" emptyLabel="No matching initiatives" selected={new Set(current.map(item => item.id))}
           options={[...current, ...candidates].map(initiativeOption)}

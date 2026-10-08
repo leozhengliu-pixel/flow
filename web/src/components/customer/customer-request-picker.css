@@ -1,0 +1,40 @@
+/* "Select customer…" palette: Linear's command menu (720px wide, 40px input, 46px rows). */
+html:root body .command-dialog.customer-request-picker {
+  width: min(720px, calc(100vw - 32px));
+}
+html:root body .customer-request-picker .command-input {
+  height: 40px;
+  padding: 0 12px;
+}
+html:root body .customer-request-picker .command-input input {
+  font-size: 13px;
+}
+html:root body .customer-request-picker [cmdk-list] {
+  padding: 6px;
+}
+html:root body .customer-request-picker [cmdk-item] {
+  height: 46px;
+  gap: 8px;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--pk-text-strong);
+  font-size: 13px;
+  font-weight: 450;
+}
+html:root body .customer-request-picker [cmdk-item][data-kind="hint"] {
+  cursor: default;
+}
+html:root body .customer-request-picker__icon {
+  width: 16px;
+  height: 16px;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  color: var(--pk-muted);
+}
+html:root body .customer-request-picker__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

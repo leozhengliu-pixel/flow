@@ -3,8 +3,8 @@ import { ApplicationMembers } from '@/components/agent/application-members'
 import {
   ArrowUpRight,
   Bot, Check, ChevronDown, ChevronRight, Code2, FileText,
-  Inbox, MessageSquare, MoreHorizontal, Plus, Radio, Rocket,
-  Search, Smile, Sparkles, Tag, UsersRound,
+  Inbox, MessageSquare, Plus, Radio, Rocket,
+  Search, Smile, Sparkles, Tag,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,9 +25,9 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
 import {
-  createCustomerStatus, createCustomerTier, createCustomEmoji, createDocumentTemplate, deleteCustomerStatus, deleteCustomerTier, restoreTrashEntry,
+  createCustomEmoji, createDocumentTemplate, restoreTrashEntry,
   deleteDocumentTemplate, updateCustomEmoji, updateDocumentTemplate,
-  updateCustomerStatus, updateCustomerTier, updateIntegrationConnection, updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
+  updateIntegrationConnection, updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
 import { loopsPath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
@@ -35,7 +35,7 @@ import { persistUserSettings } from "@/lib/settings-persistence";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useNavigate } from "react-router-dom";
 import type {
-  BootstrapData, CustomEmoji, DocumentTemplate, FeatureOption, FeatureSettings,
+  BootstrapData, CustomEmoji, DocumentTemplate, FeatureSettings,
   ReleasePipeline, WorkspaceSettings,
 } from "@/types/flow";
 
@@ -45,6 +45,7 @@ import { SlackUpdates } from "./slack-updates";
 import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingAgentSettingsPage } from "./coding-agent-settings";
+import { CustomerRequestsSettings } from "./customer-requests-settings";
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: (addressId?: string) => void };
@@ -58,10 +59,10 @@ const DEFAULT_FEATURE_SETTINGS: FeatureSettings = {
   customerRevenueCurrency: "USD",
   customerManualEdits: true,
   customerStatuses: [
-    { id: "active", name: "Active", color: "#4cb782" },
-    { id: "prospect", name: "Prospect", color: "#5e6ad2" },
-    { id: "churned", name: "Churned", color: "#f2c94c" },
-    { id: "lost", name: "Lost", color: "#eb5757" },
+    { id: "active", name: "Active", color: "#5e6ad2" },
+    { id: "prospect", name: "Prospect", color: "#4cb782" },
+    { id: "churned", name: "Churned", color: "#eb5757" },
+    { id: "lost", name: "Lost", color: "#f2994a" },
   ],
   customerTiers: [], customerExcludedDomains: [], customerGenericDomains: [],
   pulseWorkspaceSchedule: "daily", asksEmailAddresses: [], asksSlackChannels: [],
@@ -340,24 +341,8 @@ function DocumentTemplateDialog({data,template,onClose,onReload}:{data:Bootstrap
   return <FeatureDialog open onClose={onClose} title={template?"Edit document template":"New document template"}><label>{t("Template name")}<input autoFocus aria-label={t("Template name")} value={name} onChange={event=>setName(event.target.value)}/></label><label>{t("Document template content")}<textarea aria-label={t("Document template content")} placeholder={t("Click here to start writing…")} value={content} onChange={event=>setContent(event.target.value)}/></label><FeatureDialogFooter>{template&&<FeatureButton danger disabled={busy} onClick={()=>void remove()}>Delete</FeatureButton>}<span/><FeatureButton disabled={busy} onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>{template?"Save":"Create"}</FeatureButton></FeatureDialogFooter></FeatureDialog>;
 }
 
-function CustomerRequestsPage({data,settings,busy,setEnabled,setFeature,onReload}:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void;onReload:()=>Promise<void>}) {
-  const { t } = useI18n();
-  const fs=settings.featureSettings; const [editor,setEditor]=useState<{type:"status"|"tier";item?:FeatureOption}|null>(null); const [domains,setDomains]=useState<"excluded"|"generic"|null>(null);
-  const statuses:FeatureOption[]=(data.customerStatuses??[]).filter(item=>!item.archivedAt);const tiers:FeatureOption[]=(data.customerTiers??[]).filter(item=>!item.archivedAt)
-  const saveOption=async(type:"status"|"tier",item:FeatureOption)=>{const existing=(type==="status"?statuses:tiers).some(value=>value.id===item.id);if(type==="status"){if(existing)await updateCustomerStatus(item.id,{name:item.name,color:item.color??""});else await createCustomerStatus({name:item.name,color:item.color??""})}else{if(existing)await updateCustomerTier(item.id,{name:item.name,color:item.color??""});else await createCustomerTier({name:item.name,color:item.color??""})}await onReload()};
-  const removeOption=async(type:"status"|"tier",id:string)=>{if(type==="status")await deleteCustomerStatus(id);else await deleteCustomerTier(id);await onReload()};
-  return <FeatureShell title="Customer requests" description="Associate customers with projects and issues to align development efforts with real user needs. Manage and track customer requests across your entire organization.">
-    <FeatureCard><FeatureRow title="Enable Customer requests" description="Workspace-wide access to create and view customer requests"><Toggle checked={settings.featureFlags["customer-requests"]??true} disabled={busy} label={t("Enable Customer requests")} onChange={value=>setEnabled("customer-requests",value)}/></FeatureRow><FeatureRow icon={UsersRound} title="Manage customers" description="Manage your list of customers and their requests"><span className="feature-state">{data.customers.length?t(`${data.customers.length} customers`):t("No customers")}</span></FeatureRow></FeatureCard>
-    <FeatureSection title="Issue routing" description="When a new issue is created from a customer page, it will be routed to the default team’s triage or backlog. This centralizes customer requests for ease of management and prioritization."><FeatureCard><FeatureRow title="Default team for customer requests"><FeatureSelect label="Default team for customer requests" value={fs.customerDefaultTeamId??""} options={[{value:"",label:"No default team"},...data.teams.map(team=>({value:team.id,label:team.name,translate:false}))]} disabled={busy} onChange={value=>setFeature("customerDefaultTeamId",value)}/></FeatureRow></FeatureCard></FeatureSection>
-    <FeatureSection title="Customer statuses" description="Define statuses for segmenting customers"><OptionList type="status" items={statuses} onAdd={()=>setEditor({type:"status"})} onEdit={item=>setEditor({type:"status",item})} onRemove={id=>void removeOption("status",id)}/></FeatureSection>
-    <FeatureSection title="Customer tiers" description="Define tiers for segmenting customers"><OptionList type="tier" items={tiers} onAdd={()=>setEditor({type:"tier"})} onEdit={item=>setEditor({type:"tier",item})} onRemove={id=>void removeOption("tier",id)}/></FeatureSection>
-    <FeatureSection title="Display options"><FeatureCard><FeatureRow title="Revenue formatting" description="Data imports must be in annual figures, but can be displayed as monthly or annual"><FeatureSelect label="Revenue formatting" value={fs.customerRevenueFormat} options={[{value:"annual",label:"Annual"},{value:"monthly",label:"Monthly"}]} disabled={busy} onChange={value=>setFeature("customerRevenueFormat",value)}/></FeatureRow><FeatureRow title="Revenue currency" description="The currency used when displaying customer revenue"><FeatureSelect label="Revenue currency" value={fs.customerRevenueCurrency} options={["USD","EUR","GBP","CNY","JPY"].map(value=>({value,label:value}))} disabled={busy} onChange={value=>setFeature("customerRevenueCurrency",value)}/></FeatureRow></FeatureCard></FeatureSection>
-    <FeatureSection title="Customer attributes data source" description="Sync customer attributes from an external data source"><FeatureCard><FeatureRow title="External data source"><span className="feature-state">{t("None")}</span></FeatureRow><FeatureRow title="Enable manual edits" description="Attributes can be edited in the Flow UI"><Toggle checked={fs.customerManualEdits} disabled={busy} label={t("Enable manual edits")} onChange={value=>setFeature("customerManualEdits",value)}/></FeatureRow></FeatureCard></FeatureSection>
-    <FeatureSection title="Excluded domains and emails" description="Domains and emails that should never create customer requests"><DomainList values={fs.customerExcludedDomains} empty="No excluded domains and emails" onEdit={()=>setDomains("excluded")}/></FeatureSection>
-    <FeatureSection title="Generic domains and emails" description="Domains and emails that are not associated with a specific customer. Common providers like Gmail, Outlook, etc. are already included."><DomainList values={fs.customerGenericDomains} empty="No custom generic domains and emails" onEdit={()=>setDomains("generic")}/></FeatureSection>
-    {editor&&<OptionDialog {...editor} onClose={()=>setEditor(null)} onSave={item=>{void saveOption(editor.type,item);setEditor(null)}}/>}
-    {domains&&<DomainDialog title={domains==="excluded"?"Excluded domains and emails":"Generic domains and emails"} values={domains==="excluded"?fs.customerExcludedDomains:fs.customerGenericDomains} onClose={()=>setDomains(null)} onSave={values=>{setFeature(domains==="excluded"?"customerExcludedDomains":"customerGenericDomains",values);setDomains(null)}}/>}
-  </FeatureShell>;
+function CustomerRequestsPage(props:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void|Promise<void>;onReload:()=>Promise<void>}) {
+  return <CustomerRequestsSettings {...props}/>;
 }
 
 function ReleasesFeatureSettings({data,onCreate,onOpen,onReload}:{data:BootstrapData;onCreate:()=>void;onOpen:(pipeline:ReleasePipeline)=>void;onReload:()=>Promise<void>}) {
@@ -471,10 +456,6 @@ function FeatureEmpty({icon:Icon,title,action}:{icon:LucideIcon;title:string;act
 function FeatureDialog({open,onClose,title,children}:{open:boolean;onClose:()=>void;title:string;children:ReactNode}) {const {t}=useI18n();return <Dialog open={open} onOpenChange={value=>!value&&onClose()}><DialogContent className="feature-dialog"><DialogTitle>{t(title)}</DialogTitle>{children}</DialogContent></Dialog>}
 function FeatureDialogFooter({children}:{children:ReactNode}) {return <footer className="feature-dialog-footer">{children}</footer>}
 
-function OptionList({type,items,onAdd,onEdit,onRemove}:{type:"status"|"tier";items:FeatureOption[];onAdd:()=>void;onEdit:(item:FeatureOption)=>void;onRemove:(id:string)=>void}) {const {t}=useI18n();const countLabel=items.length?`${items.length} ${t(type==="status"?"customer statuses":"customer tiers")}`:t(type==="status"?"No customer statuses":"No customer tiers");return <FeatureCard><div className="feature-list-title"><span>{countLabel}</span><FeatureButton aria-label={t(type==="status"?"Create new customer status":"Create new customer tier")} onClick={onAdd}><Plus size={14}/></FeatureButton></div>{items.map(item=><div className="feature-option-row" key={item.id}><i style={{background:item.color}}/><strong data-i18n-ignore>{item.name}</strong><DropdownMenu><DropdownMenuTrigger asChild><button aria-label={`${t("Open menu")}: ${item.name}`}><MoreHorizontal size={15}/></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="feature-select-menu"><DropdownMenuItem onSelect={()=>onEdit(item)}>{t("Edit")}</DropdownMenuItem><DropdownMenuItem className="danger-item" onSelect={()=>onRemove(item.id)}>{t("Delete")}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div>)}</FeatureCard>}
-function OptionDialog({type,item,onClose,onSave}:{type:"status"|"tier";item?:FeatureOption;onClose:()=>void;onSave:(item:FeatureOption)=>void}) {const {t}=useI18n();const [name,setName]=useState(item?.name??"");const [color,setColor]=useState(item?.color??"#5e6ad2");const title=item?(type==="status"?"Edit customer status":"Edit customer tier"):(type==="status"?"New customer status":"New customer tier");return <FeatureDialog open onClose={onClose} title={title}><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><label>{t("Color")}<input aria-label={t("Color")} className="feature-color" type="color" value={color} onChange={event=>setColor(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={!name.trim()} onClick={()=>onSave({id:item?.id??`${type}-${Date.now()}`,name:name.trim(),color})}>Save</FeatureButton></FeatureDialogFooter></FeatureDialog>}
-function DomainList({values,empty,onEdit}:{values:string[];empty:string;onEdit:()=>void}) {const {t}=useI18n();return <FeatureCard><div className="feature-domain-row"><strong data-i18n-ignore={values.length?true:undefined}>{values.length?values.join(", "):t(empty)}</strong><FeatureButton aria-label={t("Open menu")} onClick={onEdit}>{values.length?"Edit":<Plus size={14}/>}</FeatureButton></div></FeatureCard>}
-function DomainDialog({title,values,onClose,onSave}:{title:string;values:string[];onClose:()=>void;onSave:(values:string[])=>void}) {const {t}=useI18n();const [text,setText]=useState(values.join("\n"));return <FeatureDialog open onClose={onClose} title={title}><label>{t("One domain or email per line")}<textarea aria-label={t("One domain or email per line")} autoFocus value={text} onChange={event=>setText(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary onClick={()=>onSave([...new Set(text.split(/[\n,]+/).map(value=>value.trim().toLowerCase()).filter(Boolean))])}>Save</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 function EmojiDialog({input,onClose,onReload}:{input:{name:string;imageUrl:string};onClose:()=>void;onReload:()=>Promise<void>}) {const {t}=useI18n();const [name,setName]=useState(input.name);const [busy,setBusy]=useState(false);const save=async()=>{setBusy(true);try{await createCustomEmoji({name,imageUrl:input.imageUrl});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};return <FeatureDialog open onClose={onClose} title="Upload emoji"><div className="feature-emoji-preview"><img src={input.imageUrl} alt={t("Preview")}/></div><label>{t("Name")}<input aria-label={t("Name")} autoFocus value={name} onChange={event=>setName(event.target.value)}/></label><FeatureDialogFooter><span/><FeatureButton onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>Upload</FeatureButton></FeatureDialogFooter></FeatureDialog>}
 
 function normalizeSettings(settings:WorkspaceSettings):WorkspaceSettings {return {...settings,featureFlags:settings.featureFlags??{},featureSettings:{...DEFAULT_FEATURE_SETTINGS,...(settings.featureSettings??{}),triageIntelligence:{...DEFAULT_FEATURE_SETTINGS.triageIntelligence,...(settings.featureSettings?.triageIntelligence??{})},customerStatuses:settings.featureSettings?.customerStatuses?.length?settings.featureSettings.customerStatuses:DEFAULT_FEATURE_SETTINGS.customerStatuses,customerTiers:settings.featureSettings?.customerTiers??[],customerExcludedDomains:settings.featureSettings?.customerExcludedDomains??[],customerGenericDomains:settings.featureSettings?.customerGenericDomains??[],asksEmailAddresses:settings.featureSettings?.asksEmailAddresses??[],asksSlackChannels:settings.featureSettings?.asksSlackChannels??[],repositoryAccess:{...DEFAULT_REPOSITORY_ACCESS,...(settings.featureSettings?.repositoryAccess??{})}}}}

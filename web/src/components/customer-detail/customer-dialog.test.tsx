@@ -95,6 +95,37 @@ describe('CustomerDialog (Linear create customer modal)', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ name: 'Acme', logoUrl: '', status: 'inactive', tier: 'Enterprise', domains: ['acme.com'] })))
   })
 
+  it('picks from the workspace statuses and tiers (first status by default) and stores their ids', async () => {
+    const user = userEvent.setup()
+    const statuses = [
+      { id: 'st-prospect', name: 'Prospect', color: '#5e6ad2', position: 1 },
+      { id: 'st-active', name: 'Active', color: '#4cb782', position: 0 },
+      { id: 'st-old', name: 'Old', color: '#999', position: 2, archivedAt: '2026-01-01' },
+    ]
+    const tiers = [{ id: 'tier-ent', name: 'Enterprise', color: '#000', position: 0 }]
+    const { onSubmit } = renderDialog({ statuses, tiers })
+    const status = screen.getByRole('combobox', { name: 'Status' })
+    expect(status).toHaveTextContent('Active')
+    expect(status.querySelector('.customer-status-icon')).toBeTruthy()
+    await user.click(status)
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual(['Active', 'Prospect'])
+    await user.click(screen.getByRole('option', { name: 'Prospect' }))
+    await user.click(screen.getByRole('combobox', { name: 'Tier' }))
+    await user.click(screen.getByRole('option', { name: 'Enterprise' }))
+    await user.type(screen.getByPlaceholderText('Customer name'), 'Acme')
+    await user.click(screen.getByRole('button', { name: 'Create customer' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ status: 'st-prospect', tier: 'tier-ent' })))
+  })
+
+  it('enters revenue per month when the workspace shows monthly revenue', async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderDialog({ monthlyRevenue: true, revenueLabel: 'Monthly revenue' })
+    await user.type(screen.getByPlaceholderText('Customer name'), 'Acme')
+    await user.type(screen.getByLabelText('Monthly revenue'), '1000')
+    await user.click(screen.getByRole('button', { name: 'Create customer' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ annualRevenue: 12000 })))
+  })
+
   it('warns about a customer with the same name', async () => {
     const user = userEvent.setup()
     renderDialog({ customers: [{ id: 'c2', name: 'Globex' }] })

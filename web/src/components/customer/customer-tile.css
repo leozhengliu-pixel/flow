@@ -1,0 +1,52 @@
+/* Linear's CustomerLogo: a size×size tile; the logo/letter sits 2px smaller on it. */
+.customer-tile {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+.customer-tile.has-background { background: var(--bg-hover); }
+.customer-tile__backdrop {
+  position: absolute;
+  inset: 0;
+  transform: scale(1.2);
+}
+.customer-tile__backdrop > span {
+  position: absolute;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+}
+/* Dark theme dims and saturates the blurred copy (Linear: brightness(40%) saturate(300%)). */
+:root:not([data-theme="light"]) .customer-tile__backdrop > span { filter: brightness(40%) saturate(300%); }
+.customer-tile__content {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.customer-tile__image,
+.customer-tile__letter,
+.customer-tile__default {
+  flex: 0 0 auto;
+  border-radius: 4px;
+}
+.customer-tile.has-background :is(.customer-tile__image, .customer-tile__letter, .customer-tile__default) { border-radius: 3px; }
+.customer-tile__image { display: block; aspect-ratio: 1 / 1; object-fit: cover; }
+.customer-tile__letter,
+.customer-tile__default {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--text-label);
+  color: var(--theme-text-primary);
+  font-family: var(--font);
+  font-feature-settings: "calt";
+  font-weight: 550;
+  text-align: center;
+}
+:root[data-theme="light"] :is(.customer-tile__letter, .customer-tile__default) { color: var(--theme-surface-0); }

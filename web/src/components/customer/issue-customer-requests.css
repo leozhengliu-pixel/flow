@@ -1,0 +1,74 @@
+/* Issue page "Customers" section (Linear's customer needs section), measured at 1470px. */
+.issue-customer-requests {
+  display: flex;
+  flex-direction: column;
+  margin: 12px 0 12px -6px;
+}
+@media print { .issue-customer-requests { display: none; } }
+
+.issue-customer-requests__header {
+  top: 0;
+  z-index: 10;
+  box-sizing: border-box;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0;
+  padding: 0 8px 0 0;
+  background: var(--surface-page);
+}
+.issue-customer-requests__header.is-sticky { position: sticky; }
+.issue-customer-requests__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.issue-customer-requests__toggle {
+  box-sizing: border-box;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 12px 0 6px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--chip-strong);
+  font: 500 12px/normal var(--font);
+  cursor: default;
+}
+.issue-customer-requests__toggle > span { color: var(--chip-text); }
+.issue-customer-requests__toggle:hover { background: var(--theme-surface-hover); }
+.issue-customer-requests__caret { width: 14px; height: 14px; flex: none; }
+.issue-customer-requests__count {
+  color: var(--pk-muted);
+  font: 450 11px/normal var(--font);
+}
+.issue-customer-requests__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.issue-customer-requests__button {
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: var(--theme-surface-1);
+  color: var(--chip-text);
+  cursor: default;
+}
+.issue-customer-requests__button:hover,
+.issue-customer-requests__button[data-state=open] { background: var(--theme-surface-hover); color: var(--chip-strong); }
+
+.issue-customer-requests__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 1px 0;
+}

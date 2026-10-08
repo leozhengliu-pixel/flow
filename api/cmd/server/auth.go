@@ -865,9 +865,23 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		return slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == customerID })
 	}
+	// A request may be referenced to a customer, issue and project the caller can see; requests
+	// without a customer ("Unknown customer") only need a non-guest caller.
+	customerRequestTargetsAllowed := func(input customerRequestInput) bool {
+		if data.ViewerRole == "guest" {
+			return false
+		}
+		if id := trimmedValue(input.CustomerID); id != "" && !customerAllowed(id) {
+			return false
+		}
+		if input.IssueID != nil && *input.IssueID != "" && !issueAllowed(*input.IssueID) {
+			return false
+		}
+		return input.ProjectID == nil || *input.ProjectID == "" || projectAllowed(*input.ProjectID)
+	}
 	customerRequestAllowed := func(requestID string) bool {
 		return slices.ContainsFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool {
-			if item.ID != requestID || !customerAllowed(item.CustomerID) {
+			if item.ID != requestID || item.CustomerID == "" && data.ViewerRole == "guest" || item.CustomerID != "" && !customerAllowed(item.CustomerID) {
 				return false
 			}
 			if item.IssueID != "" && !issueAllowed(item.IssueID) {
@@ -1268,13 +1282,16 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			if !peekRequestJSON(r, &input) {
 				return false
 			}
-			if input.CustomerID != "" && !customerAllowed(input.CustomerID) || input.IssueID != nil && *input.IssueID != "" && !issueAllowed(*input.IssueID) || input.ProjectID != nil && *input.ProjectID != "" && !projectAllowed(*input.ProjectID) {
-				return false
-			}
-			return true
+			return customerRequestTargetsAllowed(input)
 		}
 		if len(parts) < 3 {
 			return data.ViewerRole != "guest"
+		}
+		if len(parts) == 3 && r.Method == http.MethodPatch {
+			var input customerRequestInput
+			if !peekRequestJSON(r, &input) || !customerRequestTargetsAllowed(input) {
+				return false
+			}
 		}
 		return customerRequestAllowed(parts[2])
 	case "asks":

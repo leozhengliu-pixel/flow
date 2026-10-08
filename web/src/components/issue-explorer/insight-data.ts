@@ -23,6 +23,11 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
     // "Hide <No value>": the empty value leaves the chart, the table and the counts.
     if (hideSegment) segments = segments.filter(value => !isEmptyInsightValue(config.segment as SavedViewInsightDimension, value.id))
     if (hideSlice) slices = slices.filter(value => !isEmptyInsightValue(config.slice, value.id))
+    // "Hide Unknown customer": requests whose customer no longer exists leave a Customer slice/segment.
+    if (config.hideUnknownCustomer) {
+      if (config.slice === 'customer') slices = slices.filter(value => value.id !== UNKNOWN_CUSTOMER_ID)
+      if (config.segment === 'customer') segments = segments.filter(value => value.id !== UNKNOWN_CUSTOMER_ID)
+    }
     if (!slices.length || !segments.length) continue
     samples.push({ item: row, value: metric, slices: slices.map(value => value.id), segments: config.segment === 'none' ? [] : segments.map(value => value.id) })
     for (const segmentValue of segments) {
@@ -45,7 +50,7 @@ export function buildInsightData(rows: MyIssuesRowData[], config: SavedViewInsig
   }
   const statusOrder = new Map([...data.states].sort((a, b) => a.position - b.position).map((state, index) => [state.id, index]))
   return {
-    rows: [...rowMap.values()].sort((left, right) => config.slice === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : config.slice === 'priority' ? Number(left.id) - Number(right.id) : config.slice.endsWith('Date') || config.slice === 'burnUp' ? left.id.localeCompare(right.id) : right.total - left.total || left.label.localeCompare(right.label)),
+    rows: [...rowMap.values()].sort((left, right) => config.slice === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : config.slice === 'priority' ? Number(left.id) - Number(right.id) : config.slice.endsWith('Date') || config.slice === 'burnUp' ? left.id.localeCompare(right.id) : config.slice === 'customer' ? Number(left.id === 'none') - Number(right.id === 'none') || left.label.localeCompare(right.label) : right.total - left.total || left.label.localeCompare(right.label)),
     // Priority and status segments keep their natural order (Linear: No priority, Urgent … Low); others rank by size.
     segments: [...segmentMap.values()].sort((left, right) => config.segment === 'priority' ? Number(left.id) - Number(right.id) : config.segment === 'status' ? (statusOrder.get(left.id) ?? 999) - (statusOrder.get(right.id) ?? 999) : right.count - left.count || left.label.localeCompare(right.label)),
     samples,
@@ -58,6 +63,12 @@ function dimensionValues(row: MyIssuesRowData, dimension: SavedViewInsightDimens
     const groupId = dimension.slice('labelGroup:'.length)
     const values = row.labels?.filter(label => label.groupId === groupId) ?? []
     return values.length ? values.map(label => ({ id: label.id, label: label.name, color: label.color })) : [noValue('label')]
+  }
+  if (dimension === 'customer') {
+    // Multi-membership like labels: an issue counts once for every requesting customer (Linear).
+    const values: InsightValue[] = (row.customers ?? []).map(customer => ({ id: customer.id, label: customer.name }))
+    if (row.hasUnknownCustomer) values.push({ id: UNKNOWN_CUSTOMER_ID, label: 'Unknown customer' })
+    return values.length ? values : [noValue('customer')]
   }
   if (dimension === 'status') return [{ id: row.state.id, label: row.state.name, color: row.state.color }]
   if (dimension === 'statusType') return [{ id: row.state.type, label: titleCase(row.state.type), color: row.state.color }]
@@ -95,6 +106,8 @@ function metricValue(row: MyIssuesRowData, config: SavedViewInsightsConfig, now:
 }
 
 export function insightColor(config: SavedViewInsightsConfig, segmentColor: string | undefined, sliceColor: string | undefined, index: number) { return config.colors === 'status' ? segmentColor || sliceColor || 'var(--data-vis-neutral)' : ['var(--data-vis-neutral)', 'var(--data-vis-1)', 'var(--data-vis-2)', 'var(--data-vis-3)', 'var(--data-vis-4)', 'var(--data-vis-5)'][index % 6] }
+/** Linear's `customer_id_unknown` bucket: requests whose customer was deleted. */
+export const UNKNOWN_CUSTOMER_ID = 'customer_id_unknown'
 function noValue(kind: string): InsightValue { return { id: 'none', label: `No ${kind}` } }
 /** Priority's empty value is "0" (No priority); every other dimension uses "none". */
 export function isEmptyInsightValue(dimension: SavedViewInsightDimension, id: string) { return dimension === 'priority' ? id === '0' : id === 'none' }

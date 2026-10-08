@@ -46,11 +46,12 @@ describe('project properties menus', () => {
 
   it('only offers initiatives when the workspace has one', async () => {
     const user = userEvent.setup(); const data = makeBootstrap()
-    render(<I18nProvider><ProjectPropertiesMenu project={project} projects={[project]} projectRelations={[]} initiatives={[]} users={data.users} viewer={viewer} labels={[]} labelGroups={[]} save={vi.fn()} onUpdateProject={vi.fn()} onAddCustomer={vi.fn()}/></I18nProvider>)
+    render(<I18nProvider><ProjectPropertiesMenu project={project} projects={[project]} projectRelations={[]} initiatives={[]} users={data.users} viewer={viewer} labels={[]} labelGroups={[]} save={vi.fn()} onUpdateProject={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button',{name:'More project properties'}))
     const items = within(screen.getByRole('menu')).getAllByRole('menuitem').map(item => item.textContent)
     expect(items.some(item => item?.startsWith('Initiatives'))).toBe(false)
-    expect(items.at(-1)).toBe('Customer request…')
+    // Linear has no Customer request… entry here: the overview always shows the Customers row.
+    expect(items).not.toContain('Customer request…')
   })
 
   it('opens the shared members picker on hover', async () => {

@@ -284,6 +284,7 @@ function InsightOptions({ config, onChange }: { config: SavedViewInsightsConfig;
     <label className={styles.option}><span>{t('Show archived issues')}</span><Toggle label={t('Show archived issues')} checked={config.showArchived} onChange={showArchived => onChange({ showArchived })}/></label>
     {emptySlice && hideRow(emptySlice, Boolean(config.hideEmptySlice), hideEmptySlice => onChange({ hideEmptySlice }))}
     {emptySegment && hideRow(emptySegment, Boolean(config.hideEmptySegment), hideEmptySegment => onChange({ hideEmptySegment }))}
+    {(config.slice === 'customer' || (config.measure === 'issueCount' && config.segment === 'customer')) && hideRow('Unknown customer', Boolean(config.hideUnknownCustomer), hideUnknownCustomer => onChange({ hideUnknownCustomer }))}
     {config.measure !== 'issueCount' && <label className={styles.option}><span>{t('Use log scale')}</span><Toggle label={t('Use log scale')} checked={config.latencyScale !== 'linear'} onChange={log => onChange({ latencyScale: log ? 'log' : 'linear' })}/></label>}
     {config.segment === 'none' && config.measure === 'issueCount' && <div className={styles.option}><span>{t('Colors')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Colors')} className={styles.optionSelect} role="combobox" type="button"><Palette/>{t(config.colors === 'status' ? 'Status colors' : 'Auto-color')}<ChevronDown/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop data-flow-motion="floating" align="end" className={styles.menu} sideOffset={4}><DropdownMenu.RadioGroup value={config.colors} onValueChange={colors => onChange({ colors: colors as SavedViewInsightsConfig['colors'] })}>{(['status', 'auto'] as const).map(value => <DropdownMenu.RadioItem className={styles.menuItem} data-selected={config.colors === value || undefined} key={value} value={value}><span className={styles.menuLabel}>{t(value === 'status' ? 'Status colors' : 'Auto-color')}</span>{config.colors === value && <InsightCheckIcon className={styles.menuCheck}/>}</DropdownMenu.RadioItem>)}</DropdownMenu.RadioGroup></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></div>}
   </>
@@ -433,7 +434,7 @@ function TimeInStatusMenu({ config, data, onToggle }: { config: SavedViewInsight
 }
 
 function segmentOptions(data: BootstrapData): InsightOption[] {
-  const allowed = new Set(['assignee', 'agent', 'agentSession', 'creator', 'priority', 'label', 'labelGroup', 'template', 'externalSource', 'project', 'initiative', 'projectLabel', 'projectLabelGroup', 'addedToCycle'])
+  const allowed = new Set(['assignee', 'agent', 'agentSession', 'creator', 'priority', 'label', 'labelGroup', 'customer', 'template', 'externalSource', 'project', 'initiative', 'projectLabel', 'projectLabelGroup', 'addedToCycle'])
   // Linear's menu says "No Value"; the select then reads "No value".
   return [{ id: 'none', label: 'No Value' }, ...dimensionOptions(data, false).filter(option => allowed.has(option.id)).map((option, index) => ({ ...option, separatorBefore: index === 0 || option.id === 'project' }))]
 }

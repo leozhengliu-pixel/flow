@@ -37,12 +37,12 @@ export const GROUPING_LABELS: Record<MyIssuesGrouping, string> = {
 export const ORDERING_LABELS: Record<MyIssuesOrdering, string> = {
   importance: 'Manual', title: 'Title', status: 'Status', assignee: 'Assignee', priority: 'Priority', estimate: 'Estimate',
   created: 'Created', updated: 'Updated', myActivity: 'My activity date', dueDate: 'Due date', linkCount: 'Link count',
-  customerCount: 'Customer count', customerRevenue: 'Customer revenue', timeInStatus: 'Time in status',
+  customerCount: 'Customer count', customerRevenue: 'Customer revenue', customerImportantCount: 'Important count', timeInStatus: 'Time in status',
 }
 
 /** The direction each ordering uses when the view has not chosen one (Linear defaults). */
 export function defaultOrderDirection(ordering: MyIssuesOrdering): 'asc' | 'desc' {
-  return ordering === 'created' || ordering === 'updated' || ordering === 'myActivity' || ordering === 'estimate' || ordering === 'linkCount' || ordering === 'customerCount' || ordering === 'customerRevenue' || ordering === 'timeInStatus' ? 'desc' : 'asc'
+  return ordering === 'created' || ordering === 'updated' || ordering === 'myActivity' || ordering === 'estimate' || ordering === 'linkCount' || ordering === 'customerCount' || ordering === 'customerRevenue' || ordering === 'customerImportantCount' || ordering === 'timeInStatus' ? 'desc' : 'asc'
 }
 
 export function isCompleted(row: Pick<MyIssuesRowData, 'state'>) { return COMPLETED_TYPES.has(row.state.type) }
@@ -200,7 +200,8 @@ export function issueComparator(ordering: MyIssuesOrdering, direction: 'asc' | '
       case 'myActivity': return row.myActivityAt ? Date.parse(row.myActivityAt) : undefined
       case 'dueDate': return row.dueDate ? Date.parse(row.dueDate) : undefined
       case 'linkCount': return row.linkCount ?? 0
-      case 'customerCount': return row.customerIds?.length ?? 0
+      case 'customerCount': return row.customerCount ?? row.customerIds?.length ?? 0
+      case 'customerImportantCount': return row.importantCustomerIds?.length ?? 0
       case 'customerRevenue': return (row.customerRevenues ?? []).reduce((sum, item) => sum + item, 0)
       case 'timeInStatus': return row.timeInStatusMinutes
     }
@@ -361,13 +362,13 @@ export function groupMoveUpdate(row: MyIssuesRowData, grouping: MyIssuesGrouping
 }
 
 /** Groupings the server-backed issue list can group by (`issueGroupAttribute` in the API). */
-export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'project', 'milestone', 'priority', 'cycle', 'label', 'team']
+export const PAGED_GROUPINGS: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'customer']
 /** Orderings the server-backed issue list can sort by. */
-export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated']
+export const PAGED_ORDERINGS: MyIssuesOrdering[] = ['importance', 'title', 'priority', 'created', 'updated', 'customerCount', 'customerRevenue', 'customerImportantCount']
 
 /** Sort, direction, groupBy and display-derived conditions for `PagedIssueList` queries. */
 export function pagedDisplayQuery(display: MyIssuesDisplayOptions, now = Date.now(), triageTeamIds: string[] = []) {
-  const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated'] ?? 'sortOrder'
+  const sort = ({ importance: 'sortOrder', title: 'title', priority: 'priority', created: 'createdAt', updated: 'updatedAt', customerCount: 'customerCount', customerRevenue: 'customerRevenue', customerImportantCount: 'customerImportantCount' } as const)[display.ordering as 'importance' | 'title' | 'priority' | 'created' | 'updated' | 'customerCount' | 'customerRevenue' | 'customerImportantCount'] ?? 'sortOrder'
   const direction = display.orderDirection ?? defaultOrderDirection(display.ordering)
   const conditions: Record<string, unknown>[] = []
   if (!display.showSubIssues) conditions.push({ field: 'parent', operator: 'isEmpty' })

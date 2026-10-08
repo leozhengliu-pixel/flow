@@ -1,0 +1,9 @@
+.customer-status-icon {
+  display: inline-block;
+  flex: none;
+  border-radius: 1px;
+}
+
+.customer-status-icon.is-monochrome {
+  background: var(--label-muted);
+}

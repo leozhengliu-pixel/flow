@@ -21,6 +21,8 @@ import { DEFAULT_PROJECT_ISSUE_DISPLAY } from "./project-issue-display";
 import { ProjectDetailsSidebar } from "./project-details-sidebar";
 import { ProjectInsights } from "./project-insights";
 import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks';
+import { ProjectCustomerRequestsLauncher, ProjectCustomerRequestsPage } from "@/components/customer/project-customer-requests";
+import { projectCustomerRequests } from "@/components/customer/customer-request-events";
 import {
   ProjectActionsMenu,
   ProjectDescriptionHistoryDialog,
@@ -122,6 +124,11 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     () => issues.filter((issue) => issue.project?.id === project.id),
     [issues, project.id],
   );
+  // Linear shows the Customers tab once the project (or one of its issues) has a request.
+  const customerRequestsEnabled = props.issueData?.workspaceSettings.featureFlags["customer-requests"] !== false && props.issueData?.viewerRole !== "guest";
+  const projectIssueIdSet = useMemo(() => new Set(projectIssues.map((issue) => issue.id)), [projectIssues]);
+  const customerRequestsTab = customerRequestsEnabled && (tab === "requests" || projectCustomerRequests(props.issueData?.customerRequests ?? [], project, projectIssueIdSet).length > 0);
+  const openCustomerRequests = useCallback(() => onTabChange("requests"), [onTabChange]);
   const scopedProjectIssues = useMemo(
     () =>
       milestoneScopeId
@@ -485,6 +492,15 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           >
             Activity
           </ProjectTab>
+          {customerRequestsTab && (
+            <ProjectTab
+              active={tab === "requests"}
+              id="requests"
+              onChange={onTabChange}
+            >
+              Customers
+            </ProjectTab>
+          )}
           <ProjectTab
             active={tab === "issues"}
             id="issues"
@@ -640,6 +656,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         className={`project-detail-page__workspace ${detailsOpen || insightsOpen ? "has-details" : ""} ${tab === "new" ? "is-new-view" : ""}`}
       >
         <div className="project-detail-page__main">
+          {customerRequestsEnabled && props.issueData && <ProjectCustomerRequestsLauncher data={props.issueData} project={displayedProject} onOpenRequests={openCustomerRequests} />}
           {tab === "overview" && (
             <ProjectOverview
               {...props}
@@ -654,6 +671,9 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               projectIssues={projectIssues}
               save={save}
             />
+          )}
+          {tab === "requests" && props.issueData && (
+            <ProjectCustomerRequestsPage data={props.issueData} project={displayedProject} issues={projectIssues} />
           )}
           {tab === "activity" && <><ProjectActivity {...props} />{props.issueData&&<IssueAgentTasks resourceType="project" issue={{id:project.id}} data={props.issueData}/>}</>}
           {tab === "issues" &&
@@ -798,7 +818,7 @@ function ProjectTab({
 }) {
   const { t } = useI18n();
   const projectBase = location.pathname.replace(
-    /\/(overview|activity|issues|view\/new|view\/[^/]+(?:\/edit)?)$/,
+    /\/(overview|activity|requests|issues|view\/new|view\/[^/]+(?:\/edit)?)$/,
     "",
   );
   return (

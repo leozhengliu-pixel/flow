@@ -1,7 +1,10 @@
 import { FilterGlyph } from '@/components/issue/filter-glyph'
+import type { MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
+import { CustomerGlyph } from '@/components/customer/customer-filter-glyphs'
+import { ProjectCustomerFilterValues } from './project-customer-filter'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { AlignLeft, BarChart3, Building2, CalendarDays, ChevronRight, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Sparkles, Tags, UserRound, Users } from 'lucide-react'
+import { AlignLeft, BarChart3, CalendarDays, ChevronRight, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Sparkles, Tags, UserRound, Users } from 'lucide-react'
 import {
   AddViewIcon,
   CheckIcon,
@@ -52,6 +55,8 @@ export type ProjectsPageSurfaceProps = {
   filterCount?: number
   selectedFilters?: ProjectFilter[]
   onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]>
+  /** Linear's Customers blocks for the Customers filter sub-menu. */
+  customerFilterOptions?: MyIssuesFilterOption[]
   displayLabelGroups?: Array<{ id: string; name: string }>
   sidebarOpen?: boolean
   views: ProjectsView[]
@@ -93,6 +98,7 @@ export function ProjectsPageSurface({
   filterCount = 0,
   selectedFilters = [],
   onSearchFilterOptions,
+  customerFilterOptions = [],
   displayLabelGroups = [],
   sidebarOpen = true,
   views,
@@ -142,7 +148,7 @@ export function ProjectsPageSurface({
     <IconButton active={openSurface?.kind === 'display' && openSurface.origin === 'editor'} badge={filterCount > 0} buttonRef={editorDisplayTriggerRef} label="Display options" onClick={() => toggleSurface('display', 'editor')}><DisplayIcon /></IconButton>
   </>
   const surfaceMenu = (origin: 'toolbar' | 'editor') => <>
-    {openSurface?.origin === origin && openSurface.kind === 'filter' && <ProjectsFilterMenu filterOptions={filterOptions} rootRef={openSurfaceRef} selectedFilters={selectedFilters} onSearchFilterOptions={onSearchFilterOptions} onSelect={(filter, option) => {
+    {openSurface?.origin === origin && openSurface.kind === 'filter' && <ProjectsFilterMenu customerFilterOptions={customerFilterOptions} filterOptions={filterOptions} rootRef={openSurfaceRef} selectedFilters={selectedFilters} onSearchFilterOptions={onSearchFilterOptions} onSelect={(filter, option) => {
       onAddFilter?.(filter, option)
       setOpenSurface(null)
     }} />}
@@ -235,7 +241,7 @@ function IconButton({ active = false, badge = false, buttonRef, children, classN
   >{children}{badge && <span aria-hidden="true" className="lp-projects__badge" />}</button>
 }
 
-function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef, selectedFilters, onSearchFilterOptions }: { filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null>; selectedFilters: ProjectFilter[]; onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]> }) {
+function ProjectsFilterMenu({ customerFilterOptions = [], filterOptions = {}, onSelect, rootRef, selectedFilters, onSearchFilterOptions }: { customerFilterOptions?: MyIssuesFilterOption[]; filterOptions?: Partial<Record<string, ProjectFilterOption[]>>; onSelect: (filter: string, option?: ProjectFilterOption) => void; rootRef?: RefObject<HTMLDivElement | null>; selectedFilters: ProjectFilter[]; onSearchFilterOptions?: (field: string, query: string) => Promise<ProjectFilterOption[]> }) {
   const [nested, setNested] = useState<string>()
   const [nestedPosition, setNestedPosition] = useState({ top: 112, openRight: false, maxHeight: 360 })
   const options=FILTER_GROUPS.flat().map(item=>({id:item,label:item})),command=usePropertyCommand({open:true,options,onOpenChange:()=>{},onSelect:option=>choose(option.id)})
@@ -300,7 +306,7 @@ function ProjectsFilterMenu({ filterOptions = {}, onSelect, rootRef, selectedFil
       })}
       {!command.filteredOptions.length&&<div className="lp-projects-filter__empty">No filters found</div>}
     </div>
-    {nested && FILTER_CHILDREN.has(nested) ? <ProjectFilterValues field={nested} nestedPosition={nestedPosition} selectedIds={selectedByField.get(PROJECT_FILTER_FIELD_IDS[nested] as ProjectFilter['field'])} onSelect={option => onSelect(nested, option)} onSearch={nested === 'Specific project' && onSearchFilterOptions ? query => onSearchFilterOptions(nested, query) : undefined} options={filterOptions[nested] ?? []} /> : null}
+    {nested === 'Customers' ? <ProjectCustomerFilterValues nestedPosition={nestedPosition} options={customerFilterOptions} selectedIds={new Set(selectedFilters.filter(filter => filter.field === 'customers' && filter.operator === 'is').flatMap(filter => filter.values.map(value => value.id)))} onSelect={option => onSelect('Customers', option)}/> : nested && FILTER_CHILDREN.has(nested) ? <ProjectFilterValues field={nested} nestedPosition={nestedPosition} selectedIds={selectedByField.get(PROJECT_FILTER_FIELD_IDS[nested] as ProjectFilter['field'])} onSelect={option => onSelect(nested, option)} onSearch={nested === 'Specific project' && onSearchFilterOptions ? query => onSearchFilterOptions(nested, query) : undefined} options={filterOptions[nested] ?? []} /> : null}
   </div>
 }
 
@@ -324,7 +330,7 @@ function ProjectFilterIcon({ field }: { field: string }) {
     case 'Initiatives':
     case 'Milestones': return <Flag {...props}/>
     case 'Relations': return <Network {...props}/>
-    case 'Customers': return <Building2 {...props}/>
+    case 'Customers': return <CustomerGlyph size={14}/>
     case 'Template': return <FileText {...props}/>
     case 'Title & summary': return <AlignLeft {...props}/>
     case 'Specific project': return <GitBranch {...props}/>

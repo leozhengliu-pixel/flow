@@ -684,3 +684,5 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Agent Session filter: the Active state glyph (Linear yellow, both themes). */
 :root{--agent-session-active:#f2c94c}
 :root[data-theme="light"]{--agent-session-active:#f2c94c}
+/* Customer requests: Linear orangeMid for "important" requests (both themes). */
+:root{--customer-important:lch(58% 80 48)}

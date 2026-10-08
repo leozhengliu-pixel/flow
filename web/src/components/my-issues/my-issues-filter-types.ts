@@ -1,12 +1,13 @@
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { combineModelFilters } from '@/components/filter/filter-block-helper'
 import { filterToQueryNode, type IssueFilterQueryContext } from '@/components/issue-explorer/issue-filter-query'
+import { CUSTOMER_NUMBER_COMPARISONS, customerNumberQueryValue, isCustomerNumberComparison, parseCustomerNumberValue, type CustomerNumberComparison } from '@/components/issue-explorer/customer-filter'
 
 /**
  * Linear's operator sets: is / is not (several values read "is any of"), labels add "include all of" /
  * "exclude if all", dates compare "before" / "after". `isNot` and `excludesAll` negate.
  */
-export type MyIssuesFilterOperator = 'is' | 'isNot' | 'includesAll' | 'excludesAll' | 'before' | 'after'
+export type MyIssuesFilterOperator = 'is' | 'isNot' | 'includesAll' | 'excludesAll' | 'before' | 'after' | CustomerNumberComparison
 export interface MyIssuesFilterValue { value: string; valueLabel: string; color?: string }
 
 /** Advanced filter tree (Linear "Advanced filter"): top level → group → nested group, at most 3 levels. */
@@ -54,11 +55,15 @@ const QUERY_FIELDS: Partial<Record<MyIssuesFilterKey, string>> = {
 export function issueFiltersToQueryAst(filters: MyIssuesAppliedFilter[], context?: IssueFilterQueryContext): IssueQueryAstNode {
   // With workspace context every filter-menu field is translated to the server vocabulary.
   if (context) return simplifyQueryNode({ and: filters.map(filter => filterToQueryNode(filter, context)) }, true)
-  const leaves = filters.map(filter => ({
-    field: QUERY_FIELDS[filter.field] ?? filter.field,
-    operator: filter.operator,
-    values: filterValues(filter).map(item => item.value),
-  }))
+  const leaves = filters.map(filter => {
+    // Number filters carry their comparison in the value the server parses (`customer-count:gte:3`).
+    const comparison = isCustomerNumberComparison(filter.operator) ? filter.operator : undefined
+    return {
+      field: QUERY_FIELDS[filter.field] ?? filter.field,
+      operator: comparison ? 'is' : filter.operator,
+      values: filterValues(filter).map(item => comparison ? customerNumberQueryValue(item.value, comparison) : item.value),
+    }
+  })
   if (!leaves.length) return { and: [] }
   const combined = combineModelFilters('and', leaves)
   // Keep a stable `and` root for REST list callers that nest this node.
@@ -108,6 +113,12 @@ export function filterValues(filter: MyIssuesAppliedFilter): MyIssuesFilterValue
 export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter[] {
   filters = consolidateFilters(filters)
   const effectiveLabel = option.filterLabel ?? fieldLabel
+  // Number filters hold one comparison (Linear allowMultiSelect: false): a new number replaces the chip.
+  if (option.comparison) {
+    const replacement = fromOption(field, effectiveLabel, option)
+    const current = filters.find(filter => filter.field === field && filter.fieldLabel === effectiveLabel && isCustomerNumberComparison(filter.operator))
+    return current ? filters.map(filter => filter.id === current.id ? { ...replacement, id: current.id } : filter) : [...filters, replacement]
+  }
   // Date filters hold one comparison ("Due date before 1 week from now"): picking another preset replaces it.
   const singleValue = field === 'dates'
   const existing = filters.find(filter => filter.field === field && filter.fieldLabel === effectiveLabel && (singleValue || filter.operator === 'is'))
@@ -129,7 +140,7 @@ export function toggleFilterOption(filters: MyIssuesAppliedFilter[], field: MyIs
 export function consolidateFilters(filters: MyIssuesAppliedFilter[]) {
   const result: MyIssuesAppliedFilter[] = []
   for (const filter of filters) {
-    if (filter.field === 'advanced' || filter.field === 'dates') { result.push(filter); continue }
+    if (filter.field === 'advanced' || filter.field === 'dates' || isCustomerNumberComparison(filter.operator)) { result.push(filter); continue }
     const existingIndex = result.findIndex(item => item.field === filter.field && item.fieldLabel === filter.fieldLabel && item.operator === filter.operator)
     if (existingIndex < 0) { result.push(filter); continue }
     const existing = result[existingIndex]
@@ -173,6 +184,7 @@ export function defaultDateOperator(value: string): 'before' | 'after' {
  */
 export function filterOperatorChoices(field: MyIssuesFilterKey, values: string[], labels?: { operatorLabel?: string; negativeOperatorLabel?: string }): FilterOperatorChoice[] {
   if (labels?.operatorLabel) return [{ operator: 'is', label: labels.operatorLabel }, { operator: 'isNot', label: labels.negativeOperatorLabel ?? 'is not' }]
+  if (field === 'customers' && values.length > 0 && values.every(value => parseCustomerNumberValue(value))) return CUSTOMER_NUMBER_COMPARISONS.map(choice => ({ operator: choice.value, label: choice.label }))
   if (field === 'dates' && values.length > 0 && values.every(isComparableDateValue)) {
     return values.every(value => value.startsWith('status:'))
       ? [{ operator: 'before', label: 'more than' }, { operator: 'after', label: 'less than' }]
@@ -208,7 +220,7 @@ export function updateFilterValues(filters: MyIssuesAppliedFilter[], id: string,
 
 function fromOption(field: MyIssuesFilterKey, fieldLabel: string, option: MyIssuesFilterOption): MyIssuesAppliedFilter {
   const value = { value: option.id, valueLabel: option.label, color: option.color }
-  const operator: MyIssuesFilterOperator = field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is'
+  const operator: MyIssuesFilterOperator = option.comparison ?? (field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is')
   return { id: filterId(field), field, fieldLabel, operator, operatorLabel: option.operatorLabel, negativeOperatorLabel: option.negativeOperatorLabel, ...value, values: [value] }
 }
 

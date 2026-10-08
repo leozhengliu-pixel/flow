@@ -2887,6 +2887,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/customers/{id}/merge": {
+      "post": {
+        "operationId": "post_customers_id_merge",
+        "tags": [
+          "customers"
+        ],
+        "summary": "POST /api/customers/{id}/merge",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/cycles/{id}": {
       "patch": {
         "operationId": "patch_cycles_id",
@@ -9141,6 +9171,26 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/labels/merge": {
+      "post": {
+        "operationId": "post_labels_merge",
+        "tags": [
+          "labels"
+        ],
+        "summary": "POST /api/labels/merge",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/loop-config": {
       "get": {
         "operationId": "get_loop_config",
@@ -13947,6 +13997,44 @@
           },
           {
             "name": "addressId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/teams/{id}/label-groups/{groupId}": {
+      "delete": {
+        "operationId": "delete_teams_id_label_groups_groupId",
+        "tags": [
+          "teams"
+        ],
+        "summary": "DELETE /api/teams/{id}/label-groups/{groupId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupId",
             "in": "path",
             "required": true,
             "schema": {

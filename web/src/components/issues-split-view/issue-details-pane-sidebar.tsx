@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { MessageSquare, UserRound } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import { PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import styles from './issues-split-view.module.css'
@@ -10,31 +10,25 @@ export interface IssueDetailsPaneSidebarProps {
   agentPanel?: ReactNode
   agentOpen?: boolean
   onAgentOpenChange?: (open: boolean) => void
-  /** Optional CustomerNeed rows; falls back to issue.customerNames when cheap. */
+  /**
+   * @deprecated Linear's issue properties sidebar has no customers section (requests live in the
+   * issue's Customers section), so these rows are no longer rendered.
+   */
   customerNeeds?: Array<{ id: string; customerName: string; body?: string }>
   className?: string
 }
 
 /**
  * LS-0346 — IssueDetailsPaneSidebar.
- * Property sidebar for split/detail hosts with AgentPanel slot + CustomerNeed when cheap.
+ * Property sidebar for split/detail hosts with an AgentPanel slot.
  */
 export function IssueDetailsPaneSidebar({
   issue,
   agentPanel,
   agentOpen = false,
   onAgentOpenChange,
-  customerNeeds,
   className,
 }: IssueDetailsPaneSidebarProps) {
-  const needs: Array<{ id: string; customerName: string; body?: string }> =
-    customerNeeds ??
-    (issue?.customerNames?.length
-      ? issue.customerNames.map((name, index) => ({
-          id: issue.customerIds?.[index] ?? `customer-${index}`,
-          customerName: name,
-        }))
-      : [])
   const replaceWithAgent = Boolean(onAgentOpenChange && agentOpen && agentPanel)
 
   return (
@@ -67,20 +61,6 @@ export function IssueDetailsPaneSidebar({
         <>
           <h3 className={styles.sidebarTitle}>Properties</h3>
           {issue ? <PropertyList issue={issue} /> : <p className={styles.sidebarEmpty}>No issue selected</p>}
-          {needs.length > 0 ? (
-            <section className={styles.customerNeeds} aria-label="Customer needs">
-              <h4>Customer needs</h4>
-              <ul>
-                {needs.map((need) => (
-                  <li key={need.id}>
-                    <UserRound size={14} aria-hidden="true" />
-                    <span className={styles.customerName}>{need.customerName}</span>
-                    {need.body ? <span className={styles.customerBody}>{need.body}</span> : null}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
           {agentPanel ? (
             <div className={styles.agentSlot} data-agent-panel-slot="">
               {agentPanel}

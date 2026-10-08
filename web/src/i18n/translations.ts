@@ -3,6 +3,13 @@ import { viewFiltersZhCN } from './translations-view-filters';
 import { insightsZhCN } from './translations-insights';
 import { agentTriageZhCN } from './translations-agent-triage';
 import { releaseIntakeZhCN } from './translations-release-intake';
+import { customerSettingsZhCN } from './translations-customer-settings';
+import { customersListZhCN } from './translations-customers-list';
+import { customerDetailZhCN } from './translations-customer-detail';
+import { customerRequestsZhCN } from './translations-customer-requests';
+import { customerFiltersZhCN } from './translations-customer-filters';
+import { initiativeHierarchyZhCN } from './translations-initiative-hierarchy';
+import { labelSettingsZhCN } from './translations-label-settings';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -5736,3 +5743,10 @@ Object.assign(zhCN, viewFiltersZhCN);
 Object.assign(zhCN, insightsZhCN);
 Object.assign(zhCN, agentTriageZhCN);
 Object.assign(zhCN, releaseIntakeZhCN);
+Object.assign(zhCN, customerSettingsZhCN);
+Object.assign(zhCN, customersListZhCN);
+Object.assign(zhCN, customerDetailZhCN);
+Object.assign(zhCN, customerRequestsZhCN);
+Object.assign(zhCN, customerFiltersZhCN);
+Object.assign(zhCN, initiativeHierarchyZhCN);
+Object.assign(zhCN, labelSettingsZhCN);

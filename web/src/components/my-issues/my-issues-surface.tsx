@@ -18,7 +18,7 @@ import {
 
 export type MyIssuesView = 'assigned' | 'created' | 'subscribed' | 'activity' | 'shared'
 export type MyIssuesGrouping = 'focus' | 'status' | 'priority' | 'project' | 'milestone' | 'assignee' | 'agent' | 'cycle' | 'label' | 'team' | 'customer' | 'parent' | 'sla' | 'release' | 'releaseDate' | 'labelGroup' | 'activityDate' | 'none'
-export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 'priority' | 'estimate' | 'created' | 'updated' | 'myActivity' | 'dueDate' | 'linkCount' | 'customerCount' | 'customerRevenue' | 'timeInStatus'
+export type MyIssuesOrdering = 'importance' | 'title' | 'status' | 'assignee' | 'priority' | 'estimate' | 'created' | 'updated' | 'myActivity' | 'dueDate' | 'linkCount' | 'customerCount' | 'customerRevenue' | 'customerImportantCount' | 'timeInStatus'
 export type MyIssuesProperty = 'id' | 'status' | 'assignee' | 'priority' | 'project' | 'cycle' | 'dueDate' | 'milestone' | 'sla' | 'estimate' | 'release' | 'labels' | 'links' | 'customers' | 'customerRevenue' | 'timeInStatus' | 'myActivity' | 'created' | 'updated' | 'pullRequests'
 
 export interface MyIssuesDisplayOptions {
@@ -74,7 +74,7 @@ export interface MyIssuesSurfaceProps {
 
 /** `suggestedLabel` is the pre-Triage-Intelligence field, kept so saved filters still apply. */
 export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id'] | 'suggestedLabel'
-export interface MyIssuesFilterOption { id: string; label: string; /** Agent member: rendered with Linear's "Agent" pill. */ agent?: boolean; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string; textConditionInput?: 'text' | 'date' }
+export interface MyIssuesFilterOption { id: string; label: string; /** Agent member: rendered with Linear's "Agent" pill. */ agent?: boolean; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string; textConditionInput?: 'text' | 'date'; /** Linear's number sub-menu ("Enter customer count…"): picking a comparison applies `<prefix><number>`. */ numberInput?: { prefix: string; placeholder: string; revenue?: { currency: string; monthly: boolean } }; /** A number filter's comparison (the chip operator). */ comparison?: 'gte' | 'lte' | 'eq' | 'neq'; /** Hides the "N issues" match count (Linear's hideMatchCount). */ hideCount?: boolean }
 
 const views: { id: MyIssuesView; label: string }[] = [
   { id: 'assigned', label: 'Assigned' },

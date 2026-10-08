@@ -1,127 +1,211 @@
-/* Customer request composer: bordered box with a customer pill, request text, and a footer. */
+/* Customer request composer (Linear's AdditionalCustomerNeedCreateForm), measured at 1470px. */
 .embedded-customer-need-form {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 0;
+}
+.embedded-customer-need-form.is-inline { padding: 0; }
+.embedded-customer-need-form.is-card .embedded-customer-need-form__surface {
+  padding: 12px;
+  border: .5px solid var(--pk-border);
+  border-radius: 10px;
+  background: var(--pk-surface);
+  box-shadow: var(--lx-small-shadow);
+}
+.embedded-customer-need-form__surface {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  margin: 8px 0 14px;
-  padding: 16px 16px 12px;
-  border: .5px solid var(--pk-border);
-  border-radius: 12px;
-  background: var(--pk-surface);
 }
 
-.embedded-customer-need-form__customer,
-.embedded-customer-need-form__source {
-  height: 24px;
+/* Customer button: 28px pill, 14px logo, 12px medium name. */
+.embedded-customer-need-form__customer {
+  box-sizing: border-box;
+  height: 28px;
   max-width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 8px 0 6px;
-  border: 0;
-  border-radius: 9999px;
-  background: var(--chip-bg);
-  box-shadow: var(--chip-ring);
-  color: var(--chip-text);
-  font: 500 12px/normal var(--font);
+  gap: 4px;
+  padding: 5px 10px;
+  border: .5px solid var(--pk-border);
+  border-radius: 34px;
+  background: var(--pk-surface);
+  color: var(--pk-muted);
+  font: 500 12px/12px var(--font);
   white-space: nowrap;
   cursor: default;
 }
-.embedded-customer-need-form__customer > span,
-.embedded-customer-need-form__source > span {
+.embedded-customer-need-form__customer > span:last-child {
   min-width: 0;
   overflow: hidden;
+  color: var(--pk-text-strong);
   text-overflow: ellipsis;
 }
 .embedded-customer-need-form__customer:hover,
-.embedded-customer-need-form__customer[data-state=open],
-.embedded-customer-need-form__source:hover,
-.embedded-customer-need-form__source[data-state=open] {
-  color: var(--chip-strong);
-}
-.embedded-customer-need-form__source { font-weight: 450; }
-.embedded-customer-need-form__logo {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  border-radius: 3px;
-  object-fit: cover;
-}
+.embedded-customer-need-form__customer[data-state=open] { background: var(--theme-surface-hover); }
 
+/* Request text: 15px / 24px, grows from 72px to 300px. */
 .embedded-customer-need-form__body {
   box-sizing: border-box;
   width: 100%;
   min-height: 72px;
   max-height: 300px;
-  margin: 16px 0 12px;
+  margin: 16px 0 0;
   padding: 0;
+  overflow-y: auto;
   border: 0;
   outline: 0;
   resize: none;
   background: transparent;
   color: var(--pk-text);
-  font: 400 15px/24px var(--font);
+  font: 450 15px/24px var(--font);
 }
+.embedded-customer-need-form__body[data-customer-hidden] { margin-top: 8px; }
+.embedded-customer-need-form.is-inline .embedded-customer-need-form__body { margin-top: 0; }
 .embedded-customer-need-form__body::placeholder { color: var(--pk-faint); }
 
-.embedded-customer-need-form__footer {
-  width: 100%;
+.embedded-customer-need-form__files {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
-.embedded-customer-need-form__spacer { flex: 1; }
-.embedded-customer-need-form__cancel,
-.embedded-customer-need-form__create {
+.embedded-customer-need-form__file {
+  max-width: 240px;
   height: 24px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--chip-strong);
-  font: 500 12px/normal var(--font);
-  cursor: default;
-}
-.embedded-customer-need-form__cancel:hover { background: var(--pk-hover); }
-.embedded-customer-need-form__create {
-  background: var(--chip-bg);
-  box-shadow: var(--chip-ring);
-}
-.embedded-customer-need-form__create:hover:not(:disabled) { background: var(--pk-hover); }
-.embedded-customer-need-form__create:disabled { opacity: .6; }
-
-.embedded-customer-need-source-popover {
-  z-index: 800;
-  width: 300px;
-  height: 36px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px 0 12px;
+  gap: 4px;
+  padding: 0 4px 0 8px;
   border: .5px solid var(--pk-border);
-  border-radius: 8px;
-  background: var(--pk-surface);
-  box-shadow: var(--pk-shadow);
-}
-.embedded-customer-need-source-popover input {
-  min-width: 0;
-  flex: 1;
-  border: 0;
-  outline: 0;
-  background: transparent;
+  border-radius: 6px;
   color: var(--pk-text);
-  font: 400 13px/normal var(--font);
+  font: 450 12px/normal var(--font);
 }
-.embedded-customer-need-source-popover input::placeholder { color: var(--pk-faint); }
-.embedded-customer-need-source-popover button {
-  width: 20px;
-  height: 20px;
+.embedded-customer-need-form__file > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.embedded-customer-need-form__file > svg { flex: none; color: var(--pk-muted); }
+.embedded-customer-need-form__file > button {
+  width: 18px;
+  height: 18px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--pk-muted);
+  color: var(--pk-faint);
 }
-.embedded-customer-need-source-popover button:hover { background: var(--pk-hover); color: var(--pk-text); }
+.embedded-customer-need-form__file > button:hover { background: var(--theme-surface-hover); color: var(--pk-text); }
+
+/* Footer: Source on the left; attach, Cancel and Create on the right, 8px apart. */
+.embedded-customer-need-form__footer {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+.embedded-customer-need-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.embedded-customer-need-form__source,
+.embedded-customer-need-form__icon-button,
+.embedded-customer-need-form__cancel,
+.embedded-customer-need-form__create {
+  box-sizing: border-box;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--pk-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+  cursor: default;
+}
+.embedded-customer-need-form__source {
+  max-width: 260px;
+  gap: 4px;
+  padding: 0 10px 0 8px;
+}
+.embedded-customer-need-form__source > svg,
+.embedded-customer-need-form__icon-button > svg { flex: none; color: var(--pk-muted); }
+.embedded-customer-need-form__source > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.embedded-customer-need-form__icon-button { width: 28px; padding: 0 2px; }
+.embedded-customer-need-form__cancel { padding: 0 10px; }
+.embedded-customer-need-form__source:hover,
+.embedded-customer-need-form__source[data-state=open],
+.embedded-customer-need-form__icon-button:hover,
+.embedded-customer-need-form__cancel:hover { background: var(--theme-surface-hover); }
+.embedded-customer-need-form__create {
+  padding: 0 10px;
+  background: var(--accent-primary);
+  box-shadow: var(--lx-small-shadow);
+  color: var(--on-accent);
+}
+.embedded-customer-need-form__create:hover:not(:disabled) { background: var(--accent-primary-hover); }
+.embedded-customer-need-form__create:disabled { opacity: .6; }
+
+/* Source popover: input, a hairline divider and the clear button. */
+.embedded-customer-need-source-popover {
+  z-index: 800;
+  box-sizing: border-box;
+  min-width: 198px;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: .5px solid var(--pk-border);
+  border-radius: 6px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+}
+.embedded-customer-need-source-popover input {
+  width: 151px;
+  min-width: 0;
+  height: 28px;
+  flex: 1;
+  box-sizing: border-box;
+  padding: 6px 0 6px 6px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--pk-text-strong);
+  font: 400 13px/normal var(--font);
+}
+.embedded-customer-need-source-popover input::placeholder { color: var(--pk-faint); }
+.embedded-customer-need-source-popover__divider {
+  width: .5px;
+  height: 16px;
+  flex: none;
+  margin: 0 2px 0 8px;
+  background: var(--pk-border);
+}
+.embedded-customer-need-source-popover button {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--pk-faint);
+}
+.embedded-customer-need-source-popover button:hover { background: var(--theme-surface-hover); color: var(--pk-text); }
+
+.embedded-customer-need-menu { min-width: 314px; }

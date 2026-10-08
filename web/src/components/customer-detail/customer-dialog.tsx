@@ -3,6 +3,7 @@ import { Trash2, X } from 'lucide-react'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SelectControl } from '@/components/ui/select-control'
+import { CustomerStatusIcon, CustomerTierIcon } from '@/components/customer/customer-status-icon'
 import { useI18n } from '@/i18n/i18n'
 import type { Customer, CustomerMutationInput, User } from '@/types/flow'
 import { hasCustomerDraftErrors, normalizeDomain, validateCustomerDraft, type CustomerDraftErrors } from './customer-form-model'
@@ -18,19 +19,22 @@ type CustomerDraft = {
   size: string
   domains: string[]
 }
-type CustomerOption = { name: string; color?: string; archivedAt?: string }
+type CustomerOption = { id?: string; name: string; color?: string; position?: number; archivedAt?: string }
 
 const LOGO_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 const LOGO_SIZE = 128
-const FALLBACK_TIERS = ['Enterprise', 'Mid-market', 'Small business']
 const emptyDraft: CustomerDraft = { name: '', logoUrl: '', ownerId: '', status: 'active', tier: '', annualRevenue: '', size: '', domains: [''] }
+const optionValue = (option: CustomerOption) => option.id ?? option.name
+const byPosition = (left: CustomerOption, right: CustomerOption) => (left.position ?? 0) - (right.position ?? 0)
+/** A stored status/tier value is an id or, for older customers, a name. */
+const findOption = (options: CustomerOption[], value: string) => options.find(option => option.id === value) ?? options.find(option => option.name.toLowerCase() === value.toLowerCase())
 
 /**
  * Create / edit customer modal, laid out like Linear's (580px; header title and
  * Discard; logo picker; Name/Owner, Status/Tier, Annual revenue/Size in two
  * columns; a Domains list with "Add domain"; Cancel and "Create customer").
  */
-export function CustomerDialog({ open, users, customer, customers = [], statuses = [], tiers = [], onOpenChange, onSubmit, currency = 'USD' }: {
+export function CustomerDialog({ open, users, customer, customers = [], statuses = [], tiers = [], onOpenChange, onSubmit, currency = 'USD', revenueLabel, monthlyRevenue = false }: {
   open: boolean
   users: User[]
   customer?: Customer
@@ -40,6 +44,10 @@ export function CustomerDialog({ open, users, customer, customers = [], statuses
   statuses?: CustomerOption[]
   tiers?: CustomerOption[]
   currency?: string
+  /** The revenue field's label ("Annual revenue" or "Monthly revenue", per the workspace setting). */
+  revenueLabel?: string
+  /** Revenue is entered per month and stored annualised (Settings › Customer requests › Revenue: Monthly). */
+  monthlyRevenue?: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (input: CustomerMutationInput & { name: string }) => Promise<void>
 }) {
@@ -50,20 +58,27 @@ export function CustomerDialog({ open, users, customer, customers = [], statuses
   const [submitted, setSubmitted] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  const statusOptions = useMemo(() => statuses.filter(status => !status.archivedAt).sort(byPosition), [statuses])
+  const tierOptions = useMemo(() => tiers.filter(tier => !tier.archivedAt).sort(byPosition), [tiers])
+  const defaultStatus = statusOptions[0]
   useEffect(() => {
     if (!open) return
     setErrors({})
     setSubmitted(false)
+    const status = (value: string) => { const match = findOption(statusOptions, value); return match ? optionValue(match) : value }
+    const tier = (value?: string) => { if (!value) return ''; const match = findOption(tierOptions, value); return match ? optionValue(match) : value }
     setDraft(customer ? {
       name: customer.name,
       logoUrl: customer.logoUrl ?? '',
       ownerId: customer.ownerId ?? '',
-      status: customer.status,
-      tier: customer.tier ?? '',
-      annualRevenue: customer.annualRevenue ? String(Math.round(customer.annualRevenue)) : '',
+      status: status(customer.status),
+      tier: tier(customer.tier),
+      annualRevenue: customer.annualRevenue ? String(Math.round(monthlyRevenue ? customer.annualRevenue / 12 : customer.annualRevenue)) : '',
       size: customer.size ? String(customer.size) : '',
       domains: customer.domains.length ? [...customer.domains] : [''],
-    } : emptyDraft)
+    } : { ...emptyDraft, status: defaultStatus ? optionValue(defaultStatus) : 'active' })
+    // Statuses only seed the draft when the dialog opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customer, open])
 
   const update = (patch: Partial<CustomerDraft>) => setDraft(current => {
@@ -75,12 +90,15 @@ export function CustomerDialog({ open, users, customer, customers = [], statuses
     const name = draft.name.trim().toLocaleLowerCase()
     return name ? customers.find(item => item.id !== customer?.id && item.name.trim().toLocaleLowerCase() === name) : undefined
   }, [customer?.id, customers, draft.name])
-  const statusColor = (value: string) => statuses.find(status => status.name.toLowerCase() === value.toLowerCase())?.color
-  const tierNames = useMemo(() => {
-    const names = tiers.filter(tier => !tier.archivedAt).map(tier => tier.name)
-    const list = names.length ? names : FALLBACK_TIERS
-    return draft.tier && !list.includes(draft.tier) ? [...list, draft.tier] : list
-  }, [draft.tier, tiers])
+  const statusSelect = useMemo(() => {
+    const options = statusOptions.map(status => ({ value: optionValue(status), label: status.name, entityName: true, icon: <CustomerStatusIcon className="customer-form__status-icon" color={status.color}/> }))
+    if (!options.length) return [{ value: 'active', label: locale === 'zh-CN' ? '活跃' : 'Active', icon: <CustomerStatusIcon className="customer-form__status-icon"/> }, { value: 'inactive', label: t('Inactive'), icon: <CustomerStatusIcon className="customer-form__status-icon" monochrome/> }]
+    return draft.status && !options.some(option => option.value === draft.status) ? [...options, { value: draft.status, label: draft.status, entityName: true, icon: <CustomerStatusIcon className="customer-form__status-icon" monochrome/> }] : options
+  }, [draft.status, locale, statusOptions, t])
+  const tierSelect = useMemo(() => {
+    const options = tierOptions.map(tier => ({ value: optionValue(tier), label: tier.name, entityName: true, icon: <CustomerTierIcon className="customer-form__tier-icon" size={14} style={tier.color ? { color: tier.color } : undefined}/> }))
+    return draft.tier && !options.some(option => option.value === draft.tier) ? [...options, { value: draft.tier, label: draft.tier, entityName: true, icon: undefined }] : options
+  }, [draft.tier, tierOptions])
   const symbol = currencySymbol(currency)
 
   const submit = async (event?: FormEvent) => {
@@ -95,10 +113,10 @@ export function CustomerDialog({ open, users, customer, customers = [], statuses
       await onSubmit({
         name: draft.name.trim(),
         logoUrl: draft.logoUrl.trim() || (customer?.logoUrl ? '' : undefined),
-        ownerId: draft.ownerId || undefined,
+        ownerId: draft.ownerId || (customer?.ownerId ? '' : undefined),
         status: draft.status,
         tier: draft.tier || (customer?.tier ? '' : undefined),
-        annualRevenue: draft.annualRevenue ? Number(draft.annualRevenue) : customer?.annualRevenue ? 0 : undefined,
+        annualRevenue: draft.annualRevenue ? Number(draft.annualRevenue) * (monthlyRevenue ? 12 : 1) : customer?.annualRevenue ? 0 : undefined,
         size: draft.size ? Number(draft.size) : customer?.size ? 0 : undefined,
         domains: draft.domains.map(normalizeDomain).filter(Boolean),
       })
@@ -127,17 +145,17 @@ export function CustomerDialog({ open, users, customer, customers = [], statuses
           </div>
           <div className="customer-form__section customer-form__grid">
             <Field label={t('Status')}>
-              <SelectControl className="customer-form__select" label="Status" value={draft.status} onChange={status => update({ status })} options={['active', 'inactive'].map(value => ({ value, label: value === 'active' ? (locale === 'zh-CN' ? '活跃' : 'Active') : t('Inactive'), icon: <i aria-hidden="true" className="customer-form__dot" data-status={value} style={statusColor(value) ? { background: statusColor(value) } : undefined}/> }))}/>
+              <SelectControl className="customer-form__select is-value" label="Status" value={draft.status} onChange={status => update({ status })} options={statusSelect}/>
             </Field>
             <Field label={t('Tier')}>
-              <SelectControl className="customer-form__select" label="Tier" value={draft.tier} onChange={tier => update({ tier })} options={[{ value: '', label: t('No tier') }, ...tierNames.map(name => ({ value: name, label: FALLBACK_TIERS.includes(name) ? t(name) : name, entityName: !FALLBACK_TIERS.includes(name), icon: tierColor(tiers, name) ? <i aria-hidden="true" className="customer-form__dot" style={{ background: tierColor(tiers, name) }}/> : undefined }))]}/>
+              <SelectControl className="customer-form__select is-value" label="Tier" value={draft.tier} onChange={tier => update({ tier })} options={[{ value: '', label: t('No tier') }, ...tierSelect]}/>
             </Field>
           </div>
           <div className="customer-form__section customer-form__grid">
-            <Field error={errors.annualRevenue} htmlFor={`${id}-revenue`} label={t('Annual revenue')}>
+            <Field error={errors.annualRevenue} htmlFor={`${id}-revenue`} label={revenueLabel ?? t('Annual revenue')}>
               <div className="customer-form__number">
                 {symbol && <span aria-hidden="true" data-i18n-ignore>{symbol}</span>}
-                <input aria-invalid={errors.annualRevenue ? true : undefined} aria-label={t('Annual revenue')} autoComplete="off" id={`${id}-revenue`} style={symbol ? { paddingLeft: `calc(16px + ${symbol.length}ch)` } : undefined} inputMode="numeric" value={formatInteger(draft.annualRevenue)} onChange={event => update({ annualRevenue: digits(event.target.value) })} onKeyDown={event => stepNumber(event, draft.annualRevenue, annualRevenue => update({ annualRevenue }))}/>
+                <input aria-invalid={errors.annualRevenue ? true : undefined} aria-label={revenueLabel ?? t('Annual revenue')} autoComplete="off" id={`${id}-revenue`} style={symbol ? { paddingLeft: `calc(17px + ${symbol.length}ch)` } : undefined} inputMode="numeric" value={formatInteger(draft.annualRevenue)} onChange={event => update({ annualRevenue: digits(event.target.value) })} onKeyDown={event => stepNumber(event, draft.annualRevenue, annualRevenue => update({ annualRevenue }))}/>
               </div>
             </Field>
             <Field error={errors.size} htmlFor={`${id}-size`} label={t('Size')}>
@@ -205,7 +223,7 @@ function CustomerLogoField({ error, value, onChange, onError }: { error?: string
     <div className="customer-form__logo">
       <button aria-label={t('Upload logo')} className="customer-form__logo-drop" data-dragging={dragging || undefined} onClick={() => inputRef.current?.click()} onDragLeave={() => setDragging(false)} onDragOver={event => { event.preventDefault(); setDragging(true) }} onDrop={onDrop} onPaste={onPaste} title={t('Upload logo')} type="button">
         {value ? <img alt="" src={value}/> : <UploadIcon/>}
-        {value && <span aria-hidden="true" className="customer-form__logo-overlay"><UploadIcon/></span>}
+        <span aria-hidden="true" className="customer-form__logo-overlay"><EditIcon/></span>
       </button>
       {value && <button aria-label={t('Remove image')} className="customer-form__logo-clear" onClick={() => { onChange(''); onError(undefined) }} title={t('Remove image')} type="button"><X size={10}/></button>}
       <input accept={LOGO_TYPES.join(',')} hidden onChange={event => { void acceptFile(event.target.files?.[0]); event.target.value = '' }} ref={inputRef} tabIndex={-1} type="file"/>
@@ -222,6 +240,11 @@ function UploadIcon() {
   return <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 16 16" width="16"><path d="M2.615 9.145v2.546c0 .984.844 1.782 1.885 1.782h7c1.04 0 1.885-.798 1.885-1.782V9.145c0-.421.361-.763.807-.763.446 0 .808.342.808.763v2.546C15 13.518 13.433 15 11.5 15h-7C2.567 15 1 13.518 1 11.69V9.146c0-.421.362-.763.808-.763.446 0 .807.342.807.763Z"/><path d="M7 5H4.5c-.444 0-.667-.568-.353-.9l3.5-2.946a.482.482 0 0 1 .706 0l3.5 2.946c.315.332.091.9-.354.9H9v5a1 1 0 1 1-2 0V5Z"/></svg>
 }
 
+/** Linear's logo hover glyph (a pencil). */
+function EditIcon() {
+  return <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 16 16" width="16"><path d="M10.1805 3.34195L4.14166 9.416C5.32948 9.77021 6.29238 10.6629 6.74008 11.8184L12.6877 5.8425C11.6642 5.22123 10.8043 4.36352 10.1805 3.34195Z"/><path d="M13.7391 4.71631C14.1575 4.02948 14.0727 3.11738 13.4846 2.5219C12.8908 1.92072 11.9784 1.83892 11.298 2.27649C11.8547 3.31132 12.7037 4.15999 13.7391 4.71631Z"/><path d="M3.03104 10.7502C4.30296 10.7658 5.36645 11.7423 5.49783 13.0114C4.83268 13.426 3.40197 13.7922 2.53114 13.9886C2.2001 14.0632 1.92026 13.7602 2.02075 13.4373C2.25326 12.6902 2.64592 11.5136 3.03104 10.7502Z"/></svg>
+}
+
 function digits(value: string) { return value.replace(/\D/g, '').replace(/^0+(?=\d)/, '') }
 function formatInteger(value: string) { return value ? Number(value).toLocaleString('en-US') : '' }
 function stepNumber(event: KeyboardEvent<HTMLInputElement>, value: string, onChange: (value: string) => void) {
@@ -230,7 +253,6 @@ function stepNumber(event: KeyboardEvent<HTMLInputElement>, value: string, onCha
   const current = Number(value || 0)
   onChange(String(Math.max(0, current + (event.key === 'ArrowUp' ? 1 : -1))))
 }
-function tierColor(tiers: CustomerOption[], name: string) { return tiers.find(tier => tier.name === name)?.color }
 function currencySymbol(currency: string) {
   try { return new Intl.NumberFormat('en-US', { style: 'currency', currency, currencyDisplay: 'narrowSymbol' }).formatToParts(0).find(part => part.type === 'currency')?.value ?? currency }
   catch { return currency }

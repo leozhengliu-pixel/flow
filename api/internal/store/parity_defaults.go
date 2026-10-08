@@ -16,8 +16,7 @@ func normalizeParity(data *domain.Bootstrap) {
 		data.DocumentContentDrafts = []domain.DocumentContentDraft{}
 	}
 	if data.CustomerStatuses == nil {
-		now := time.Now().UTC()
-		data.CustomerStatuses = []domain.CustomerStatus{{ID: "customer_status_active", Name: "Active", Color: "#4cb782", Position: 0, CreatedAt: now, UpdatedAt: now}, {ID: "customer_status_prospect", Name: "Prospect", Color: "#5e6ad2", Position: 1, CreatedAt: now, UpdatedAt: now}, {ID: "customer_status_churned", Name: "Churned", Color: "#f2c94c", Position: 2, CreatedAt: now, UpdatedAt: now}}
+		data.CustomerStatuses = DefaultCustomerStatuses(time.Now().UTC())
 	}
 	if data.CustomerTiers == nil {
 		data.CustomerTiers = []domain.CustomerTier{}
@@ -63,4 +62,20 @@ func normalizeTriageIntelligenceSettings(settings *domain.TriageIntelligenceSett
 			*target = fallback
 		}
 	}
+}
+
+// DefaultCustomerStatuses are the customer statuses a new workspace starts
+// with (Active, Prospect, Churned, Lost), in order.
+func DefaultCustomerStatuses(now time.Time) []domain.CustomerStatus {
+	defaults := []struct{ id, name, color string }{
+		{"customer_status_active", "Active", "#5e6ad2"},
+		{"customer_status_prospect", "Prospect", "#4cb782"},
+		{"customer_status_churned", "Churned", "#eb5757"},
+		{"customer_status_lost", "Lost", "#f2994a"},
+	}
+	statuses := make([]domain.CustomerStatus, len(defaults))
+	for index, item := range defaults {
+		statuses[index] = domain.CustomerStatus{ID: item.id, Name: item.name, Color: item.color, Position: float64(index), CreatedAt: now, UpdatedAt: now}
+	}
+	return statuses
 }

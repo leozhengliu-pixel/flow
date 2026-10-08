@@ -94,6 +94,9 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 		reviews[i].IssueIDs = slices.Clone(reviews[i].IssueIDs)
 		reviews[i].TeamReviewers = slices.Clone(reviews[i].TeamReviewers)
 	}
+	// Customer requests linked to issues: the team filter below only sees the
+	// (empty) paged issue list, so their issues are checked by id instead.
+	customerRequests := slices.Clone(data.CustomerRequests)
 	data, ok, err := s.projectBootstrapForUser(ctx, data, userID)
 	if err != nil {
 		return data, err
@@ -118,6 +121,11 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 			ids = append(ids, item.ResourceID)
 		}
 	}
+	for _, item := range customerRequests {
+		if item.IssueID != "" {
+			ids = append(ids, item.IssueID)
+		}
+	}
 	if len(ids) > 0 {
 		_, access, err := s.IssueQueryAccess(ctx, data.Workspace.URLKey, userID)
 		if err != nil {
@@ -133,6 +141,10 @@ func (s *SQLiteStore) PagedWorkspaceMetadata(ctx context.Context, workspace, use
 		for _, project := range data.Projects {
 			visibleProjects[project.ID] = true
 		}
+		guest := data.ViewerRole == "guest"
+		data.CustomerRequests = slices.DeleteFunc(customerRequests, func(item domain.CustomerRequest) bool {
+			return guest || (item.IssueID != "" && !visible[item.IssueID]) || (item.ProjectID != "" && !visibleProjects[item.ProjectID])
+		})
 		for _, release := range releases {
 			if release.PipelineID != "" && !slices.ContainsFunc(data.ReleasePipelines, func(p domain.ReleasePipeline) bool { return p.ID == release.PipelineID }) {
 				continue
@@ -543,6 +555,13 @@ func issueRecordWhere(query IssueRecordQuery) (string, []any, error) {
 	}
 	clauses = append(clauses, filter)
 	args = append(args, values...)
+	if query.GroupValue != nil && query.GroupBy == "customer" {
+		// Customer groups are multi-membership: an issue is in every requesting customer's group.
+		clause, values := customerGroupClause(*query.GroupValue)
+		clauses = append(clauses, clause)
+		args = append(args, values...)
+		return strings.Join(clauses, " AND "), args, nil
+	}
 	if query.GroupValue != nil && query.GroupBy != "none" {
 		if field := issueGroupAttribute(query.GroupBy); field != "" {
 			clause, values, err := compileIssueAttribute(IssueFilter{Field: field, Values: []string{*query.GroupValue}})
@@ -693,6 +712,10 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		column = "updated_at"
 	case "title":
 		column = "title"
+	case "customerCount", "customerImportantCount", "customerRevenue":
+		// Linear's customer orderings: computed per row from the customer request index.
+		column = "customer"
+		expression = customerSortExpression(query.Sort)
 	default:
 		return page, ErrIssueQuery
 	}
@@ -733,7 +756,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 			return page, ErrIssueQuery
 		}
 		var value any = cursor.Value
-		if column == "priority" || column == "sort_order" {
+		if column == "priority" || column == "sort_order" || column == "customer" {
 			number, err := strconv.ParseFloat(cursor.Value, 64)
 			if err != nil || math.IsNaN(number) || math.IsInf(number, 0) {
 				return page, ErrIssueQuery
@@ -836,6 +859,13 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 		groups := []IssueRecordGroup{{Value: "all", Count: total}}
 		s.cacheSetIssueGroups(ctx, query, groups)
 		return groups, nil
+	}
+	if query.GroupBy == "customer" {
+		groups, err := s.customerIssueGroups(ctx, query)
+		if err == nil {
+			s.cacheSetIssueGroups(ctx, query, groups)
+		}
+		return groups, err
 	}
 	column, err := issueGroupColumn(query.GroupBy)
 	from := "issue_records i"

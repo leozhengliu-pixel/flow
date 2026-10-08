@@ -1,8 +1,8 @@
-import { cloneElement, Fragment, isValidElement, useMemo, useRef, useState, type ReactElement } from 'react'
+import { cloneElement, Fragment, isValidElement, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactElement } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as Popover from '@radix-ui/react-popover'
 import { Command, defaultFilter } from 'cmdk'
-import { Building2, Diamond, ExternalLink, Link2, Rocket } from 'lucide-react'
+import { Diamond, ExternalLink, Link2, Rocket } from 'lucide-react'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
@@ -15,6 +15,10 @@ import { LinearGlyph, type LinearGlyphName } from '@/components/ui/menu-glyphs'
 import { SubscriptionIcon } from '@/components/ui/view-action-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { CustomerGlyph, CustomerOwnerGlyph, CustomerRevenueGlyph, CustomerSizeGlyph, ImportantCustomerGlyph } from '@/components/customer/customer-filter-glyphs'
+import { CustomerStatusIcon, CustomerTierIcon } from '@/components/customer/customer-status-icon'
+import { CustomerLogoPile } from '@/components/customer/customer-logo-pile'
+import { CUSTOMER_NUMBER_COMPARISONS, parseCustomerNumberInput } from '@/components/issue-explorer/customer-filter'
 
 export type IssueFilterScope = 'issues' | 'project'
 
@@ -96,7 +100,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, filters 
     const walk = (field: MyIssuesFilterKey, items: MyIssuesFilterOption[], path: string[], depth: number) => {
       for (const option of items) {
         if (option.children?.length) { if (depth < 2) walk(field, option.children, [...path, option.label], depth + 1); continue }
-        if (option.textConditionPrefix || option.id === 'content-prompt') continue
+        if (option.textConditionPrefix || option.numberInput || option.id === 'content-prompt') continue
         if (option.label.toLocaleLowerCase().includes(needle)) matches.push({ field, option, path: [...path, option.label] })
       }
     }
@@ -238,7 +242,8 @@ type ValueRowKind = 'check' | 'icon' | 'plain'
 /** Linear's three value-row layouts: selectable values (checkbox column + icon), categories and one-click entries (icon first), presets (text only). */
 function valueRowKind(field: MyIssuesFilterKey, option: MyIssuesFilterOption): ValueRowKind {
   if (option.textConditionPrefix || option.kind === 'dueDate' || option.kind === 'dateCustom' || option.kind === 'textCondition') return 'plain'
-  if (option.children?.length) return categoryGlyph(field, option) === undefined && !option.kind ? 'plain' : 'icon'
+  // A category stays a category while empty (Customer tier with no tiers yet): it opens "No results".
+  if (option.children || option.numberInput) return categoryGlyph(field, option) === undefined && !option.kind ? 'plain' : 'icon'
   if (field === 'relations' || (field === 'triageIntelligence' && (option.id === 'related' || option.id === 'duplicate'))) return 'icon'
   return 'check'
 }
@@ -248,7 +253,7 @@ function isCategoryList(field: MyIssuesFilterKey, options: MyIssuesFilterOption[
 }
 /** Labels Flow defines (presets, "No …", categories) are translated; names users typed are not. */
 function isSystemOption(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
-  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || valueRowKind(field, option) !== 'check'
+  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || Boolean(option.numberInput) || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || valueRowKind(field, option) !== 'check'
 }
 
 function FilterValueItems({ activeId, field, isSelected = () => false, layer, onActive = () => {}, onChoose, options }: { activeId?: string; field: MyIssuesFilterKey; isSelected?: (id: string) => boolean; layer: number; onActive?: (id: string) => void; onChoose: (option: MyIssuesFilterOption) => void; options: MyIssuesFilterOption[] }) {
@@ -261,10 +266,12 @@ function FilterValueItem({ field, layer, option, active, selected, nestedOpen, o
   const {t}=useI18n()
   const kind = valueRowKind(field, option)
   const label = isSystemOption(field, option) ? t(option.label) : option.label
-  const mark = kind === 'plain' ? null : <span className={styles.optionSlot} aria-hidden="true"><OptionMark field={field} option={option}/></span>
+  // Linear's customer tier values carry no image.
+  const mark = kind === 'plain' || option.kind === 'customerTier' ? null : <span className={styles.optionSlot} aria-hidden="true"><OptionMark field={field} option={option}/></span>
   // Linear shows counts on selectable values only (not on categories or one-click relation rows).
   const count = (optionCount(option)??0)>0 && kind === 'check' ? <span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span> : null
-  if(option.children?.length)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
+  if(option.numberInput)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NumberValueMenu field={field} layer={layer} option={option} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
+  if(option.children&&(option.children.length||field==='customers'))return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(kind!=='check')return <button type="button" role="option" aria-selected={active} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{count}</button>
   return <PersonHover userId={isPeopleProperty(option.kind ?? field) ? option.id : undefined}><button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{option.agent&&<AgentBadge/>}{count}</button></PersonHover>
 }
@@ -277,6 +284,43 @@ function NestedValueMenu({ field, label, layer, onChoose, onClose, options }: { 
     <div className={styles.valueSearch} data-hidden={hideSearch || undefined}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t('Filter…')} value={command.query} onChange={event=>command.onQueryChange(event.target.value)}/></div>
     <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>
   </Popover.Content>
+}
+
+/**
+ * Linear's number block sub-menu: an always-shown "Enter customer count…" input; a typed number offers
+ * "greater than or equals N", "less than or equals N", "equals N" and "not equals N".
+ */
+function NumberValueMenu({ field, layer, onChoose, onClose, option }: { field: MyIssuesFilterKey; layer: number; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; option: MyIssuesFilterOption }) {
+  const { t } = useI18n()
+  const [query, setQuery] = useState('')
+  const [activeIndex, setActiveIndex] = useState(0)
+  const input = option.numberInput!
+  const typed = parseCustomerNumberInput(query)
+  const display = (amount: number) => input.revenue ? formatCurrency(amount, input.revenue.currency) : new Intl.NumberFormat().format(amount)
+  const rows = typed === undefined ? [] : CUSTOMER_NUMBER_COMPARISONS.map(comparison => ({ comparison, value: input.revenue?.monthly ? typed * 12 : typed }))
+  const choose = (index: number) => {
+    const row = rows[index]
+    if (!row || typed === undefined) return
+    onChoose({ id: `${input.prefix}${row.value}`, label: display(typed), kind: option.kind, filterLabel: option.label, comparison: row.comparison.value })
+  }
+  const onKeyDown = (event: ReactKeyboardEvent) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); if (rows.length) setActiveIndex(index => (index + (event.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length) }
+    else if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); choose(activeIndex) }
+  }
+  return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} data-level={2} data-number-input="" style={{ zIndex: layer }} side="left" align="start" alignOffset={NUMBER_INPUT_ALIGN_OFFSET} sideOffset={SUBMENU_SIDE_OFFSET} collisionPadding={11} onOpenAutoFocus={event => event.preventDefault()} onCloseAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { event.preventDefault(); onClose() }} onKeyDown={onKeyDown}>
+    <div className={styles.valueSearch}><input role="searchbox" inputMode="decimal" aria-label={t(input.placeholder)} placeholder={t(input.placeholder)} value={query} onChange={event => { setQuery(event.target.value); setActiveIndex(0) }}/></div>
+    {rows.length > 0 && <div className={styles.valueList} role="listbox" aria-label={t(option.label)}>
+      {rows.map((row, index) => <button key={row.comparison.value} type="button" role="option" aria-selected={index === activeIndex} className={styles.valueItem} data-row-kind="icon" onMouseMove={() => setActiveIndex(index)} onClick={() => choose(index)}>
+        <span className={styles.optionSlot} aria-hidden="true"><OptionMark field={field} option={option}/></span>
+        <span className={styles.valueLabel}><span className={styles.numberComparison}>{t(row.comparison.label)} </span><span data-i18n-ignore>{display(typed!)}</span></span>
+      </button>)}
+    </div>}
+  </Popover.Content>
+}
+/** Linear lines the number input itself up with the hovered row. */
+const NUMBER_INPUT_ALIGN_OFFSET = -1.5
+function formatCurrency(amount: number, currency: string) {
+  try { return new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount) } catch { return String(amount) }
 }
 
 function TextConditionDialog({ condition, onApply, onClose }: { condition?: { field: MyIssuesFilterKey; option: MyIssuesFilterOption }; onApply: (field: MyIssuesFilterKey, option: MyIssuesFilterOption) => void; onClose: () => void }) {
@@ -325,11 +369,17 @@ export function OptionMark({ field, option }: { field: MyIssuesFilterKey; option
   if(kind==='projectLeadCategory')return <ProjectPropertyCategoryIcon kind="lead"/>
   if(kind==='projectLead'){const leadId=option.id.startsWith('project-lead:')?option.id.slice(13):option.id;return leadId&&option.label!=='Current user'?<span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>:<NoAssigneeIcon size={14}/>}
   if(kind==='projectMilestone'||kind==='projectMilestoneCategory')return <ProjectPropertyCategoryIcon kind="milestone"/>
-  if(kind==='customerNameCategory'||kind==='customerCountCategory'||kind==='customerRevenueCategory'||kind==='customerSizeCategory')return <Building2 size={14}/>
-  if(kind==='customerOwnerCategory')return <ProjectPropertyCategoryIcon kind="lead"/>
-  if(kind==='customerOwner'){const ownerId=option.id.startsWith('customer-owner:')?option.id.slice(15):option.id;return ownerId&&option.label!=='Current user'?<span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>:<NoAssigneeIcon size={14}/>}
-  if(kind==='customerStatusCategory'||kind==='customerTierCategory')return <i className={styles.optionMark} style={{backgroundColor:option.color||'var(--theme-text-tertiary)'}}/>
-  if(kind==='customerStatus'||kind==='customerTier'||kind==='customerName')return option.color?<i className={styles.optionMark} style={{backgroundColor:option.color}}/>:<Building2 size={14}/>
+  if(kind==='customerNameCategory'||kind==='customerCountCategory')return <CustomerGlyph/>
+  if(kind==='customerImportantCountCategory')return <ImportantCustomerGlyph/>
+  if(kind==='customerOwnerCategory')return <CustomerOwnerGlyph/>
+  if(kind==='customerStatusCategory')return <CustomerStatusIcon monochrome/>
+  if(kind==='customerTierCategory')return <CustomerTierIcon/>
+  if(kind==='customerRevenueCategory')return <CustomerRevenueGlyph/>
+  if(kind==='customerSizeCategory')return <CustomerSizeGlyph/>
+  if(kind==='customerOwner'){const ownerId=option.id.startsWith('customer-owner:')?option.id.slice(15):option.id;if(!ownerId)return <NoAssigneeIcon size={14}/>;if(option.label==='Current user')return <CustomerOwnerGlyph size={14}/>;return <span className={styles.optionAvatar} style={option.avatarUrl?{backgroundImage:`url(${option.avatarUrl})`}:undefined}>{option.avatarUrl?'':initials(option.label)}</span>}
+  if(kind==='customerStatus')return <CustomerStatusIcon color={option.color}/>
+  if(kind==='customerTier')return <CustomerTierIcon size={14}/>
+  if(kind==='customerName')return <CustomerLogoPile size={14} customers={option.id==='customer:'?[]:[{id:option.id,name:option.label,logoUrl:option.avatarUrl}]} appendNoCustomer={option.id==='customer:'}/>
   if(option.color)return <i className={styles.optionMark} style={{backgroundColor:option.color}}/>
   return <span className={styles.optionIcon}><FilterFieldIcon field={field}/></span>
 }
@@ -358,7 +408,7 @@ export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
   if(field==='initiative')return <ViewGlyph icon="Initiative" color="currentColor" style={{width:16,height:16}}/>
   if(field==='cycle')return <CycleIcon noCycle size={16}/>
   if(field==='releases')return <IssueActionGlyph label="Release" fallback={<Rocket size={16}/>}/>
-  if(field==='customers')return <IssueActionGlyph label="Add customer request…" fallback={<Building2 size={16}/>}/>
+  if(field==='customers')return <CustomerGlyph/>
   if(field==='subscribers')return <SubscriptionIcon/>
   if(field==='template')return <IssueActionGlyph label="Template…" fallback={<Diamond size={16}/>}/>
   if(field==='externalSource')return <ExternalLink size={16}/>

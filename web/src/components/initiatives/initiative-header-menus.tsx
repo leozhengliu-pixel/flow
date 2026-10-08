@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { Bell, Check, Link2, Plus, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { toast } from 'sonner'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
@@ -19,6 +19,7 @@ import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { SlackIcon } from '@/components/issue/issue-icons'
 import { InitiativeCopySubmenu, InitiativeHierarchySubmenus, InitiativeRemindSubmenu, InitiativeSubscribeSubmenu } from './initiative-row-menu'
 import { initiativeGraph } from './initiative-hierarchy'
+import { childOptions, directChildIds, parentOptions, saveInitiativeRelation, showNestingLimitError, toggleChild, toggleId } from './initiative-hierarchy-actions'
 import { InitiativeCreateRow } from './initiatives-page'
 import { usePulseSubscription } from '@/lib/pulse-subscriptions'
 import './initiative-controls.css'
@@ -73,13 +74,15 @@ export type InitiativeActionsMenuProps = {
   onShowActivity: () => void
   onUpdate: Update
   onUpdateInitiative: (id: string, input: InitiativeMutationInput) => Promise<unknown>
+  /** Opens the overview's inline create row instead of the fallback dialog (Linear's create-sub-initiative signal). */
+  onCreateSubInitiative?: () => void
 }
 
 /**
  * The initiative page's "…" menu (Linear's initiative header menu), built from the same rows and
  * submenus as the initiative list's row menu. Its key hints also work anywhere on the page.
  */
-export function InitiativeActionsMenu({ initiative, initiatives, users, teams, labels, viewer, pulseSubscribed, onCreateInitiative, onCreateLabel, onCreateReminder, onDelete, onNewUpdate, onShowActivity, onUpdate, onUpdateInitiative }: InitiativeActionsMenuProps) {
+export function InitiativeActionsMenu({ initiative, initiatives, users, teams, labels, viewer, pulseSubscribed, onCreateInitiative, onCreateLabel, onCreateReminder, onCreateSubInitiative, onDelete, onNewUpdate, onShowActivity, onUpdate, onUpdateInitiative }: InitiativeActionsMenuProps) {
   const { t } = useI18n()
   const [menuOpen, setMenuOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -103,7 +106,7 @@ export function InitiativeActionsMenu({ initiative, initiatives, users, teams, l
   return <>
     <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}><DropdownMenu.Trigger asChild><button aria-label={t('Initiative actions')} type="button"><span className="li-ellipsis">•••</span></button></DropdownMenu.Trigger><DropdownMenu.Portal>
       <LinearDropdownMenuContent label={t('Initiative actions')}>
-        <InitiativeHierarchySubmenus initiative={initiative} initiatives={initiatives} canParent={graph.canParent} onCreateSubInitiative={() => setCreatingChild(true)} onUpdate={onUpdate} onUpdateInitiative={onUpdateInitiative}/>
+        <InitiativeHierarchySubmenus initiative={initiative} initiatives={initiatives} canParent={graph.canParent} onCreateSubInitiative={onCreateSubInitiative ?? (() => setCreatingChild(true))} onUpdate={onUpdate} onUpdateInitiative={onUpdateInitiative}/>
         <LinearMenuSeparator/>
         <InitiativeCopySubmenu initiative={initiative} url={location.href}/>
         <LinearMenuSeparator/>
@@ -131,13 +134,38 @@ export function InitiativeActionsMenu({ initiative, initiatives, users, teams, l
   </>
 }
 
-export function AddProjectMenu({ initiative, projects, onCreateNew, onUpdate }: { initiative: Initiative; projects: Project[]; onCreateNew: () => void; onUpdate: Update }) {
+type AddMenuMode = 'actions' | 'projects' | 'parents' | 'children'
+
+/** Linear's header "Add…" menu (and the overview's "Add a project" menus). With `hierarchy` it also
+ * offers Linear Enterprise's parent / sub-initiative actions after a divider. */
+export function AddProjectMenu({ initiative, projects, onCreateNew, onUpdate, trigger, align = 'end', hierarchy }: {
+  initiative: Initiative; projects: Project[]; onCreateNew: () => void; onUpdate: Update
+  /** Replaces the header's "+" button (the overview's empty-state button, for one). */
+  trigger?: ReactElement
+  align?: 'start' | 'end'
+  hierarchy?: { initiatives: Initiative[]; onCreateSubInitiative: () => void; onUpdateInitiative: (id: string, input: InitiativeMutationInput) => Promise<unknown> }
+}) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<'actions' | 'existing'>('actions')
-  const toggle = (projectId: string) => void onUpdate({ projectIds: initiative.projectIds.includes(projectId) ? initiative.projectIds.filter(id => id !== projectId) : [...initiative.projectIds, projectId] })
-  const options=projects.map(project=>({id:project.id,label:project.name})),command=usePropertyCommand({closeOnSelect:false,open:open&&mode==='existing',options,selectedIds:initiative.projectIds,onOpenChange:setOpen,onSelect:option=>toggle(option.id)})
-  return <Popover.Root open={open} onOpenChange={nextOpen=>{setOpen(nextOpen);if(!nextOpen)setMode('actions')}}><Popover.Trigger asChild><button aria-label="Add project" type="button"><Plus size={14}/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="li-add-project" sideOffset={4} onOpenAutoFocus={event => event.preventDefault()}>
-    {mode === 'actions' ? <><label><Search size={14}/><input autoFocus aria-label="Add…" placeholder="Add…"/></label><button onClick={() => { setOpen(false); onCreateNew() }} type="button"><Plus size={14}/>Create new project…<kbd>N then P</kbd></button><button onClick={() => setMode('existing')} type="button"><Link2 size={14}/>Add existing projects…</button></> : <><header><button aria-label="Back" onClick={() => setMode('actions')} type="button">‹</button><span>Initiative · <b data-i18n-ignore>{initiative.name}</b></span><button aria-label="Close" onClick={() => setOpen(false)} type="button"><X size={13}/></button></header><label><Search size={14}/><input ref={command.inputRef} autoFocus aria-label="Command menu" placeholder="Search projects…" value={command.query} onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown}/></label><div role="listbox" aria-multiselectable="true" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const project=projects.find(item=>item.id===option.id)!;return <button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="li-picker-checkbox">{command.isSelected(option.id)&&<Check size={11}/>}</span><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><span data-i18n-ignore>{project.name}</span><small>{project.progress}%</small></button>})}</div><footer><kbd>Enter ↵</kbd> Select <span/><kbd>⌥ ↵</kbd> More actions</footer></>}
+  const [mode, setMode] = useState<AddMenuMode>('actions')
+  const graph = useMemo(() => initiativeGraph(hierarchy?.initiatives ?? []), [hierarchy?.initiatives])
+  const parentIds = initiative.parentInitiativeIds ?? []
+  const choices = useMemo(() => {
+    if (mode === 'parents' && hierarchy) return { options: parentOptions(initiative, hierarchy.initiatives, graph), selected: initiative.parentInitiativeIds ?? [], placeholder: 'Change parent initiatives…' }
+    if (mode === 'children' && hierarchy) return { options: childOptions(initiative, hierarchy.initiatives, graph), selected: [...directChildIds(initiative, hierarchy.initiatives)], placeholder: 'Add existing sub-initiative…' }
+    return { options: projects.map(project => ({ id: project.id, label: project.name })), selected: initiative.projectIds, placeholder: 'Search projects…' }
+  }, [graph, hierarchy, initiative, mode, projects])
+  const choose = (id: string) => {
+    if (mode === 'parents') return void saveInitiativeRelation(async () => onUpdate({ parentInitiativeIds: toggleId(parentIds, id) }), t)
+    if (mode === 'children' && hierarchy) return void saveInitiativeRelation(() => toggleChild(initiative, graph.byId.get(id), hierarchy.onUpdateInitiative), t)
+    void onUpdate({ projectIds: toggleId(initiative.projectIds, id) })
+  }
+  const command = usePropertyCommand({ closeOnSelect: false, open: open && mode !== 'actions', options: choices.options, selectedIds: choices.selected, resetKey: mode, onOpenChange: setOpen, onSelect: option => choose(option.id) })
+  const createSubInitiative = () => { setOpen(false); if (graph.canCreateChild(initiative.id)) hierarchy?.onCreateSubInitiative(); else showNestingLimitError(t) }
+  return <Popover.Root open={open} onOpenChange={nextOpen=>{setOpen(nextOpen);if(!nextOpen)setMode('actions')}}><Popover.Trigger asChild>{trigger ?? <button aria-label={t(hierarchy ? 'Add' : 'Add project')} type="button"><Plus size={14}/></button>}</Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align={align} className="li-add-project" sideOffset={4} onOpenAutoFocus={event => event.preventDefault()}>
+    {mode === 'actions' ? <><label><Search size={14}/><input autoFocus aria-label={t('Add…')} placeholder={t('Add…')}/></label><button onClick={() => { setOpen(false); onCreateNew() }} type="button"><Plus size={14}/>{t('Create new project…')}<kbd>N then P</kbd></button><button onClick={() => setMode('projects')} type="button"><Link2 size={14}/>{t('Add existing projects…')}</button>
+      {hierarchy && <><hr/><button onClick={() => setMode('parents')} type="button"><LinearGlyph name="parentInitiatives"/>{t(parentIds.length ? 'Change parent initiatives' : 'Set parent initiatives')}</button><button onClick={createSubInitiative} type="button"><LinearGlyph name="subInitiatives"/>{t('Create sub-initiative')}</button><button onClick={() => setMode('children')} type="button"><ViewGlyph icon="Initiative" color="currentColor"/>{t('Add existing sub-initiative')}</button></>}
+    </> : <><header><button aria-label={t('Back')} onClick={() => setMode('actions')} type="button">‹</button><span>{t('Initiative')} · <b data-i18n-ignore>{initiative.name}</b></span><button aria-label={t('Close')} onClick={() => setOpen(false)} type="button"><X size={13}/></button></header><label><Search size={14}/><input ref={command.inputRef} autoFocus aria-label={t('Command menu')} placeholder={t(choices.placeholder)} value={command.query} onChange={event=>command.onQueryChange(event.target.value)} onKeyDown={command.onKeyDown}/></label><div role="listbox" aria-multiselectable="true" onKeyDown={command.onKeyDown}>{command.filteredOptions.map(option=>{const project=mode==='projects'?projects.find(item=>item.id===option.id):undefined;const item=mode==='projects'?undefined:graph.byId.get(option.id);return <button aria-checked={command.isSelected(option.id)} aria-selected={command.activeId===option.id} key={option.id} onPointerMove={()=>command.setActiveId(option.id)} onFocus={()=>command.setActiveId(option.id)} onClick={()=>command.choose(option)} role="option" type="button"><span className="li-picker-checkbox">{command.isSelected(option.id)&&<Check size={11}/>}</span>{project?<ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/>:<ViewGlyph color={item?.color} icon={item?.icon || 'Initiative'}/>}<span data-i18n-ignore>{option.label}</span>{project&&<small>{project.progress}%</small>}</button>})}{!command.filteredOptions.length&&<p className="li-add-project__empty">{t(mode==='projects'?'No results':'No matching initiatives')}</p>}</div><footer><kbd>Enter ↵</kbd> {t('Select')} <span/><kbd>⌥ ↵</kbd> {t('More actions')}</footer></>}
   </Popover.Content></Popover.Portal></Popover.Root>
 }
 

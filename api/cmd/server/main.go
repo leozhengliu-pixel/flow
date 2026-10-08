@@ -339,6 +339,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/customers", s.createCustomer)
 	mux.HandleFunc("PATCH /api/customers/{id}", s.updateCustomer)
 	mux.HandleFunc("DELETE /api/customers/{id}", s.deleteCustomer)
+	mux.HandleFunc("POST /api/customers/{id}/merge", s.mergeCustomer)
 	mux.HandleFunc("POST /api/customer-requests", s.createCustomerRequest)
 	mux.HandleFunc("PATCH /api/customer-requests/{id}", s.updateCustomerRequest)
 	mux.HandleFunc("DELETE /api/customer-requests/{id}", s.deleteCustomerRequest)
@@ -413,6 +414,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/labels", s.createWorkspaceLabel)
 	mux.HandleFunc("PATCH /api/labels/{id}", s.updateWorkspaceLabel)
 	mux.HandleFunc("POST /api/labels/{id}/move-to-teams", s.moveWorkspaceLabelToTeams)
+	mux.HandleFunc("POST /api/labels/merge", s.mergeLabels)
 	mux.HandleFunc("DELETE /api/labels/{id}", s.deleteWorkspaceLabel)
 	mux.HandleFunc("POST /api/label-groups", s.createLabelGroup)
 	mux.HandleFunc("PATCH /api/label-groups/{id}", s.updateLabelGroup)
@@ -741,6 +743,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/teams/{id}/labels", s.createTeamLabel)
 	mux.HandleFunc("PATCH /api/teams/{id}/labels/{labelId}", s.updateTeamLabel)
 	mux.HandleFunc("DELETE /api/teams/{id}/labels/{labelId}", s.deleteTeamLabel)
+	mux.HandleFunc("DELETE /api/teams/{id}/label-groups/{groupId}", s.deleteTeamLabelGroup)
 	mux.HandleFunc("PATCH /api/cycles/{id}", s.updateCycle)
 	mux.HandleFunc("GET /api/cycles/{id}/capacity", s.getCycleCapacity)
 	mux.HandleFunc("GET /api/cycles/{id}/graph", s.getCycleGraph)
@@ -1835,6 +1838,13 @@ func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	customer := domain.Customer{ID: fmt.Sprintf("customer_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), Status: "active", Domains: []string{}, CreatedAt: now, UpdatedAt: now}
 	applyCustomerInput(&customer, input)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "customer.created", customer.ID, input, func(data *domain.Bootstrap) error {
+		if input.Status == nil {
+			customer.Status = defaultCustomerStatus(data)
+		} else if status, ok := resolveCustomerStatus(data, *input.Status); ok {
+			customer.Status = status
+		} else {
+			return fmt.Errorf("%w: unknown customer status", errInvalid)
+		}
 		for _, value := range customer.Domains {
 			if customerDomainMatches(value, data.WorkspaceSettings.FeatureSettings.CustomerGenericDomains) {
 				return fmt.Errorf("%w: generic domains cannot identify a customer", errInvalid)
@@ -1862,6 +1872,13 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		applyCustomerInput(&data.Customers[index], input)
+		if input.Status != nil {
+			status, ok := resolveCustomerStatus(data, *input.Status)
+			if !ok {
+				return fmt.Errorf("%w: unknown customer status", errInvalid)
+			}
+			data.Customers[index].Status = status
+		}
 		for _, value := range data.Customers[index].Domains {
 			if customerDomainMatches(value, data.WorkspaceSettings.FeatureSettings.CustomerGenericDomains) {
 				return fmt.Errorf("%w: generic domains cannot identify a customer", errInvalid)
@@ -1899,6 +1916,40 @@ func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
+// resolveCustomerStatus accepts a workspace customer status (by id or name)
+// or the legacy "active"/"inactive" values and returns the value to store.
+func resolveCustomerStatus(data *domain.Bootstrap, value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	for _, status := range data.CustomerStatuses {
+		if status.ArchivedAt == nil && (status.ID == value || strings.EqualFold(status.Name, value)) {
+			if status.ID == value {
+				return status.ID, true
+			}
+			if value == "active" || value == "inactive" {
+				return value, true
+			}
+			return status.ID, true
+		}
+	}
+	return value, value == "active" || value == "inactive"
+}
+
+// defaultCustomerStatus is the status new customers get: the first workspace
+// status by position (Linear's defaultCustomerStatus), else "active".
+func defaultCustomerStatus(data *domain.Bootstrap) string {
+	var first *domain.CustomerStatus
+	for index := range data.CustomerStatuses {
+		status := &data.CustomerStatuses[index]
+		if status.ArchivedAt == nil && (first == nil || status.Position < first.Position) {
+			first = status
+		}
+	}
+	if first == nil || strings.EqualFold(first.Name, "active") {
+		return "active"
+	}
+	return first.ID
+}
+
 func applyCustomerInput(customer *domain.Customer, input customerInput) {
 	if input.Name != nil {
 		customer.Name = strings.TrimSpace(*input.Name)
@@ -1908,9 +1959,6 @@ func applyCustomerInput(customer *domain.Customer, input customerInput) {
 	}
 	if input.OwnerID != nil {
 		customer.OwnerID = strings.TrimSpace(*input.OwnerID)
-	}
-	if input.Status != nil && (*input.Status == "active" || *input.Status == "inactive") {
-		customer.Status = *input.Status
 	}
 	if input.Tier != nil {
 		customer.Tier = strings.TrimSpace(*input.Tier)
@@ -6183,8 +6231,13 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 		initiative.LabelIDs = slices.Clone(*input.LabelIDs)
 	}
 	if input.ParentInitiativeIDs != nil {
-		if domain.InitiativeParentCycle(domain.InitiativeParents(data), initiative.ID, *input.ParentInitiativeIDs) {
+		parents := domain.InitiativeParents(data)
+		if domain.InitiativeParentCycle(parents, initiative.ID, *input.ParentInitiativeIDs) {
 			return fmt.Errorf("%w: initiative hierarchy cannot contain a cycle", errInvalid)
+		}
+		added := slices.DeleteFunc(slices.Clone(*input.ParentInitiativeIDs), func(id string) bool { return slices.Contains(parents[initiative.ID], id) })
+		if domain.InitiativeNestingTooDeep(parents, initiative.ID, added) {
+			return errInitiativeNesting
 		}
 		for _, id := range *input.ParentInitiativeIDs {
 			if id == initiative.ID || !slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool { return item.ID == id }) {

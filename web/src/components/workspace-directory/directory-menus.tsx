@@ -15,6 +15,8 @@ export interface DirectoryFilterChoice {
   icon?: ReactNode;
   keywords?: string;
   person?: User;
+  /** The label is workspace data (a status or person name): never machine-translated. */
+  entity?: boolean;
 }
 
 export interface DirectoryFilterGroup {
@@ -25,7 +27,22 @@ export interface DirectoryFilterGroup {
   selectionMode?: "multiple" | "single";
   separatorBefore?: boolean;
   /** Linear's free-form value submenu (e.g. a number): a single input; Enter applies it and closes the menu. */
-  input?: { placeholder: string; numeric?: boolean; onSubmit: (value: string) => void };
+  input?: {
+    placeholder: string;
+    numeric?: boolean;
+    onSubmit: (value: string) => void;
+    /** Choices offered for the typed value (e.g. "greater than or equals $1,000"); picking one calls `onChoose`. */
+    options?: (value: string) => DirectoryFilterInputOption[];
+    onChoose?: (optionId: string, value: string) => void;
+  };
+  /** Overrides the menu's `hideSearch` for this group's submenu (Linear shows "Filter…" on some submenus only). */
+  hideSearch?: boolean;
+}
+
+export interface DirectoryFilterInputOption {
+  id: string;
+  label: ReactNode;
+  icon?: ReactNode;
 }
 
 export function DirectoryFilterMenu({
@@ -194,6 +211,7 @@ function FilterGroup({
   submenuClassName?: string;
 }) {
   const [query, setQuery] = useState("");
+  const searchHidden = group.hideSearch ?? hideSearch;
   const choices = (group.choices ?? []).filter((choice) =>
     `${choice.label} ${choice.keywords ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   );
@@ -219,7 +237,7 @@ function FilterGroup({
               sideOffset={5}
               collisionPadding={8}
             >
-              <DirectoryFilterInput input={group.input} onDone={onClose}/>
+              <DirectoryFilterInput icon={group.icon} input={group.input} onDone={onClose}/>
             </DropdownMenu.SubContent>
           </DropdownMenu.Portal>
         </DropdownMenu.Sub>
@@ -237,10 +255,10 @@ function FilterGroup({
             <DropdownMenu.SubContent data-flow-motion="floating"
               className={`workspace-directory-filter-submenu ${submenuClassName}`.trim()}
               sideOffset={5}
-              alignOffset={hideSearch && !query ? -7 : 0}
+              alignOffset={searchHidden && !query ? -7 : 0}
               collisionPadding={8}
             >
-              <DirectoryFilterSearch hidden={hideSearch && !query} label="Filter…" query={query} submenu onQuery={setQuery}/>
+              <DirectoryFilterSearch hidden={searchHidden && !query} label="Filter…" query={query} submenu onQuery={setQuery}/>
               <div className="workspace-directory-filter-menu__items">
                 {choices.map((choice) =>
                   group.selectionMode === "single" ? (
@@ -297,24 +315,37 @@ function DirectoryFilterSearch({ autoFocus = false, hidden = false, label, onQue
   }} placeholder={label} value={query}/>{shortcut && <kbd>{shortcut}</kbd>}</label>
 }
 
-function DirectoryFilterInput({ input, onDone }: { input: NonNullable<DirectoryFilterGroup["input"]>; onDone: () => void }) {
+function DirectoryFilterInput({ icon, input, onDone }: { icon?: ReactNode; input: NonNullable<DirectoryFilterGroup["input"]>; onDone: () => void }) {
   const [value, setValue] = useState("");
   const ref = useRef<HTMLInputElement>(null);
   // Radix focuses the submenu itself after it opens; the field takes focus right after so typing goes into it.
   useEffect(() => { const timer = window.setTimeout(() => ref.current?.focus()); return () => window.clearTimeout(timer); }, []);
   const valid = input.numeric ? /^\d+$/.test(value.trim()) : Boolean(value.trim());
-  return <label className="workspace-directory-filter-menu__search is-input"><input aria-label={input.placeholder} inputMode={input.numeric ? "numeric" : undefined} onChange={event => setValue(input.numeric ? event.target.value.replace(/[^\d]/g, "") : event.target.value)} onKeyDown={event => {
-    if (event.key === 'Enter') {
-      event.preventDefault(); event.stopPropagation();
-      if (!valid) return;
-      input.onSubmit(value.trim());
-      onDone();
-    } else if (!['Escape', 'Tab'].includes(event.key)) event.stopPropagation();
-  }} placeholder={input.placeholder} ref={ref} value={value}/></label>
+  const options = input.options?.(value.trim()) ?? [];
+  const choose = (id: string) => { input.onChoose?.(id, value.trim()); onDone(); };
+  return <>
+    <label className="workspace-directory-filter-menu__search is-input"><input aria-label={input.placeholder} inputMode={input.numeric ? "numeric" : undefined} onChange={event => setValue(input.numeric && !input.options ? event.target.value.replace(/[^\d]/g, "") : event.target.value)} onKeyDown={event => {
+      if (event.key === 'Enter') {
+        event.preventDefault(); event.stopPropagation();
+        if (input.options) { if (options[0]) choose(options[0].id); return; }
+        if (!valid) return;
+        input.onSubmit(value.trim());
+        onDone();
+      } else if (event.key === 'ArrowDown' && options.length) {
+        event.preventDefault(); event.stopPropagation();
+        event.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>('[role^="menuitem"]')?.focus();
+      } else if (!['Escape', 'Tab'].includes(event.key)) event.stopPropagation();
+    }} placeholder={input.placeholder} ref={ref} value={value}/></label>
+    {options.length > 0 && <div className="workspace-directory-filter-menu__items">
+      {options.map(option => <DropdownMenu.Item className="workspace-directory-filter-menu__choice" key={option.id} onSelect={() => choose(option.id)}>
+        {option.icon ?? icon}<span className="workspace-directory-filter-menu__choice-label">{option.label}</span>
+      </DropdownMenu.Item>)}
+    </div>}
+  </>
 }
 
 function DirectoryChoiceContent({ choice }: { choice: DirectoryFilterChoice }) {
-  return <>{choice.icon}<span className="workspace-directory-filter-menu__choice-label">{choice.label}</span>{choice.meta && <small>{choice.meta}</small>}</>
+  return <>{choice.icon}<span className="workspace-directory-filter-menu__choice-label" data-i18n-ignore={choice.entity || undefined}>{choice.label}</span>{choice.meta && <small>{choice.meta}</small>}</>
 }
 
 export interface DirectoryPropertyOption<T extends string> {

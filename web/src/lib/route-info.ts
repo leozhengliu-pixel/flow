@@ -23,7 +23,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & Partial<Pick<BootstrapData, "savedViews">> & {
+> & Partial<Pick<BootstrapData, "savedViews" | "customers">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -99,7 +99,7 @@ export function routeInfo(
     if (project) {
       const tab =
         route.tab && route.tab !== "overview"
-          ? ` › ${t(capitalize(route.tab))}`
+          ? ` › ${t(route.tab === "requests" ? "Customers" : capitalize(route.tab))}`
           : "";
       return {
         title: `${project.name}${tab}`,
@@ -108,6 +108,13 @@ export function routeInfo(
       };
     }
     return { title: t("Project"), pinnedTitle: t("Project"), icon: "project" };
+  }
+
+  if (route.kind === "customer") {
+    const customer = data?.customers?.find((item) => route.customerSlugId.endsWith(item.id.slice(-12)));
+    return customer
+      ? { title: customer.name, pinnedTitle: customer.name, icon: "customers" }
+      : { title: t("Customers"), pinnedTitle: t("Customers"), icon: "customers" };
   }
 
   if (route.kind === "settings") {

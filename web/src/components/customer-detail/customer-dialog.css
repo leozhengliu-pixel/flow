@@ -1,8 +1,8 @@
 /*
- * Create / edit customer modal, like Linear's (580px wide; header 12px 16px
- * 12px 24px; body 16px 20px with 16px between sections; two 1fr columns 16px
- * apart; 13px/500 labels 4px above 30px inputs; footer 12px with Cancel and
- * the primary action 12px apart).
+ * Create / edit customer modal, like Linear's (580px wide, 21px radius; header
+ * 12px 16px 12px 24px; body 16px 20px with 24px between sections; two 1fr
+ * columns 16px apart; 13px/500 labels in a 24px line 4px above 30px inputs;
+ * footer 12px with Cancel and the primary action 12px apart).
  */
 .dialog-content.customer-form {
   width: min(580px, calc(100vw - 32px));
@@ -11,6 +11,7 @@
   flex-direction: column;
   padding: 0;
   overflow: hidden;
+  border-radius: 21px;
   color: var(--theme-text-primary);
 }
 .customer-form > form { min-height: 0; display: flex; flex-direction: column; }
@@ -28,10 +29,12 @@
 .customer-form > .dialog-close svg { width: 14px; height: 14px; }
 
 .customer-form__body { min-height: 0; overflow: auto; display: flex; flex-direction: column; padding: 16px 20px; }
-.customer-form__section { margin-bottom: 16px; }
+.customer-form__section { margin-bottom: 24px; }
 .customer-form__section:last-child { margin-bottom: 0; }
 .customer-form__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; width: 100%; }
 .customer-form__field { min-width: 0; }
+/* The reference's field sections are 59px (label 24 + 4 + control 30 + 1). */
+.customer-form__grid > .customer-form__field { padding-bottom: 1px; }
 .customer-form__field > label,
 .customer-form__field > .customer-form__label,
 .customer-form__domains-header > label {
@@ -40,7 +43,7 @@
   color: var(--form-label-fg);
   font-size: 13px;
   font-weight: 500;
-  line-height: normal;
+  line-height: 24px;
 }
 
 .customer-form input:not([type="file"]) {
@@ -71,11 +74,16 @@
   color: var(--theme-text-primary);
   font: 450 12px/normal var(--font);
 }
+/* Linear's Status / Tier selects: no border, a 0.5px ring with a soft shadow; Owner keeps the input border plus the ring. */
+.customer-form .customer-form__select { box-shadow: var(--create-pill-ring); }
+.customer-form .customer-form__select:not(.is-value) { border-color: var(--form-control-border); }
+.customer-form .customer-form__select.is-value { border-color: transparent; font-size: 13px; font-weight: 400; }
+.customer-form .customer-form__select:not(.is-value) > span:first-child > span { font-size: 13px; font-weight: 450; }
+.customer-form .customer-form__select .customer-form__status-icon { margin: 0 2px 0 4px; flex: 0 0 8px; }
+.customer-form .customer-form__select .customer-form__tier-icon { flex: 0 0 14px; }
 .customer-form .customer-form__select:hover,
 .customer-form .customer-form__select[data-state="open"] { background: var(--theme-surface-hover); }
 .customer-form .customer-form__select .avatar { width: 16px; height: 16px; flex: 0 0 16px; }
-.customer-form__dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: var(--theme-text-tertiary); }
-.customer-form__dot[data-status="active"] { background: var(--success); }
 
 .customer-form__number { position: relative; }
 .customer-form__number > span {
@@ -83,10 +91,13 @@
   top: 50%;
   left: 12px;
   transform: translateY(-50%);
-  color: var(--theme-text-secondary);
-  font-size: 12px;
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  font-weight: 450;
+  line-height: normal;
   pointer-events: none;
 }
+.customer-form .customer-form__number > input:not([type="file"]) { height: 32px; }
 
 .customer-form__logo-row { display: flex; align-items: center; gap: 16px; }
 .customer-form__logo { position: relative; flex: 0 0 auto; }
@@ -113,7 +124,7 @@
 .customer-form__logo-drop > svg { width: 16px; height: 16px; }
 .customer-form__logo-overlay {
   position: absolute;
-  inset: 4px;
+  inset: 0;
   display: grid;
   place-items: center;
   border-radius: 3px;
@@ -122,7 +133,7 @@
   opacity: 0;
   transition: opacity .15s;
 }
-.customer-form__logo-overlay > svg { width: 14px; height: 14px; }
+.customer-form__logo-overlay > svg { width: 16px; height: 16px; }
 .customer-form__logo-drop:hover > .customer-form__logo-overlay,
 .customer-form__logo-drop:focus-visible > .customer-form__logo-overlay { opacity: 1; }
 .customer-form__logo-clear {
@@ -141,21 +152,20 @@
   cursor: pointer;
 }
 .customer-form__logo-copy { min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.customer-form__logo-copy strong { color: var(--form-label-fg); font-size: 13px; font-weight: 500; }
-.customer-form__logo-copy small { color: var(--theme-text-secondary); font-size: 12px; }
+.customer-form__logo-copy strong { color: var(--form-label-fg); font-size: 13px; font-weight: 500; line-height: normal; }
+.customer-form__logo-copy small { color: var(--text-label); font-size: 13px; font-weight: 450; line-height: normal; }
 .customer-form__logo-copy .customer-form__error { margin: 0; }
 
 .customer-form__domains { display: flex; flex-direction: column; gap: 8px; }
 .customer-form__domains-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: -4px; }
-.customer-form__domains-header > label { margin-bottom: 4px; }
+.customer-form__domains-header > label { margin-bottom: 0; }
 .customer-form__link-button {
   height: 24px;
-  margin-bottom: 4px;
   padding: 0 8px;
   border: 0;
   border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: var(--theme-text-primary);
   font: 500 12px/normal var(--font);
   cursor: pointer;
 }
@@ -185,12 +195,13 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  margin-top: 6px;
   padding: 12px;
   border-top: .5px solid var(--theme-border);
 }
 .customer-form__button {
   height: 28px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: .5px solid transparent;
   border-radius: 9999px;
   background: var(--create-pill-bg);
@@ -200,7 +211,20 @@
   cursor: pointer;
 }
 .customer-form__button:hover { background: var(--create-pill-hover-bg); box-shadow: var(--create-pill-hover-ring); }
-.customer-form__button.is-primary { background: var(--accent-primary); box-shadow: none; color: var(--on-accent); }
-.customer-form__button.is-primary:hover { background: var(--accent-primary-hover); box-shadow: none; }
+.customer-form__button.is-primary { background: var(--accent-primary); box-shadow: var(--shadow); color: var(--on-accent); }
+.customer-form__button.is-primary:hover { background: var(--accent-primary-hover); }
 .customer-form__button:disabled { opacity: .6; cursor: default; }
 .customer-form__button:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--focus-ring); }
+
+/* Linear's modal copy (title, labels, currency, Add domain, Cancel) uses the base label colour. */
+.customer-form__header h2,
+.customer-form__field > label,
+.customer-form__field > .customer-form__label,
+.customer-form__domains-header > label,
+.customer-form__logo-copy strong,
+.customer-form__number > span,
+.customer-form__link-button,
+.customer-form__button:not(.is-primary) { color: var(--text); }
+/* Linear's fast-create modal is rounder than other dialogs (21px). */
+html:root[data-theme] body .dialog-content.customer-form,
+html:root body .dialog-content.customer-form { border-radius: 21px; }

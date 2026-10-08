@@ -4,6 +4,7 @@ import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanc
 import { DATE_FILTER_FIELDS, dateFilterThreshold, localDay, parseDateFilterValue } from './issue-date-filter'
 import { triageIntelligenceQueryNode } from './triage-intelligence-filter'
 import { agentSessionStatesFor } from '@/lib/agent-members'
+import { customerNumberQueryValue, isCustomerNumberComparison } from './customer-filter'
 
 /**
  * Translate a filter-bar filter into the server query vocabulary (`compileIssueFilter`), so every
@@ -28,6 +29,11 @@ export function filterToQueryNode(filter: MyIssuesAppliedFilter, context: IssueF
       : filter.field === 'labels' ? { field: 'labels', operator: 'includesAll', values }
         : values.length === 1 ? positiveNode(filter.field, values, context) : { and: values.map(value => positiveNode(filter.field, [value], context)) }
     return filter.operator === 'excludesAll' ? { not: all } : all
+  }
+  // Number filters (Customer count ≥ 3) send the comparison inside the value: `customer-count:gte:3`.
+  if (isCustomerNumberComparison(filter.operator)) {
+    const comparison = filter.operator
+    return { field: 'customerId', operator: 'in', values: values.map(value => customerNumberQueryValue(value, comparison)) }
   }
   const node = positiveNode(filter.field, values, context, filter.operator === 'before' || filter.operator === 'after' ? filter.operator : undefined)
   return filter.operator === 'isNot' ? { not: node } : node

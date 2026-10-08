@@ -256,7 +256,10 @@ function sortValue(project: ProjectPageItem, ordering: string, projectStatuses: 
   if (ordering === 'Target date') return project.targetDate ?? '9999-12-31'
   if (ordering === 'Created') return project.createdAt ?? ''
   if (ordering === 'Updated') return project.updatedAt ?? ''
-  if (ordering === 'Customer count' || ordering === 'Customer revenue' || ordering === 'Important count') return 0
+  // Linear's customer orderings: most customers / revenue / important customers first (descending by default).
+  if (ordering === 'Customer count') return -(project.customerCount ?? 0)
+  if (ordering === 'Customer revenue') return -(project.customerRevenues ?? []).reduce((sum, value) => sum + value, 0)
+  if (ordering === 'Important count') return -(project.importantCustomerIds?.length ?? 0)
   if (ordering === 'Status') {
     const status = statusForProject(project, projectStatuses)
     const index = status ? projectStatuses.findIndex(candidate => candidate.id === status.id) : -1

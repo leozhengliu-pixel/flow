@@ -2,7 +2,7 @@ import { insightAggregations, type InsightAggregation } from './insight-interact
 
 export type SavedViewInsightMeasure = 'issueCount' | 'cycleTime' | 'leadTime' | 'issueAge' | 'timeInStatus'
 export type SavedViewInsightDimension =
-  | 'status' | 'statusType' | 'assignee' | 'agent' | 'agentSession' | 'creator' | 'priority' | 'label' | `labelGroup:${string}` | 'template' | 'externalSource'
+  | 'status' | 'statusType' | 'assignee' | 'agent' | 'agentSession' | 'creator' | 'priority' | 'label' | `labelGroup:${string}` | 'customer' | 'template' | 'externalSource'
   | 'project' | 'initiative' | 'projectLabel' | `projectLabelGroup:${string}` | 'cycle' | 'addedToCycle'
   | 'createdDate' | 'completedDate' | 'canceledDate' | 'startedDate' | 'dueDate' | 'burnUp'
 export interface SavedViewInsightsConfig {
@@ -15,6 +15,8 @@ export interface SavedViewInsightsConfig {
   hideEmptySegment?: boolean
   /** Linear's "Hide <No value>" for the slice (`hideEmptyDimension`): drops the slice's empty value. */
   hideEmptySlice?: boolean
+  /** Linear's "Hide Unknown customer" (`hideUnknownCustomer`) when the slice or segment is Customer. */
+  hideUnknownCustomer?: boolean
   colors: 'status' | 'auto'
   aggregation?: InsightAggregation
   aggregations?: InsightAggregation[]
@@ -27,7 +29,7 @@ export const DEFAULT_INSIGHTS: SavedViewInsightsConfig = {
 }
 
 const MEASURES: SavedViewInsightMeasure[] = ['issueCount', 'cycleTime', 'leadTime', 'issueAge', 'timeInStatus']
-const DIMENSIONS = ['status', 'statusType', 'assignee', 'agent', 'agentSession', 'creator', 'priority', 'label', 'template', 'externalSource', 'project', 'initiative', 'projectLabel', 'cycle', 'addedToCycle', 'createdDate', 'completedDate', 'canceledDate', 'startedDate', 'dueDate', 'burnUp']
+const DIMENSIONS = ['status', 'statusType', 'assignee', 'agent', 'agentSession', 'creator', 'priority', 'label', 'customer', 'template', 'externalSource', 'project', 'initiative', 'projectLabel', 'cycle', 'addedToCycle', 'createdDate', 'completedDate', 'canceledDate', 'startedDate', 'dueDate', 'burnUp']
 
 export function isInsightMeasure(value: unknown): value is SavedViewInsightMeasure { return typeof value === 'string' && MEASURES.includes(value as SavedViewInsightMeasure) }
 export function isInsightDimension(value: unknown): value is SavedViewInsightDimension { return typeof value === 'string' && (DIMENSIONS.includes(value) || /^(labelGroup|projectLabelGroup):.+/.test(value)) }
@@ -44,6 +46,7 @@ export function parseInsightsConfig(value: Record<string, unknown> | undefined |
     ...(typeof source.showArchived === 'boolean' ? { showArchived: source.showArchived } : {}),
     ...(typeof source.hideEmptySegment === 'boolean' ? { hideEmptySegment: source.hideEmptySegment } : {}),
     ...(typeof source.hideEmptySlice === 'boolean' ? { hideEmptySlice: source.hideEmptySlice } : {}),
+    ...(typeof source.hideUnknownCustomer === 'boolean' ? { hideUnknownCustomer: source.hideUnknownCustomer } : {}),
     ...(source.colors === 'status' || source.colors === 'auto' ? { colors: source.colors } : {}),
     ...(insightAggregations.includes(source.aggregation as InsightAggregation) ? { aggregation: source.aggregation as InsightAggregation } : {}),
     // Linear lets every percentile be switched off ("None").
@@ -57,12 +60,12 @@ export function parseInsightsConfig(value: Record<string, unknown> | undefined |
 
 /** Stable comparison key: key order and absent-vs-default flags never make a config "dirty". */
 export function insightsConfigKey(config: SavedViewInsightsConfig) {
-  return JSON.stringify([config.measure, config.timeInStatusIds, config.slice, config.segment, config.showArchived, Boolean(config.hideEmptySegment), Boolean(config.hideEmptySlice), config.colors, config.aggregation ?? null, config.aggregations ?? null, config.latencyScale ?? null])
+  return JSON.stringify([config.measure, config.timeInStatusIds, config.slice, config.segment, config.showArchived, Boolean(config.hideEmptySegment), Boolean(config.hideEmptySlice), Boolean(config.hideUnknownCustomer), config.colors, config.aggregation ?? null, config.aggregations ?? null, config.latencyScale ?? null])
 }
 
 const EMPTY_LABELS: Partial<Record<SavedViewInsightDimension, string>> = {
   assignee: 'Unassigned', agent: 'No Agent', creator: 'External', initiative: 'No Initiative', project: 'No Project', cycle: 'No Cycle',
-  label: 'No Label', projectLabel: 'No Project Label', priority: 'No Priority', template: 'No Template', externalSource: 'No Source', agentSession: 'No session',
+  label: 'No Label', customer: 'No customer', projectLabel: 'No Project Label', priority: 'No Priority', template: 'No Template', externalSource: 'No Source', agentSession: 'No session',
 }
 
 /** Linear's `getEmptyDimensionLabel`: the chip in "Hide <value>", or undefined when the dimension always has a value (statuses, dates). */
@@ -86,7 +89,7 @@ export function percentileShare(aggregation: InsightAggregation) { return ({ p25
 const ACROSS_ALL: Record<string, string> = {
   status: 'Across all statuses', statusType: 'Across all status types', assignee: 'Across all assignees', agent: 'Across all agents', creator: 'Across all creators',
   label: 'Across all labels', labelGroup: 'Across all label groups', cycle: 'Across all cycles', project: 'Across all projects', priority: 'Across all priorities',
-  initiative: 'Across all initiatives', template: 'Across all templates', externalSource: 'Across all external sources', agentSession: 'Across all agent sessions',
+  initiative: 'Across all initiatives', customer: 'Across all customers', template: 'Across all templates', externalSource: 'Across all external sources', agentSession: 'Across all agent sessions',
   projectLabel: 'Across all project labels', projectLabelGroup: 'Across all project label groups',
 }
 /** Linear's `getAllDimensionLabel`: the duration table's total row, e.g. "Across all assignees". */

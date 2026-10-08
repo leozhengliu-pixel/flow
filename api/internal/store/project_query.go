@@ -27,6 +27,9 @@ type ProjectRecordQuery struct {
 	AllowedTeamIDs []string
 	Admin          bool
 	Filters        []ProjectDirectoryFilter
+	// CustomerSummaries backs "customers" filters (Linear's Customers blocks).
+	// Not part of the cache key: the summaries follow from the workspace data.
+	CustomerSummaries map[string]*ProjectCustomerSummary `json:"-"`
 }
 
 type ProjectDirectoryFilter struct {
@@ -260,12 +263,16 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 	if strings.TrimSpace(query.Workspace) == "" {
 		return page, ErrIssueQuery
 	}
-	if cached, ok := s.cacheGetProjectQuery(ctx, query); ok {
+	// Customer filters read live request summaries, which the query cache key does not cover.
+	cacheable := !slices.ContainsFunc(query.Filters, func(filter ProjectDirectoryFilter) bool { return filter.Field == "customers" })
+	if cached, ok := s.cacheGetProjectQuery(ctx, query); cacheable && ok {
 		return cached, nil
 	}
 	if projects, ok := s.projectSnapshot(query.Workspace); ok {
 		page = filterProjectDirectory(projects, query)
-		s.cacheSetProjectQuery(ctx, query, page)
+		if cacheable {
+			s.cacheSetProjectQuery(ctx, query, page)
+		}
 		return page, nil
 	}
 	limit := query.Limit
@@ -328,7 +335,7 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 		if search != "" && !strings.Contains(strings.ToLower(project.Name), search) && !strings.Contains(strings.ToLower(project.SlugID), search) && !strings.Contains(strings.ToLower(project.Summary), search) {
 			continue
 		}
-		if !projectDirectoryFiltersMatch(project, query.Filters) {
+		if !projectDirectoryFiltersMatch(project, query.Filters, query.CustomerSummaries) {
 			continue
 		}
 		if matched < offset {
@@ -356,7 +363,9 @@ func (s *SQLiteStore) QueryProjectDirectory(ctx context.Context, query ProjectRe
 	if page.HasMore {
 		page.NextCursor = encodeProjectCursor(offset + len(page.Items))
 	}
-	s.cacheSetProjectQuery(ctx, query, page)
+	if cacheable {
+		s.cacheSetProjectQuery(ctx, query, page)
+	}
 	return page, nil
 }
 
@@ -422,7 +431,7 @@ func filterProjectDirectory(projects []domain.Project, query ProjectRecordQuery)
 		if search != "" && !strings.Contains(strings.ToLower(project.Name), search) && !strings.Contains(strings.ToLower(project.SlugID), search) && !strings.Contains(strings.ToLower(project.Summary), search) {
 			continue
 		}
-		if !projectDirectoryFiltersMatch(project, query.Filters) {
+		if !projectDirectoryFiltersMatch(project, query.Filters, query.CustomerSummaries) {
 			continue
 		}
 		if matched < offset {
@@ -450,8 +459,14 @@ func filterProjectDirectory(projects []domain.Project, query ProjectRecordQuery)
 	return page
 }
 
-func projectDirectoryFiltersMatch(project domain.Project, filters []ProjectDirectoryFilter) bool {
+func projectDirectoryFiltersMatch(project domain.Project, filters []ProjectDirectoryFilter, customers map[string]*ProjectCustomerSummary) bool {
 	for _, filter := range filters {
+		if filter.Field == "customers" {
+			if matched, err := MatchProjectCustomerFilter(customers[project.ID], filter.Operator, filter.Values); err != nil || !matched {
+				return false
+			}
+			continue
+		}
 		matched := false
 		for _, value := range filter.Values {
 			if projectDirectoryValueMatches(project, filter.Field, value) {

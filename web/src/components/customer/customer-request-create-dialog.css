@@ -1,0 +1,11 @@
+.customer-request-create-dialog {
+  position: fixed;
+  z-index: 701;
+  top: 15vh;
+  left: 50%;
+  box-sizing: border-box;
+  width: min(640px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  outline: none;
+}
+.customer-request-create-dialog .embedded-customer-need-form__surface { box-shadow: var(--pk-card-shadow); }

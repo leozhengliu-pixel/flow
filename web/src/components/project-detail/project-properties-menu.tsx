@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Building2, Plus, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
 import { LabelIcon, MembersIcon, SlackIcon } from '@/components/issue/issue-icons'
 import { Avatar } from '@/components/issue/issue-row'
@@ -29,16 +29,15 @@ type Props = Pick<ProjectDetailProps, 'initiatives'|'labels'|'labelGroups'|'proj
   integrationConnections?: ProjectDetailProps['integrationConnections']
   save: (input: ProjectMutationInput) => Promise<void>
   onUpdateProject: ProjectDetailProps['onUpdate']
-  /** Reveals the hidden Customers row on the overview; omitted when the row is already visible or the feature is off. */
-  onAddCustomer?: () => void
 }
 
 /**
  * Overview "…" menu, matching Linear's 261px menu: Members (P then M), Labels (P then L), Connect existing
  * Slack channel…. Flow additionally offers Initiatives when the workspace has any (the sidebar hides that row
- * while the project has none) and, last, Customer request…. Dates and dependencies live in the details sidebar.
+ * while the project has none). The Customers row is always on the overview, like Linear. Dates and dependencies live
+ * in the details sidebar.
  */
-export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, labelGroups, project, users, save, onCreateLabel, onAddCustomer, integrationConnections = [] }: Props) {
+export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, labelGroups, project, users, save, onCreateLabel, integrationConnections = [] }: Props) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [query,setQuery] = useState('')
@@ -64,7 +63,6 @@ export function ProjectPropertiesMenu({ featureFlags, initiatives, labels, label
         {visible('Labels') && !labelIds.length && <ProjectSubmenu label="Labels" icon={<LabelIcon size={16}/>} shortcut="P then L" searchable className="property-command-surface property-command-project-labels project-property-submenu"><ProjectLabelMenuContent options={projectLabelOptions(labels,labelGroups)} selectedIds={labelIds} onChoose={id => void save({labelIds:toggleGroupedLabelIds(labelIds,id,labels)})} onCreate={onCreateLabel ? async (name,groupId) => { const created = await onCreateLabel(name,groupId); await save({labelIds:toggleGroupedLabelIds(labelIds,created.id,[...labels,created])}) } : undefined} onClose={() => setOpen(false)}/></ProjectSubmenu>}
         {featureFlags?.initiatives !== false && visible('Initiatives') && initiatives.length > 0 && <ProjectSubmenu label="Initiatives" icon={<ViewGlyph icon="Initiative" color="currentColor"/>} shortcut="P then N" alignOffset={-30.5} className="property-command-surface property-command-standard project-property-submenu is-initiatives">{close => <PropertyMenu embedded hideSearch multiple label="Initiatives" options={initiativePropertyOptions(initiatives, project.initiatives ?? [])} selectedIds={project.initiatives ?? []} searchPlaceholder="Change initiatives…" searchShortcut="P, then N" onChange={id => void save({initiatives:toggle(project.initiatives ?? [],id)})} onOpenChange={next => { if (!next) close() }}/>}</ProjectSubmenu>}
         {!project.slackChannelId && visible('Connect existing Slack channel…') && <ProjectMenuItem label="Connect existing Slack channel…" icon={<SlackIcon size={16}/>} onSelect={()=>setSlackOpen(true)}/>}
-        {onAddCustomer && visible('Customer request…') && <ProjectMenuItem label="Customer request…" icon={<Building2 size={16}/>} onSelect={onAddCustomer}/>}
       </DropdownMenu.Content></DropdownMenu.Portal>
     </DropdownMenu.Root>
     <ProjectSlackDialog open={slackOpen} onOpenChange={setSlackOpen} project={project} connections={integrationConnections} onSave={save}/>

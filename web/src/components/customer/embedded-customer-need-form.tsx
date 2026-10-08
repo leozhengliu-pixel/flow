@@ -1,10 +1,17 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Building2, Link2, X } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
-import { PropertyMenu } from '@/components/property/property-menu'
-import { createCustomer, createCustomerRequest } from '@/lib/api'
+import { confirmAction } from '@/components/ui/action-dialog-service'
+import { LinearDropdownMenuContent, LinearMenuItem, LinearMenuOptions, type LinearMenuOption } from '@/components/ui/row-context-menu'
+import { FlowTooltip } from '@/components/ui/tooltip'
+import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
+import { useI18n } from '@/i18n/i18n'
+import { createCustomerRequest, updateCustomerRequest, uploadCustomerRequestAttachment } from '@/lib/api'
 import type { BootstrapData, Customer, CustomerRequest } from '@/types/flow'
+import { CustomerLogo } from './customer-logo'
+import { AttachIcon, ClearIcon, RequestPlusIcon, SourceLinkIcon } from './customer-request-glyphs'
+import { IMPORTANT_PRIORITY, looksLikeUrl, normalizeSourceUrl, sourceHost } from './customer-request-model'
 import './embedded-customer-need-form.css'
 
 export type EmbeddedCustomerNeedHost = 'issuePage' | 'projectPage' | 'customerPage'
@@ -14,18 +21,28 @@ export type EmbeddedCustomerNeedFormProps = {
   host: EmbeddedCustomerNeedHost
   issueId?: string
   projectId?: string
-  /** Prefill / lock customer when on customer page. */
+  /** Prefill and lock the customer (customer page, "New request from …"); hides the customer button. */
   customer?: Customer
+  /** Customer chosen in the "Select customer…" step. */
+  initialCustomerId?: string
+  /** Name typed in the "Select customer…" step: the customer is created when the request is saved. */
+  pendingCustomerName?: string
+  /** Link pasted in the "Select customer…" step ("Add link as source"). */
+  initialSourceUrl?: string
+  /** Edit an existing request ("Edit request"): no customer button, the button reads Save. */
+  request?: CustomerRequest
+  /** `card` (default) draws the bordered surface; `inline` sits inside an expanded row. */
+  variant?: 'card' | 'inline'
   onCreated?: (request: CustomerRequest) => void | Promise<void>
+  onSaved?: (request: CustomerRequest) => void | Promise<void>
   onCancel?: () => void
   className?: string
 }
 
-const IMPORTANT_PRIORITY = 1
-
 /**
- * Embedded customer request composer for issues and projects: a customer pill, the request text,
- * a source link, and Cancel / Create. ⌘↵ creates, Esc cancels.
+ * Linear's customer request composer (AdditionalCustomerNeedCreateForm.J): customer button, the
+ * request text, then Source, attach, Cancel and Create. ⌘↵ submits; Esc and Cancel discard, asking
+ * first when something was entered. A customer typed in the picker is created with the request.
  */
 export function EmbeddedCustomerNeedForm({
   data,
@@ -33,149 +50,244 @@ export function EmbeddedCustomerNeedForm({
   issueId,
   projectId,
   customer: lockedCustomer,
+  initialCustomerId,
+  pendingCustomerName,
+  initialSourceUrl,
+  request,
+  variant = 'card',
   onCreated,
+  onSaved,
   onCancel,
   className,
 }: EmbeddedCustomerNeedFormProps) {
-  const [customerId, setCustomerId] = useState(lockedCustomer?.id ?? '')
-  const [pendingName, setPendingName] = useState('')
-  const [body, setBody] = useState('')
-  const [sourceUrl, setSourceUrl] = useState('')
+  const { t } = useI18n()
+  const editing = Boolean(request)
+  const hideCustomer = editing || Boolean(lockedCustomer)
+  const initial = useMemo(() => ({
+    customerId: lockedCustomer?.id ?? request?.customerId ?? initialCustomerId ?? '',
+    pendingName: pendingCustomerName?.trim() ?? '',
+    body: request?.body ?? '',
+    sourceUrl: request?.sourceUrl ?? initialSourceUrl ?? '',
+  }), []) // eslint-disable-line react-hooks/exhaustive-deps
+  const [customerId, setCustomerId] = useState(initial.customerId)
+  const [pendingName, setPendingName] = useState(initial.pendingName)
+  const [body, setBody] = useState(initial.body)
+  const [sourceUrl, setSourceUrl] = useState(initial.sourceUrl)
+  const [files, setFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const mac = isMacPlatform()
 
-  const customers = useMemo(() => [...data.customers].sort((a, b) => a.name.localeCompare(b.name)), [data.customers])
-  const selected = lockedCustomer ?? data.customers.find((item) => item.id === customerId)
-  const customerLabel = selected?.name ?? (pendingName || 'Customer')
+  const selected = lockedCustomer ?? data.customers.find(item => item.id === customerId)
+  const hasChanges = body.trim() !== initial.body.trim() || sourceUrl !== initial.sourceUrl || files.length > 0 || (!hideCustomer && (customerId !== initial.customerId || pendingName !== initial.pendingName))
 
-  useEffect(() => { bodyRef.current?.focus() }, [])
+  // Linear focuses the editor with the caret at the end.
+  useEffect(() => {
+    const field = bodyRef.current
+    if (!field) return
+    field.focus({ preventScroll: false })
+    field.setSelectionRange(field.value.length, field.value.length)
+  }, [])
+  useLayoutEffect(() => {
+    const field = bodyRef.current
+    if (!field) return
+    field.style.height = '0px'
+    field.style.height = `${Math.min(300, Math.max(72, field.scrollHeight))}px`
+  }, [body])
 
-  const submit = async () => {
+  const discard = async () => {
+    if (!onCancel) return
+    if (hasChanges && !await confirmAction(t('Discard this request?'), { description: t('Confirm that you want to discard this customer request.'), confirmLabel: t('Discard'), danger: true })) return
+    onCancel()
+  }
+
+  const submit = async (event?: FormEvent) => {
+    event?.preventDefault()
     if (saving) return
-    if (!selected && !pendingName.trim()) {
-      toast.error('Select a customer for this request')
-      return
-    }
-    if (!body.trim() && !sourceUrl.trim()) {
-      toast.error('Provide a request or specify a source')
+    const text = body.trim()
+    const customerChosen = Boolean(selected || pendingName)
+    if (!customerChosen && !text && !sourceUrl && !files.length) {
+      toast.error(t('Please select a customer, provide a request, or specify a source.'))
       return
     }
     setSaving(true)
     try {
-      const customer = selected ?? await createCustomer({ name: pendingName.trim() })
-      const request = await createCustomerRequest({
-        customerId: customer.id,
-        body: body.trim(),
-        source: 'manual',
-        sourceUrl: sourceUrl.trim() || undefined,
-        issueId,
-        projectId,
-      })
-      toast.success('Customer request added')
-      await onCreated?.(request)
-      setBody('')
-      setSourceUrl('')
-      if (!lockedCustomer) {
-        setCustomerId('')
-        setPendingName('')
+      let saved: CustomerRequest
+      if (request) {
+        saved = await updateCustomerRequest(request.id, { body: text, sourceUrl })
+      } else {
+        saved = await createCustomerRequest({
+          customerId: selected?.id,
+          customerName: selected ? undefined : pendingName || undefined,
+          body: text,
+          source: 'manual',
+          sourceUrl: sourceUrl || undefined,
+          issueId,
+          projectId: issueId ? undefined : projectId,
+        })
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save customer request')
+      if (files.length) {
+        const attachments = []
+        for (const file of files) attachments.push(await uploadCustomerRequestAttachment(saved.id, file))
+        saved = { ...saved, attachments: [...(saved.attachments ?? []), ...attachments] }
+      }
+      toast.success(t(editing ? 'Customer request updated' : 'Customer request added'))
+      if (editing) await onSaved?.(saved)
+      else await onCreated?.(saved)
+    } catch {
+      toast.error(t('Failed to save customer request'))
     } finally {
       setSaving(false)
     }
   }
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    // Keys from the portaled pickers bubble here through React; only handle the form's own fields.
+  const onKeyDown = (event: KeyboardEvent<HTMLFormElement>) => {
+    // Keys from portaled menus bubble here through React; only handle the form's own fields.
     if (event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return
     if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void submit() }
-    else if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel() }
+    else if (event.key === 'Escape' && onCancel) { event.preventDefault(); event.stopPropagation(); void discard() }
+    else if (event.key.toLowerCase() === 'u' && event.shiftKey && (mac ? event.metaKey : event.ctrlKey)) { event.preventDefault(); fileRef.current?.click() }
   }
 
   return (
-    <div className={`embedded-customer-need-form${className ? ` ${className}` : ''}`} data-host={host} onKeyDown={onKeyDown}>
-      {!lockedCustomer && (
-        <PropertyMenu
-          label="Customer"
-          ariaLabel="Customer"
-          value={customerLabel}
-          valueIsEntityName={Boolean(selected || pendingName)}
-          selectedId={customerId}
-          triggerRole="button"
-          triggerClassName="embedded-customer-need-form__customer"
-          trigger={<><CustomerMark customer={selected}/><span data-i18n-ignore={selected || pendingName ? true : undefined}>{customerLabel}</span></>}
-          searchPlaceholder="Search customers…"
-          emptyLabel="No customers"
-          createOptionLabel={(name) => `Create new customer: “${name}”`}
-          onCreate={async (name) => { setCustomerId(''); setPendingName(name); bodyRef.current?.focus() }}
-          options={customers.map((item) => ({ id: item.id, label: item.name, icon: <CustomerMark customer={item}/>, i18nIgnore: true }))}
-          onChange={(id) => { setCustomerId(id === customerId ? '' : id); setPendingName(''); bodyRef.current?.focus() }}
+    <form className={`embedded-customer-need-form is-${variant}${className ? ` ${className}` : ''}`} data-host={host} onKeyDown={onKeyDown} onSubmit={event => void submit(event)}>
+      <div className="embedded-customer-need-form__surface">
+        {!hideCustomer && (
+          <CustomerButton
+            customers={data.customers}
+            selected={selected}
+            pendingName={pendingName}
+            onPick={(id, name) => {
+              setCustomerId(id ?? '')
+              setPendingName(name ?? '')
+              requestAnimationFrame(() => bodyRef.current?.focus())
+            }}
+          />
+        )}
+        <textarea
+          ref={bodyRef}
+          aria-label={t('Request')}
+          className="embedded-customer-need-form__body"
+          data-customer-hidden={hideCustomer || undefined}
+          placeholder={t('Add request details')}
+          value={body}
+          onChange={event => setBody(event.target.value)}
         />
-      )}
-      <textarea
-        ref={bodyRef}
-        aria-label="Request"
-        className="embedded-customer-need-form__body"
-        placeholder="Add request details"
-        value={body}
-        onChange={(event) => setBody(event.target.value)}
-      />
-      <div className="embedded-customer-need-form__footer">
-        <SourceButton value={sourceUrl} onChange={setSourceUrl}/>
-        <span className="embedded-customer-need-form__spacer"/>
-        {onCancel && <button className="embedded-customer-need-form__cancel" type="button" onClick={onCancel}>Cancel</button>}
-        <button className="embedded-customer-need-form__create" disabled={saving} type="button" onClick={() => void submit()}>Create</button>
+        {files.length > 0 && (
+          <div className="embedded-customer-need-form__files">
+            {files.map((file, index) => (
+              <span className="embedded-customer-need-form__file" key={`${file.name}-${index}`} data-i18n-ignore>
+                <AttachIcon size={12}/><span>{file.name}</span>
+                <button type="button" aria-label={t('Remove attachment')} onClick={() => setFiles(current => current.filter((_, item) => item !== index))}><ClearIcon size={10}/></button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="embedded-customer-need-form__footer">
+          {editing && request?.source && request.source !== 'manual' ? <span/> : <SourceButton value={sourceUrl} onChange={setSourceUrl}/>}
+          <div className="embedded-customer-need-form__actions">
+            <FlowTooltip label={t('Attach images, files, or videos')} shortcut={mac ? '⌘⇧U' : 'Ctrl Shift U'}>
+              <button className="embedded-customer-need-form__icon-button" type="button" aria-label={t('Attach images, files, or videos')} onClick={() => fileRef.current?.click()}><AttachIcon size={14}/></button>
+            </FlowTooltip>
+            <input ref={fileRef} hidden multiple type="file" onChange={event => { const picked = Array.from(event.target.files ?? []); if (picked.length) setFiles(current => [...current, ...picked]); event.target.value = '' }}/>
+            {onCancel && (
+              <FlowTooltip label={t('Discard')} shortcut="Esc">
+                <button className="embedded-customer-need-form__cancel" type="button" aria-label={t('Discard')} onClick={() => void discard()}>{t('Cancel')}</button>
+              </FlowTooltip>
+            )}
+            <FlowTooltip label={<>{t('Press')} <kbd>{mac ? '⌘' : 'Ctrl'}</kbd><kbd>↵</kbd> {t(editing ? 'to save request' : 'to create request')}</>}>
+              <button className="embedded-customer-need-form__create" disabled={saving} type="submit">{t(editing ? 'Save' : 'Create')}</button>
+            </FlowTooltip>
+          </div>
+        </div>
       </div>
-    </div>
+    </form>
   )
 }
 
-function CustomerMark({ customer }: { customer?: Pick<Customer, 'name' | 'logoUrl'> }) {
-  if (customer?.logoUrl) return <img className="embedded-customer-need-form__logo" src={customer.logoUrl} alt=""/>
-  return <Building2 aria-hidden="true" className="embedded-customer-need-form__logo" size={14}/>
+/**
+ * The composer's customer button (Linear's `customer-select-button`): the customer's logo and
+ * name — or the pending name, or "Customer" — opening a "Search customers…" menu. Picking the
+ * current customer again clears it.
+ */
+function CustomerButton({ customers, selected, pendingName, onPick }: { customers: readonly Customer[]; selected?: Customer; pendingName: string; onPick: (customerId?: string, pendingName?: string) => void }) {
+  const { t } = useI18n()
+  const label = selected?.name ?? (pendingName || t('Customer'))
+  const options: LinearMenuOption[] = [
+    ...(pendingName ? [{ id: PENDING_ID, label: pendingName, translate: false, icon: <CustomerLogo customer={null} size={16}/>, detail: t('New customer') }] : []),
+    ...[...customers].sort((left, right) => left.name.localeCompare(right.name)).map(customer => ({ id: customer.id, label: customer.name, translate: false, keywords: customer.domains?.join(' '), icon: <CustomerLogo customer={customer} size={16}/> })),
+  ]
+  const selectedIds = new Set(selected ? [selected.id] : pendingName ? [PENDING_ID] : [])
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild>
+      <button className="embedded-customer-need-form__customer" id="customer-select-button" type="button" aria-label={t('Search customers')}>
+        <CustomerLogo customer={selected ?? null} size={14}/>
+        <span data-i18n-ignore={selected || pendingName ? true : undefined}>{label}</span>
+      </button>
+    </DropdownMenu.Trigger>
+    <LinearDropdownMenuContent label={t('Search customers…')} className="embedded-customer-need-menu">
+      <LinearMenuOptions
+        options={options}
+        selected={selectedIds}
+        placeholder="Search customers…"
+        emptyLabel={customers.length ? 'No results' : 'Type a name to create your first customer'}
+        onChoose={id => {
+          if (id === PENDING_ID) onPick(undefined, pendingName)
+          else onPick(id === selected?.id ? undefined : id)
+        }}
+        footer={query => query && !looksLikeUrl(query) && query.toLocaleLowerCase() !== pendingName.toLocaleLowerCase()
+          ? <LinearMenuItem icon={<RequestPlusIcon/>} label={t('Create new customer: "{name}"').replace('{name}', query)} translate={false} onSelect={() => onPick(undefined, query)}/>
+          : null}
+      />
+    </LinearDropdownMenuContent>
+  </DropdownMenu.Root>
 }
 
-/** "Source" pill that edits the request's source link in a small popover. */
+const PENDING_ID = '__pending-customer'
+
+/** "Source" button with Linear's link popover: "Paste link…", Enter saves, the × clears. */
 function SourceButton({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState(value)
-  const host = useMemo(() => {
-    const trimmed = value.trim()
-    if (!trimmed) return undefined
-    try { return new URL(trimmed.includes('://') ? trimmed : `https://${trimmed}`).hostname } catch { return undefined }
-  }, [value])
+  const host = value ? sourceHost(value) : undefined
   const save = () => {
-    const trimmed = draft.trim()
-    if (!trimmed) { onChange(''); setOpen(false); return }
-    const url = trimmed.includes('://') ? trimmed : `https://${trimmed}`
-    try { new URL(url) } catch { toast.error('Invalid URL, please enter a valid URL'); return }
+    const url = normalizeSourceUrl(draft)
+    if (url === undefined) { toast.error(t('Invalid URL, please enter a valid URL')); return }
     onChange(url)
     setOpen(false)
   }
-  return <Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setDraft(value) }}>
-    <Popover.Trigger asChild>
-      <button className="embedded-customer-need-form__source" type="button" title={value || 'Add source'} aria-label={value ? `Source ${value}` : 'Add source'}>
-        <Link2 size={14} aria-hidden="true"/><span>{host ? `via ${host}` : 'Source'}</span>
-      </button>
-    </Popover.Trigger>
+  return <Popover.Root open={open} onOpenChange={next => { if (next) { setDraft(value); setOpen(true) } else save() }}>
+    <FlowTooltip label={value || t('Add source')} disabled={open}>
+      <Popover.Trigger asChild>
+        <button className="embedded-customer-need-form__source" type="button" aria-haspopup="dialog" aria-label={t('Add source')}>
+          <SourceLinkIcon size={14}/><span data-i18n-ignore={host ? true : undefined}>{host ? `via ${host}` : t('Source')}</span>
+        </button>
+      </Popover.Trigger>
+    </FlowTooltip>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" className="embedded-customer-need-source-popover" side="bottom" align="start" sideOffset={4} collisionPadding={10}>
+      <Popover.Content data-flow-motion="floating" className="embedded-customer-need-source-popover" side="bottom" align="start" sideOffset={4} collisionPadding={10}
+        onEscapeKeyDown={event => { event.preventDefault(); setOpen(false) }}
+        onKeyDown={event => event.stopPropagation()}>
         <input
           autoFocus
-          aria-label="Source URL"
-          placeholder="Paste a link…"
+          aria-label={t('Source URL')}
+          placeholder={t('Paste link…')}
           value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); save() } }}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); save() } }}
         />
-        {draft && <button type="button" aria-label="Clear source" onClick={() => { setDraft(''); onChange('') }}><X size={14}/></button>}
+        <span className="embedded-customer-need-source-popover__divider" aria-hidden="true"/>
+        <FlowTooltip label={t('Remove link')}>
+          <button type="button" aria-label={t('Clear source')} onClick={() => { setDraft(''); onChange(''); setOpen(false) }}><ClearIcon size={12}/></button>
+        </FlowTooltip>
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
 }
 
-/** Map Important toggle ↔ REST priority (1 = important). */
+/** Map Important ↔ REST priority (1 = important). */
 export function importantFromPriority(priority?: number) {
   return (priority ?? 0) >= IMPORTANT_PRIORITY
 }

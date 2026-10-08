@@ -15,6 +15,7 @@ import type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, M
 import { useMyIssuesSelection } from '@/components/my-issues/use-my-issues-state'
 import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updateFilterValues } from '@/components/my-issues/my-issues-filter-types'
 import { PagedIssueList } from './paged-issue-list'
+import { orderingCommandLabel, useRegisterDisplayCommands } from '@/components/command/display-commands'
 import { fetchIssueRecord, listIssueRecords, updateStructuredTeamSettings } from '@/lib/api'
 import { toast } from 'sonner'
 import { IssueExplorerSurface } from './issue-explorer-surface'
@@ -291,6 +292,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     onSaveDefault: saveDisplayAsViewDefault,
     saveDefaultLabel: savedView ? 'Save as default for view' : 'Save as team default',
   }
+  // ⌘K: Linear's customer display commands (Grouping › Customer, View ordering › By customer count…).
+  useRegisterDisplayCommands(data.workspaceSettings.featureFlags['customer-requests'] !== false ? () => [
+    { id: 'display-grouping-customer', kind: 'grouping', path: ['Grouping', 'Customer'], value: 'customer', current: display.grouping === 'customer', run: () => changeDisplay({ ...display, grouping: 'customer', subGrouping: display.subGrouping === 'customer' ? 'none' : display.subGrouping }) },
+    ...(data.issueCollectionPaged ? [] : [{ id: 'display-subgrouping-customer', kind: 'subGrouping' as const, path: ['Sub-grouping', 'Customer'] as [string, string], value: 'customer', current: display.subGrouping === 'customer', run: () => changeDisplay({ ...display, subGrouping: 'customer', grouping: display.grouping === 'customer' ? 'none' : display.grouping }) }]),
+    { id: 'display-ordering-customer-count', kind: 'ordering', path: ['View ordering', orderingCommandLabel('Customer count')], value: 'customerCount', current: display.ordering === 'customerCount', run: () => changeDisplay({ ...display, ordering: 'customerCount', orderDirection: undefined }) },
+    { id: 'display-ordering-customer-revenue', kind: 'ordering', path: ['View ordering', orderingCommandLabel('Customer revenue')], value: 'customerRevenue', current: display.ordering === 'customerRevenue', run: () => changeDisplay({ ...display, ordering: 'customerRevenue', orderDirection: undefined }) },
+  ] : undefined)
   const changeDetails = (open: boolean) => { setDetailsOpen(open); if (open) setInsightsOpen(false); writeValue(detailsKey, String(open)) }
   const changeInsights = (open: boolean) => { setInsightsOpen(open); if (open) { setDetailsOpen(false); setPreviewIssueId(undefined) } }
   const openIssueFromExplorer = (row: MyIssuesRowData) => {

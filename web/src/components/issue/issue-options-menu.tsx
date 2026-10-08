@@ -27,13 +27,15 @@ import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { confirmAction } from '@/components/ui/action-dialog-service'
-import { SelectControl } from '@/components/ui/select-control'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import './issue-options-select.css'
 import './issue-options-menu.css'
 import { IssueReleasePicker } from './issue-release-picker'
 import { useI18n } from '@/i18n/i18n'
 import { IssueActionGlyph } from './issue-action-glyphs'
+import { CustomerRequestCreateDialog } from '@/components/customer/customer-request-create-dialog'
+import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
+import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { RecurrenceDialog } from './recurrence-picker'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
@@ -77,7 +79,7 @@ interface IssueOptionsMenuProps {
 }
 
 type Submenu = 'release' | 'create' | 'mark' | 'copy' | 'convert' | 'remind'
-type DialogName = 'link' | 'customer' | 'review' | 'related' | 'reminder' | 'loop' | 'history' | 'recurrence' | null
+type DialogName = 'link' | 'review' | 'related' | 'reminder' | 'loop' | 'history' | 'recurrence' | null
 
 export function IssueOptionsMenu({
   issue,
@@ -101,9 +103,7 @@ export function IssueOptionsMenu({
   const [dialog, setDialog] = useState<DialogName>(null)
   const [linkUrl, setLinkUrl] = useState('')
   const [linkTitle, setLinkTitle] = useState('')
-  const [customerId, setCustomerId] = useState('')
-  const [customerName, setCustomerName] = useState('')
-  const [customerBody, setCustomerBody] = useState(issue.title)
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false)
   const [reviewQuery, setReviewQuery] = useState('')
   const [relatedKind, setRelatedKind] = useState<RelatedIssueCreationKind>('issue')
   const [relatedTitle, setRelatedTitle] = useState('')
@@ -263,14 +263,10 @@ export function IssueOptionsMenu({
               <Option icon={<CalendarIcon/>} label="Due date" shortcut="Shift D" nested="due" anchor={anchors.due} expanded={datePickerOpen} onHover={() => openNested('due')} onSelect={() => openNested('due', true)}/>
               {data?.workspaceSettings.featureFlags.releases !== false && <Option icon={<ReleasesIcon/>} label="Release" shortcut="Option R" nested="release" anchor={anchors.release} expanded={submenu === 'release'} onHover={() => openNested('release')} onSelect={() => openNested('release', true)}/>}
               <Option icon={<Link/>} label="Add link..." shortcut="Ctrl L" onSelect={beginAddLink}/>
-              {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut="Ctrl R" onSelect={() => {
-                // The issue page opens its inline composer; elsewhere fall back to the dialog.
-                const opened = !window.dispatchEvent(new CustomEvent('flow:add-customer-request', { detail: { issueId: issue.id }, cancelable: true }))
-                if (opened) { closeMenu(); return }
-                setCustomerId(data?.customers[0]?.id ?? '')
-                setCustomerName('')
-                setCustomerBody(issue.title)
-                openDialog('customer')
+              {data?.workspaceSettings.featureFlags['customer-requests'] !== false && <Option icon={<UserRoundPlus/>} label="Add customer request..." shortcut={isMacPlatform() ? 'Ctrl R' : 'Ctrl Option R'} onSelect={() => {
+                // The issue page shows "Select customer…" and its inline composer; elsewhere the composer opens in a dialog.
+                closeMenu()
+                if (!requestIssueCustomerRequest(issue.id)) setCustomerDialogOpen(true)
               }}/>}
               {Boolean(data?.reviews.length) && <Option icon={<GitPullRequest/>} label="Add pull request..." onSelect={() => { setReviewQuery(''); openDialog('review') }}/>}
               <Option icon={<FilePlus2/>} label="Add document..." onSelect={() => actions && void perform(actions.addDocument, 'Document created')}/>
@@ -369,12 +365,7 @@ export function IssueOptionsMenu({
       <label>Title <small>(optional)</small><input value={linkTitle} onChange={event => setLinkTitle(event.target.value)}/></label>
       <IssueOptionsDialogFooter busy={busy} disabled={!linkUrl.trim()} action="Add link" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addLink({ url: linkUrl.trim(), title: linkTitle.trim() || undefined }), 'Link added')}/>
     </ActionDialog>
-    <ActionDialog open={dialog === 'customer'} title={`Add customer request to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
-      {data?.customers.length ? <label>Customer<SelectControl label="Customer" value={customerId} onChange={setCustomerId} options={[...data.customers.map(customer=>({value:customer.id,label:customer.name,entityName:true})),{value:'',label:'Create new customer...'}]}/></label> : null}
-      {!customerId && <label>Customer name<input autoFocus value={customerName} onChange={event => setCustomerName(event.target.value)}/></label>}
-      <label>Request<textarea value={customerBody} onChange={event => setCustomerBody(event.target.value)}/></label>
-      <IssueOptionsDialogFooter busy={busy} disabled={!customerBody.trim() || (!customerId && !customerName.trim())} action="Add request" onCancel={() => setDialog(null)} onSubmit={() => actions && void perform(() => actions.addCustomerRequest({ customerId: customerId || undefined, customerName: customerName.trim() || undefined, body: customerBody.trim() }), 'Customer request added')}/>
-    </ActionDialog>
+    {data && <CustomerRequestCreateDialog open={customerDialogOpen} onOpenChange={setCustomerDialogOpen} data={data} issueId={issue.id}/>}
     <ActionDialog open={dialog === 'review'} title={`Add pull request to ${issue.identifier}`} onOpenChange={value => !value && setDialog(null)}>
       <label className="issue-review-filter"><Search/><input autoFocus value={reviewQuery} placeholder="Filter pull requests…" onChange={event => setReviewQuery(event.target.value)}/></label>
       <div className="issue-review-results" role="listbox">{data?.reviews.filter(review => !review.issueIds.includes(issue.id)).filter(review => `${review.title} ${review.repositoryOwner}/${review.repositoryName}`.toLowerCase().includes(reviewQuery.trim().toLowerCase())).map(review => <button type="button" role="option" key={review.id} disabled={busy} onClick={() => actions && void perform(() => actions.linkReview(review.id), 'Pull request linked')}><GitPullRequest/><span><strong>{review.title}</strong><small>{review.repositoryOwner}/{review.repositoryName} · #{review.number}</small></span></button>)}{!data?.reviews.some(review => !review.issueIds.includes(issue.id) && `${review.title} ${review.repositoryOwner}/${review.repositoryName}`.toLowerCase().includes(reviewQuery.trim().toLowerCase())) && <p>No pull requests found</p>}</div>

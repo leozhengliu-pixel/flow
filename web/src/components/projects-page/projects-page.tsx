@@ -2,7 +2,10 @@ import { startTransition, useCallback, useEffect, useMemo, useRef, useState } fr
 import { toast } from 'sonner'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
-import type { Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectMilestone, ProjectRelation, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import type { BootstrapData, Customer, Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectMilestone, ProjectRelation, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'
+import { customerRowDataFor, isCustomerNumberComparison, matchesCustomerNumberValues, matchesCustomerValues, projectCustomerRowData } from '@/components/issue-explorer/customer-filter'
+import { customerFilterOptions } from '@/components/issue-explorer/issue-explorer-model'
+import type { ProjectCustomerFilterChoice } from './project-customer-filter'
 import { currentProjectMilestone, milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { SavedViewEditor, SavedViewMenu, type SavedViewTarget } from '@/components/issue-explorer/saved-view-editor'
 import { NewProjectDialog, type NewProjectDraft, type NewProjectMilestoneDraft } from './new-project-dialog'
@@ -24,7 +27,7 @@ import { labelsForResource } from '@/lib/labels'
 import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
-import { listProjectRecords } from '@/lib/api'
+import { listProjectRecords, type ProjectCustomerSummary, type ProjectQueryPage } from '@/lib/api'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
 
 /** The row's one-line summary falls back to the description as plain text (descriptions are stored as HTML). */
@@ -106,6 +109,8 @@ export type ProjectsPageProps = {
   scopeTeamId?: string
   /** Workspace feature flags; feature-dependent display properties (Initiatives, Customers) follow them. */
   featureFlags?: Record<string, boolean>
+  /** Customers and their requests: the Customers / Customer revenue properties, orderings and filters. */
+  customerData?: Pick<BootstrapData, 'customers' | 'customerRequests' | 'viewer' | 'users'> & Partial<Pick<BootstrapData, 'customerStatuses' | 'customerTiers' | 'workspaceSettings'>>
   teamSettings?: TeamHierarchySettings
   teamParents?: Record<string, string>
   viewerId?: string
@@ -180,6 +185,7 @@ export function ProjectsPage({
   savedViews = [],
   scopeTeamId,
   featureFlags,
+  customerData,
   teamSettings,
   teamParents,
   viewerId,
@@ -220,6 +226,14 @@ export function ProjectsPage({
   const [directoryCursor, setDirectoryCursor] = useState<string>()
   const [directoryHasMore, setDirectoryHasMore] = useState(false)
   const directoryRequest = useRef<AbortController | null>(null)
+  // Per-project customers from the project directory (the project-list bootstrap carries no requests).
+  const [directoryCustomers, setDirectoryCustomers] = useState<{ summaries: Record<string, ProjectCustomerSummary>; customers: Customer[] }>({ summaries: {}, customers: [] })
+  const mergeDirectoryCustomers = useCallback((page: ProjectQueryPage, reset: boolean) => setDirectoryCustomers(current => {
+    const base = reset ? { summaries: {}, customers: [] as Customer[] } : current
+    const customers = [...base.customers]
+    for (const customer of page.customers ?? []) if (!customers.some(item => item.id === customer.id)) customers.push(customer)
+    return { summaries: { ...base.summaries, ...page.customerSummaries }, customers }
+  }), [])
   useEffect(() => {
     if (projects.length) setPagedProjects(projects)
   }, [projects])
@@ -234,7 +248,7 @@ export function ProjectsPage({
       setDirectoryError(null)
       try {
         const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100 }, controller.signal)
-        if (!cancelled) startTransition(() => setPagedProjects(page.items))
+        if (!cancelled) startTransition(() => { setPagedProjects(page.items); mergeDirectoryCustomers(page, true) })
         if (!cancelled) { setDirectoryCursor(page.nextCursor); setDirectoryHasMore(page.hasMore) }
       } catch (error) {
         if (!cancelled && !(error instanceof DOMException && error.name === 'AbortError')) setDirectoryError(error instanceof Error ? error.message : 'Could not load projects')
@@ -244,7 +258,7 @@ export function ProjectsPage({
     }
     const frame = requestAnimationFrame(() => { void load() })
     return () => { cancelled = true; cancelAnimationFrame(frame); controller.abort() }
-  }, [projectFilterQuery, projects.length, scopeTeamId, workspaceKey])
+  }, [mergeDirectoryCustomers, projectFilterQuery, projects.length, scopeTeamId, workspaceKey])
   const loadMoreProjects = useCallback(async () => {
     if (!directoryHasMore || !directoryCursor || directoryLoadingMore) return
     const controller = new AbortController()
@@ -252,7 +266,7 @@ export function ProjectsPage({
     setDirectoryLoadingMore(true)
     try {
       const page = await listProjectRecords({ teamId: scopeTeamId, archived: 'all', filter: projectFilterQuery, limit: 100, cursor: directoryCursor }, controller.signal)
-      startTransition(() => setPagedProjects(current => [...current, ...page.items.filter(item => !current.some(existing => existing.id === item.id))]))
+      startTransition(() => { setPagedProjects(current => [...current, ...page.items.filter(item => !current.some(existing => existing.id === item.id))]); mergeDirectoryCustomers(page, false) })
       setDirectoryCursor(page.nextCursor)
       setDirectoryHasMore(page.hasMore)
     } catch (error) {
@@ -260,7 +274,7 @@ export function ProjectsPage({
     } finally {
       setDirectoryLoadingMore(false)
     }
-  }, [directoryCursor, directoryHasMore, directoryLoadingMore, projectFilterQuery, scopeTeamId])
+  }, [directoryCursor, directoryHasMore, directoryLoadingMore, mergeDirectoryCustomers, projectFilterQuery, scopeTeamId])
   const projectCollection = pagedProjects.length || projects.length === 0 ? pagedProjects : projects
   const currentViewerId = viewerId ?? viewer?.id
   const onlineUserIds = useMemo(() => {
@@ -288,11 +302,24 @@ export function ProjectsPage({
     return map
   }, [projectCollection, projectRelations])
   const milestoneProgress = useMemo(() => milestoneProgressIndex(issues), [issues])
+  // Customers known to the page: the bootstrap's plus those the project directory returned.
+  const customerSource = useMemo(() => {
+    if (!customerData) return undefined
+    const known = customerData.customers ?? []
+    const extra = directoryCustomers.customers.filter(customer => !known.some(item => item.id === customer.id))
+    return extra.length ? { ...customerData, customers: [...known, ...extra] } : customerData
+  }, [customerData, directoryCustomers.customers])
+  const issueIdsByProject = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const issue of issues) if (issue.project?.id) map.set(issue.project.id, (map.get(issue.project.id) ?? new Set()).add(issue.id))
+    return map
+  }, [issues])
   const items = useMemo(() => scopedProjects.map(project => ({
     ...toPageItem(project, projectHref?.(project), itemIndexes, projectUpdates[project.id]?.[0], issues),
+    ...(customerSource ? projectCustomerFields(directoryCustomers.summaries[project.id] ? summaryRowData(directoryCustomers.summaries[project.id], customerSource) : projectCustomerRowData(project.id, issueIdsByProject.get(project.id) ?? new Set(), customerSource)) : {}),
     milestones: (project.milestones ?? []).map(milestone => ({ id: milestone.id, name: milestone.name, targetDate: milestone.targetDate, progress: milestoneProgress(project.id, milestone.id) })),
     blockedByIds: blockedByIds.get(project.id),
-  })), [blockedByIds, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects])
+  })), [blockedByIds, customerSource, directoryCustomers.summaries, issueIdsByProject, itemIndexes, issues, milestoneProgress, projectHref, projectUpdates, scopedProjects])
   // With the project-list projection the app store holds no projects, so the directory page
   // (pagedProjects) must absorb timeline edits itself or bars snap back until the next fetch.
   const syncPagedProject = useCallback((project: Project) => setPagedProjects(current => current.map(item => item.id === project.id ? project : item)), [])
@@ -354,6 +381,8 @@ export function ProjectsPage({
     targetDate: targetDateOptions(),
   }), [labelGroups, projectLabelGroupNames, projectLabels, statusOptions, users])
   const filterOptions = useMemo(() => projectFilterOptions(leadScopedItems, users, availableProjectStatuses, projectLabels, teams), [availableProjectStatuses, leadScopedItems, projectLabels, teams, users])
+  // Linear's Customers filter blocks (Customer name … Customer size), offered while Customer requests is on.
+  const customerOptions = useMemo(() => customerSource && featureFlags?.['customer-requests'] !== false ? customerFilterOptions(customerSource) : [], [customerSource, featureFlags])
   const saveTargets = useMemo<SavedViewTarget[]>(() => [
     { scope: 'personal', label: 'Personal' },
     { scope: 'workspace', label: 'Workspace' },
@@ -462,6 +491,7 @@ export function ProjectsPage({
     onNavigateNewView?.()
   }
   const addFilter = (label: string, option?: ProjectFilterOption) => {
+    if (label === 'Customers' && option) { addCustomerFilter(option as ProjectCustomerFilterChoice); return }
     const field = PROJECT_FILTER_FIELDS[label]
     if (!field) {
       toast.info(label === 'AI filter' ? 'AI filters require the Flow integration.' : `${label} is not available for the current project data.`)
@@ -474,6 +504,23 @@ export function ProjectsPage({
       if (!existing) return [...current, createProjectFilter(field, label, option)]
       if (existing.values.some(value => value.id === option.id)) return current
       return current.map(filter => filter.id === existing.id ? { ...filter, values: [...filter.values, option] } : filter)
+    })
+  }
+
+  // Customers blocks: a chip per block ("Customer name is Acme"); number blocks hold one comparison.
+  const addCustomerFilter = (option: ProjectCustomerFilterChoice) => {
+    const setTarget = bandActive && !viewEditor ? setExtraFilters : setProjectFilters
+    const value = { id: option.id, label: option.label, color: option.color }
+    setTarget(current => {
+      if (option.comparison) {
+        const next: ProjectFilter = { ...createProjectFilter('customers', option.filterLabel, value), operator: option.comparison }
+        const existing = current.find(filter => filter.field === 'customers' && filter.fieldLabel === option.filterLabel)
+        return existing ? current.map(filter => filter.id === existing.id ? { ...next, id: existing.id } : filter) : [...current, next]
+      }
+      const existing = current.find(filter => filter.field === 'customers' && filter.fieldLabel === option.filterLabel && filter.operator === 'is')
+      if (!existing) return [...current, createProjectFilter('customers', option.filterLabel, value)]
+      const values = existing.values.some(item => item.id === option.id) ? existing.values.filter(item => item.id !== option.id) : [...existing.values, value]
+      return values.length ? current.map(filter => filter.id === existing.id ? { ...filter, values } : filter) : current.filter(filter => filter.id !== existing.id)
     })
   }
 
@@ -526,6 +573,7 @@ export function ProjectsPage({
       onRemove={id => setExtraFilters(current => current.filter(filter => filter.id !== id))}
       commands={<SavedViewBandCommands canUpdate={Boolean(onUpdateSavedView)} onClear={() => setExtraFilters([])} onCreate={createViewFromBand} onUpdate={saveBandToView}/>}
       options={filterOptions}
+      customerOptions={customerOptions}
     /> : <ProjectsFilterBar
       filters={projectFilters}
       onAdd={() => document.querySelector<HTMLButtonElement>('.lp-projects__actions [aria-label="Add filter"]')?.click()}
@@ -534,12 +582,14 @@ export function ProjectsPage({
       onRemove={id => setProjectFilters(current => current.filter(filter => filter.id !== id))}
       onSave={!creatingView && !savedView ? beginSaveFilteredView : undefined}
       options={filterOptions}
+      customerOptions={customerOptions}
     />}
     filterCount={activeFilters.length + (insightFilter ? 1 : 0)}
     selectedFilters={bandActive && !viewEditor ? extraFilters : projectFilters}
     displayLabelGroups={projectLabelGroups.map(group => ({ id: group.id, name: group.name }))}
     filterOptions={Object.fromEntries(Object.entries(PROJECT_FILTER_FIELDS).map(([label, field]) => [label, filterOptions[field] ?? []]))}
     onAddFilter={addFilter}
+    customerFilterOptions={customerOptions}
     onSearchFilterOptions={async (field, query) => {
       if (field !== 'Specific project') return []
       const page = await listProjectRecords({ q: query, teamId: scopeTeamId, archived: 'all', limit: 100 })
@@ -915,6 +965,12 @@ function projectFiltersFromSavedView(view: SavedView | undefined, fallback: Proj
 }
 
 function matchesProjectFilter(item: ProjectPageItem, filter: ProjectFilter) {
+  if (filter.field === 'customers') {
+    const values = filter.values.map(value => value.id)
+    if (isCustomerNumberComparison(filter.operator)) return matchesCustomerNumberValues(item, values, filter.operator)
+    const matched = matchesCustomerValues(item, values)
+    return filter.operator === 'isNot' ? !matched : matched
+  }
   const matched = filter.values.some(value => projectValueMatches(item, filter.field, value.id))
   return filter.operator === 'is' ? matched : !matched
 }
@@ -943,3 +999,12 @@ function writeDraftFilters(key: string, filters: ProjectFilter[]) { try { sessio
 function removeDraftFilters(key: string) { try { sessionStorage.removeItem(key) } catch { /* best effort */ } }
 function bulkActionLabel(action: ProjectBulkAction) { const labels: Partial<Record<ProjectBulkAction, string>> = { edit: 'Project editing', initiatives: 'Initiatives', labels: 'Project labels', dependencies: 'Project dependencies', members: 'Project members', favorite: 'Favorites', subscribe: 'Subscriptions' }; return labels[action] ?? action }
 function exportProjectsCsv(projects: ProjectPageItem[], name: string) { const quote = (value: unknown) => `"${String(value ?? '').replaceAll('"', '""')}"`; const csv = [['Name', 'Status', 'Health', 'Priority', 'Lead', 'Start date', 'Target date'], ...projects.map(project => [project.name, project.status, project.health, project.priority, project.lead?.name ?? '', project.rawStartDate ?? '', project.rawTargetDate ?? ''])].map(row => row.map(quote).join(',')).join('\n'); const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' })); const link = document.createElement('a'); link.href = url; link.download = `${name.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '') || 'view'}.csv`; link.click(); URL.revokeObjectURL(url) }
+function projectCustomerFields({ settings, ...fields }: ReturnType<typeof projectCustomerRowData>) { return { ...fields, customerSettings: settings } }
+/** Row data from the directory's summary: customers resolved against the known catalog, unknown ones counted once. */
+function summaryRowData(summary: ProjectCustomerSummary, source: NonNullable<Parameters<typeof projectCustomerRowData>[2]>) {
+  const important = new Set(summary.customers.filter(customer => customer.important).map(customer => customer.id))
+  const requests = summary.customers.map(customer => ({ customerId: customer.id, projectId: '__summary__', priority: important.has(customer.id) ? 1 : 0 }))
+  const row = customerRowDataFor(() => true, { ...source, customerRequests: requests })
+  const unknown = row.hasUnknownCustomer || Boolean(summary.unknownCustomer)
+  return { ...row, hasUnknownCustomer: unknown, customerCount: row.customers.length + (unknown ? 1 : 0) }
+}
