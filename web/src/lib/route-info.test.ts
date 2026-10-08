@@ -99,3 +99,11 @@ describe("custom view titles", () => {
     expect(routeInfo({ kind: "team-saved-view", workspaceSlug: "w", teamKey: "T", viewId: "view-1", editing: true }, { savedViews }).title).toBe("Urgent > Edit");
   });
 });
+
+describe("customer page titles", () => {
+  it("names the browser tab after the customer, like the reference", () => {
+    const customers = [{ id: "customer_1791431475874274000", name: "Acme Corp" }] as BootstrapData["customers"];
+    expect(routeInfo({ kind: "customer", workspaceSlug: "w", customerSlugId: "acme-corp-475874274000" }, { customers }).title).toBe("Acme Corp");
+    expect(routeInfo({ kind: "customer", workspaceSlug: "w", customerSlugId: "missing-000000000000" }, { customers }).title).toBe("Customers");
+  });
+});

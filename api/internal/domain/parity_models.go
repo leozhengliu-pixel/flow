@@ -33,22 +33,24 @@ type DocumentContentDraft struct {
 	UpdatedAt    time.Time      `json:"updatedAt"`
 }
 type CustomerStatus struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Color      string     `json:"color"`
-	Position   float64    `json:"position"`
-	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Color       string     `json:"color"`
+	Position    float64    `json:"position"`
+	ArchivedAt  *time.Time `json:"archivedAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 type CustomerTier struct {
-	ID         string     `json:"id"`
-	Name       string     `json:"name"`
-	Color      string     `json:"color"`
-	Position   float64    `json:"position"`
-	ArchivedAt *time.Time `json:"archivedAt,omitempty"`
-	CreatedAt  time.Time  `json:"createdAt"`
-	UpdatedAt  time.Time  `json:"updatedAt"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Color       string     `json:"color"`
+	Position    float64    `json:"position"`
+	ArchivedAt  *time.Time `json:"archivedAt,omitempty"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
 }
 type ReleaseNote struct {
 	ID          string         `json:"id"`

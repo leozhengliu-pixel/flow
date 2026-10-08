@@ -1,0 +1,38 @@
+/**
+ * Chinese copy for the issue / project / initiative label settings pages (filter and display
+ * options, value columns, merge and convert actions). Merged into zhCN by translations.ts.
+ */
+export const labelSettingsZhCN: Record<string, string> = {
+  "No labels found": "未找到标签",
+  "No matching labels": "没有匹配的标签",
+  "Never applied": "从未使用",
+  "never applied": "从未使用",
+  "is not any of": "不是以下任一",
+  "Last applied on or after": "最近使用不早于",
+  "Last applied through": "最近使用截至",
+  "Last applied on {date}": "最近使用于 {date}",
+  "Created {date}": "创建于 {date}",
+  "Created by {name}": "由 {name} 创建",
+  "Archived on {date}": "归档于 {date}",
+  "Show team labels": "显示团队标签",
+  "Show archived": "显示已归档",
+  "Used by {count} team": "被 {count} 个团队使用",
+  "Used by {count} teams": "被 {count} 个团队使用",
+  "+ {count} more": "另外 {count} 个",
+  "SLA rules": "SLA 规则",
+  "Team triage rules": "团队分流规则",
+  "Move to group…": "移动到分组…",
+  "Change group": "更改分组",
+  "Convert to label group": "转换为标签分组",
+  "Convert to label": "转换为标签",
+  "Converted \"{name}\" to group": "已将“{name}”转换为分组",
+  "Converted \"{name}\" to label": "已将“{name}”转换为标签",
+  "View labeled initiatives": "查看带此标签的目标",
+  "Label archived": "标签已归档",
+  "\"{name}\" has been archived": "“{name}”已归档",
+  "Merge labels…": "合并标签…",
+  "Merge {count} labels?": "合并 {count} 个标签？",
+  "These labels will be merged into": "这些标签将合并到",
+  "The merged label will be applied to": "合并后的标签将应用到",
+  "Labels merged": "标签已合并",
+}

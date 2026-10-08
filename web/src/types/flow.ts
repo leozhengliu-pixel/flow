@@ -1913,6 +1913,7 @@ export interface CustomerStatus {
   id: UUID;
   name: string;
   color: string;
+  description?: string;
   position: number;
   archivedAt?: string;
   createdAt: string;
@@ -1922,6 +1923,7 @@ export interface CustomerTier {
   id: UUID;
   name: string;
   color: string;
+  description?: string;
   position: number;
   archivedAt?: string;
   createdAt: string;

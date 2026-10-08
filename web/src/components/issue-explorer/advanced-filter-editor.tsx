@@ -131,7 +131,7 @@ function AddFilterButton({ depth, filterOptions, onAddCondition, onAddGroup }: {
     onOpenChange={setOpen}
     options={filterOptions}
     onAddGroup={onAddGroup}
-    onToggle={(field, option) => onAddCondition(createCondition(field, option.filterLabel ?? ISSUE_FILTER_LABELS[field] ?? field, { value: option.id, valueLabel: option.label, color: option.color }, field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is'))}
+    onToggle={(field, option) => onAddCondition(createCondition(field, option.filterLabel ?? ISSUE_FILTER_LABELS[field] ?? field, { value: option.id, valueLabel: option.label, color: option.color }, option.comparison ?? (field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is')))}
     trigger={<button type="button" className={styles.addFilter} data-depth={depth} aria-label={t('Add filter')}><PlusIcon aria-hidden/><span>{t('Filter')}</span></button>}
   />
 }

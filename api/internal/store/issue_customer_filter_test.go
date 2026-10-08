@@ -17,7 +17,7 @@ func customerFilterFixture(t *testing.T) (*SQLiteStore, IssueRecordQuery) {
 		d.Customers = []domain.Customer{{ID: "c1", OwnerID: "owner", Status: "active", Tier: "gold", AnnualRevenue: 1000, Size: 12}, {ID: "c2", Status: "trial", Tier: "silver"}}
 		now := time.Now()
 		d.CustomerRequests = []domain.CustomerRequest{
-			{ID: "r1", IssueID: "issue_1", CustomerID: "c1"}, {ID: "r2", IssueID: "issue_1", CustomerID: "c1"}, {ID: "r3", IssueID: "issue_1", CustomerID: "c2"},
+			{ID: "r1", IssueID: "issue_1", CustomerID: "c1"}, {ID: "r2", IssueID: "issue_1", CustomerID: "c1", Priority: 1}, {ID: "r3", IssueID: "issue_1", CustomerID: "c2"},
 			{ID: "r4", IssueID: "issue_2", CustomerID: "c2"}, {ID: "r5", IssueID: "issue_33", CustomerID: "missing"}, {ID: "r6", IssueID: "issue_33", CustomerID: "missing2"},
 			{ID: "r7", IssueID: "issue_53156", CustomerID: "c1", ArchivedAt: &now}, {ID: "r8", ProjectID: "project_aut", CustomerID: "c1"},
 		}
@@ -172,5 +172,167 @@ func TestCustomerIndexLifecycleMigrationAndRollback(t *testing.T) {
 	}
 	if len(query("customer:c2")) != 1 {
 		t.Fatal("query decoded an unrelated issue")
+	}
+}
+
+func TestCustomerNumberFiltersAndOrdering(t *testing.T) {
+	repo, q := customerFilterFixture(t)
+	ids := func(filter IssueFilter) []string {
+		t.Helper()
+		query := q
+		query.Filter = IssueFilter{And: []IssueFilter{q.Filter, filter}}
+		query.IncludeTotal = true
+		page, err := repo.QueryIssueRecords(t.Context(), query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := []string{}
+		for _, item := range page.Items {
+			got = append(got, item.ID)
+		}
+		slices.Sort(got)
+		return got
+	}
+	for _, test := range []struct {
+		operator, value string
+		want            []string
+	}{
+		{"is", "customer-count:gte:2", []string{"issue_1"}},
+		{"is", "customer-count:eq:1", []string{"issue_2", "issue_33"}},
+		{"is", "customer-count:lte:0", []string{"issue_53156"}},
+		{"gte", "customer-count:2", []string{"issue_1"}},
+		{"is", "customer-important-count:gte:1", []string{"issue_1"}},
+		{"is", "customer-important-count:eq:0", []string{"issue_2", "issue_33", "issue_53156"}},
+		{"is", "customer-revenue:gte:500", []string{"issue_1"}},
+		{"is", "customer-revenue:lte:0", []string{"issue_1", "issue_2"}},
+		{"is", "customer-size:gte:10", []string{"issue_1"}},
+		{"neq", "customer-size:12", []string{"issue_1", "issue_2"}},
+	} {
+		got := ids(IssueFilter{Field: "customerId", Operator: test.operator, Values: []string{test.value}})
+		if !slices.Equal(got, test.want) {
+			t.Fatalf("%s %s: got %v want %v", test.operator, test.value, got, test.want)
+		}
+	}
+	if got := ids(IssueFilter{Not: &IssueFilter{Field: "customerId", Values: []string{"customer-count:gte:2"}}}); !slices.Equal(got, []string{"issue_2", "issue_33", "issue_53156"}) {
+		t.Fatalf("negated number filter: %v", got)
+	}
+	for _, node := range []IssueFilter{{Field: "customerId", Values: []string{"customer-count:gt:2"}}, {Field: "customerId", Values: []string{"customer-count:gte:many"}}, {Field: "customerId", Operator: "gte", Values: []string{"customer:c1"}}} {
+		if err := ValidateIssueFilter(node); !errors.Is(err, ErrIssueQuery) {
+			t.Fatalf("invalid number filter accepted: %+v", node)
+		}
+	}
+	for _, test := range []struct {
+		sort, direction string
+		want            []string
+	}{
+		{"customerCount", "desc", []string{"issue_1", "issue_33", "issue_2", "issue_53156"}},
+		{"customerRevenue", "desc", []string{"issue_1", "issue_53156", "issue_33", "issue_2"}},
+		{"customerImportantCount", "asc", []string{"issue_2", "issue_33", "issue_53156", "issue_1"}},
+	} {
+		query := q
+		query.Sort, query.Direction, query.Limit = test.sort, test.direction, 1
+		got := []string{}
+		for len(got) < 8 {
+			page, err := repo.QueryIssueRecords(t.Context(), query)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, item := range page.Items {
+				got = append(got, item.ID)
+			}
+			if !page.HasMore {
+				break
+			}
+			query.Cursor = page.NextCursor
+		}
+		if !slices.Equal(got, test.want) {
+			t.Fatalf("%s %s: got %v want %v", test.sort, test.direction, got, test.want)
+		}
+	}
+}
+
+func TestCustomerGroupingIsMultiMembership(t *testing.T) {
+	repo, q := customerFilterFixture(t)
+	q.GroupBy = "customer"
+	groups, err := repo.QueryIssueGroups(t.Context(), q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]int64{}
+	for _, group := range groups {
+		got[group.Value] = group.Count
+	}
+	want := map[string]int64{"c1": 1, "c2": 2, UnknownCustomerGroup: 1, "": 1}
+	if len(got) != len(want) {
+		t.Fatalf("groups %v want %v", got, want)
+	}
+	for value, count := range want {
+		if got[value] != count {
+			t.Fatalf("groups %v want %v", got, want)
+		}
+	}
+	for value, ids := range map[string][]string{"c2": {"issue_1", "issue_2"}, UnknownCustomerGroup: {"issue_33"}, "": {"issue_53156"}} {
+		query := q
+		group := value
+		query.GroupValue = &group
+		page, err := repo.QueryIssueRecords(t.Context(), query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		items := []string{}
+		for _, item := range page.Items {
+			items = append(items, item.ID)
+		}
+		slices.Sort(items)
+		if !slices.Equal(items, ids) {
+			t.Fatalf("group %q: got %v want %v", value, items, ids)
+		}
+	}
+}
+
+func TestProjectCustomerSummariesAndFilters(t *testing.T) {
+	repo, q := customerFilterFixture(t)
+	summaries, err := repo.ProjectCustomerSummaries(t.Context(), q.Workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	direct := summaries["project_aut"]
+	if direct == nil || !slices.ContainsFunc(direct.Customers, func(customer ProjectCustomer) bool { return customer.ID == "c1" && customer.Revenue == 1000 && customer.OwnerID == "owner" }) {
+		t.Fatalf("project request missing from summary: %+v", direct)
+	}
+	summary := &ProjectCustomerSummary{Customers: []ProjectCustomer{{ID: "c1", Important: true, OwnerID: "owner", Status: "active", Revenue: 1000, Size: 12}, {ID: "c2", Tier: "silver"}}, UnknownCustomer: true}
+	for _, test := range []struct {
+		operator string
+		values   []string
+		want     bool
+	}{
+		{"is", []string{"customer:c2"}, true}, {"isNot", []string{"customer:c2"}, false}, {"is", []string{"customer:"}, true},
+		{"is", []string{"customer-owner:owner"}, true}, {"is", []string{"customer-status:trial"}, false}, {"is", []string{"customer-tier:silver"}, true},
+		{"gte", []string{"customer-count:3"}, true}, {"eq", []string{"customer-important-count:1"}, true}, {"lte", []string{"customer-revenue:0"}, true}, {"gte", []string{"customer-size:13"}, false},
+	} {
+		got, err := MatchProjectCustomerFilter(summary, test.operator, test.values)
+		if err != nil || got != test.want {
+			t.Fatalf("%s %v: got %v err %v", test.operator, test.values, got, err)
+		}
+	}
+	if matched, _ := MatchProjectCustomerFilter(nil, "eq", []string{"customer-count:0"}); !matched {
+		t.Fatal("projects without requests have zero customers")
+	}
+	for _, values := range [][]string{{"customer-count:many"}, {"nope"}} {
+		if _, err := MatchProjectCustomerFilter(nil, "gte", values); err == nil {
+			t.Fatalf("invalid values accepted: %v", values)
+		}
+	}
+	page, err := repo.QueryProjectDirectory(t.Context(), ProjectRecordQuery{Workspace: q.Workspace, Admin: true, Limit: 100, Filters: []ProjectDirectoryFilter{{Field: "customers", Operator: "is", Values: []string{"customer:c1"}}}, CustomerSummaries: summaries})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(page.Items, func(project domain.Project) bool { return project.ID == "project_aut" }) {
+		t.Fatal("customer filter dropped the requesting project")
+	}
+	for _, project := range page.Items {
+		if matched, _ := MatchProjectCustomerFilter(summaries[project.ID], "is", []string{"customer:c1"}); !matched {
+			t.Fatalf("project %s does not request c1", project.ID)
+		}
 	}
 }

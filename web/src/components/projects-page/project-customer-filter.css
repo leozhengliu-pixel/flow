@@ -1,0 +1,11 @@
+/* Projects › Filter › Customers: the category list and its value / number panel (a third level). */
+.lp-projects-filter__nested.project-customer-filter { width: 215px; }
+.project-customer-filter .lp-projects-filter__values button.is-active,
+.project-customer-filter__values .lp-projects-filter__values button.is-active { background: var(--theme-control-active); }
+.project-customer-filter__icon { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; color: var(--theme-text-secondary); }
+.project-customer-filter__label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-customer-filter__chevron { margin-left: auto; color: var(--theme-text-tertiary); font-size: 8px; }
+.project-customer-filter__muted { color: var(--theme-text-secondary); }
+.lp-projects-filter__nested.project-customer-filter__values { width: 240px; right: calc(100% + 209px); left: auto; }
+.lp-projects-filter__nested.project-customer-filter__values.is-end { left: calc(100% + 209px); right: auto; }
+.project-customer-filter__values .lp-projects-filter__search { border-bottom: .5px solid var(--theme-border); }
