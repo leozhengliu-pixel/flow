@@ -482,11 +482,13 @@ function GitLabSetupForm({
           )}
         </div>
         <footer>
-          <button type="button" className="gitlab-settings-button" disabled={busy} onClick={onCancel}>
+          <button type="button" className="gitlab-settings-button" onClick={onCancel}>
             {t("Cancel")}
           </button>
+          {/* Linear keeps the label and adds the grid loader after it while connecting. */}
           <button type="submit" className="gitlab-settings-button primary" disabled={busy} aria-busy={busy || undefined}>
-            {busy ? t("Connecting…") : t("Connect")}
+            {t("Connect")}
+            {busy && <GridLoader variant="pong" size={16} label={t("Connecting…")} />}
           </button>
         </footer>
       </form>
@@ -745,8 +747,9 @@ function GitLabUpdateTokenDialog({
             <button type="button" className="gitlab-settings-button" disabled={busy} onClick={close}>
               {t("Cancel")}
             </button>
-            <button type="submit" className="gitlab-settings-button primary" disabled={busy || !token.trim()}>
+            <button type="submit" className="gitlab-settings-button primary" disabled={busy || !token.trim()} aria-busy={busy || undefined}>
               {t("Update token")}
+              {busy && <GridLoader variant="pong" size={16} label={t("Updating…")} />}
             </button>
           </footer>
         </form>

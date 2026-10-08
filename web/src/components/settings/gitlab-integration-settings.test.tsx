@@ -137,6 +137,20 @@ describe("GitLab integration settings", () => {
     expect(within(alert).getByText('{"message":"401 Unauthorized"}')).toBeInTheDocument();
   });
 
+  it("keeps the Connect label and shows the grid loader while connecting, like Linear", async () => {
+    const user = userEvent.setup();
+    api.connectGitLab.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await user.click(screen.getByRole("button", { name: "Enable" }));
+    await user.type(screen.getByLabelText("API access token"), FAKE_TOKEN);
+    await user.click(screen.getByRole("button", { name: "Connect" }));
+    const connect = await screen.findByRole("button", { name: /^Connect/ });
+    expect(connect).toBeDisabled();
+    expect(connect).toHaveAttribute("aria-busy", "true");
+    expect(within(connect).getByRole("status", { name: "Connecting…" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+  });
+
   it("shows the webhook step with URL, secret and triggers after connecting", async () => {
     const user = userEvent.setup();
     api.connectGitLab.mockResolvedValue({ ...gitlabConnection(), webhookSecret: "flow_glwh_fake", webhookPath: "/api/integrations/gitlab/webhook?workspace=workspace" });
