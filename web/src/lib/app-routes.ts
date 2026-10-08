@@ -9,7 +9,7 @@ import type {
 
 export type MyIssuesRouteView =
   "assigned" | "created" | "subscribed" | "activity" | "shared";
-export type ProjectRouteTab = "overview" | "activity" | "issues" | "new";
+export type ProjectRouteTab = "overview" | "activity" | "issues" | "requests" | "new";
 export type TeamIssuesRouteView = "active" | "backlog" | "all";
 export type ViewsResource = "issues" | "projects";
 export type InitiativesRouteView = "active" | "planned" | "all";
@@ -378,6 +378,7 @@ const PROJECT_TABS = new Set<ProjectRouteTab>([
   "overview",
   "activity",
   "issues",
+  "requests",
 ]);
 const TEAM_ISSUES_VIEWS = new Set<TeamIssuesRouteView>([
   "active",

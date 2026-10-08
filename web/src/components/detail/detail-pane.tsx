@@ -1,4 +1,6 @@
-import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, Plus, Repeat2, RotateCw, UserRound, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ExternalLink, FileText, GitPullRequest, Link2, Plus, Repeat2, RotateCw, X } from 'lucide-react'
+import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
+import { issueCustomerRowData } from '@/components/issue-explorer/customer-filter'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentPicker, IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
@@ -33,7 +35,7 @@ import { IssueTitleEditor } from '@/components/issue/issue-title-editor'
 import { AssigneePicker, PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
 import { CyclePicker, EstimatePicker, LabelPicker } from '@/components/issue/label-project-pickers'
 import { DetailLabelControl } from '@/components/property/detail-label-control'
-import { EmbeddedCustomerNeedForm } from '@/components/customer/embedded-customer-need-form'
+import { IssueCustomerRequests } from '@/components/customer/issue-customer-requests'
 import './issue-customer-needs.css'
 import { IssueProjectPicker } from '@/components/issue/issue-project-picker'
 import type { NewProjectDraft } from '@/components/projects-page/new-project-dialog'
@@ -44,7 +46,7 @@ import { RecurrenceDialog } from '@/components/issue/recurrence-picker'
 import { useRecurrenceSummary } from '@/components/issue/use-recurrence-summary'
 import { IssueReleasePicker } from '@/components/issue/issue-release-picker'
 import { IssueSubscriberPicker } from '@/components/issue/issue-subscriber-picker'
-import { useEffect, useRef, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useIssueAutosave } from '@/components/issue/editor/use-issue-autosave'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import type { SubIssueInput } from '@/components/issue/sub-issue-editor'
@@ -213,8 +215,8 @@ type SubIssueDisplay={ordering:'priority'|'created'|'updated';direction:'asc'|'d
 function flattenSubIssues(parent:Issue,issues:Issue[],nested:boolean){const byId=new Map(issues.map(item=>[item.id,item])),seen=new Set<string>();const result:{issue:Issue;depth:number}[]=[];const visit=(id:string,depth:number)=>{if(seen.has(id))return;seen.add(id);const child=byId.get(id);if(!child||child.archivedAt)return;result.push({issue:child,depth});if(nested)child.subIssueIds.forEach(childId=>visit(childId,depth+1))};parent.subIssueIds.forEach(id=>visit(id,0));return result}
 
 function DetailSubIssueRow({child,data,depth,properties,selected,onOpen,onSelect}:{child:Issue;data:BootstrapData;depth:number;properties:Set<SubIssueProperty>;selected:boolean;onOpen:()=>void;onSelect:()=>void}){
-  const labels=child.labels.slice(0,3),cycle=data.cycles.find(item=>item.id===child.cycleId),project=data.projects.find(item=>item.id===child.project?.id),milestone=(project?.milestones??[]).find(item=>item.id===child.projectMilestoneId),sla=data.issueSlas.find(item=>item.issueId===child.id&&item.status!=='removed'),rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined,requests=data.customerRequests.filter(item=>item.issueId===child.id),customers=requests.map(item=>data.customers.find(customer=>customer.id===item.customerId)).filter((customer):customer is NonNullable<typeof customer>=>Boolean(customer)),revenue=customers.reduce((total,customer)=>total+(customer.annualRevenue??0),0),hasStatus=properties.has('status')
-  return <a className="detail-sub-issue-row" data-selected={selected} data-depth={depth} data-has-status={hasStatus} style={{'--sub-depth':depth} as React.CSSProperties} href={`/${data.workspace.urlKey}/issue/${child.identifier}`} onClick={event=>{if((event.target as Element).closest('button,[role=checkbox]')){event.preventDefault();return}event.preventDefault();onOpen()}}><span className="detail-sub-checkbox" role="checkbox" tabIndex={0} aria-label="Select issue" aria-checked={selected} onClick={event=>{event.preventDefault();event.stopPropagation();onSelect()}} onKeyDown={event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();onSelect()}}}>{selected&&<CheckboxMark/>}</span>{hasStatus&&<StatusIcon state={child.state} size={14}/>}<span className="detail-sub-title" data-i18n-ignore>{properties.has('id')&&<small>{child.identifier}</small>}{child.title}</span><span className="detail-sub-properties">{properties.has('priority')&&child.priority>0&&<span className="detail-sub-priority">{child.priorityLabel}</span>}{properties.has('sla')&&sla&&<IssueSLAIndicator compact sla={sla} ruleName={rule?.name}/>} {properties.has('labels')&&labels.map(label=><span className="detail-sub-badge" key={label.id}><i style={{background:label.color}}/><b data-i18n-ignore>{label.name}</b></span>)}{properties.has('milestone')&&milestone&&<span className="detail-sub-badge"><b data-i18n-ignore>{milestone.name}</b></span>}{properties.has('cycle')&&cycle&&<span className="detail-sub-badge"><b data-i18n-ignore>{cycle.name}</b></span>}{properties.has('dueDate')&&child.dueDate&&<span className="detail-sub-badge"><b>{child.dueDate.slice(5)}</b></span>}{properties.has('links')&&child.attachments.length>0&&<span className="detail-sub-badge"><Link2/><b>{child.attachments.length}</b></span>}{properties.has('customers')&&customers.map(customer=><span className="detail-sub-badge" key={customer.id}><b data-i18n-ignore>{customer.name}</b></span>)}{properties.has('customerRevenue')&&revenue>0&&<span className="detail-sub-badge"><b>{new Intl.NumberFormat(undefined,{style:'currency',currency:'USD',notation:'compact'}).format(revenue)}</b></span>}{properties.has('assignee')&&(child.assignee?<Avatar name={child.assignee.displayName}/>:<NoAssigneeIcon className="detail-sub-unassigned" size={18}/>)}</span></a>
+  const labels=child.labels.slice(0,3),cycle=data.cycles.find(item=>item.id===child.cycleId),project=data.projects.find(item=>item.id===child.project?.id),milestone=(project?.milestones??[]).find(item=>item.id===child.projectMilestoneId),sla=data.issueSlas.find(item=>item.issueId===child.id&&item.status!=='removed'),rule=sla?data.slaRules.find(item=>item.id===sla.ruleId):undefined,customerRow=issueCustomerRowData(child.id,data),hasStatus=properties.has('status')
+  return <a className="detail-sub-issue-row" data-selected={selected} data-depth={depth} data-has-status={hasStatus} style={{'--sub-depth':depth} as React.CSSProperties} href={`/${data.workspace.urlKey}/issue/${child.identifier}`} onClick={event=>{if((event.target as Element).closest('button,[role=checkbox]')){event.preventDefault();return}event.preventDefault();onOpen()}}><span className="detail-sub-checkbox" role="checkbox" tabIndex={0} aria-label="Select issue" aria-checked={selected} onClick={event=>{event.preventDefault();event.stopPropagation();onSelect()}} onKeyDown={event=>{if(event.key===' '||event.key==='Enter'){event.preventDefault();onSelect()}}}>{selected&&<CheckboxMark/>}</span>{hasStatus&&<StatusIcon state={child.state} size={14}/>}<span className="detail-sub-title" data-i18n-ignore>{properties.has('id')&&<small>{child.identifier}</small>}{child.title}</span><span className="detail-sub-properties">{properties.has('priority')&&child.priority>0&&<span className="detail-sub-priority">{child.priorityLabel}</span>}{properties.has('sla')&&sla&&<IssueSLAIndicator compact sla={sla} ruleName={rule?.name}/>} {properties.has('labels')&&labels.map(label=><span className="detail-sub-badge" key={label.id}><i style={{background:label.color}}/><b data-i18n-ignore>{label.name}</b></span>)}{properties.has('milestone')&&milestone&&<span className="detail-sub-badge"><b data-i18n-ignore>{milestone.name}</b></span>}{properties.has('cycle')&&cycle&&<span className="detail-sub-badge"><b data-i18n-ignore>{cycle.name}</b></span>}{properties.has('dueDate')&&child.dueDate&&<span className="detail-sub-badge"><b>{child.dueDate.slice(5)}</b></span>}{properties.has('links')&&child.attachments.length>0&&<span className="detail-sub-badge"><Link2/><b>{child.attachments.length}</b></span>}{properties.has('customers')&&customerRow.customerCount>0&&<CustomersRowChip {...customerRow}/>}{properties.has('customerRevenue')&&<CustomerRevenueRowChip customers={customerRow.customers} settings={customerRow.settings}/>}{properties.has('assignee')&&(child.assignee?<Avatar name={child.assignee.displayName}/>:<NoAssigneeIcon className="detail-sub-unassigned" size={18}/>)}</span></a>
 }
 
 function SubIssueDisplayMenu({value,onChange}:{value:SubIssueDisplay;onChange:(value:SubIssueDisplay)=>void}){const{t}=useI18n();const toggle=(property:SubIssueProperty)=>{const properties=new Set(value.properties);if(properties.has(property))properties.delete(property);else properties.add(property);onChange({...value,properties})};const names:Record<SubIssueProperty,string>={priority:'Priority',sla:'SLA',id:'ID',status:'Status',labels:'Labels',milestone:'Milestone',cycle:'Cycle',dueDate:'Due date',links:'Links',customers:'Customers',customerRevenue:'Customer revenue',assignee:'Assignee'};return <Popover.Root><Popover.Trigger asChild><button className="sub-issues-display" aria-label={t('Display options')}><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" className="sub-issues-display-menu" align="end" sideOffset={4}><label><span>{t('Ordering')}</span><span className="sub-issue-order"><SubIssueSelect ariaLabel={t('View ordering')} value={value.ordering} options={[{id:'priority',label:t('Priority')},{id:'created',label:t('Created')},{id:'updated',label:t('Updated')}]} onChange={ordering=>onChange({...value,ordering:ordering as SubIssueDisplay['ordering']})}/><button aria-label={t('Direction')} onClick={()=>onChange({...value,direction:value.direction==='asc'?'desc':'asc'})}>{value.direction==='asc'?'↑':'↓'}</button></span></label><label><span>{t('Completed issues')}</span><SubIssueSelect ariaLabel={t('Completed issues')} value={value.completed} options={[{id:'all',label:t('All')},{id:'none',label:t('None')}]} onChange={completed=>onChange({...value,completed:completed as SubIssueDisplay['completed']})}/></label><label><span>{t('Nested sub-issues')}</span><Toggle checked={value.nested} label={t('Nested sub-issues')} onChange={nested=>onChange({...value,nested})}/></label><h4>{t('Display properties')}</h4><div>{(Object.keys(names) as SubIssueProperty[]).map(property=><button aria-pressed={value.properties.has(property)} key={property} onClick={()=>toggle(property)}>{t(names[property])}</button>)}</div></Popover.Content></Popover.Portal></Popover.Root>}
@@ -259,72 +261,7 @@ function IssueCustomerNeedsSection({ data, issueId, requests, onLocalCreated }: 
   requests: import('@/types/flow').CustomerRequest[]
   onLocalCreated: (request: import('@/types/flow').CustomerRequest) => void
 }) {
-  const [adding, setAdding] = useState(false)
-  const [open, setOpen] = useState(true)
-  const [showArchived, setShowArchived] = useState(false)
-  useEffect(() => {
-    const onAdd = (event: Event) => {
-      if ((event as CustomEvent<{ issueId: string }>).detail?.issueId !== issueId) return
-      event.preventDefault()
-      setOpen(true)
-      setAdding(true)
-    }
-    window.addEventListener('flow:add-customer-request', onAdd)
-    return () => window.removeEventListener('flow:add-customer-request', onAdd)
-  }, [issueId])
-  const merged = useMemo(() => {
-    const seen = new Set<string>()
-    const rows: import('@/types/flow').CustomerRequest[] = []
-    for (const item of requests) {
-      if (seen.has(item.id)) continue
-      seen.add(item.id)
-      rows.push(item)
-    }
-    return rows
-  }, [requests])
-  const archivedCount = merged.filter(item => item.archivedAt).length
-  const visible = merged.filter(item => showArchived || !item.archivedAt)
-  // Like the reference, the section appears once the issue has a request or one is being added.
-  if (!merged.length && !adding) return null
-  return (
-    <section className="issue-detail-section issue-customer-needs">
-      <header>
-        <button className="issue-section-collapse" aria-label={open ? 'Collapse customers section' : 'Expand customers section'} aria-expanded={open} onClick={() => setOpen(value => !value)}><ChevronDown/><span>Customers</span></button>
-        {!open && <span>{visible.length}</span>}
-        <span/>
-        {open && archivedCount > 0 && (
-          <button className="issue-customer-needs-archived" aria-pressed={showArchived} type="button" onClick={() => setShowArchived(value => !value)}>
-            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
-          </button>
-        )}
-        {open && <button className="issue-customer-needs-add" aria-label="Add customer request" type="button" onClick={() => setAdding(true)}><Plus size={16}/></button>}
-      </header>
-      {open && adding && (
-        <EmbeddedCustomerNeedForm
-          data={data}
-          host="issuePage"
-          issueId={issueId}
-          onCancel={() => setAdding(false)}
-          onCreated={async (request) => {
-            onLocalCreated(request)
-            setAdding(false)
-          }}
-        />
-      )}
-      {open && visible.map(request => {
-        const customer = data.customers.find(item => item.id === request.customerId)
-        return (
-          <div className={`linked-issue issue-resource-row${request.archivedAt ? ' is-archived' : ''}`} key={request.id}>
-            <UserRound size={14}/>
-            <span>{customer?.name ?? 'Customer'}</span>
-            <strong>{request.body}</strong>
-            {request.priority ? <em className="issue-need-important">Important</em> : null}
-            {request.sourceUrl ? <a href={request.sourceUrl} rel="noreferrer" target="_blank">Source</a> : null}
-          </div>
-        )
-      })}
-    </section>
-  )
+  return <IssueCustomerRequests data={data} issueId={issueId} requests={requests} onLocalCreated={onLocalCreated}/>
 }
 
 /** Disclosure triangle for the sub-issue header; points right when collapsed. */

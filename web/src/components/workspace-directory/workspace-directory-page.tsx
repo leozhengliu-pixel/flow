@@ -1,7 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { refreshResourcePreferences } from '@/lib/resource-preferences';
 import { teamHierarchy } from '@/lib/team-hierarchy';
-import { formatCustomerRevenue } from '@/lib/customer-settings';
 import { personMatchesQuery, personSearchText, personUsername } from '@/lib/people';
 import { compareDirectoryTeams, indexTeamPeople, matchesTeamDate, matchesTeamFilters, teamDateChoices, teamTimestamp, type TeamFilterField, type TeamOrdering } from './team-directory-model';
 import { TeamDateFilterDialog, TeamFilterBar } from './team-directory-controls';
@@ -10,17 +9,12 @@ import { AppLink } from '@/components/ui/app-link';
 import {
   ArrowDown,
   ArrowUp,
-  Banknote,
   Check,
   ChevronRight,
   Circle,
   MoreHorizontal,
   Plus,
-  Search,
   Settings2,
-  Trash2,
-  UserRound,
-  UsersRound,
   X,
 } from "lucide-react";
 import {
@@ -28,9 +22,7 @@ import {
   useEffect,
   useMemo,
   useState,
-  type Dispatch,
   type ReactNode,
-  type SetStateAction,
 } from "react";
 import { VirtualColumnList } from '@/components/ui/virtual-column-list';
 import { toggleFavoriteFor } from "@/lib/favorites";
@@ -41,6 +33,8 @@ import { useI18n } from "@/i18n/i18n";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { CustomerDialog } from "@/components/customer-detail/customer-dialog";
+import { CustomersDirectory } from "./customers-directory";
+import { customerRevenueLabel } from "@/lib/customer-settings";
 import type {
   BootstrapData,
   Customer,
@@ -65,16 +59,6 @@ import { memberColumnIds, useMemberDirectoryPreferences, type MemberColumn, type
 import { isActiveSubscription } from "@/lib/subscription-records";
 
 type DirectoryKind = "members" | "customers" | "teams";
-type CustomerColumn =
-  | "requests"
-  | "revenue"
-  | "size"
-  | "owner"
-  | "status"
-  | "tier"
-  | "domains"
-  | "source";
-type CustomerOrdering = "created" | "updated" | "name" | "requests" | "revenue" | "size" | "status" | "tier";
 const DIRECTORY_VIRTUALIZATION_THRESHOLD = 80;
 
 function DirectoryRows<T>({ header, items, itemKey, render }: { header: ReactNode; items: readonly T[]; itemKey: (item: T) => string; render: (item: T) => ReactNode }) {
@@ -128,7 +112,8 @@ export function WorkspaceDirectoryPage({
   const {t}=useI18n();
   const [inviteOpen, setInviteOpen] = useState(inviteOnOpen);
   const [customerOpen, setCustomerOpen] = useState(customerOnOpen);
-  const [customerResultCount, setCustomerResultCount] = useState<number>();
+  // "Create new customer…" from the command menu reopens the dialog while already on the page.
+  useEffect(() => { if (customerOnOpen) setCustomerOpen(true); }, [customerOnOpen]);
   const title = t(
     kind === "members"
       ? "Members"
@@ -136,10 +121,9 @@ export function WorkspaceDirectoryPage({
         ? "Customers"
         : "Teams");
   return (
-    <main className="main-panel workspace-directory" aria-label={title}>
+    <main className={`main-panel workspace-directory workspace-directory--${kind}`} aria-label={title}>
       <DirectoryHeader
         title={title}
-        count={kind === "customers" ? customerResultCount : undefined}
         onOpenSidebar={onOpenSidebar}
         onCreate={kind === "members" && data.viewerRole !== "admin" && data.viewerRole !== "owner" ? undefined : () =>
           kind === "members"
@@ -155,21 +139,18 @@ export function WorkspaceDirectoryPage({
               ? t("New customer")
               : t("New team")
         }
-        createVariant={kind === "customers" ? "pill" : "ghost"}
+        createVariant="ghost"
         options={kind === "teams" ? <TeamsOptions onOpenSettings={onNavigateTeamsSettings} /> : undefined}
       />
       {kind === "members" && <MembersDirectory key={`${data.workspace.id}:${data.viewer.id}`} data={data} onOpen={onNavigateMember} onOpenTeam={onNavigateTeam} />}
       {kind === "customers" && (
         <CustomersDirectory
-          featureSettings={data.workspaceSettings.featureSettings}
-          customers={data.customers ?? []}
-          requests={data.customerRequests}
-          users={data.users}
-          onResultCount={setCustomerResultCount}
+          data={data}
           onCreate={() => setCustomerOpen(true)}
           onUpdate={onUpdateCustomer}
           onDelete={onDeleteCustomer}
           onOpen={onOpenCustomer}
+          onReload={() => onReload()}
         />
       )}
       {kind === "teams" && (
@@ -190,10 +171,12 @@ export function WorkspaceDirectoryPage({
         onClose={() => setInviteOpen(false)}
         onInvited={() => onReload()}
       />}
-      <CustomerDialog
+      {kind === "customers" && <CustomerDialog
         currency={data.workspaceSettings.featureSettings?.customerRevenueCurrency}
         customers={data.customers}
         open={customerOpen}
+        monthlyRevenue={data.workspaceSettings.featureSettings?.customerRevenueFormat === "monthly"}
+        revenueLabel={t(customerRevenueLabel(data.workspaceSettings.featureSettings))}
         statuses={data.customerStatuses}
         tiers={data.customerTiers}
         users={data.users}
@@ -201,7 +184,7 @@ export function WorkspaceDirectoryPage({
         onSubmit={async (input) => {
           await onCreateCustomer(input);
         }}
-      />
+      />}
     </main>
   );
 }
@@ -573,367 +556,6 @@ function DirectorySortHeader({
       {label}
       {active ? descending ? <ArrowUp aria-hidden="true" /> : <ArrowDown aria-hidden="true" /> : null}
     </button>
-  );
-}
-
-function CustomersDirectory({
-  featureSettings,
-  customers,
-  requests,
-  users,
-  onResultCount,
-  onCreate,
-  onUpdate,
-  onDelete,
-  onOpen,
-}: {
-  featureSettings: BootstrapData['workspaceSettings']['featureSettings'];
-  customers: Customer[];
-  requests: BootstrapData["customerRequests"];
-  users: User[];
-  onResultCount: (count: number | undefined) => void;
-  onCreate: () => void;
-  onUpdate: (customer: Customer, input: CustomerMutationInput) => Promise<void>;
-  onDelete: (customer: Customer) => Promise<void>;
-  onOpen: (customer: Customer) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [advanced, setAdvanced] = useState(false);
-  const [ownerIds, setOwnerIds] = useState<Set<string>>(new Set());
-  const [statuses, setStatuses] = useState<Set<string>>(new Set());
-  const [revenue, setRevenue] = useState<Set<string>>(new Set());
-  const [size, setSize] = useState<Set<string>>(new Set());
-  const [ordering, setOrdering] = useState<CustomerOrdering>("created");
-  const [descending, setDescending] = useState(false);
-  const [columns, setColumns] = useState<Set<CustomerColumn>>(
-    new Set(["requests", "revenue", "size", "owner", "status", "tier"]),
-  );
-  const requestCounts = useMemo(() => requests.reduce((counts, request) => counts.set(request.customerId, (counts.get(request.customerId) ?? 0) + 1), new Map<string, number>()), [requests]);
-  const usersById = useMemo(() => new Map(users.map(user => [user.id, user])), [users]);
-  const filtersActive =
-    advanced ||
-    ownerIds.size > 0 ||
-    statuses.size > 0 ||
-    revenue.size > 0 ||
-    size.size > 0;
-  const visible = useMemo(() => customers
-    .filter((customer) => {
-      const minimumRevenue = Number([...revenue][0] ?? 0);
-      const minimumSize = Number([...size][0] ?? 0);
-      return (
-        (!ownerIds.size || ownerIds.has(customer.ownerId ?? "")) &&
-        (!statuses.size || statuses.has(customer.status)) &&
-        (!minimumRevenue || (customer.annualRevenue ?? 0) >= minimumRevenue) &&
-        (!minimumSize || (customer.size ?? 0) >= minimumSize) &&
-        [customer.name, ...customer.domains]
-          .join(" ")
-          .toLowerCase()
-          .includes(query.toLowerCase())
-      );
-    })
-    .sort(
-      (left, right) =>
-        (ordering === "requests" ? (requestCounts.get(left.id) ?? 0) - (requestCounts.get(right.id) ?? 0) : compareCustomers(left, right, ordering)) * (descending ? -1 : 1),
-    ), [customers, descending, ordering, ownerIds, query, requestCounts, revenue, size, statuses]);
-  useEffect(() => {
-    onResultCount(query || filtersActive ? visible.length : undefined);
-    return () => onResultCount(undefined);
-  }, [filtersActive, onResultCount, query, visible.length]);
-  const filterGroups: DirectoryFilterGroup[] = [
-    {
-      id: "owner",
-      label: "Owner",
-      icon: <UserRound />,
-      choices: users.map((user) => ({
-        id: user.id,
-        label: user.displayName,
-        icon: <DirectoryUserAvatar user={user} />,
-      })),
-    },
-    {
-      id: "status",
-      label: "Status",
-      icon: <Circle />,
-      choices: [
-        { id: "active", label: "Active" },
-        { id: "inactive", label: "Inactive" },
-      ],
-    },
-    {
-      id: "revenue",
-      label: "Revenue",
-      icon: <Banknote />,
-      choices: [
-        { id: "1000", label: "$1k+" },
-        { id: "10000", label: "$10k+" },
-        { id: "100000", label: "$100k+" },
-        { id: "1000000", label: "$1m+" },
-      ],
-    },
-    {
-      id: "size",
-      label: "Size",
-      icon: <UsersRound />,
-      choices: [
-        { id: "10", label: "10+" },
-        { id: "50", label: "50+" },
-        { id: "100", label: "100+" },
-        { id: "1000", label: "1,000+" },
-      ],
-    },
-  ];
-  const selectedFilters = { owner: ownerIds, status: statuses, revenue, size };
-  const changeFilter = (
-    groupId: string,
-    choiceId: string,
-    checked: boolean,
-  ) => {
-    const update = (
-      setter: Dispatch<SetStateAction<Set<string>>>,
-      single = false,
-    ) =>
-      setter((current) => {
-        const next = single ? new Set<string>() : new Set(current);
-        if (checked) next.add(choiceId);
-        else next.delete(choiceId);
-        return next;
-      });
-    if (groupId === "owner") update(setOwnerIds);
-    if (groupId === "status") update(setStatuses);
-    if (groupId === "revenue") update(setRevenue, true);
-    if (groupId === "size") update(setSize, true);
-  };
-  const clearFilters = () => {
-    setAdvanced(false);
-    setOwnerIds(new Set());
-    setStatuses(new Set());
-    setRevenue(new Set());
-    setSize(new Set());
-  };
-  const removeFilter = (id: string) => {
-    if (id === "owner") setOwnerIds(new Set());
-    if (id === "status") setStatuses(new Set());
-    if (id === "revenue") setRevenue(new Set());
-    if (id === "size") setSize(new Set());
-  };
-  const toggleColumn = (column: CustomerColumn) =>
-    setColumns((current) => {
-      const next = new Set(current);
-      if (next.has(column)) next.delete(column);
-      else next.add(column);
-      return next;
-    });
-  const changeCustomerOrder = (next: CustomerOrdering) => {
-    if (ordering === next) setDescending((current) => !current);
-    else { setOrdering(next); setDescending(false); }
-  };
-  return (
-    <>
-      <div className="workspace-directory__toolbar workspace-customers-toolbar">
-        <label>
-          <Search />
-          <input
-            aria-label="Find by name or domain"
-            placeholder="Find by name or domain…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          {query && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setQuery("")}
-            >
-              <X />
-            </button>
-          )}
-        </label>
-        <span />
-        <DirectoryFilterMenu
-          groups={filterGroups}
-          onAdvanced={() => setAdvanced(true)}
-          onChoice={changeFilter}
-          selected={selectedFilters}
-        />
-        <DirectoryDisplayMenu<CustomerColumn, CustomerOrdering>
-          descending={descending}
-          onDirection={() => setDescending((value) => !value)}
-          onOrdering={setOrdering}
-          onProperty={toggleColumn}
-          ordering={ordering}
-          orderingOptions={[
-            { id: "created", label: "Created" },
-            { id: "updated", label: "Updated" },
-            { id: "name", label: "Name" },
-            { id: "revenue", label: "Annual revenue" },
-            { id: "size", label: "Size" },
-          ]}
-          properties={columns}
-          propertyOptions={[
-            { id: "requests", label: "Requests" },
-            { id: "revenue", label: "Annual revenue" },
-            { id: "size", label: "Size" },
-            { id: "owner", label: "Owner" },
-            { id: "status", label: "Status" },
-            { id: "tier", label: "Tier" },
-            { id: "domains", label: "Domains" },
-            { id: "source", label: "Data source" },
-          ]}
-        />
-      </div>
-      {filtersActive && (
-        <DirectoryFilterBar
-          advanced={advanced}
-          chips={customerFilterChips(ownerIds, statuses, revenue, size, users)}
-          groups={filterGroups}
-          onAdvanced={() => setAdvanced(true)}
-          onChoice={changeFilter}
-          onClear={clearFilters}
-          onRemoveAdvanced={() => setAdvanced(false)}
-          onRemoveChip={removeFilter}
-          selected={selectedFilters}
-        />
-      )}
-      {customers.length === 0 ? (
-        <CustomerEmpty onCreate={onCreate} />
-      ) : visible.length === 0 ? (
-        <DirectoryFilteredEmpty
-          hiddenCount={customers.length}
-          noun="customers"
-          onClear={clearFilters}
-        />
-      ) : (
-        <div
-          className={`workspace-directory__table workspace-customers-table${visible.length > DIRECTORY_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}`}
-          style={
-            {
-              "--customer-columns": customerColumns(columns),
-            } as React.CSSProperties
-          }
-        >
-      <DirectoryRows header={<div className="workspace-customer-columns">
-            <button onClick={() => changeCustomerOrder("name")}>Name</button>
-            {columns.has("requests") && <button onClick={() => changeCustomerOrder("requests")}>Requests</button>}
-            {columns.has("revenue") && <button onClick={() => changeCustomerOrder("revenue")}>Annual revenue</button>}
-            {columns.has("size") && <button onClick={() => changeCustomerOrder("size")}>Size</button>}
-            {columns.has("status") && <button onClick={() => changeCustomerOrder("status")}>Status</button>}
-            {columns.has("tier") && <button onClick={() => changeCustomerOrder("tier")}>Tier</button>}
-            {columns.has("owner") && <span>Owner</span>}
-            {columns.has("domains") && <span>Domains</span>}
-            {columns.has("source") && <span>Data source</span>}
-            <span />
-          </div>} items={visible} itemKey={customer => customer.id} render={(customer) => (
-            <div className="workspace-customer-row" key={customer.id} role="button" tabIndex={0} onClick={() => onOpen(customer)} onKeyDown={event => { if (event.key === 'Enter') onOpen(customer) }}>
-              <div>
-                <CustomerMark customer={customer} />
-                <span>
-                  <strong>{customer.name}</strong>
-                  <small>{customer.domains[0] ?? "No domain"}</small>
-                </span>
-              </div>
-              {columns.has("requests") && <span>{requestCounts.get(customer.id) ?? 0}</span>}
-              {columns.has("revenue") && (
-                <span>{formatCustomerRevenue(customer.annualRevenue,featureSettings)}</span>
-              )}
-              {columns.has("size") && <span>{customer.size ?? "—"}</span>}
-              {columns.has("status") && (
-                <button
-                  className="workspace-customer-status"
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void onUpdate(customer, {
-                      status:
-                        customer.status === "active" ? "inactive" : "active",
-                    });
-                  }}
-                >
-                  <i data-active={customer.status === "active"} />
-                  {capitalize(customer.status)}
-                </button>
-              )}
-              {columns.has("tier") && <span>{customer.tier || "No tier"}</span>}
-              {columns.has("owner") && (
-                <span>
-                  {usersById.get(customer.ownerId ?? "")?.displayName ?? "No owner"}
-                </span>
-              )}
-              {columns.has("domains") && (
-                <span>{customer.domains.join(", ") || "—"}</span>
-              )}
-              {columns.has("source") && <span>Manual</span>}
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger asChild>
-                  <button
-                    className="workspace-row-menu"
-                    type="button"
-                    aria-label={`Open ${customer.name} menu`}
-                    onClick={event => event.stopPropagation()}
-                  >
-                    <MoreHorizontal />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Portal>
-                  <DropdownMenu.Content data-flow-motion="floating"
-                    className="workspace-directory__menu"
-                    align="end"
-                  >
-                    <DropdownMenu.Item
-                      className="workspace-directory__danger"
-                      onSelect={() => void onDelete(customer)}
-                    >
-                      <Trash2 />
-                      Delete customer
-                    </DropdownMenu.Item>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Portal>
-              </DropdownMenu.Root>
-            </div>
-          )}/>
-        </div>
-      )}
-    </>
-  );
-}
-
-function CustomerEmpty({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="workspace-customer-empty">
-      <CustomerEmptyArt />
-      <h2>Customers</h2>
-      <p>
-        Add organizations using your product to track their
-        <br />
-        feature requests and use attributes like revenue and
-        <br />
-        size to prioritize development.
-      </p>
-      <div>
-        <button type="button" onClick={onCreate}>
-          Create new customer
-        </button>
-        <a
-          href="https://flow.app/docs/customer-requests"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Documentation
-        </a>
-      </div>
-    </div>
-  );
-}
-
-function CustomerEmptyArt() {
-  return (
-    <div className="workspace-customer-art" aria-hidden="true">
-      <i />
-      <i />
-      <i />
-      <i>
-        <span>ℓ</span>
-      </i>
-    </div>
   );
 }
 
@@ -1441,13 +1063,6 @@ function DirectoryFilteredEmpty({
 function DirectoryUserAvatar({ user }: { user: User }) {
   return <UserAvatar avatarUrl={user.avatarUrl} className="workspace-directory-avatar" color={avatarColor(user.id)} name={user.displayName} title={user.email}/>;
 }
-function CustomerMark({ customer }: { customer: Customer }) {
-  return customer.logoUrl ? (
-    <img className="workspace-customer-mark" src={customer.logoUrl} alt="" />
-  ) : (
-    <span className="workspace-customer-mark">{initials(customer.name)}</span>
-  );
-}
 function TeamGlyph({ team }: { team: Team }) {
   return <ViewGlyph className="workspace-team-glyph" color={team.color} icon={team.icon || "Team"} />;
 }
@@ -1503,55 +1118,6 @@ function teamColumns(columns: Set<TeamColumn>) {
     .join(" ")} 22px`;
 }
 
-function customerColumns(columns: Set<CustomerColumn>) {
-  const widths: Record<CustomerColumn, string> = {
-    requests: "88px",
-    revenue: "125px",
-    size: "80px",
-    owner: "145px",
-    status: "105px",
-    tier: "105px",
-    domains: "180px",
-    source: "110px",
-  };
-  return `minmax(250px,1fr) ${(
-    [
-      "requests",
-      "revenue",
-      "size",
-      "status",
-      "tier",
-      "owner",
-      "domains",
-      "source",
-    ] as CustomerColumn[]
-  )
-    .filter((column) => columns.has(column))
-    .map((column) => widths[column])
-    .join(" ")} 38px`;
-}
-
-function compareCustomers(
-  left: Customer,
-  right: Customer,
-  ordering: CustomerOrdering,
-) {
-  if (ordering === "name") return left.name.localeCompare(right.name);
-  if (ordering === "status") return left.status.localeCompare(right.status);
-  if (ordering === "tier") return (left.tier ?? "").localeCompare(right.tier ?? "");
-  if (ordering === "revenue")
-    return (left.annualRevenue ?? 0) - (right.annualRevenue ?? 0);
-  if (ordering === "size") return (left.size ?? 0) - (right.size ?? 0);
-  return (
-    new Date(
-      ordering === "created" ? left.createdAt : left.updatedAt,
-    ).getTime() -
-    new Date(
-      ordering === "created" ? right.createdAt : right.updatedAt,
-    ).getTime()
-  );
-}
-
 function formatTeamDate(team: Team, field: 'created' | 'updated') {
   const timestamp = teamTimestamp(team, field);
   return timestamp === undefined ? '-' : formatDirectoryDate(new Date(timestamp));
@@ -1559,45 +1125,4 @@ function formatTeamDate(team: Team, field: 'created' | 'updated') {
 
 function formatDirectoryDate(value: Date) {
   return value.toLocaleDateString("en", { month: "short", day: "numeric" });
-}
-
-function namesFor(ids: Set<string>, users: User[]) {
-  return [...ids]
-    .map((id) => users.find((user) => user.id === id)?.displayName ?? id)
-    .join(", ");
-}
-
-function customerFilterChips(
-  ownerIds: Set<string>,
-  statuses: Set<string>,
-  revenue: Set<string>,
-  size: Set<string>,
-  users: User[],
-): DirectoryFilterChip[] {
-  const chips: DirectoryFilterChip[] = [];
-  if (ownerIds.size)
-    chips.push({
-      id: "owner",
-      label: "Owner",
-      value: namesFor(ownerIds, users),
-    });
-  if (statuses.size)
-    chips.push({
-      id: "status",
-      label: "Status",
-      value: [...statuses].map(capitalize).join(", "),
-    });
-  if (revenue.size)
-    chips.push({
-      id: "revenue",
-      label: "Revenue",
-      value: `$${Number([...revenue][0]).toLocaleString()}+`,
-    });
-  if (size.size)
-    chips.push({
-      id: "size",
-      label: "Size",
-      value: `${Number([...size][0]).toLocaleString()}+`,
-    });
-  return chips;
 }

@@ -37,7 +37,7 @@ type DisplayPatch = Partial<MyIssuesDisplayOptions>
 
 const GROUPING_ORDER: MyIssuesGrouping[] = ['none', 'focus', 'status', 'assignee', 'agent', 'project', 'milestone', 'priority', 'cycle', 'label', 'team', 'parent', 'sla', 'customer', 'release', 'releaseDate', 'labelGroup', 'activityDate']
 const groupingOptions: { value: MyIssuesGrouping; label: string }[] = GROUPING_ORDER.map(value => ({ value, label: GROUPING_LABELS[value] }))
-const ORDERING_ORDER: MyIssuesOrdering[] = ['importance', 'title', 'status', 'assignee', 'priority', 'estimate', 'created', 'updated', 'myActivity', 'dueDate', 'linkCount', 'customerCount', 'customerRevenue', 'timeInStatus']
+const ORDERING_ORDER: MyIssuesOrdering[] = ['importance', 'title', 'status', 'assignee', 'priority', 'estimate', 'created', 'updated', 'myActivity', 'dueDate', 'linkCount', 'timeInStatus', 'customerCount', 'customerRevenue', 'customerImportantCount']
 const orderingOptions: { value: MyIssuesOrdering; label: string }[] = ORDERING_ORDER.map(value => ({ value, label: ORDERING_LABELS[value] }))
 
 const subGroupingOptions = groupingOptions.filter(option => option.value !== 'focus')

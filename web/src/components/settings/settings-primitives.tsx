@@ -1,4 +1,5 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
+import { Fragment } from "react";
 import type {
   KeyboardEventHandler,
   MouseEventHandler,
@@ -170,7 +171,7 @@ export function SettingsToggle({
 
 export type SettingsSelectOption =
   | string
-  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode };
+  | { value: string; label: string; disabled?: boolean; entityName?: boolean; icon?: ReactNode; /** Draws a separator above the option. */ divider?: boolean };
 
 export function SettingsSelect({
   align = "end",
@@ -181,6 +182,7 @@ export function SettingsSelect({
   menuClassName = "",
   onChange,
   options,
+  placeholder,
   value,
 }: {
   align?: "start" | "center" | "end";
@@ -191,6 +193,8 @@ export function SettingsSelect({
   menuClassName?: string;
   onChange: (value: string) => void;
   options: SettingsSelectOption[];
+  /** Shown when the value matches no option. */
+  placeholder?: string;
   value: string;
 }) {
   const normalized = options.map((option) =>
@@ -214,7 +218,7 @@ export function SettingsSelect({
           <span className="settings-select-value">
             {selected?.icon}
             <span data-i18n-ignore={selected?.entityName || undefined}>
-              {selected?.label ?? value}
+              {selected?.label ?? (placeholder || value)}
             </span>
           </span>
         </SelectPrimitive.Value>
@@ -232,10 +236,11 @@ export function SettingsSelect({
         >
           <SelectPrimitive.Viewport>
             {normalized.map((option) => (
+              <Fragment key={option.value}>
+              {"divider" in option && option.divider && <SelectPrimitive.Separator className="settings-select-separator" />}
               <SelectPrimitive.Item
                 className="settings-select-option"
                 disabled={option.disabled}
-                key={option.value}
                 value={option.value}
               >
                 <SelectPrimitive.ItemText>
@@ -250,6 +255,7 @@ export function SettingsSelect({
                   <SettingsCheck />
                 </SelectPrimitive.ItemIndicator>
               </SelectPrimitive.Item>
+              </Fragment>
             ))}
           </SelectPrimitive.Viewport>
         </SelectPrimitive.Content>

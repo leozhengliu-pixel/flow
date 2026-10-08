@@ -1,7 +1,8 @@
 import { createBlockSelection, blockSelectionToModelFilter, uiOperatorToCompare } from '@/components/filter/filter-block-helper'
 import type { FilterModelNode } from '@/components/filter/filter-block-types'
-export type ProjectFilterField = 'status' | 'priority' | 'lead' | 'members' | 'health' | 'dates' | 'milestones' | 'labels' | 'teams' | 'project'
-export type ProjectFilterOperator = 'is' | 'isNot'
+export type ProjectFilterField = 'status' | 'priority' | 'lead' | 'members' | 'health' | 'dates' | 'milestones' | 'labels' | 'teams' | 'project' | 'customers'
+/** `gte` / `lte` / `eq` / `neq` are the Customers number blocks (Customer count ≥ 3). */
+export type ProjectFilterOperator = 'is' | 'isNot' | 'gte' | 'lte' | 'eq' | 'neq'
 export type ProjectFilterOption = { id: string; label: string; color?: string; count?: number }
 export type ProjectFilter = {
   id: string
@@ -18,7 +19,7 @@ export function createProjectFilter(field: ProjectFilterField, fieldLabel: strin
 export function isProjectFilter(value: unknown): value is ProjectFilter {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<ProjectFilter>
-  return typeof candidate.id === 'string' && typeof candidate.field === 'string' && (candidate.operator === 'is' || candidate.operator === 'isNot') && Array.isArray(candidate.values)
+  return typeof candidate.id === 'string' && typeof candidate.field === 'string' && (candidate.operator === 'is' || candidate.operator === 'isNot' || candidate.operator === 'gte' || candidate.operator === 'lte' || candidate.operator === 'eq' || candidate.operator === 'neq') && Array.isArray(candidate.values)
 }
 
 /** REST AST leaf for a project filter chip (FilterBlockHelper bridge). */
@@ -33,7 +34,7 @@ export function projectFilterToModelNode(filter: ProjectFilter): FilterModelNode
     },
     createBlockSelection(
       filter.values.map(value => value.id),
-      uiOperatorToCompare(filter.operator),
+      uiOperatorToCompare(filter.operator === 'isNot' ? 'isNot' : 'is'),
     ),
   )
 }

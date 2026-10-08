@@ -21,6 +21,10 @@ import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
 import { documentPath, issuePath, projectPath } from '@/lib/app-routes'
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
+import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
+import { requestProjectCustomerRequest } from '@/components/customer/customer-request-events'
+import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { changePulseSubscription, projectPulseSubscribed, sessionPulseChoice } from '@/lib/pulse-subscriptions'
 import { estimatePickerOptions } from '@/lib/estimates'
@@ -216,6 +220,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     ] : []),
     { id: 'ctx-duplicate', label: 'Mark as duplicate…', icon: <Copy/>, keywords: 'duplicate of', page: { id: 'relatedIssue', label: 'Mark as duplicate…', relationType: 'duplicate' } },
     { id: 'ctx-relation', label: 'Add relation…', icon: <Link2/>, keywords: 'related blocking blocked by', page: { id: 'relation', label: 'Add relation…' } },
+    ...(single && context.source === 'detail' && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'customer-requests') ? [{ id: 'ctx-customer-request', label: 'Add customer request to issue…', icon: <IssueActionGlyph label="Add customer request…" fallback={<UserRound/>}/>, shortcut: isMacPlatform() ? ['Ctrl', 'R'] : ['Ctrl', 'Alt', 'R'], keywords: 'new customer request need', run: () => { close(); requestIssueCustomerRequest(ids[0]) } }] : []),
     subscribed
       ? { id: 'ctx-subscribe', label: 'Unsubscribe', icon: <BellOff/>, keywords: 'notifications', run: choose(() => applyEach(issue => ({ subscriberIds: issue.subscriberIds.filter(id => id !== viewerId) }))) }
       : { id: 'ctx-subscribe', label: 'Subscribe', icon: <Bell/>, keywords: 'notifications', run: choose(() => applyEach(issue => issue.subscriberIds.includes(viewerId) ? undefined : ({ subscriberIds: [...issue.subscriberIds, viewerId] }))) },
@@ -308,6 +313,7 @@ function projectCommands(context: Extract<CommandContext, { kind: 'project' }>, 
     { id: 'ctx-project-target', label: 'Set target date…', icon: <CalendarRange/>, keywords: 'deadline due', page: { id: 'projectTargetDate', label: 'Set target date…' } },
     { id: 'ctx-project-initiative', label: 'Add to initiative…', icon: <Lightbulb/>, page: { id: 'projectInitiative', label: 'Add to initiative…' } },
     { id: 'ctx-project-url', label: 'Copy project URL', icon: <Clipboard/>, shortcut: ['⌘', '⇧', ','], keywords: 'link', run: () => { close(); return copyText(`${location.origin}${projectPath(data.workspace.urlKey, project)}`, t('Copied to clipboard')) } },
+    ...(workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'customer-requests') && data.viewerRole !== 'guest' ? [{ id: 'ctx-project-customer-request', label: 'Add customer request to project…', icon: <IssueActionGlyph label="Add customer request…" fallback={<UserRound/>}/>, shortcut: isMacPlatform() ? ['Ctrl', 'R'] : ['Ctrl', 'Alt', 'R'], keywords: 'new customer request need', run: () => { close(); requestProjectCustomerRequest(project.id) } }] : []),
   ]
   if (data.viewerRole !== 'guest' && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'pulse')) {
     const subscribed = sessionPulseChoice('project', project.id) ?? projectPulseSubscribed(project, { viewerId: data.viewer.id, subscriptions: data.subscriptions, teamMembers: data.teamMembers, projects: data.projects, initiatives: data.initiatives })

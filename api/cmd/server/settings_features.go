@@ -290,6 +290,12 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if input.FeatureSettings.CustomerRevenueCurrency == "" {
 			input.FeatureSettings.CustomerRevenueCurrency = "USD"
 		}
+		if !slices.Contains(customerRevenueFormats, input.FeatureSettings.CustomerRevenueFormat) {
+			return fmt.Errorf("%w: customerRevenueFormat must be annual or monthly", errInvalid)
+		}
+		if !slices.Contains(customerRevenueCurrencies, input.FeatureSettings.CustomerRevenueCurrency) {
+			return fmt.Errorf("%w: unsupported customerRevenueCurrency", errInvalid)
+		}
 		if input.FeatureSettings.PulseWorkspaceSchedule == "" {
 			input.FeatureSettings.PulseWorkspaceSchedule = "daily"
 		}
@@ -313,8 +319,9 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 		if len(triageIntelligence.WorkspaceGuidance) > 8000 {
 			return errInvalid
 		}
-		input.FeatureSettings.CustomerExcludedDomains = normalizedStrings(input.FeatureSettings.CustomerExcludedDomains)
-		input.FeatureSettings.CustomerGenericDomains = normalizedStrings(input.FeatureSettings.CustomerGenericDomains)
+		input.FeatureSettings.CustomerExcludedDomains = normalizedCustomerSources(input.FeatureSettings.CustomerExcludedDomains)
+		input.FeatureSettings.CustomerGenericDomains = normalizedCustomerSources(input.FeatureSettings.CustomerGenericDomains)
+		applyCustomerExclusionChanges(data, data.WorkspaceSettings.FeatureSettings.CustomerExcludedDomains, input.FeatureSettings.CustomerExcludedDomains, time.Now().UTC())
 		input.FeatureSettings.AsksEmailAddresses = normalizedStrings(input.FeatureSettings.AsksEmailAddresses)
 		for _, address := range input.FeatureSettings.AsksEmailAddresses {
 			if slices.Contains(data.WorkspaceSettings.FeatureSettings.AsksEmailAddresses, address) {
@@ -686,10 +693,20 @@ func (s *server) updateLabelGroup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) deleteLabelGroup(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
+	s.deleteScopedLabelGroup(w, r, r.PathValue("id"), labelScopeIsWorkspace)
+}
+
+// deleteTeamLabelGroup deletes a team-owned label group from that team's
+// label settings; the workspace route only deletes workspace groups.
+func (s *server) deleteTeamLabelGroup(w http.ResponseWriter, r *http.Request) {
+	teamID := r.PathValue("id")
+	s.deleteScopedLabelGroup(w, r, r.PathValue("groupId"), func(scope string) bool { return scope == teamID })
+}
+
+func (s *server) deleteScopedLabelGroup(w http.ResponseWriter, r *http.Request, id string, inScope func(string) bool) {
 	err := s.store.MutateLabelDeletion(r.Context(), workspaceKey(r), "label_group.deleted", id, true, func(data *domain.Bootstrap) error {
 		before := len(data.LabelGroups)
-		data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == id && labelScopeIsWorkspace(group.Scope) })
+		data.LabelGroups = slices.DeleteFunc(data.LabelGroups, func(group domain.LabelGroup) bool { return group.ID == id && inScope(group.Scope) })
 		if before == len(data.LabelGroups) {
 			return errNotFound
 		}

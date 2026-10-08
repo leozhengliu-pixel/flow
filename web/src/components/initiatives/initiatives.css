@@ -10,3 +10,7 @@
 .li-empty-initiatives-icon__dot.is-strong{fill:var(--theme-text-secondary)}
 .li-empty-initiatives-icon__dot.is-mid{fill:var(--theme-text-tertiary)}
 .li-empty-initiatives-icon__dot.is-dim{fill:var(--initiatives-empty-dot-dim)}
+
+/* Initiative project list: one collapsible group per project status, with its count. */
+.li-project-group__count{margin-left:2px;color:var(--faint)}
+.li-project-group>button:first-child svg{flex:none}
