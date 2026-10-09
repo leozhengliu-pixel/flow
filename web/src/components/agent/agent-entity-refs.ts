@@ -237,7 +237,8 @@ function userByName(data: BootstrapData, username: string) {
 
 /**
  * A Flow URL (any workspace page URL on this app) resolved to the entity target it names. Unknown ids resolve to
- * undefined, except issues / projects the client cannot hold in paged mode, which are fetched when the chip renders.
+ * undefined, except issues (with a team-key identifier) and projects the client does not hold (paged workspaces, or
+ * records created since the page loaded), which are fetched when the chip renders and fall back to plain text if missing.
  */
 export function parseAgentEntityUrl(url: string, data: BootstrapData, linkText?: string): AgentEntityTarget | undefined {
   let parsed: URL
@@ -261,7 +262,7 @@ export function parseAgentEntityUrl(url: string, data: BootstrapData, linkText?:
       if (/^comment-/.test(hash)) return linkOnly('comment')
       const issue = findAgentIssue(data, route.identifier)
       if (issue) return entityTarget({ kind: 'issue', issue })
-      return data.issueCollectionPaged && isAgentIdentifier(data, route.identifier)
+      return isAgentIdentifier(data, route.identifier)
         ? { kind: 'issue', id: route.identifier.toUpperCase(), label: route.identifier.toUpperCase() }
         : undefined
     }
@@ -276,7 +277,7 @@ export function parseAgentEntityUrl(url: string, data: BootstrapData, linkText?:
       }
       const project = findProject(data, slug)
       if (project) return entityTarget({ kind: 'project', project })
-      return data.issueCollectionPaged && !(data.projects ?? []).length ? { kind: 'project', id: slug, label: text || slug } : undefined
+      return { kind: 'project', id: slug, label: text || slug }
     }
     case 'initiative': {
       if (/^(?:initiative-)?update-/.test(hash)) return linkOnly('update')

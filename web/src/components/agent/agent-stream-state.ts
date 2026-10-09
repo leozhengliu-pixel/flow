@@ -26,9 +26,17 @@ export function applyAgentStreamEvent(session: AgentSession | undefined, event: 
 }
 
 export function markAgentSessionStopped(session: AgentSession): AgentSession {
+  return markAgentSessionFailed(session, 'Generation stopped', 'stopped')
+}
+
+/**
+ * Ends the trailing reply with an error row, the way the server saves a failed turn: running parts stop and the
+ * reason is added once. Lets a turn that failed mid-stream show its error (with Retry) without re-reading the chat.
+ */
+export function markAgentSessionFailed(session: AgentSession, reason: string, suffix = 'error'): AgentSession {
   const last = session.messages.at(-1)
   if (!last || last.role !== 'assistant') return session
   const parts = (last.parts ?? []).map(part => part.status === 'running' || part.status === 'pending' ? { ...part, status: 'error' as const } : part)
-  if (!parts.some(part => part.type === 'error')) parts.push({ id: `${last.id}-stopped`, type: 'error', status: 'error', text: 'Generation stopped' })
+  if (!parts.some(part => part.type === 'error')) parts.push({ id: `${last.id}-${suffix}`, type: 'error', status: 'error', text: reason })
   return { ...session, messages: session.messages.map(message => message.id === last.id ? { ...message, parts } : message) }
 }

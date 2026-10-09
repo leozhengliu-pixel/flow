@@ -44,7 +44,7 @@ import { AgentMentionInput, type AgentMention } from "./agent-mention-input";
 import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
 import { AgentSkillsPicker } from './agent-skills-picker'
-import { applyAgentStreamEvent, markAgentSessionStopped } from './agent-stream-state'
+import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
 import { AgentElicitation } from './agent-elicitation';
 import {
@@ -54,6 +54,7 @@ import {
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue';
 import { FlowLogo } from '@/components/ui/flow-logo';
 import { AgentHistoryList } from './agent-history-list';
+import { AgentErrorDetail } from './agent-error-detail';
 import { agentSessionUnread, formatAgentHistoryTime, useMarkAgentSessionRead } from './agent-read-state';
 
 export function AgentPage({
@@ -108,7 +109,10 @@ export function AgentPage({
     const restored = restoredAgentDraft.current;
     setInput(restored.input);
     setSelectedSkills(restored.skillIds);
-    requestAnimationFrame(() => writeInputToEditor(editorRef, restored.input));
+    requestAnimationFrame(() => {
+      writeInputToEditor(editorRef, restored.input);
+      if (document.activeElement === editorRef.current) placeCaretAtEnd(editorRef.current);
+    });
   }, [chatSlug]);
   useEffect(() => {
     if (historyRequested) setHistoryOpen(true);
@@ -224,16 +228,22 @@ export function AgentPage({
     }).catch(() => undefined);
     window.setTimeout(poll, titleRetryDelays[0]);
   };
-  const send = async (message = input) => {
+  /**
+   * Sends `message`, or with `retryOf` runs the user message that already failed again: the server keeps that message,
+   * drops the failed reply after it and answers again, so the chat never gets a second copy of the question.
+   */
+  const send = async (message = input, retryOf?: AgentMessage) => {
     message = message.trim();
     if (!message || replyRunning || !status?.enabled) return;
+    const retrying = Boolean(retryOf && current);
     setBusy(true);
     setError(undefined);
     // Linear shows the sent message and its working state at once; the stream replaces this copy when it starts.
-    setPending(optimisticAgentTurn(current, message, editingId, mentions));
-    let streamed = current, started = false;
+    setPending(optimisticAgentTurn(current, message, retrying ? retryOf!.id : editingId, retrying ? retryOf!.mentions : mentions));
+    let streamed = current, started = false, failedInChat = false;
     try {
-      const attachmentContext = await Promise.all(
+      // A retry resends the saved message as it is (attachment text included), leaving the composer alone.
+      const attachmentContext = retrying ? [] : await Promise.all(
         attachments.map(agentFileContext),
       );
       const providerMessage = attachmentContext.length
@@ -242,7 +252,11 @@ export function AgentPage({
       const controller = new AbortController();
       streamAbortRef.current = controller;
       const onEvent = (event: AgentStreamEvent) => {
-          streamed = applyAgentStreamEvent(streamed, event);
+          // The server saved the failed turn with its error; show the same row now instead of only a banner.
+          if (event.type === "error" && streamed && started) {
+            failedInChat = true;
+            streamed = markAgentSessionFailed(streamed, event.error || t("Flow Agent is unavailable"));
+          } else streamed = applyAgentStreamEvent(streamed, event);
           if (!streamed) return;
           const next = streamed;
           if (event.type === "session.completed") clearLiveAgentSession(next.id);
@@ -269,20 +283,31 @@ export function AgentPage({
         mentions,
       };
       // Linear clears the composer as soon as the message is sent; restore it below if sending fails.
-      setMentions([]);
-      writeInput("");
-      setAttachments([]);
-      if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
+      if (!retrying) {
+        setMentions([]);
+        writeInput("");
+        setAttachments([]);
+      }
+      if (current && retryOf) await streamAgentSessionMessageEdit(current.id, retryOf.id, providerMessage, onEvent, controller.signal);
+      else if (current && editingId) await streamAgentSessionMessageEdit(current.id, editingId, providerMessage, onEvent, controller.signal);
       else if (current) await streamAgentSessionMessage(current.id, providerMessage, onEvent, controller.signal, mentioned);
       else await streamNewAgentSession({ message: providerMessage, ...mentioned, skillIds: selectedSkills, location: "page" }, onEvent, controller.signal);
-      clearAgentDraft(agentDraftKey);
-      setEditingId(undefined);
+      if (!retrying) {
+        clearAgentDraft(agentDraftKey);
+        setEditingId(undefined);
+      }
     } catch (reason) {
       setPending(undefined);
-      writeInput(message);
+      // When the server reported the failure it had already saved the question and its error row (shown with Retry),
+      // so putting the text back in the composer would only invite a second copy of it.
+      if (!retrying && !failedInChat) writeInput(message);
       if (reason instanceof DOMException && reason.name === "AbortError") {
         // Keep the stopped chat (the server already saved the message) in the workspace data too.
         if (started && streamed) saveSession(markAgentSessionStopped(streamed));
+        return;
+      }
+      if (failedInChat && streamed) {
+        saveSession(streamed);
         return;
       }
       setError(
@@ -343,6 +368,16 @@ export function AgentPage({
       .filter((session): session is AgentSession => Boolean(session))),
     [historyCommand.filteredOptions, sessions],
   );
+  // Like Linear, the empty new-chat page opens ready to type: focus lands in the composer on arrival and whenever
+  // the page goes back to a new chat. It never takes focus from another text field or an open dialog/menu.
+  const emptyPage = !chatSlug && !shown;
+  useEffect(() => {
+    if (!emptyPage) return;
+    const editor = editorRef.current;
+    if (!editor || document.activeElement === editor || typingElsewhere(editor) || document.querySelector(openOverlaySelector)) return;
+    editor.focus({ preventScroll: true });
+    placeCaretAtEnd(editor);
+  }, [emptyPage]);
   const newChat = () => {
     setHistoryOpen(false);
     setActiveStreamId(undefined);
@@ -517,7 +552,7 @@ export function AgentPage({
             draftContext={data.projects.find((project) => shown.projectIds?.includes(project.id))?.name ?? shown.title}
             session={shown}
             editingId={editingId}
-            onRetry={(message) => void send(message)}
+            onRetry={(message) => void send(message.content, message)}
             onToolApproval={decideToolApproval}
             approvalBusy={approvalBusy}
             onEdit={(message) => {
@@ -547,7 +582,18 @@ export function AgentPage({
         <div className={shown ? styles.stagePassthrough : styles.emptyColumn}>
         <div className={shown ? styles.stagePassthrough : styles.emptyComposerSlot}>
         {!shown && <FlowLogo className={styles.emptyLogo} variant="outline" />}
-        <div className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}>
+        <div
+          className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}
+          // The editor is one line tall inside a taller box: a press on the box's empty space focuses it too.
+          onMouseDown={(event) => {
+            const editor = editorRef.current;
+            const target = event.target as HTMLElement;
+            if (event.button !== 0 || !editor || editor.getAttribute("contenteditable") !== "true" || editor.contains(target) || target.closest(composerControlSelector)) return;
+            event.preventDefault();
+            editor.focus({ preventScroll: true });
+            placeCaretAtEnd(editor);
+          }}
+        >
           {attachments.length > 0 && (
             <div className={styles.attachments}>
               {attachments.map((file, index) => (
@@ -622,7 +668,7 @@ export function AgentPage({
           </footer>
           {error && (
             <span className={styles.error} role="alert">
-              {error}
+              <AgentErrorDetail error={error} />
             </span>
           )}
         </div>
@@ -690,7 +736,7 @@ function Conversation({
   draftProject?: Project;
   editingId?: string;
   onEdit: (message: AgentSession["messages"][number]) => void;
-  onRetry: (message: string) => void;
+  onRetry: (message: AgentMessage) => void;
   onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void;
   approvalBusy?: string;
   session: AgentSession;
@@ -715,6 +761,8 @@ function Conversation({
     >
       <div className={styles.conversationInner}>
         {session.messages.map((message, index) => {
+          // Retry runs the question again, so only the newest reply offers it (never an older error in the history).
+          const retryTarget = message.role === "assistant" ? lastUserMessage(session.messages, index) : undefined;
           const waiting = busy && index === session.messages.length - 1 && message.role === "assistant" && !message.content && !message.parts?.length;
           const answer: AnswerProps = message.role === "assistant"
             ? { data, onSuggestion: index === latestAssistantIndex && !busy ? onSuggestion : undefined, streaming: busy && index === session.messages.length - 1 }
@@ -734,7 +782,7 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><span className={styles.workShimmer}>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts {...answer} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={lastUserMessage(session.messages, index) ? () => onRetry(lastUserMessage(session.messages, index)) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
+                    ? <AgentMessageParts {...answer} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
                     : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
               </div>
               <div className={styles.messageActions}>
@@ -777,7 +825,7 @@ function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToo
     {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text}/>}
     <AgentElicitationResponseQueue answeredCount={queue.answeredCount} elicitationCount={queue.elicitationCount} isSubmitting={submitting} />
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
-      ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
+      ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
     {text && <AgentMessageText {...answer} content={text} draftContext={draftContext} draftProject={draftProject}/>}
   </div>;
@@ -824,11 +872,14 @@ function optimisticAgentTurn(session: AgentSession | undefined, message: string,
   return { id: `pending-${stamp}`, slugId: "", userId: "", title: message.split("\n")[0].slice(0, 80), favorite: false, location: "page", issueIds: [], skillIds: [], messages, createdAt: now, updatedAt: now };
 }
 
+/** The saved user message a reply answers (never a not-yet-saved local copy). */
 function lastUserMessage(messages: AgentMessage[], before: number) {
   for (let index = before; index >= 0; index--) {
-    if (messages[index].role === "user") return messages[index].content;
+    const message = messages[index];
+    if (message.role !== "user") continue;
+    return message.content.trim() && !message.id.startsWith("pending-") ? message : undefined;
   }
-  return "";
+  return undefined;
 }
 
 function groupAgentHistory(sessions: AgentSession[]) {
@@ -854,6 +905,27 @@ function markdown(session: AgentSession) {
     .join("\n\n");
 }
 
+
+/** Controls inside the composer that keep their own press behaviour. */
+const composerControlSelector = 'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [contenteditable="true"]';
+/** Overlays that own the keyboard while open (same notion as the global shortcut guard). */
+const openOverlaySelector = '[role="dialog"], [role="menu"][data-state="open"], [data-radix-popper-content-wrapper]';
+
+function typingElsewhere(editor: HTMLElement) {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active === document.body || active === editor) return false;
+  return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement || active.isContentEditable || active.getAttribute("contenteditable") === "true";
+}
+
+function placeCaretAtEnd(editor: HTMLElement | null) {
+  const selection = window.getSelection();
+  if (!editor || !selection) return;
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
 
 function writeInputToEditor(editorRef: RefObject<HTMLDivElement | null>, value: string) {
   if (editorRef.current && editorRef.current.textContent !== value) editorRef.current.textContent = value;

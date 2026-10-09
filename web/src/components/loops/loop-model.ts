@@ -255,13 +255,6 @@ export function runDuration(startedAt: string, finishedAt?: string, now = Date.n
   return seconds % 60 ? `${minutes}m ${seconds % 60}s` : `${minutes}m`;
 }
 
-export function runTriggerLabel(run: { trigger: "manual" | "schedule" | "event"; triggerLabel?: string; entityIdentifier?: string }) {
-  if (run.triggerLabel) return run.triggerLabel;
-  if (run.trigger === "manual") return run.entityIdentifier ? `Manual run on ${run.entityIdentifier}` : "Manual run";
-  if (run.trigger === "schedule") return "Scheduled run";
-  return run.entityIdentifier ? `Triggered by ${run.entityIdentifier}` : "Triggered run";
-}
-
 /** Instruction placeholder follows the trigger like Linear. */
 export function instructionsPlaceholder(triggerType: LoopTriggerType) {
   if (triggerType === "schedule")

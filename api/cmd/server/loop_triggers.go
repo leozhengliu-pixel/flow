@@ -236,11 +236,55 @@ func (s *server) resolveLoopEvent(workspace string, data domain.Bootstrap, event
 	return result, true
 }
 
+// loopTriggerReason says why an event started a run: a stable code the web
+// app translates and, for property changes, the new value (empty for none).
+type loopTriggerReason struct {
+	Code  string
+	Value string
+}
+
+// loopTriggerReasonTexts are the English trigger reasons by code; {value} is
+// the new value. The web app mirrors this table (TRIGGER_REASON_TEXTS in
+// web/src/components/loops/loop-run-labels.ts) to translate run triggers.
+var loopTriggerReasonTexts = map[string]string{
+	"created": "created", "updated": "updated", "comment": "new comment", "customerRequest": "new customer request",
+	"triage": "entering triage", "status": "status → {value}", "statusChanged": "status changed",
+	"priority": "priority → {value}", "assignee": "assignee → {value}", "agent": "agent → {value}",
+	"project": "project → {value}", "team": "team → {value}", "label": "label {value} added",
+	"update": "new update", "started": "started", "completed": "completed",
+}
+
+// loopTriggerReasonNone is the value shown when a property was cleared.
+var loopTriggerReasonNone = map[string]string{"assignee": "No assignee", "agent": "No agent", "project": "No project"}
+
+func (reason loopTriggerReason) text() string {
+	value := reason.Value
+	if value == "" {
+		value = loopTriggerReasonNone[reason.Code]
+	}
+	return strings.Replace(loopTriggerReasonTexts[reason.Code], "{value}", value, 1)
+}
+
+// label is the English trigger label stored on the run ("Triggered by DEV-24
+// entering triage"); clients that know the reason code translate it instead.
+func (reason loopTriggerReason) label(entityName string) string {
+	return strings.TrimSpace("Triggered by " + entityName + " " + reason.text())
+}
+
 // loopEventMatches reports whether a loop's trigger fires for an event and, if
 // so, how the run should describe its trigger.
 func loopEventMatches(data domain.Bootstrap, loop domain.Loop, event loopEvent) (bool, string) {
-	if loop.TriggerType != event.EntityType {
+	matched, reason := matchLoopEvent(data, loop, event)
+	if !matched {
 		return false, ""
+	}
+	return true, reason.label(loopEventEntityName(data, event))
+}
+
+// matchLoopEvent reports whether a loop's trigger fires for an event and why.
+func matchLoopEvent(data domain.Bootstrap, loop domain.Loop, event loopEvent) (bool, loopTriggerReason) {
+	if loop.TriggerType != event.EntityType {
+		return false, loopTriggerReason{}
 	}
 	config := normalizeLoopTriggerConfig(loop.TriggerType, loop.TriggerConfig)
 	want, _ := config["event"].(string)
@@ -251,125 +295,126 @@ func loopEventMatches(data domain.Bootstrap, loop domain.Loop, event loopEvent) 
 	if text, ok := value.(string); ok && (text == "" || strings.EqualFold(text, "any")) {
 		hasValue = false
 	}
-	name := loopEventEntityName(data, event)
 	if event.Issue != nil {
 		issue := *event.Issue
-		matched, detail := loopIssueEventMatches(data, issue, event, want, value, hasValue)
+		matched, reason := loopIssueEventMatches(data, issue, event, want, value, hasValue)
 		if !matched || !loopFiltersMatch(data, config, issue) {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return true, strings.TrimSpace("Triggered by " + name + " " + detail)
+		return true, reason
 	}
 	switch want {
 	case "created", "update", "started", "completed":
 		if event.Kind != want {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 	case "updated":
 		if event.Kind != "updated" {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 	case "status":
 		if event.Kind != "updated" {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 		_, status := event.Previous["status"]
 		_, stage := event.Previous["stage"]
 		if !status && !stage {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 	default:
-		return false, ""
+		return false, loopTriggerReason{}
 	}
-	detail := map[string]string{"created": "created", "updated": "updated", "status": "status changed", "update": "new update", "started": "started", "completed": "completed"}[want]
-	return true, "Triggered by " + name + " " + detail
+	if want == "status" {
+		return true, loopTriggerReason{Code: "statusChanged"}
+	}
+	return true, loopTriggerReason{Code: want}
 }
 
-func loopIssueEventMatches(data domain.Bootstrap, issue domain.Issue, event loopEvent, want string, value any, hasValue bool) (bool, string) {
+func loopIssueEventMatches(data domain.Bootstrap, issue domain.Issue, event loopEvent, want string, value any, hasValue bool) (bool, loopTriggerReason) {
 	previous := event.Previous
 	changed := func(key string) bool { _, ok := previous[key]; return ok }
 	switch want {
 	case "created":
-		return event.Kind == "created", "created"
+		return event.Kind == "created", loopTriggerReason{Code: "created"}
 	case "updated":
-		return event.Kind == "updated", "updated"
+		return event.Kind == "updated", loopTriggerReason{Code: "updated"}
 	case "comment":
-		return event.Kind == "comment", "new comment"
+		return event.Kind == "comment", loopTriggerReason{Code: "comment"}
 	case "customerRequest":
-		return event.Kind == "customerRequest", "new customer request"
+		return event.Kind == "customerRequest", loopTriggerReason{Code: "customerRequest"}
 	case "triage":
 		if !loopIssueInTriage(data, issue) {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 		if event.Kind == "created" {
-			return true, "entering triage"
+			return true, loopTriggerReason{Code: "triage"}
 		}
 		if event.Kind != "updated" || !changed("state") && !changed("triagedAt") && !changed("team") {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return !loopIssueWasInTriage(data, issue, previous), "entering triage"
+		return !loopIssueWasInTriage(data, issue, previous), loopTriggerReason{Code: "triage"}
 	}
 	if event.Kind != "updated" && !(event.Kind == "created" && want != "team") {
-		return false, ""
+		return false, loopTriggerReason{}
 	}
 	// On creation a property "changes" to its initial value only when it is set.
 	created := event.Kind == "created"
 	switch want {
 	case "status":
 		if !created && !changed("state") {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 		if created && !hasValue {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return !hasValue || loopStatusMatches(data, issue, fmt.Sprint(value)), "status → " + loopStatusName(data, issue)
+		return !hasValue || loopStatusMatches(data, issue, fmt.Sprint(value)), loopTriggerReason{Code: "status", Value: loopStatusName(data, issue)}
 	case "priority":
 		if !created && !changed("priority") || created && issue.Priority == 0 {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return !hasValue || loopPriorityMatches(issue, value), "priority → " + firstNonEmpty(issue.PriorityLabel, strconv.Itoa(issue.Priority))
+		return !hasValue || loopPriorityMatches(issue, value), loopTriggerReason{Code: "priority", Value: firstNonEmpty(issue.PriorityLabel, strconv.Itoa(issue.Priority))}
 	case "assignee":
 		if !created && !changed("assignee") || created && issue.Assignee == nil {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return !hasValue || loopUserMatches(issue.Assignee, value), "assignee → " + loopUserName(issue.Assignee, "No assignee")
+		return !hasValue || loopUserMatches(issue.Assignee, value), loopTriggerReason{Code: "assignee", Value: loopUserName(issue.Assignee, "")}
 	case "agent":
 		if !created && !changed("delegate") || created && issue.Delegate == nil {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return !hasValue || loopUserMatches(issue.Delegate, value), "agent → " + loopUserName(issue.Delegate, "No agent")
+		return !hasValue || loopUserMatches(issue.Delegate, value), loopTriggerReason{Code: "agent", Value: loopUserName(issue.Delegate, "")}
 	case "project":
 		if !created && !changed("project") || created && issue.Project == nil {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		projectName := "No project"
+		reason := loopTriggerReason{Code: "project"}
 		if issue.Project != nil {
-			projectName = issue.Project.Name
+			reason.Value = issue.Project.Name
 		}
 		if !hasValue {
-			return true, "project → " + projectName
+			return true, reason
 		}
 		if value == nil {
-			return issue.Project == nil, "project → " + projectName
+			return issue.Project == nil, reason
 		}
-		return issue.Project != nil && (issue.Project.ID == fmt.Sprint(value) || strings.EqualFold(issue.Project.Name, fmt.Sprint(value))), "project → " + projectName
+		return issue.Project != nil && (issue.Project.ID == fmt.Sprint(value) || strings.EqualFold(issue.Project.Name, fmt.Sprint(value))), reason
 	case "team":
 		if !changed("team") {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
-		return !hasValue || issue.Team.ID == fmt.Sprint(value) || strings.EqualFold(issue.Team.Key, fmt.Sprint(value)), "team → " + issue.Team.Name
+		return !hasValue || issue.Team.ID == fmt.Sprint(value) || strings.EqualFold(issue.Team.Key, fmt.Sprint(value)), loopTriggerReason{Code: "team", Value: issue.Team.Name}
 	case "labels":
 		added := loopAddedLabels(issue, previous, created)
 		if len(added) == 0 {
-			return false, ""
+			return false, loopTriggerReason{}
 		}
 		for _, label := range added {
 			if !hasValue || label.ID == fmt.Sprint(value) || strings.EqualFold(label.Name, fmt.Sprint(value)) {
-				return true, "label " + label.Name + " added"
+				return true, loopTriggerReason{Code: "label", Value: label.Name}
 			}
 		}
 	}
-	return false, ""
+	return false, loopTriggerReason{}
 }
 
 func loopIssueInTriage(data domain.Bootstrap, issue domain.Issue) bool {
@@ -573,7 +618,7 @@ func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent
 		if !loopLive(loop) || loop.TriggerType != resolved.EntityType {
 			continue
 		}
-		matched, label := loopEventMatches(data, loop, resolved)
+		matched, reason := matchLoopEvent(data, loop, resolved)
 		if !matched {
 			continue
 		}
@@ -584,7 +629,7 @@ func (s *server) dispatchLoopTriggers(workspace string, event domain.DomainEvent
 		if sourceKey != "" && !loopSourceTrusted(data.WorkspaceSettings, loop, sourceKey) {
 			continue
 		}
-		trigger := loopTrigger{Kind: "event", EventType: event.Type, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: label}
+		trigger := loopTrigger{Kind: "event", EventType: event.Type, EntityType: resolved.EntityType, EntityID: resolved.EntityID, SourceKey: sourceKey, Label: reason.label(loopEventEntityName(data, resolved)), Reason: reason}
 		if _, err := s.startLoopRun(workspace, loop.ID, trigger, ""); err != nil && !errors.Is(err, errConflict) && !errors.Is(err, errLoopUnavailable) {
 			log.Printf("Loop trigger workspace=%s loop=%s: %v", workspace, loop.ID, err)
 		}

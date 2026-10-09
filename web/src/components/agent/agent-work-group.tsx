@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import type { AgentMessage, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
+import { AgentRichText } from "./agent-rich-text";
+import { toolStatusLabel, translateToolTitle } from "./agent-step-labels";
 import styles from "./agent-page.module.css";
+import workStyles from "./agent-work-group.module.css";
 
 /** Shared "Worked for N seconds" group used by the Agent page and embedded agent threads. */
 export function AgentWorkGroup({ message, parts: allParts, onToolApproval, approvalBusy, running: forceRunning = false, className, collapseWhenDone = false }: { message: Pick<AgentMessage, "durationMs">; parts: NonNullable<AgentMessage["parts"]>; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; running?: boolean; className?: string; /** Fold back to "Worked for N seconds ▸" when the turn finishes (loop builder). */ collapseWhenDone?: boolean }) {
@@ -33,12 +36,23 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
     <summary><span className={running ? styles.workShimmer : undefined}>{label}</span><WorkDisclosureIcon/></summary>
     <div className={styles.workItems}>
       {parts.map(part => part.type === "step"
-        ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{part.title}</span>{part.text && <div className={styles.reasoningRow}><p data-i18n-ignore>{part.text}</p></div>}</div>
+        ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{part.title}</span>{part.text && <div className={styles.reasoningRow}><AgentReasoningText text={part.text}/></div>}</div>
         : part.type === "reasoning"
-        ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <p>{part.text}</p>}</div>
+        ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <AgentReasoningText text={part.text}/>}</div>
         : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
   </details>;
+}
+
+/** Model-written narration (reasoning summaries, step plans) is markdown: "**Planning** the work" renders bold, never literal asterisks. */
+function AgentReasoningText({ text }: { text: string }) {
+  const { t } = useI18n();
+  return <AgentRichText ariaLabel={t("Agent reasoning")} className={workStyles.reasoningText} content={splitAdjacentBold(text)}/>;
+}
+
+/** Reasoning summaries concatenate bold headings ("**One****Two**"), which markdown cannot parse; put each on its own paragraph. */
+function splitAdjacentBold(text: string) {
+  return text.replace(/(\S)\*\*\*\*(?=\S)/g, "$1**\n\n**");
 }
 
 function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullable<AgentMessage["parts"]>[number]; onApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
@@ -48,46 +62,10 @@ function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullab
   const detail = readableToolDetail(call.arguments, call.result);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
   return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined}>{call.title && !running ? t(call.title) : toolStatusLabel(call.name, running, call.arguments)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t) : toolStatusLabel(call.name, running, t, call.arguments)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
     {call.error && <p className={styles.toolCallErrorText} role="alert">{call.error}</p>}
   </div>;
-}
-
-function toolStatusLabel(name: string, running: boolean, args?: Record<string, unknown>) {
-  const updating = typeof args?.id === "string" && args.id !== "";
-  const labels: Record<string, [string, string]> = {
-    list_issues: ["Looking at issues…", "Looked at issues"], list_projects: ["Looking at projects…", "Looked at projects"],
-    list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
-    search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: updating ? ["Updating issue…", "Updated issue"] : ["Creating issue…", "Created issue"],
-    save_project: updating ? ["Updating project…", "Updated project"] : ["Creating project…", "Created project"], save_initiative: updating ? ["Updating initiative…", "Updated initiative"] : ["Creating initiative…", "Created initiative"],
-    save_comment: updating ? ["Updating comment…", "Updated comment"] : ["Adding comment…", "Added comment"],
-    get_issue: ["Looking at issue…", "Looked at issue"], list_issue_history: ["Looking at issue activity…", "Looked at issue activity"],
-    list_project_activity: ["Looking at project activity…", "Looked at project activity"], get_status_updates: ["Looking at project updates…", "Looked at project updates"],
-    search_issues: ["Searching issues…", "Searched issues"], list_notifications: ["Reviewing inbox…", "Reviewed inbox"],
-    list_users: ["Looking at users…", "Looked at users"], list_views: ["Looking at views…", "Looked at views"],
-    list_templates: ["Looking at templates…", "Looked at templates"], list_customers: ["Looking at customers…", "Looked at customers"],
-    save_status_update: ["Creating project update…", "Created project update"], save_draft: ["Creating draft…", "Created draft"],
-    save_team: updating ? ["Updating team…", "Updated team"] : ["Creating team…", "Created team"],
-    save_label: ["Saving label…", "Saved label"], delete_label: ["Deleting label…", "Deleted label"],
-    save_view: ["Saving view…", "Saved view"], delete_issue: ["Deleting issue…", "Deleted issue"],
-    triage_issue: ["Triaging issue…", "Triaged issue"], save_reaction: ["Reacting…", "Reacted"],
-    save_subscription: ["Updating subscription…", "Updated subscription"], save_document: ["Saving document…", "Saved document"],
-    save_template: ["Saving template…", "Saved template"], update_notification: ["Updating inbox…", "Updated inbox"],
-    save_agent_skill: ["Saving skill…", "Saved skill"], save_loop: ["Saving loop…", "Saved loop"],
-  };
-  if (labels[name]) return labels[name][running ? 0 : 1];
-  const [verb, ...words] = name.split("_");
-  const subject = words.join(" ") || "workspace";
-  const verbs: Record<string, [string, string]> = {
-    list: ["Looking at", "Looked at"], get: ["Looking at", "Looked at"], search: ["Searching", "Searched"], extract: ["Extracting", "Extracted"],
-    save: ["Updating", "Updated"], update: ["Updating", "Updated"], create: ["Creating", "Created"], delete: ["Deleting", "Deleted"],
-    prepare: ["Preparing", "Prepared"], merge: ["Merging", "Merged"], submit: ["Submitting", "Submitted"], resolve: ["Resolving", "Resolved"],
-  };
-  const action = verbs[verb]?.[running ? 0 : 1];
-  if (action) return `${action} ${subject}${running ? "…" : ""}`;
-  const fallback = name.replaceAll("_", " ").replace(/^./, value => value.toUpperCase());
-  return running ? `${fallback}…` : fallback;
 }
 
 /** Step subtitle: the looked-up entity's name when the result has one, never a bare internal id (project_123…). */

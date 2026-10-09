@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getLoop, getLoopConfig, listLoopTemplates, listLoops } from "@/lib/api";
 import { loopPath, newLoopPath } from "@/lib/app-routes";
 import type { AgentMessagePart, AgentToolCall, BootstrapData, Loop, LoopConfig, LoopRun, LoopTemplate, Team } from "@/types/flow";
 import { isLoopDraft } from "./loop-model";
+import { isPermanentLoadError, useBackoffRetry } from "./loop-poll";
 
 const AUTOSTART_KEY = "flow:loop-agent-autostart:";
 
@@ -101,11 +102,18 @@ export function useLoopConfig() {
   return config;
 }
 
-/** Loads a loop from bootstrap, then keeps it fresh from the API. */
+/**
+ * Loads a loop from bootstrap, then keeps it fresh from the API.
+ * A transient failure (an API restart answers 502) retries with backoff instead of reporting the loop missing.
+ */
 export function useLoopRecord(data: BootstrapData, loopId: string) {
   const cached = data.loops.find((item) => item.id === loopId);
   const [loop, setLoop] = useState<Loop | undefined>(cached);
   const [missing, setMissing] = useState(false);
+  const [failures, setFailures] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((count) => count + 1), []);
+  useBackoffRetry(failures, retry);
   useEffect(() => {
     let active = true;
     getLoop(loopId)
@@ -113,29 +121,45 @@ export function useLoopRecord(data: BootstrapData, loopId: string) {
         if (!active) return;
         setLoop(next);
         setMissing(false);
+        setFailures(0);
       })
-      .catch(() => active && !cached && setMissing(true));
+      .catch((reason) => {
+        if (!active) return;
+        if (isPermanentLoadError(reason)) {
+          if (!cached) setMissing(true);
+          return;
+        }
+        setFailures((count) => count + 1);
+      });
     return () => {
       active = false;
     };
-  }, [cached, loopId]);
+  }, [attempt, cached, loopId]);
   return { loop, setLoop, missing };
 }
 
-/** Loops from bootstrap, refreshed from the API (the list carries drafts and run counts). */
+/** Loops from bootstrap, refreshed from the API (the list carries drafts and run counts); a failed refresh retries with backoff. */
 export function useLoops(data: Pick<BootstrapData, "loops">) {
   const [fetched, setFetched] = useState<Loop[]>();
+  const [failures, setFailures] = useState(0);
+  const [attempt, setAttempt] = useState(0);
+  const retry = useCallback(() => setAttempt((count) => count + 1), []);
+  useBackoffRetry(failures, retry);
   useEffect(() => {
     let active = true;
     listLoops()
       .then((items) => {
-        if (active && Array.isArray(items)) setFetched(items);
+        if (!active) return;
+        if (Array.isArray(items)) setFetched(items);
+        setFailures(0);
       })
-      .catch(() => undefined);
+      .catch((reason) => {
+        if (active && !isPermanentLoadError(reason)) setFailures((count) => count + 1);
+      });
     return () => {
       active = false;
     };
-  }, [data.loops]);
+  }, [attempt, data.loops]);
   return [fetched ?? data.loops ?? [], setFetched] as const;
 }
 

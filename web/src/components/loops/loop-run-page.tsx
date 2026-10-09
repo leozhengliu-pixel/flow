@@ -25,9 +25,12 @@ import type { BootstrapData, LoopRun, LoopRunReply, LoopRunStatus } from "@/type
 import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
-import { dayLabel, runDuration, runTriggerLabel } from "./loop-model";
+import { dayLabel, runDuration } from "./loop-model";
+import { describeRunFailure, runTriggerText } from "./loop-run-labels";
+import { ErrorDetails } from "@/components/agent/agent-error-detail";
 import { GridLoader } from '@/components/ui/grid-loader'
 import { REASON_LABELS, RUN_STATUSES, STATUS_LABELS } from './loop-run-status'
+import { useBackoffRetry } from './loop-poll'
 
 const POLL_MS = 1500;
 /** Loop runs never wait for approvals in the transcript. */
@@ -44,6 +47,25 @@ function RunStatusIcon({ status }: { status: LoopRunStatus }) {
   return <CheckCircle2 aria-label={label} className="loops-run-status is-completed" size={14} />;
 }
 
+/** The translated explanation under a failure reason, with the server's raw text under "Details". */
+function RunFailureDetail({ run }: { run: LoopRun | LoopRunReply }) {
+  const { locale, t } = useI18n();
+  const { message, items, detail } = describeRunFailure(run, t, locale);
+  return (
+    <>
+      {message && <p data-i18n-ignore>{message}</p>}
+      {items && items.length > 0 && (
+        <ul className="loops-run-error-items" data-i18n-ignore>
+          {items.map((item, index) => (
+            <li key={index}>{item}</li>
+          ))}
+        </ul>
+      )}
+      {detail && <ErrorDetails className="loops-run-error-details" detail={detail} />}
+    </>
+  );
+}
+
 /** Why a finished run did not simply complete: needs review, failed, cancelled or interrupted. */
 function RunOutcome({ data, run }: { data: BootstrapData; run: LoopRun }) {
   const { t } = useI18n();
@@ -56,7 +78,7 @@ function RunOutcome({ data, run }: { data: BootstrapData; run: LoopRun }) {
         <div>
           <strong>{t("Needs review")}</strong>
           {reason && <p className="loops-run-error-reason">{reason}</p>}
-          {run.error && <p data-i18n-ignore>{run.error}</p>}
+          <RunFailureDetail run={run} />
         </div>
       </div>
     );
@@ -88,7 +110,7 @@ function RunOutcome({ data, run }: { data: BootstrapData; run: LoopRun }) {
       <div>
         <strong>{t("Loop couldn't run")}</strong>
         {reason && run.failureReason !== "error" && <p className="loops-run-error-reason">{reason}</p>}
-        {run.error && <p data-i18n-ignore>{run.error}</p>}
+        <RunFailureDetail run={run} />
       </div>
     </div>
   );
@@ -119,24 +141,34 @@ export function LoopRunPage({
   const [triggerFilters, setTriggerFilters] = useState<LoopRun["trigger"][]>([]);
   const [showDuration, setShowDuration] = useState(true);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
-  const [error, setError] = useState<string>();
+  // Consecutive failed list loads (an API restart answers 502): retried with backoff until one succeeds.
+  const [listFailures, setListFailures] = useState(0);
 
   const loadRuns = useCallback(async () => {
     try {
       const items = await listLoopRuns(loopId);
       setRuns(Array.isArray(items) ? items : []);
-    } catch (reason) {
-      setRuns([]);
-      setError(reason instanceof Error ? reason.message : t("Could not load loop runs"));
+      setListFailures(0);
+    } catch {
+      // Keep the runs already loaded; the list just shows a transient notice.
+      setRuns((current) => current ?? []);
+      setListFailures((count) => count + 1);
     }
-  }, [loopId, t]);
+  }, [loopId]);
   useEffect(() => {
     void loadRuns();
   }, [loadRuns]);
+  const retryRuns = useCallback(() => void loadRuns(), [loadRuns]);
+  useBackoffRetry(listFailures, retryRuns);
 
   const activeId = runId ?? runs?.[0]?.id;
   const runsRef = useRef(runs);
   runsRef.current = runs;
+  // Consecutive failed loads of the selected run; a retry re-runs the load below after a backoff.
+  const [selectFailures, setSelectFailures] = useState(0);
+  const [selectAttempt, setSelectAttempt] = useState(0);
+  const retrySelected = useCallback(() => setSelectAttempt((count) => count + 1), []);
+  useBackoffRetry(selectFailures, retrySelected);
   useEffect(() => {
     if (!activeId) {
       setSelected(undefined);
@@ -144,19 +176,25 @@ export function LoopRunPage({
     }
     let active = true;
     const fromList = runsRef.current?.find((item) => item.id === activeId);
-    if (fromList) setSelected(fromList);
+    if (fromList) setSelected((current) => (current?.id === activeId ? current : fromList));
     getLoopRun(loopId, activeId)
-      .then((run) => active && setSelected(run))
-      .catch(() => undefined);
+      .then((run) => {
+        if (!active) return;
+        setSelected(run);
+        setSelectFailures(0);
+      })
+      .catch(() => active && setSelectFailures((count) => count + 1));
     return () => {
       active = false;
     };
-    // Runs refresh on their own poll; only re-fetch when the selection changes.
-  }, [activeId, loopId]);
+    // Runs refresh on their own poll; only re-fetch when the selection changes (or a failed load is retried).
+  }, [activeId, loopId, selectAttempt]);
 
   // Poll the selected run and the list while anything is still running (a run, or the agent answering a reply).
   const replying = Boolean(selected?.replies?.some((reply) => reply.status === "running"));
   const running = selected?.status === "running" || replying || Boolean(runs?.some((item) => item.status === "running"));
+  const listFailuresRef = useRef(listFailures);
+  listFailuresRef.current = listFailures;
   const refreshSelected = useCallback(() => {
     if (!activeId) return;
     void getLoopRun(loopId, activeId)
@@ -169,6 +207,8 @@ export function LoopRunPage({
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
+      // While the list is failing, the backoff retry drives the requests instead of this fixed-rate poll.
+      if (listFailuresRef.current > 0) return;
       refreshSelected();
       void loadRuns();
     }, POLL_MS);
@@ -191,10 +231,10 @@ export function LoopRunPage({
     return (runs ?? []).filter((run) => {
       if (statusFilters.length && !statusFilters.includes(run.status)) return false;
       if (triggerFilters.length && !triggerFilters.includes(run.trigger)) return false;
-      if (needle && !`${runTriggerLabel(run)} ${run.entityIdentifier ?? ""} ${run.output ?? ""} ${run.error ?? ""}`.toLowerCase().includes(needle)) return false;
+      if (needle && !`${runTriggerText(run, t)} ${run.triggerLabel ?? ""} ${run.entityIdentifier ?? ""} ${run.output ?? ""} ${run.error ?? ""}`.toLowerCase().includes(needle)) return false;
       return true;
     });
-  }, [query, runs, statusFilters, triggerFilters]);
+  }, [query, runs, statusFilters, t, triggerFilters]);
 
   // Linear's ↓/↑: the next (older) and previous (newer) run in the visible list.
   const position = filtered.findIndex((run) => run.id === activeId);
@@ -333,8 +373,16 @@ export function LoopRunPage({
             </DropdownMenu>
           </div>
           {runs === undefined ? null : filtered.length === 0 ? (
-            <p className="loops-run-list-empty">{error ?? t(runs.length ? "No runs match." : "This loop has not run yet.")}</p>
+            <p className="loops-run-list-empty" role={listFailures > 0 ? "status" : undefined}>
+              {listFailures > 0 && !runs.length ? t("Could not load loop runs. Retrying…") : t(runs.length ? "No runs match." : "This loop has not run yet.")}
+            </p>
           ) : (
+            <>
+            {listFailures > 0 && (
+              <p className="loops-run-list-notice" role="status">
+                {t("Connection lost. Retrying…")}
+              </p>
+            )}
             <ol>
               {filtered.map((run) => (
                 <li key={run.id}>
@@ -343,8 +391,8 @@ export function LoopRunPage({
                     className={`loops-run-row${run.id === activeId ? " is-active" : ""}`}
                     onClick={() => onNavigate(loopRunPath(workspace, loopId, run.id))}
                   >
-                    <span className="loops-run-row-label" data-i18n-ignore={run.triggerLabel ? true : undefined}>
-                      {run.triggerLabel ?? t(runTriggerLabel(run))}
+                    <span className="loops-run-row-label" data-i18n-ignore>
+                      {runTriggerText(run, t)}
                     </span>
                     <RunStatusIcon status={run.status} />
                     {showDuration && <span className="loops-run-row-meta">{runDuration(run.startedAt, run.finishedAt)}</span>}
@@ -355,6 +403,7 @@ export function LoopRunPage({
                 </li>
               ))}
             </ol>
+            </>
           )}
         </aside>
         <section className="loops-run-detail" aria-label={t("Run")}>
@@ -382,7 +431,7 @@ export function LoopRunPage({
               </header>
               <p className="loops-run-subtitle">
                 <RunStatusIcon status={selected.status} />
-                <span data-i18n-ignore={selected.triggerLabel ? true : undefined}>{selected.triggerLabel ?? t(runTriggerLabel(selected))}</span>
+                <span data-i18n-ignore>{runTriggerText(selected, t)}</span>
                 <span>· {runDuration(selected.startedAt, selected.finishedAt)}</span>
                 {selected.version !== undefined && (
                   <a
@@ -487,7 +536,7 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
           <XCircle size={16} />
           <div>
             <strong>{t("The agent couldn't reply")}</strong>
-            {reply.error && <p data-i18n-ignore>{reply.error}</p>}
+            <RunFailureDetail run={reply} />
           </div>
         </div>
       )}

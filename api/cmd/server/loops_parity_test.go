@@ -198,6 +198,9 @@ func TestIssuePropertyTriggersFireOnlyOnMatchingChanges(t *testing.T) {
 	if want := "Triggered by " + issue.Identifier + " status → " + started.Name; runs[0].TriggerLabel != want {
 		t.Fatalf("status label = %q, want %q", runs[0].TriggerLabel, want)
 	}
+	if runs[0].TriggerReason != "status" || runs[0].TriggerValue != started.Name {
+		t.Fatalf("status reason = %q %q", runs[0].TriggerReason, runs[0].TriggerValue)
+	}
 	requestJSON[domain.Issue](t, handler, http.MethodPatch, "/api/issues/"+issue.ID, map[string]any{"priority": 1}, http.StatusOK)
 	runs = waitForLoopRuns(t, handler, priorityLoop.ID, 1)
 	if !strings.Contains(runs[0].TriggerLabel, "priority → Urgent") {

@@ -20,6 +20,7 @@ import {
   writeAgentDraft,
 } from './agent-drafts'
 import styles from './entity-agent-thread.module.css'
+import { AgentErrorDetail } from './agent-error-detail'
 import { GridLoader } from '@/components/ui/grid-loader'
 
 export type EntityAgentThreadProps = {
@@ -140,7 +141,8 @@ export function EntityAgentThread({
     else { onInputChange(suggestion); inputRef.current?.focus() }
   }
   const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
-  const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'toolCall')
+  // Steps render in the work group above (their plan text as markdown), never again as a plain row.
+  const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'step' && part.type !== 'toolCall')
   const composerPlaceholder = messages.length && enabled
     ? t('Reply…')
     : placeholder ?? (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))
@@ -278,7 +280,7 @@ export function EntityAgentThread({
         )}
         {streamOther.map(part => (
           <div className={styles.streamPart} key={part.id}>
-            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.text}
+            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.type === 'error' ? <AgentErrorDetail error={part.text ?? ''} /> : part.text}
           </div>
         ))}
       </div>
@@ -333,7 +335,7 @@ export function EntityAgentThread({
         )}
         <footer>
           {footerStart}
-          {error ? <span role="alert">{error}</span> : <span />}
+          {error ? <span role="alert"><AgentErrorDetail error={error} /></span> : <span />}
           {loading ? (
             <button aria-label={t('Stop responding')} onClick={onStop} type="button">
               <X />

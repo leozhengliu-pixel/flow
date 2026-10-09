@@ -1,0 +1,29 @@
+/* Agent and loop run errors: the friendly message, then the raw server text behind a small "Details" toggle. */
+.error {
+  min-width: 0;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.details {
+  min-width: 0;
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+}
+.details > summary {
+  width: fit-content;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+  list-style-position: inside;
+}
+.details > summary:hover { color: var(--theme-text-primary); }
+.details > code {
+  display: block;
+  max-height: 160px;
+  margin-top: 4px;
+  overflow: auto;
+  color: var(--theme-text-secondary);
+  font: 11px/1.5 var(--font-monospace);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -129,6 +129,96 @@ describe('agent page empty state', () => {
   })
 })
 
+describe('agent page composer focus', () => {
+  const editorName = { name: 'Send a message to Flow AI' }
+  beforeEach(() => {
+    localStorage.setItem('flow:locale', 'en-US')
+    Object.values(api).forEach(mock => mock.mockReset())
+    Object.values(streams).forEach(mock => mock.mockReset())
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    api.getAgentSession.mockRejectedValue(new Error('not stubbed'))
+  })
+
+  it('focuses the composer when the empty new-chat page opens', async () => {
+    renderPage([])
+    const editor = await screen.findByRole('textbox', editorName)
+    expect(editor).toHaveFocus()
+  })
+
+  it('lets typing reach the composer instead of the global shortcuts', async () => {
+    // App's shortcut handler ignores keys typed into editable targets (jsdom doesn't implement isContentEditable).
+    Object.defineProperty(HTMLElement.prototype, 'isContentEditable', { configurable: true, get() { return this.getAttribute('contenteditable') === 'true' } })
+    const shortcut = vi.fn()
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target
+      const editable = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || (target instanceof HTMLElement && target.isContentEditable)
+      if (!editable && event.key === 'c') shortcut()
+    }
+    window.addEventListener('keydown', onKey)
+    try {
+      renderPage([])
+      const editor = await screen.findByRole('textbox', editorName)
+      await userEvent.setup().keyboard('create')
+      expect(shortcut).not.toHaveBeenCalled()
+      expect(editor).toHaveTextContent('create')
+    } finally {
+      window.removeEventListener('keydown', onKey)
+      delete (HTMLElement.prototype as { isContentEditable?: boolean }).isContentEditable
+    }
+  })
+
+  it('does not take focus from another text field that already has it', async () => {
+    const other = document.createElement('input')
+    document.body.append(other)
+    other.focus()
+    try {
+      renderPage([])
+      await screen.findByRole('textbox', editorName)
+      expect(other).toHaveFocus()
+    } finally {
+      other.remove()
+    }
+  })
+
+  it('does not take focus from an open dialog', async () => {
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    document.body.append(dialog)
+    try {
+      renderPage([])
+      expect(await screen.findByRole('textbox', editorName)).not.toHaveFocus()
+    } finally {
+      dialog.remove()
+    }
+  })
+
+  it('leaves an open chat alone', async () => {
+    const session = { ...chat('one', 'Plan the launch', HOUR, 'read'), messages: [{ id: 'm1', role: 'user' as const, content: 'Hi', createdAt: new Date().toISOString() }] }
+    api.getAgentSession.mockResolvedValue(session)
+    renderPage([session], { chatSlug: 'one-slug' })
+    expect(await screen.findByRole('textbox', editorName)).not.toHaveFocus()
+  })
+
+  it('focuses the editor on the first press anywhere on the composer box', async () => {
+    renderPage([])
+    const editor = await screen.findByRole('textbox', editorName)
+    editor.blur()
+    expect(editor).not.toHaveFocus()
+    const box = editor.closest('[class*="composer"]') as HTMLElement
+    // Empty space around the one-line editor (padding / below the first line).
+    expect(fireEvent.mouseDown(box.querySelector('[class*="editorScroll"]')!)).toBe(false)
+    expect(editor).toHaveFocus()
+  })
+
+  it('keeps the composer buttons working instead of grabbing their press', async () => {
+    renderPage([])
+    const editor = await screen.findByRole('textbox', editorName)
+    editor.blur()
+    expect(fireEvent.mouseDown(screen.getByRole('button', { name: 'Attach images, files, or videos' }))).toBe(true)
+    expect(editor).not.toHaveFocus()
+  })
+})
+
 describe('agent history helpers', () => {
   it('formats ages in Linear\'s short style', () => {
     const now = Date.parse('2026-10-08T12:00:00Z')

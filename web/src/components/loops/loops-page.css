@@ -781,6 +781,7 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-list-toolbar .loops-icon-button[data-state='open'] { background: var(--theme-surface-hover); }
 .loops-run-list ol { min-height: 0; flex: 1; margin: 0; padding: 0 0 8px; overflow: auto; list-style: none; }
 .loops-run-list-empty { margin: 20px 16px; color: var(--theme-text-secondary); font-size: 13px; }
+.loops-run-list-notice { margin: 8px 16px; color: var(--theme-text-secondary); font-size: 12px; }
 .loops-run-row {
   position: relative;
   width: 100%;
@@ -880,6 +881,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-error strong { display: block; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
 .loops-run-error p { margin: 4px 0 0; color: var(--theme-text-secondary); font-size: 12px; line-height: 17px; white-space: pre-wrap; }
 .loops-run-error .loops-run-error-reason { color: var(--theme-text-primary); }
+.loops-run-error .loops-run-error-items { margin: 4px 0 0; padding-left: 16px; color: var(--theme-text-secondary); font-size: 12px; line-height: 17px; }
+.loops-run-error .loops-run-error-details { margin-top: 6px; }
 .loops-run-error.is-review { color: var(--priority-medium); }
 .loops-run-error.is-stopped { color: var(--theme-text-tertiary); }
 .loops-run-feedback { display: flex; gap: 4px; margin-top: 14px; }

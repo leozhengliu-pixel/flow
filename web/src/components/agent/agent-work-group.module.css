@@ -1,0 +1,29 @@
+/* Reasoning and step narration rendered from markdown: one 2px quote bar for the whole block (Linear), compact paragraphs and lists. */
+.reasoningText {
+  position: relative;
+  padding-left: 14px;
+  font: 450 12px/19.2px var(--font);
+  outline: none;
+}
+.reasoningText::before {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 1px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--agent-work-quote-bar);
+  content: "";
+}
+/* Beats the per-paragraph bar of `.reasoningRow p` in agent-page.module.css: the block carries the bar. */
+div.reasoningText p {
+  margin: 0;
+  padding-left: 0;
+  font: inherit;
+  white-space: pre-wrap;
+}
+div.reasoningText p::before { content: none; }
+div.reasoningText :is(p, ul, ol) + :is(p, ul, ol) { margin-top: 6px; }
+div.reasoningText :is(ul, ol) { margin: 0; padding-left: 16px; }
+div.reasoningText strong { color: var(--theme-text-primary); font-weight: 600; }
+div.reasoningText code { font: 11px/1.5 var(--font-monospace); }
