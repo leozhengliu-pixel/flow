@@ -161,7 +161,8 @@ html:root[data-theme="light"] body .flow-tooltip-content {
   font: 450 11px/16.5px var(--font);
 }
 /* Multi-line tooltips (titles, resource cards) grow with their content. */
-html:root[data-theme="light"] body .flow-tooltip-content--title { height: auto; }
+html:root[data-theme="light"] body .flow-tooltip-content--title,
+html:root[data-theme="light"] body .flow-tooltip-content--card { height: auto; }
 
 /* ── Buttons, select triggers and search fields ────────────────────────── */
 html:root[data-theme="light"] body .settings-action:not(.danger):not(.primary),
