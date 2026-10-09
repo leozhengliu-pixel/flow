@@ -49,7 +49,7 @@ export function CustomersRowChip({ customers, customerCount, importantCustomerId
         </span>
       </span>
     </TooltipTrigger>
-    <TooltipContent side="top" className="customer-row-popover">
+    <TooltipContent side="top" className="customer-row-popover flow-tooltip-content--card">
       <CustomersSummary customers={sorted} customerCount={customerCount} importantCustomerIds={importantCustomerIds} settings={settings}/>
     </TooltipContent>
   </TooltipRoot></TooltipProvider>
@@ -104,7 +104,7 @@ export function CustomerRevenueRowChip({ customers, settings, variant = 'rounded
         <span className="customer-row-chip__revenue">{amount}{variant !== 'plain' && <span className="customer-row-chip__suffix">{t(revenueSuffix(settings))}</span>}</span>
       </span>
     </TooltipTrigger>
-    <TooltipContent side="top" className="customer-row-popover">
+    <TooltipContent side="top" className="customer-row-popover flow-tooltip-content--card">
       <div className="customer-row-popover__body">
         <div className="customer-row-popover__data"><RevenueLine revenue={revenue} settings={settings}/></div>
         <ul className="customer-row-popover__list">
