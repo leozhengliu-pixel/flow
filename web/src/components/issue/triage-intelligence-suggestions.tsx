@@ -13,6 +13,7 @@ import {
 } from '@/lib/api'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FlowTooltip } from '@/components/ui/tooltip'
+import { GridLoader } from '@/components/ui/grid-loader'
 import { useI18n } from '@/i18n/i18n'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -25,11 +26,11 @@ type PropertySuggestion = IssueSuggestion & {
   type: 'assignee' | 'project' | 'label' | 'team'
 }
 
-type RemoteSuggestions = { suggestions: IssueSuggestion[]; generatedAt?: string; thinking?: string }
+type RemoteSuggestions = { suggestions: IssueSuggestion[]; generatedAt?: string; thinking?: string; pending: boolean }
 
-/** While suggestions are still being generated (agentic runs take a minute or two), poll the list. */
-const POLL_MS = 5000
-const POLL_LIMIT = 36
+/** While suggestions are still being generated (model runs take 5–60 s), poll the list. */
+const POLL_MS = 3000
+const POLL_LIMIT = 60
 
 const ENTITY_NOUN: Record<PropertySuggestion['type'], string> = { assignee: 'user', project: 'project', label: 'label', team: 'team' }
 
@@ -85,7 +86,7 @@ export function TriageIntelligenceSuggestions({
           if (controller.signal.aborted) return
           const next = normalizeRemote(result)
           setRemote(next)
-          if (inTriage && !next.generatedAt && !next.suggestions.length && attempts++ < POLL_LIMIT) timer = setTimeout(load, POLL_MS)
+          if (inTriage && next.pending && attempts++ < POLL_LIMIT) timer = setTimeout(load, POLL_MS)
         })
         .catch(() => {
           if (!controller.signal.aborted) setRemote(undefined)
@@ -115,10 +116,13 @@ export function TriageIntelligenceSuggestions({
   const related = suggestions.filter(item => item.type === 'relatedIssue')
   const relatedIssues = useSuggestedIssues([...duplicates, ...related], data)
 
-  if (!enabled || (!inTriage && !suggestions.length)) return null
-
   const generatedAt = remote?.generatedAt ?? issue.suggestionsGeneratedAt
-  const pending = refreshing || (!generatedAt && !suggestions.length)
+  // A run is pending while the issue was never generated, or the server reports a background run (first generation,
+  // replacing heuristic suggestions, or regenerating after an edit), or "Run again" is in flight.
+  const pending = refreshing || Boolean(remote?.pending) || (!generatedAt && !suggestions.length)
+  const elapsed = usePendingSeconds(enabled && inTriage && pending)
+
+  if (!enabled || (!inTriage && !suggestions.length)) return null
   const thinking = remote?.thinking ?? suggestions.map(item => readThinking(item.metadata?.thinking)).find(Boolean)
 
   const update = async (suggestion: IssueSuggestion, accept: boolean) => {
@@ -174,8 +178,8 @@ export function TriageIntelligenceSuggestions({
       const result = normalizeRemote(await fetchIssueSuggestions(issue.id))
       setRemoved(new Set())
       setRemote(result)
-      // An asynchronous (agentic) run reports no generation time yet: keep polling until it lands.
-      if (!result.generatedAt && !result.suggestions.length) setReloadKey(key => key + 1)
+      // An asynchronous (agentic) run is still pending: keep polling until it lands.
+      if (result.pending) setReloadKey(key => key + 1)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not refresh suggestions')
     } finally {
@@ -196,28 +200,33 @@ export function TriageIntelligenceSuggestions({
     >
       <header>
         <span className="triage-intelligence-title">
-          <Sparkles size={14} aria-hidden="true" />
+          {pending ? <GridLoader variant="agent" size={14} className="triage-intelligence-loader" /> : <Sparkles size={14} aria-hidden="true" />}
           {pending ? (
-            <span className="triage-intelligence-shimmer" role="status">Finding suggestions…</span>
+            <span className="triage-intelligence-shimmer" role="status">{t('Finding suggestions…')}</span>
           ) : (
             <strong className="triage-intelligence-gradient">Triage Intelligence</strong>
           )}
         </span>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <button className="triage-intelligence-menu-trigger" type="button" aria-label="Triage Intelligence options">
+            <button className="triage-intelligence-menu-trigger" type="button" aria-label={t('Triage Intelligence options')}>
               <MoreHorizontal size={15} />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="triage-intelligence-menu">
-            <DropdownMenuItem onSelect={() => setThinkingOpen(true)}>Show thinking…</DropdownMenuItem>
-            <DropdownMenuItem disabled={refreshing} onSelect={() => void runAgain()}>Run again</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setThinkingOpen(true)}>{t('Show thinking…')}</DropdownMenuItem>
+            <DropdownMenuItem disabled={pending} onSelect={() => void runAgain()}>{t('Run again')}</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={!suggestions.length || busy === 'all'} onSelect={() => void dismissAll()}>Dismiss all suggestions</DropdownMenuItem>
+            <DropdownMenuItem disabled={!suggestions.length || busy === 'all'} onSelect={() => void dismissAll()}>{t('Dismiss all suggestions')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
-      {pending ? null : empty ? (
+      {pending && !suggestions.length ? (
+        <div className="triage-intelligence-generating">
+          <span>{t('Comparing with similar issues, projects and owners…')}</span>
+          <span className="triage-intelligence-elapsed" aria-hidden="true">{elapsed}s</span>
+        </div>
+      ) : empty ? (
         <div className="triage-intelligence-empty">
           <span>{t('No suggestions found')}</span>
           <FlowTooltip label={t('Find suggestions')}>
@@ -558,12 +567,28 @@ function useSuggestedIssues(suggestions: IssueSuggestion[], data: BootstrapData)
 }
 
 function normalizeRemote(result: unknown): RemoteSuggestions {
-  const value = (result ?? {}) as { suggestions?: unknown; suggestionsGeneratedAt?: unknown; thinking?: unknown }
+  const value = (result ?? {}) as { suggestions?: unknown; suggestionsGeneratedAt?: unknown; thinking?: unknown; pending?: unknown }
+  const suggestions = Array.isArray(value.suggestions) ? (value.suggestions as IssueSuggestion[]) : []
+  const generatedAt = typeof value.suggestionsGeneratedAt === 'string' ? value.suggestionsGeneratedAt : undefined
   return {
-    suggestions: Array.isArray(value.suggestions) ? (value.suggestions as IssueSuggestion[]) : [],
-    generatedAt: typeof value.suggestionsGeneratedAt === 'string' ? value.suggestionsGeneratedAt : undefined,
+    suggestions,
+    generatedAt,
     thinking: readThinking(value.thinking),
+    pending: value.pending === true || (!generatedAt && !suggestions.length),
   }
+}
+
+/** Seconds since `active` turned on (Linear's thinking timer); resets when it turns off. */
+function usePendingSeconds(active: boolean) {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!active) return
+    const started = Date.now()
+    setSeconds(0)
+    const timer = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(timer)
+  }, [active])
+  return seconds
 }
 
 /** Model thinking may arrive as a string, a list of steps, or `{ summary }`. */

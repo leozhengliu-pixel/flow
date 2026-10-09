@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log"
 	"slices"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unicode"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -40,6 +43,13 @@ const (
 	triageAIMaxReasonWords    = 20
 	triageAIMaxThinkingRunes  = 1200
 	triageAIConcurrentRunsCap = 4
+	triageAIMaxLinked         = 10
+	// A model run replacing heuristic suggestions is retried at most this often
+	// (the model may be failing, and each failure falls back to the heuristic).
+	triageAIUpgradeRetry = 10 * time.Minute
+	// Edits to a triage issue's title/description regenerate its suggestions
+	// once the edits settle.
+	triageAIEditDebounce = 20 * time.Second
 	// The JSON reply is small, but reasoning models think first and that counts against the budget.
 	triageAIMaxOutputTokens = 16384
 )
@@ -48,27 +58,50 @@ const (
 // triage would otherwise fan out one provider call per issue at once).
 var triageAISlots = make(chan struct{}, triageAIConcurrentRunsCap)
 
-const triageAISystemPrompt = `You are Triage Intelligence for an issue tracker. A new issue has arrived in a team's Triage inbox. Using only the workspace context provided, suggest how to route it.
+const triageAISystemPrompt = `You are Triage Intelligence for an issue tracker. A new issue has arrived in a team's Triage inbox. Using only the workspace context provided, suggest how to route it, the way an experienced teammate who knows how this workspace organizes its work would.
 
-Be conservative. Only suggest something when the evidence is specific; "No suggestions" is a good answer and is better than a weak guess.
-- duplicate: only when a candidate issue describes the same problem or request. Otherwise null.
-- related: only candidate issues with genuine topical overlap (same feature, integration, workflow or bug area), at most 3. Shared generic words, or merely being in the same project or team, are not overlap; the titles or descriptions must be about the same subject.
-- assignee: only when someone clearly owns this area (e.g. they are assigned to closely related issues, lead or are the only member of the matching project, or guidance names them). Never suggest the issue's creator merely because they created it. Otherwise null.
-- project: only when the issue clearly belongs to one project (it names it, or it matches the project's stated scope, or closely related issues are in it). Otherwise null.
-- labels: only labels that closely related candidate issues already carry (see each candidate's labels). A label name that merely fits (e.g. "Bug", "Feature") is not evidence. At most 3. Never suggest labels already on the issue.
-- team: only when a different team fits clearly better than the current one. Otherwise null.
+Aim for high precision without being timid: suggest when there is reasonable, specific evidence in the context, and leave a field empty when there is none. An empty result is fine; a weak guess is not. If the issue is too vague to understand (gibberish, a lone word or number, no real description), return no suggestions at all.
+- duplicate: a candidate issue that reports the same problem or asks for the same thing, even in different words or with different details (e.g. both describe large CSV imports hanging or freezing). Otherwise null.
+- related: candidate issues about the same feature, integration, workflow or bug area, at most 3. Shared generic words, or merely being in the same project or team, are not overlap.
+- Never suggest an issue that is already linked to the triage issue (see triageIssue.linkedIssues and a candidate's alreadyLinkedAs).
+- project: the issue names the project, clearly fits the project's stated scope, or its duplicate / closely related issues are in that project. Otherwise null.
+- assignee: someone who owns this area: the assignee of the duplicate or closely related issues, the lead of the project you suggest (or of the project the issue is in), or the member most often assigned to issues in that project or area (see recentAssignedIssues). Never suggest the issue's creator merely because they created it. Otherwise null.
+- labels: labels the workspace already uses (issuesUsing > 0) whose name or description clearly describes this issue (e.g. a crash or hang report is a bug; slowness or freezing on large inputs is performance), or that the duplicate / closely related issues carry. Do not stretch: a label must plainly fit the issue's content. At most 3. Never suggest labels already on the issue.
+- team: only when a different team fits clearly better than the current one (its description or the related issues point there). Otherwise null.
 - Follow the workspace guidance when it is given.
 
-Reasons: 1-3 short bullets per suggestion, each at most 20 words, citing concrete evidence (for example "This project is the explicit Compare Test fixture referenced by the issue"). Do not restate the suggestion itself.
+Reasons: 1-3 short bullets per suggestion, each at most 20 words, citing concrete evidence (for example "DEV-10 is assigned to Dev User and describes the same import freeze"). Do not restate the suggestion itself.
 
 Use only identifiers, names and team keys that appear in the context. Reply with ONE JSON object and nothing else:
 {"duplicate":{"identifier":"ABC-1","reasons":["..."]}|null,"related":[{"identifier":"ABC-2","reasons":["..."]}],"assignee":{"name":"...","reasons":["..."]}|null,"project":{"name":"...","reasons":["..."]}|null,"labels":[{"name":"...","reasons":["..."]}],"team":{"key":"...","reasons":["..."]}|null,"thinking":"2-4 sentence summary of how you decided"}`
 
+// triageRunReason says why a background run was started; the run re-checks
+// it against the latest issue (before and after the model call) so a newer
+// "Run again" or generation is never overwritten.
+type triageRunReason string
+
+const (
+	triageRunAlways  triageRunReason = ""        // "Run again"
+	triageRunPending triageRunReason = "pending" // never generated
+	triageRunUpgrade triageRunReason = "upgrade" // generated by the heuristic, the model is available now
+	triageRunEdited  triageRunReason = "edited"  // title/description changed materially since generation
+)
+
+func (reason triageRunReason) wanted(issue *domain.Issue) bool {
+	switch reason {
+	case triageRunPending:
+		return issue.SuggestionsGeneratedAt == nil
+	case triageRunUpgrade:
+		return issue.SuggestionsGeneratedAt == nil || issue.SuggestionsSource != triageSourceAI
+	case triageRunEdited:
+		return issue.SuggestionsGeneratedAt == nil || triageInputChanged(issue)
+	}
+	return true
+}
+
 type triageRunOptions struct {
-	useAI bool
-	// onlyPending skips issues whose suggestions were already generated
-	// (a background run must not overwrite a newer "Run again").
-	onlyPending bool
+	useAI       bool
+	reason      triageRunReason
 	bumpVersion bool
 	eventType   string
 }
@@ -82,12 +115,22 @@ func (s *server) triageIntelligenceTimeout() time.Duration {
 	return timeout
 }
 
-// startTriageIntelligenceRun generates suggestions for a pending triage issue
-// in the background. Concurrent runs for the same issue are deduplicated.
-func (s *server) startTriageIntelligenceRun(ctx context.Context, actor mcpActor, issueID string) {
-	key := actor.WorkspaceKey + "\x00" + issueID
+func triageRunKey(workspace, issueID string) string {
+	return workspace + "\x00" + issueID
+}
+
+// triageRunActive reports whether a background run for the issue is queued or in flight.
+func (s *server) triageRunActive(workspace, issueID string) bool {
+	_, running := s.triageRuns.Load(triageRunKey(workspace, issueID))
+	return running
+}
+
+// startTriageIntelligenceRun generates suggestions for a triage issue in the
+// background. Concurrent runs for the same issue are deduplicated.
+func (s *server) startTriageIntelligenceRun(ctx context.Context, actor mcpActor, issueID string, reason triageRunReason) bool {
+	key := triageRunKey(actor.WorkspaceKey, issueID)
 	if _, running := s.triageRuns.LoadOrStore(key, struct{}{}); running {
-		return
+		return false
 	}
 	// Keep request values (actor, API key) but not the request's cancellation.
 	base := context.WithoutCancel(ctx)
@@ -105,10 +148,87 @@ func (s *server) startTriageIntelligenceRun(ctx context.Context, actor mcpActor,
 		case <-runCtx.Done():
 			return
 		}
-		_, _, err := s.runTriageIntelligence(runCtx, actor, issueID, triageRunOptions{useAI: true, onlyPending: true, eventType: "issue.suggestions_generated"})
+		_, _, err := s.runTriageIntelligence(runCtx, actor, issueID, triageRunOptions{useAI: true, reason: reason, eventType: "issue.suggestions_generated"})
 		if err != nil && !errors.Is(err, store.ErrNoMutation) && !errors.Is(err, errInvalid) {
 			log.Printf("generate triage intelligence issue=%s: %v", issueID, err)
 		}
+	}()
+	return true
+}
+
+type triageRefreshScope struct {
+	upgrade bool // replace heuristic suggestions with model ones
+	edits   bool // regenerate after material title/description edits
+}
+
+// refreshTriageIntelligence starts whatever background model run a triage
+// issue needs: a first generation, an upgrade of heuristic suggestions (at most
+// once per triageAIUpgradeRetry), or a debounced regeneration after material
+// edits. Only the given issue is considered: there is no workspace sweep. It
+// reports whether a run is now queued or in flight.
+func (s *server) refreshTriageIntelligence(ctx context.Context, actor mcpActor, issue *domain.Issue, scope triageRefreshScope) bool {
+	if !s.agent.Enabled {
+		return false
+	}
+	key := triageRunKey(actor.WorkspaceKey, issue.ID)
+	switch {
+	case triageRunPending.wanted(issue):
+		s.startTriageIntelligenceRun(ctx, actor, issue.ID, triageRunPending)
+	case scope.upgrade && triageRunUpgrade.wanted(issue):
+		if last, ok := s.triageUpgrades.Load(key); ok && time.Since(last.(time.Time)) < triageAIUpgradeRetry {
+			return s.triageRunActive(actor.WorkspaceKey, issue.ID)
+		}
+		s.triageUpgrades.Store(key, time.Now())
+		s.startTriageIntelligenceRun(ctx, actor, issue.ID, triageRunUpgrade)
+	case scope.edits && triageRunEdited.wanted(issue):
+		s.scheduleTriageEditRun(ctx, actor, issue.ID)
+	}
+	return s.triageRunActive(actor.WorkspaceKey, issue.ID)
+}
+
+type triageEdit struct{ due atomic.Int64 }
+
+// scheduleTriageEditRun regenerates suggestions once edits have been quiet
+// for the debounce period; every further edit pushes the run back.
+func (s *server) scheduleTriageEditRun(ctx context.Context, actor mcpActor, issueID string) {
+	delay := s.triageEditDebounce
+	if delay <= 0 {
+		delay = triageAIEditDebounce
+	}
+	key := triageRunKey(actor.WorkspaceKey, issueID)
+	entry := &triageEdit{}
+	entry.due.Store(time.Now().Add(delay).UnixNano())
+	if existing, loaded := s.triageEdits.LoadOrStore(key, entry); loaded {
+		existing.(*triageEdit).due.Store(time.Now().Add(delay).UnixNano())
+		return
+	}
+	base := context.WithoutCancel(ctx)
+	var done <-chan struct{}
+	if s.store != nil {
+		done = s.store.WorkerContext().Done()
+	}
+	go func() {
+		defer s.triageEdits.Delete(key)
+		for {
+			wait := time.Until(time.Unix(0, entry.due.Load()))
+			if wait <= 0 {
+				// A run still working from the previous text would swallow this
+				// one (runs are deduplicated): wait for it to finish first.
+				if !s.triageRunActive(actor.WorkspaceKey, issueID) {
+					break
+				}
+				wait = delay
+				entry.due.Store(time.Now().Add(wait).UnixNano())
+			}
+			timer := time.NewTimer(wait)
+			select {
+			case <-timer.C:
+			case <-done:
+				timer.Stop()
+				return
+			}
+		}
+		s.startTriageIntelligenceRun(base, actor, issueID, triageRunEdited)
 	}()
 }
 
@@ -127,7 +247,7 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	if !ok || !triageIntelligenceEnabled(metadata.WorkspaceSettings) || !isTriageIssue(&metadata, &issue) {
 		return domain.Issue{}, nil, fmt.Errorf("%w: Triage Intelligence is disabled or issue is not in triage", errInvalid)
 	}
-	if options.onlyPending && issue.SuggestionsGeneratedAt != nil {
+	if !options.reason.wanted(&issue) {
 		return domain.Issue{}, nil, store.ErrNoMutation
 	}
 	candidates, err := s.triageCandidateIssues(ctx, &issue, query)
@@ -138,16 +258,22 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 	settings := metadata.WorkspaceSettings.FeatureSettings.TriageIntelligence
 	source, thinking := triageSourceHeuristic, ""
 	var generated []domain.IssueSuggestion
-	if options.useAI && s.agent.Enabled {
+	if options.useAI && s.agent.Enabled && !triageIssueHasSubstance(&issue) {
+		// Nothing to compare against other work: don't spend a model call on
+		// noise, and record the run as final so it is not retried.
+		source, thinking = triageSourceAI, "The issue has too little content to compare against other work, so nothing was suggested."
+	} else if options.useAI && s.agent.Enabled {
 		plan, aiErr := s.requestTriageAIPlan(ctx, actor, query, &issue, candidates)
 		if aiErr != nil {
 			log.Printf("triage intelligence model issue=%s: %v (using heuristic)", issueID, aiErr)
+			// Retrying the model to replace this fallback waits for triageAIUpgradeRetry.
+			s.triageUpgrades.Store(triageRunKey(actor.WorkspaceKey, issueID), time.Now())
 		} else {
 			source, thinking = triageSourceAI, plan.Thinking
 			generated = plan.suggestions(settings, issue.ID, now)
 		}
 	}
-	if source == triageSourceHeuristic {
+	if source == triageSourceHeuristic && triageIssueHasSubstance(&issue) {
 		scoring := metadata
 		scoring.Issues = candidates
 		generated = generateIssueSuggestions(&scoring, &issue, now)
@@ -173,11 +299,14 @@ func (s *server) runTriageIntelligence(ctx context.Context, actor mcpActor, issu
 		if !isTriageIssue(data, target) {
 			return fmt.Errorf("%w: issue is not in triage", errInvalid)
 		}
-		if options.onlyPending && target.SuggestionsGeneratedAt != nil {
+		if !options.reason.wanted(target) {
 			return store.ErrNoMutation
 		}
 		now := time.Now().UTC()
 		stored = storeTriageSuggestions(data, target, generated, now, source, thinking)
+		// Fingerprint the text the suggestions were generated from (it may
+		// have been edited while the model was thinking).
+		target.SuggestionsInputSketch = triageInputSketch(&issue)
 		autoApplied := slices.ContainsFunc(stored, func(item domain.IssueSuggestion) bool { return item.State == "accepted" })
 		if options.bumpVersion || autoApplied {
 			target.UpdatedAt = now
@@ -244,7 +373,15 @@ type triageAIContext struct {
 	Labels     []triageAILabel
 	Teams      []triageAITeam
 	Guidance   string
-	users      map[string]domain.User
+	// Linked are issues already related to the triage issue (relation type by
+	// issue ID); they are shown to the model and never re-suggested.
+	Linked map[string]triageAILink
+	users  map[string]domain.User
+}
+
+type triageAILink struct {
+	Type       string
+	Identifier string
 }
 
 func (s *server) requestTriageAIPlan(ctx context.Context, actor mcpActor, query store.IssueRecordQuery, issue *domain.Issue, candidates []domain.Issue) (*triageAIPlan, error) {
@@ -270,6 +407,14 @@ func (s *server) requestTriageAIPlan(ctx context.Context, actor mcpActor, query 
 		}
 	}
 	triageContext := buildTriageAIContext(&data, *issue, pool)
+	for id, link := range triageContext.Linked {
+		if link.Identifier == "" {
+			if linked, linkErr := s.store.AuthorizedIssueRecord(ctx, query, id); linkErr == nil {
+				link.Identifier = linked.Identifier
+				triageContext.Linked[id] = link
+			}
+		}
+	}
 	callCtx, cancel := context.WithTimeout(withAgentMaxOutputTokens(ctx, triageAIMaxOutputTokens), s.triageIntelligenceTimeout())
 	defer cancel()
 	turn, err := s.requestAgentTurnWithoutTools(callCtx, []agentProviderMessage{
@@ -290,8 +435,21 @@ func (s *server) requestTriageAIPlan(ctx context.Context, actor mcpActor, query 
 // with recent open issues so semantic matches with no shared words are still
 // visible to the model) and collects the routing vocabulary.
 func buildTriageAIContext(data *domain.Bootstrap, issue domain.Issue, pool []domain.Issue) triageAIContext {
-	result := triageAIContext{Issue: issue, Scores: map[string]float64{}, users: map[string]domain.User{}}
+	result := triageAIContext{Issue: issue, Scores: map[string]float64{}, Linked: map[string]triageAILink{}, users: map[string]domain.User{}}
 	result.Guidance = strings.TrimSpace(data.WorkspaceSettings.FeatureSettings.TriageIntelligence.WorkspaceGuidance)
+	for _, relation := range issue.Relations {
+		if len(result.Linked) >= triageAIMaxLinked {
+			break
+		}
+		if _, seen := result.Linked[relation.RelatedIssueID]; relation.RelatedIssueID == "" || relation.RelatedIssueID == issue.ID || seen {
+			continue
+		}
+		link := triageAILink{Type: relation.Type}
+		if index := slices.IndexFunc(pool, func(item domain.Issue) bool { return item.ID == relation.RelatedIssueID }); index >= 0 {
+			link.Identifier = pool[index].Identifier
+		}
+		result.Linked[relation.RelatedIssueID] = link
+	}
 
 	scoring := *data
 	scoring.Issues = pool
@@ -415,16 +573,22 @@ func userDisplayName(user domain.User) string {
 }
 
 func triageAIPrompt(input *triageAIContext) string {
+	type linkView struct {
+		Identifier string `json:"identifier"`
+		Relation   string `json:"relation"`
+	}
 	type issueView struct {
-		Identifier  string   `json:"identifier"`
-		Title       string   `json:"title"`
-		Description string   `json:"description,omitempty"`
-		Status      string   `json:"status,omitempty"`
-		Team        string   `json:"team,omitempty"`
-		Project     string   `json:"project,omitempty"`
-		Assignee    string   `json:"assignee,omitempty"`
-		Labels      []string `json:"labels,omitempty"`
-		Creator     string   `json:"creator,omitempty"`
+		Identifier  string     `json:"identifier"`
+		Title       string     `json:"title"`
+		Description string     `json:"description,omitempty"`
+		Status      string     `json:"status,omitempty"`
+		Team        string     `json:"team,omitempty"`
+		Project     string     `json:"project,omitempty"`
+		Assignee    string     `json:"assignee,omitempty"`
+		Labels      []string   `json:"labels,omitempty"`
+		Creator     string     `json:"creator,omitempty"`
+		LinkedAs    string     `json:"alreadyLinkedAs,omitempty"`
+		Linked      []linkView `json:"linkedIssues,omitempty"`
 	}
 	type projectView struct {
 		Name    string   `json:"name"`
@@ -473,9 +637,19 @@ func triageAIPrompt(input *triageAIContext) string {
 	triage := view(input.Issue, maxTriageSuggestionTextRunes)
 	triage.Status = ""
 	triage.Creator = userDisplayName(input.Issue.Creator)
+	links := []linkView{}
+	for _, link := range input.Linked {
+		if link.Identifier != "" {
+			links = append(links, linkView{Identifier: link.Identifier, Relation: link.Type})
+		}
+	}
+	sort.Slice(links, func(i, j int) bool { return links[i].Identifier < links[j].Identifier })
+	triage.Linked = links
 	candidates := make([]issueView, 0, len(input.Candidates))
 	for _, issue := range input.Candidates {
-		candidates = append(candidates, view(issue, 300))
+		item := view(issue, 300)
+		item.LinkedAs = input.Linked[issue.ID].Type
+		candidates = append(candidates, item)
 	}
 	projects := make([]projectView, 0, len(input.Projects))
 	for _, project := range input.Projects {
@@ -555,7 +729,9 @@ func parseTriageAIReply(text string, input *triageAIContext) (*triageAIPlan, err
 			return domain.Issue{}, false
 		}
 		candidate, ok := candidates[strings.ToLower(strings.TrimSpace(target.Identifier))]
-		return candidate, ok && candidate.ID != issue.ID
+		// Issues already linked to the triage issue (in any way) are not news.
+		_, linked := input.Linked[candidate.ID]
+		return candidate, ok && candidate.ID != issue.ID && !linked && !slices.ContainsFunc(issue.Relations, func(relation domain.IssueRelation) bool { return relation.RelatedIssueID == candidate.ID })
 	}
 	used := map[string]bool{}
 	add := func(kind, id string, target *triageAIReplyTarget) {
@@ -566,7 +742,7 @@ func parseTriageAIReply(text string, input *triageAIContext) (*triageAIPlan, err
 		plan.Picks = append(plan.Picks, triageAIPick{Kind: kind, TargetID: id, Reasons: triageAIReasons(target.Reasons), Score: input.Scores[id]})
 	}
 	duplicateID := ""
-	if candidate, ok := lookupIssue(reply.Duplicate); ok && !hasIssueRelation(&issue, candidate.ID, "duplicate") {
+	if candidate, ok := lookupIssue(reply.Duplicate); ok {
 		duplicateID = candidate.ID
 		add("similarIssue", candidate.ID, reply.Duplicate)
 	}
@@ -574,7 +750,7 @@ func parseTriageAIReply(text string, input *triageAIContext) (*triageAIPlan, err
 	for index := range reply.Related {
 		target := &reply.Related[index]
 		candidate, ok := lookupIssue(target)
-		if !ok || candidate.ID == duplicateID || hasIssueRelation(&issue, candidate.ID, "related") || related >= triageAIMaxRelated {
+		if !ok || candidate.ID == duplicateID || related >= triageAIMaxRelated {
 			continue
 		}
 		related++
@@ -622,8 +798,11 @@ func parseTriageAIReply(text string, input *triageAIContext) (*triageAIPlan, err
 			if name == "" || strings.ToLower(label.Label.Name) != name || slicesContainsIssueLabel(issue.Labels, label.Label.ID) || labelPicks >= triageAIMaxLabelPicks {
 				continue
 			}
-			// Like Linear, labels are learned from similar issues, not guessed from their names.
-			if !slices.ContainsFunc(input.Candidates, func(candidate domain.Issue) bool {
+			// Like Linear, labels follow how the workspace organizes similar work:
+			// a similar issue carries the label, or the workspace uses it (the
+			// model is told to pick only labels that plainly fit the content).
+			// A label nobody uses is never introduced by a guess.
+			if label.Uses == 0 && !slices.ContainsFunc(input.Candidates, func(candidate domain.Issue) bool {
 				return similar(candidate) && slicesContainsIssueLabel(candidate.Labels, label.Label.ID)
 			}) {
 				break
@@ -719,4 +898,107 @@ func triageClip(value string, limit int) string {
 		return strings.TrimSpace(string(runes[:limit])) + "…"
 	}
 	return value
+}
+
+const (
+	triageSketchTitleSize       = 8
+	triageSketchDescriptionSize = 16
+	// Below this Jaccard similarity the title or description changed materially.
+	triageSketchMaterialSimilarity = 0.5
+)
+
+// triageInputSketch fingerprints an issue's title and description as two
+// bottom-k MinHash sketches (k hashed tokens each), so a later edit can be
+// judged material — a typo fix is not, a rewritten title or a newly written
+// description is — without storing the text twice.
+func triageInputSketch(issue *domain.Issue) string {
+	description := triageTokens(truncateTriageText(issue.Description))
+	if len(description) < 3 {
+		description = nil // a stub description carries no routing signal
+	}
+	return triageBottomK(triageTokens(issue.Title), triageSketchTitleSize) + "|" + triageBottomK(description, triageSketchDescriptionSize)
+}
+
+func triageBottomK(tokens map[string]bool, k int) string {
+	values := make([]uint32, 0, len(tokens))
+	for token := range tokens {
+		hash := fnv.New32a()
+		_, _ = hash.Write([]byte(token))
+		values = append(values, hash.Sum32())
+	}
+	slices.Sort(values)
+	values = slices.Compact(values)
+	var result strings.Builder
+	for _, value := range values[:min(k, len(values))] {
+		fmt.Fprintf(&result, "%08x", value)
+	}
+	return result.String()
+}
+
+func parseTriageBottomK(value string) []uint32 {
+	result := make([]uint32, 0, len(value)/8)
+	for index := 0; index+8 <= len(value); index += 8 {
+		var item uint32
+		if _, err := fmt.Sscanf(value[index:index+8], "%08x", &item); err == nil {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// triageSketchSimilarity estimates the Jaccard similarity of two token sets
+// from their bottom-k sketches (exact while the sets are smaller than k).
+func triageSketchSimilarity(left, right []uint32, k int) float64 {
+	if len(left) == 0 && len(right) == 0 {
+		return 1
+	}
+	union := slices.Concat(left, right)
+	slices.Sort(union)
+	union = slices.Compact(union)
+	union = union[:min(k, len(union))]
+	shared := 0
+	for _, value := range union {
+		if slices.Contains(left, value) && slices.Contains(right, value) {
+			shared++
+		}
+	}
+	return float64(shared) / float64(len(union))
+}
+
+// triageInputChanged reports whether the issue's title or description changed
+// materially since its suggestions were generated. Issues generated before
+// sketches were recorded have no baseline and never count as changed.
+func triageInputChanged(issue *domain.Issue) bool {
+	previous := issue.SuggestionsInputSketch
+	if previous == "" {
+		return false
+	}
+	return triageSketchMaterial(previous, triageInputSketch(issue))
+}
+
+func triageSketchMaterial(previous, current string) bool {
+	previousTitle, previousDescription, _ := strings.Cut(previous, "|")
+	currentTitle, currentDescription, _ := strings.Cut(current, "|")
+	return triageSketchSimilarity(parseTriageBottomK(previousTitle), parseTriageBottomK(currentTitle), triageSketchTitleSize) < triageSketchMaterialSimilarity ||
+		triageSketchSimilarity(parseTriageBottomK(previousDescription), parseTriageBottomK(currentDescription), triageSketchDescriptionSize) < triageSketchMaterialSimilarity
+}
+
+// triageIssueHasSubstance reports whether an issue has enough words to be
+// compared with other work: at least two real words (three or more letters,
+// or CJK text). "212312" or "asd" has none.
+func triageIssueHasSubstance(issue *domain.Issue) bool {
+	words := 0
+	for token := range triageTokens(issue.Title, truncateTriageText(issue.Description)) {
+		runes := []rune(token)
+		cjk := slices.ContainsFunc(runes, func(character rune) bool {
+			return unicode.In(character, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
+		})
+		if (cjk || len(runes) >= 3) && slices.ContainsFunc(runes, unicode.IsLetter) {
+			words++
+			if words >= 2 {
+				return true
+			}
+		}
+	}
+	return false
 }

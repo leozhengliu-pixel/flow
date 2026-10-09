@@ -83,6 +83,7 @@ func storeTriageSuggestions(data *domain.Bootstrap, issue *domain.Issue, generat
 	issue.SuggestionsGeneratedAt = &now
 	issue.SuggestionsSource = source
 	issue.SuggestionsThinking = thinking
+	issue.SuggestionsInputSketch = triageInputSketch(issue)
 	syncIssueSuggestionTargets(data, issue)
 	return suggestions
 }
@@ -218,14 +219,18 @@ func (s *server) generateTriageIntelligenceForIssues(ctx context.Context, worksp
 	if s.agent.Enabled {
 		// Like Linear, model-backed suggestions are generated in the background:
 		// the issue stays pending (no suggestionsGeneratedAt) until the run
-		// writes its results, so the request never waits on the model.
+		// writes its results, so the request never waits on the model. A single
+		// issue being edited also gets its heuristic suggestions upgraded and,
+		// after material title/description edits, regenerated (debounced);
+		// bulk updates only start first generations.
 		actor.WorkspaceKey = firstNonEmpty(metadata.Workspace.URLKey, actor.WorkspaceKey)
+		single := len(issueIDs) == 1
 		for _, issueID := range issueIDs {
 			issue, readErr := s.store.AuthorizedIssueRecord(ctx, query, issueID)
-			if readErr != nil || !isTriageIssue(&metadata, &issue) || issue.SuggestionsGeneratedAt != nil {
+			if readErr != nil || !isTriageIssue(&metadata, &issue) {
 				continue
 			}
-			s.startTriageIntelligenceRun(ctx, actor, issueID)
+			s.refreshTriageIntelligence(ctx, actor, &issue, triageRefreshScope{upgrade: single, edits: single})
 		}
 		return nil, store.ErrNoMutation
 	}
@@ -1014,15 +1019,22 @@ func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "issue not found")
 		return
 	}
+	running := false
 	if metadata, ok := s.store.WorkspaceMetadata(actor.WorkspaceKey); ok {
-		// Self-heal a pending issue whose background run was lost (e.g. a
-		// restart): clients poll this endpoint while suggestions are pending.
-		// Only issues untouched for longer than a full run qualify.
-		if s.agent.Enabled && issue.SuggestionsGeneratedAt == nil && time.Since(issue.UpdatedAt) > s.triageIntelligenceTimeout()+30*time.Second && triageIntelligenceEnabled(metadata.WorkspaceSettings) && isTriageIssue(&metadata, &issue) {
-			runActor := actor
-			runActor.WorkspaceKey = firstNonEmpty(metadata.Workspace.URLKey, actor.WorkspaceKey)
-			s.startTriageIntelligenceRun(r.Context(), runActor, issue.ID)
+		runActor := actor
+		runActor.WorkspaceKey = firstNonEmpty(metadata.Workspace.URLKey, actor.WorkspaceKey)
+		if s.agent.Enabled && triageIntelligenceEnabled(metadata.WorkspaceSettings) && isTriageIssue(&metadata, &issue) {
+			// Viewing the card is when suggestions matter: self-heal a pending
+			// issue whose background run was lost (e.g. a restart; only issues
+			// untouched for longer than a full run qualify), and replace
+			// suggestions the heuristic generated while the model was not
+			// configured. Clients poll this endpoint while it reports pending.
+			lost := issue.SuggestionsGeneratedAt == nil && time.Since(issue.UpdatedAt) > s.triageIntelligenceTimeout()+30*time.Second
+			if lost || issue.SuggestionsGeneratedAt != nil {
+				s.refreshTriageIntelligence(r.Context(), runActor, &issue, triageRefreshScope{upgrade: true})
+			}
 		}
+		running = s.triageRunActive(runActor.WorkspaceKey, issue.ID)
 		data.IssueSuggestions = slices.DeleteFunc(metadata.IssueSuggestions, func(item domain.IssueSuggestion) bool {
 			if item.IssueID != issue.ID {
 				return true
@@ -1046,9 +1058,10 @@ func (s *server) listIssueSuggestions(w http.ResponseWriter, r *http.Request) {
 		"issueId":                issue.ID,
 		"suggestionsGeneratedAt": issue.SuggestionsGeneratedAt,
 		"suggestions":            activeIssueSuggestions(&data, issue.ID),
-		// pending: generation has not finished yet (the model runs in the
-		// background after the issue enters triage).
-		"pending":  issue.SuggestionsGeneratedAt == nil,
+		// pending: a generation has not finished yet (the model runs in the
+		// background after the issue enters triage, is edited, or its
+		// heuristic suggestions are being replaced).
+		"pending":  issue.SuggestionsGeneratedAt == nil || running,
 		"source":   issue.SuggestionsSource,
 		"thinking": issue.SuggestionsThinking,
 	})
