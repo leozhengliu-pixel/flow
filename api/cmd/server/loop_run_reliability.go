@@ -167,6 +167,10 @@ func loopRetry(ctx context.Context, limits loopRunLimits, call func() error) (in
 	}
 }
 
+// loopFailureReasons are the failure reason codes runs and replies store. The
+// web app labels each one (REASON_LABELS in web/src/components/loops/loop-run-status.ts).
+var loopFailureReasons = []string{"cancelled", "interrupted", "timeout", "provider_timeout", "provider_error", "empty_response", "tool_error", "budget_exhausted", "no_output", "incomplete", "unavailable", "error"}
+
 // classifyLoopRunFailure maps how a run ended to its status, failure reason
 // and message.
 func classifyLoopRunFailure(ctx context.Context, err error, limits loopRunLimits) (string, string, string) {

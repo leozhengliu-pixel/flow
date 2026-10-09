@@ -275,6 +275,20 @@ describe('LoopRunPage', () => {
     expect(await screen.findByText('Signal received.')).toBeVisible()
   })
 
+  it('shows the trigger and the failure in Chinese, with the raw provider error under Details', async () => {
+    localStorage.setItem('flow:locale', 'zh-CN')
+    const raw = 'Flow Agent provider returned status 429: {"error":{"message":"Rate limit reached"}}'
+    const triggered: LoopRun = { ...failed, id: 'run-7', trigger: 'event', triggerLabel: 'Triggered by DEV-24 entering triage', triggerReason: 'triage', entityIdentifier: 'DEV-24', failureReason: 'provider_error', error: raw }
+    api.listLoopRuns.mockResolvedValue([triggered])
+    api.getLoopRun.mockResolvedValue(triggered)
+    renderPage('run-7')
+    expect((await screen.findAllByText('由 DEV-24 进入分流触发')).length).toBeGreaterThan(0)
+    expect(screen.getByText('模型服务商正在限制请求频率。请稍候再试。')).toBeVisible()
+    expect(screen.getByText('详情', { selector: 'summary' })).toBeVisible()
+    expect(document.querySelector('.loops-run-error details code')).toHaveTextContent(raw)
+    expect(screen.queryByText(/Triggered by/)).toBeNull()
+  })
+
   it('has Chinese copy for every run status and failure reason', () => {
     for (const label of [...Object.values(STATUS_LABELS), ...Object.values(REASON_LABELS)]) {
       expect(zhCN[label], label).toBeTruthy()

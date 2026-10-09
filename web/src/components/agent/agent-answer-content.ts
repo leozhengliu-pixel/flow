@@ -47,7 +47,8 @@ const SPACED_PATH_LINK = /\]\(\s*(\/[^()\n"<>]*?[ \t][^()\n"<>]*?)\s*\)/g
 export type LinkAgentEntitiesOptions = {
   /**
    * Link every resource type (documents, people, teams, cycles, labels, milestones, customers, releases, views, reviews,
-   * updates and comments) and, in paged mode, issues / projects the client does not hold. Without it only the issues
+   * updates and comments) and the issues / projects the client does not hold (paged workspaces, or records created since
+   * the page loaded; they are fetched by identifier / id when the chip renders). Without it only the issues
    * and projects workspace data already holds are linked (loop instructions share this helper with their own chips).
    */
   all?: boolean
@@ -55,7 +56,7 @@ export type LinkAgentEntitiesOptions = {
 
 /**
  * Turn issue identifiers, links whose text is an identifier ("DEV-1" / "DEV-1 Title") and links to Flow resource URLs
- * (and, with `all`, @mentions of people) into inline entity shortcodes. Unknown identifiers stay plain text. Returns the
+ * (and, with `all`, @mentions of people) into inline entity shortcodes. Identifiers whose prefix is not a team key stay plain text. Returns the
  * issues referenced (those workspace data holds) and every reference in order. Idempotent: shortcodes are left alone.
  */
 export function linkAgentEntities(markdown: string, data?: BootstrapData, options: LinkAgentEntitiesOptions = {}): { markdown: string; issues: Issue[]; references: AgentEntityTarget[] } {
@@ -80,7 +81,7 @@ export function linkAgentEntities(markdown: string, data?: BootstrapData, option
   const identifierTarget = (identifier: string): AgentEntityTarget | undefined => {
     const issue = findAgentIssue(data, identifier)
     if (issue) return { kind: 'issue', id: issue.id, label: issue.identifier }
-    return all && data.issueCollectionPaged && isAgentIdentifier(data, identifier) ? { kind: 'issue', id: identifier.toUpperCase(), label: identifier.toUpperCase() } : undefined
+    return all && isAgentIdentifier(data, identifier) ? { kind: 'issue', id: identifier.toUpperCase(), label: identifier.toUpperCase() } : undefined
   }
   const linked = markdown.split(PROTECTED).map((segment, index) => index % 2 ? segment : segment.replace(SPACED_PATH_LINK, (_match: string, path: string) => `](${path.trim().replace(/\s+/g, '%20')})`).replace(ENTITY_TOKEN, (match: string, linkText?: string, linkUrl?: string, autolink?: string, bareUrl?: string, identifier?: string, offset?: number, source?: string) => {
     if (linkText !== undefined && linkUrl !== undefined) {

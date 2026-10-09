@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import type { AgentSession } from '@/types/flow'
@@ -291,5 +291,100 @@ describe('agent page composer', () => {
     const chip = await screen.findByRole('button', { name: 'Compare TST-1 and TST-2' })
     await user.click(chip)
     expect(streams.streamAgentSessionMessage).toHaveBeenCalledWith('session-chrome', 'Compare TST-1 and TST-2', expect.any(Function), expect.any(AbortSignal), expect.anything())
+  })
+
+  describe('retrying a failed reply', () => {
+    const failedChat = (): AgentSession => ({
+      id: 'session-failed', slugId: 'failed', userId: 'user-1', title: 'Failed chat', favorite: false, location: 'page', issueIds: [], skillIds: [],
+      messages: [
+        { id: 'user-message', role: 'user', content: 'Summarise the launch', createdAt: '2026-08-31T00:00:00Z' },
+        { id: 'assistant-message', role: 'assistant', content: '', createdAt: '2026-08-31T00:00:01Z', parts: [{ id: 'assistant-message_error', type: 'error', status: 'error', text: 'Provider timed out' }] },
+      ],
+      createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:01Z',
+    })
+    const conversation = () => screen.getByRole('group', { name: 'Agent conversation' })
+    // Streams left hanging by a test keep a live copy of their chat; don't let it leak into the next one.
+    afterEach(() => ['session-failed', 'session-live'].forEach(clearLiveAgentSession))
+
+    it('reuses the saved question and replaces the error row instead of adding a second copy', async () => {
+      api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+      const failed = failedChat()
+      api.getAgentSession.mockResolvedValue(failed)
+      let emit!: (event: unknown) => void
+      streams.streamAgentSessionMessageEdit.mockImplementation((_id, _messageId, _message, onEvent) => new Promise(() => { emit = onEvent }))
+      const user = userEvent.setup()
+      render(<I18nProvider><AgentPage chatSlug="failed" data={makeBootstrap({ agentSessions: [failed], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      expect(await screen.findByText('Provider timed out')).toBeVisible()
+      await user.click(await screen.findByRole('button', { name: 'Retry' }))
+      // The edit endpoint keeps the stored question (same id) and drops the failed reply; no new message is appended.
+      expect(streams.streamAgentSessionMessageEdit).toHaveBeenCalledWith('session-failed', 'user-message', 'Summarise the launch', expect.any(Function), expect.any(AbortSignal))
+      expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
+      await waitFor(() => expect(within(conversation()).getByText('Thinking…')).toBeVisible())
+      expect(within(conversation()).getAllByText('Summarise the launch')).toHaveLength(1)
+      expect(screen.queryByText('Provider timed out')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+      // The server's copy of the turn replaces the optimistic one: still a single question.
+      act(() => emit({ type: 'session.started', session: { ...failed, messages: [failed.messages[0]] }, messageId: 'assistant-retry' }))
+      await waitFor(() => expect(document.querySelector('[data-message-id="user-message"]')).not.toBeNull())
+      expect(within(conversation()).getAllByText('Summarise the launch')).toHaveLength(1)
+      expect(screen.queryByText('Provider timed out')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    })
+
+    it('shows a turn that fails while streaming as an error row with Retry, without restoring the composer', async () => {
+      api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+      const started: AgentSession = { ...failedChat(), id: 'session-live', slugId: 'live', messages: [{ id: 'user-message', role: 'user', content: 'Summarise the launch', createdAt: '2026-08-31T00:00:00Z' }] }
+      streams.streamNewAgentSession.mockImplementation(async (_input, onEvent) => {
+        onEvent({ type: 'session.started', session: started, messageId: 'assistant-message' })
+        onEvent({ type: 'error', error: 'Provider timed out' })
+        throw new Error('Provider timed out')
+      })
+      streams.streamAgentSessionMessageEdit.mockImplementation(() => new Promise(() => undefined))
+      const user = userEvent.setup()
+      render(<I18nProvider><AgentPage data={makeBootstrap({ agentSessions: [], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+      await user.type(editor, 'Summarise the launch')
+      await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+      expect(await screen.findByRole('button', { name: 'Retry' })).toBeVisible()
+      // One question, one error row (no extra banner), and the sent text is not put back for a second send.
+      expect(within(conversation()).getAllByText('Summarise the launch')).toHaveLength(1)
+      expect(screen.getAllByText('Provider timed out')).toHaveLength(1)
+      expect(editor).toHaveTextContent('')
+      await user.click(screen.getByRole('button', { name: 'Retry' }))
+      expect(streams.streamAgentSessionMessageEdit).toHaveBeenCalledWith('session-live', 'user-message', 'Summarise the launch', expect.any(Function), expect.any(AbortSignal))
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument())
+      expect(within(conversation()).getAllByText('Summarise the launch')).toHaveLength(1)
+      expect(screen.queryByText('Provider timed out')).not.toBeInTheDocument()
+      expect(streams.streamNewAgentSession).toHaveBeenCalledTimes(1)
+      expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
+    })
+
+    it('leaves the composer draft alone when retrying', async () => {
+      api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+      const failed = failedChat()
+      api.getAgentSession.mockResolvedValue(failed)
+      streams.streamAgentSessionMessageEdit.mockImplementation(() => new Promise(() => undefined))
+      const user = userEvent.setup()
+      render(<I18nProvider><AgentPage chatSlug="failed" data={makeBootstrap({ agentSessions: [failed], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      const editor = screen.getByRole('textbox', { name: 'Send a message to Flow AI' })
+      await user.type(editor, 'Something else I was typing')
+      await user.click(await screen.findByRole('button', { name: 'Retry' }))
+      await waitFor(() => expect(streams.streamAgentSessionMessageEdit).toHaveBeenCalled())
+      expect(editor).toHaveTextContent('Something else I was typing')
+    })
+
+    it('offers Retry only on the newest reply, not on older errors in the history', async () => {
+      api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+      const failed = failedChat()
+      const older: AgentSession = { ...failed, messages: [
+        ...failed.messages,
+        { id: 'user-2', role: 'user', content: 'Try again later', createdAt: '2026-08-31T00:01:00Z' },
+        { id: 'assistant-2', role: 'assistant', content: 'Here you go.', createdAt: '2026-08-31T00:01:01Z', parts: [{ id: 'text', type: 'text', text: 'Here you go.', status: 'completed' }] },
+      ] }
+      api.getAgentSession.mockResolvedValue(older)
+      render(<I18nProvider><AgentPage chatSlug="failed" data={makeBootstrap({ agentSessions: [older], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      expect(await screen.findByText('Provider timed out')).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+    })
   })
 })

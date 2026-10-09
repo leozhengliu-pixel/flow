@@ -110,6 +110,14 @@ func testLoopRunRecordsRoundTrip(t *testing.T, repository *SQLiteStore) {
 	if cancel, err := repository.HeartbeatLoopRun(ctx, workspace, "run_d", lease.Owner, now, now.Add(time.Minute)); err != nil || cancel {
 		t.Fatalf("heartbeat = %v, %v", cancel, err)
 	}
+	// Reads merge the heartbeat column into the run, even though the document was not rewritten.
+	beat, err := repository.LoopRun(ctx, workspace, "run_d")
+	if err != nil || beat.HeartbeatAt == nil || !beat.HeartbeatAt.Equal(now) {
+		t.Fatalf("run heartbeatAt = %v, %v (want %v)", beat.HeartbeatAt, err, now)
+	}
+	if listed, err := repository.ListLoopRuns(ctx, workspace, "loop_1", 10); err != nil || listed[0].HeartbeatAt == nil || !listed[0].HeartbeatAt.Equal(now) {
+		t.Fatalf("listed heartbeatAt = %+v, %v", listed[0].HeartbeatAt, err)
+	}
 	if _, err := repository.HeartbeatLoopRun(ctx, workspace, "run_d", "host-b:2:y", now, now.Add(time.Minute)); !errors.Is(err, ErrLoopRunLeaseLost) {
 		t.Fatalf("foreign heartbeat err = %v", err)
 	}

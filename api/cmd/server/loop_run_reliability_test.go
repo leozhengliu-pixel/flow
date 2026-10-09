@@ -347,6 +347,31 @@ func TestLoopRunLeaseRenewalAndLoss(t *testing.T) {
 	}
 }
 
+// Heartbeats renew only the lease columns, so every read path merges the live
+// heartbeat into the run it returns: the run page shows the run is alive.
+func TestLoopRunAPIReturnsTheCurrentHeartbeat(t *testing.T) {
+	provider := &fakeLoopProvider{replies: []string{"block"}}
+	srv, handler := newReliableLoopServer(t, provider)
+	loop, started := startTestRun(t, handler, "Slow", "Wait.", nil)
+	time.Sleep(3 * srv.loopLimits().LeaseTTL)
+	single := requestJSON[domain.LoopRun](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+started.ID, nil, http.StatusOK)
+	if single.Status != "running" || single.HeartbeatAt == nil || !single.HeartbeatAt.After(single.StartedAt) {
+		t.Fatalf("single run heartbeatAt = %v, startedAt = %v", single.HeartbeatAt, single.StartedAt)
+	}
+	listed := requestJSON[[]domain.LoopRun](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs", nil, http.StatusOK)
+	if len(listed) != 1 || listed[0].HeartbeatAt == nil || !listed[0].HeartbeatAt.After(listed[0].StartedAt) {
+		t.Fatalf("listed runs = %+v", listed)
+	}
+	// The heartbeat keeps advancing between reads.
+	time.Sleep(2 * srv.loopLimits().LeaseTTL)
+	later := requestJSON[domain.LoopRun](t, handler, http.MethodGet, "/api/loops/"+loop.ID+"/runs/"+started.ID, nil, http.StatusOK)
+	if !later.HeartbeatAt.After(*single.HeartbeatAt) {
+		t.Fatalf("heartbeatAt did not advance: %v then %v", single.HeartbeatAt, later.HeartbeatAt)
+	}
+	srv.interruptLoopRun(context.Background(), "test-workspace", started.ID, srv.loopInstanceID())
+	waitForRun(t, handler, loop.ID, started.ID)
+}
+
 func TestLoopRunFailureReasonsAndRetries(t *testing.T) {
 	provider := &fakeLoopProvider{}
 	srv, handler := newReliableLoopServer(t, provider)
