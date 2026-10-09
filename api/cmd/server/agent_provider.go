@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"slices"
 	"sort"
@@ -66,9 +67,31 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 	if emit == nil {
 		emit = func(agentProviderEvent) error { return nil }
 	}
+	if _, err := s.agentToolDefinitions(); err != nil {
+		return agentProviderTurn{}, err
+	}
+	tools := s.agentTurnTools(ctx)
+	protocol := s.agent.Protocol
+	if protocol == "" {
+		protocol = "openai-chat-completions"
+	}
+	switch protocol {
+	case "openai-responses":
+		return s.requestOpenAIResponses(ctx, messages, tools, emit)
+	case "anthropic-messages":
+		return s.requestAnthropicMessages(ctx, messages, tools, emit)
+	case "openai-chat-completions":
+		return s.requestChatCompletions(ctx, messages, tools, emit)
+	default:
+		return agentProviderTurn{}, fmt.Errorf("unsupported Agent protocol %q", protocol)
+	}
+}
+
+// agentTurnTools is the tool list a model turn is offered in ctx.
+func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 	tools, err := s.agentToolDefinitions()
 	if err != nil {
-		return agentProviderTurn{}, err
+		return nil
 	}
 	if connectors, ok := ctx.Value(connectorToolsKey{}).([]connectorTool); ok {
 		for _, tool := range connectors {
@@ -85,20 +108,7 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 	if allow, ok := ctx.Value(agentToolFilterKey{}).(func(agentProviderTool) bool); ok {
 		tools = slices.DeleteFunc(tools, func(tool agentProviderTool) bool { return !allow(tool) })
 	}
-	protocol := s.agent.Protocol
-	if protocol == "" {
-		protocol = "openai-chat-completions"
-	}
-	switch protocol {
-	case "openai-responses":
-		return s.requestOpenAIResponses(ctx, messages, tools, emit)
-	case "anthropic-messages":
-		return s.requestAnthropicMessages(ctx, messages, tools, emit)
-	case "openai-chat-completions":
-		return s.requestChatCompletions(ctx, messages, tools, emit)
-	default:
-		return agentProviderTurn{}, fmt.Errorf("unsupported Agent protocol %q", protocol)
-	}
+	return tools
 }
 
 type agentMaxOutputTokensKey struct{}
@@ -470,15 +480,28 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("Flow Agent provider is unavailable")
+		var netErr net.Error
+		return nil, &agentProviderError{message: "Flow Agent provider is unavailable", transient: true, timeout: errors.As(err, &netErr) && netErr.Timeout()}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		defer response.Body.Close()
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
-		return nil, fmt.Errorf("Flow Agent provider returned status %d: %s", response.StatusCode, providerError(body))
+		status := response.StatusCode
+		return nil, &agentProviderError{message: fmt.Sprintf("Flow Agent provider returned status %d: %s", status, providerError(body)), status: status, transient: status >= 500 || status == http.StatusTooManyRequests || status == http.StatusRequestTimeout, timeout: status == http.StatusGatewayTimeout || status == http.StatusRequestTimeout}
 	}
 	return response, nil
 }
+
+// agentProviderError is a failed provider request. Transient failures (no
+// connection, timeouts, 429 and 5xx) may succeed when the request is retried.
+type agentProviderError struct {
+	message   string
+	status    int
+	transient bool
+	timeout   bool
+}
+
+func (e *agentProviderError) Error() string { return e.message }
 
 func responsesInput(messages []agentProviderMessage) (string, []any) {
 	instructions := ""

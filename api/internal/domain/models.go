@@ -926,6 +926,11 @@ type Loop struct {
 	Attachments                []LoopAttachment `json:"attachments,omitempty"`
 	Version                    int              `json:"version,omitempty"`
 	VersionID                  string           `json:"versionId,omitempty"`
+	// ExpectedOutputs are what a successful run must produce: statusUpdate,
+	// issue, comment, document or change (any Flow change); ["none"] when a
+	// run may legitimately change nothing. Empty means inferred from the
+	// instructions (see EffectiveOutputs on the run).
+	ExpectedOutputs []string `json:"expectedOutputs,omitempty"`
 }
 
 // LoopDefinition is the part of a loop a published version snapshots.
@@ -989,9 +994,10 @@ type LoopRunFeedbackCounts struct {
 
 // LoopRun records one execution of a loop by the agent runtime.
 type LoopRun struct {
-	ID               string            `json:"id"`
-	LoopID           string            `json:"loopId"`
-	Status           string            `json:"status"`  // running | completed | failed
+	ID     string `json:"id"`
+	LoopID string `json:"loopId"`
+	// running | completed | needs_review | failed | cancelled | interrupted
+	Status           string            `json:"status"`
 	Trigger          string            `json:"trigger"` // manual | schedule | event
 	TriggerLabel     string            `json:"triggerLabel,omitempty"`
 	EventType        string            `json:"eventType,omitempty"`
@@ -1009,6 +1015,20 @@ type LoopRun struct {
 	Feedback         []LoopRunFeedback `json:"feedback,omitempty"`
 	// Replies continue the run's agent conversation from the run page.
 	Replies []LoopRunReply `json:"replies,omitempty"`
+	// FailureReason classifies a run that did not complete: cancelled,
+	// interrupted, timeout, provider_timeout, provider_error, empty_response,
+	// tool_error, budget_exhausted, no_output, incomplete or unavailable.
+	FailureReason string `json:"failureReason,omitempty"`
+	// Summary is the agent's structured final report (the finish_run tool).
+	Summary *LoopRunSummary `json:"summary,omitempty"`
+	// ExpectedOutputs are the outputs the run was checked for; Produced
+	// counts the successful changes it made by kind.
+	ExpectedOutputs []string       `json:"expectedOutputs,omitempty"`
+	Produced        map[string]int `json:"produced,omitempty"`
+	// Retries counts provider and read-only tool calls that were retried.
+	Retries     int        `json:"retries,omitempty"`
+	CancelledBy string     `json:"cancelledBy,omitempty"`
+	HeartbeatAt *time.Time `json:"heartbeatAt,omitempty"`
 	// Viewer fields are computed per request and never stored.
 	ViewerRating   *string                `json:"viewerRating"`
 	ViewerComment  string                 `json:"viewerComment,omitempty"`
@@ -1019,21 +1039,31 @@ type LoopRun struct {
 
 // LoopRunReply is a follow-up message on a run and the agent's answer to it.
 type LoopRunReply struct {
-	ID         string            `json:"id"`
-	UserID     string            `json:"userId"`
-	Body       string            `json:"body"`
-	Status     string            `json:"status"` // running | completed | failed
-	Output     string            `json:"output,omitempty"`
-	Steps      []LoopRunStep     `json:"steps,omitempty"`
-	ToolCalls  []LoopRunToolCall `json:"toolCalls,omitempty"`
-	Error      string            `json:"error,omitempty"`
-	CreatedAt  time.Time         `json:"createdAt"`
-	FinishedAt *time.Time        `json:"finishedAt,omitempty"`
+	ID            string            `json:"id"`
+	UserID        string            `json:"userId"`
+	Body          string            `json:"body"`
+	Status        string            `json:"status"` // running | completed | failed | cancelled | interrupted
+	Output        string            `json:"output,omitempty"`
+	Steps         []LoopRunStep     `json:"steps,omitempty"`
+	ToolCalls     []LoopRunToolCall `json:"toolCalls,omitempty"`
+	FailureReason string            `json:"failureReason,omitempty"`
+	Error         string            `json:"error,omitempty"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	FinishedAt    *time.Time        `json:"finishedAt,omitempty"`
 	// SkillIDs are the replier's skills applied to the answer.
 	SkillIDs []string `json:"skillIds,omitempty"`
 	// Attachments describe the files sent with the reply; their contents
 	// went to the agent with that turn and are not kept.
 	Attachments []LoopRunReplyAttachment `json:"attachments,omitempty"`
+}
+
+// LoopRunSummary is the structured report a loop run ends with.
+type LoopRunSummary struct {
+	// done | incomplete | nothing_to_do
+	Status  string   `json:"status"`
+	Summary string   `json:"summary"`
+	Done    []string `json:"done,omitempty"`
+	NotDone []string `json:"notDone,omitempty"`
 }
 
 // LoopRunReplyAttachment is a file sent with a run reply.
@@ -2080,29 +2110,31 @@ type Bootstrap struct {
 	Teams                  []Team        `json:"teams"`
 	// TeamByID/TeamByKey/TeamChildren/LabelIndex are in-memory lookup tables
 	// rebuilt on load. They are not serialized.
-	TeamByID                      map[string]int                     `json:"-"`
-	TeamByKey                     map[string]string                  `json:"-"`
-	TeamChildren                  map[string][]string                `json:"-"`
-	LabelIndex                    map[string][]int                   `json:"-"`
-	Customers                     []Customer                         `json:"customers"`
-	States                        []WorkflowState                    `json:"states"`
-	Labels                        []IssueLabel                       `json:"labels"`
-	LabelGroups                   []LabelGroup                       `json:"labelGroups"`
-	Issues                        []Issue                            `json:"issues"`
-	Cycles                        []Cycle                            `json:"cycles"`
-	CycleSettings                 map[string]CycleSettings           `json:"cycleSettings"`
-	TeamSettings                  map[string]TeamSettings            `json:"teamSettings"`
-	TeamParents                   map[string]string                  `json:"teamParents,omitempty"`
-	IssueTemplates                []IssueTemplate                    `json:"issueTemplates"`
-	ProjectTemplates              []ProjectTemplate                  `json:"projectTemplates"`
-	DocumentTemplates             []DocumentTemplate                 `json:"documentTemplates"`
-	Documents                     []Document                         `json:"documents"`
-	CustomerRequests              []CustomerRequest                  `json:"customerRequests"`
-	Releases                      []Release                          `json:"releases"`
-	ReleasePipelines              []ReleasePipeline                  `json:"releasePipelines"`
-	CustomEmojis                  []CustomEmoji                      `json:"customEmojis"`
-	Asks                          []Ask                              `json:"asks"`
-	Loops                         []Loop                             `json:"loops"`
+	TeamByID          map[string]int           `json:"-"`
+	TeamByKey         map[string]string        `json:"-"`
+	TeamChildren      map[string][]string      `json:"-"`
+	LabelIndex        map[string][]int         `json:"-"`
+	Customers         []Customer               `json:"customers"`
+	States            []WorkflowState          `json:"states"`
+	Labels            []IssueLabel             `json:"labels"`
+	LabelGroups       []LabelGroup             `json:"labelGroups"`
+	Issues            []Issue                  `json:"issues"`
+	Cycles            []Cycle                  `json:"cycles"`
+	CycleSettings     map[string]CycleSettings `json:"cycleSettings"`
+	TeamSettings      map[string]TeamSettings  `json:"teamSettings"`
+	TeamParents       map[string]string        `json:"teamParents,omitempty"`
+	IssueTemplates    []IssueTemplate          `json:"issueTemplates"`
+	ProjectTemplates  []ProjectTemplate        `json:"projectTemplates"`
+	DocumentTemplates []DocumentTemplate       `json:"documentTemplates"`
+	Documents         []Document               `json:"documents"`
+	CustomerRequests  []CustomerRequest        `json:"customerRequests"`
+	Releases          []Release                `json:"releases"`
+	ReleasePipelines  []ReleasePipeline        `json:"releasePipelines"`
+	CustomEmojis      []CustomEmoji            `json:"customEmojis"`
+	Asks              []Ask                    `json:"asks"`
+	Loops             []Loop                   `json:"loops"`
+	// LoopRuns is legacy: runs now live in loop_run_records, and the store
+	// moves runs found here into that table once at startup.
 	LoopRuns                      []LoopRun                          `json:"loopRuns,omitempty"`
 	LoopVersions                  []LoopVersion                      `json:"loopVersions,omitempty"`
 	LoopAttachments               []LoopAttachment                   `json:"loopAttachments,omitempty"`

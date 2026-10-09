@@ -32,6 +32,8 @@ export const INBOX_ACTIVITY_EVENT = 'flow:inbox-activity'
 export function inboxRealtimeRelevant(event: { type: string; actorId?: string }, viewerId: string) {
   if (/^notifications?\./.test(event.type)) return true
   if (event.type === 'presence.updated' || event.type.startsWith('favorite') || event.type.startsWith('subscription.')) return false
+  // Loop run progress signals never create notifications.
+  if (event.type.startsWith('loop_run.')) return false
   return event.actorId !== viewerId
 }
 

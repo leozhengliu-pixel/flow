@@ -1,12 +1,16 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { zhCN } from '@/i18n/translations'
+import { LOOP_RUN_ACTIVITY_EVENT } from '@/lib/loop-run-activity'
+import { REASON_LABELS, STATUS_LABELS } from './loop-run-status'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { Loop, LoopRun } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
+  cancelLoopRun: vi.fn(),
   getLoop: vi.fn(),
   getLoopRun: vi.fn(),
   listLoopRuns: vi.fn(),
@@ -34,6 +38,11 @@ const running: LoopRun = { id: 'run-3', loopId: 'loop-1', status: 'running', tri
 
 const skill = { id: 'skill-1', userId: viewer.id, name: 'Terse answers', instructions: 'One sentence.', createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' }
 
+function cleanupAndRender(runId: string) {
+  cleanup()
+  return renderPage(runId)
+}
+
 function renderPage(runId?: string) {
   const onNavigate = vi.fn()
   render(<I18nProvider><LoopRunPage data={makeBootstrap({ loops: [loop], agentSkills: [skill] })} loopId="loop-1" runId={runId} onNavigate={onNavigate} onOpenSidebar={vi.fn()}/></I18nProvider>)
@@ -46,6 +55,7 @@ describe('LoopRunPage', () => {
     api.listLoopRuns.mockReset().mockResolvedValue([completed, failed])
     api.getLoopRun.mockReset().mockImplementation(async (_loop: string, id: string) => [completed, failed, running].find(run => run.id === id))
     api.rateLoopRun.mockReset()
+    api.cancelLoopRun.mockReset()
     localStorage.clear()
   })
 
@@ -201,5 +211,73 @@ describe('LoopRunPage', () => {
     expect(await screen.findByRole('list', { name: 'Attachments' })).toHaveTextContent('notes.md')
     expect(box).toHaveValue('')
     expect(box.closest('form')!.querySelector('.loops-run-composer-attachments')).toBeNull()
+  })
+
+  it('cancels a running run and shows it as cancelled', async () => {
+    const user = userEvent.setup()
+    api.listLoopRuns.mockResolvedValue([running])
+    api.getLoopRun.mockResolvedValue(running)
+    api.cancelLoopRun.mockResolvedValue({ ...running, status: 'cancelled', failureReason: 'cancelled', error: 'Cancelled', cancelledBy: viewer.id, finishedAt: new Date().toISOString() })
+    renderPage('run-3')
+    const cancel = await screen.findByRole('button', { name: 'Cancel run' })
+    await user.click(cancel)
+    expect(api.cancelLoopRun).toHaveBeenCalledWith('loop-1', 'run-3')
+    expect(await screen.findByText('Run cancelled')).toBeVisible()
+    expect(screen.getByText(`Cancelled by ${viewer.displayName || viewer.name}`)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull()
+    expect(screen.getAllByLabelText('Cancelled').length).toBeGreaterThan(0)
+  })
+
+  it('keeps the run when cancelling fails', async () => {
+    const user = userEvent.setup()
+    api.listLoopRuns.mockResolvedValue([running])
+    api.getLoopRun.mockResolvedValue(running)
+    api.cancelLoopRun.mockRejectedValue(new Error('This run is not running'))
+    renderPage('run-3')
+    await user.click(await screen.findByRole('button', { name: 'Cancel run' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel run' })).toBeEnabled())
+    expect(screen.queryByText('Run cancelled')).toBeNull()
+  })
+
+  it('flags a run that produced no output for review', async () => {
+    const review: LoopRun = { ...completed, id: 'run-4', status: 'needs_review', failureReason: 'no_output', error: 'No output produced: the loop\'s instructions call for a project or initiative status update, but the run made none' }
+    api.listLoopRuns.mockResolvedValue([review])
+    api.getLoopRun.mockResolvedValue(review)
+    renderPage('run-4')
+    expect(await screen.findByText('Needs review', { selector: 'strong' })).toBeVisible()
+    expect(screen.getByText('No output produced')).toBeVisible()
+    expect(screen.getByText(/but the run made none/)).toBeVisible()
+    expect(screen.getAllByLabelText('Needs review').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Cancel run' })).toBeNull()
+  })
+
+  it('shows interrupted runs and failure reasons', async () => {
+    const interrupted: LoopRun = { ...failed, id: 'run-5', status: 'interrupted', failureReason: 'interrupted', error: 'Interrupted by server restart' }
+    const timedOut: LoopRun = { ...failed, id: 'run-6', failureReason: 'provider_timeout', error: 'Flow Agent provider is unavailable' }
+    api.listLoopRuns.mockResolvedValue([interrupted, timedOut])
+    api.getLoopRun.mockImplementation(async (_loop: string, id: string) => [interrupted, timedOut].find(run => run.id === id))
+    renderPage('run-5')
+    expect(await screen.findByText('Run interrupted')).toBeVisible()
+    expect(screen.getAllByLabelText('Interrupted').length).toBeGreaterThan(0)
+    cleanupAndRender('run-6')
+    expect(await screen.findByText("Loop couldn't run")).toBeVisible()
+    expect(screen.getByText('The model provider timed out')).toBeVisible()
+    expect(screen.getByText('Flow Agent provider is unavailable')).toBeVisible()
+  })
+
+  it('refetches the run when a realtime run signal arrives', async () => {
+    api.listLoopRuns.mockResolvedValue([running])
+    api.getLoopRun.mockResolvedValue(running)
+    renderPage('run-3')
+    await screen.findByText('Reviewing issues…')
+    api.getLoopRun.mockResolvedValue({ ...running, status: 'completed', output: 'Signal received.', finishedAt: new Date().toISOString() })
+    window.dispatchEvent(new CustomEvent(LOOP_RUN_ACTIVITY_EVENT, { detail: { type: 'loop_run.finished', loopId: 'loop-1', runId: 'run-3', status: 'completed' } }))
+    expect(await screen.findByText('Signal received.')).toBeVisible()
+  })
+
+  it('has Chinese copy for every run status and failure reason', () => {
+    for (const label of [...Object.values(STATUS_LABELS), ...Object.values(REASON_LABELS)]) {
+      expect(zhCN[label], label).toBeTruthy()
+    }
   })
 })

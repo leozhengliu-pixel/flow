@@ -32,7 +32,7 @@ func sessionLoops(data domain.Bootstrap, session domain.AgentSession) []domain.L
 	loops := []domain.Loop{}
 	for _, id := range session.LoopIDs {
 		if loop := loopByID(&data, id); loop != nil {
-			loops = append(loops, presentLoop(data.LoopRuns, *loop))
+			loops = append(loops, presentLoop(nil, *loop))
 		}
 	}
 	return loops

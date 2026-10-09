@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -100,7 +101,7 @@ func (s *server) loopRunnable(data domain.Bootstrap, loop domain.Loop) error {
 }
 
 func (s *server) listLoopRuns(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops", "viewer")
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -110,29 +111,31 @@ func (s *server) listLoopRuns(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "loop not found")
 		return
 	}
-	runs := []domain.LoopRun{}
-	for _, run := range data.LoopRuns {
-		if run.LoopID == id {
-			runs = append(runs, presentLoopRun(run, firstNonEmpty(authUser(r).ID, data.Viewer.ID)))
-		}
+	runs, err := s.store.ListLoopRuns(r.Context(), data.Workspace.URLKey, id, loopRunHistory)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not load loop runs")
+		return
+	}
+	viewerID := firstNonEmpty(authUser(r).ID, data.Viewer.ID)
+	for index := range runs {
+		runs[index] = presentLoopRun(runs[index], viewerID)
 	}
 	writeJSON(w, http.StatusOK, runs)
 }
 
 func (s *server) getLoopRun(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "viewer")
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	id, runID := r.PathValue("id"), r.PathValue("runId")
-	for _, run := range data.LoopRuns {
-		if run.LoopID == id && run.ID == runID {
-			writeJSON(w, http.StatusOK, presentLoopRun(run, firstNonEmpty(authUser(r).ID, data.Viewer.ID)))
-			return
-		}
+	run, err := s.store.LoopRun(r.Context(), data.Workspace.URLKey, runID)
+	if err != nil || run.LoopID != id {
+		writeError(w, http.StatusNotFound, "loop run not found")
+		return
 	}
-	writeError(w, http.StatusNotFound, "loop run not found")
+	writeJSON(w, http.StatusOK, presentLoopRun(run, firstNonEmpty(authUser(r).ID, data.Viewer.ID)))
 }
 
 // presentLoopRun fills the trigger label for runs stored before labels existed
@@ -188,7 +191,7 @@ func (s *server) runLoopNow(w http.ResponseWriter, r *http.Request) {
 	if r.ContentLength != 0 && !decodeJSON(w, r, &input) {
 		return
 	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), loopEntityFields...)
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
@@ -278,12 +281,18 @@ func (s *server) resolveLoopEntity(ctx context.Context, workspace string, data d
 	return "", nil, fmt.Errorf("%s %q not found", entityType, id)
 }
 
+// loopEntityFields is the metadata a run start reads: the loop, the
+// workspace settings and the entities a run can be started on.
+var loopEntityFields = []string{"loops", "loopVersions", "workspaceSettings", "projects", "initiatives", "releases", "teams", "teamSettings", "cycles"}
+
 // startLoopRun records a running run and executes it in the background.
+// Runs over the concurrency budget are recorded as failed.
 func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, actorID string) (domain.LoopRun, error) {
-	data, ok := s.store.WorkspaceMetadata(workspace)
+	data, ok := s.store.WorkspaceMetadataFields(workspace, loopEntityFields...)
 	if !ok {
 		return domain.LoopRun{}, errNotFound
 	}
+	workspace = data.Workspace.URLKey
 	loop := loopByID(&data, loopID)
 	if loop == nil {
 		return domain.LoopRun{}, errNotFound
@@ -308,7 +317,13 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 	if loop.WebSearch && !s.webSearchAvailable() {
 		run.Notices = append(run.Notices, loopWebSearchUnavailable)
 	}
-	err := s.store.MutateWorkspace(context.Background(), workspace, "loop.run_started", loopID, map[string]any{"runId": run.ID, "trigger": trigger.Kind}, func(data *domain.Bootstrap) error {
+	run.ExpectedOutputs = effectiveLoopOutputs(*loop)
+	limits := s.loopLimits()
+	registry := s.loopRunRegistry()
+	budgetErr := registry.reserve(workspace, limits)
+	// Stamping the loop touches only the loop catalog and its versions.
+	stampCtx := store.WithMetadataFields(context.Background(), "loops", "loopVersions")
+	err := s.store.MutateWorkspace(stampCtx, workspace, "loop.run_started", loopID, map[string]any{"runId": run.ID, "trigger": trigger.Kind}, func(data *domain.Bootstrap) error {
 		item := loopByID(data, loopID)
 		if item == nil {
 			return errNotFound
@@ -316,38 +331,47 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		version := ensureLoopVersion(data, item)
 		run.VersionID, run.Version = version.ID, version.Version
 		item.LastRunAt = &now
-		data.LoopRuns = append([]domain.LoopRun{run}, data.LoopRuns...)
-		data.LoopRuns = trimLoopRuns(data.LoopRuns, loopID)
 		return nil
 	})
 	if err != nil {
+		if budgetErr == nil {
+			registry.unreserve(workspace)
+		}
 		loopGuards.release(guardKey)
 		return domain.LoopRun{}, err
 	}
+	if budgetErr != nil {
+		defer loopGuards.release(guardKey)
+		run.Status, run.FailureReason, run.Error, run.FinishedAt = "failed", "budget_exhausted", budgetErr.Error(), &now
+		if err := s.store.CreateLoopRun(context.Background(), workspace, run, store.LoopRunLease{}); err != nil {
+			return domain.LoopRun{}, err
+		}
+		s.publishLoopRunEvent(workspace, "loop_run.finished", run)
+		return run, nil
+	}
+	run.HeartbeatAt = &now
+	if err := s.store.CreateLoopRun(context.Background(), workspace, run, store.LoopRunLease{Owner: s.loopInstanceID(), ExpiresAt: now.Add(limits.LeaseTTL)}); err != nil {
+		registry.unreserve(workspace)
+		loopGuards.release(guardKey)
+		return domain.LoopRun{}, err
+	}
+	current := *loop
 	go func() {
 		defer loopGuards.release(guardKey)
-		ctx, cancel := context.WithTimeout(context.Background(), loopRunTimeout)
-		defer cancel()
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run}
-		runErr := s.executeLoopRun(ctx, workspace, *loop, trigger, recorder)
-		s.finishLoopRun(workspace, recorder.run, runErr)
+		s.runLoopWork(workspace, run.ID, limits, func(ctx context.Context) error {
+			return s.executeLoopRun(ctx, workspace, current, trigger, recorder)
+		}, func(ctx context.Context, runErr error) {
+			s.finishLoopRun(ctx, workspace, current, recorder, runErr)
+		})
 	}()
 	return run, nil
 }
 
-func trimLoopRuns(runs []domain.LoopRun, loopID string) []domain.LoopRun {
-	count := 0
-	return slices.DeleteFunc(runs, func(run domain.LoopRun) bool {
-		if run.LoopID != loopID {
-			return false
-		}
-		count++
-		return count > loopRunHistory
-	})
-}
-
 // loopRunRecorder keeps a running run's record and persists it as it changes,
 // so the run page shows steps, tool calls and output while the run works.
+// Each write updates the run's own row (loop_run_records) and appends to its
+// event log; nothing touches the workspace metadata.
 type loopRunRecorder struct {
 	s         *server
 	workspace string
@@ -356,10 +380,12 @@ type loopRunRecorder struct {
 	// the run: the agent is answering a reply on the run page.
 	reply *domain.LoopRunReply
 	// skills are the replier's skills, added to the system prompt for the answer.
-	skills   []domain.PersonalAgentSkill
-	order    int
-	lastSave time.Time
-	dirty    bool
+	skills      []domain.PersonalAgentSkill
+	order       int
+	lastSave    time.Time
+	lastPublish time.Time
+	dirty       bool
+	events      []store.LoopRunEvent
 }
 
 // parts is where the agent's steps, tool calls and output are recorded.
@@ -385,6 +411,10 @@ func (rec *loopRunRecorder) nextOrder() int {
 	return rec.order
 }
 
+func (rec *loopRunRecorder) logEvent(kind string, data any) {
+	rec.events = append(rec.events, loopRunEvent(kind, data))
+}
+
 // save writes the run when forced or when the throttle interval has passed.
 func (rec *loopRunRecorder) save(force bool) {
 	rec.dirty = true
@@ -392,28 +422,40 @@ func (rec *loopRunRecorder) save(force bool) {
 		return
 	}
 	rec.lastSave, rec.dirty = time.Now(), false
+	events := rec.events
+	rec.events = nil
 	if rec.reply != nil {
-		rec.saveReply()
+		rec.saveReply(events)
 		return
 	}
 	snapshot := rec.run
 	snapshot.Steps = slices.Clone(rec.run.Steps)
 	snapshot.ToolCalls = slices.Clone(rec.run.ToolCalls)
-	err := rec.s.store.MutateWorkspace(context.Background(), rec.workspace, "loop.run_progress", snapshot.LoopID, map[string]any{"runId": snapshot.ID}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.LoopRuns, func(item domain.LoopRun) bool { return item.ID == snapshot.ID })
-		if index < 0 {
-			return errNotFound
+	snapshot.Produced = maps.Clone(rec.run.Produced)
+	updated, err := rec.s.store.UpdateLoopRun(context.Background(), rec.workspace, snapshot.ID, events, func(run *domain.LoopRun) error {
+		if run.Status != "running" {
+			return store.ErrNoMutation
 		}
-		if data.LoopRuns[index].Status != "running" {
-			return nil
-		}
-		snapshot.Feedback = data.LoopRuns[index].Feedback
-		data.LoopRuns[index] = snapshot
+		run.Steps, run.ToolCalls, run.Output = snapshot.Steps, snapshot.ToolCalls, snapshot.Output
+		run.Produced, run.Retries, run.Summary, run.Notices = snapshot.Produced, snapshot.Retries, snapshot.Summary, snapshot.Notices
 		return nil
 	})
-	if err != nil && !errors.Is(err, errNotFound) {
-		log.Printf("Loop run progress workspace=%s run=%s: %v", rec.workspace, snapshot.ID, err)
+	if err != nil {
+		if !errors.Is(err, store.ErrLoopRunNotFound) {
+			log.Printf("Loop run progress workspace=%s run=%s: %v", rec.workspace, snapshot.ID, err)
+		}
+		return
 	}
+	rec.publishProgress(updated)
+}
+
+// publishProgress tells clients the run changed, at most once a second.
+func (rec *loopRunRecorder) publishProgress(run domain.LoopRun) {
+	if time.Since(rec.lastPublish) < time.Second {
+		return
+	}
+	rec.lastPublish = time.Now()
+	rec.s.publishLoopRunEvent(rec.workspace, "loop_run.progress", run)
 }
 
 func (rec *loopRunRecorder) addStep(title, message string) {
@@ -422,7 +464,9 @@ func (rec *loopRunRecorder) addStep(title, message string) {
 		return
 	}
 	steps, _, _ := rec.parts()
-	*steps = append(*steps, domain.LoopRunStep{Order: rec.nextOrder(), Title: title, Message: strings.TrimSpace(message), At: time.Now().UTC()})
+	step := domain.LoopRunStep{Order: rec.nextOrder(), Title: title, Message: strings.TrimSpace(message), At: time.Now().UTC()}
+	*steps = append(*steps, step)
+	rec.logEvent("step", step)
 	rec.save(true)
 }
 
@@ -430,12 +474,16 @@ func (rec *loopRunRecorder) startTool(call domain.AgentToolCall) int {
 	now := time.Now().UTC()
 	args := loopToolArgs(call)
 	_, calls, _ := rec.parts()
-	*calls = append(*calls, domain.LoopRunToolCall{Order: rec.nextOrder(), ID: call.ID, Name: call.Name, Label: loopToolLabel(call.Name, args), Args: loopToolArgsSummary(args), Status: "running", StartedAt: &now})
+	record := domain.LoopRunToolCall{Order: rec.nextOrder(), ID: call.ID, Name: call.Name, Label: loopToolLabel(call.Name, args), Args: loopToolArgsSummary(args), Status: "running", StartedAt: &now}
+	*calls = append(*calls, record)
+	rec.logEvent("tool_started", record)
 	rec.save(true)
 	return len(*calls) - 1
 }
 
-func (rec *loopRunRecorder) finishTool(index int, status string, callErr error) {
+// finishTool records a tool call's outcome; a successful change counts
+// toward the run's produced outputs.
+func (rec *loopRunRecorder) finishTool(index int, status string, callErr error, write bool, args map[string]any) {
 	now := time.Now().UTC()
 	_, calls, _ := rec.parts()
 	record := &(*calls)[index]
@@ -443,7 +491,38 @@ func (rec *loopRunRecorder) finishTool(index int, status string, callErr error) 
 	if callErr != nil {
 		record.Error = callErr.Error()
 	}
+	if status == "completed" && write && rec.reply == nil {
+		if rec.run.Produced == nil {
+			rec.run.Produced = map[string]int{}
+		}
+		rec.run.Produced["change"]++
+		if kind := loopOutputKind(record.Name, args); kind != "" {
+			rec.run.Produced[kind]++
+		}
+	}
+	rec.logEvent("tool_finished", *record)
 	rec.save(true)
+}
+
+func (rec *loopRunRecorder) addRetries(count int) {
+	if count > 0 && rec.reply == nil {
+		rec.run.Retries += count
+		rec.logEvent("retried", map[string]int{"count": count})
+	}
+}
+
+func (rec *loopRunRecorder) setSummary(summary *domain.LoopRunSummary) {
+	if rec.reply == nil {
+		rec.run.Summary = summary
+	}
+	rec.logEvent("summary", summary)
+}
+
+func (rec *loopRunRecorder) summary() *domain.LoopRunSummary {
+	if rec.reply != nil {
+		return nil
+	}
+	return rec.run.Summary
 }
 
 // setOutput records streamed text and persists it on the throttle.
@@ -452,36 +531,66 @@ func (rec *loopRunRecorder) setOutput(text string) {
 	rec.save(false)
 }
 
+// loopRunOutputLimit caps the answer kept on a run.
+const loopRunOutputLimit = 64 << 10
+
 // setOutputNow records the output without writing it.
 func (rec *loopRunRecorder) setOutputNow(text string) {
+	if len(text) > loopRunOutputLimit {
+		text = strings.ToValidUTF8(text[:loopRunOutputLimit], "") + "\n\n[output truncated]"
+	}
 	_, _, output := rec.parts()
 	*output = text
 }
 
-func (s *server) finishLoopRun(workspace string, run domain.LoopRun, runErr error) {
+// finishLoopRun records how a run ended: its failure (cancelled, interrupted,
+// timed out, provider or budget failures) or, when the agent finished, the
+// acceptance check of what the run produced.
+func (s *server) finishLoopRun(ctx context.Context, workspace string, loop domain.Loop, rec *loopRunRecorder, runErr error) {
+	limits := s.loopLimits()
 	now := time.Now().UTC()
+	run := rec.run
 	run.FinishedAt = &now
-	run.Status = "completed"
-	if runErr != nil {
-		run.Status, run.Error = "failed", runErr.Error()
-	}
 	run.Output = strings.TrimSpace(run.Output)
-	for index := range run.ToolCalls {
-		if run.ToolCalls[index].Status == "running" {
-			run.ToolCalls[index].Status = "error"
+	run.Steps, run.ToolCalls = slices.Clone(run.Steps), slices.Clone(run.ToolCalls)
+	closeRunningToolCalls(run.ToolCalls)
+	if runErr != nil || ctx.Err() != nil {
+		if runErr == nil {
+			runErr = ctx.Err()
 		}
+		run.Status, run.FailureReason, run.Error = classifyLoopRunFailure(ctx, runErr, limits)
+		if run.Status == "cancelled" {
+			run.CancelledBy = s.loopRunRegistry().cancelledBy(run.ID)
+		}
+	} else {
+		run.Status, run.FailureReason, run.Error = acceptLoopRun(loop, &run)
 	}
-	err := s.store.MutateWorkspace(context.Background(), workspace, "loop.run_finished", run.LoopID, map[string]any{"runId": run.ID, "status": run.Status}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.LoopRuns, func(item domain.LoopRun) bool { return item.ID == run.ID })
-		if index < 0 {
-			return errNotFound
+	events := append(rec.events, loopRunEvent("finished", map[string]string{"status": run.Status, "reason": run.FailureReason, "error": run.Error}))
+	rec.events = nil
+	stored, err := s.store.UpdateLoopRun(context.Background(), workspace, run.ID, events, func(current *domain.LoopRun) error {
+		if current.Status != "running" {
+			// Reconciled (interrupted) or cancelled elsewhere first.
+			return store.ErrNoMutation
 		}
-		run.Feedback = data.LoopRuns[index].Feedback
-		data.LoopRuns[index] = run
+		run.Feedback, run.Replies = current.Feedback, current.Replies
+		*current = run
 		return nil
 	})
 	if err != nil {
 		log.Printf("Loop run finish workspace=%s run=%s: %v", workspace, run.ID, err)
+	}
+	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, run.ID, s.loopInstanceID()); err != nil {
+		log.Printf("Loop run lease release workspace=%s run=%s: %v", workspace, run.ID, err)
+	}
+	if run.Status != "completed" {
+		log.Printf("Loop run finished workspace=%s loop=%s run=%s status=%s reason=%s: %s", workspace, run.LoopID, run.ID, run.Status, run.FailureReason, run.Error)
+	}
+	if err == nil {
+		run = stored
+	}
+	s.publishLoopRunEvent(workspace, "loop_run.finished", run)
+	if err := s.store.TrimLoopRuns(context.Background(), workspace, run.LoopID, loopRunHistory); err != nil {
+		log.Printf("Loop run history trim workspace=%s loop=%s: %v", workspace, run.LoopID, err)
 	}
 }
 
@@ -523,31 +632,51 @@ func (s *server) loopRunRequest(ctx context.Context, workspace string, owner dom
 	return request.WithContext(ctx), nil
 }
 
-const loopSummaryPrompt = "You have used all tool calls available to this run. Do not call any more tools. Reply now with the short summary of what you did, including links to the issues you changed, and note anything you could not finish."
+const loopSummaryPrompt = "You have used all tool turns available to this run. Do not call any more tools. Do the final self-check from what you already know, then reply with the short summary of what you did, including links to the issues you changed, and list anything you could not finish."
+
+// loopRunTools lists the tools a run's model is offered (names) and which of
+// them only read (retried on transient failures; never counted as output).
+func (s *server) loopRunTools(ctx context.Context) ([]string, map[string]bool) {
+	names := []string{}
+	readOnly := map[string]bool{agentProgressTool: true, loopFinishToolName: true, webSearchToolName: true, fetchURLToolName: true}
+	for _, tool := range s.agentTurnTools(ctx) {
+		names = append(names, tool.Name)
+		if tool.Access == "read" && !strings.HasPrefix(tool.Name, "external_") {
+			readOnly[tool.Name] = true
+		}
+	}
+	return names, readOnly
+}
 
 // executeLoopRun runs the loop's agent. history continues an earlier run: the
 // run's answer and the replies that followed it.
 func (s *server) executeLoopRun(ctx context.Context, workspace string, loop domain.Loop, trigger loopTrigger, rec *loopRunRecorder, history ...agentProviderMessage) error {
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
+	limits := s.loopLimits()
+	directory, ok := s.store.WorkspaceMetadataFields(workspace, "users")
 	if !ok {
 		return errNotFound
 	}
-	owner := userByID(&metadata, loop.OwnerID)
+	owner := userByID(&directory, loop.OwnerID)
 	if owner == nil {
-		return fmt.Errorf("the loop owner is no longer in this workspace")
+		return &loopRunError{reason: "unavailable", message: "the loop owner is no longer in this workspace"}
 	}
+	// The run reads workspace metadata only; issues and discussions are read
+	// through the paged tool queries, never loaded whole.
 	var data domain.Bootstrap
 	if s.authDisabled {
-		data = metadata
+		data, ok = s.store.WorkspaceMetadata(workspace)
+		if !ok {
+			return errNotFound
+		}
 		data.Viewer, data.ViewerRole = *owner, "admin"
 	} else {
 		var err error
-		if data, _, err = s.store.BootstrapForUser(ctx, workspace, owner.ID); err != nil {
-			return fmt.Errorf("the loop owner cannot access this workspace")
+		if data, err = s.store.PagedWorkspaceMetadata(ctx, workspace, owner.ID); err != nil {
+			return &loopRunError{reason: "unavailable", message: "the loop owner cannot access this workspace"}
 		}
 	}
 	if err := agentWorkspacePolicy(data.WorkspaceSettings, data.ViewerRole); err != nil {
-		return err
+		return &loopRunError{reason: "unavailable", message: err.Error(), err: err}
 	}
 	request, err := s.loopRunRequest(ctx, workspace, *owner)
 	if err != nil {
@@ -560,13 +689,16 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	}
 	request = request.WithContext(context.WithValue(request.Context(), connectorContextKey{}, connectorRequestContext{Workspace: workspace, UserID: owner.ID}))
 	request = request.WithContext(context.WithValue(request.Context(), agentToolFilterKey{}, scope.offers))
+	request = request.WithContext(context.WithValue(request.Context(), agentExtraToolsKey{}, []agentProviderTool{loopFinishToolDefinition}))
 	if loop.WebSearch && s.webSearchAvailable() {
 		request = request.WithContext(withAgentWebTools(request.Context()))
 	}
+	toolNames, readOnly := s.loopRunTools(request.Context())
+	plan := loopRunPlan{Tools: toolNames, Limits: limits, Outputs: effectiveLoopOutputs(loop)}
 
 	entity := s.loopEntityContext(ctx, workspace, data, trigger)
 	messages := []agentProviderMessage{
-		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop)) + loopReplySkillsPrompt(rec.skills)},
+		{Role: "system", Content: loopSystemPrompt(data, loop, trigger, entity, scope, s.webSearchAvailable(), s.loopInstructionReferences(ctx, workspace, data, loop), plan) + loopReplySkillsPrompt(rec.skills)},
 		{Role: "user", Content: "Run this loop now and follow its instructions."},
 	}
 	messages = append(messages, history...)
@@ -579,19 +711,34 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		}
 		return nil
 	}
+	toolCalls := 0
 	for turnIndex := 0; ; turnIndex++ {
-		turnText.Reset()
-		final := turnIndex >= loopMaxToolTurns
-		var turn agentProviderTurn
+		final := turnIndex >= limits.MaxTurns
 		if final {
 			messages = append(messages, agentProviderMessage{Role: "user", Content: loopSummaryPrompt})
-			turn, err = s.requestAgentTurnWithoutTools(request.Context(), messages)
-		} else {
-			turn, err = s.requestAgentTurn(request.Context(), messages, emit)
 		}
+		if size := loopContextBytes(messages); limits.MaxContextBytes > 0 && size > limits.MaxContextBytes {
+			rec.setOutputNow(strings.TrimSpace(output))
+			return loopBudgetError("The run's conversation reached %d KB, over its %d KB context budget. Narrow the instructions or the tool queries (filters, smaller limits).", size>>10, limits.MaxContextBytes>>10)
+		}
+		var turn agentProviderTurn
+		retries, err := loopRetry(ctx, limits, func() error {
+			turnText.Reset()
+			var callErr error
+			if final {
+				turn, callErr = s.requestAgentTurnWithoutTools(request.Context(), messages)
+			} else {
+				turn, callErr = s.requestAgentTurn(request.Context(), messages, emit)
+			}
+			return callErr
+		})
+		rec.addRetries(retries)
 		if err != nil {
 			rec.setOutputNow(strings.TrimSpace(output))
-			return err
+			if ctx.Err() != nil {
+				return err
+			}
+			return loopProviderFailure(err)
 		}
 		// Some gateways print report_progress as JSON text; keep it as steps instead.
 		if leaked, rest := leakedProgressSteps(turn.Text); len(leaked) > 0 {
@@ -606,8 +753,8 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		if len(turn.ToolCalls) == 0 {
 			output += turn.Text
 			rec.setOutputNow(strings.TrimSpace(output))
-			if rec.output() == "" && rec.toolCount() == 0 {
-				return fmt.Errorf("Flow Agent returned an empty response")
+			if rec.output() == "" && rec.toolCount() == 0 && rec.summary() == nil {
+				return &loopRunError{reason: "empty_response", message: "Flow Agent returned an empty response"}
 			}
 			return nil
 		}
@@ -617,16 +764,40 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 		}
 		rec.setOutput(strings.TrimSpace(output))
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
+		var finished *domain.LoopRunSummary
 		for _, call := range turn.ToolCalls {
-			if call.Name == agentProgressTool {
+			reply := func(content string, isError bool) {
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
+			}
+			if finished != nil {
+				reply("The run already finished with finish_run; this call was not executed.", true)
+				continue
+			}
+			switch call.Name {
+			case agentProgressTool:
 				var progress struct {
 					Title   string `json:"title"`
 					Message string `json:"message"`
 				}
 				_ = json.Unmarshal(call.Arguments, &progress)
 				rec.addStep(progress.Title, progress.Message)
-				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: `{"ok":true}`}})
+				reply(`{"ok":true}`, false)
 				continue
+			case loopFinishToolName:
+				summary, err := parseLoopSummary(call.Arguments)
+				if err != nil {
+					reply(err.Error(), true)
+					continue
+				}
+				finished = summary
+				rec.setSummary(summary)
+				reply(`{"ok":true}`, false)
+				continue
+			}
+			toolCalls++
+			if limits.MaxToolCalls > 0 && toolCalls > limits.MaxToolCalls {
+				rec.setOutputNow(strings.TrimSpace(output))
+				return loopBudgetError("The run made more than %d tool calls, its budget. Narrow the instructions or raise FLOW_LOOP_MAX_TOOL_CALLS.", limits.MaxToolCalls)
 			}
 			index := rec.startTool(call)
 			status := "completed"
@@ -634,15 +805,37 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			callErr := scope.check(ctx, call)
 			if callErr != nil {
 				status = "blocked"
-			} else if result, callErr = s.executeAgentTool(request, data, call); callErr != nil {
-				status = "error"
+			} else {
+				execute := func() error {
+					result, callErr = s.executeAgentTool(request, data, call)
+					return callErr
+				}
+				if readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] {
+					// Reads are safe to repeat; changes are never retried.
+					retries, _ := loopRetry(ctx, limits, execute)
+					rec.addRetries(retries)
+				} else {
+					execute()
+				}
+				if callErr != nil {
+					status = "error"
+				}
 			}
-			rec.finishTool(index, status, callErr)
+			write := !readOnly[strings.TrimPrefix(call.Name, "mcp__flow.")] && !strings.HasPrefix(call.Name, "external_")
+			rec.finishTool(index, status, callErr, write, loopToolArgs(call))
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			content := string(result)
 			if callErr != nil {
 				content = callErr.Error()
 			}
-			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: callErr != nil}})
+			reply(truncateLoopToolOutput(content, limits.MaxToolOutputBytes), callErr != nil)
+		}
+		if finished != nil {
+			output = strings.TrimSpace(output + "\n\n" + renderLoopSummary(finished))
+			rec.setOutputNow(output)
+			return nil
 		}
 	}
 }
@@ -907,7 +1100,7 @@ func (scope *loopScope) check(ctx context.Context, call domain.AgentToolCall) er
 				return fmt.Errorf("This loop cannot access that team")
 			}
 			if !scope.loop.AllowExternalSync {
-				if data, ok := scope.s.store.WorkspaceMetadata(scope.workspace); ok && issueExternallySynced(data, issue) {
+				if data, ok := scope.s.store.WorkspaceMetadataFields(scope.workspace, "asks"); ok && issueExternallySynced(data, issue) {
 					return fmt.Errorf("This loop cannot change externally synced issues or comments")
 				}
 			}
@@ -923,7 +1116,7 @@ func (scope *loopScope) check(ctx context.Context, call domain.AgentToolCall) er
 }
 
 func (scope *loopScope) teamKeyAllowed(key string) bool {
-	data, ok := scope.s.store.WorkspaceMetadata(scope.workspace)
+	data, ok := scope.s.store.WorkspaceMetadataFields(scope.workspace, "teams")
 	if !ok {
 		return false
 	}
@@ -1007,10 +1200,42 @@ func (s *server) loopEntityContext(ctx context.Context, workspace string, data d
 	return string(raw)
 }
 
-func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigger, entity string, scope *loopScope, webSearch bool, references string) string {
+// loopRunPlan is what the system prompt tells the model about how the run
+// works: its tools, budgets and expected outputs.
+type loopRunPlan struct {
+	Tools   []string
+	Limits  loopRunLimits
+	Outputs []string
+}
+
+var loopOutputPrompts = map[string]string{
+	"statusUpdate": "post the status update(s) the instructions ask for with save_status_update",
+	"issue":        "create the issue(s) the instructions ask for with save_issue",
+	"comment":      "post the comment(s) the instructions ask for with save_comment",
+	"document":     "create or update the document(s) the instructions ask for with save_document",
+	"change":       "make the change(s) in Flow the instructions ask for",
+}
+
+func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigger, entity string, scope *loopScope, webSearch bool, references string, plan loopRunPlan) string {
 	var prompt strings.Builder
-	fmt.Fprintf(&prompt, "You are running the Flow automation loop %q in the %s workspace. Work autonomously: there is no user to answer questions. Use the Flow tools to act, then reply with a short summary of what you did.\n", loop.Name, data.Workspace.Name)
-	prompt.WriteString("Before each distinct phase of work, call report_progress in the same turn as the lookups it describes. Refer to issues by identifier and link them with the url the tools return. Keep the final summary under about 150 words.\n")
+	fmt.Fprintf(&prompt, "You are running the Flow automation loop %q in the %s workspace. Work autonomously: there is no user to answer questions. Use the Flow tools to act; the run is judged by the changes it makes, not by what it says.\n", loop.Name, data.Workspace.Name)
+	prompt.WriteString("\nHow to work:\n")
+	prompt.WriteString("1. Plan: call report_progress with a short title for each distinct step (in the same turn as that step's tool calls).\n")
+	prompt.WriteString("2. Gather: read only what the step needs. Use filters, a limit and the cursor on list tools; never try to read a whole workspace.\n")
+	prompt.WriteString("3. Act: make each change the instructions ask for. After each change, check the tool result: a change only happened when the result has no error. Note the identifier and url it returned.\n")
+	prompt.WriteString("4. Self-check before finishing: re-read the instructions and confirm every required output exists (one per item the instructions name), retry or explain any failed change, and list what you could not do.\n")
+	fmt.Fprintf(&prompt, "5. Finish: call %s exactly once as your last action with status (done, incomplete or nothing_to_do), summary (under about 150 words; refer to issues by identifier and link them with the url the tools return), done (each change) and notDone (each thing not done and why). Do not end the run with plain text instead.\n", loopFinishToolName)
+	if len(plan.Outputs) > 0 {
+		wanted := []string{}
+		for _, kind := range plan.Outputs {
+			wanted = append(wanted, loopOutputPrompts[kind])
+		}
+		fmt.Fprintf(&prompt, "\nThis loop is expected to produce output: %s. A run that ends without it is flagged for review, so only report nothing_to_do when the instructions truly do not apply.\n", strings.Join(wanted, "; "))
+	}
+	fmt.Fprintf(&prompt, "\nLimits: at most %d tool turns and %d tool calls; tool results over %d KB are cut off; the run stops after %s.\n", plan.Limits.MaxTurns, plan.Limits.MaxToolCalls, max(plan.Limits.MaxToolOutputBytes>>10, 1), plan.Limits.Timeout.Round(time.Second))
+	if len(plan.Tools) > 0 {
+		fmt.Fprintf(&prompt, "Available tools: %s.\n", strings.Join(plan.Tools, ", "))
+	}
 	if guidance := strings.TrimSpace(data.WorkspaceSettings.AgentInstructions); guidance != "" {
 		fmt.Fprintf(&prompt, "\nWorkspace guidance:\n%s\n", truncateSettingsText(guidance, 8000))
 	}

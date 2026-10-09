@@ -12,6 +12,8 @@ import { initiativeHierarchyZhCN } from './translations-initiative-hierarchy';
 import { labelSettingsZhCN } from './translations-label-settings';
 import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
+import { agentMentionsZhCN } from './translations-agent-mentions';
+import { loopRunsZhCN } from './translations-loop-runs';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -5754,3 +5756,5 @@ Object.assign(zhCN, initiativeHierarchyZhCN);
 Object.assign(zhCN, labelSettingsZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
+Object.assign(zhCN, loopRunsZhCN);
+Object.assign(zhCN, agentMentionsZhCN);

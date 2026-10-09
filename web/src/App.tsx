@@ -290,6 +290,7 @@ import { useDesktopNotifications } from "@/hooks/use-desktop-notifications";
 import { useSaveBrowserTimeZone } from "@/hooks/use-browser-timezone";
 import { subscriptionAfterGenericDelete } from "@/lib/subscription-records";
 import { INBOX_ACTIVITY_EVENT, inboxRealtimeRelevant, inboxUnread } from "@/lib/inbox-unread";
+import { LOOP_RUN_ACTIVITY_EVENT, isLoopRunSignal, loopRunActivity } from "@/lib/loop-run-activity";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
 import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
 import { persistUserSettings } from "@/lib/settings-persistence";
@@ -1168,6 +1169,13 @@ function App() {
       if (event.type === 'workspace_preferences.updated') {
         const settings = await fetchWorkspacePreferences(workspace);
         setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, workspaceSettings: settings } : current);
+        return;
+      }
+      if (isLoopRunSignal(event.type)) {
+        // Run progress changes no workspace data: tell an open run page, and
+        // refresh the loop list (run counts) only when a run finished.
+        window.dispatchEvent(new CustomEvent(LOOP_RUN_ACTIVITY_EVENT, { detail: loopRunActivity(event) }));
+        if (event.type === 'loop_run.finished') await reloadLoops(workspace, viewerId);
         return;
       }
       if (event.type.startsWith('loop.')) {

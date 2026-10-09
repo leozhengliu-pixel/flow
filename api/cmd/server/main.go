@@ -79,6 +79,14 @@ type server struct {
 	agentApprovals                 map[string]*agentApproval
 	agentElicitations              map[string]*agentElicitation
 	importSlots                    chan struct{}
+	// Loop run execution: budgets (nil reads FLOW_LOOP_* variables), the
+	// runs executing in this process and the lease owner name.
+	loopRunLimits         atomic.Pointer[loopRunLimits]
+	loopRunsOnce          sync.Once
+	loopRuns              *loopRunRegistry
+	loopInstanceOnce      sync.Once
+	loopInstance          string
+	loopReconcilerStarted atomic.Bool
 }
 
 func main() {
@@ -203,6 +211,7 @@ func newHandler(s *server) http.Handler {
 	s.startCoordination()
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
+	s.startLoopRunReconciler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"status": "ok", "redis": "disabled", "version": version, "commit": commit}
@@ -400,6 +409,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/loops/{id}/versions/{versionId}/restore", s.restoreLoopVersion)
 	mux.HandleFunc("POST /api/loops/{id}/runs/{runId}/feedback", s.setLoopRunFeedback)
 	mux.HandleFunc("POST /api/loops/{id}/runs/{runId}/replies", s.replyLoopRun)
+	mux.HandleFunc("POST /api/loops/{id}/runs/{runId}/cancel", s.cancelLoopRun)
+	mux.HandleFunc("GET /api/loops/{id}/runs/{runId}/events", s.listLoopRunEvents)
 	mux.HandleFunc("GET /api/project-templates", s.listProjectTemplates)
 	mux.HandleFunc("POST /api/project-templates", s.createProjectTemplate)
 	mux.HandleFunc("PATCH /api/project-templates/{id}", s.updateProjectTemplate)
@@ -951,6 +962,7 @@ func (s *server) bootstrap(w http.ResponseWriter, r *http.Request) {
 		materializeDevelopmentMembers(&data)
 	}
 	sanitizeBootstrap(&data)
+	s.applyLoopRunCounts(r.Context(), data.Workspace.URLKey, data.Loops)
 	s.writeStoredBootstrap(w, r, data)
 }
 
@@ -985,11 +997,12 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	// through their paginated endpoints. Keeping them in the persisted settings
 	// envelope avoids a second transaction, but they must never leak through the
 	// workspace bootstrap response.
-	// Loop run history is served by /api/loops/{id}/runs.
+	// Loop run history is served by /api/loops/{id}/runs; run counts come
+	// from the run records (applyLoopRunCounts).
 	if len(data.Loops) > 0 {
 		loops := make([]domain.Loop, len(data.Loops))
 		for index, loop := range data.Loops {
-			loops[index] = presentLoop(data.LoopRuns, loop)
+			loops[index] = presentLoop(nil, loop)
 		}
 		data.Loops = loops
 	}

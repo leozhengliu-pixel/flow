@@ -34,7 +34,7 @@ import { AgentRichText } from "./agent-rich-text";
 import { AgentDraftCard } from "./agent-draft-card";
 import { HealthGlyph, healthColor } from "@/components/project-detail/health-glyph";
 import { splitAgentDraft } from "./agent-draft";
-import { AgentAnswerText, AgentReferencedIssues, AgentSuggestionChips } from "./agent-answer";
+import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from "./agent-answer";
 import { parseAgentAnswer, splitAgentSuggestions } from "./agent-answer-content";
 import { AgentWorkGroup } from "./agent-work-group";
 import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
@@ -789,7 +789,7 @@ function AgentMessageText({ content, data, draftContext, draftProject, onSuggest
   </>;
   return <>
     {answer.markdown && <AgentAnswerText className={styles.messageDocument} data={data} markdown={answer.markdown}/>}
-    {!streaming && <AgentReferencedIssues data={data} issues={answer.referencedIssues}/>}
+    {!streaming && <AgentReferencedResources data={data} references={answer.references}/>}
     {draftCard}
     {onSuggestion && <AgentSuggestionChips onSelect={onSuggestion} suggestions={answer.suggestions}/>}
   </>;

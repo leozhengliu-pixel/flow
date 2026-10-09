@@ -20,7 +20,8 @@ import {
   AgentSkillsIcon,
   AgentSubmitIcon,
 } from "@/components/agent/agent-icons";
-import { AgentRichText } from "@/components/agent/agent-rich-text";
+import { AgentAnswerText } from "@/components/agent/agent-answer";
+import { useAgentEntityData } from "@/components/agent/agent-entity-data";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import type { NewProjectDraft } from "./new-project-dialog";
 import { parseProjectAgentDraft, projectAgentPrompt, splitProjectAgentReply } from "./project-agent-draft";
@@ -58,6 +59,7 @@ export function ProjectCreationAgent({
   workspaceName,
 }: ProjectCreationAgentProps) {
   const { t } = useI18n();
+  const entityData = useAgentEntityData();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ProjectCreationAgentMessage[]>([]);
   const [conversationStartedAt, setConversationStartedAt] = useState<string>();
@@ -344,7 +346,7 @@ export function ProjectCreationAgent({
                         )}
                         {reply.prose && (
                           <article className={`project-creation-agent__message project-creation-agent__message--${message.role}`}>
-                            <AgentRichText className="project-creation-agent__rich-text" content={reply.prose} />
+                            <AgentAnswerText className="project-creation-agent__rich-text" data={entityData} markdown={reply.prose} />
                           </article>
                         )}
                       </>

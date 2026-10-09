@@ -11,6 +11,7 @@ import (
 func workspaceAgentSystemPrompt(data domain.Bootstrap, issues []domain.Issue, skills []domain.PersonalAgentSkill) string {
 	var prompt strings.Builder
 	prompt.WriteString(agentSystemPrompt(data.Workspace.Name, issues, skills))
+	prompt.WriteString(agentResourceLinkGuidance(data.Workspace.URLKey))
 	if guidance:=strings.TrimSpace(data.WorkspaceSettings.AgentInstructions);guidance!="" {fmt.Fprintf(&prompt,"\nWorkspace guidance:\n%s\n",truncateSettingsText(guidance,8000))}
 	if guidance := strings.TrimSpace(data.UserSettings[data.Viewer.ID].AgentInstructions); guidance != "" {
 		fmt.Fprintf(&prompt, "\nPersonal guidance:\n%s\n", truncateSettingsText(guidance, 4000))

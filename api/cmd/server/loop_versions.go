@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"reflect"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Published versions ("Show published versions"): every publish and every
@@ -212,7 +214,6 @@ func (s *server) getLoopVersion(w http.ResponseWriter, r *http.Request) {
 func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 	id, versionID := r.PathValue("id"), r.PathValue("versionId")
 	var restored domain.Loop
-	var runs []domain.LoopRun
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "loop.version_restored", id, map[string]string{"versionId": versionID}, func(data *domain.Bootstrap) error {
 		loop := loopByID(data, id)
 		if loop == nil {
@@ -254,14 +255,13 @@ func (s *server) restoreLoopVersion(w http.ResponseWriter, r *http.Request) {
 		*loop = next
 		restored = next
 		appendAudit(data, "updated", "loop", id, map[string]any{"restoredVersion": source.Version})
-		runs = data.LoopRuns
 		return nil
 	})
 	if err != nil && strings.Contains(err.Error(), "only created loops") {
 		writeError(w, http.StatusConflict, "Only created loops have published versions")
 		return
 	}
-	respondLoopMutation(w, err, http.StatusOK, presentLoop(runs, restored))
+	respondLoopMutation(w, err, http.StatusOK, presentLoop(s.loopRunCounts(r.Context(), s.workspaceURLKey(r)), restored))
 }
 
 type loopRunFeedbackInput struct {
@@ -285,22 +285,25 @@ func (s *server) setLoopRunFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, runID := r.PathValue("id"), r.PathValue("runId")
-	var updated domain.LoopRun
-	viewerID := authUser(r).ID
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "loop.run_feedback", id, map[string]any{"runId": runID}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.LoopRuns, func(item domain.LoopRun) bool { return item.ID == runID && item.LoopID == id })
-		if index < 0 {
-			return errNotFound
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "viewer")
+	if !ok {
+		writeError(w, http.StatusNotFound, "workspace not found")
+		return
+	}
+	viewerID := firstNonEmpty(authUser(r).ID, data.Viewer.ID)
+	updated, err := s.store.UpdateLoopRun(r.Context(), data.Workspace.URLKey, runID, nil, func(run *domain.LoopRun) error {
+		if run.LoopID != id {
+			return store.ErrLoopRunNotFound
 		}
-		userID := firstNonEmpty(viewerID, data.Viewer.ID)
-		viewerID = userID
-		run := &data.LoopRuns[index]
-		run.Feedback = slices.DeleteFunc(slices.Clone(run.Feedback), func(item domain.LoopRunFeedback) bool { return item.UserID == userID })
+		run.Feedback = slices.DeleteFunc(slices.Clone(run.Feedback), func(item domain.LoopRunFeedback) bool { return item.UserID == viewerID })
 		if input.Rating != nil {
-			run.Feedback = append(run.Feedback, domain.LoopRunFeedback{UserID: userID, Rating: *input.Rating, Comment: comment, At: time.Now().UTC()})
+			run.Feedback = append(run.Feedback, domain.LoopRunFeedback{UserID: viewerID, Rating: *input.Rating, Comment: comment, At: time.Now().UTC()})
 		}
-		updated = *run
 		return nil
 	})
+	if errors.Is(err, store.ErrLoopRunNotFound) {
+		writeError(w, http.StatusNotFound, "loop run not found")
+		return
+	}
 	respondMutation(w, err, http.StatusOK, presentLoopRun(updated, viewerID))
 }

@@ -1,8 +1,7 @@
 import { createContext, useContext } from 'react'
-import { issuePath, projectPath } from '@/lib/app-routes'
 import { ApplicationStoreContext } from '@/store/application-store-context'
 import type { BootstrapData } from '@/types/flow'
-import type { AgentEntityRef } from './agent-answer-content'
+import { agentEntityPath, type AgentEntity } from './agent-entity-refs'
 
 /** Workspace data the inline entity chips resolve against. */
 export const AgentEntityDataContext = createContext<BootstrapData | undefined>(undefined)
@@ -13,6 +12,6 @@ export function useAgentEntityData(explicit?: BootstrapData) {
   return explicit ?? store?.data ?? undefined
 }
 
-export function agentEntityHref(data: BootstrapData, entity: AgentEntityRef) {
-  return entity.kind === 'issue' ? issuePath(data.workspace.urlKey, entity.issue) : projectPath(data.workspace.urlKey, entity.project)
+export function agentEntityHref(data: BootstrapData, entity: AgentEntity) {
+  return agentEntityPath(data, entity)
 }
