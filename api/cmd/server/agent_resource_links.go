@@ -18,7 +18,7 @@ func agentResourceLinkGuidance(urlKey string) string {
 		"cycle " + root + "/team/{teamKey}/cycle/{number}",
 		"issue label " + root + "/issue-label/{name} (project-label and initiative-label for the other label types)",
 		"project milestone " + root + "/project/{slugId}/overview#milestone-{milestoneId}",
-		"customer " + root + "/customer/{name}-{last 12 characters of the customer id}",
+		"customer " + root + "/customer/{lowercase-hyphenated-name}-{last 12 characters of the customer id} (no spaces, e.g. acme-corp-123456789012)",
 		"release " + root + "/pipeline/{pipelineSlugId}/release/{releaseSlugId}/issues",
 		"saved view " + root + "/view/{viewSlugId}",
 		"code review " + root + "/review/{slugId}",

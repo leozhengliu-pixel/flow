@@ -20,7 +20,7 @@ func TestWorkspaceAgentPromptTellsTheModelHowToLinkEveryResource(t *testing.T) {
 		"/dev-workspace/team/{teamKey}/cycle/{number}",
 		"/dev-workspace/issue-label/{name}",
 		"#milestone-{milestoneId}",
-		"/dev-workspace/customer/{name}-{last 12 characters of the customer id}",
+		"/dev-workspace/customer/{lowercase-hyphenated-name}-{last 12 characters of the customer id}",
 		"/dev-workspace/pipeline/{pipelineSlugId}/release/{releaseSlugId}/issues",
 		"/dev-workspace/view/{viewSlugId}",
 		"/dev-workspace/review/{slugId}",

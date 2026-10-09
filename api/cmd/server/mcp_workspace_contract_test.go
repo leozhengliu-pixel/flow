@@ -667,3 +667,23 @@ func TestMCPSaveTeamMembersKeepOwnersAndOwnerChangesAreExplicit(t *testing.T) {
 		t.Fatalf("duplicate key should say so: %s", message)
 	}
 }
+
+func TestMCPMarkdownInlineKeepsIntrawordUnderscores(t *testing.T) {
+	nodes := mcpMarkdownInlineNodes("use get_issue on each issue, then finish_run with _emphasis_ and __bold__ and snake_case_name")
+	var plain strings.Builder
+	marked := map[string]string{}
+	for _, node := range nodes {
+		item := node.(map[string]any)
+		text := item["text"].(string)
+		plain.WriteString(text)
+		if marks, ok := item["marks"].([]any); ok {
+			marked[text] = marks[0].(map[string]any)["type"].(string)
+		}
+	}
+	if got := plain.String(); got != "use get_issue on each issue, then finish_run with emphasis and bold and snake_case_name" {
+		t.Fatalf("text = %q", got)
+	}
+	if len(marked) != 2 || marked["emphasis"] != "italic" || marked["bold"] != "bold" {
+		t.Fatalf("marks = %v", marked)
+	}
+}
