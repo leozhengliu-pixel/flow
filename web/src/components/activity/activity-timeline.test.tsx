@@ -1,9 +1,16 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { resetAgentRecordCache } from '@/components/agent/agent-entity-fetch'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
+import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap, viewer } from '@/test/fixtures'
-import type { ActivityEvent, Comment } from '@/types/flow'
+import { makeBootstrap, makeIssue, viewer } from '@/test/fixtures'
+import type { ActivityEvent, BootstrapData, Comment } from '@/types/flow'
+const mocked = vi.hoisted(() => ({ fetchIssueRecord: vi.fn(), listProjectRecords: vi.fn() }))
+vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...mocked }))
+
 import { ActivityTimeline } from './activity-timeline'
 
 describe('issue activity timeline', () => {
@@ -147,5 +154,45 @@ describe('issue activity timeline', () => {
     expect(screen.queryByRole('button', { name: 'Link' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Mention' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attach images, files, or videos' })).toBeVisible()
+  })
+
+  describe('referenced resources', () => {
+    const eventOf = (id: string, type: string, metadata: Record<string, string>): ActivityEvent => ({ id, type, createdAt: '2026-09-01T00:00:00Z', actor: viewer, metadata })
+    const renderTimeline = (events: ActivityEvent[], data: BootstrapData) => render(<I18nProvider><MemoryRouter><WorkspaceStoreProvider account={null} data={data} session={null}>
+      <ActivityTimeline events={events} comments={[]} context={data} viewerId={viewer.id} onReply={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onReaction={vi.fn()}/>
+    </WorkspaceStoreProvider></MemoryRouter></I18nProvider>)
+
+    it('renders the project, cycle, label, milestone and related issue an event names as chips', async () => {
+      const data = mentionFixture({ issues: [makeIssue(), makeIssue({ id: 'issue-2', identifier: 'TST-2', title: 'Second issue' })] })
+      const { container } = renderTimeline([
+        eventOf('e1', 'issue.updated', { project: 'project-1' }),
+        eventOf('e2', 'issue.updated', { projectMilestone: 'milestone-1' }),
+        eventOf('e3', 'issue.updated', { cycle: 'cycle-1' }),
+        eventOf('e4', 'issue.updated', { labels: 'label-1' }),
+        eventOf('e5', 'issue.relation_added', { type: 'duplicate', relatedIssueId: 'issue-2' }),
+      ], data)
+      expect(container.querySelector('#activity-e1')).toHaveTextContent('added to project Project one')
+      const rows = (id: string) => container.querySelector(`#activity-${id}`) as HTMLElement
+      await waitFor(() => expect(rows('e1').querySelector('a[data-agent-entity="project"]')).toHaveAttribute('href', mentionUrls.project))
+      expect(rows('e2').querySelector('a[data-agent-entity="milestone"]')).toHaveTextContent('Alpha')
+      expect(rows('e3').querySelector('a[data-agent-entity="cycle"]')).toHaveAttribute('href', mentionUrls.cycle)
+      expect(rows('e4').querySelector('a[data-agent-entity="label"]')).toHaveTextContent('Feature')
+      const duplicate = rows('e5')
+      expect(duplicate).toHaveTextContent('marked this as a duplicate of')
+      expect(duplicate.querySelector('a[data-agent-entity="issue"]')).toHaveAttribute('href', '/workspace/issue/TST-2/second-issue')
+      expect(container.querySelector('.timeline')?.textContent).not.toContain('](')
+    })
+
+    it('fetches the parent issue the paged client does not hold and keeps a placeholder when it is gone', async () => {
+      resetAgentRecordCache()
+      const remote = makeIssue({ id: '0a1b2c3d-1111-2222-3333-444455556666', identifier: 'TST-9', title: 'Remote parent' })
+      mocked.fetchIssueRecord.mockReset().mockImplementation(async (id: string) => { if (id === remote.id) return remote; throw new Error('not found') })
+      const data = mentionFixture({ issueCollectionPaged: true, issues: [], projects: [] })
+      const { container } = renderTimeline([eventOf('e1', 'issue.updated', { parent: remote.id }), eventOf('e2', 'issue.relation_added', { type: 'blocked_by', relatedIssueId: '0a1b2c3d-9999-2222-3333-444455556666' })], data)
+      await waitFor(() => expect(container.querySelector('#activity-e1 a[data-agent-entity="issue"]')).toHaveTextContent('TST-9 Remote parent'))
+      expect(container.querySelector('#activity-e1')).toHaveTextContent('set the parent issue to')
+      await waitFor(() => expect(container.querySelector('#activity-e2 [data-agent-entity="issue"]')).toHaveAttribute('data-mention-state', 'missing'))
+      expect(container.querySelector('#activity-e2')).toHaveTextContent('marked this as blocked by another issue')
+    })
   })
 })

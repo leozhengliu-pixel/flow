@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker } from '@/components/reactions/emoji-picker'
 import { RichComment } from '@/components/activity/rich-comment'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
@@ -14,6 +15,9 @@ import { useCommentComposer } from '@/hooks/use-comment-composer'
 import type { Project, ProjectUpdate, User } from '@/types/flow'
 
 const HEALTHS: { id: Project['health']; label: string }[] = [{ id: 'onTrack', label: 'On track' }, { id: 'atRisk', label: 'At risk' }, { id: 'offTrack', label: 'Off track' }]
+
+/** The "@" menu is portaled to the page, outside the panel: choosing a mention must not count as a click outside it. */
+const mentionMenuRef: RefObject<Element | null> = { get current() { return document.querySelector('.description-mention-menu') } }
 
 export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, onOpenProject, onReact, onUpdate, project, updates, viewer }: {
   onClose: () => void
@@ -40,7 +44,7 @@ export function ProjectUpdatesPreview({ onClose, onComment, onCreate, onDelete, 
   const [deleteTarget, setDeleteTarget] = useState<ProjectUpdate>()
   const [deleting, setDeleting] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
-  useDismissibleLayer({ open: !deleteTarget, refs: [ref, menuRef, reactionRef], onDismiss: onClose })
+  useDismissibleLayer({ open: !deleteTarget, refs: [ref, menuRef, reactionRef, mentionMenuRef], onDismiss: onClose })
   useEffect(() => ref.current?.focus(), [])
   useEffect(() => setActiveIndex(index => Math.min(index, Math.max(0, updates.length - 1))), [updates.length])
 
@@ -139,7 +143,7 @@ function ProjectUpdateComposer({ body, health, mode, onCancel, onSubmit, saving,
 }) {
   return <section className="lp-project-updates-preview__composer">
     <header><strong>{mode === 'edit' ? 'Edit update' : 'New update'}</strong><div className="lp-project-updates-preview__healths">{HEALTHS.map(option => <button className={health === option.id ? 'is-active' : ''} key={option.id} onClick={() => setHealth(option.id)} type="button"><i className={`is-${option.id}`}/>{option.label}</button>)}</div></header>
-    <textarea autoFocus aria-label="Project update" onChange={event => setBody(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); onSubmit() } }} placeholder="Write a project update…" value={body}/>
+    <MentionTextField autoFocus ariaLabel="Project update" className="lp-project-updates-preview__editor" onChange={setBody} onSubmit={onSubmit} placeholder="Write a project update…" value={body}/>
     <footer><span>{viewer?.displayName ?? 'Project update'}</span><div><button onClick={onCancel} type="button">Cancel</button><button className="is-primary" disabled={!body.trim() || saving} onClick={onSubmit} type="button">{saving ? 'Saving…' : mode === 'edit' ? 'Save update' : 'Post update'}</button></div></footer>
   </section>
 }
@@ -160,13 +164,13 @@ function ProjectUpdateArticle({ active, dataIndex, menuRef, onComment, onDelete,
         {canModify && <><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onEdit}><Pencil size={14}/><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></>}
       </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
     </header>
-    <p>{update.body}</p>
+    <div className="lp-project-updates-preview__text" data-i18n-ignore><RichComment body={update.body} data={update.bodyData}/></div>
     <ProjectUpdateMetadata project={project}/>
     <div className="lp-project-update-reactions">{Object.entries(reactions).map(([emoji, userIds]) => <button aria-pressed={Boolean(viewer && userIds.includes(viewer.id))} key={emoji} onClick={() => onReact && void onReact(project.id, update.id, emoji)} type="button"><span>{emoji}</span>{userIds.length}</button>)}</div>
     <footer><button aria-expanded={commentsOpen} aria-label={`${comments.length} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={14}/>{comments.length > 0 && <span>{comments.length}</span>}</button><EmojiPicker align="start" contentRef={reactionRef} onSelect={async emoji => { await onReact?.(project.id, update.id, emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={14}/></button></EmojiPicker></footer>
     {commentsOpen && <section className="lp-project-update-comments">
       {comments.map(item => <article key={item.id}><UpdateAuthorAvatar user={item.user}/><div><header><strong>{item.user.displayName}</strong><time>{formatRelative(item.createdAt)}</time></header><div className="project-updates-preview__comment-body"><RichComment body={item.body} data={item.bodyData} version={item.version}/></div></div></article>)}
-      <div className="lp-project-update-comment-box"><UpdateAuthorAvatar user={viewer ?? update.user}/><textarea aria-label="Add comment" onChange={event => setComment(event.target.value)} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); void submitComment() } }} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim() || posting || !onComment} onClick={() => void submitComment()} type="button">{posting ? 'Sending…' : 'Comment'}</button></div>
+      <div className="lp-project-update-comment-box"><UpdateAuthorAvatar user={viewer ?? update.user}/><MentionTextField ariaLabel="Add comment" onChange={setComment} onSubmit={() => void submitComment()} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim() || posting || !onComment} onClick={() => void submitComment()} type="button">{posting ? 'Sending…' : 'Comment'}</button></div>
     </section>}
   </article>
 }

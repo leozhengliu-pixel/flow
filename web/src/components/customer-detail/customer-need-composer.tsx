@@ -4,6 +4,7 @@ import { ChevronDown, Paperclip, X, Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { toast } from 'sonner'
 
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { LinearDropdownMenuContent, LinearMenuItem, LinearMenuSearch } from '@/components/ui/row-context-menu'
@@ -52,22 +53,8 @@ export function CustomerNeedComposer({ data, customer, mode, request, issue, pro
   const initialTitle = newIssueTitleFor(customer)
   const [newTitle, setNewTitle] = useState(initialTitle)
   const [saving, setSaving] = useState(false)
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const formRef = useRef<HTMLFormElement>(null)
-
-  useEffect(() => {
-    const field = bodyRef.current
-    if (!field) return
-    field.focus()
-    field.setSelectionRange(field.value.length, field.value.length)
-  }, [])
-  useEffect(() => {
-    const field = bodyRef.current
-    if (!field) return
-    field.style.height = 'auto'
-    field.style.height = `${Math.min(mode === 'customer' ? 200 : 300, Math.max(mode === 'customer' ? 60 : 72, field.scrollHeight))}px`
-  }, [body, mode])
 
   const hasChanges = body.trim() !== (request?.body ?? '').trim() || source.trim() !== (request?.sourceUrl ?? '') || files.length > 0 || target.kind !== 'new' || newTitle !== initialTitle
 
@@ -141,7 +128,7 @@ export function CustomerNeedComposer({ data, customer, mode, request, issue, pro
   const submitLabel = mode === 'customer' ? 'Add request' : mode === 'edit' ? 'Save' : 'Create'
   const submitHint = mode === 'customer' ? 'to add request' : 'to create request'
   const editor = <div className="customer-need-composer__surface">
-    <textarea ref={bodyRef} className="customer-need-composer__input" aria-label={t(mode === 'customer' ? 'Note' : 'Request')} placeholder={t('Add request details')} value={body} onChange={event => setBody(event.target.value)} rows={3}/>
+    <MentionTextField autoFocus className="customer-need-composer__input" ariaLabel={t(mode === 'customer' ? 'Note' : 'Request')} placeholder={t('Add request details')} value={body} onChange={setBody}/>
     {files.length > 0 && <div className="customer-need-composer__files">
       {files.map((file, index) => <span key={`${file.name}:${index}`}>
         <Paperclip size={12} aria-hidden="true"/><span data-i18n-ignore>{file.name}</span>

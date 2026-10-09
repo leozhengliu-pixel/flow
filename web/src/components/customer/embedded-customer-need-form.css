@@ -46,23 +46,19 @@
 
 /* Request text: 15px / 24px, grows from 72px to 300px. */
 .embedded-customer-need-form__body {
+  --mention-field-min-height: 72px;
   box-sizing: border-box;
   width: 100%;
-  min-height: 72px;
-  max-height: 300px;
   margin: 16px 0 0;
-  padding: 0;
-  overflow-y: auto;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
   color: var(--pk-text);
+}
+.embedded-customer-need-form__body.mention-text-field .issue-description-root .description-editor {
+  max-height: 300px;
+  overflow-y: auto;
   font: 450 15px/24px var(--font);
 }
-.embedded-customer-need-form__body[data-customer-hidden] { margin-top: 8px; }
+.embedded-customer-need-form__body.is-customer-hidden { margin-top: 8px; }
 .embedded-customer-need-form.is-inline .embedded-customer-need-form__body { margin-top: 0; }
-.embedded-customer-need-form__body::placeholder { color: var(--pk-faint); }
 
 .embedded-customer-need-form__files {
   display: flex;

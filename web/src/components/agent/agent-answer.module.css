@@ -11,6 +11,9 @@ a.entityMention:hover{background:transparent;text-decoration:underline}
 .entityIdentifier{color:var(--theme-text-secondary)}
 .entityTitle{color:var(--theme-text-primary)}
 .entityPending{color:var(--theme-text-secondary)}
+.entityMissing{color:var(--theme-text-tertiary,var(--theme-text-secondary))}
+a.entityMissing{text-decoration:line-through;text-decoration-color:var(--theme-border-strong,currentColor)}
+a.entityMissing:hover{color:var(--theme-text-secondary)}
 .labelDot{display:inline-block;width:9px;height:9px;margin:0 3px;border-radius:50%;vertical-align:0}
 .updateGlyph{color:var(--theme-text-secondary)}
 /* Linear's referenced-issues list: one bordered 8px container, 32px rows on a shared grid (priority, id, status, title, assignee). */
@@ -35,3 +38,9 @@ a.referenceCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset
 .suggestion{height:28px;display:inline-flex;align-items:center;max-width:100%;padding:0 10px;border:.5px solid var(--theme-border);border-radius:9999px;background:transparent;color:var(--text);font:500 12px/16px var(--font);text-align:left;cursor:pointer}
 .suggestion:hover:not(:disabled),.suggestion:focus-visible{background:var(--theme-surface-hover);outline:0}
 .suggestion:disabled{opacity:.5;cursor:default}
+/* Inside an editor the generic link style (blue, underlined) must not leak into the chip. */
+:global(.ProseMirror) a.entityChip[data-agent-entity]{color:var(--theme-text-primary);text-decoration:none}
+:global(.ProseMirror) a.entityChip[data-agent-entity]:hover{text-decoration:none}
+:global(.ProseMirror) a.entityMention[data-agent-entity]{color:var(--text)}
+:global(.ProseMirror) a.entityMention[data-agent-entity]:hover{text-decoration:underline}
+:global(.ProseMirror) a.entityMissing[data-agent-entity]{color:var(--theme-text-tertiary);text-decoration:line-through}

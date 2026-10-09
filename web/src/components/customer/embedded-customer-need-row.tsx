@@ -1,6 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import { toast } from 'sonner'
+import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { useIssueSearch } from '@/components/issue/use-issue-search'
@@ -171,7 +172,7 @@ function NeedDetails({ data, request, customer, variant, withHeader, editing, is
     </div>}
     {editing
       ? <EmbeddedCustomerNeedForm data={data} host={variant} request={request} variant="inline" onCancel={onEditDone} onSaved={saved => { onEditDone(); onChanged?.(saved) }}/>
-      : request.body.trim() && <div className="customer-request-row__body" data-i18n-ignore>{request.body}</div>}
+      : request.body.trim() && <MentionBody className="customer-request-row__body" body={request.body}/>}
     {!editing && (request.sourceUrl || request.attachments?.length > 0) && <div className="customer-request-row__sources">
       {request.sourceUrl && <a className="customer-request-row__source" href={request.sourceUrl} target="_blank" rel="noreferrer" onClick={event => event.stopPropagation()}>
         <SourceLinkIcon size={14}/><span data-i18n-ignore>{sourceHost(request.sourceUrl) ?? request.sourceUrl}</span>

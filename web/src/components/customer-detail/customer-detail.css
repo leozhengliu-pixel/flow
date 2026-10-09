@@ -447,7 +447,6 @@
 .customer-need-composer {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   border: 2px solid var(--customer-need-frame);
   border-radius: 6px;
   background: var(--customer-need-frame);
@@ -464,22 +463,15 @@
 .customer-need-composer:not(.is-customer) .customer-need-composer__surface { border-radius: 4px; }
 
 .customer-need-composer__input {
+  --mention-field-min-height: 60px;
   width: 100%;
   max-width: 76ch;
-  min-height: 60px;
   box-sizing: border-box;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
   color: var(--theme-text-primary);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.6;
 }
+.customer-need-composer.is-customer .customer-need-composer__input .issue-description-root .description-editor { max-height: 200px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
+.customer-need-composer:not(.is-customer) .customer-need-composer__input .issue-description-root .description-editor { --mention-field-min-height: 72px; max-height: 300px; overflow-y: auto; font-size: 13px; line-height: 1.6; }
 
-.customer-need-composer__input::placeholder { color: var(--theme-text-tertiary); }
 .customer-need-composer__files { margin-top: 8px; }
 
 .customer-need-composer__toolbar {

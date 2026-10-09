@@ -1,7 +1,9 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import type { Editor } from '@tiptap/react'
 import { toast } from 'sonner'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { LinearDropdownMenuContent, LinearMenuItem, LinearMenuOptions, type LinearMenuOption } from '@/components/ui/row-context-menu'
 import { FlowTooltip } from '@/components/ui/tooltip'
@@ -75,26 +77,12 @@ export function EmbeddedCustomerNeedForm({
   const [sourceUrl, setSourceUrl] = useState(initial.sourceUrl)
   const [files, setFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
-  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<Editor | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const mac = isMacPlatform()
 
   const selected = lockedCustomer ?? data.customers.find(item => item.id === customerId)
   const hasChanges = body.trim() !== initial.body.trim() || sourceUrl !== initial.sourceUrl || files.length > 0 || (!hideCustomer && (customerId !== initial.customerId || pendingName !== initial.pendingName))
-
-  // Linear focuses the editor with the caret at the end.
-  useEffect(() => {
-    const field = bodyRef.current
-    if (!field) return
-    field.focus({ preventScroll: false })
-    field.setSelectionRange(field.value.length, field.value.length)
-  }, [])
-  useLayoutEffect(() => {
-    const field = bodyRef.current
-    if (!field) return
-    field.style.height = '0px'
-    field.style.height = `${Math.min(300, Math.max(72, field.scrollHeight))}px`
-  }, [body])
 
   const discard = async () => {
     if (!onCancel) return
@@ -161,18 +149,19 @@ export function EmbeddedCustomerNeedForm({
             onPick={(id, name) => {
               setCustomerId(id ?? '')
               setPendingName(name ?? '')
-              requestAnimationFrame(() => bodyRef.current?.focus())
+              requestAnimationFrame(() => { const field = editorRef.current; if (field && !field.isDestroyed) field.commands.focus('end') })
             }}
           />
         )}
-        <textarea
-          ref={bodyRef}
-          aria-label={t('Request')}
-          className="embedded-customer-need-form__body"
-          data-customer-hidden={hideCustomer || undefined}
+        <MentionTextField
+          ariaLabel={t('Request')}
+          autoFocus
+          className={`embedded-customer-need-form__body${hideCustomer ? ' is-customer-hidden' : ''}`}
+          editorRef={editor => { editorRef.current = editor }}
+          onChange={setBody}
+          onSubmit={() => void submit()}
           placeholder={t('Add request details')}
           value={body}
-          onChange={event => setBody(event.target.value)}
         />
         {files.length > 0 && (
           <div className="embedded-customer-need-form__files">

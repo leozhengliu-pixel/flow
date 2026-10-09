@@ -321,6 +321,9 @@
 .document-comment strong { font-weight:550; color:var(--color-text-primary,var(--theme-text-primary)); }
 .document-comment small { margin-left:8px; color:var(--color-text-tertiary,var(--faint)); font-size:11px; }
 .document-comment p { margin:7px 0 6px; white-space:pre-wrap; }
+.document-comment-body { margin:7px 0 6px; font-size:13px; color:var(--color-text-primary,var(--theme-text-primary)); }
+.document-comment-body p { margin:0 0 4px; }
+.document-comment-body p:last-child { margin-bottom:0; }
 .document-comment button { border:0; background:none; padding:2px 6px; color:var(--color-text-tertiary,var(--faint)); font-size:11px; cursor:pointer; }
 .document-comment button:hover { color:var(--color-text-primary,var(--theme-text-primary)); }
 .document-comment-reply { margin-left:28px; background:transparent; }

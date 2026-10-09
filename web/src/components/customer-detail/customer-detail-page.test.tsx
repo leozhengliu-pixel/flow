@@ -1,11 +1,14 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { I18nProvider } from '@/i18n/i18n'
+import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { makeBootstrap, makeIssue, backlog, completed, viewer } from '@/test/fixtures'
+import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import type { BootstrapData, Customer, CustomerRequest } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
@@ -61,11 +64,13 @@ function fixture(overrides: Partial<BootstrapData> = {}) {
 function renderPage(data = fixture()) {
   const onReload = vi.fn().mockResolvedValue(undefined)
   const onBack = vi.fn()
-  render(<MemoryRouter><I18nProvider><TooltipProvider><CustomerDetailPage data={data} customer={data.customers.find(item => item.id === customer.id)!} onBack={onBack} onReload={onReload}/></TooltipProvider></I18nProvider></MemoryRouter>)
+  render(<MentionShell data={data}><TooltipProvider><CustomerDetailPage data={data} customer={data.customers.find(item => item.id === customer.id)!} onBack={onBack} onReload={onReload}/></TooltipProvider></MentionShell>)
   return { onReload, onBack }
 }
 
+afterEach(() => { vi.unstubAllGlobals() })
 beforeEach(() => {
+  stubEditorEnvironment()
   localStorage.clear()
   Object.values(api).forEach(fn => fn.mockReset())
   api.listIssueRecords.mockResolvedValue({ items: [], hasMore: false, total: 0 })
@@ -157,6 +162,19 @@ describe('CustomerDetailPage (Linear customer page)', () => {
     expect(screen.getByText('Archived')).toBeVisible()
   })
 
+  it('renders references in a request body as chips and keeps an unavailable issue\'s stored label', async () => {
+    const user = userEvent.setup()
+    const data = fixture({ customerRequests: [need({ id: 'need-m', projectId: 'project-1', body: 'Needs [TST-1](/workspace/issue/TST-1/test-issue) in [Project one](/workspace/project/project-one/overview) cc @viewer' })] })
+    render(<MemoryRouter><I18nProvider><TooltipProvider><WorkspaceStoreProvider account={null} data={data} session={null}><CustomerDetailPage data={data} customer={customer} onBack={vi.fn()} onReload={vi.fn()}/></WorkspaceStoreProvider></TooltipProvider></I18nProvider></MemoryRouter>)
+    await user.click(screen.getAllByRole('listitem')[0].querySelector('.customer-need__row') as HTMLElement)
+    const body = document.querySelector('.customer-need-detail__body') as HTMLElement
+    await waitFor(() => expect(body.querySelector('a[data-agent-entity="issue"]')).toHaveTextContent('TST-1 Test issue'))
+    expect(body.querySelector('a[data-agent-entity="issue"]')).toHaveAttribute('href', '/workspace/issue/TST-1/test-issue')
+    expect(body.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one')
+    expect(body.querySelector('a[data-agent-entity="user"]')).toHaveTextContent('@Viewer')
+    expect(body.textContent).not.toContain('](')
+  })
+
   it('shows Linear\'s empty state with the add-request shortcut', () => {
     renderPage(fixture({ customerRequests: [] }))
     expect(screen.getByText('Customer requests')).toBeVisible()
@@ -173,12 +191,32 @@ describe('CustomerDetailPage (Linear customer page)', () => {
     await user.click(screen.getByRole('button', { name: 'Add request' }))
     expect(screen.getByText('This request will be added to')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Search issues or projects…' })).toHaveTextContent('Customer request from Acme')
-    await user.type(screen.getByRole('textbox', { name: 'Note' }), 'Needs audit logs')
-    await user.keyboard('{Control>}{Enter}{/Control}')
+    await user.click(await screen.findByRole('textbox', { name: 'Note' }))
+    await user.keyboard('Needs audit logs{Control>}{Enter}{/Control}')
     await waitFor(() => expect(api.createCustomerRequest).toHaveBeenCalled())
     expect(api.createIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 'Customer request from Acme', teamId: 'team-1', stateId: 'state-backlog', priority: 0 }))
     expect(api.createCustomerRequest).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'customer-1', body: 'Needs audit logs', issueId: 'issue-new' }))
     await waitFor(() => expect(onReload).toHaveBeenCalledWith(['issue-new']))
+  })
+
+  it('stores mentions in a request as markdown links and shows them as chips when the request is shown', async () => {
+    const user = userEvent.setup()
+    api.createIssue.mockResolvedValue({ ...makeIssue({ id: 'issue-new', identifier: 'TST-9', title: 'Customer request from Acme' }) })
+    api.createCustomerRequest.mockResolvedValue(need({ id: 'need-new', issueId: 'issue-new' }))
+    const { documents, initiatives } = mentionFixture()
+    renderPage(fixture({ documents, initiatives }))
+    await user.click(screen.getByRole('button', { name: 'Add request' }))
+    const box = await screen.findByRole('textbox', { name: 'Note' })
+    await user.click(box)
+    await user.keyboard('See @Launch')
+    await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
+    pasteText(box, `${window.location.origin}${mentionUrls.initiative}`)
+    await waitFor(() => expect(document.querySelector('a[data-agent-entity="initiative"]')).not.toBeNull())
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    await waitFor(() => expect(api.createCustomerRequest).toHaveBeenCalled())
+    const body = api.createCustomerRequest.mock.calls[0][0].body as string
+    expect(body).toContain('[Launch plan](/workspace/document/plan-abc)')
+    expect(body).toContain(mentionUrls.initiative)
   })
 
   it('requires details or a source when the request creates a new issue', async () => {

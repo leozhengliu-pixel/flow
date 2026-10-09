@@ -78,7 +78,7 @@ describe('IssueCustomerRequests', () => {
     fireEvent.click(row.querySelector('.customer-request-row__header')!)
     expect(row).toHaveClass('is-expanded')
     expect(within(row).getAllByText('Ada')).toHaveLength(2)
-    expect(within(row).getByText('Need r1')).toHaveClass('customer-request-row__body')
+    expect(within(row).getByText('Need r1').closest('.customer-request-row__body')).not.toBeNull()
   })
 
   it('collapses the section to a customer count', async () => {

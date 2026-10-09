@@ -31,7 +31,8 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 		switch v := value.(type) {
 		case map[string]any:
 			if v["type"] == "mention" {
-				if attrs, ok := v["attrs"].(map[string]any); ok {
+				// Only user mentions name an app user; an issue or document id is never one.
+				if attrs, ok := v["attrs"].(map[string]any); ok && domain.IsUserMention(attrs) {
 					if id, ok := attrs["id"].(string); ok && strings.HasPrefix(id, "app_") {
 						ids[id] = true
 					}

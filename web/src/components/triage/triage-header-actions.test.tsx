@@ -23,7 +23,8 @@ const api = vi.hoisted(() => ({
   dismissIssueSuggestion: vi.fn(),
 }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<object>()), ...api }))
-vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: () => <div /> }))
+// The detail pane's description editor is replaced by a plain field; the comment field of the dialogs is covered with the real editor in triage-action-dialogs.test.tsx.
+vi.mock('@/components/issue/issue-description-editor', () => ({ IssueDescriptionEditor: ({ ariaLabel, value, onChange }: { ariaLabel?: string; value: string; onChange?: (snapshot: { markdown: string }) => void }) => <textarea aria-label={ariaLabel} value={value} onChange={event => onChange?.({ markdown: event.target.value })}/> }))
 vi.mock('@/components/editor/composer', () => ({ Composer: () => <div /> }))
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }

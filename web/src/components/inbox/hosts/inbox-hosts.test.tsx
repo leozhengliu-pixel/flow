@@ -1,7 +1,9 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { makeBootstrap } from '@/test/fixtures'
+import { MentionShell, stubEditorEnvironment } from '@/test/mention-host-harness'
 import type { Initiative, Project, ProjectUpdate, User } from '@/types/flow'
 
 import { classifyInboxHost } from './inbox-host-types'
@@ -13,6 +15,11 @@ import {
 } from './priority-inbox-settings-metadata'
 import { ProjectOverviewInboxView } from './project-overview-inbox-view'
 import { ProjectUpdatesInboxView } from './project-updates-inbox-view'
+
+beforeEach(stubEditorEnvironment)
+afterEach(() => { vi.unstubAllGlobals() })
+
+const shell = (node: React.ReactNode) => <MentionShell data={makeBootstrap()}>{node}</MentionShell>
 
 const viewer = {
   id: 'user-1',
@@ -106,7 +113,7 @@ describe('ProjectUpdatesInboxView', () => {
   it('renders update stream chrome and posts a new update', async () => {
     const user = userEvent.setup()
     const onCreateUpdate = vi.fn().mockResolvedValue(undefined)
-    render(
+    render(shell(
       <ProjectUpdatesInboxView
         project={project}
         updates={[update]}
@@ -114,11 +121,12 @@ describe('ProjectUpdatesInboxView', () => {
         onOpenProject={vi.fn()}
         onCreateUpdate={onCreateUpdate}
       />,
-    )
+    ))
     expect(screen.getByText('Launch Flow')).toBeInTheDocument()
     expect(screen.getByText(/Design review landed/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'New update' }))
-    await user.type(screen.getByLabelText('Project update'), 'Hosts are shipping')
+    await user.click(await screen.findByRole('textbox', { name: 'Project update' }))
+    await user.keyboard('Hosts are shipping')
     await user.click(screen.getByRole('button', { name: 'Post update' }))
     expect(onCreateUpdate).toHaveBeenCalledWith({ body: 'Hosts are shipping', health: 'onTrack' })
   })
@@ -136,8 +144,8 @@ describe('ProjectOverviewInboxView', () => {
 })
 
 describe('InitiativeUpdatesInboxView', () => {
-  it('opens the write-update composer when there are no updates yet', () => {
-    render(
+  it('opens the write-update composer when there are no updates yet', async () => {
+    render(shell(
       <InitiativeUpdatesInboxView
         initiative={initiative}
         updates={[]}
@@ -145,9 +153,9 @@ describe('InitiativeUpdatesInboxView', () => {
         onOpenInitiative={vi.fn()}
         onCreateUpdate={vi.fn()}
       />,
-    )
+    ))
     expect(screen.getByText('Inbox parity')).toBeInTheDocument()
-    expect(screen.getByLabelText('Initiative update')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Initiative update' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Post update' })).toBeDisabled()
   })
 })

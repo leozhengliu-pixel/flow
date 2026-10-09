@@ -48,9 +48,37 @@ export function loadAgentRecord(workspace: string, kind: RecordKind, id: string)
   if (current && Date.now() - current.at < (current.missing ? MISSING_TTL : FOUND_TTL)) return
   publish(key, { ...current, loading: true, at: current?.at ?? Date.now() })
   fetchRecord(kind, id, workspace).then(
-    value => publish(key, value ? { value, at: Date.now() } : { missing: true, at: Date.now() }),
+    value => {
+      // A record named by identifier / slug is also answered when it is named by id (and the other way round).
+      if (value) for (const alias of [value.id, kind === 'issue' ? (value as Issue).identifier : (value as Project).slugId]) if (alias) records.set(recordKey(workspace, kind, alias), { value, at: Date.now() })
+      publish(key, value ? { value, at: Date.now() } : { missing: true, at: Date.now() })
+    },
     () => publish(key, { missing: true, at: Date.now() }),
   )
+}
+
+/** The cached issue / project for a key, when a fetch already found it. */
+export function peekAgentRecord(workspace: string, kind: RecordKind, id: string): Issue | Project | undefined {
+  return records.get(recordKey(workspace, kind, id))?.value
+}
+
+/** Loads the records the targets name and resolves once each one is found or known to be missing. */
+export function settleAgentRecords(workspace: string, targets: Array<Pick<AgentEntityTarget, 'kind' | 'id'>>): Promise<void> {
+  const wanted = targets.filter((target): target is { kind: RecordKind; id: string } => target.kind === 'issue' || target.kind === 'project')
+  wanted.forEach(target => loadAgentRecord(workspace, target.kind, target.id))
+  return new Promise(resolve => {
+    const done = () => wanted.every(target => {
+      const entry = records.get(recordKey(workspace, target.kind, target.id))
+      return Boolean(entry && !entry.loading && (entry.value || entry.missing))
+    })
+    if (done()) { resolve(); return }
+    const unsubscribe = subscribe(() => { if (done()) { unsubscribe(); resolve() } })
+  })
+}
+
+/** Re-renders when any record loads while `active` (a surface that waits on records): lets it convert its references again once they arrive. */
+export function useAgentRecordVersion(active = true) {
+  return useSyncExternalStore(subscribe, () => active ? version : 0, () => 0)
 }
 
 /** Test hook: forget every fetched record. */

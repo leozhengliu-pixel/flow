@@ -14,6 +14,7 @@ import { useI18n } from '@/i18n/i18n'
 import { readSearchState, writeSearchState, searchFilterAST, type SearchTab, type SearchPageState } from './search-state'
 import { SearchMenus, SearchFilterChips } from './search-menus'
 
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import './workspace-search-page.css'
 
 const tabs: Array<{ id: SearchTab; label: string }> = [
@@ -196,7 +197,7 @@ function RecentSearches({ history, onSearch, onClear }: { history: SearchHistory
 
 function resultContext(result: SearchResult) {
   if (result.email) return result.email
-  if (result.subtitle && result.subtitle !== 'Document') return result.subtitle
+  if (result.subtitle && result.subtitle !== 'Document') return markdownPlainText(result.subtitle)
 }
 
 function issueStatus(result: SearchResult): Pick<WorkflowState, 'id' | 'name' | 'color' | 'type'> | undefined {

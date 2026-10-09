@@ -22,7 +22,10 @@ import type { AuditLogEntry, Comment, Project, ProjectUpdate, ThreadSubscription
 import type { ProjectDetailProps } from './project-detail-types'
 import { PROJECT_HEALTHS } from './project-detail-types'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { RichComment } from '@/components/activity/rich-comment'
+import type { ActivityRef } from '@/components/activity/issue-activity-model'
+import { MentionReference } from '@/components/editor/mentions/mention-reference'
 import { insertImageFiles } from '@/components/issue/editor/image-extension'
 import { insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import { ActivityPage } from '@/components/activity/activity-page'
@@ -196,10 +199,11 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
 function UpdateEntry({ changes, onComment, onDelete, onDeleteAttachment, onEdit, onReact, update, viewerId }: { changes: ProjectPropertyChange[]; onComment: (body: string) => Promise<ProjectUpdate>; onDelete: () => void; onDeleteAttachment: (attachmentId:string)=>Promise<ProjectUpdate>; onEdit: () => void; onReact: (emoji: string) => Promise<ProjectUpdate>; update: ProjectUpdate; viewerId: string }) {
   const [commentsOpen, setCommentsOpen] = useState(false)
   const [comment, setComment] = useState('')
-  return <article className="project-activity__update" data-update-id={update.id}><header><span className={`project-activity__update-health is-${update.health}`}><HealthGlyph health={update.health}/>{healthLabel(update.health)}</span><Avatar name={update.user.displayName}/><strong>{update.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true })}</time><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open update menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu" sideOffset={4}><DropdownMenu.Item onSelect={onEdit}><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header><div className="project-activity__rich"><RichComment body={update.body}/></div>{changes.length > 0 && <ul aria-label="Changes since last update" className="project-activity__changes">{changes.map(change => <li key={change.field}><span>{PROPERTY_LABELS[change.field] ?? change.field}</span><span>{formatPropertyValue(change.field, change.from)}</span><span aria-hidden="true">→</span><span>{formatPropertyValue(change.field, change.to)}</span></li>)}</ul>}{update.attachments?.length>0&&<div className="project-activity__attachments">{update.attachments.map(attachment=><span key={attachment.id}><a href={attachment.url} target="_blank" rel="noreferrer"><Paperclip size={12}/>{attachment.title||'Attachment'}</a><button aria-label={`Remove ${attachment.title||'attachment'}`} onClick={()=>void onDeleteAttachment(attachment.id)}><X size={11}/></button></span>)}</div>}
+  const postComment = () => { if (comment.trim()) void onComment(comment.trim()).then(() => setComment('')) }
+  return <article className="project-activity__update" data-update-id={update.id}><header><span className={`project-activity__update-health is-${update.health}`}><HealthGlyph health={update.health}/>{healthLabel(update.health)}</span><Avatar name={update.user.displayName}/><strong>{update.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true })}</time><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open update menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu" sideOffset={4}><DropdownMenu.Item onSelect={onEdit}><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header><div className="project-activity__rich"><RichComment body={update.body} data={update.bodyData}/></div>{changes.length > 0 && <ul aria-label="Changes since last update" className="project-activity__changes">{changes.map(change => <li key={change.field}><span>{PROPERTY_LABELS[change.field] ?? change.field}</span><span>{formatPropertyValue(change.field, change.from)}</span><span aria-hidden="true">→</span><span>{formatPropertyValue(change.field, change.to)}</span></li>)}</ul>}{update.attachments?.length>0&&<div className="project-activity__attachments">{update.attachments.map(attachment=><span key={attachment.id}><a href={attachment.url} target="_blank" rel="noreferrer"><Paperclip size={12}/>{attachment.title||'Attachment'}</a><button aria-label={`Remove ${attachment.title||'attachment'}`} onClick={()=>void onDeleteAttachment(attachment.id)}><X size={11}/></button></span>)}</div>}
     <div className="project-activity__reactions">{Object.entries(update.reactions ?? {}).map(([emoji, users]) => <button aria-pressed={users.includes(viewerId)} key={emoji} onClick={() => void onReact(emoji)} type="button">{emoji} {users.length}</button>)}</div>
     <footer><button aria-label={`${update.comments?.length ?? 0} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={13}/>{update.comments?.length ? update.comments.length : null}</button><EmojiPicker onSelect={async emoji => { await onReact(emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={13}/></button></EmojiPicker></footer>
-    {commentsOpen && <div className="project-activity__comments">{(update.comments ?? []).map(item => <CommentEntry comment={item} key={item.id}/>)}<div className="project-activity__comment-box"><Avatar name="You"/><input aria-label="Add comment" onChange={event => setComment(event.target.value)} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim()} onClick={() => void onComment(comment.trim()).then(() => setComment(''))} type="button">Comment</button></div></div>}
+    {commentsOpen && <div className="project-activity__comments">{(update.comments ?? []).map(item => <CommentEntry comment={item} key={item.id}/>)}<div className="project-activity__comment-box"><Avatar name="You"/><MentionTextField ariaLabel="Add comment" onChange={setComment} onSubmit={postComment} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim()} onClick={postComment} type="button">Comment</button></div></div>}
   </article>
 }
 
@@ -302,16 +306,17 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
 }
 
 function CommentEntry({ comment }: { comment: Comment }) { return <article className="project-activity__comment"><Avatar name={comment.user.displayName}/><div><header><strong>{comment.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(comment.createdAt), { addSuffix: true })}</time></header><div className="project-activity__rich"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div></div></article> }
-function PropertyEvent({ actor, icon, text, time }: { actor?: string; icon?: ReactNode; text: string; time: string }) {
+function PropertyEvent({ actor, icon, reference, text, time }: { actor?: string; icon?: ReactNode; reference?: ActivityRef; text: string; time: string }) {
+  const { t } = useI18n()
   // Linear bolds the actor and runs the date straight after the sentence.
   const rest = actor && text.startsWith(`${actor} `) ? text.slice(actor.length) : undefined
-  return <div className="project-activity__event">{icon ?? <span className="project-activity__event-dot"/>}<span>{rest !== undefined ? <><strong>{actor}</strong>{rest}</> : text}<time> · {format(new Date(time), 'MMM d')}</time></span></div>
+  return <div className="project-activity__event">{icon ?? <span className="project-activity__event-dot"/>}<span>{rest !== undefined ? <><strong>{actor}</strong>{rest}</> : text}{reference && <> <MentionReference id={reference.id} label={reference.label || t(REFERENCE_TYPE_LABEL[reference.type])} type={reference.type}/></>}<time> · {format(new Date(time), 'MMM d')}</time></span></div>
 }
 
-type ProjectPropertyEvent = { id: string; icon?: ReactNode; actor?: string; text: string; time: string }
+type ProjectPropertyEvent = { id: string; icon?: ReactNode; actor?: string; reference?: ActivityRef; text: string; time: string }
 // Linear's project Activity tab lists events without month group headings.
 function ActivityPropertyTimeline({ events }: { events: ProjectPropertyEvent[] }) {
-  return <>{events.map(event => <PropertyEvent actor={event.actor} icon={event.icon} key={event.id} text={event.text} time={event.time}/>)}</>
+  return <>{events.map(event => <PropertyEvent actor={event.actor} icon={event.icon} key={event.id} reference={event.reference} text={event.text} time={event.time}/>)}</>
 }
 
 type ProjectPropertyChange = { field: string; from: string; to: string }
@@ -353,15 +358,41 @@ export function projectUpdateChanges(updates: ProjectUpdate[], history: AuditLog
 }
 
 function buildProjectEvents(activities: ProjectDetailProps['activities'], creation?: { actor: { displayName: string }; createdAt: string; color?: string }): ProjectPropertyEvent[] {
-  const events: ProjectPropertyEvent[] = activities.map(event => ({ id: event.id, actor: event.actor.displayName, icon: event.type === 'project.created' ? <ProjectIcon size={16}/> : event.type.includes('initiative') ? <Flag size={16}/> : event.type.includes('date') ? <CalendarIcon size={16}/> : event.type.includes('priority') ? <PriorityIcon priority={Number(event.metadata.priority ?? 0)} size={16}/> : undefined, text: activityLabel(event), time: event.createdAt }))
+  const events: ProjectPropertyEvent[] = activities.map(event => ({ id: event.id, actor: event.actor.displayName, icon: event.type === 'project.created' ? <ProjectIcon size={16}/> : event.type.includes('initiative') ? <Flag size={16}/> : event.type.includes('date') ? <CalendarIcon size={16}/> : event.type.includes('priority') ? <PriorityIcon priority={Number(event.metadata.priority ?? 0)} size={16}/> : undefined, reference: projectEventReference(event), text: activityLabel(event), time: event.createdAt }))
   // The API does not persist a project.created event, so synthesize the creation entry Linear always shows at the bottom of the feed.
   if (creation && !Number.isNaN(Date.parse(creation.createdAt)) && !activities.some(event => event.type === 'project.created')) events.push({ id: 'project-created', actor: creation.actor.displayName, icon: <ProjectIcon size={16} style={creation.color ? { color: creation.color } : undefined}/>, text: `${creation.actor.displayName} created the project`, time: creation.createdAt })
   return events.sort((left, right) => +new Date(right.time) - +new Date(left.time))
 }
 
+const REFERENCE_TYPE_LABEL: Record<ActivityRef['type'], string> = { issue: 'Issue', project: 'Project', milestone: 'Milestone', cycle: 'Cycle', label: 'Label', release: 'Release', review: 'Review', initiative: 'Initiative', document: 'Document', customer: 'Customer' }
+const PROJECT_EVENT_REFERENCE_KEYS: Array<[string, ActivityRef['type'], string[]]> = [
+  ['initiativeId', 'initiative', ['initiativeName', 'name']],
+  ['milestoneId', 'milestone', ['milestoneName', 'name']],
+  ['issueId', 'issue', ['issueIdentifier', 'identifier']],
+  ['relatedIssueId', 'issue', ['relatedIssueIdentifier', 'identifier']],
+  ['documentId', 'document', ['documentTitle', 'title']],
+  ['labelId', 'label', ['labelName', 'name']],
+  ['customerId', 'customer', ['customerName', 'name']],
+  ['releaseId', 'release', ['releaseName', 'name']],
+  ['cycleId', 'cycle', ['cycleName', 'name']],
+]
+
+/** The resource a history event names (an initiative the project joined, a milestone, an issue, a document...), shown as the same chip as a mention. */
+function projectEventReference(event: ProjectDetailProps['activities'][number]): ActivityRef | undefined {
+  const metadata = event.metadata ?? {}
+  for (const [key, type, labelKeys] of PROJECT_EVENT_REFERENCE_KEYS) {
+    const id = metadata[key]
+    if (!id) continue
+    const label = labelKeys.map(name => metadata[name]).find(Boolean) ?? ''
+    return { type, id, label }
+  }
+  return undefined
+}
+
 function activityLabel(event: ProjectDetailProps['activities'][number]) {
   const actor = event.actor.displayName
-  const value = event.metadata.name ?? event.metadata.label ?? event.metadata.status ?? event.metadata.projectName ?? ''
+  const reference = projectEventReference(event)
+  const value = reference ? '' : event.metadata.name ?? event.metadata.label ?? event.metadata.status ?? event.metadata.projectName ?? ''
   const labels: Record<string, string> = { 'project.created': 'created the project', 'project.updated': 'updated the project', 'project.commented': 'commented on the project', 'project.update_created': 'posted a project update', 'project.reminder_created': 'created a project reminder', 'project.milestone_created': 'added a milestone', 'project.milestone_updated': 'updated a milestone', 'project.milestone_deleted': 'deleted a milestone' }
   return `${actor} ${labels[event.type] ?? event.type.replaceAll('.', ' ')}${value ? ` ${value}` : ''}`
 }
@@ -369,7 +400,8 @@ function activityLabel(event: ProjectDetailProps['activities'][number]) {
 function EditUpdateDialog({ onOpenChange, onSave, open, update }: { onOpenChange: (open: boolean) => void; onSave: (id: string, input: { body?: string; health?: Project['health'] }) => Promise<void>; open: boolean; update?: ProjectUpdate }) {
   const [body, setBody] = useState(update?.body ?? '')
   const [health, setHealth] = useState<Project['health']>(update?.health ?? 'onTrack')
-  return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-detail-page__form-dialog project-activity__edit-dialog"><Dialog.Title>Edit update</Dialog.Title><div className="project-activity__edit-health">{PROJECT_HEALTHS.slice(0,3).map(option => <button className={health === option.id ? 'is-active' : ''} key={option.id} onClick={() => setHealth(option.id)} type="button">{option.label}</button>)}</div><textarea autoFocus aria-label="Edit project update" onChange={event => setBody(event.target.value)} value={body}/><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!body.trim()} onClick={() => update && void onSave(update.id, { body: body.trim(), health })} type="button">Save update</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
+  const save = () => { if (update && body.trim()) void onSave(update.id, { body: body.trim(), health }) }
+  return <Dialog.Root onOpenChange={onOpenChange} open={open}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="project-detail-page__dialog-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="project-detail-page__form-dialog project-activity__edit-dialog"><Dialog.Title>Edit update</Dialog.Title><div className="project-activity__edit-health">{PROJECT_HEALTHS.slice(0,3).map(option => <button className={health === option.id ? 'is-active' : ''} key={option.id} onClick={() => setHealth(option.id)} type="button">{option.label}</button>)}</div><MentionTextField autoFocus ariaLabel="Edit project update" className="project-activity__edit-body" onChange={setBody} onSubmit={save} value={body}/><footer><Dialog.Close asChild><button type="button">Cancel</button></Dialog.Close><button className="is-primary" disabled={!body.trim()} onClick={save} type="button">Save update</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
 }
 
 

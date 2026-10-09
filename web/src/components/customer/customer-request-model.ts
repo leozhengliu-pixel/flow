@@ -1,3 +1,4 @@
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import type { Customer, CustomerRequest } from '@/types/flow'
 import type { CustomerPick } from './customer-request-events'
 
@@ -87,7 +88,7 @@ export function groupIsImportant(group: Pick<CustomerRequestGroup, 'primary' | '
 
 /** The collapsed row's preview: the request text on one line (Linear's `subtitle(0)`), else the source host. */
 export function requestSubtitle(request: Pick<CustomerRequest, 'body' | 'sourceUrl'>) {
-  const text = request.body.replace(/\s+/g, ' ').trim()
+  const text = markdownPlainText(request.body)
   if (text) return text
   return request.sourceUrl ? sourceHost(request.sourceUrl) ?? request.sourceUrl : ''
 }

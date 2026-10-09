@@ -109,3 +109,7 @@
 .settings-content>.ip-settings-page:not(.ip-template-editor) .ip-setting-row,.settings-content>.ip-settings-page:not(.ip-template-editor) .ip-empty-row{padding-left:16px;padding-right:16px}
 .ip-settings-section>header:has(>p){height:auto;min-height:36px;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}
 .ip-settings-section>header>p{flex:1 0 100%;margin:2px 0 0;color:var(--muted);font-size:12px;font-weight:400;line-height:16px}
+/* Template body / description fields that seed rich text (MentionTextField) look like the other editor fields. */
+.ip-editor-field .ip-mention-field{box-sizing:border-box;width:100%;min-height:32px;padding:6px 9px;border:.5px solid var(--border-strong);border-radius:7px;background:var(--theme-control);color:var(--text);--mention-field-min-height:96px}
+.ip-editor-field .ip-mention-field:focus-within{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 20%,transparent)}
+:root[data-theme="light"] .ip-editor-field .ip-mention-field{border-color:var(--border);background:var(--theme-control);color:var(--text)}

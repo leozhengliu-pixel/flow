@@ -15,6 +15,9 @@ import { gitlabSettingsZhCN } from './translations-gitlab-settings';
 import { agentMentionsZhCN } from './translations-agent-mentions';
 import { loopRunsZhCN } from './translations-loop-runs';
 import { agentStepsZhCN } from './translations-agent-steps';
+import { mentionsZhCN } from './translations-mentions';
+import { mentionsSurfacesZhCN } from './translations-mentions-surfaces';
+import { mentionsLoopsZhCN } from './translations-mentions-loops';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -4592,6 +4595,10 @@ Object.assign(zhCN, {
   "Show thinking…": "查看思考过程…",
   "Dismiss all suggestions": "忽略所有建议",
   "Triage Intelligence options": "智能分流选项",
+  "Looking at the issue…": "正在查看事项…",
+  "Error while trying to find suggestions": "查找建议时出错",
+  "Show {count} more": "再显示 {count} 项",
+  "Show less": "收起",
   "Triage Intelligence thinking": "智能分流思考过程",
   "No reasoning is available for this run.": "本次运行没有可用的推理说明。",
   "Duplicate of": "重复于",
@@ -5764,3 +5771,5 @@ Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
 // Agent step and loop run vocabulary fills gaps only: shared nouns ("issue", "team"…) keep their existing copy.
 for (const [source, translation] of Object.entries(agentStepsZhCN)) zhCN[source] ??= translation;
+// Mention menu / chip copy and the surfaces that show references fill gaps only.
+for (const group of [mentionsZhCN, mentionsSurfacesZhCN, mentionsLoopsZhCN]) for (const [source, translation] of Object.entries(group)) zhCN[source] ??= translation;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import * as Dialog from '@radix-ui/react-dialog'
-import { Check, MoreHorizontal, RotateCw, Sparkles, ThumbsDown, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, ThumbsDown, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   acceptIssueSuggestion,
@@ -13,10 +13,10 @@ import {
 } from '@/lib/api'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { FlowTooltip } from '@/components/ui/tooltip'
-import { GridLoader } from '@/components/ui/grid-loader'
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
 import { UserAvatar } from '@/components/ui/user-avatar'
-import { ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
+import { NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { isIssueInTriage } from '@/components/triage/triage-model'
 import type { BootstrapData, Issue, IssueRelationType, IssueSuggestion } from '@/types/flow'
 import './triage-intelligence-suggestions.css'
@@ -34,10 +34,15 @@ const POLL_LIMIT = 60
 
 const ENTITY_NOUN: Record<PropertySuggestion['type'], string> = { assignee: 'user', project: 'project', label: 'label', team: 'team' }
 
+/** Linear shows a relation list longer than this as the first `COLLAPSED_ROWS` rows plus a "Show N more" toggle. */
+const COLLAPSE_AT = 6
+const COLLAPSED_ROWS = 4
+
 /**
  * Linear's Triage Intelligence card: shown under the issue title for issues in Triage (and any issue that still has
- * active suggestions). Relation rows ("Duplicate of" / "Related to") with Apply, dashed property chips with a hover
- * card explaining why, a pending shimmer while suggestions are generated, and "No suggestions found" · Run again.
+ * active suggestions). A white card (sparkle + "Triage Intelligence", property chips, "Duplicate of" / "Related to"
+ * rows with Apply and a hover card explaining why) sits in a hairline-bordered frame; while suggestions are generated,
+ * failed, or empty the frame's footer shows the progress line + timer, or the error / "No suggestions found" with Run again.
  */
 export function TriageIntelligenceSuggestions({
   issue,
@@ -67,6 +72,7 @@ export function TriageIntelligenceSuggestions({
   const [refreshing, setRefreshing] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [thinkingOpen, setThinkingOpen] = useState(false)
+  const [failed, setFailed] = useState(false)
   const enabled = data.workspaceSettings.featureFlags?.['triage-intelligence'] ?? false
   const inTriage = inTriageOverride ?? isIssueInTriage(issue, data.teamSettings)
   const hasLocal = (data.issueSuggestions ?? []).some(item => item.issueId === issue.id && item.state === 'active')
@@ -80,6 +86,7 @@ export function TriageIntelligenceSuggestions({
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     let attempts = 0
+    setFailed(false)
     const load = () => {
       void fetchIssueSuggestions(issue.id, controller.signal)
         .then(result => {
@@ -89,7 +96,9 @@ export function TriageIntelligenceSuggestions({
           if (inTriage && next.pending && attempts++ < POLL_LIMIT) timer = setTimeout(load, POLL_MS)
         })
         .catch(() => {
-          if (!controller.signal.aborted) setRemote(undefined)
+          if (controller.signal.aborted) return
+          setRemote(undefined)
+          setFailed(true)
         })
     }
     load()
@@ -119,7 +128,7 @@ export function TriageIntelligenceSuggestions({
   const generatedAt = remote?.generatedAt ?? issue.suggestionsGeneratedAt
   // A run is pending while the issue was never generated, or the server reports a background run (first generation,
   // replacing heuristic suggestions, or regenerating after an edit), or "Run again" is in flight.
-  const pending = refreshing || Boolean(remote?.pending) || (!generatedAt && !suggestions.length)
+  const pending = !failed && (refreshing || Boolean(remote?.pending) || (!generatedAt && !suggestions.length))
   const elapsed = usePendingSeconds(enabled && inTriage && pending)
 
   if (!enabled || (!inTriage && !suggestions.length)) return null
@@ -173,6 +182,7 @@ export function TriageIntelligenceSuggestions({
 
   const runAgain = async () => {
     setRefreshing(true)
+    setFailed(false)
     try {
       await refreshIssueSuggestions(issue.id)
       const result = normalizeRemote(await fetchIssueSuggestions(issue.id))
@@ -181,105 +191,90 @@ export function TriageIntelligenceSuggestions({
       // An asynchronous (agentic) run is still pending: keep polling until it lands.
       if (result.pending) setReloadKey(key => key + 1)
     } catch (error) {
+      setFailed(true)
       toast.error(error instanceof Error ? error.message : 'Could not refresh suggestions')
     } finally {
       setRefreshing(false)
     }
   }
 
-  const empty = !pending && !suggestions.length
+  const empty = !pending && !failed && !suggestions.length
+  const footer = pending ? 'pending' : failed && !suggestions.length ? 'failed' : empty ? 'empty' : undefined
   const reasonsSummary = suggestions.flatMap(item => (item.metadata?.reasons ?? []).filter(reason => typeof reason === 'string'))
+
+  const relationProps = {
+    issues: relatedIssues,
+    data,
+    busy,
+    onAccept: (suggestion: IssueSuggestion) => void update(suggestion, true),
+    onDismiss: (suggestion: IssueSuggestion) => void update(suggestion, false),
+    onRelate: (suggestion: IssueSuggestion, type: IssueRelationType) => void relate(suggestion, type),
+  }
 
   return (
     <section
-      className={`triage-intelligence-panel${variant === 'compact' ? ' is-compact' : ''}`}
+      className={`triage-intelligence-panel${variant === 'compact' ? ' is-compact' : ''}${footer ? ' has-footer' : ''}`}
       aria-label="Triage Intelligence"
       aria-busy={pending || undefined}
-      data-state={pending ? 'pending' : empty ? 'empty' : 'ready'}
+      data-state={pending ? 'pending' : failed && !suggestions.length ? 'failed' : empty ? 'empty' : 'ready'}
       data-triage-accept={isVisibleInTriageAccept || undefined}
     >
-      <header>
-        <span className="triage-intelligence-title">
-          {pending ? <GridLoader variant="agent" size={14} className="triage-intelligence-loader" /> : <Sparkles size={14} aria-hidden="true" />}
-          {pending ? (
-            <span className="triage-intelligence-shimmer" role="status">{t('Finding suggestions…')}</span>
-          ) : (
-            <strong className="triage-intelligence-gradient">Triage Intelligence</strong>
-          )}
-        </span>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <button className="triage-intelligence-menu-trigger" type="button" aria-label={t('Triage Intelligence options')}>
-              <MoreHorizontal size={15} />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="triage-intelligence-menu">
-            <DropdownMenuItem onSelect={() => setThinkingOpen(true)}>{t('Show thinking…')}</DropdownMenuItem>
-            <DropdownMenuItem disabled={pending} onSelect={() => void runAgain()}>{t('Run again')}</DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem disabled={!suggestions.length || busy === 'all'} onSelect={() => void dismissAll()}>{t('Dismiss all suggestions')}</DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </header>
-      {pending && !suggestions.length ? (
-        <div className="triage-intelligence-generating">
-          <span>{t('Comparing with similar issues, projects and owners…')}</span>
-          <span className="triage-intelligence-elapsed" aria-hidden="true">{elapsed}s</span>
-        </div>
-      ) : empty ? (
-        <div className="triage-intelligence-empty">
-          <span>{t('No suggestions found')}</span>
-          <FlowTooltip label={t('Find suggestions')}>
-            <button type="button" className="triage-intelligence-run-again" disabled={refreshing} onClick={() => void runAgain()}>
-              <RotateCw size={12} aria-hidden="true" />
-              {t('Run again')}
-            </button>
-          </FlowTooltip>
-        </div>
-      ) : (
-        <div className="triage-intelligence-body">
-          {duplicates.length > 0 && (
-            <RelationRow
-              label="Duplicate of"
-              suggestions={duplicates}
-              issues={relatedIssues}
-              data={data}
-              busy={busy}
-              onAccept={suggestion => void update(suggestion, true)}
-              onDismiss={suggestion => void update(suggestion, false)}
-              onRelate={(suggestion, type) => void relate(suggestion, type)}
-            />
-          )}
-          {related.length > 0 && (
-            <RelationRow
-              label="Related to"
-              suggestions={related}
-              issues={relatedIssues}
-              data={data}
-              busy={busy}
-              onAccept={suggestion => void update(suggestion, true)}
-              onDismiss={suggestion => void update(suggestion, false)}
-              onRelate={(suggestion, type) => void relate(suggestion, type)}
-            />
-          )}
-          {visiblePropertySuggestions.length > 0 && (
-            <div className="triage-intelligence-row">
-              <span className="triage-intelligence-row-label">Suggestions</span>
-              <div className="triage-intelligence-chips">
-                {visiblePropertySuggestions.map(suggestion => (
-                  <PropertySuggestionChip
-                    key={suggestion.id}
-                    suggestion={suggestion}
-                    data={data}
-                    busy={busy === suggestion.id || busy === 'all'}
-                    onAccept={() => void update(suggestion, true)}
-                    onDismiss={() => void update(suggestion, false)}
-                  />
-                ))}
-              </div>
+      <div className="triage-intelligence-card">
+        <header>
+          <span className="triage-intelligence-title">
+            <LinearGlyph name="triage" size={16} />
+            <span className={pending ? 'triage-intelligence-shimmer' : undefined}>Triage Intelligence</span>
+          </span>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button className="triage-intelligence-menu-trigger" type="button" aria-label={t('Triage Intelligence options')}>
+                <LinearGlyph name="ellipsis" size={14} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="triage-intelligence-menu">
+              <DropdownMenuItem onSelect={() => setThinkingOpen(true)}>{t('Show thinking…')}</DropdownMenuItem>
+              <DropdownMenuItem disabled={pending} onSelect={() => void runAgain()}>{t('Run again')}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={!suggestions.length || busy === 'all'} onSelect={() => void dismissAll()}>{t('Dismiss all suggestions')}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </header>
+        {visiblePropertySuggestions.length > 0 && (
+          <div className="triage-intelligence-row">
+            <span className="triage-intelligence-row-label">Suggestions</span>
+            <div className="triage-intelligence-chips">
+              {visiblePropertySuggestions.map(suggestion => (
+                <PropertySuggestionChip
+                  key={suggestion.id}
+                  suggestion={suggestion}
+                  data={data}
+                  busy={busy === suggestion.id || busy === 'all'}
+                  onAccept={() => void update(suggestion, true)}
+                  onDismiss={() => void update(suggestion, false)}
+                />
+              ))}
             </div>
+          </div>
+        )}
+        {duplicates.length > 0 && <RelationRow label="Duplicate of" suggestions={duplicates} {...relationProps} />}
+        {related.length > 0 && <RelationRow label="Related to" suggestions={related} {...relationProps} />}
+      </div>
+      {footer && (
+        <footer className="triage-intelligence-footer" data-kind={footer}>
+          <span className="triage-intelligence-footer-text" role={pending ? 'status' : undefined}>
+            {t(pending ? 'Looking at the issue…' : footer === 'failed' ? 'Error while trying to find suggestions' : 'No suggestions found')}
+          </span>
+          {pending ? (
+            <span className="triage-intelligence-elapsed" aria-hidden="true">{formatElapsed(elapsed)}</span>
+          ) : (
+            <FlowTooltip label={t('Find suggestions')}>
+              <button type="button" className="triage-intelligence-run-again" disabled={refreshing} onClick={() => void runAgain()}>
+                <LinearGlyph name="rerun" size={14} />
+                {t('Run again')}
+              </button>
+            </FlowTooltip>
           )}
-        </div>
+        </footer>
       )}
       <Dialog.Root open={thinkingOpen} onOpenChange={setThinkingOpen}>
         <Dialog.Portal>
@@ -287,7 +282,7 @@ export function TriageIntelligenceSuggestions({
           <Dialog.Content data-flow-motion="dialog" className="triage-intelligence-thinking-dialog" aria-describedby={undefined}>
             <header>
               <Dialog.Title>
-                <Sparkles size={14} aria-hidden="true" />
+                <LinearGlyph name="triage" size={14} />
                 Triage Intelligence thinking
               </Dialog.Title>
               <Dialog.Close asChild>
@@ -332,15 +327,19 @@ function RelationRow({
   onRelate: (suggestion: IssueSuggestion, type: IssueRelationType) => void
 }) {
   const { t } = useI18n()
+  const [expanded, setExpanded] = useState(false)
   const duplicate = label === 'Duplicate of'
   const kind = duplicate ? 'duplicate' : 'related issue'
+  const rows = suggestions.filter(suggestion => suggestion.suggestedIssueId && issues.get(suggestion.suggestedIssueId))
+  const collapsible = rows.length >= COLLAPSE_AT
+  const hidden = collapsible && !expanded ? rows.length - COLLAPSED_ROWS : 0
+  const visible = collapsible && !expanded ? rows.slice(0, COLLAPSED_ROWS) : rows
   return (
     <div className="triage-intelligence-row">
-      <span className="triage-intelligence-row-label triage-intelligence-relation-pill">{t(label)}</span>
+      <span className="triage-intelligence-row-label triage-intelligence-relation-label">{t(label)}</span>
       <div className="triage-intelligence-related-list">
-        {suggestions.map(suggestion => {
-          const relatedIssue = suggestion.suggestedIssueId ? issues.get(suggestion.suggestedIssueId) : undefined
-          if (!relatedIssue) return null
+        {visible.map(suggestion => {
+          const relatedIssue = issues.get(suggestion.suggestedIssueId as string) as Issue
           const disabled = busy === suggestion.id || busy === 'all'
           const url = `${typeof location === 'undefined' ? '' : location.origin}/${data.workspace.urlKey}/issue/${relatedIssue.identifier}`
           const copy = (text: string, message: string) => void navigator.clipboard.writeText(text).then(() => toast.success(t(message))).catch(() => toast.error(t('Could not write to clipboard')))
@@ -362,7 +361,7 @@ function RelationRow({
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <button type="button" className="triage-intelligence-icon-button" aria-label={t('Suggestion options')} disabled={disabled}>
-                      <MoreHorizontal size={14} />
+                      <LinearGlyph name="ellipsis" size={14} />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="triage-intelligence-menu">
@@ -387,6 +386,12 @@ function RelationRow({
             </div>
           )
         })}
+        {collapsible && (
+          <button type="button" className="triage-intelligence-show-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>
+            {expanded ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+            {expanded ? t('Show less') : t('Show {count} more').replace('{count}', String(hidden))}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -395,8 +400,8 @@ function RelationRow({
 function createdAgo(value: string, t: (text: string) => string) {
   const days = Math.floor(Math.max(0, Date.now() - Date.parse(value)) / 86_400_000)
   if (days < 1) return t('Created today')
-  if (days < 7) return t('Created {count}d ago').replace('{count}', String(days))
-  if (days < 30) return t('Created {count}w ago').replace('{count}', String(Math.floor(days / 7)))
+  // Linear counts days up to a month ("Created 11d ago"), then months.
+  if (days < 30) return t('Created {count}d ago').replace('{count}', String(days))
   if (days < 365) return t('Created {count}mo ago').replace('{count}', String(Math.floor(days / 30)))
   return t('Created {count}y ago').replace('{count}', String(Math.floor(days / 365)))
 }
@@ -444,25 +449,29 @@ function RelatedIssueHoverCard({ suggestion, issue, data, duplicate, disabled, o
           onPointerEnter={cancel}
           onPointerLeave={event => { if (event.pointerType !== 'touch') schedule(false) }}
         >
-          <span className="triage-intelligence-issue-card__created">{createdAgo(issue.createdAt, t)}</span>
-          <strong className="triage-intelligence-issue-card__title" data-i18n-ignore>{issue.identifier} {issue.title}</strong>
-          <span className="triage-intelligence-issue-card__meta">
-            <StatusIcon state={issue.state} size={12} />
-            <span data-i18n-ignore>{issue.state.name}</span>
-            <i>·</i>
-            <span data-i18n-ignore={issue.assignee ? true : undefined}>{issue.assignee?.displayName ?? t('Unassigned')}</span>
-            <i>·</i>
-            <span>{t(issue.priorityLabel || 'No priority')}</span>
-          </span>
-          <h4>{why}</h4>
-          {reasons.length > 0 ? (
-            <ul data-i18n-ignore>{reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>
-          ) : (
-            <p>{t('The issues share similar titles and context.')}</p>
-          )}
+          <div className="triage-intelligence-issue-card__head">
+            <span className="triage-intelligence-issue-card__created">{createdAgo(issue.createdAt, t)}</span>
+            <strong className="triage-intelligence-issue-card__title" data-i18n-ignore>{issue.title}</strong>
+            <span className="triage-intelligence-issue-card__meta">
+              <span><StatusIcon state={issue.state} size={14} /><span data-i18n-ignore>{issue.state.name}</span></span>
+              <span>
+                {issue.assignee ? <UserAvatar className="triage-intelligence-avatar" name={issue.assignee.displayName} avatarUrl={issue.assignee.avatarUrl} /> : <NoAssigneeIcon size={16} />}
+                <span data-i18n-ignore={issue.assignee ? true : undefined}>{issue.assignee?.displayName ?? t('Unassigned')}</span>
+              </span>
+              <span><PriorityIcon priority={issue.priority} size={16} /><span>{t(issue.priorityLabel || 'No priority')}</span></span>
+            </span>
+          </div>
+          <div className="triage-intelligence-popover-why">
+            <h4>{why}</h4>
+            {reasons.length > 0 ? (
+              <ul data-i18n-ignore>{reasons.map((reason, index) => <li key={`${index}-${reason}`}>{reason}</li>)}</ul>
+            ) : (
+              <p>{t('The issues share similar titles and context.')}</p>
+            )}
+          </div>
           <div className="triage-intelligence-popover-actions">
             <button type="button" disabled={disabled} onClick={() => { setOpen(false); onAccept() }}>
-              <Check size={14} />
+              <LinearGlyph name="acceptSuggestion" size={14} />
               {t(duplicate ? 'Accept duplicate suggestion' : 'Accept related suggestion')}
             </button>
             <button type="button" aria-label={t('Dismiss suggestion')} disabled={disabled} onClick={() => { setOpen(false); onDismiss() }}>
@@ -536,19 +545,21 @@ function PropertySuggestionChip({
           onPointerLeave={event => { if (event.pointerType !== 'touch') schedule(false) }}
         >
           <div className="triage-intelligence-popover-target">{target.header}</div>
-          <h4>{target.whyTitle}</h4>
-          {reasons.length > 0 ? (
-            <ul data-i18n-ignore>
-              {reasons.map((reason, index) => (
-                <li key={`${index}-${reason}`}>{reason}</li>
-              ))}
-            </ul>
-          ) : (
-            <p>The workspace context points to this value.</p>
-          )}
+          <div className="triage-intelligence-popover-why">
+            <h4>{target.whyTitle}</h4>
+            {reasons.length > 0 ? (
+              <ul data-i18n-ignore>
+                {reasons.map((reason, index) => (
+                  <li key={`${index}-${reason}`}>{reason}</li>
+                ))}
+              </ul>
+            ) : (
+              <p>The workspace context points to this value.</p>
+            )}
+          </div>
           <div className="triage-intelligence-popover-actions">
             <button type="button" disabled={busy} onClick={() => { setOpen(false); onAccept() }}>
-              <Check size={14} />
+              <LinearGlyph name="acceptSuggestion" size={14} />
               {`Accept ${noun} suggestion`}
             </button>
             <button type="button" aria-label="Dismiss suggestion" disabled={busy} onClick={() => { setOpen(false); onDismiss() }}>
@@ -576,6 +587,11 @@ function normalizeRemote(result: unknown): RemoteSuggestions {
     thinking: readThinking(value.thinking),
     pending: value.pending === true || (!generatedAt && !suggestions.length),
   }
+}
+
+/** `m:ss` like Linear's thinking timer. */
+function formatElapsed(seconds: number) {
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 }
 
 /** Seconds since `active` turned on (Linear's thinking timer); resets when it turns off. */

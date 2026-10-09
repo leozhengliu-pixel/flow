@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { ProjectLeadPicker } from '@/components/projects-page/project-lead-picker'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { Avatar } from '@/components/issue/issue-row'
 import { CalendarIcon, PriorityIcon, ProjectStatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
@@ -88,7 +89,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
     {customersEnabled && issueData && <ProjectCustomersRow data={issueData} project={project} issueIds={projectIssueIds}/>}
 
     <section className={`project-overview__latest${projectUpdates[0] ? '' : ' is-empty'}`}>
-      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText size={14}/>Write first project update</button>}
+      {projectUpdates[0] ? <div aria-label="Open latest project update" className="project-overview__latest-update" onClick={event => { if (!(event.target as HTMLElement).closest('a')) onTabChange('activity') }} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onTabChange('activity') } }} role="button" tabIndex={0}><span className={`project-overview__health is-${projectUpdates[0].health}`}/><div><strong data-i18n-ignore>{projectUpdates[0].user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(projectUpdates[0].createdAt), { addSuffix: true })}</time><div className="project-overview__latest-update-body" data-i18n-ignore><RichComment body={projectUpdates[0].body} data={projectUpdates[0].bodyData}/></div></div></div> : <button className="project-overview__first-update" onClick={() => onTabChange('activity')} type="button"><FileText size={14}/>Write first project update</button>}
     </section>
 
     <section className="project-overview__description" id="project-overview-description">
@@ -153,7 +154,7 @@ function OverviewMilestoneCreator({ onCancel, onCreate }: { onCancel: () => void
   const submit = () => { if (!name.trim() || saving) return; setSaving(true); void onCreate({ name: name.trim(), description: description.trim(), targetDate }).finally(() => setSaving(false)) }
   return <form className="project-overview__milestone project-overview__milestone-creator" onSubmit={event => { event.preventDefault(); submit() }}>
     <header><span className="project-overview__milestone-mark"><MilestoneProgressIcon className="project-overview__milestone-progress" empty/></span><input autoFocus aria-label="Milestone name" className="project-overview__milestone-name" disabled={saving} onChange={event => setName(event.target.value)} onKeyDown={event => { if (event.key === 'Escape') onCancel() }} placeholder="Milestone name" value={name}/><span className="project-overview__milestone-spacer"/><ProjectDatePicker buttonClassName="project-overview__milestone-date" label="Target date" onChange={setTargetDate} value={targetDate}><span>{targetDate ? locale === 'en-US' ? format(new Date(`${targetDate}T00:00:00`), 'MMM d') : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' }) : <span className="project-overview__milestone-date-placeholder">Set target date</span>}</span></ProjectDatePicker><button aria-label="Cancel" className="project-overview__milestone-menu-trigger" onClick={onCancel} type="button"><X size={12}/></button></header>
-    <textarea aria-label="Milestone description" className="project-overview__milestone-description" disabled={saving} onChange={event => setDescription(event.target.value)} placeholder="Add milestone description…" value={description}/>
+    <MentionTextField ariaLabel="Milestone description" className="project-overview__milestone-description" onChange={setDescription} onSubmit={submit} placeholder="Add milestone description…" value={description}/>
   </form>
 }
 
@@ -211,7 +212,7 @@ function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCom
   const cancelled = useRef(false)
   useEffect(() => setDraft(value), [value])
   const commit = () => { const next = draft.trim(); const skip = cancelled.current || (onDone && !next); cancelled.current = false; if (!skip && next !== value) void onCommit(next); onDone?.() }
-  if (multiline) return <textarea aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} placeholder={placeholder} value={draft}/>
+  if (multiline) return <MentionTextField ariaLabel={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={setDraft} placeholder={placeholder} value={draft}/>
   return <input aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} onKeyDown={onDone ? event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { cancelled.current = true; setDraft(value); event.currentTarget.blur() } } : undefined} placeholder={placeholder} value={draft}/>
 }
 

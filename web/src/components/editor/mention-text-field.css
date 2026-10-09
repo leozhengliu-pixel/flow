@@ -1,0 +1,20 @@
+/* A form-sized rich text field (MentionTextField): the issue description editor without the issue page's gutters. */
+.mention-text-field {
+  position: relative;
+  min-width: 0;
+  color: var(--theme-text-primary);
+}
+.mention-text-field .issue-description-root {
+  width: 100%;
+  margin-left: 0;
+}
+.mention-text-field .issue-description-root .description-editor {
+  min-height: 60px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: inherit;
+}
+.mention-text-field .issue-description-root .description-editor p + p { margin-top: 8px; }

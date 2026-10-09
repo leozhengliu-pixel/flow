@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { backlog, makeBootstrap, makeIssue, started, teammate } from '@/test/fixtures'
+import { stubEditorEnvironment } from '@/test/mention-host-harness'
 import type { BootstrapData, Issue, WorkflowState } from '@/types/flow'
 import { TriagePage, type TriagePageProps } from './triage-page'
 import { readTriageDisplay, triageDisplayKey, triageState } from './triage-model'
@@ -47,6 +48,7 @@ function renderPage(props: Partial<TriagePageProps> & { data: BootstrapData }) {
 describe('TriagePage (Linear)', () => {
   beforeEach(() => {
     globalThis.ResizeObserver = TestResizeObserver as unknown as typeof ResizeObserver
+    stubEditorEnvironment()
     localStorage.clear()
     vi.clearAllMocks()
     api.updateIssue.mockImplementation(async (id: string, input: object) => makeIssue({ id, ...input }))
@@ -54,7 +56,7 @@ describe('TriagePage (Linear)', () => {
     api.createComment.mockResolvedValue({})
     api.listIssueRecords.mockResolvedValue({ items: [], hasMore: false, total: 0 })
   })
-  afterEach(() => localStorage.clear())
+  afterEach(() => { localStorage.clear(); vi.unstubAllGlobals() })
 
   it('renders Linear two-line rows: title and identifier, creator and when it was added', () => {
     renderPage({ data: setup([triageIssue(1, { dueDate: '2026-12-01' }), triageIssue(2)]) })

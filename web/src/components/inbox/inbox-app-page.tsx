@@ -31,6 +31,7 @@ import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, 
 import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 
 const initialDisplayOptions: InboxDisplayOptions = {
   ordering: 'newest',
@@ -519,7 +520,7 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
         kind: 'generic' as const,
         identifier: 'Welcome',
         title: data.workspaceSettings.welcomeMessageTitle?.trim() || `Welcome to ${data.workspace.name}`,
-        body: content.split('\n').find(line => line.trim()) ?? '',
+        body: markdownPlainText(content.split('\n').find(line => line.trim()) ?? ''),
         timeLabel: relativeTime(notification.updatedAt),
         timestamp: notification.updatedAt,
         read: Boolean(notification.readAt),
@@ -669,7 +670,7 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
       kind: comment ? 'comment' : event ? activityKind(event) : notificationKind(notification),
       identifier: issue.identifier,
       title: issue.title,
-      body: withOccurrence(comment ? `${notification.actor.displayName} commented: ${comment.body}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
+      body: withOccurrence(comment ? `${notification.actor.displayName} commented: ${markdownPlainText(comment.body)}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
       timeLabel: relativeTime(notification.updatedAt),
       timestamp: notification.updatedAt,
       read: Boolean(notification.readAt),

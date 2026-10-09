@@ -7,6 +7,8 @@ import { Check, PenSquare } from 'lucide-react'
 
 import type { Project, User } from '@/types/flow'
 
+import { MentionTextField } from '@/components/editor/mention-text-field'
+import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { healthLabel } from './inbox-host-types'
 
 import './inbox-hosts.css'
@@ -14,6 +16,7 @@ import './inbox-hosts.css'
 export type BaseUpdateItem = {
   id: string
   body: string
+  bodyData?: Record<string, unknown>
   health: Project['health']
   createdAt: string
   editedAt?: string
@@ -143,16 +146,12 @@ export function BaseUpdateInboxView({
               ))}
             </div>
           </header>
-          <textarea
-            aria-label={entityKind === 'project' ? 'Project update' : 'Initiative update'}
+          <MentionTextField
+            ariaLabel={entityKind === 'project' ? 'Project update' : 'Initiative update'}
             autoFocus
-            onChange={event => setBody(event.target.value)}
-            onKeyDown={event => {
-              if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                event.preventDefault()
-                void submit()
-              }
-            }}
+            className="flow-inbox-host__body"
+            onChange={setBody}
+            onSubmit={() => void submit()}
             placeholder={
               entityKind === 'project'
                 ? 'Share progress, risks, and what’s next…'
@@ -210,7 +209,7 @@ export function BaseUpdateInboxView({
               <time dateTime={update.createdAt}>{formatRelative(update.createdAt)}</time>
               {update.editedAt ? <span className="flow-inbox-host__muted">Edited</span> : null}
             </header>
-            <p>{update.body}</p>
+            <MentionBody body={update.body} data={update.bodyData} />
             {typeof update.commentCount === 'number' && update.commentCount > 0 ? (
               <footer>{update.commentCount} comment{update.commentCount === 1 ? '' : 's'}</footer>
             ) : null}

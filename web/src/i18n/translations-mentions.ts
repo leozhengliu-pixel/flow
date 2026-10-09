@@ -1,0 +1,20 @@
+/** Chinese copy for the "@" mention menu and the mention chips in rich text. Fills gaps only (shared nouns keep their existing copy). */
+export const mentionsZhCN: Record<string, string> = {
+  "Mention": "提及",
+  "Keep as link": "保留为链接",
+  "People": "成员",
+  "Issues": "事项",
+  "Projects": "项目",
+  "Documents": "文档",
+  "Initiatives": "目标",
+  "Reviews": "评审",
+  "Customers": "客户",
+  "Views": "视图",
+  "Releases": "发布",
+  "Teams": "团队",
+  "Cycles": "周期",
+  "Milestones": "里程碑",
+  "Labels": "标签",
+  "No results for “@{query}”": "没有与“@{query}”匹配的结果",
+  "This item was deleted or you do not have access to it": "该内容已被删除，或你没有访问权限",
+};

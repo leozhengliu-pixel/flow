@@ -1,57 +1,90 @@
-/* Linear's Triage Intelligence card: bordered, radius 8, padding 12, subtle background. */
+/*
+ * Linear's Triage Intelligence card, measured side by side:
+ *   panel (frame)  padding 4px 4px 0, margin 0 -4px, radius 14, gradient hairline only while the footer shows
+ *   card           white, 0.5px border, radius 10, padding 4px 8px 4px 12px
+ *   header         32px, sparkle 16 + "Triage Intelligence" 12/500, hover-only "…" (24px pill)
+ *   row            82px label (12/450) + list of 24px pill rows with hover-only Apply / "…"
+ *   footer         32px (padding 4px 12.5px), 12/450 monospace text + timer / "Run again" (24px pill)
+ */
 .triage-intelligence-panel {
-  display: grid;
-  gap: 10px;
-  margin: 4px 0 16px;
-  padding: 12px;
-  border: 1px solid var(--theme-border);
-  border-radius: 8px;
-  background: var(--bg-subtle);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Linear stacks its 10px wrapper margin under the title's 8px margin (flex, no collapse): 18px to the frame. */
+  margin: 18px -4px 14px;
+  padding: 4px 4px 0;
+  border-radius: 14px;
 }
 
 .triage-intelligence-panel.is-compact {
-  gap: 8px;
   margin: 0;
-  padding: 10px 12px;
+  border-radius: 10px;
 }
 
-.triage-intelligence-panel > header,
+/* Gradient hairline (0.5px) around card + footer: a masked border-box background, like Linear. */
+.triage-intelligence-panel::before {
+  content: '';
+  position: absolute;
+  inset: -0.5px;
+  border: 0.5px solid transparent;
+  border-radius: inherit;
+  background: linear-gradient(var(--triage-ti-outer-border-top), var(--triage-ti-outer-border-bottom)) border-box;
+  -webkit-mask: linear-gradient(currentColor 0 0) padding-box, linear-gradient(currentColor 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(currentColor 0 0) padding-box exclude, linear-gradient(currentColor 0 0) exclude;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+
+.triage-intelligence-panel.has-footer::before {
+  opacity: 1;
+}
+
+.triage-intelligence-card {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 8px 4px 12px;
+  border: 0.5px solid var(--triage-card-border);
+  border-radius: 10px;
+  color: var(--triage-ti-action-fg);
+  background: var(--triage-card-bg);
+}
+
+.triage-intelligence-card > header,
 .triage-intelligence-title,
 .triage-intelligence-row,
 .triage-intelligence-related-row,
 .triage-intelligence-row-actions,
 .triage-intelligence-chips,
 .triage-intelligence-chip,
-.triage-intelligence-empty,
+.triage-intelligence-footer,
 .triage-intelligence-popover-actions {
   display: flex;
   align-items: center;
 }
 
-.triage-intelligence-panel > header {
+.triage-intelligence-card > header {
   justify-content: space-between;
-  min-height: 20px;
+  gap: 6px;
+  height: 32px;
 }
 
 .triage-intelligence-title {
   gap: 6px;
   min-width: 0;
+  height: 32px;
   color: var(--theme-text-primary);
-  font-size: 13px;
+  font: 500 12px/normal var(--font);
 }
 
-.triage-intelligence-title strong {
-  font-weight: 500;
-}
-
-.triage-intelligence-title svg {
+.triage-intelligence-title > svg {
   flex: none;
-  color: var(--theme-text-secondary);
+  color: var(--triage-ti-label);
 }
 
 .triage-intelligence-shimmer {
   color: transparent;
-  font-weight: 500;
   background: linear-gradient(90deg, var(--theme-text-tertiary) 0%, var(--theme-text-primary) 50%, var(--theme-text-tertiary) 100%) 0 0 / 200% 100%;
   background-clip: text;
   -webkit-background-clip: text;
@@ -61,20 +94,16 @@
 .triage-intelligence-menu-trigger,
 .triage-intelligence-icon-button {
   display: grid;
+  flex: none;
   place-items: center;
   width: 24px;
   height: 24px;
   padding: 0;
-  border: 0;
-  border-radius: 5px;
-  color: var(--theme-text-tertiary);
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
+  color: var(--triage-ti-label);
   background: transparent;
   cursor: pointer;
-}
-
-.triage-intelligence-icon-button {
-  width: 22px;
-  height: 22px;
 }
 
 .triage-intelligence-menu-trigger {
@@ -91,14 +120,18 @@
 
 .triage-intelligence-menu-trigger:hover,
 .triage-intelligence-menu-trigger[data-state='open'],
-.triage-intelligence-icon-button:hover {
+.triage-intelligence-icon-button:hover,
+.triage-intelligence-icon-button[data-state='open'] {
   color: var(--theme-text-primary);
-  background: var(--theme-control-hover);
+  background: var(--triage-ti-hover-bg);
 }
 
 .triage-intelligence-menu-trigger:focus-visible,
 .triage-intelligence-icon-button:focus-visible,
 .triage-intelligence-small-button:focus-visible,
+.triage-intelligence-run-again:focus-visible,
+.triage-intelligence-show-more:focus-visible,
+.triage-intelligence-issue-chip:focus-visible,
 .triage-intelligence-chip:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -108,74 +141,55 @@
   min-width: 200px;
 }
 
-.triage-intelligence-small-button {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--theme-border);
-  border-radius: 6px;
-  color: var(--theme-text-primary);
-  background: var(--theme-control);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.triage-intelligence-small-button:hover {
-  background: var(--theme-control-hover);
-}
-
+.triage-intelligence-icon-button:disabled,
 .triage-intelligence-small-button:disabled,
-.triage-intelligence-icon-button:disabled {
+.triage-intelligence-run-again:disabled {
   cursor: default;
   opacity: 0.5;
 }
 
-.triage-intelligence-empty {
-  gap: 10px;
-  color: var(--theme-text-secondary);
-  font-size: 13px;
-}
-
-.triage-intelligence-loader {
-  flex: none;
-  color: var(--theme-text-secondary);
-}
-
-.triage-intelligence-generating {
-  display: flex;
+/* Pills used for Apply / Run again / Show more. */
+.triage-intelligence-small-button,
+.triage-intelligence-run-again,
+.triage-intelligence-show-more {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--theme-text-tertiary);
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.triage-intelligence-elapsed {
   flex: none;
-  font-variant-numeric: tabular-nums;
+  height: 24px;
+  padding: 0 8px;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
+  color: var(--triage-ti-action-fg);
+  background: transparent;
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.triage-intelligence-body {
-  display: grid;
-  gap: 6px;
+.triage-intelligence-small-button:hover,
+.triage-intelligence-run-again:hover,
+.triage-intelligence-show-more:hover {
+  color: var(--theme-text-primary);
+  background: var(--triage-ti-hover-bg);
 }
 
+/* Rows. */
 .triage-intelligence-row {
   align-items: flex-start;
-  gap: 12px;
   min-width: 0;
 }
 
 .triage-intelligence-row-label {
+  display: flex;
   flex: none;
-  width: 88px;
-  padding-top: 4px;
-  color: var(--theme-text-secondary);
-  font-size: 13px;
-  line-height: 18px;
+  align-items: center;
+  box-sizing: border-box;
+  width: 82px;
+  height: 32px;
+  padding-right: 6px;
+  color: var(--triage-ti-label);
+  font: 450 12px/normal var(--font);
+  white-space: nowrap;
 }
 
 .triage-intelligence-chips {
@@ -183,8 +197,123 @@
   flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
+  padding: 4px 0;
 }
 
+.triage-intelligence-related-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.triage-intelligence-related-row {
+  gap: 4px;
+  min-width: 0;
+  height: 24px;
+}
+
+.triage-intelligence-issue-chip {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  box-sizing: border-box;
+  min-width: 0;
+  height: 24px;
+  padding: 3.5px 5.5px 3.5px 3.5px;
+  border: 0.5px solid transparent;
+  border-radius: 9999px;
+  color: var(--theme-text-primary);
+  font: 450 12px/normal var(--font);
+  text-decoration: none;
+}
+
+.triage-intelligence-issue-chip:hover {
+  background: var(--triage-ti-hover-bg);
+}
+
+.triage-intelligence-issue-chip > svg {
+  flex: none;
+  margin-right: 6px;
+}
+
+.triage-intelligence-issue-id {
+  flex: none;
+  margin-right: 4px;
+  color: var(--triage-ti-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.triage-intelligence-issue-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triage-intelligence-row-actions {
+  flex: none;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.triage-intelligence-related-row:hover .triage-intelligence-row-actions,
+.triage-intelligence-related-row:focus-within .triage-intelligence-row-actions,
+.triage-intelligence-row-actions:has([data-state='open']) {
+  opacity: 1;
+}
+
+.triage-intelligence-show-more {
+  align-self: flex-start;
+  gap: 6px;
+  padding: 0 8px 0 6px;
+  color: var(--triage-ti-label);
+}
+
+/* Footer (progress line, error, empty): monospace text on the frame, outside the white card. */
+.triage-intelligence-footer {
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 4px 12.5px;
+}
+
+.triage-intelligence-footer-text {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--triage-ti-muted);
+  font: 450 12px/normal "Berkeley Mono", "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triage-intelligence-footer[data-kind='pending'] .triage-intelligence-footer-text {
+  color: var(--triage-ti-label);
+}
+
+.triage-intelligence-elapsed {
+  flex: none;
+  color: var(--triage-ti-label);
+  font: 450 12px/normal "Berkeley Mono", "SFMono Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.triage-intelligence-run-again {
+  justify-content: center;
+  padding: 0 8px 0 6px;
+}
+
+.triage-intelligence-run-again > svg {
+  flex: none;
+  margin-right: 6px;
+  color: var(--triage-ti-muted);
+}
+
+/* Property chips. */
 .triage-intelligence-chip {
   max-width: 240px;
   height: 26px;
@@ -201,7 +330,7 @@
 
 .triage-intelligence-chip:hover,
 .triage-intelligence-chip[data-state='open'] {
-  background: var(--theme-control-hover);
+  background: var(--triage-ti-hover-bg);
 }
 
 .triage-intelligence-chip > span:last-child {
@@ -252,81 +381,62 @@
   border-radius: 50%;
 }
 
-.triage-intelligence-related-list {
-  display: grid;
-  flex: 1;
-  gap: 2px;
-  min-width: 0;
-}
-
-.triage-intelligence-related-row {
-  gap: 8px;
-  min-width: 0;
-  min-height: 26px;
-}
-
-.triage-intelligence-issue-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 26px;
-  padding: 0 8px 0 6px;
-  border-radius: 6px;
-  color: var(--theme-text-primary);
-  font-size: 13px;
-  text-decoration: none;
-}
-
-.triage-intelligence-issue-chip:hover {
-  background: var(--theme-control-hover);
-}
-
-.triage-intelligence-issue-chip > svg {
-  flex: none;
-}
-
-.triage-intelligence-issue-id {
-  flex: none;
-  color: var(--theme-text-secondary);
-}
-
-.triage-intelligence-issue-title {
-  min-width: 0;
-  overflow: hidden;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.triage-intelligence-row-actions {
-  flex: none;
-  gap: 2px;
-  margin-left: auto;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.triage-intelligence-related-row:hover .triage-intelligence-row-actions,
-.triage-intelligence-related-row:focus-within .triage-intelligence-row-actions {
-  opacity: 1;
-}
-
-/* Chip hover card. */
+/* Hover cards (property chips and suggested issues): 321px, 0.5px border, radius 12. */
 .triage-intelligence-popover {
   z-index: 80;
-  width: min(330px, calc(100vw - 32px));
-  padding: 12px;
-  border: 1px solid var(--popover-border);
-  border-radius: 8px;
-  color: var(--theme-text-primary);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  gap: 12px;
+  width: min(321px, calc(100vw - 32px));
+  padding: 8px 10px 10px;
+  border: 0.5px solid var(--triage-card-border);
+  border-radius: 12px;
+  color: var(--triage-ti-action-fg);
   background: var(--theme-surface-2);
-  box-shadow: var(--menu-shadow);
+  box-shadow: var(--triage-ti-popover-shadow);
+  font: 450 11px/16.5px var(--font);
 }
 
 .triage-intelligence-popover-target {
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--theme-border);
+  padding: 2px 0 12px;
+  border-bottom: 0.5px solid var(--triage-card-border);
+}
+
+.triage-intelligence-issue-card__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 0 12px;
+  border-bottom: 0.5px solid var(--triage-card-border);
+}
+
+.triage-intelligence-issue-card__created {
+  color: var(--triage-ti-label);
+}
+
+.triage-intelligence-issue-card__title {
+  color: var(--triage-ti-action-fg);
+  font: 500 12px/normal var(--font);
+}
+
+.triage-intelligence-issue-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-top: 2px;
+  color: var(--triage-ti-label);
+  font: 450 12px/normal var(--font);
+}
+
+.triage-intelligence-issue-card__meta > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.triage-intelligence-issue-card__meta > span:first-child {
+  color: var(--triage-ti-action-fg);
 }
 
 .triage-intelligence-entity {
@@ -354,7 +464,7 @@
 
 .triage-intelligence-entity > div > span {
   overflow: hidden;
-  color: var(--theme-text-secondary);
+  color: var(--triage-ti-label);
   font-size: 12px;
   text-overflow: ellipsis;
 }
@@ -378,69 +488,89 @@
   gap: 5px;
 }
 
+.triage-intelligence-popover-why {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 6px;
+}
+
 .triage-intelligence-popover h4 {
-  margin: 12px 0 6px;
-  color: var(--theme-text-primary);
-  font-size: 13px;
-  font-weight: 500;
+  margin: 2px 0 4px;
+  color: var(--triage-ti-action-fg);
+  font: 500 12px/normal var(--font);
 }
 
 .triage-intelligence-popover ul {
-  display: grid;
-  gap: 5px;
   margin: 0;
-  padding-left: 18px;
+  padding: 0 0 0 14px;
   list-style: disc;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
+  color: var(--triage-ti-label);
+  font: 450 13px/20px var(--font);
+}
+
+.triage-intelligence-popover li {
+  padding: 4px 0 2px;
 }
 
 .triage-intelligence-popover p {
   margin: 0;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
+  color: var(--triage-ti-label);
+  font: 450 13px/20px var(--font);
 }
 
 .triage-intelligence-popover-actions {
   gap: 6px;
-  margin-top: 12px;
+  margin-top: 2px;
 }
 
 .triage-intelligence-popover-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 30px;
-  border: 1px solid var(--theme-border-strong);
-  border-radius: 6px;
-  color: var(--theme-text-primary);
-  background: var(--theme-control);
-  font-size: 12px;
-  font-weight: 500;
+  box-sizing: border-box;
+  height: 28px;
+  border: 0.5px solid var(--triage-card-border);
+  border-radius: 9999px;
+  color: var(--triage-ti-action-fg);
+  background: var(--triage-card-bg);
+  font: 500 12px/normal var(--font);
   cursor: pointer;
 }
 
 .triage-intelligence-popover-actions button:first-child {
   flex: 1;
   gap: 6px;
+  padding: 0 8px 0 6px;
+}
+
+.triage-intelligence-popover-actions button:first-child > svg {
+  margin-right: 0;
+  color: var(--triage-ti-label);
 }
 
 .triage-intelligence-popover-actions button:last-child {
   flex: none;
-  width: 30px;
-  color: var(--theme-text-secondary);
+  width: 24px;
+  padding: 0 2px;
+  border-color: transparent;
+  color: var(--triage-ti-label);
+  background: transparent;
 }
 
 .triage-intelligence-popover-actions button:hover {
   color: var(--theme-text-primary);
-  background: var(--theme-control-hover);
+  background: var(--triage-ti-hover-bg);
 }
 
 .triage-intelligence-popover-actions button:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+.triage-intelligence-popover-actions button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 /* "Show thinking…" dialog. */
@@ -510,24 +640,8 @@ ul.triage-intelligence-thinking-text {
   .triage-intelligence-shimmer {
     animation: none;
   }
-}
 
-/* Linear's card: white, 0.5px border, radius 10, gradient title, monospace "No suggestions found" footer. */
-.triage-intelligence-panel:not(.is-compact) { border: 0.5px solid var(--triage-card-border); border-radius: 10px; background: var(--triage-card-bg); }
-.triage-intelligence-title { font-size: 12px; }
-.triage-intelligence-gradient { color: transparent; background: var(--triage-ti-gradient); background-clip: text; -webkit-background-clip: text; font-size: 12px; font-weight: 500; }
-.triage-intelligence-empty { justify-content: space-between; color: var(--triage-ti-muted); font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.triage-intelligence-generating { color: var(--triage-ti-muted); font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
-.triage-intelligence-run-again { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); font: 500 12px var(--font); cursor: pointer; }
-.triage-intelligence-run-again:hover { background: var(--theme-control-hover); color: var(--theme-text-primary); }
-.triage-intelligence-run-again:disabled { opacity: 0.5; cursor: default; }
-.triage-intelligence-run-again:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
-.triage-intelligence-relation-pill { width: auto; min-width: 0; height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border: 0.5px solid var(--triage-card-border); border-radius: 9999px; font-size: 12px; line-height: 16px; white-space: nowrap; }
-.triage-intelligence-related-row .triage-intelligence-small-button { opacity: 0; transition: opacity 120ms ease; }
-.triage-intelligence-related-row:hover .triage-intelligence-small-button,
-.triage-intelligence-related-row:focus-within .triage-intelligence-small-button { opacity: 1; }
-.triage-intelligence-issue-card { width: 321px; display: flex; flex-direction: column; gap: 6px; }
-.triage-intelligence-issue-card__created { color: var(--theme-text-tertiary); font-size: 12px; }
-.triage-intelligence-issue-card__title { color: var(--theme-text-primary); font-size: 13px; font-weight: 500; line-height: 18px; }
-.triage-intelligence-issue-card__meta { display: inline-flex; align-items: center; gap: 5px; color: var(--theme-text-secondary); font-size: 12px; }
-.triage-intelligence-issue-card__meta i { color: var(--theme-text-tertiary); font-style: normal; }
+  .triage-intelligence-panel::before {
+    transition: none;
+  }
+}

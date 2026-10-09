@@ -4,8 +4,11 @@
  */
 import { useState } from 'react'
 import { Send, X } from 'lucide-react'
+import './initiative-mention-fields.css'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { Avatar } from '@/components/issue/issue-row'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { RichComment } from '@/components/activity/rich-comment'
 import { SelectControl } from '@/components/ui/select-control'
 import type { Initiative, InitiativeMutationInput, InitiativeUpdate, Project, User } from '@/types/flow'
 function healthLabel(value: Project['health']) {
@@ -95,12 +98,13 @@ export function UpdatesFloatingPanel({
                 ]}
               />
             </div>
-            <textarea
+            <MentionTextField
               autoFocus
-              aria-label="Initiative update"
+              ariaLabel="Initiative update"
               placeholder="Write an initiative update…"
               value={body}
-              onChange={event => setBody(event.target.value)}
+              onChange={setBody}
+              onSubmit={() => void submit()}
             />
             <footer>
               <button onClick={() => setComposing(false)} type="button">
@@ -144,7 +148,7 @@ export function UpdatesFloatingPanel({
                   <span className={`li-update-health is-${update.health}`} />
                   {healthLabel(update.health)}
                 </header>
-                <p data-i18n-ignore>{update.body}</p>
+                <div className="li-rich-text" data-i18n-ignore><RichComment body={update.body} data={update.bodyData} /></div>
               </article>
             ))}
           </div>

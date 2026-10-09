@@ -18,6 +18,7 @@ import { customerPath, issuePath, projectPath } from '@/lib/app-routes'
 import type { BootstrapData, Customer, CustomerRequest, Issue, Project } from '@/types/flow'
 import { CustomerNeedComposer } from './customer-need-composer'
 import { CustomerLogo } from '@/components/customer/customer-logo'
+import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { ChevronRightSmallIcon, CreateIssueIcon, CustomerDefaultLogoIcon, CustomerPageEmptyIcon, EditPencilIcon, ImportantIcon, IssueCircleIcon, LinkIcon, MoveToIcon, NotImportantIcon, RequestDetailsIcon, ArchiveBoxIcon } from './customer-page-icons'
 import { customerRequestIssueState, customerRequestIssueTeam, fullTimestamp, groupHasDetails, groupHasImportant, isImportant, longRelativeTime, orderCustomerNeedGroups, passesCompletedWindow, sectionCustomerNeedGroups, shortRelativeTime, type CustomerNeedGroup, type CustomerPageViewPreferences } from './customer-page-model'
 import { CustomerPageViewOptions } from './customer-page-view-options'
@@ -266,7 +267,7 @@ function NeedDetail({ data, customer, group, need, editing, onEdit, onCloseEdit,
     </div>
     {editing
       ? <CustomerNeedComposer className="customer-need__inline-form" data={data} customer={customer} mode="edit" request={need} onClose={onCloseEdit} onSaved={() => onReload(need.issueId ? [need.issueId] : undefined)}/>
-      : need.body.trim() && <div className="customer-need-detail__body" onDoubleClick={onEdit} data-i18n-ignore>{need.body}</div>}
+      : need.body.trim() && <div className="customer-need-detail__body" onDoubleClick={onEdit}><MentionBody body={need.body}/></div>}
     {need.attachments.length > 0 && <div className="customer-need-detail__files">
       {need.attachments.map(attachment => <span key={attachment.id}>
         <a href={attachment.url} target="_blank" rel="noreferrer"><Paperclip size={12} aria-hidden="true"/><span data-i18n-ignore>{attachment.title}</span></a>

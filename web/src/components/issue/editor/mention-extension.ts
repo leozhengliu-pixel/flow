@@ -1,15 +1,28 @@
 import { Node, createInlineMarkdownSpec, mergeAttributes } from '@tiptap/core'
+import { mentionMarkdown, mentionText } from '@/components/editor/mentions/mention-model'
 
-const mentionMarkdown = createInlineMarkdownSpec({
+const mentionShortcode = createInlineMarkdownSpec({
   nodeName: 'mention',
   selfClosing: true,
   allowedAttributes: ['id', 'label', 'href', 'title', 'mentionType'],
 })
 
+function mentionAttributes(node: HTMLElement) {
+  return {
+    id: node.getAttribute('data-flow-mention') ?? '',
+    label: node.getAttribute('data-mention-label') ?? node.textContent?.replace(/^@/, '') ?? '',
+    href: node.getAttribute('data-mention-href') ?? '',
+    title: node.getAttribute('data-mention-title') ?? '',
+    mentionType: node.getAttribute('data-mention-type') ?? 'user',
+  }
+}
+
 /**
- * Inline mentions are stored as an atom so identity survives markdown
- * projections and collaborative Yjs updates. User mentions keep @name;
- * issue/entity mentions (LS-0407) carry href/title when hydrated from URLs.
+ * The inline reference node every rich-text surface shares (people, issues, projects, documents, …): an atom, so
+ * identity survives markdown projections and collaborative Yjs updates. `mentionType` names the resource kind and
+ * `href` its in-app path. Markdown carries people as `@name` and every other resource as `[label](path)`, which
+ * `convertMentionLinks` turns back into a mention wherever markdown is loaded; plain text carries the label.
+ * This is the schema only: the React editors extend it with the chip view (`MentionChipNode`).
  */
 export const MentionExtension = Node.create({
   name: 'mention',
@@ -17,6 +30,7 @@ export const MentionExtension = Node.create({
   group: 'inline',
   atom: true,
   selectable: false,
+  draggable: true,
   addAttributes() {
     return {
       id: { default: '' },
@@ -27,48 +41,32 @@ export const MentionExtension = Node.create({
     }
   },
   parseHTML() {
-    return [{
-      tag: 'span[data-flow-mention]',
-      getAttrs: (node) => {
-        if (!(node instanceof HTMLElement)) return false
-        return {
-          id: node.getAttribute('data-flow-mention') ?? '',
-          label: node.getAttribute('data-mention-label') ?? node.textContent?.replace(/^@/, '') ?? '',
-          href: node.getAttribute('data-mention-href') ?? '',
-          title: node.getAttribute('data-mention-title') ?? '',
-          mentionType: node.getAttribute('data-mention-type') ?? 'user',
-        }
-      },
-    }]
+    return [
+      { tag: 'span[data-flow-mention]', getAttrs: node => node instanceof HTMLElement ? mentionAttributes(node) : false },
+      { tag: 'a[data-flow-mention]', priority: 60, getAttrs: node => node instanceof HTMLElement ? mentionAttributes(node) : false },
+    ]
   },
   renderHTML({ HTMLAttributes }) {
     const label = typeof HTMLAttributes.label === 'string' ? HTMLAttributes.label : ''
     const mentionType = typeof HTMLAttributes.mentionType === 'string' ? HTMLAttributes.mentionType : 'user'
-    const prefix = mentionType === 'user' ? '@' : ''
-    return [
-      'span',
-      mergeAttributes(HTMLAttributes, {
-        'data-flow-mention': HTMLAttributes.id ?? '',
-        'data-mention-label': label,
-        'data-mention-href': HTMLAttributes.href ?? '',
-        'data-mention-title': HTMLAttributes.title ?? '',
-        'data-mention-type': mentionType,
-        class: mentionType === 'issue' ? 'flow-mention flow-mention--issue' : 'flow-mention',
-      }),
-      `${prefix}${label}`,
-    ]
+    const href = typeof HTMLAttributes.href === 'string' ? HTMLAttributes.href : ''
+    const attributes = mergeAttributes(HTMLAttributes, {
+      'data-flow-mention': HTMLAttributes.id ?? '',
+      'data-mention-label': label,
+      'data-mention-href': href,
+      'data-mention-title': HTMLAttributes.title ?? '',
+      'data-mention-type': mentionType,
+      class: mentionType === 'issue' ? 'flow-mention flow-mention--issue' : 'flow-mention',
+    })
+    // Pasted into another app a resource reads as a link; people stay @name text.
+    if (mentionType !== 'user' && href) return ['a', mergeAttributes(attributes, { href }), label]
+    return ['span', attributes, `${mentionType === 'user' ? '@' : ''}${label}`]
   },
   renderText({ node }) {
-    const mentionType = String(node.attrs.mentionType ?? 'user')
-    const label = String(node.attrs.label ?? '')
-    return mentionType === 'user' ? `@${label}` : label
+    return mentionText(node.attrs)
   },
-  markdownTokenName: mentionMarkdown.markdownTokenizer.name,
-  parseMarkdown: mentionMarkdown.parseMarkdown,
-  markdownTokenizer: mentionMarkdown.markdownTokenizer,
-  renderMarkdown: (node) => {
-    const mentionType = String(node.attrs?.mentionType ?? 'user')
-    const label = String(node.attrs?.label ?? '')
-    return mentionType === 'user' ? `@${label}` : label
-  },
+  markdownTokenName: mentionShortcode.markdownTokenizer.name,
+  parseMarkdown: mentionShortcode.parseMarkdown,
+  markdownTokenizer: mentionShortcode.markdownTokenizer,
+  renderMarkdown: node => mentionMarkdown(node.attrs ?? {}),
 })

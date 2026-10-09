@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   EmbeddedCustomerNeedForm,
   importantFromPriority,
@@ -9,6 +9,9 @@ import {
 import type { BootstrapData, CustomerRequest } from '@/types/flow'
 import { I18nProvider } from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { makeBootstrap } from '@/test/fixtures'
+import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 
 const createCustomerRequest = vi.fn()
 const updateCustomerRequest = vi.fn()
@@ -17,6 +20,10 @@ const confirmAction = vi.fn()
 const toastError = vi.fn()
 
 vi.mock('@/lib/api', () => ({
+  fetchIssueRecord: vi.fn(),
+  listProjectRecords: vi.fn(),
+  listIssueRecords: vi.fn().mockResolvedValue({ items: [], hasMore: false, total: 0 }),
+  realtimeClientId: () => 'need-form-test',
   createCustomerRequest: (...args: unknown[]) => createCustomerRequest(...args),
   updateCustomerRequest: (...args: unknown[]) => updateCustomerRequest(...args),
   uploadCustomerRequestAttachment: (...args: unknown[]) => uploadCustomerRequestAttachment(...args),
@@ -35,22 +42,24 @@ const data = {
 const created = { id: 'r1', customerId: 'c1', body: 'Need', source: 'manual', attachments: [], createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z' }
 
 function renderForm(props: Partial<Parameters<typeof EmbeddedCustomerNeedForm>[0]> = {}) {
-  return render(<I18nProvider><TooltipProvider><EmbeddedCustomerNeedForm data={data} host="issuePage" issueId="issue-1" {...props}/></TooltipProvider></I18nProvider>)
+  return render(<MentionShell data={makeBootstrap()}><I18nProvider><TooltipProvider><EmbeddedCustomerNeedForm data={data} host="issuePage" issueId="issue-1" {...props}/></TooltipProvider></I18nProvider></MentionShell>)
 }
 
 describe('EmbeddedCustomerNeedForm', () => {
+  afterEach(() => { vi.unstubAllGlobals() })
   beforeEach(() => {
+    stubEditorEnvironment()
     vi.clearAllMocks()
     createCustomerRequest.mockResolvedValue(created)
     updateCustomerRequest.mockResolvedValue({ ...created, body: 'Edited' })
   })
 
-  it('renders Linear’s composer: customer button, request text, Source, attach, Cancel and Create', () => {
+  it('renders Linear’s composer: customer button, request text, Source, attach, Cancel and Create', async () => {
     renderForm({ initialCustomerId: 'c1', onCancel: vi.fn() })
     expect(screen.getByRole('button', { name: 'Search customers' })).toHaveTextContent('Acme')
-    const body = screen.getByRole('textbox', { name: 'Request' })
-    expect(body).toHaveAttribute('placeholder', 'Add request details')
-    expect(body).toHaveFocus()
+    const body = await screen.findByRole('textbox', { name: 'Request' })
+    expect(document.querySelector('[data-placeholder="Add request details"]')).not.toBeNull()
+    await waitFor(() => expect(body).toHaveFocus())
     expect(screen.getByRole('button', { name: 'Add source' })).toHaveTextContent('Source')
     expect(screen.getByRole('button', { name: 'Attach images, files, or videos' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Discard' })).toHaveTextContent('Cancel')
@@ -58,11 +67,11 @@ describe('EmbeddedCustomerNeedForm', () => {
   })
 
   it('creates the request for the picked customer with ⌘↵', async () => {
+    const user = userEvent.setup()
     const onCreated = vi.fn()
     renderForm({ initialCustomerId: 'c1', onCreated })
-    const body = screen.getByRole('textbox', { name: 'Request' })
-    fireEvent.change(body, { target: { value: '  Need SSO  ' } })
-    fireEvent.keyDown(body, { key: 'Enter', metaKey: true })
+    await user.click(await screen.findByRole('textbox', { name: 'Request' }))
+    await user.keyboard('Need SSO{Meta>}{Enter}{/Meta}')
     await waitFor(() => expect(createCustomerRequest).toHaveBeenCalledWith({
       customerId: 'c1',
       customerName: undefined,
@@ -91,8 +100,10 @@ describe('EmbeddedCustomerNeedForm', () => {
   })
 
   it('creates an Unknown customer request from text alone, for a project', async () => {
+    const user = userEvent.setup()
     renderForm({ issueId: undefined, projectId: 'project-1', host: 'projectPage' })
-    fireEvent.change(screen.getByRole('textbox', { name: 'Request' }), { target: { value: 'From a call' } })
+    await user.click(await screen.findByRole('textbox', { name: 'Request' }))
+    await user.keyboard('From a call')
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(createCustomerRequest).toHaveBeenCalledWith(expect.objectContaining({ customerId: undefined, customerName: undefined, body: 'From a call', projectId: 'project-1', issueId: undefined })))
   })
@@ -110,15 +121,18 @@ describe('EmbeddedCustomerNeedForm', () => {
   })
 
   it('discards without asking when nothing changed and asks once something was typed', async () => {
+    const user = userEvent.setup()
     const onCancel = vi.fn()
     renderForm({ initialCustomerId: 'c1', onCancel })
-    const body = screen.getByRole('textbox', { name: 'Request' })
-    fireEvent.keyDown(body, { key: 'Escape' })
+    const body = await screen.findByRole('textbox', { name: 'Request' })
+    await user.click(body)
+    await user.keyboard('{Escape}')
     await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(1))
     expect(confirmAction).not.toHaveBeenCalled()
 
     confirmAction.mockResolvedValue(false)
-    fireEvent.change(body, { target: { value: 'Draft' } })
+    await user.click(body)
+    await user.keyboard('Draft')
     fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(confirmAction).toHaveBeenCalledWith('Discard this request?', expect.objectContaining({ description: 'Confirm that you want to discard this customer request.', confirmLabel: 'Discard' })))
     expect(onCancel).toHaveBeenCalledTimes(1)
@@ -136,16 +150,38 @@ describe('EmbeddedCustomerNeedForm', () => {
   })
 
   it('edits an existing request without a customer button and saves', async () => {
+    const user = userEvent.setup()
     const onSaved = vi.fn()
     const request = { ...created, body: "Old text", sourceUrl: "" } as unknown as CustomerRequest
     renderForm({ request, onSaved, onCancel: vi.fn() })
     expect(screen.queryByRole('button', { name: 'Search customers' })).toBeNull()
-    const body = screen.getByRole('textbox', { name: 'Request' })
-    expect(body).toHaveValue('Old text')
-    fireEvent.change(body, { target: { value: 'Edited' } })
+    const body = await screen.findByRole('textbox', { name: 'Request' })
+    expect(body).toHaveTextContent('Old text')
+    await user.click(body)
+    await user.keyboard('{Control>}a{/Control}Edited')
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(updateCustomerRequest).toHaveBeenCalledWith('r1', { body: 'Edited', sourceUrl: '' }))
     expect(onSaved).toHaveBeenCalled()
+  })
+
+  it('saves a mention as a markdown link, turns a pasted Flow URL into a chip, and shows the chip when the request is edited', async () => {
+    const user = userEvent.setup()
+    const form = (props: Partial<Parameters<typeof EmbeddedCustomerNeedForm>[0]> = {}) => <MentionShell data={mentionFixture()}><I18nProvider><TooltipProvider><EmbeddedCustomerNeedForm data={data} host="issuePage" issueId="issue-1" initialCustomerId="c1" {...props}/></TooltipProvider></I18nProvider></MentionShell>
+    const first = render(form())
+    const box = await screen.findByRole('textbox', { name: 'Request' })
+    await user.click(box)
+    await user.keyboard('Needs @Launch')
+    await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
+    pasteText(box, `${window.location.origin}${mentionUrls.project}`)
+    await waitFor(() => expect(document.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one'))
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(createCustomerRequest).toHaveBeenCalledTimes(1))
+    const saved = createCustomerRequest.mock.calls[0][0].body as string
+    expect(saved).toContain('[Launch plan](/workspace/document/plan-abc)')
+    expect(saved).toContain('[Project one](/workspace/project/project-one/overview)')
+    first.unmount()
+    render(form({ request: { ...created, body: saved } as unknown as CustomerRequest, onCancel: vi.fn() }))
+    await waitFor(() => expect(document.querySelector('a[data-agent-entity="document"]')).toHaveTextContent('Launch plan'))
   })
 
   it('maps Important ↔ priority helpers', () => {

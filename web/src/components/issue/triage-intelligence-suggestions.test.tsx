@@ -157,8 +157,15 @@ describe('TriageIntelligenceSuggestions', () => {
 
     renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Finding suggestions…')
-    expect(screen.getByRole('region', { name: 'Triage Intelligence' })).toHaveAttribute('data-state', 'pending')
+    // Linear keeps the title and shows the progress line + timer in the footer outside the white card.
+    expect(await screen.findByRole('status')).toHaveTextContent('Looking at the issue…')
+    const panel = screen.getByRole('region', { name: 'Triage Intelligence' })
+    expect(panel).toHaveAttribute('data-state', 'pending')
+    expect(panel).toHaveClass('has-footer')
+    expect(screen.getByText('Triage Intelligence')).toHaveClass('triage-intelligence-shimmer')
+    expect(panel.querySelector('.triage-intelligence-footer .triage-intelligence-elapsed')).toHaveTextContent('0:00')
+    expect(panel.querySelector('.triage-intelligence-card .triage-intelligence-footer')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Run again' })).not.toBeInTheDocument()
     expect(screen.queryByText('No suggestions found')).not.toBeInTheDocument()
   })
 
@@ -169,8 +176,7 @@ describe('TriageIntelligenceSuggestions', () => {
 
     renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Finding suggestions…')
-    expect(screen.getByText('Comparing with similar issues, projects and owners…')).toBeInTheDocument()
+    expect(await screen.findByRole('status')).toHaveTextContent('Looking at the issue…')
     expect(screen.queryByText('No suggestions found')).not.toBeInTheDocument()
 
     const assignee = suggestion({ suggestedUserId: viewer.id, metadata: { rank: 1, source: 'ai' } })
@@ -178,7 +184,100 @@ describe('TriageIntelligenceSuggestions', () => {
     expect(await screen.findByRole('button', { name: 'Assign to user: Viewer' }, { timeout: 5000 })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Triage Intelligence' })).toHaveAttribute('data-state', 'ready')
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Triage Intelligence' })).not.toHaveClass('has-footer')
   }, 10000)
+
+  it('lays the empty state out like Linear: white card, footer on the frame outside it, monospace text, plain title', async () => {
+    const issue = triageIssue()
+    respond(issue.id, [])
+
+    const { container } = renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+
+    const text = await screen.findByText('No suggestions found')
+    const panel = screen.getByRole('region', { name: 'Triage Intelligence' })
+    const card = panel.querySelector('.triage-intelligence-card') as HTMLElement
+    const footer = panel.querySelector('.triage-intelligence-footer') as HTMLElement
+    expect(panel).toHaveAttribute('data-state', 'empty')
+    expect(panel).toHaveClass('has-footer')
+    expect(card.parentElement).toBe(panel)
+    expect(footer.parentElement).toBe(panel)
+    expect(card).not.toContainElement(footer)
+    expect(card).not.toContainElement(text)
+    expect(footer).toContainElement(text)
+    expect(footer).toContainElement(screen.getByRole('button', { name: 'Run again' }))
+    expect(text).toHaveClass('triage-intelligence-footer-text')
+    expect(within(card).getByText('Triage Intelligence')).toBeInTheDocument()
+    expect(container.querySelector('[class*="gradient"]')).toBeNull()
+    expect(card.querySelector('header svg')).toHaveAttribute('data-linear-glyph', 'triage')
+    expect(screen.getByRole('button', { name: 'Run again' }).querySelector('svg')).toHaveAttribute('data-linear-glyph', 'rerun')
+
+    // The CSS draws the frame hairline, white card, monospace footer text and a plain (not gradient) title.
+    const fs = await import('node:' + 'fs') as { readFileSync: (path: string, encoding: 'utf8') => string }
+    const styles = fs.readFileSync('src/components/issue/triage-intelligence-suggestions.css', 'utf8')
+    expect(styles).toMatch(/\.triage-intelligence-footer-text\s*{[^}]*font:[^;]*"Berkeley Mono"[^;]*monospace/)
+    expect(styles).toMatch(/\.triage-intelligence-card\s*{[^}]*background: var\(--triage-card-bg\)[^}]*}/)
+    expect(styles).toMatch(/\.triage-intelligence-panel::before\s*{[^}]*border-radius: inherit/)
+    expect(styles).not.toMatch(/gradient-text|background-clip: text;\s*-webkit-background-clip: text;\s*font-size/)
+    expect(styles).not.toMatch(/triage-ti-gradient/)
+  })
+
+  it('shows an error footer with Run again when the suggestions cannot be loaded', async () => {
+    const user = userEvent.setup()
+    const issue = triageIssue()
+    mocks.fetchIssueSuggestions.mockRejectedValue(new Error('boom'))
+
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+
+    expect(await screen.findByText('Error while trying to find suggestions')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Triage Intelligence' })).toHaveAttribute('data-state', 'failed')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText('No suggestions found')).not.toBeInTheDocument()
+
+    mocks.fetchIssueSuggestions.mockResolvedValue({ issueId: issue.id, suggestions: [], suggestionsGeneratedAt: GENERATED })
+    await user.click(screen.getByRole('button', { name: 'Run again' }))
+    expect(mocks.refreshIssueSuggestions).toHaveBeenCalledWith(issue.id)
+    expect(await screen.findByText('No suggestions found')).toBeInTheDocument()
+  })
+
+  it('keeps Run again disabled while a run is in flight', async () => {
+    const user = userEvent.setup()
+    const issue = triageIssue()
+    respond(issue.id, [])
+    let finish: (value: unknown) => void = () => {}
+    mocks.refreshIssueSuggestions.mockReturnValue(new Promise(resolve => { finish = resolve }))
+
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+    await user.click(await screen.findByRole('button', { name: 'Run again' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Looking at the issue…')
+    expect(screen.queryByRole('button', { name: 'Run again' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Triage Intelligence options' }))
+    expect(await screen.findByRole('menuitem', { name: 'Run again' })).toHaveAttribute('aria-disabled', 'true')
+    finish([])
+  })
+
+  it('orders property chips before relation rows and folds long relation lists behind Show N more', async () => {
+    const user = userEvent.setup()
+    const issue = triageIssue({ suggestionsGeneratedAt: GENERATED })
+    const others = Array.from({ length: 6 }, (_, index) => makeIssue({ id: `issue-other-${index}`, identifier: `TST-${30 + index}`, title: `Related ${index}` }))
+    const suggestions = [
+      suggestion({ id: 'chip', suggestedUserId: viewer.id, metadata: { rank: 1 } }),
+      ...others.map((other, index) => suggestion({ id: `rel-${index}`, type: 'relatedIssue', suggestedIssueId: other.id, metadata: { rank: 2 + index } })),
+    ]
+    respond(issue.id, suggestions)
+
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue, ...others])} />)
+
+    const chip = await screen.findByRole('button', { name: 'Assign to user: Viewer' })
+    const first = await screen.findByText('Related 0')
+    expect(chip.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Triage Intelligence' })).not.toHaveClass('has-footer')
+    expect(screen.queryByText('Related 4')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show 2 more' }))
+    expect(screen.getByText('Related 5')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Show less' }))
+    expect(screen.queryByText('Related 5')).not.toBeInTheDocument()
+  })
 
   it('shows the empty state and runs again', async () => {
     const user = userEvent.setup()

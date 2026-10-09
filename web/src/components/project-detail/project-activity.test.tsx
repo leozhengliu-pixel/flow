@@ -1,16 +1,21 @@
 import type { ComponentProps } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, project, viewer } from '@/test/fixtures'
+import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import type { AuditLogEntry, Comment, ProjectUpdate } from '@/types/flow'
 import { ProjectActivity, projectUpdateChanges } from './project-activity'
 
 const apiMocks = vi.hoisted(() => ({
   listProjectHistory: vi.fn(async () => ({ nodes: [] as unknown[], nextCursor: '', total: 0 })),
   deleteDraft: vi.fn(async () => undefined),
+  fetchIssueRecord: vi.fn(),
+  listProjectRecords: vi.fn(),
+  listIssueRecords: vi.fn(async () => ({ items: [], hasMore: false, total: 0 })),
   uploadProjectCommentAttachment: vi.fn(async (_projectId: string, file: File) => ({ id: 'media-1', title: file.name, url: `/uploads/media-1_${file.name}`, contentType: file.type, size: file.size, createdAt: '2026-09-27T12:00:00.000Z' })),
 }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...apiMocks }))
@@ -446,5 +451,56 @@ describe('ProjectActivity comment cards', () => {
     expect(pill).toHaveAttribute('aria-pressed', 'true')
     await user.click(pill)
     expect(props.onReactProjectComment).toHaveBeenCalledWith(props.project.id, root.id, '👍')
+  })
+})
+
+describe('ProjectActivity mentions in update edits and update comments', () => {
+  const projectUpdate = (props: ReturnType<typeof activityProps>, body: string): ProjectUpdate => ({ id: 'update-1', projectId: props.project.id, body, health: 'onTrack', createdAt: new Date().toISOString(), user: props.viewer, comments: [], reactions: {}, attachments: [] })
+  beforeEach(() => { stubEditorEnvironment() })
+  afterEach(() => { vi.unstubAllGlobals() })
+
+  it('edits a project update in the dialog with a mention and keeps the chip when the dialog is reopened', async () => {
+    const user = userEvent.setup()
+    const data = mentionFixture()
+    const props = { ...activityProps(), documents: data.documents, users: data.users }
+    const onUpdateProjectUpdate = vi.fn(async () => ({}) as never)
+    const saved = projectUpdate(props, 'Status: [Launch plan](/workspace/document/plan-abc)')
+    render(<MentionShell data={data}><ProjectActivity {...props} onUpdateProjectUpdate={onUpdateProjectUpdate} projectUpdates={[saved]}/></MentionShell>)
+
+    await user.click(screen.getByRole('button', { name: 'Open update menu' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+    const box = within(dialog).getByRole('textbox', { name: 'Edit project update' })
+    await waitFor(() => expect(box.querySelector('a[data-agent-entity="document"]')).toHaveTextContent('Launch plan'))
+    await waitFor(() => expect(box).toHaveFocus())
+    // The dialog is modal (the page behind it is inert), so the "@" option is picked with the keyboard.
+    await user.keyboard(' and @Road')
+    await screen.findByRole('option', { name: /Roadmap/ })
+    await user.keyboard('{Enter}')
+    pasteText(box, `${window.location.origin}${mentionUrls.project}`)
+    await waitFor(() => expect(box.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one'))
+    await user.keyboard('{Control>}{Enter}{/Control}')
+
+    await waitFor(() => expect(onUpdateProjectUpdate).toHaveBeenCalled())
+    const [, , input] = onUpdateProjectUpdate.mock.calls[0] as unknown as [string, string, { body: string }]
+    expect(input.body).toContain('[Launch plan](/workspace/document/plan-abc)')
+    expect(input.body).toContain('[Roadmap](/workspace/initiative/roadmap/overview)')
+    expect(input.body).toContain(`[Project one](${mentionUrls.project})`)
+  })
+
+  it('writes a comment on an update with a mention and posts the markdown', async () => {
+    const user = userEvent.setup()
+    const data = mentionFixture()
+    const props = { ...activityProps(), documents: data.documents, users: data.users }
+    const onCommentProjectUpdate = vi.fn(async () => ({}) as never)
+    render(<MentionShell data={data}><ProjectActivity {...props} onCommentProjectUpdate={onCommentProjectUpdate} projectUpdates={[projectUpdate(props, 'Shipped')]}/></MentionShell>)
+
+    await user.click(screen.getByRole('button', { name: '0 comments' }))
+    const box = await screen.findByRole('textbox', { name: 'Add comment' })
+    await user.click(box)
+    await user.keyboard('Plan @Launch')
+    await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
+    await user.click(within(box.closest('.project-activity__comment-box') as HTMLElement).getByRole('button', { name: 'Comment' }))
+    await waitFor(() => expect(onCommentProjectUpdate).toHaveBeenCalledWith(props.project.id, 'update-1', 'Plan [Launch plan](/workspace/document/plan-abc)'))
   })
 })

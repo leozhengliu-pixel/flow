@@ -1,5 +1,4 @@
 import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Pilcrow, Quote, Table2, Workflow } from 'lucide-react'
-import { personSearchText } from '@/lib/people'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
@@ -8,11 +7,10 @@ import { TableKit } from '@tiptap/extension-table'
 import { Markdown } from '@tiptap/markdown'
 import { Editor as CoreEditor, getSchema } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
-import type { EditorView } from '@tiptap/pm/view'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
-import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { descriptionDocumentJSON, parseDescriptionContent, sameDocument, serializeDescription, type DescriptionSnapshot } from './editor/editor-content'
 import { prosemirrorJSONToYXmlFragment, ySyncPluginKey } from '@tiptap/y-tiptap'
 import { applyUpdate, Doc as YDoc } from 'yjs'
@@ -26,8 +24,13 @@ import { DescriptionCallout } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
 import { MentionExtension } from './editor/mention-extension'
-import { createMentionHydrationExtension } from './editor/mention-hydration'
-import { EntityStoreContext } from '@/store'
+import { MentionChipNode } from '@/components/editor/mentions/mention-chip-extension'
+import { MentionLinksExtension } from '@/components/editor/mentions/mention-links-extension'
+import { insertMentionOption, type MentionOption } from '@/components/editor/mentions/mention-options'
+import { EmbedPasteNode, EmbedSchema } from '@/components/editor/embeds/embed-extension'
+import { useMentionOptions } from '@/components/editor/mentions/use-mention-options'
+import { useMentionConversion } from '@/components/editor/mentions/use-mention-conversion'
+import { useAgentEntityData } from '@/components/agent/agent-entity-data'
 import { InlineCommentMark } from './editor/inline-comment-mark'
 import { MentionMenu } from './editor/mention-menu'
 import { HeadingActions } from './editor/heading-actions'
@@ -106,9 +109,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const [menuPosition, setMenuPosition] = useState({ left: 14, top: 44 })
   const [mention, setMention] = useState<MentionState>(closedMention)
   const [mentionIndex, setMentionIndex] = useState(0)
-  const [mentionPosition, setMentionPosition] = useState({ left: 14, top: 44 })
+  const [mentionAnchor, setMentionAnchor] = useState({ left: 14, top: 44, bottom: 44 })
+  const mentionUsers = useMemo(() => mentionableUsers(users), [users])
   const mentionRef = useRef<MentionState>(closedMention)
   const mentionSelectedRef = useRef(0)
+  const mentionOptionsRef = useRef<MentionOption[]>([])
   const uploadImageRef = useRef(onInsertImage)
   uploadImageRef.current = onInsertImage
   const liveEditorRef = useRef<Editor | null>(null)
@@ -146,8 +151,11 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     persistTimerRef.current = window.setTimeout(() => void persistRef.current(), 1_500)
   }
 
-  const workspaceStore = useContext(EntityStoreContext)
-  const mentionHydration = createMentionHydrationExtension(() => workspaceStore)
+  const entityData = useAgentEntityData()
+  const entityDataRef = useRef(entityData)
+  entityDataRef.current = entityData
+  const mentionOptionList = useMentionOptions({ active: mention.active, query: mention.query, users: mentionUsers })
+  mentionOptionsRef.current = mentionOptionList
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -163,8 +171,9 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       DescriptionFile,
       DescriptionCallout,
       DescriptionDiagram,
-      MentionExtension,
-      mentionHydration,
+      EmbedPasteNode,
+      MentionChipNode,
+      MentionLinksExtension.configure({ getData: () => entityDataRef.current }),
       InlineCommentMark,
       SlashCommandExtension,
       ...(collaborationSession ? [
@@ -212,7 +221,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         const current = getSlashCommandState(view.state)
         const currentMention = getMentionState(view.state)
         if (currentMention.active && currentMention.range?.from !== dismissedMentionRef.current) {
-          const matches = matchingUsers(users, currentMention.query)
+          const matches = mentionOptionsRef.current
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault()
             if (!matches.length) return true
@@ -224,7 +233,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
           }
           if ((event.key === 'Enter' || event.key === 'Tab') && matches.length) {
             event.preventDefault()
-            insertMention(view, currentMention.range, matches[Math.min(mentionSelectedRef.current, matches.length - 1)])
+            insertMentionOption(view, currentMention.range, matches[Math.min(mentionSelectedRef.current, matches.length - 1)])
             return true
           }
           if (event.key === 'Escape') {
@@ -429,6 +438,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     editorRef?.(editor)
     return () => editorRef?.(null)
   }, [editor, editorRef])
+  // Markdown / older JSON content: its references show as mentions (display only; collaborative documents keep their stored nodes).
+  useMentionConversion(editor, `${value}\n${state ?? ''}`, !collaborationSession, !state)
   useEffect(() => {
     if (!editor) return
     editor.view.dom.setAttribute('aria-label', descriptionLabel)
@@ -467,7 +478,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   }
 
   function syncMentionState(current: NonNullable<typeof editor>) {
-    if (!users.length || !current.isFocused || !current.state.selection.empty) {
+    if ((!users.length && !entityDataRef.current) || !current.isFocused || !current.state.selection.empty) {
       mentionRef.current = closedMention
       setMention(closedMention)
       return
@@ -487,16 +498,10 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       setMentionIndex(0)
     }
     requestAnimationFrame(() => {
-      const root = rootRef.current
       const live = getMentionState(current.state)
-      if (!root || current.isDestroyed || !next.range || !live.active || live.range?.to !== next.range.to) return
+      if (current.isDestroyed || !next.range || !live.active || live.range?.to !== next.range.to) return
       const caret = current.view.coordsAtPos(next.range.to)
-      const bounds = root.getBoundingClientRect()
-      const width = 292
-      setMentionPosition({
-        left: Math.max(0, Math.min(caret.left - bounds.left, bounds.width - width)),
-        top: caret.bottom - bounds.top + 6,
-      })
+      setMentionAnchor(anchor => anchor.left === caret.left && anchor.top === caret.top && anchor.bottom === caret.bottom ? anchor : { left: caret.left, top: caret.top, bottom: caret.bottom })
     })
   }
 
@@ -518,7 +523,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       query={slash.query}
       onSelect={command => command.run()}
     />}
-    {mention.active && <MentionMenu users={matchingUsers(users, mention.query)} selectedIndex={mentionIndex} position={mentionPosition} query={mention.query} onSelect={user => insertMention(editor.view, mention.range, user)}/>}
+    {mention.active && <MentionMenu options={mentionOptionList} selectedIndex={mentionIndex} anchor={mentionAnchor} query={mention.query} onSelect={option => insertMentionOption(editor.view, mention.range, option)}/>}
   </div>
 }
 
@@ -534,6 +539,7 @@ function schemaExtensions() {
     DescriptionCallout,
     DescriptionDiagram,
     MentionExtension,
+    EmbedSchema,
     InlineCommentMark,
     SlashCommandExtension,
   ]
@@ -600,20 +606,6 @@ function getMentionState(state: EditorState): MentionState {
   return { active: true, query, range: { from, to: $from.pos } }
 }
 
-function matchingUsers(users: User[], query: string) {
-  const normalized = query.trim().toLocaleLowerCase()
-  return users.filter(user => {
-    if (!user.active || user.app && !user.appScopes?.includes('app:mentionable')) return false
-    const name = personSearchText(user).toLocaleLowerCase()
-    return !normalized || name.includes(normalized)
-  }).slice(0, 8)
-}
-
-function insertMention(view: EditorView, range: MentionState['range'], user: User) {
-  if (!range) return
-  const node = view.state.schema.nodes.mention?.create({ id: user.id, label: user.displayName || user.name })
-  if (!node) return
-  const transaction = view.state.tr.replaceWith(range.from, range.to, node)
-  transaction.insertText(' ', range.from + node.nodeSize)
-  view.dispatch(transaction)
+function mentionableUsers(users: User[]) {
+  return users.filter(user => user.active && !(user.app && !user.appScopes?.includes('app:mentionable')))
 }
