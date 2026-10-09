@@ -174,12 +174,21 @@ var agentProgressToolDefinition = agentProviderTool{
 	Access:      "read",
 }
 
+// agentReasoning is the Responses API reasoning block: summaries always, effort when configured.
+func (s *server) agentReasoning() map[string]any {
+	reasoning := map[string]any{"summary": "auto"}
+	if s.agent.ReasoningEffort != "" {
+		reasoning["effort"] = s.agent.ReasoningEffort
+	}
+	return reasoning
+}
+
 func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
 	instructions, input := responsesInput(messages)
 	payload := map[string]any{
 		"model": s.agent.Model, "instructions": instructions, "input": input, "stream": true,
 		"max_output_tokens": s.agentMaxOutputTokens(ctx), "store": false,
-		"reasoning": map[string]any{"summary": "auto"},
+		"reasoning": s.agentReasoning(),
 	}
 	if len(tools) > 0 {
 		payload["tools"] = mapTools(tools, func(tool agentProviderTool, parameters any) any {
@@ -276,6 +285,9 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 
 func (s *server) requestChatCompletions(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
 	payload := map[string]any{"model": s.agent.Model, "messages": chatMessages(messages), "stream": true, "max_tokens": s.agentMaxOutputTokens(ctx)}
+	if s.agent.ReasoningEffort != "" {
+		payload["reasoning_effort"] = s.agent.ReasoningEffort
+	}
 	if len(tools) > 0 {
 		payload["tools"] = mapTools(tools, func(tool agentProviderTool, parameters any) any {
 			return map[string]any{"type": "function", "function": map[string]any{"name": tool.Name, "description": tool.Description, "parameters": parameters}}

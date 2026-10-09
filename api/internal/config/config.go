@@ -43,6 +43,9 @@ type AgentConfig struct {
 	AnthropicVersion string
 	ToolsEnabled     bool
 	WriteTools       bool
+	// ReasoningEffort is the reasoning effort sent to OpenAI-compatible models
+	// (none|minimal|low|medium|high|xhigh); empty leaves the provider default.
+	ReasoningEffort string
 }
 
 // TTSConfig configures text-to-speech for Pulse summaries ("Listen"). It
@@ -170,6 +173,7 @@ func Load() (Config, error) {
 			BaseURL: value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1"), APIKey: secret("FLOW_AGENT_API_KEY"), Model: value("FLOW_AGENT_MODEL", "gpt-5-mini"),
 			Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second), MaxOutputTokens: integer("FLOW_AGENT_MAX_OUTPUT_TOKENS", 4096),
 			AnthropicVersion: value("FLOW_AGENT_ANTHROPIC_VERSION", "2023-06-01"), ToolsEnabled: boolean("FLOW_AGENT_TOOLS_ENABLED", true), WriteTools: boolean("FLOW_AGENT_WRITE_TOOLS", false),
+			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")),
 		},
 		TTS: TTSConfig{
 			Enabled: boolean("FLOW_TTS_ENABLED", false), BaseURL: strings.TrimRight(value("FLOW_TTS_BASE_URL", value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1")), "/"),
@@ -269,6 +273,11 @@ func (c Config) Validate() error {
 	}
 	if c.Agent.Enabled && (c.Agent.BaseURL == "" || c.Agent.Model == "") {
 		return fmt.Errorf("FLOW_AGENT_BASE_URL and FLOW_AGENT_MODEL are required when Flow Agent is enabled")
+	}
+	switch c.Agent.ReasoningEffort {
+	case "", "none", "minimal", "low", "medium", "high", "xhigh":
+	default:
+		return fmt.Errorf("FLOW_AGENT_REASONING_EFFORT must be none, minimal, low, medium, high or xhigh")
 	}
 	if c.Agent.Protocol != "openai-responses" && c.Agent.Protocol != "anthropic-messages" && c.Agent.Protocol != "openai-chat-completions" {
 		return fmt.Errorf("FLOW_AGENT_PROTOCOL must be openai-responses, anthropic-messages, or openai-chat-completions")

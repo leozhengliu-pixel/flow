@@ -155,3 +155,45 @@ func TestAgentToolInventoryRespectsWritePolicy(t *testing.T) {
 		t.Fatalf("write tools were not enabled: read=%d all=%d err=%v", len(readTools), len(allTools), err)
 	}
 }
+
+func TestAgentReasoningEffortIsSentWhenConfigured(t *testing.T) {
+	tests := []struct {
+		protocol string
+		path     string
+		body     string
+		effort   func(map[string]any) any
+	}{
+		{"openai-responses", "/responses", `{"id":"resp","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}`, func(body map[string]any) any {
+			reasoning, _ := body["reasoning"].(map[string]any)
+			if reasoning["summary"] != "auto" {
+				return "missing summary"
+			}
+			return reasoning["effort"]
+		}},
+		{"openai-chat-completions", "/chat/completions", `{"choices":[{"finish_reason":"stop","message":{"content":"ok"}}]}`, func(body map[string]any) any { return body["reasoning_effort"] }},
+	}
+	for _, test := range tests {
+		for _, effort := range []string{"", "medium"} {
+			t.Run(test.protocol+"/"+effort, func(t *testing.T) {
+				var got any
+				provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var body map[string]any
+					if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+						t.Error(err)
+					}
+					got = test.effort(body)
+					w.Header().Set("Content-Type", "application/json")
+					_, _ = w.Write([]byte(test.body))
+				}))
+				defer provider.Close()
+				s := &server{agent: appconfig.AgentConfig{Protocol: test.protocol, BaseURL: provider.URL, Model: "model", MaxOutputTokens: 100, ReasoningEffort: effort}, agentClient: provider.Client()}
+				if _, err := s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil); err != nil {
+					t.Fatal(err)
+				}
+				if effort == "" && got != nil || effort != "" && got != effort {
+					t.Fatalf("effort sent = %#v, want %q", got, effort)
+				}
+			})
+		}
+	}
+}
