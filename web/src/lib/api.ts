@@ -3002,6 +3002,10 @@ export function fetchIssueSuggestions(
   issueId: string;
   suggestionsGeneratedAt?: string;
   suggestions: IssueSuggestion[];
+  /** A generation is queued or running (first run, replacing heuristic suggestions, or after an edit). */
+  pending?: boolean;
+  source?: "ai" | "heuristic";
+  thinking?: string;
 }> {
   return request(`/api/issue-records/${issueId}/suggestions`, { signal });
 }
