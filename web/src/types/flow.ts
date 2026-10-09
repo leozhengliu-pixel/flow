@@ -969,6 +969,8 @@ export interface Loop {
   nextRunAt?: string;
   /** Runs started in the last 30 days. */
   runCount30d?: number;
+  /** What a run must produce: statusUpdate, issue, comment, document or change; ["none"] for nothing; unset infers from the instructions. */
+  expectedOutputs?: string[];
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -1061,10 +1063,26 @@ export interface LoopTemplate {
   questions?: { question: string; options: string[] }[];
 }
 /** One execution of a loop by the agent runtime. */
+/** completed: did what it was asked; needs_review: ended without the output its instructions call for (or reported unfinished work). */
+export type LoopRunStatus = "running" | "completed" | "needs_review" | "failed" | "cancelled" | "interrupted";
+/** Why a run did not complete. */
+export type LoopRunFailureReason =
+  | "cancelled"
+  | "interrupted"
+  | "timeout"
+  | "provider_timeout"
+  | "provider_error"
+  | "empty_response"
+  | "tool_error"
+  | "budget_exhausted"
+  | "no_output"
+  | "incomplete"
+  | "unavailable"
+  | "error";
 export interface LoopRun {
   id: UUID;
   loopId: UUID;
-  status: "running" | "completed" | "failed";
+  status: LoopRunStatus;
   trigger: "manual" | "schedule" | "event";
   /** "Manual run", "Scheduled run", "Triggered by DEV-14 status → Triage"… */
   triggerLabel?: string;
@@ -1100,6 +1118,15 @@ export interface LoopRun {
   feedbackCounts?: { up: number; down: number };
   /** Follow-up messages from the run page and the agent's answers. */
   replies?: LoopRunReply[];
+  failureReason?: LoopRunFailureReason;
+  /** The agent's structured final report (finish_run). */
+  summary?: { status: "done" | "incomplete" | "nothing_to_do"; summary: string; done?: string[]; notDone?: string[] };
+  /** Outputs the run was checked for, and the successful changes it made by kind. */
+  expectedOutputs?: string[];
+  produced?: Record<string, number>;
+  retries?: number;
+  cancelledBy?: UUID;
+  heartbeatAt?: string;
 }
 /** A file attached to an agent message: text files as text, images as a data URL, anything else by name only. */
 export interface AgentFileAttachment {
@@ -1116,7 +1143,8 @@ export interface LoopRunReply {
   skillIds?: string[];
   /** Files attached to the reply (their contents went to the agent, only these details are kept). */
   attachments?: { name: string; contentType: string; size: number }[];
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled" | "interrupted";
+  failureReason?: LoopRunFailureReason;
   output?: string;
   steps?: LoopRun["steps"];
   toolCalls?: LoopRun["toolCalls"];

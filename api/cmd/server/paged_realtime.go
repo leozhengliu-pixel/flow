@@ -68,6 +68,19 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		event.Payload = json.RawMessage(`{"settingsChanged":true}`)
 		return event, true, nil
 	}
+	if strings.HasPrefix(event.Type, "loop_run.") {
+		// Run progress is a small signal ({loopId, runId, status}); members
+		// refetch the run. Skip the workspace projection for it.
+		if s.authDisabled {
+			return event, true, nil
+		}
+		metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
+		if !ok {
+			return event, false, nil
+		}
+		_, status, err := s.store.WorkspaceRole(r.Context(), metadata.Workspace.ID, authUser(r).ID)
+		return event, err == nil && status == "active", err
+	}
 	data, query, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
 		return event, false, err

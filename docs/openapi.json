@@ -9601,6 +9601,82 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/loops/{id}/runs/{runId}/cancel": {
+      "post": {
+        "operationId": "post_loops_id_runs_runId_cancel",
+        "tags": [
+          "loops"
+        ],
+        "summary": "POST /api/loops/{id}/runs/{runId}/cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/loops/{id}/runs/{runId}/events": {
+      "get": {
+        "operationId": "get_loops_id_runs_runId_events",
+        "tags": [
+          "loops"
+        ],
+        "summary": "GET /api/loops/{id}/runs/{runId}/events",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/loops/{id}/runs/{runId}/feedback": {
       "post": {
         "operationId": "post_loops_id_runs_runId_feedback",

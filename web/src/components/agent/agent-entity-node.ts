@@ -6,10 +6,10 @@ import { AgentEntityChipView } from './agent-entity-chip'
 const entityMarkdown = createInlineMarkdownSpec({
   nodeName: AGENT_ENTITY_NODE,
   selfClosing: true,
-  allowedAttributes: ['kind', 'id', 'label'],
+  allowedAttributes: ['kind', 'id', 'label', 'href'],
 })
 
-/** Read-only inline atom for issue / project references in agent answers (`[agentEntity kind="issue" id="…" label="…"]`). */
+/** Read-only inline atom for resource references in agent answers (`[agentEntity kind="issue" id="…" label="…"]`). */
 export const AgentEntityNode = Node.create({
   name: AGENT_ENTITY_NODE,
   inline: true,
@@ -21,6 +21,7 @@ export const AgentEntityNode = Node.create({
       kind: { default: 'issue' },
       id: { default: '' },
       label: { default: '' },
+      href: { default: '' },
     }
   },
   parseHTML() {

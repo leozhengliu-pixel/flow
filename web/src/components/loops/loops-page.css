@@ -806,6 +806,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-status.is-completed { color: var(--semantic-success); }
 .loops-run-status.is-failed { color: var(--priority-high); }
 .loops-run-status.is-running { color: var(--accent-primary); }
+.loops-run-status.is-review { color: var(--priority-medium); }
+.loops-run-status.is-stopped { color: var(--theme-text-tertiary); }
 .loops-run-detail { min-width: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .loops-run-scroll { min-height: 0; flex: 1; overflow: auto; }
 /* Linear's ↓/↑ run navigation: two half-pill buttons in one group. */
@@ -844,6 +846,8 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 .loops-run-header h1 { margin: 0; color: var(--theme-text-primary); font: 600 15px/23px var(--font); }
 .loops-run-edit { height: 24px; flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 0 8px 0 6px; border: 0.5px solid transparent; border-radius: 9999px; background: var(--theme-control); color: var(--theme-text-primary); font: 500 12px var(--font); cursor: pointer; }
 .loops-run-edit:hover { background: var(--theme-control-hover); }
+.loops-run-edit:disabled { opacity: .6; cursor: default; }
+.loops-run-header-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .loops-run-subtitle { display: flex; align-items: center; gap: 6px; margin: 4px 0 16px; color: var(--theme-text-secondary); font-size: 12px; }
 .loops-run-instructions { position: relative; margin: 0 0 16px; padding: 12px 16px; border: 0.5px solid var(--theme-border); border-radius: 10px; background: var(--theme-surface-2); }
 .loops-run-instructions h3 { margin: 0 0 10px; color: var(--theme-text-secondary); font: 500 12px/15px var(--font); }
@@ -875,6 +879,9 @@ button.loops-agent-card-body:hover { background: var(--theme-surface-hover); }
 }
 .loops-run-error strong { display: block; color: var(--theme-text-primary); font-size: 13px; font-weight: 500; }
 .loops-run-error p { margin: 4px 0 0; color: var(--theme-text-secondary); font-size: 12px; line-height: 17px; white-space: pre-wrap; }
+.loops-run-error .loops-run-error-reason { color: var(--theme-text-primary); }
+.loops-run-error.is-review { color: var(--priority-medium); }
+.loops-run-error.is-stopped { color: var(--theme-text-tertiary); }
 .loops-run-feedback { display: flex; gap: 4px; margin-top: 14px; }
 .loops-run-feedback button { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); cursor: pointer; }
 .loops-run-feedback button:hover,

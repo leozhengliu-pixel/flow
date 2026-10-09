@@ -91,12 +91,15 @@ describe('Agent answer chrome in the floating panel', () => {
     await waitFor(() => expect(answer.querySelectorAll('a[data-agent-entity="issue"]')).toHaveLength(2))
     const chip = answer.querySelector('a[data-agent-entity="issue"]')!
     expect(chip).toHaveAttribute('href', '/workspace/issue/TST-1/test-issue')
-    expect(chip).toHaveTextContent('TST-1Test issue')
+    expect(chip).toHaveTextContent('TST-1 Test issue')
     expect(answer).toHaveTextContent('DEV-404 is unknown.')
     expect(answer).not.toHaveTextContent('suggestions')
 
     const references = screen.getByRole('list', { name: 'Referenced issues' })
-    expect(within(references).getAllByRole('link').map(link => link.textContent)).toEqual(['TST-1Test issue', 'TST-2Second issue'])
+    const rows = within(references).getAllByRole('link')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toHaveTextContent('TST-1Test issue')
+    expect(rows[1]).toHaveTextContent('TST-2Second issue')
 
     const chips = screen.getByRole('group', { name: 'Suggested follow-ups' })
     expect(within(chips).getAllByRole('button').map(button => button.textContent)).toEqual(['Compare TST-1 and TST-2', 'Review migration steps'])

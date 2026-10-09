@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // Replies continue a finished run's agent conversation from the run page
@@ -69,17 +70,22 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 	skillIDs := uniqueAgentIDs(input.SkillIDs)
 	workspace := workspaceKey(r)
 	id, runID := r.PathValue("id"), r.PathValue("runId")
-	metadata, ok := s.store.WorkspaceMetadata(workspace)
-	if !ok {
+	data, err := s.loopViewerData(r)
+	if errors.Is(err, errNotFound) {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
-	loop := loopByID(&metadata, id)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
+		return
+	}
+	workspace = data.Workspace.URLKey
+	loop := loopByID(&data, id)
 	if loop == nil {
 		writeError(w, http.StatusNotFound, "loop not found")
 		return
 	}
-	if enabled, ok := metadata.WorkspaceSettings.FeatureFlags["loops"]; ok && !enabled {
+	if enabled, ok := data.WorkspaceSettings.FeatureFlags["loops"]; ok && !enabled {
 		writeError(w, http.StatusConflict, "Loops are disabled for this workspace")
 		return
 	}
@@ -87,53 +93,78 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "Flow Agent is not configured on this server")
 		return
 	}
+	if err := s.checkLoopEditor(&data, *loop); err != nil {
+		respondLoopMutation(w, err, http.StatusAccepted, nil)
+		return
+	}
+	userID := data.Viewer.ID
+	// The replier's own skills, checked the way new agent chats check them.
+	skills := selectedAgentSkills(data.AgentSkills, skillIDs, userID)
+	if len(skills) != len(skillIDs) {
+		writeError(w, http.StatusBadRequest, "one or more selected skills were not found")
+		return
+	}
 	guardKey := "reply|" + runID
 	if !loopGuards.claim(guardKey, false, time.Now()) {
 		writeError(w, http.StatusConflict, errLoopReplyBusy.Error())
 		return
 	}
+	limits := s.loopLimits()
+	registry := s.loopRunRegistry()
+	if err := registry.reserve(workspace, limits); err != nil {
+		loopGuards.release(guardKey)
+		writeError(w, http.StatusTooManyRequests, err.Error())
+		return
+	}
+	abort := func(status int, message string) {
+		registry.unreserve(workspace)
+		loopGuards.release(guardKey)
+		writeError(w, status, message)
+	}
 	now := time.Now().UTC()
-	reply := domain.LoopRunReply{ID: fmt.Sprintf("loop_reply_%d", now.UnixNano()), Body: body, Status: "running", CreatedAt: now, Attachments: attachments.meta}
+	reply := domain.LoopRunReply{ID: fmt.Sprintf("loop_reply_%d", now.UnixNano()), UserID: userID, Body: body, Status: "running", CreatedAt: now, Attachments: attachments.meta}
 	if len(skillIDs) > 0 {
 		reply.SkillIDs = skillIDs
 	}
-	var run domain.LoopRun
-	var current domain.Loop
-	var skills []domain.PersonalAgentSkill
-	err = s.store.MutateWorkspace(r.Context(), workspace, "loop.run_replied", id, map[string]any{"runId": runID, "replyId": reply.ID}, func(data *domain.Bootstrap) error {
-		item := loopByID(data, id)
-		if item == nil {
-			return errNotFound
+	existing, err := s.store.LoopRun(r.Context(), workspace, runID)
+	if err != nil || existing.LoopID != id {
+		abort(http.StatusNotFound, "loop run not found")
+		return
+	}
+	if existing.Status == "running" || slices.ContainsFunc(existing.Replies, func(item domain.LoopRunReply) bool { return item.Status == "running" }) {
+		abort(http.StatusConflict, errLoopReplyBusy.Error())
+		return
+	}
+	// The answer runs under the run's lease, like the run itself.
+	owner := s.loopInstanceID()
+	if err := s.store.ClaimLoopRunLease(r.Context(), workspace, runID, store.LoopRunLease{Owner: owner, ExpiresAt: now.Add(limits.LeaseTTL)}); err != nil {
+		if _, readErr := s.store.LoopRun(r.Context(), workspace, runID); errors.Is(readErr, store.ErrLoopRunNotFound) {
+			abort(http.StatusNotFound, "loop run not found")
+			return
 		}
-		if err := s.checkLoopEditor(data, *item); err != nil {
-			return err
+		abort(http.StatusConflict, errLoopReplyBusy.Error())
+		return
+	}
+	run, err := s.store.UpdateLoopRun(r.Context(), workspace, runID, []store.LoopRunEvent{loopRunEvent("reply_created", map[string]string{"replyId": reply.ID, "userId": userID})}, func(stored *domain.LoopRun) error {
+		if stored.LoopID != id {
+			return store.ErrLoopRunNotFound
 		}
-		index := slices.IndexFunc(data.LoopRuns, func(item domain.LoopRun) bool { return item.ID == runID && item.LoopID == id })
-		if index < 0 {
-			return errNotFound
-		}
-		stored := &data.LoopRuns[index]
 		if stored.Status == "running" || slices.ContainsFunc(stored.Replies, func(item domain.LoopRunReply) bool { return item.Status == "running" }) {
 			return errLoopReplyBusy
 		}
-		reply.UserID = data.Viewer.ID
-		// The replier's own skills, checked the way new agent chats check them.
-		skills = selectedAgentSkills(data.AgentSkills, skillIDs, reply.UserID)
-		if len(skills) != len(skillIDs) {
-			return fmt.Errorf("%w: one or more selected skills were not found", errInvalid)
-		}
 		stored.Replies = append(stored.Replies, reply)
-		run, current = *stored, *item
-		run.Replies = slices.Clone(stored.Replies)
 		return nil
 	})
 	if err != nil {
-		loopGuards.release(guardKey)
-		if errors.Is(err, errLoopReplyBusy) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
+		_ = s.store.ReleaseLoopRunLease(context.Background(), workspace, runID, owner)
+		switch {
+		case errors.Is(err, store.ErrLoopRunNotFound):
+			abort(http.StatusNotFound, "loop run not found")
+		case errors.Is(err, errLoopReplyBusy):
+			abort(http.StatusConflict, err.Error())
+		default:
+			abort(http.StatusInternalServerError, "Could not save the reply")
 		}
-		respondLoopMutation(w, err, http.StatusAccepted, nil)
 		return
 	}
 	history := loopReplyHistory(run, reply.ID)
@@ -142,16 +173,18 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		history[last].Images = attachments.images
 	}
 	trigger := loopTrigger{Kind: run.Trigger, EventType: run.EventType, EntityType: run.EntityType, EntityID: run.EntityID, Label: run.TriggerLabel}
+	current := *loop
 	go func() {
 		defer loopGuards.release(guardKey)
-		ctx, cancel := context.WithTimeout(context.Background(), loopRunTimeout)
-		defer cancel()
 		answer := reply
 		recorder := &loopRunRecorder{s: s, workspace: workspace, run: run, reply: &answer, skills: skills}
-		runErr := s.executeLoopRun(ctx, workspace, current, trigger, recorder, history...)
-		s.finishLoopRunReply(workspace, run.LoopID, run.ID, answer, runErr)
+		s.runLoopWork(workspace, run.ID, limits, func(ctx context.Context) error {
+			return s.executeLoopRun(ctx, workspace, current, trigger, recorder, history...)
+		}, func(ctx context.Context, runErr error) {
+			s.finishLoopRunReply(ctx, workspace, recorder, runErr)
+		})
 	}()
-	writeJSON(w, http.StatusAccepted, presentLoopRun(run, firstNonEmpty(authUser(r).ID, reply.UserID)))
+	writeJSON(w, http.StatusAccepted, presentLoopRun(run, userID))
 }
 
 // loopReplyHistory is the conversation after the run's opening prompt: the
@@ -260,61 +293,67 @@ func loopReplyAttachments(inputs []loopRunReplyAttachmentInput) (loopReplyAttach
 }
 
 // saveReply writes the answer in progress onto its run.
-func (rec *loopRunRecorder) saveReply() {
+func (rec *loopRunRecorder) saveReply(events []store.LoopRunEvent) {
 	snapshot := *rec.reply
 	snapshot.Steps = slices.Clone(rec.reply.Steps)
 	snapshot.ToolCalls = slices.Clone(rec.reply.ToolCalls)
-	err := rec.s.store.MutateWorkspace(context.Background(), rec.workspace, "loop.run_progress", rec.run.LoopID, map[string]any{"runId": rec.run.ID, "replyId": snapshot.ID}, func(data *domain.Bootstrap) error {
-		stored := loopRunReplyByID(data, rec.run.ID, snapshot.ID)
-		if stored == nil {
-			return errNotFound
-		}
-		if stored.Status != "running" {
-			return nil
+	updated, err := rec.s.store.UpdateLoopRun(context.Background(), rec.workspace, rec.run.ID, events, func(run *domain.LoopRun) error {
+		stored := loopRunReplyByID(run, snapshot.ID)
+		if stored == nil || stored.Status != "running" {
+			return store.ErrNoMutation
 		}
 		*stored = snapshot
 		return nil
 	})
-	if err != nil && !errors.Is(err, errNotFound) {
-		log.Printf("Loop reply progress workspace=%s run=%s: %v", rec.workspace, rec.run.ID, err)
+	if err != nil {
+		if !errors.Is(err, store.ErrLoopRunNotFound) {
+			log.Printf("Loop reply progress workspace=%s run=%s: %v", rec.workspace, rec.run.ID, err)
+		}
+		return
 	}
+	rec.publishProgress(updated)
 }
 
-func (s *server) finishLoopRunReply(workspace, loopID, runID string, reply domain.LoopRunReply, runErr error) {
+// finishLoopRunReply records how the agent's answer to a reply ended.
+func (s *server) finishLoopRunReply(ctx context.Context, workspace string, rec *loopRunRecorder, runErr error) {
+	reply := *rec.reply
 	now := time.Now().UTC()
 	reply.FinishedAt = &now
 	reply.Status = "completed"
-	if runErr != nil {
-		reply.Status, reply.Error = "failed", runErr.Error()
+	if runErr != nil || ctx.Err() != nil {
+		if runErr == nil {
+			runErr = ctx.Err()
+		}
+		reply.Status, reply.FailureReason, reply.Error = classifyLoopRunFailure(ctx, runErr, s.loopLimits())
 	}
 	reply.Output = strings.TrimSpace(reply.Output)
-	for index := range reply.ToolCalls {
-		if reply.ToolCalls[index].Status == "running" {
-			reply.ToolCalls[index].Status = "error"
-		}
-	}
-	err := s.store.MutateWorkspace(context.Background(), workspace, "loop.run_reply_finished", loopID, map[string]any{"runId": runID, "replyId": reply.ID, "status": reply.Status}, func(data *domain.Bootstrap) error {
-		stored := loopRunReplyByID(data, runID, reply.ID)
-		if stored == nil {
-			return errNotFound
+	reply.Steps, reply.ToolCalls = slices.Clone(reply.Steps), slices.Clone(reply.ToolCalls)
+	closeRunningToolCalls(reply.ToolCalls)
+	events := append(rec.events, loopRunEvent("reply_finished", map[string]string{"replyId": reply.ID, "status": reply.Status, "reason": reply.FailureReason}))
+	rec.events = nil
+	run, err := s.store.UpdateLoopRun(context.Background(), workspace, rec.run.ID, events, func(run *domain.LoopRun) error {
+		stored := loopRunReplyByID(run, reply.ID)
+		if stored == nil || stored.Status != "running" {
+			return store.ErrNoMutation
 		}
 		*stored = reply
 		return nil
 	})
 	if err != nil {
-		log.Printf("Loop reply finish workspace=%s loop=%s run=%s: %v", workspace, loopID, runID, err)
+		log.Printf("Loop reply finish workspace=%s loop=%s run=%s: %v", workspace, rec.run.LoopID, rec.run.ID, err)
+	}
+	if err := s.store.ReleaseLoopRunLease(context.Background(), workspace, rec.run.ID, s.loopInstanceID()); err != nil {
+		log.Printf("Loop reply lease release workspace=%s run=%s: %v", workspace, rec.run.ID, err)
+	}
+	if err == nil {
+		s.publishLoopRunEvent(workspace, "loop_run.finished", run)
 	}
 }
 
-func loopRunReplyByID(data *domain.Bootstrap, runID, replyID string) *domain.LoopRunReply {
-	for runIndex := range data.LoopRuns {
-		if data.LoopRuns[runIndex].ID != runID {
-			continue
-		}
-		for replyIndex := range data.LoopRuns[runIndex].Replies {
-			if data.LoopRuns[runIndex].Replies[replyIndex].ID == replyID {
-				return &data.LoopRuns[runIndex].Replies[replyIndex]
-			}
+func loopRunReplyByID(run *domain.LoopRun, replyID string) *domain.LoopRunReply {
+	for index := range run.Replies {
+		if run.Replies[index].ID == replyID {
+			return &run.Replies[index]
 		}
 	}
 	return nil
