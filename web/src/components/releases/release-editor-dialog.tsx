@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { CalendarIcon } from '@/components/issue/issue-icons'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { createRelease, updateRelease } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Release, ReleasePipeline } from '@/types/flow'
@@ -82,7 +83,7 @@ export function ReleaseEditorDialog({ data, pipeline, release, onClose, onSaved 
         <div className="flow-release-editor__copy">
           <input aria-label={t('Release name')} autoFocus className="flow-release-editor__name" value={name} onChange={event => setName(event.target.value)} placeholder={t('Release name')}/>
           <input aria-label={t('Release version')} className="flow-release-editor__version" value={version} onChange={event => setVersion(event.target.value)} placeholder={t('Version')}/>
-          <textarea aria-label={t('Release description')} className="flow-release-editor__description" value={description} onChange={event => setDescription(event.target.value)} placeholder={t('Add description…')}/>
+          <MentionTextField ariaLabel={t('Release description')} className="flow-release-editor__description" onChange={setDescription} onSubmit={() => { if (!saving) void save() }} placeholder={t('Add description…')} value={description}/>
         </div>
         <div className="flow-release-editor__properties">
           <DropdownMenu.Root open={stageMenuOpen} onOpenChange={setStageMenuOpen}>

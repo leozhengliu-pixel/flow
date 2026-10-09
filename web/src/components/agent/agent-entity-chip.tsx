@@ -23,9 +23,9 @@ function linkGlyph(icon: 'update' | 'comment' | 'milestone') {
   return <HealthGlyph className={styles.updateGlyph} health="noUpdate"/>
 }
 
-type ChipParts = { icon?: ReactNode; identifier?: string; label: string; suffix?: string }
+export type ChipParts = { icon?: ReactNode; identifier?: string; label: string; suffix?: string }
 
-function chipParts(entity: AgentEntity, t: (source: string) => string): ChipParts {
+export function chipParts(entity: AgentEntity, t: (source: string) => string): ChipParts {
   switch (entity.kind) {
     case 'issue': return { icon: <StatusIcon size={15} state={entity.issue.state}/>, identifier: entity.issue.identifier, label: entity.issue.title }
     case 'project': return { icon: entity.project.icon && entity.project.icon !== 'Project' ? <ViewGlyph color={entity.project.color} icon={entity.project.icon}/> : <ProjectIcon size={15} style={{ color: entity.project.color }}/>, label: entity.project.name }

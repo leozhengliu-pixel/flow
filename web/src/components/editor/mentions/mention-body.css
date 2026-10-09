@@ -1,0 +1,18 @@
+/* A stored body shown read-only inside a framed panel (description history dialogs). */
+.mention-body--panel {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  margin: 14px 0;
+  padding: 14px;
+  overflow: auto;
+  border: 0.5px solid var(--border);
+  border-radius: 6px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.mention-body--panel p { margin: 0 0 8px; }
+.mention-body--panel p:last-child { margin-bottom: 0; }

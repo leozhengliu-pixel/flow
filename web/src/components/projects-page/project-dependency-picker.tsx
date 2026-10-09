@@ -10,6 +10,7 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { ProjectStatusGlyph } from './project-property-picker'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import type { ProjectDependencyRelationInput } from '@/types/flow'
 
 import './project-dependency-picker.css'
@@ -334,7 +335,7 @@ function ProjectDependencyPreview({ project }: { project: ProjectDependencyOptio
   const details = project.previewData
   return <div className="project-dependency-picker__preview-card">
     <header><ProjectDependencyIcon project={project} size={16}/><strong data-i18n-ignore>{project.label}</strong></header>
-    {details?.summary && <p data-i18n-ignore>{details.summary}</p>}
+    {details?.summary && <p data-i18n-ignore>{markdownPlainText(details.summary)}</p>}
     <div className="project-dependency-picker__preview-meta">
       {details?.status && <span><PreviewMetaIcon kind="status" value={details.status}/>{t(details.status)}</span>}
       {details?.milestone && <span><PreviewMetaIcon kind="milestone"/><span data-i18n-ignore>{details.milestone}</span></span>}

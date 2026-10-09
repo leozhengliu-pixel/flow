@@ -92,15 +92,13 @@
   padding: 10px 12px 14px;
 }
 
-.diary-entry__editor textarea {
+.diary-entry__editor .mention-text-field {
+  --mention-field-min-height: 110px;
   width: 100%;
-  min-height: 110px;
-  border: 0;
-  outline: 0;
-  resize: vertical;
-  background: transparent;
-  color: var(--theme-text-primary);
-  font: inherit;
+}
+
+.diary-entry__editor .mention-text-field .issue-description-root .description-editor {
+  font-size: inherit;
   line-height: 1.55;
 }
 

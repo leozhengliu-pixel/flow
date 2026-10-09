@@ -40,6 +40,7 @@ export function ProjectUpdatesInboxView({
       updates={updates.map(update => ({
         id: update.id,
         body: update.body,
+        bodyData: update.bodyData,
         health: update.health,
         createdAt: update.createdAt,
         editedAt: update.editedAt,

@@ -8,15 +8,18 @@ import { clearComposerDraft, readComposerDraft, writeComposerDraft, type Compose
 import type { Draft, User } from '@/types/flow'
 import type { Editor } from '@tiptap/react'
 import { usePeopleDirectory } from '@/components/property/people-context'
-import { MentionExtension } from '@/components/issue/editor/mention-extension'
-import { createMentionHydrationExtension } from '@/components/issue/editor/mention-hydration'
-import { EntityStoreContext } from '@/store'
+import { MentionChipNode } from '@/components/editor/mentions/mention-chip-extension'
+import { MentionLinksExtension } from '@/components/editor/mentions/mention-links-extension'
+import { mentionMarkdown } from '@/components/editor/mentions/mention-model'
+import { insertMentionOption, type MentionOption } from '@/components/editor/mentions/mention-options'
+import { EmbedPasteNode } from '@/components/editor/embeds/embed-extension'
+import { useMentionOptions } from '@/components/editor/mentions/use-mention-options'
+import { useAgentEntityData } from '@/components/agent/agent-entity-data'
 import { MentionMenu } from '@/components/issue/editor/mention-menu'
-import { personSearchText } from '@/lib/people'
 import { DescriptionImage, insertImageFiles } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import '@/components/issue/issue-description-editor.css'
-import { useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
 import { handleEmoticonInput } from './emoticon-input'
 
@@ -25,9 +28,13 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   const people=useRef<User[]>([]);people.current=(users??[...directory.users.values()]).filter(user=>user.active&&(!user.app||user.appScopes?.includes('app:mentionable')))
   const [mention,setMention]=useState<{query:string;from:number;to:number;index:number}>()
   const mentionRef=useRef(mention);mentionRef.current=mention
-  const matching=(query:string)=>people.current.filter(user=>personSearchText(user).toLocaleLowerCase().includes(query.toLocaleLowerCase())).slice(0,8)
+  const entityData=useAgentEntityData()
+  const entityDataRef=useRef(entityData);entityDataRef.current=entityData
+  const mentionUsers=people.current
+  const mentionOptionList=useMentionOptions({active:Boolean(mention),query:mention?.query??'',users:mentionUsers})
+  const optionsRef=useRef<MentionOption[]>([]);optionsRef.current=mentionOptionList
   const updateMention=(editor:Editor)=>{const {$from,empty}=editor.state.selection;const match=empty&&$from.parent.type.name!=='codeBlock'?$from.parent.textBetween(0,$from.parentOffset,' ',' ').match(/(?:^|\s)@([^\s@]*)$/):null;const next=match?{query:match[1],from:$from.pos-match[1].length-1,to:$from.pos,index:0}:undefined;mentionRef.current=next;setMention(next)}
-  const insertMention=(editor:Editor,user:User)=>{const range=mentionRef.current;if(!range)return;editor.chain().focus().insertContentAt({from:range.from,to:range.to},[{type:'mention',attrs:{id:user.id,label:user.displayName||user.name}},{type:'text',text:' '}]).run();mentionRef.current=undefined;setMention(undefined)}
+  const insertMention=(editor:Editor,option:MentionOption)=>{const range=mentionRef.current;if(!range)return;insertMentionOption(editor.view,range,option);editor.commands.focus();mentionRef.current=undefined;setMention(undefined)}
   const persistedDraft = useMemo(() => draftType && draftResourceId ? drafts.find(item => item.type === draftType && item.resourceId === draftResourceId) ?? readComposerDraft(draftType, draftResourceId) : undefined, [draftResourceId, draftType, drafts])
   const initialBody = persistedDraft?.body ?? initialValue
   const initialDocument = persistedDraft?.metadata?.bodyData as Record<string, unknown> | undefined ?? initialData
@@ -36,14 +43,12 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   onUploadRef.current = onUpload
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!commentSendable(initialBody, initialDocument)), [draftBody, setDraftBody] = useState(initialBody)
   const draftId = useRef(persistedDraft?.id ?? '')
-  const workspaceStore = useContext(EntityStoreContext)
-  const mentionHydration = createMentionHydrationExtension(() => workspaceStore)
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit.configure({ heading: false }), MentionExtension, mentionHydration, DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder })],
+    extensions: [StarterKit.configure({ heading: false }), EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: () => entityDataRef.current }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder })],
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
-    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=matching(current.query);if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
-    onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = editor.getText({ blockSeparator: '\n' }); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
+    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': placeholder, 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
+    onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
     onSelectionUpdate:({editor})=>updateMention(editor),
   })
   useEffect(() => {
@@ -78,14 +83,14 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     }
     onAttach?.()
   }
-  const submit = async () => { const json = editor?.getJSON() as Record<string, unknown> | undefined; const text = editor?.getText({ blockSeparator: '\n' }) ?? ''; const body = commentBody(text, json); if (!body || saving) return; setSaving(true); setError(''); try { await onSubmit?.(body, json); if (draftType && draftResourceId) { if (draftId.current && !draftId.current.startsWith('local:')) await deleteDraft(draftId.current).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); draftId.current = '' } editor?.commands.clearContent() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Comment could not be submitted') } finally { setSaving(false) } }
+  const submit = async () => { const json = editor?.getJSON() as Record<string, unknown> | undefined; const text = editor ? commentText(editor) : ''; const body = commentBody(text, json); if (!body || saving) return; setSaving(true); setError(''); try { await onSubmit?.(body, json); if (draftType && draftResourceId) { if (draftId.current && !draftId.current.startsWith('local:')) await deleteDraft(draftId.current).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); draftId.current = '' } editor?.commands.clearContent() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Comment could not be submitted') } finally { setSaving(false) } }
   return <div className={`composer${compact ? ' compact' : ''}`} style={{position:'relative'}}>
     <EditorContent editor={editor}/>
     {error && <div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit()}>Retry</button></div>}
     <div className="composer-toolbar"><div className="composer-tools">
       <button type="button" aria-label="Attach images, files, or videos" onClick={attachFiles}><Paperclip size={14}/></button>
     </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><ArrowUp size={14}/></Button></div></div>
-    {mention&&editor&&<MentionMenu users={matching(mention.query)} selectedIndex={mention.index} position={{left:8,top:38}} query={mention.query} onSelect={user=>insertMention(editor,user)}/>}
+    {mention&&editor&&<MentionMenu options={mentionOptionList} selectedIndex={mention.index} anchor={caretAnchor(editor,mention.to)} query={mention.query} onSelect={option=>insertMention(editor,option)}/>}
   </div>
 }
 
@@ -124,4 +129,18 @@ function pickComposerFiles(onFiles: (files: File[]) => void) {
     input.remove()
   })
   input.click()
+}
+
+function caretAnchor(editor: Editor, position: number) {
+  try {
+    const caret = editor.view.coordsAtPos(Math.min(position, editor.state.doc.content.size))
+    return { left: caret.left, top: caret.top, bottom: caret.bottom }
+  } catch {
+    return { left: 8, top: 0, bottom: 38 }
+  }
+}
+
+/** The comment's text body: plain text, with each mention as `@name` (people) or `[label](path)` (other resources) so agents and exports keep the references. */
+function commentText(editor: Editor) {
+  return editor.getText({ blockSeparator: '\n', textSerializers: { mention: ({ node }) => mentionMarkdown(node.attrs) } })
 }

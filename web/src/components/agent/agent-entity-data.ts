@@ -6,10 +6,11 @@ import { agentEntityPath, type AgentEntity } from './agent-entity-refs'
 /** Workspace data the inline entity chips resolve against. */
 export const AgentEntityDataContext = createContext<BootstrapData | undefined>(undefined)
 
-/** The surface's own data, or the app's bootstrap data when the surface was not handed any. */
+/** The surface's own data, the data its nearest `AgentEntityDataContext` provides (an editor handed its own workspace data), or the app's bootstrap data. */
 export function useAgentEntityData(explicit?: BootstrapData) {
   const store = useContext(ApplicationStoreContext)
-  return explicit ?? store?.data ?? undefined
+  const provided = useContext(AgentEntityDataContext)
+  return explicit ?? provided ?? store?.data ?? undefined
 }
 
 export function agentEntityHref(data: BootstrapData, entity: AgentEntity) {

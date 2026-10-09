@@ -1,9 +1,24 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
+
+const api = vi.hoisted(() => ({ fetchIssueRecord: vi.fn(), listProjectRecords: vi.fn(), listIssueRecords: vi.fn() }))
+vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), ...api }))
+
+import { resetAgentRecordCache } from '@/components/agent/agent-entity-fetch'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import { NewProjectDialog } from './new-project-dialog'
+
+beforeEach(() => {
+  for (const mock of [api.fetchIssueRecord, api.listProjectRecords, api.listIssueRecords]) mock.mockReset()
+  api.listIssueRecords.mockResolvedValue({ items: [], hasMore: false, total: 0 })
+  resetAgentRecordCache()
+  stubEditorEnvironment()
+})
+afterEach(() => { vi.unstubAllGlobals() })
 
 describe('NewProjectDialog', () => {
   it('uses the provided project status dictionary without English fallback states', async () => {
@@ -146,7 +161,7 @@ describe('NewProjectDialog', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add' }))
     expect(screen.getByRole('textbox', { name: 'Milestone name' })).toHaveValue('')
-    expect(screen.getByRole('textbox', { name: 'Milestone description' })).toHaveValue('')
+    expect(screen.getByRole('textbox', { name: 'Milestone description' })).toHaveTextContent(/^$/)
     await user.click(screen.getByRole('button', { name: 'Add milestone' }))
     expect(screen.getByText('Create milestone')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Remove Discard me' })).not.toBeInTheDocument()
@@ -255,5 +270,54 @@ describe('NewProjectDialog', () => {
       if (previousLocale === null) localStorage.removeItem('flow:locale')
       else localStorage.setItem('flow:locale', previousLocale)
     }
+  })
+
+  it('mentions resources in the project description and keeps them in the saved markdown', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <MentionShell data={mentionFixture()}>
+        <NewProjectDialog open onClose={vi.fn()} onCreate={onCreate} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]} />
+      </MentionShell>,
+    )
+
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Mentions')
+    const box = screen.getByRole('textbox', { name: 'Project description' })
+    await user.click(box)
+    await user.keyboard('Plan: @Launch')
+    await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
+    pasteText(box, `${window.location.origin}${mentionUrls.project}`)
+    await waitFor(() => expect(document.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one'))
+    expect(document.querySelector('a[data-agent-entity="document"]')).toHaveTextContent('Launch plan')
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+
+    const description = onCreate.mock.calls[0][0].description as string
+    expect(description).toContain('[Launch plan](/workspace/document/plan-abc)')
+    expect(description).toContain(`[Project one](${mentionUrls.project})`)
+  })
+
+  it('shows a template description with its mentions as chips and mentions in the milestone description', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    render(
+      <MentionShell data={mentionFixture()}>
+        <NewProjectDialog initialTemplateId="template-1" open onClose={vi.fn()} onCreate={onCreate} teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]} templates={[{ id: 'template-1', label: 'Brief', name: 'Brief', description: 'Read [Launch plan](/workspace/document/plan-abc)' }]} />
+      </MentionShell>,
+    )
+
+    await waitFor(() => expect(document.querySelector('a[data-agent-entity="document"]')).toHaveTextContent('Launch plan'))
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await user.type(screen.getByRole('textbox', { name: 'Milestone name' }), 'Beta')
+    await user.click(screen.getByRole('textbox', { name: 'Milestone description' }))
+    await user.keyboard('Owner @Road')
+    await user.click(await screen.findByRole('option', { name: /Roadmap/ }))
+    await user.click(screen.getByRole('button', { name: 'Add milestone' }))
+    expect(screen.getByText('Owner Roadmap')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      description: 'Read [Launch plan](/workspace/document/plan-abc)',
+      milestoneDetails: [expect.objectContaining({ name: 'Beta', description: expect.stringContaining('[Roadmap](/workspace/initiative/roadmap/overview)') })],
+    }))
   })
 })

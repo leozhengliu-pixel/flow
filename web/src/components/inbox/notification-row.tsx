@@ -6,6 +6,7 @@ import { useCallback, useRef, useState, type CSSProperties, type FocusEvent, typ
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
 import { DateTimeControl } from '@/components/ui/date-time-control'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import type { WorkflowState } from '@/types/flow'
 
 import { PulseFrequencyContextSubmenu } from './pulse-frequency-menu'
@@ -154,7 +155,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
               ref={rowRef}
               className="flow-inbox-row"
               role="link"
-              aria-label={[notification.actor, notification.identifier, notification.title, notification.body, notification.timeLabel].filter(Boolean).join(' ')}
+              aria-label={[notification.actor, notification.identifier, notification.title, markdownPlainText(notification.body), notification.timeLabel].filter(Boolean).join(' ')}
               aria-current={active ? 'page' : undefined}
               aria-disabled={disabled || undefined}
               aria-busy={pending || undefined}
@@ -180,7 +181,7 @@ export function InboxNotificationRow(props: InboxNotificationRowProps) {
                     {notification.issueState ? <span aria-label={notification.issueState.name} className="flow-inbox-row__issue-state" title={notification.issueState.name}><StatusIcon size={14} state={notification.issueState} /></span> : notification.reviewStatus ? <span aria-label={`Review ${notification.reviewStatus}`} className="flow-inbox-row__issue-state is-review" title={`Review ${notification.reviewStatus}`}><ReviewStatusIcon status={notification.reviewStatus} /></span> : null}
                   </div>
                   <div className="flow-inbox-row__summary">
-                    <span className="flow-inbox-row__body">{notification.body}</span>
+                    <span className="flow-inbox-row__body">{markdownPlainText(notification.body)}</span>
                     <time title={notification.timestamp}>{notification.timeLabel}</time>
                   </div>
                 </div>

@@ -58,9 +58,11 @@ import {
   updateSLARule,
   updateWorkspaceIssueTemplate,
 } from "@/lib/api";
+import { markdownPlainText } from "@/lib/markdown-plain-text";
 import { labelTeamScopeIds, labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
 import { useI18n } from "@/i18n/i18n";
 import { Avatar } from "@/components/issue/issue-row";
+import { MentionTextField } from "@/components/editor/mention-text-field";
 import {
   LabelIcon,
   MembersIcon,
@@ -91,6 +93,7 @@ import { SlackUpdates } from "./slack-updates";
 import "./issues-projects-settings.css";
 import "./issue-template-settings.css";
 import "./project-template-settings.css";
+import { keepMentionMenuOpen } from "./mention-field-host";
 import { SettingsSelect, SettingsToggle } from "./settings-primitives";
 
 type TemplateKind = "issue" | "project";
@@ -573,13 +576,18 @@ function ProjectTemplateEditor({
               onIssues={setIssueIds}
             />
           </div>
-          <textarea
-            aria-label={t("Project description")}
+          <MentionTextField
+            className="pt-description"
+            ariaLabel={t("Project description")}
             placeholder={t(
               "Write a description, a project brief, or collect ideas…",
             )}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            users={data.users}
+            onChange={setDescription}
+            onSubmit={() => {
+              if (!saving) void save();
+            }}
           />
           <ProjectMilestonesEditor
             milestones={milestones}
@@ -1554,11 +1562,13 @@ function StandardTemplateBody({
           value={title}
           onChange={(e) => onTitle(e.target.value)}
         />
-        <textarea
-          aria-label={t("Issue description")}
+        <MentionTextField
+          className="it-description"
+          ariaLabel={t("Issue description")}
           placeholder={t("Add description…")}
           value={body}
-          onChange={(e) => onBody(e.target.value)}
+          users={data.users}
+          onChange={onBody}
         />
       </section>
       <TemplateDefaults
@@ -2291,11 +2301,13 @@ export function SubIssueTemplateComposer({
         value={title}
         onChange={(e) => setTitle(e.target.value)}
       />
-      <textarea
-        aria-label={t("Issue description")}
+      <MentionTextField
+        className="it-description"
+        ariaLabel={t("Issue description")}
         placeholder={t("Add description…")}
         value={description}
-        onChange={(e) => setDescription(e.target.value)}
+        users={data.users}
+        onChange={setDescription}
       />
       <div>
         <IssueTemplatePropertyMenus
@@ -2351,7 +2363,15 @@ export function SubIssueTemplateRow({
     [description, setDescription] = useState(item.description ?? "");
   if (editing)
     return (
-      <div className="it-subissue-row is-editing">
+      <div
+        className="it-subissue-row is-editing"
+        onKeyDown={(e) => {
+          if (e.key !== "Escape" || e.defaultPrevented) return;
+          setTitle(item.title);
+          setDescription(item.description ?? "");
+          setEditing(false);
+        }}
+      >
         <span>
           <input
             autoFocus
@@ -2359,20 +2379,15 @@ export function SubIssueTemplateRow({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
-          <input
-            aria-label={t("Issue description")}
+          <MentionTextField
+            className="it-description"
+            ariaLabel={t("Issue description")}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && title.trim()) {
-                onChange({ ...item, title: title.trim(), description });
-                setEditing(false);
-              }
-              if (e.key === "Escape") {
-                setTitle(item.title);
-                setDescription(item.description ?? "");
-                setEditing(false);
-              }
+            onChange={setDescription}
+            onSubmit={() => {
+              if (!title.trim()) return;
+              onChange({ ...item, title: title.trim(), description });
+              setEditing(false);
             }}
           />
         </span>
@@ -2395,7 +2410,7 @@ export function SubIssueTemplateRow({
     <div className="it-subissue-row">
       <span>
         <strong data-i18n-ignore>{item.title}</strong>
-        <small data-i18n-ignore>{item.description}</small>
+        <small data-i18n-ignore>{markdownPlainText(item.description)}</small>
       </span>
       <button aria-label={t("Edit sub-issue")} onClick={() => setEditing(true)}>
         <Pencil />
@@ -2704,11 +2719,12 @@ function ProjectMilestonesEditor({
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <textarea
-            aria-label={t("Milestone description template")}
+          <MentionTextField
+            className="pt-milestone-description"
+            ariaLabel={t("Milestone description template")}
             placeholder={t("Add a description template…")}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={setDescription}
           />
           <footer>
             <button onClick={() => onOpenChange(false)}>{t("Cancel")}</button>
@@ -2915,10 +2931,15 @@ export function TemplateEditor({
               />
             </EditorField>
             <EditorField label={t("Issue description")}>
-              <textarea
-                rows={5}
+              <MentionTextField
+                className="ip-mention-field"
+                ariaLabel={t("Issue description")}
                 value={body}
-                onChange={(event) => setBody(event.target.value)}
+                users={data.users}
+                onChange={setBody}
+                onSubmit={() => {
+                  if (!saving) void save();
+                }}
               />
             </EditorField>
             <div className="ip-properties-grid">
@@ -3062,10 +3083,15 @@ export function TemplateEditor({
               onToggle={(id) => toggle(setIssueIds, id)}
             />
             <EditorField label={t("Project description")}>
-              <textarea
-                rows={5}
+              <MentionTextField
+                className="ip-mention-field"
+                ariaLabel={t("Project description")}
                 value={description}
-                onChange={(event) => setDescription(event.target.value)}
+                users={data.users}
+                onChange={setDescription}
+                onSubmit={() => {
+                  if (!saving) void save();
+                }}
               />
             </EditorField>
             <div className="ip-milestones">
@@ -3084,7 +3110,7 @@ export function TemplateEditor({
                   <div className="ip-milestone-row" key={item.id}>
                     <span>
                       <strong data-i18n-ignore>{item.name}</strong>
-                      <small data-i18n-ignore>{item.description}</small>
+                      <small data-i18n-ignore>{markdownPlainText(item.description)}</small>
                     </span>
                     <button
                       aria-label={t("Remove milestone")}
@@ -3332,6 +3358,8 @@ function MilestoneDialog({
         <Dialog.Content data-flow-motion="dialog"
           className="ip-dialog"
           data-i18n-ignore
+          onPointerDownOutside={keepMentionMenuOpen}
+          onInteractOutside={keepMentionMenuOpen}
           onCloseAutoFocus={(event) => {
             event.preventDefault();
             triggerRef.current?.focus();
@@ -3350,10 +3378,11 @@ function MilestoneDialog({
             />
           </EditorField>
           <EditorField label={t("Milestone description template")}>
-            <textarea
-              rows={4}
+            <MentionTextField
+              className="ip-mention-field"
+              ariaLabel={t("Milestone description template")}
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={setDescription}
             />
           </EditorField>
           <footer>

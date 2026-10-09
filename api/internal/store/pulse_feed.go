@@ -300,8 +300,10 @@ func PulseMentions(body string, bodyData map[string]any, handles map[string]stri
 func collectStructuredMentions(value any, result *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
-		if typed["type"] == "mention" || typed["type"] == "userMention" || typed["type"] == "user" {
-			for _, source := range []map[string]any{typed, func() map[string]any { attrs, _ := typed["attrs"].(map[string]any); return attrs }()} {
+		attrs, _ := typed["attrs"].(map[string]any)
+		// A `mention` node names any workspace resource; only user mentions carry a person's id.
+		if typed["type"] == "mention" && domain.IsUserMention(attrs) || typed["type"] == "userMention" || typed["type"] == "user" {
+			for _, source := range []map[string]any{typed, attrs} {
 				for _, key := range []string{"userId", "id"} {
 					if id, ok := source[key].(string); ok && id != "" && !slices.Contains(*result, id) {
 						*result = append(*result, id)

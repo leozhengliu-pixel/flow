@@ -2,8 +2,9 @@
  * LS-0200 DiaryView — week-grouped personal diary entries backed by documents.
  */
 import { CalendarDays, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { createDocument, deleteDocument, listDocuments, updateDocument } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData } from '@/types/flow'
@@ -31,6 +32,7 @@ export function DiaryView({
   )
   const [busy, setBusy] = useState(false)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const latest = useRef<Record<string, string>>({})
 
   const refresh = useCallback(async () => {
     try {
@@ -130,14 +132,15 @@ export function DiaryView({
                   <strong>{formatDiaryHeading(entry.date)}</strong>
                 </div>
                 <div className="diary-entry__editor">
-                  <textarea
-                    aria-label={t('Diary entry')}
+                  <MentionTextField
+                    ariaLabel={t('Diary entry')}
+                    onBlur={() => void persistEntry(entry, latest.current[entry.id] ?? entry.content)}
+                    onChange={next => {
+                      latest.current[entry.id] = next
+                      setDrafts(current => ({ ...current, [entry.id]: next }))
+                    }}
                     placeholder={t('Write today’s notes…')}
                     value={value}
-                    onChange={event =>
-                      setDrafts(current => ({ ...current, [entry.id]: event.target.value }))
-                    }
-                    onBlur={() => void persistEntry(entry, value)}
                   />
                 </div>
               </article>

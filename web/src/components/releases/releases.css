@@ -934,3 +934,14 @@
 .flow-release-notes-missing strong{display:block;font-size:13px;font-weight:500}
 .flow-release-notes-missing p{margin:2px 0 0;font-size:12px;color:var(--theme-text-secondary)}
 .flow-release-notes-missing .flow-releases-primary{margin-left:auto}
+
+/* The release description is a mention-capable field; it scrolls inside the editor's fixed-height copy block. */
+.flow-release-editor__copy .flow-release-editor__description { --mention-field-min-height: 61px; box-sizing: border-box; overflow-y: auto; color: var(--theme-text-primary); }
+.flow-release-editor__copy .flow-release-editor__description.mention-text-field .issue-description-root .description-editor { font-size: 15px; line-height: 23px; }
+
+/* Release notes: a mention-capable editor in the detail page, and the same markdown rendered in the changelog. */
+.flow-release-detail-notes > .flow-release-detail-notes__editor { --mention-field-min-height: 320px; box-sizing: border-box; flex: 1; min-height: 0; overflow-y: auto; padding: 16px; color: var(--theme-text-primary); }
+.flow-release-detail-notes > .flow-release-detail-notes__editor.mention-text-field .issue-description-root .description-editor { font-size: 13px; line-height: 20px; }
+.flow-release-changelog .flow-release-changelog-body { margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 18px; }
+.flow-release-changelog .flow-release-changelog-body p { margin: 0 0 6px; white-space: normal; }
+.flow-release-changelog .flow-release-changelog-body p:last-child { margin-bottom: 0; }

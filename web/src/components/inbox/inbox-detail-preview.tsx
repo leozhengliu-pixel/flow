@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { forwardRef, useEffect, useState } from 'react'
 
+import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { IssueOptionsMenu } from '@/components/issue/issue-options-menu'
 import { RelationPicker } from '@/components/issue/relation-picker'
 import { PulseIcon } from '@/components/pulse/pulse-icon'
@@ -140,7 +141,7 @@ function InboxDescriptionHistoryDialog({ issue, open, onOpenChange }: { issue?: 
       <Dialog.Content data-flow-motion="dialog" className="inbox-description-history" aria-label="Description history">
         <Dialog.Title>Description history</Dialog.Title>
         <p className="inbox-description-history__timestamp">Current version · {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(issue.updatedAt))}</p>
-        <article>{issue.description || 'No description'}</article>
+        <article>{issue.description ? <MentionBody body={issue.description} data={issue.documentContent?.contentData}/> : 'No description'}</article>
         <footer><button type="button" onClick={() => onOpenChange(false)}>Done</button></footer>
       </Dialog.Content>
     </Dialog.Portal>

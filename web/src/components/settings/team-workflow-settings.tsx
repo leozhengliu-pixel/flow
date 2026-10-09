@@ -83,6 +83,7 @@ import {
 } from "@/lib/team-security-confirms";
 
 import { TemplateEditor } from "./advanced-settings";
+import { MentionTextField } from "@/components/editor/mention-text-field";
 import {
   SettingsCrumb,
   SettingsRow,
@@ -2441,14 +2442,18 @@ function DocumentTemplateEditor({
             onChange={(event) => setDocumentTitle(event.target.value)}
           />
         </label>
-        <label>
-          {t("Document content")}
-          <textarea
-            rows={14}
+        <div className="template-content-field">
+          <span>{t("Document content")}</span>
+          <MentionTextField
+            className="template-content-editor"
+            ariaLabel={t("Document content")}
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={setContent}
+            onSubmit={() => {
+              if (name.trim() && !saving) void save();
+            }}
           />
-        </label>
+        </div>
         {template && (
           <button
             className="settings-action danger"

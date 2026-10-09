@@ -1,9 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AgentSession } from '@/types/flow'
 import { I18nProvider } from '@/i18n/i18n'
+import { stubEditorEnvironment } from '@/test/mention-host-harness'
 import { NewProjectDialog } from './new-project-dialog'
 import { ProjectCreationAgent } from './project-creation-agent'
 
@@ -27,6 +28,10 @@ const session: AgentSession = {
 }
 
 describe('ProjectCreationAgent', () => {
+  // The new-project dialog's description fields are rich text editors, which need these browser APIs.
+  beforeEach(() => { stubEditorEnvironment() })
+  afterEach(() => { vi.unstubAllGlobals() })
+
   it('keeps the assistant background grid and featured gradient overlay separate', () => {
     api.fetchAgentStatus.mockResolvedValue({ enabled: false, model: '' })
     const { container } = render(<I18nProvider><ProjectCreationAgent onClose={vi.fn()} onHide={vi.fn()} /></I18nProvider>)

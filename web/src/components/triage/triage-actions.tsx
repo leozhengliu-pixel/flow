@@ -3,6 +3,7 @@ import { Command } from 'cmdk'
 import { AlarmClockOff, CircleCheck, CircleX, Clock3, Copy, CornerDownLeft } from 'lucide-react'
 import { toast } from 'sonner'
 import { createComment, createRelation, updateIssue } from '@/lib/api'
+import { MentionTextField } from '@/components/editor/mention-text-field'
 import { PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueSearch } from '@/components/issue/use-issue-search'
@@ -145,7 +146,7 @@ function AcceptDialog({ issue, data, team, onOpenChange, onDone }: { issue: Issu
       </div>
       {!selected ? <p className="action-dialog-error" role="alert">{t('This team has no status to accept issues into.')}</p> : null}
       {needsPriority ? <p className="action-dialog-error" role="status">{t('Set a priority before moving this issue out of triage.')}</p> : null}
-      <textarea className="triage-action-dialog__comment" aria-label={t('Comment for accepting issue')} placeholder={t('Add an optional comment…')} rows={3} value={comment} onChange={event => setComment(event.target.value)}/>
+      <MentionTextField className="triage-action-dialog__comment" ariaLabel={t('Comment for accepting issue')} placeholder={t('Add an optional comment…')} value={comment} onChange={setComment}/>
       <footer>
         <button type="button" onClick={() => onOpenChange(false)}>{t('Cancel')}</button>
         <button type="button" className="primary" disabled={busy || !selected || needsPriority} onClick={() => void accept()}>{busy ? <GridLoader size={14}/> : null}{t('Accept')}</button>
@@ -165,7 +166,7 @@ function DeclineDialog({ issue, work, onOpenChange }: { issue: Issue; work: Tria
       {work.canceled
         ? <p>{t('Declined issues move to')} <strong data-i18n-ignore>{work.canceled.name}</strong>.</p>
         : <p className="action-dialog-error" role="alert">{t('This team has no canceled status. Add one in the team workflow settings to decline issues.')}</p>}
-      <textarea className="triage-action-dialog__comment" aria-label={t('Comment for declining issue')} placeholder={t('Add an optional comment…')} rows={3} value={comment} onChange={event => setComment(event.target.value)}/>
+      <MentionTextField className="triage-action-dialog__comment" ariaLabel={t('Comment for declining issue')} placeholder={t('Add an optional comment…')} value={comment} onChange={setComment}/>
       <footer>
         <button type="button" onClick={() => onOpenChange(false)}>{t('Cancel')}</button>
         <button type="button" className="danger" disabled={work.busy || !work.canceled} onClick={decline}>{work.busy ? <GridLoader size={14}/> : null}{t('Decline')}</button>

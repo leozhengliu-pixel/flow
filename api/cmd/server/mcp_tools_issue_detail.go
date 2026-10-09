@@ -745,6 +745,7 @@ func (s *server) saveMCPStatusUpdate(ctx context.Context, actor mcpActor, data d
 	kind, id := stringArg(args, "type"), stringArg(args, "id")
 	var parentID, parentName string
 	var authorID string
+	richBody := false // the update holds an editor document for its body
 	switch kind {
 	case "project":
 		project, err := mcpFindProject(data, stringArg(args, "project"))
@@ -754,7 +755,7 @@ func (s *server) saveMCPStatusUpdate(ctx context.Context, actor mcpActor, data d
 		parentID, parentName = project.ID, project.Name
 		for _, update := range data.ProjectUpdates[project.ID] {
 			if id != "" && update.ID == id {
-				authorID = update.User.ID
+				authorID, richBody = update.User.ID, update.BodyData != nil
 			}
 		}
 	case "initiative":
@@ -765,7 +766,7 @@ func (s *server) saveMCPStatusUpdate(ctx context.Context, actor mcpActor, data d
 		parentID, parentName = initiative.ID, initiative.Name
 		for _, update := range data.InitiativeUpdates[initiative.ID] {
 			if id != "" && update.ID == id {
-				authorID = update.User.ID
+				authorID, richBody = update.User.ID, update.BodyData != nil
 			}
 		}
 	default:
@@ -778,7 +779,7 @@ func (s *server) saveMCPStatusUpdate(ctx context.Context, actor mcpActor, data d
 		if body == "" {
 			return nil, fmt.Errorf("body is required when creating a status update")
 		}
-		input := domain.ProjectUpdateCreateInput{Body: body, Health: health}
+		input := domain.ProjectUpdateCreateInput{Body: body, BodyData: s.mcpMentionResolver(ctx, actor, &data, body).companionDocument(body), Health: health}
 		if kind == "project" {
 			result, err = invokeJSONHandler(ctx, http.MethodPost, map[string]string{"id": parentID}, input, s.createProjectUpdate)
 		} else {
@@ -793,7 +794,12 @@ func (s *server) saveMCPStatusUpdate(ctx context.Context, actor mcpActor, data d
 		}
 		input := domain.ProjectUpdateMutationInput{}
 		if _, ok := args["body"]; ok {
-			input.Body = &body
+			mentions := s.mcpMentionResolver(ctx, actor, &data, body)
+			input.Body, input.BodyData = &body, mentions.companionDocument(body)
+			if input.BodyData == nil && richBody {
+				// The stored document would otherwise keep showing the old body.
+				input.BodyData = mentions.markdownDocument(body)
+			}
 		}
 		if health != "" {
 			input.Health = &health
@@ -817,7 +823,7 @@ func (s *server) saveMCPStatusUpdate(ctx context.Context, actor mcpActor, data d
 	return map[string]any{"id": saved["id"], "type": kind, "parentId": parentID, "name": parentName, "health": saved["health"], "body": saved["body"], "createdAt": saved["createdAt"], "editedAt": saved["editedAt"]}, nil
 }
 
-func (s *server) saveMCPDraft(ctx context.Context, data domain.Bootstrap, args map[string]any) (any, error) {
+func (s *server) saveMCPDraft(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	id := stringArg(args, "id")
 	kind := normalizeDraftType(stringArg(args, "type"))
 	var current domain.Draft
@@ -901,7 +907,7 @@ func (s *server) saveMCPDraft(ctx context.Context, data domain.Bootstrap, args m
 		}
 		if bodyProvided {
 			// The composer restores its editor from metadata.description.
-			metadata["description"] = mcpComposerDescription(body)
+			metadata["description"] = mcpComposerDescription(body, s.mcpMentionResolver(ctx, actor, &data, body))
 		}
 		if title == "" {
 			title = "Untitled issue"
@@ -948,17 +954,21 @@ func (s *server) saveMCPDraft(ctx context.Context, data domain.Bootstrap, args m
 }
 
 // mcpComposerDescription mirrors the create-issue composer's stored
-// description: Markdown plus a paragraph-per-line editor document.
-func mcpComposerDescription(markdown string) map[string]any {
-	content := []map[string]any{}
+// description: Markdown plus a paragraph-per-line editor document, with inline
+// formatting as marks and references as mention nodes.
+func mcpComposerDescription(markdown string, mentions *mentionResolver) map[string]any {
+	content := []any{}
 	for _, line := range strings.Split(markdown, "\n") {
 		paragraph := map[string]any{"type": "paragraph"}
-		if line != "" {
-			paragraph["content"] = []map[string]any{{"type": "text", "text": line}}
+		if inline := mcpMarkdownInlineNodes(line); len(inline) > 0 {
+			paragraph["content"] = inline
 		}
 		content = append(content, paragraph)
 	}
 	document := map[string]any{"type": "doc", "content": content}
+	if mentions != nil {
+		document = mentions.convert(document)
+	}
 	raw, _ := json.Marshal(document)
 	return map[string]any{"markdown": markdown, "document": document, "documentJSON": string(raw), "contentState": ""}
 }

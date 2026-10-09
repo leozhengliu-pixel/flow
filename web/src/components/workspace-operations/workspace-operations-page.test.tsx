@@ -1,13 +1,15 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import { expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { mentionFixture } from '@/components/editor/mentions/mention-fixtures'
 import { makeBootstrap } from '@/test/fixtures'
+import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
 import type { Draft } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ deleteAllDrafts: vi.fn(), deleteDraft: vi.fn() }))
+const api = vi.hoisted(() => ({ deleteAllDrafts: vi.fn(), deleteDraft: vi.fn(), createAsk: vi.fn(), fetchIssueRecord: vi.fn(), listProjectRecords: vi.fn(), listIssueRecords: vi.fn(), realtimeClientId: () => 'ops-test' }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 
 import { WorkspaceOperationsPage } from './workspace-operations-page'
@@ -76,4 +78,38 @@ it('groups parent-scoped update and comment drafts and links them to their paren
   expect(screen.getByText('Commenting on a project')).toBeVisible()
   await user.click(screen.getAllByRole('link', { name: 'Edit draft' })[0])
   expect(onNavigate).toHaveBeenCalledWith(`/workspace/project/${project.slugId}/activity`)
+})
+
+beforeEach(() => {
+  api.listIssueRecords.mockResolvedValue({ items: [], hasMore: false, total: 0 })
+  stubEditorEnvironment()
+})
+afterEach(() => { vi.unstubAllGlobals() })
+
+it('creates an ask whose description keeps mentions as markdown links', async () => {
+  const user = userEvent.setup()
+  const onReload = vi.fn().mockResolvedValue(undefined)
+  api.createAsk.mockResolvedValue({})
+  const data = mentionFixture({ asks: [], integrationConnections: [], issueTemplates: [] })
+  render(
+    <MentionShell data={data}>
+      <WorkspaceOperationsPage data={data} view="asks" onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={onReload} onResumeDraft={vi.fn()} />
+    </MentionShell>,
+  )
+  await user.click(screen.getByRole('button', { name: 'Create ask' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Create ask' })
+  await user.type(within(dialog).getByPlaceholderText('What do you need?'), 'Need a plan')
+  const box = within(dialog).getByRole('textbox', { name: 'Description' })
+  await user.click(box)
+  await user.keyboard('Details in @Launch')
+  // The dialog is modal: the page outside it is inert, so the option is picked with the keyboard.
+  await screen.findByRole('option', { name: /Launch plan/ })
+  await user.keyboard('{Enter}')
+  pasteText(box, `${window.location.origin}/workspace/project/project-one/overview`)
+  await waitFor(() => expect(box.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one'))
+  await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+  await waitFor(() => expect(api.createAsk).toHaveBeenCalledTimes(1))
+  const body = api.createAsk.mock.calls[0][0].body as string
+  expect(body).toContain('[Launch plan](/workspace/document/plan-abc)')
+  expect(body).toContain('[Project one](/workspace/project/project-one/overview)')
 })

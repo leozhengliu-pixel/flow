@@ -234,3 +234,10 @@
 :root[data-theme="light"] .flow-empty-state>div button:not(:first-child){
   background:var(--theme-control);color:var(--theme-text-primary)
 }
+
+/* Create-ask description: a mention-aware field styled like the dialog's other inputs. */
+.operations-dialog>.operations-field{display:flex;flex-direction:column;gap:6px;margin:12px 0;font-size:12px;color:var(--theme-text-secondary)}
+.operations-description-field{--mention-field-min-height:90px;border:.5px solid var(--border-strong);border-radius:6px;padding:8px;background:var(--bg-panel);color:var(--text)}
+.operations-description-field:focus-within{border-color:var(--focus-ring);box-shadow:0 0 0 1px var(--focus-ring)}
+:root[data-theme="light"] .operations-dialog>.operations-field{color:var(--muted)}
+:root[data-theme="light"] .operations-description-field{border-color:var(--border);background:var(--theme-control);color:var(--theme-text-primary)}

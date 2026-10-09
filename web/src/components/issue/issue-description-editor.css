@@ -406,3 +406,25 @@
   border-bottom-style: dashed;
   opacity: 0.7;
 }
+
+/* "@" menu sections and resource icons (people keep their avatar; other resources use their own icon). */
+.description-mention-group {
+  padding: 8px 8px 4px;
+  color: var(--theme-text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 14px;
+}
+.description-mention-option:first-child .description-mention-group { padding-top: 4px; }
+.description-mention-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  color: var(--theme-text-secondary);
+}
+.description-mention-icon svg { width: 16px; height: 16px; }
+:root[data-theme="light"] .description-mention-group { color: var(--theme-text-tertiary); }
+
+/* The "@" menu is portaled to the page so dialogs, popovers and scrolling editors never clip it (pointer-events: auto because a modal dialog disables them on the body). */
+.description-mention-menu--floating { position: fixed; z-index: 1100; pointer-events: auto; }

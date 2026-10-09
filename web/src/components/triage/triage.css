@@ -326,20 +326,18 @@
 }
 .triage-action-dialog__properties { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .triage-action-dialog__comment {
+  --mention-field-min-height: 62px;
   box-sizing: border-box;
   width: 100%;
-  min-height: 80px;
   margin-top: 12px;
   padding: 8px 10px;
   border: 0.5px solid var(--theme-border-strong);
   border-radius: 8px;
-  outline: 0;
-  resize: vertical;
   background: var(--theme-surface-1);
   color: var(--theme-text-primary);
-  font: 13px/19px var(--font);
 }
-.triage-action-dialog__comment:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
+.triage-action-dialog__comment.mention-text-field .issue-description-root .description-editor { max-height: 240px; overflow-y: auto; font: 13px/19px var(--font); }
+.triage-action-dialog__comment:focus-within { border-color: var(--focus-ring); box-shadow: 0 0 0 1px var(--focus-ring); }
 .dialog-content.action-dialog.triage-action-dialog > footer { margin: 16px 0 0; padding: 0; }
 .dialog-content.action-dialog.triage-action-dialog > footer button { display: inline-flex; align-items: center; gap: 6px; height: 28px; font-size: 12px; }
 

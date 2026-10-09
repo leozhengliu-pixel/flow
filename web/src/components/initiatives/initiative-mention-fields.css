@@ -1,0 +1,9 @@
+/* Mention-aware fields (MentionTextField) in the initiative activity composer, update panels and description. */
+.li-activity-composer { overflow: visible; }
+.li-activity-composer .mention-text-field { --mention-field-min-height: 70px; margin-top: 12px; padding: 0 16px; }
+.li-activity-composer .mention-text-field .issue-description-root .description-editor { font-size: 14px; line-height: 1.55; }
+.li-update-panel-composer .mention-text-field { --mention-field-min-height: 100px; margin-top: 8px; padding: 8px; }
+.li-inline-update-editor .mention-text-field { --mention-field-min-height: 76px; margin-top: 6px; padding: 7px; }
+.li-description .mention-text-field { --mention-field-min-height: 110px; width: calc(100% + 28px); margin: 0 0 0 -14px; padding: 7px 14px; border-radius: 6px; }
+.li-description .mention-text-field:focus-within { background: var(--theme-soft-overlay); }
+.li-description .mention-text-field .issue-description-root .description-editor { font-size: 14px; line-height: 1.6; }

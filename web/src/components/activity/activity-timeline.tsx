@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n/i18n'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
-import { activityTimeLabel, describeIssueActivity, type ActivityContext } from './issue-activity-model'
+import { activityTimeLabel, describeIssueActivityParts, type ActivityContext, type ActivityPart } from './issue-activity-model'
+import { MentionReference } from '@/components/editor/mentions/mention-reference'
 import { inlineCommentsState } from '@/lib/inline-comments-state'
 import './activity-timeline.css'
 
@@ -83,7 +84,7 @@ export function ActivityTimeline({
   }
   const topLevel = comments.filter((comment) => !comment.parentId || !commentIds.has(comment.parentId))
   const eventItems = events.flatMap((event) => {
-    const description = describeIssueActivity(event, context, t)
+    const description = describeIssueActivityParts(event, context, t)
     return description ? [{ ...event, description }] : []
   })
   const items = [
@@ -308,11 +309,11 @@ export function ActivityTimeline({
   )
 }
 
-function ActivityRow({ event, description }: { event: ActivityEvent; description: string }) {
+function ActivityRow({ event, description }: { event: ActivityEvent; description: ActivityPart[] }) {
   const { locale } = useI18n()
   return (
     <p className="activity-row" data-i18n-ignore>
-      <strong>{event.actor.displayName}</strong> {description}
+      <strong>{event.actor.displayName}</strong>{' '}{description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)}
       <span className="activity-time">
         <span className="activity-dot">·</span>
         <a href={`#activity-${event.id}`} title={format(new Date(event.createdAt), 'PPpp')}>

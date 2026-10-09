@@ -117,7 +117,8 @@ export function linkAgentEntities(markdown: string, data?: BootstrapData, option
   return { markdown: result, issues, references }
 }
 
-function userMentionPattern(data: BootstrapData) {
+/** People a text can @mention by name, longest names first (shared with the editors' mention conversion). */
+export function userMentionPattern(data: BootstrapData) {
   const byName = new Map<string, User>()
   for (const user of data.users ?? []) {
     if (user.active === false || user.app) continue

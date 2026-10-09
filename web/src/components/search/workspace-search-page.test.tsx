@@ -98,6 +98,14 @@ describe('workspace search',()=>{
     expect(lastSignal.aborted).toBe(true)
   })
 
+  it('shows a result subtitle as plain text, never as markdown link syntax',async()=>{
+    vi.mocked(semanticSearch).mockResolvedValue(semantic([{id:'doc-1',type:'document',title:'Spec',score:1,subtitle:'Covers [FLOW-1](/test/issue/FLOW-1/general) and **more**'}]))
+    setup('/test/search?q=spec')
+    const link=await screen.findByRole('link',{name:/Spec/})
+    expect(link).toHaveTextContent('Covers FLOW-1 and more')
+    expect(link.textContent).not.toContain('](')
+  })
+
   it('renders real links and status glyphs while keeping entity names untranslated',async()=>{
     localStorage.setItem('flow:locale','zh-CN')
     vi.mocked(semanticSearch).mockResolvedValue(semantic([

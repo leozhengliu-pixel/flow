@@ -320,9 +320,11 @@
 .project-overview__milestone-issues:hover { background: var(--pd-control); color: var(--pd-text); }
 .project-overview__milestone-menu-trigger:hover { background: var(--pd-control); color: var(--pd-text); }
 .project-overview__milestone-menu-trigger[data-state=open] { background: var(--pd-control); color: var(--pd-text); }
-.project-overview__milestone-description { box-sizing: border-box; width: calc(100% + 24px); min-height: 98px; display: block; margin: 0 -14px; padding: 10px 14px 16px 26px; resize: none; border: 0; border-radius: 4px; outline: 0; background: transparent; color: var(--pd-copy); font-family: inherit; font-size: 13px; font-weight: 450; line-height: 23px; }
+.project-overview__milestone-description { --mention-field-min-height: 72px; box-sizing: border-box; width: calc(100% + 24px); min-height: 98px; display: block; margin: 0 -14px; padding: 10px 14px 16px 26px; border: 0; border-radius: 4px; outline: 0; background: transparent; color: var(--pd-copy); font-family: inherit; font-size: 13px; font-weight: 450; line-height: 23px; }
+.project-overview__milestone-description.mention-text-field .issue-description-root .description-editor { font-size: 13px; font-weight: 450; line-height: 23px; }
 .project-overview__milestone-description:hover { background: var(--theme-soft-overlay); }
-.project-overview__milestone-description:focus { background: var(--theme-soft-overlay); }
+.project-overview__milestone-description:focus,
+.project-overview__milestone-description:focus-within { background: var(--theme-soft-overlay); }
 .project-overview__milestone-menu { width: 220px; }
 .project-overview__milestone-creator { min-height: 153px; }
 .project-overview__milestone-link { height: 28px; display: flex; align-items: center; gap: 7.5px; margin: 8px 0 0; padding: 0 8px 0 2px; border: 1px solid transparent; border-radius: 9999px; background: transparent; color: var(--pd-faint); font-size: 13px; font-weight: 500; }
@@ -995,6 +997,9 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-activity__comment p { margin: 2px 0 0; color: var(--theme-text-secondary); font-size: 11px; line-height: 17px; }
 .project-activity__comment-box { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; gap: 7px; align-items: center; }
 .project-activity__comment-box input { height: 29px; padding: 0 8px; border: .5px solid var(--theme-border-strong); border-radius: 5px; outline: 0; background: var(--theme-control); color: var(--theme-text-primary); font-size: 11px; }
+.project-activity__comment-box .mention-text-field { --mention-field-min-height: 17px; box-sizing: border-box; min-height: 29px; padding: 5px 8px; border: .5px solid var(--theme-border-strong); border-radius: 5px; background: var(--theme-control); color: var(--theme-text-primary); font-size: 11px; }
+.project-activity__comment-box .mention-text-field:focus-within { border-color: var(--theme-text-tertiary); }
+.project-activity__comment-box .mention-text-field .issue-description-root .description-editor { font-size: 11px; line-height: 17px; }
 .project-activity__comment-box button { height: 27px; padding: 0 8px; border: 0; border-radius: 5px; background: #5e6ad2; color: #fff; font-size: 10px; }
 .project-activity__event { min-height: 28px; display: flex; align-items: center; gap: 4px; padding: 0 16px; color: var(--theme-text-secondary); font-size: 12px; line-height: 16.8px; font-weight: 450; }
 .project-activity__event strong { font-weight: 500; }
@@ -1002,6 +1007,9 @@ html .project-details-sidebar .project-label-control .project-label-add[aria-exp
 .project-activity__event-dot { width: 13px; height: 13px; flex: none; border: 1px solid #77777c; border-radius: 50%; }
 .project-activity__event time { color: inherit; }
 .project-activity__edit-dialog textarea { min-height: 130px; }
+.project-activity__edit-body { --mention-field-min-height: 114px; box-sizing: border-box; min-height: 130px; padding: 7px 9px; border: .5px solid var(--theme-border-strong); border-radius: 6px; background: var(--theme-surface-1); color: var(--theme-text-primary); font-size: 12px; }
+.project-activity__edit-body:focus-within { border-color: var(--theme-text-tertiary); }
+.project-activity__edit-body.mention-text-field .issue-description-root .description-editor { font-size: 12px; line-height: 18px; }
 .project-activity__edit-health { display: flex; gap: 5px; margin-bottom: 8px; }
 .project-activity__edit-health button { height: 26px; padding: 0 8px; border: 0; border-radius: 9999px; background: var(--theme-control-hover); color: #88888e; font-size: 10px; }
 .project-activity__edit-health button.is-active { background: #3a3a3e; color: var(--theme-text-primary); }

@@ -3,6 +3,8 @@
  */
 import type { Project, ProjectUpdate, Team } from '@/types/flow'
 
+import { MentionBody } from '@/components/editor/mentions/mention-body'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { healthLabel } from './inbox-host-types'
 
 import './inbox-hosts.css'
@@ -45,7 +47,7 @@ export function ProjectOverviewInboxView({
         </div>
       </header>
 
-      {project.summary ? <p className="flow-inbox-host__summary">{project.summary}</p> : null}
+      {project.summary ? <p className="flow-inbox-host__summary">{markdownPlainText(project.summary)}</p> : null}
 
       <dl className="flow-inbox-host__properties">
         <div>
@@ -102,7 +104,7 @@ export function ProjectOverviewInboxView({
               {new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(latestUpdate.createdAt))}
             </time>
           </header>
-          <p>{latestUpdate.body}</p>
+          <MentionBody body={latestUpdate.body} data={latestUpdate.bodyData} />
         </section>
       ) : (
         <section className="flow-inbox-host__latest-update is-empty">
@@ -118,7 +120,7 @@ export function ProjectOverviewInboxView({
       {project.description ? (
         <section className="flow-inbox-host__description">
           <h3>Description</h3>
-          <p>{project.description}</p>
+          <MentionBody body={project.description} />
         </section>
       ) : null}
     </div>

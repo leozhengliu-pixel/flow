@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ActivityEvent } from '@/types/flow'
 import { makeBootstrap, viewer } from '@/test/fixtures'
-import { activityTimeLabel, describeIssueActivity } from './issue-activity-model'
+import { activityPartsText, activityTimeLabel, describeIssueActivity, describeIssueActivityParts } from './issue-activity-model'
 
 const event = (metadata: Record<string,string>, type = 'issue.updated'): ActivityEvent => ({ id: 'event', type, actor: viewer, createdAt: '2026-09-08T06:00:00Z', metadata })
 
@@ -39,6 +39,19 @@ describe('issue activity projection', () => {
     expect(describeIssueActivity(event({ added: 'Version 2', removed: 'Version 1' }, 'issue.releases_updated'))).toBe('added to release Version 2, removed from release Version 1')
     expect(describeIssueActivity(event({}, 'comment.created'))).toBeNull()
     expect(describeIssueActivity(event({}, 'issue.reacted'))).toBeNull()
+  })
+
+  it('names the resources an event references so they can render as chips', () => {
+    const context = { ...makeBootstrap(), releases: [{ id: 'release-1', name: 'Version 2' }, { id: 'release-0', name: 'Version 1' }] as never }
+    const projectId = context.projects[0].id
+    expect(describeIssueActivityParts(event({ project: projectId }), context)).toEqual(['added to project ', { type: 'project', id: projectId, label: context.projects[0].name }])
+    expect(describeIssueActivityParts(event({ labels: context.labels[0].id }), context)).toEqual(['changed labels to ', { type: 'label', id: context.labels[0].id, label: context.labels[0].name }])
+    expect(describeIssueActivityParts(event({ type: 'duplicate', relatedIssueId: context.issues[0].id }, 'issue.relation_added'), context)).toEqual(['marked this as a duplicate of ', { type: 'issue', id: context.issues[0].id, label: context.issues[0].identifier }])
+    expect(describeIssueActivityParts(event({ type: 'blocked_by', relatedIssueId: 'issue-not-held' }, 'issue.relation_added'), context)).toEqual(['marked this as blocked by ', { type: 'issue', id: 'issue-not-held', label: 'another issue' }])
+    expect(describeIssueActivityParts(event({ parent: 'issue-not-held' }), context)).toEqual(['set the parent issue to ', { type: 'issue', id: 'issue-not-held', label: 'another issue' }])
+    expect(describeIssueActivityParts(event({ added: 'Version 2', removed: 'Version 1' }, 'issue.releases_updated'), context)).toEqual(['added to release ', { type: 'release', id: 'release-1', label: 'Version 2' }, ', removed from release ', { type: 'release', id: 'release-0', label: 'Version 1' }])
+    expect(describeIssueActivityParts(event({ recurrence: '', recurringNext: 'DEV-13', recurringNextId: 'issue-13' }), context)).toEqual(['moved the recurring schedule to ', { type: 'issue', id: 'issue-13', label: 'DEV-13' }])
+    expect(activityPartsText(describeIssueActivityParts(event({ project: projectId, cycle: 'missing-cycle' }), context)!)).toBe(`added to project ${context.projects[0].name}, changed the cycle`)
   })
 
   it('uses compact localized timestamps', () => {
