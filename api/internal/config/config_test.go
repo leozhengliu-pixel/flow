@@ -87,6 +87,15 @@ func TestLoadAgentValidation(t *testing.T) {
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_PROTOCOL") {
 		t.Fatalf("invalid agent protocol error = %v", err)
 	}
+	t.Setenv("FLOW_AGENT_PROTOCOL", "openai-responses")
+	t.Setenv("FLOW_AGENT_REASONING_EFFORT", "Medium")
+	if loaded, err := Load(); err != nil || loaded.Agent.ReasoningEffort != "medium" {
+		t.Fatalf("reasoning effort config = %#v, %v", loaded.Agent, err)
+	}
+	t.Setenv("FLOW_AGENT_REASONING_EFFORT", "extreme")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_REASONING_EFFORT") {
+		t.Fatalf("invalid reasoning effort error = %v", err)
+	}
 }
 
 func TestLoadAuthAndTelemetryValidation(t *testing.T) {
