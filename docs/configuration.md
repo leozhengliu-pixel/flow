@@ -333,6 +333,7 @@ credentials to the browser.
 | `FLOW_AGENT_ANTHROPIC_VERSION` | `2023-06-01` | Anthropic API version header. |
 | `FLOW_AGENT_TOOLS_ENABLED` | `true` | Expose Flow MCP read tools to the Agent. |
 | `FLOW_AGENT_WRITE_TOOLS` | `false` | Also expose write tools. Enable only when automatic mutations are acceptable. |
+| `FLOW_AGENT_REASONING_EFFORT` | empty | Reasoning effort for OpenAI-compatible models: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Empty leaves the provider default. |
 
 ```dotenv
 FLOW_AGENT_ENABLED=true
