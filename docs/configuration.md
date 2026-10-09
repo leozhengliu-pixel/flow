@@ -328,7 +328,7 @@ credentials to the browser.
 | `FLOW_AGENT_BASE_URL` | `https://api.openai.com/v1` | Provider API base URL. |
 | `FLOW_AGENT_API_KEY` | empty | Provider credential; `_FILE` is supported. |
 | `FLOW_AGENT_MODEL` | `gpt-5-mini` | Provider model identifier. |
-| `FLOW_AGENT_TIMEOUT` | `60s` | Per-request Go timeout. |
+| `FLOW_AGENT_TIMEOUT` | `60s` | Provider request timeout: how long a request may wait for the provider's first byte, or between two chunks of a streamed answer. A streamed answer may run longer than this as long as the provider keeps sending. |
 | `FLOW_AGENT_MAX_OUTPUT_TOKENS` | `4096` | Maximum output tokens per provider turn. |
 | `FLOW_AGENT_ANTHROPIC_VERSION` | `2023-06-01` | Anthropic API version header. |
 | `FLOW_AGENT_TOOLS_ENABLED` | `true` | Expose Flow MCP read tools to the Agent. |

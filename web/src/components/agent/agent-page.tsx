@@ -122,6 +122,12 @@ export function AgentPage({
       active = false;
     };
   }, []);
+  // Leaving a chat for the Agent landing (sidebar "Agent") shows the empty page, not the chat just sent from here.
+  const previousChatSlugRef = useRef(chatSlug);
+  useEffect(() => {
+    if (previousChatSlugRef.current && !chatSlug) setActiveStreamId(undefined);
+    previousChatSlugRef.current = chatSlug;
+  }, [chatSlug]);
   const currentSummary = useMemo(
     () =>
       chatSlug
@@ -175,7 +181,9 @@ export function AgentPage({
     setSessions((list) => list.map((item) => (item.id === read.id ? { ...item, lastReadAt } : item)));
     onSessionChange(read.id, listed ? { ...listed, lastReadAt } : read);
   });
-  const shown = pending ?? (awaitingReply && current ? withReplyPlaceholder(current) : current);
+  // Until the reply's first part arrives the conversation ends with the user's message: keep the working indicator
+  // under it while a reply is running (streaming here, or on the server after the page was reopened).
+  const shown = pending ?? (replyRunning && current?.messages.at(-1)?.role === "user" ? withReplyPlaceholder(current) : current);
   useEffect(() => {
     if (chatSlug || current || !input.trim()) {
       if (!chatSlug && !current && !input.trim()) clearAgentDraft(agentDraftKey);
@@ -766,7 +774,7 @@ function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToo
   const queue = summarizeElicitationQueue(other);
   const submitting = other.some(part => part.type === "elicitation" && part.status === "running");
   return <div className={styles.messageParts}>
-    {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>}
+    {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text}/>}
     <AgentElicitationResponseQueue answeredCount={queue.answeredCount} elicitationCount={queue.elicitationCount} isSubmitting={submitting} />
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><span>{part.text}</span>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>

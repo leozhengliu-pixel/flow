@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	appconfig "flow/api/internal/config"
 )
@@ -195,5 +198,52 @@ func TestAgentReasoningEffortIsSentWhenConfigured(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// FLOW_AGENT_TIMEOUT bounds how long a streamed answer may stall, not how long it may run.
+func TestAgentStreamTimeoutIsAnIdleTimeout(t *testing.T) {
+	streamChunks := func(chunks int, gap time.Duration, stall bool) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			flusher := w.(http.Flusher)
+			for index := 0; index < chunks; index++ {
+				_, _ = fmt.Fprintf(w, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"x\"}\n\n")
+				flusher.Flush()
+				time.Sleep(gap)
+			}
+			if stall {
+				select {
+				case <-r.Context().Done():
+				case <-time.After(2 * time.Second):
+				}
+				return
+			}
+			_, _ = fmt.Fprintf(w, "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp\",\"output\":[]}}\n\n")
+		}))
+	}
+	config := func(url string) appconfig.AgentConfig {
+		return appconfig.AgentConfig{Protocol: "openai-responses", BaseURL: url, Model: "model", MaxOutputTokens: 100, Timeout: 250 * time.Millisecond}
+	}
+
+	steady := streamChunks(8, 80*time.Millisecond, false)
+	defer steady.Close()
+	s := &server{agent: config(steady.URL)}
+	start := time.Now()
+	turn, err := s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
+	if err != nil || turn.Text != "xxxxxxxx" {
+		t.Fatalf("steady stream: turn=%#v err=%v", turn, err)
+	}
+	if time.Since(start) < 500*time.Millisecond {
+		t.Fatalf("the stream finished before the timeout elapsed (%s), so it proves nothing", time.Since(start))
+	}
+
+	stalled := streamChunks(1, 0, true)
+	defer stalled.Close()
+	s = &server{agent: config(stalled.URL)}
+	_, err = s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
+	var providerErr *agentProviderError
+	if !errors.As(err, &providerErr) || !providerErr.timeout || !providerErr.transient {
+		t.Fatalf("stalled stream error = %v", err)
 	}
 }

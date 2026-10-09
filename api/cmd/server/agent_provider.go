@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"flow/api/internal/domain"
 )
@@ -469,8 +470,22 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 		return nil, fmt.Errorf("could not encode Agent request")
 	}
 	endpoint := agentEndpoint(s.agent.BaseURL, suffix)
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
+	// The provider's own client (tests) keeps its whole-request timeout. Otherwise FLOW_AGENT_TIMEOUT is an idle
+	// timeout: a streamed answer may run as long as the provider keeps sending, but not stall for that long.
+	requestCtx, cancel := context.WithCancelCause(ctx)
+	var idle *time.Timer
+	if s.agentClient == nil && s.agent.Timeout > 0 {
+		idle = time.AfterFunc(s.agent.Timeout, func() { cancel(errAgentProviderIdle) })
+	}
+	stop := func() {
+		if idle != nil {
+			idle.Stop()
+		}
+		cancel(nil)
+	}
+	request, err := http.NewRequestWithContext(requestCtx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
+		stop()
 		return nil, fmt.Errorf("could not create Agent request")
 	}
 	request.Header.Set("Content-Type", "application/json")
@@ -485,23 +500,56 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 	}
 	client := s.agentClient
 	if client == nil {
-		client = &http.Client{Timeout: s.agent.Timeout}
+		client = &http.Client{}
 	}
 	response, err := client.Do(request)
 	if err != nil {
+		idled := errors.Is(context.Cause(requestCtx), errAgentProviderIdle)
+		stop()
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
 		var netErr net.Error
-		return nil, &agentProviderError{message: "Flow Agent provider is unavailable", transient: true, timeout: errors.As(err, &netErr) && netErr.Timeout()}
+		return nil, &agentProviderError{message: "Flow Agent provider is unavailable", transient: true, timeout: idled || errors.As(err, &netErr) && netErr.Timeout()}
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		defer response.Body.Close()
+		defer stop()
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		status := response.StatusCode
 		return nil, &agentProviderError{message: fmt.Sprintf("Flow Agent provider returned status %d: %s", status, providerError(body)), status: status, transient: status >= 500 || status == http.StatusTooManyRequests || status == http.StatusRequestTimeout, timeout: status == http.StatusGatewayTimeout || status == http.StatusRequestTimeout}
 	}
+	response.Body = &agentIdleBody{ReadCloser: response.Body, ctx: requestCtx, idle: idle, timeout: s.agent.Timeout, stop: stop}
 	return response, nil
+}
+
+var errAgentProviderIdle = errors.New("Flow Agent provider stopped responding")
+
+// agentIdleBody is a provider response body that restarts the idle timer whenever data arrives and releases the
+// request when closed.
+type agentIdleBody struct {
+	io.ReadCloser
+	ctx     context.Context
+	idle    *time.Timer
+	timeout time.Duration
+	stop    func()
+}
+
+func (b *agentIdleBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if n > 0 && b.idle != nil {
+		b.idle.Reset(b.timeout)
+	}
+	if err != nil && err != io.EOF && errors.Is(context.Cause(b.ctx), errAgentProviderIdle) {
+		return n, &agentProviderError{message: errAgentProviderIdle.Error(), transient: true, timeout: true}
+	}
+	return n, err
+}
+
+func (b *agentIdleBody) Close() error {
+	err := b.ReadCloser.Close()
+	b.stop()
+	return err
 }
 
 // agentProviderError is a failed provider request. Transient failures (no

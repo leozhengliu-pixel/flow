@@ -97,6 +97,8 @@ describe('linkAgentEntities for every resource type', () => {
     for (const [kind, url, attributes] of cases) {
       expect(linkAgentEntities(`See [thing](${url}).`, data, { all: true }).markdown, kind).toBe(`See [agentEntity kind="${kind}" ${attributes}].`)
     }
+    // The model sometimes writes the customer's name, spaces and all, instead of the slug.
+    expect(linkAgentEntities('See [Acme Corp](/workspace/customer/Acme Corp-1234567890ab).', data, { all: true }).markdown).toBe('See [agentEntity kind="customer" id="customer-1234567890ab" label="Acme Corp"].')
   })
 
   it('keeps updates and comments addressable by their link', () => {

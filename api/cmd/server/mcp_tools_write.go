@@ -957,6 +957,10 @@ func (s *server) saveMCPComment(ctx context.Context, actor mcpActor, data domain
 	if parent == "" {
 		return nil, fmt.Errorf("comment parent is required")
 	}
+	// The mutation matches issues by ID; models pass identifiers such as DEV-24.
+	if issue, err := mcpFindIssue(data, parent); err == nil {
+		parent = issue.ID
+	}
 	return s.mutateAnyComment(ctx, actor, data, parent, body, objectArg(args, "bodyData"), "create")
 }
 
