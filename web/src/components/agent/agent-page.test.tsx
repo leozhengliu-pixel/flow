@@ -129,6 +129,29 @@ describe('agent page composer', () => {
     await user.click(screen.getByRole('button', { name: 'Stop responding' }))
   })
 
+  it('keeps the working state after the new chat opens and the server copy still ends with the question', async () => {
+    api.fetchAgentStatus.mockResolvedValue({ enabled: true, model: 'model' })
+    const session: AgentSession = { id: 'session-opened', slugId: 'opened', userId: 'user-1', title: 'Opened', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [{ id: 'user-message', role: 'user', content: 'Think first', createdAt: new Date().toISOString() }], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z' }
+    // The server has not stored an assistant message yet when the opened chat is re-read.
+    api.getAgentSession.mockResolvedValue(session)
+    let rerenderWithSlug: () => void = () => undefined
+    const onNavigate = vi.fn(() => rerenderWithSlug())
+    streams.streamNewAgentSession.mockImplementation((_input, onEvent, signal: AbortSignal) => {
+      onEvent({ type: 'session.started', session, messageId: 'assistant-message' })
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))
+    })
+    const data = makeBootstrap({ agentSessions: [session], agentSkills: [] })
+    const page = (chatSlug?: string) => <I18nProvider><AgentPage chatSlug={chatSlug} data={data} onNavigate={onNavigate} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>
+    const view = render(page())
+    rerenderWithSlug = () => view.rerender(page('opened'))
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox', { name: 'Send a message to Flow AI' }), 'Think first')
+    await user.click(screen.getByRole('button', { name: 'Submit comment' }))
+    await waitFor(() => expect(api.getAgentSession).toHaveBeenCalledWith('session-opened'))
+    await waitFor(() => expect(screen.getByText('Thinking…')).toBeVisible())
+    await user.click(screen.getByRole('button', { name: 'Stop responding' }))
+  })
+
   it('reduces incremental stream events into one assistant message', () => {
     const session = { id: 'session', slugId: 'chat', userId: 'user', title: 'Chat', favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [], createdAt: '', updatedAt: '' } as AgentSession
     const started = applyAgentStreamEvent(undefined, { type: 'session.started', session, messageId: 'message' })!
@@ -159,6 +182,19 @@ describe('agent page composer', () => {
       expect(api.stopAgentSession).toHaveBeenCalledWith('session-live')
     } finally {
       clearLiveAgentSession('session-live')
+    }
+  })
+
+  it('keeps the work group running between steps of a reply that is still streaming', async () => {
+    const liveSession: AgentSession = { id: 'session-between', slugId: 'between', userId: 'user-1', title: 'Between', favorite: false, location: 'page', issueIds: [], skillIds: [], createdAt: '2026-08-31T00:00:00Z', updatedAt: '2026-08-31T00:00:00Z',
+      messages: [{ id: 'q', role: 'user', content: 'Check the project', createdAt: '2026-08-31T00:00:00Z' }, { id: 'a', role: 'assistant', content: '', createdAt: '2026-08-31T00:00:01Z', parts: [{ id: 's', type: 'step', title: 'Checking the project', text: 'Reading it first', status: 'completed' }, { id: 't', type: 'toolCall', status: 'completed', toolCall: { id: 'call', name: 'get_project', status: 'completed', arguments: {} } }] }] }
+    setLiveAgentSession(liveSession)
+    try {
+      render(<I18nProvider><AgentPage chatSlug="between" data={makeBootstrap({ agentSessions: [{ ...liveSession, messages: liveSession.messages.slice(0, 1) }], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
+      expect(await screen.findByText('Checking the project…')).toBeVisible()
+      expect(screen.queryByText('Work completed')).not.toBeInTheDocument()
+    } finally {
+      clearLiveAgentSession('session-between')
     }
   })
 

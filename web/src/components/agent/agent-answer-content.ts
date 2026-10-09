@@ -40,6 +40,10 @@ const PROTECTED = /(```[\s\S]*?(?:```|$)|`[^`\n]*`|\[agentEntity [^\]\n]*\])/
 // Markdown link | <autolink> | bare URL | issue identifier.
 const ENTITY_TOKEN = /\[([^\]\n]+)\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)|<(https?:\/\/[^>\s]+)>|(https?:\/\/[^\s<>()[\]]+)|(?<![\w/#.-])([A-Z][A-Z0-9]*-\d+)(?![\w-])/g
 
+// A markdown link to an app path whose target holds spaces (the model writing a customer's name instead of its slug):
+// markdown does not link it, so the spaces are percent-encoded first.
+const SPACED_PATH_LINK = /\]\(\s*(\/[^()\n"<>]*?[ \t][^()\n"<>]*?)\s*\)/g
+
 export type LinkAgentEntitiesOptions = {
   /**
    * Link every resource type (documents, people, teams, cycles, labels, milestones, customers, releases, views, reviews,
@@ -78,7 +82,7 @@ export function linkAgentEntities(markdown: string, data?: BootstrapData, option
     if (issue) return { kind: 'issue', id: issue.id, label: issue.identifier }
     return all && data.issueCollectionPaged && isAgentIdentifier(data, identifier) ? { kind: 'issue', id: identifier.toUpperCase(), label: identifier.toUpperCase() } : undefined
   }
-  const linked = markdown.split(PROTECTED).map((segment, index) => index % 2 ? segment : segment.replace(ENTITY_TOKEN, (match: string, linkText?: string, linkUrl?: string, autolink?: string, bareUrl?: string, identifier?: string, offset?: number, source?: string) => {
+  const linked = markdown.split(PROTECTED).map((segment, index) => index % 2 ? segment : segment.replace(SPACED_PATH_LINK, (_match: string, path: string) => `](${path.trim().replace(/\s+/g, '%20')})`).replace(ENTITY_TOKEN, (match: string, linkText?: string, linkUrl?: string, autolink?: string, bareUrl?: string, identifier?: string, offset?: number, source?: string) => {
     if (linkText !== undefined && linkUrl !== undefined) {
       if (offset && source?.[offset - 1] === '!') return match
       const textId = linkText.trim().match(IDENTIFIER_PREFIX)?.[1]

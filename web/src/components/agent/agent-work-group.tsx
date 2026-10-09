@@ -59,8 +59,9 @@ function toolStatusLabel(name: string, running: boolean, args?: Record<string, u
   const labels: Record<string, [string, string]> = {
     list_issues: ["Looking at issues…", "Looked at issues"], list_projects: ["Looking at projects…", "Looked at projects"],
     list_initiatives: ["Looking at initiatives…", "Looked at initiatives"], list_documents: ["Looking at documents…", "Looked at documents"],
-    search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: ["Updating issue…", "Updated issue"],
-    save_project: ["Updating project…", "Updated project"], save_initiative: ["Updating initiative…", "Updated initiative"],
+    search_documentation: ["Searching documentation…", "Searched documentation"], save_issue: updating ? ["Updating issue…", "Updated issue"] : ["Creating issue…", "Created issue"],
+    save_project: updating ? ["Updating project…", "Updated project"] : ["Creating project…", "Created project"], save_initiative: updating ? ["Updating initiative…", "Updated initiative"] : ["Creating initiative…", "Created initiative"],
+    save_comment: updating ? ["Updating comment…", "Updated comment"] : ["Adding comment…", "Added comment"],
     get_issue: ["Looking at issue…", "Looked at issue"], list_issue_history: ["Looking at issue activity…", "Looked at issue activity"],
     list_project_activity: ["Looking at project activity…", "Looked at project activity"], get_status_updates: ["Looking at project updates…", "Looked at project updates"],
     search_issues: ["Searching issues…", "Searched issues"], list_notifications: ["Reviewing inbox…", "Reviewed inbox"],

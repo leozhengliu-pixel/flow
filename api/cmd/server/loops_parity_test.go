@@ -282,6 +282,19 @@ func TestSaveCommentWithIssueAsIDCreatesComment(t *testing.T) {
 	}
 }
 
+func TestSaveCommentWithIssueIdentifierAsParentCreatesComment(t *testing.T) {
+	repository, actor, ctx := newMCPToolTestContext(t)
+	issue := repository.Bootstrap().Issues[0]
+	service := &server{store: repository}
+	if _, err := service.callFlowTool(ctx, actor, "save_comment", map[string]any{"issueId": issue.Identifier, "body": "Posted by identifier"}); err != nil {
+		t.Fatal(err)
+	}
+	comments := repository.Bootstrap().Comments[issue.ID]
+	if len(comments) == 0 || comments[len(comments)-1].Body != "Posted by identifier" {
+		t.Fatalf("comments = %#v", comments)
+	}
+}
+
 // streamAgent posts a streaming agent request and answers chip questions with the given answers.
 func streamAgent(t *testing.T, srv *server, host *httptest.Server, path string, body map[string]any, answers []string) string {
 	t.Helper()

@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // mcpMarkdownDocument converts agent-written Markdown into the rich-text
@@ -139,6 +141,15 @@ func mcpMarkdownParagraph(text string) map[string]any {
 	return paragraph
 }
 
+// mcpMarkdownIntrawordUnderscore reports whether text[start:end], an
+// underscore-delimited span, touches a letter or digit on the outside.
+func mcpMarkdownIntrawordUnderscore(text string, start, end int) bool {
+	before, _ := utf8.DecodeLastRuneInString(text[:start])
+	after, _ := utf8.DecodeRuneInString(text[end:])
+	wordRune := func(value rune) bool { return unicode.IsLetter(value) || unicode.IsDigit(value) }
+	return (start > 0 && wordRune(before)) || (end < len(text) && wordRune(after))
+}
+
 func mcpMarkdownInlineNodes(text string) []any {
 	nodes := []any{}
 	appendText := func(value string, marks ...map[string]any) {
@@ -156,7 +167,25 @@ func mcpMarkdownInlineNodes(text string) []any {
 		nodes = append(nodes, node)
 	}
 	cursor := 0
-	for _, match := range mcpMarkdownInline.FindAllStringSubmatchIndex(text, -1) {
+	searchFrom := 0
+	for searchFrom <= len(text) {
+		match := mcpMarkdownInline.FindStringSubmatchIndex(text[searchFrom:])
+		if match == nil {
+			break
+		}
+		for index := range match {
+			if match[index] >= 0 {
+				match[index] += searchFrom
+			}
+		}
+		// Underscore emphasis does not open or close inside a word
+		// (snake_case names such as get_issue stay literal): skip the
+		// underscore and look again after it.
+		if (match[6] >= 0 || match[12] >= 0) && mcpMarkdownIntrawordUnderscore(text, match[0], match[1]) {
+			searchFrom = match[0] + 1
+			continue
+		}
+		searchFrom = match[1]
 		appendText(text[cursor:match[0]])
 		group := func(index int) string {
 			if match[2*index] < 0 {
