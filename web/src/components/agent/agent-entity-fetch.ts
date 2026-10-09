@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import { fetchIssueRecord, listProjectRecords } from '@/lib/api'
 import type { BootstrapData, Issue, Project } from '@/types/flow'
-import { resolveAgentEntity, type AgentEntity, type AgentEntityTarget } from './agent-entity-refs'
+import { isAgentIdentifier, resolveAgentEntity, type AgentEntity, type AgentEntityTarget } from './agent-entity-refs'
 
 /**
- * Paged workspaces (~75k issues) never hold every issue in the client, and the project list view holds no projects, so an
- * answer's chip may name a record that is not in workspace data. Those are fetched by id through the same endpoints the
- * detail pages use, once per record, and shared by every chip, hover card and list row that names them.
+ * An answer's chip may name a record that is not in workspace data: paged workspaces (~75k issues) never hold every
+ * issue in the client, the project list view holds no projects, and the agent can create records (a new issue, a new
+ * project) after the page loaded. Those are fetched by id / identifier through the same endpoints the detail pages use,
+ * once per record, and shared by every chip, hover card and list row that names them.
  */
 type RecordKind = 'issue' | 'project'
 type Entry = { value?: Issue | Project; missing?: boolean; loading?: boolean; at: number }
@@ -64,21 +65,29 @@ export type AgentEntityState =
   | { status: 'loading' }
   | { status: 'missing' }
 
-/** Kinds the client may not hold in paged mode and can fetch by id. */
-function fetchableKind(kind: AgentEntityTarget['kind']): kind is RecordKind {
-  return kind === 'issue' || kind === 'project'
+const ISSUE_IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*-\d+$/
+
+/**
+ * Kinds the client may not hold and can fetch by id. An issue named by identifier is only worth a request when its
+ * prefix is a real team key ("UTF-8" or "DEV-404" in a workspace without DEV stay plain text without a round trip).
+ */
+function fetchableTarget(data: BootstrapData, kind: AgentEntityTarget['kind'], id: string): kind is RecordKind {
+  if (kind === 'project') return true
+  if (kind !== 'issue') return false
+  return !ISSUE_IDENTIFIER.test(id) || isAgentIdentifier(data, id)
 }
 
 /**
- * Resolves an answer's entity target: from workspace data when it holds it, otherwise (paged issues / projects) from a
- * cached by-id fetch. Chips for entities that cannot be found at all report `missing` so they fall back to plain text.
+ * Resolves an answer's entity target: from workspace data when it holds it, otherwise (issues / projects the client does
+ * not hold: paged workspaces, records created this session) from a cached by-id fetch. Chips for entities that cannot be
+ * found at all report `missing` so they fall back to plain text.
  */
 export function useAgentEntity(data: BootstrapData | undefined, target: Pick<AgentEntityTarget, 'kind' | 'id'> & Partial<AgentEntityTarget>): AgentEntityState {
   const { kind, id } = target
   const workspace = data?.workspace.urlKey ?? ''
   const { href, label } = target
   const held = useMemo(() => data ? resolveAgentEntity(data, { kind, id, href, label }) : undefined, [data, kind, id, href, label])
-  const fetchable = Boolean(data) && !held && fetchableKind(kind) && Boolean(data?.issueCollectionPaged)
+  const fetchable = Boolean(data) && !held && fetchableTarget(data as BootstrapData, kind, id)
   const key = fetchable ? recordKey(workspace, kind as RecordKind, id) : ''
   useEffect(() => {
     if (fetchable) loadAgentRecord(workspace, kind as RecordKind, id)

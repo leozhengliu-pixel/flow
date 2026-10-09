@@ -105,12 +105,21 @@ func storedLoopRun(run domain.LoopRun) ([]byte, error) {
 	return json.Marshal(run)
 }
 
-func decodeLoopRun(raw []byte, status string) (domain.LoopRun, error) {
+// decodeLoopRun rebuilds a run from its row. status and heartbeat come from
+// their columns: a heartbeat only renews the lease columns (it must not
+// rewrite the whole run document every few seconds), so the document's
+// heartbeatAt is the value from when the run was last saved and the column
+// holds the live one.
+func decodeLoopRun(raw []byte, status, heartbeat string) (domain.LoopRun, error) {
 	var run domain.LoopRun
 	if err := json.Unmarshal(raw, &run); err != nil {
 		return run, err
 	}
 	run.Status = status
+	if at, err := time.Parse(loopRunTime, heartbeat); err == nil && (run.HeartbeatAt == nil || at.After(*run.HeartbeatAt)) {
+		at = at.UTC()
+		run.HeartbeatAt = &at
+	}
 	return run, nil
 }
 
@@ -137,15 +146,15 @@ func (s *SQLiteStore) CreateLoopRun(ctx context.Context, workspace string, run d
 // LoopRun reads one run.
 func (s *SQLiteStore) LoopRun(ctx context.Context, workspace, id string) (domain.LoopRun, error) {
 	var raw []byte
-	var status string
-	err := s.db.QueryRowContext(ctx, `SELECT data,status FROM loop_run_records WHERE workspace_key=? AND id=?`, workspace, id).Scan(&raw, &status)
+	var status, heartbeat string
+	err := s.db.QueryRowContext(ctx, `SELECT data,status,heartbeat_at FROM loop_run_records WHERE workspace_key=? AND id=?`, workspace, id).Scan(&raw, &status, &heartbeat)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.LoopRun{}, ErrLoopRunNotFound
 	}
 	if err != nil {
 		return domain.LoopRun{}, err
 	}
-	return decodeLoopRun(raw, status)
+	return decodeLoopRun(raw, status, heartbeat)
 }
 
 // ListLoopRuns returns a loop's newest runs first.
@@ -153,7 +162,7 @@ func (s *SQLiteStore) ListLoopRuns(ctx context.Context, workspace, loopID string
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`SELECT data,status FROM loop_run_records WHERE workspace_key=? AND loop_id=? ORDER BY started_at DESC,id DESC LIMIT %d`, limit), workspace, loopID)
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`SELECT data,status,heartbeat_at FROM loop_run_records WHERE workspace_key=? AND loop_id=? ORDER BY started_at DESC,id DESC LIMIT %d`, limit), workspace, loopID)
 	if err != nil {
 		return nil, err
 	}
@@ -161,11 +170,11 @@ func (s *SQLiteStore) ListLoopRuns(ctx context.Context, workspace, loopID string
 	runs := []domain.LoopRun{}
 	for rows.Next() {
 		var raw []byte
-		var status string
-		if err := rows.Scan(&raw, &status); err != nil {
+		var status, heartbeat string
+		if err := rows.Scan(&raw, &status, &heartbeat); err != nil {
 			return nil, err
 		}
-		run, err := decodeLoopRun(raw, status)
+		run, err := decodeLoopRun(raw, status, heartbeat)
 		if err != nil {
 			return nil, err
 		}
@@ -184,21 +193,21 @@ func (s *SQLiteStore) UpdateLoopRun(ctx context.Context, workspace, id string, e
 	}
 	defer tx.Rollback()
 	var raw []byte
-	var status string
-	err = tx.QueryRowContext(ctx, `SELECT data,status FROM loop_run_records WHERE workspace_key=? AND id=?`+s.lockClause(), workspace, id).Scan(&raw, &status)
+	var status, heartbeat string
+	err = tx.QueryRowContext(ctx, `SELECT data,status,heartbeat_at FROM loop_run_records WHERE workspace_key=? AND id=?`+s.lockClause(), workspace, id).Scan(&raw, &status, &heartbeat)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.LoopRun{}, ErrLoopRunNotFound
 	}
 	if err != nil {
 		return domain.LoopRun{}, err
 	}
-	run, err := decodeLoopRun(raw, status)
+	run, err := decodeLoopRun(raw, status, heartbeat)
 	if err != nil {
 		return run, err
 	}
 	if err := mutate(&run); err != nil {
 		if errors.Is(err, ErrNoMutation) {
-			current, _ := decodeLoopRun(raw, status)
+			current, _ := decodeLoopRun(raw, status, heartbeat)
 			return current, nil
 		}
 		return run, err

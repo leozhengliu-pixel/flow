@@ -172,7 +172,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		history[last].Content += attachments.notes
 		history[last].Images = attachments.images
 	}
-	trigger := loopTrigger{Kind: run.Trigger, EventType: run.EventType, EntityType: run.EntityType, EntityID: run.EntityID, Label: run.TriggerLabel}
+	trigger := loopTrigger{Kind: run.Trigger, EventType: run.EventType, EntityType: run.EntityType, EntityID: run.EntityID, Label: run.TriggerLabel, Reason: loopTriggerReason{Code: run.TriggerReason, Value: run.TriggerValue}}
 	current := *loop
 	go func() {
 		defer loopGuards.release(guardKey)

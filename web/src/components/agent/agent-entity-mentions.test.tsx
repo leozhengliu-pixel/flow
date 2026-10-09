@@ -121,12 +121,15 @@ describe('linkAgentEntities for every resource type', () => {
     expect(legacy).toBe(`[Launch plan](${urls.document}) [agentEntity kind="issue" id="issue-1" label="TST-1"] ${urls.team}`)
   })
 
-  it('treats team-key identifiers as issues the client may not hold only in paged mode', () => {
+  it('treats team-key identifiers as issues the client may not hold (paged workspaces and records created this session)', () => {
     const paged = fixture({ issueCollectionPaged: true, issues: [] })
     expect(linkAgentEntities('See TST-77 and UTF-8 and DEV-1.', paged, { all: true }).markdown).toBe('See [agentEntity kind="issue" id="TST-77" label="TST-77"] and UTF-8 and DEV-1.')
-    expect(linkAgentEntities('See TST-77.', fixture({ issues: [] }), { all: true }).markdown).toBe('See TST-77.')
+    expect(linkAgentEntities('See TST-77 and DEV-1.', fixture({ issues: [] }), { all: true }).markdown).toBe('See [agentEntity kind="issue" id="TST-77" label="TST-77"] and DEV-1.')
+    expect(linkAgentEntities('[x](/workspace/issue/TST-77/y) [z](/workspace/issue/DEV-1/y)', fixture(), { all: true }).markdown).toBe('[agentEntity kind="issue" id="TST-77" label="TST-77"] [z](/workspace/issue/DEV-1/y)')
     expect(linkAgentEntities('[x](/workspace/project/gone/overview)', fixture({ issueCollectionPaged: true, projects: [] }), { all: true }).markdown).toBe('[agentEntity kind="project" id="gone" label="x"]')
-    expect(linkAgentEntities('[x](/workspace/project/gone/overview)', fixture({ issueCollectionPaged: true }), { all: true }).markdown).toBe('[x](/workspace/project/gone/overview)')
+    expect(linkAgentEntities('[x](/workspace/project/gone/overview)', fixture(), { all: true }).markdown).toBe('[agentEntity kind="project" id="gone" label="x"]')
+    // Without `all` (loop instructions) only records the data holds are linked.
+    expect(linkAgentEntities('See TST-77.', fixture({ issues: [] })).markdown).toBe('See TST-77.')
   })
 })
 
@@ -282,6 +285,31 @@ describe('agent entity chips', () => {
     expect(viewCard).toHaveTextContent('Teammate')
     await act(async () => { within(rows).getAllByRole('link')[1].focus() })
     await waitFor(() => expect(document.querySelector('[data-agent-entity-card="issue"]')).toHaveTextContent('Second issue'))
+  })
+
+  describe('records created after the page loaded (non-paged workspace data lacks them)', () => {
+    it('fetches an issue the agent just created by identifier and renders its chip', async () => {
+      api.fetchIssueRecord.mockResolvedValue(makeIssue({ id: 'issue-25', identifier: 'TST-25', title: 'Fresh issue' }))
+      renderAnswer('Created TST-25 for you', fixture())
+      const chip = await chipFor('issue')
+      expect(chip).toHaveTextContent('TST-25 Fresh issue')
+      expect(api.fetchIssueRecord).toHaveBeenCalledWith('TST-25', undefined, 'workspace')
+    })
+
+    it('fetches a project created this session by slug', async () => {
+      api.listProjectRecords.mockResolvedValue({ items: [{ ...baseProject, id: 'project-9', slugId: 'brand-new', name: 'Brand new' }], hasMore: false, total: 1 })
+      renderAnswer('[Brand new](/workspace/project/brand-new/overview)', fixture())
+      expect(await chipFor('project')).toHaveTextContent('Brand new')
+    })
+
+    it('keeps identifiers that are not team keys plain without a request, and unfetchable ones plain after a failed fetch', async () => {
+      api.fetchIssueRecord.mockRejectedValue(new Error('not found'))
+      renderAnswer('DEV-404 and UTF-8 and TST-404', fixture())
+      await waitFor(() => expect(api.fetchIssueRecord).toHaveBeenCalledTimes(1))
+      expect(api.fetchIssueRecord).toHaveBeenCalledWith('TST-404', undefined, 'workspace')
+      await waitFor(() => expect(screen.getByRole('document', { name: 'AI message' })).toHaveTextContent('DEV-404 and UTF-8 and TST-404'))
+      expect(document.querySelector('a[data-agent-entity]')).toBeNull()
+    })
   })
 
   describe('paged workspaces (issues and projects are not held by the client)', () => {

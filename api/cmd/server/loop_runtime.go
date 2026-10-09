@@ -44,6 +44,8 @@ type loopTrigger struct {
 	EntityID   string
 	SourceKey  string
 	Label      string
+	// Reason is why an event fired the trigger (event triggers only).
+	Reason loopTriggerReason
 }
 
 var errLoopUnavailable = errors.New("loop cannot run")
@@ -314,6 +316,7 @@ func (s *server) startLoopRun(workspace, loopID string, trigger loopTrigger, act
 		run.EntityIdentifier = loopEventEntityName(data, loopEvent{EntityType: trigger.EntityType, EntityID: trigger.EntityID})
 	}
 	run.TriggerLabel = loopTriggerLabel(trigger, run.EntityIdentifier)
+	run.TriggerReason, run.TriggerValue = trigger.Reason.Code, trigger.Reason.Value
 	if loop.WebSearch && !s.webSearchAvailable() {
 		run.Notices = append(run.Notices, loopWebSearchUnavailable)
 	}
@@ -840,69 +843,75 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 	}
 }
 
+// loopToolLabels are the fixed run log labels by tool name. The web app
+// translates every label and template below (web/src/i18n/translations-agent-steps.ts;
+// TestLoopRunVocabularyTranslated keeps them in sync).
+var loopToolLabels = map[string]string{
+	webSearchToolName: "Searched the web", fetchURLToolName: "Read web page",
+	"get_issue": "Read issue", "list_issues": "Listed issues", "search_issues": "Searched issues",
+	"list_comments": "Read comments", "triage_issue": "Triaged issue", "get_project": "Read project",
+	"list_projects": "Listed projects", "list_users": "Listed members", "get_user": "Looked up member",
+	"list_teams": "Listed teams", "get_team": "Read team", "list_issue_labels": "Listed labels",
+	"list_issue_statuses": "Listed statuses", "list_cycles": "Listed cycles", "list_customers": "Listed customers",
+	"save_status_update": "Posted status update", "get_status_updates": "Read status updates",
+	"list_issue_history": "Read issue history", "list_project_activity": "Read project activity",
+	"list_documents": "Listed documents", "get_document": "Read document", "search_documentation": "Searched documentation",
+	"save_reaction": "Reacted", "create_reminder": "Set reminder", "list_diffs": "Listed code changes",
+	"get_diff": "Read code change", "get_diff_threads": "Read review threads", "list_initiatives": "Listed initiatives",
+	"get_initiative": "Read initiative", "list_releases": "Listed releases", "list_milestones": "Listed milestones",
+	agentProgressTool: "Reported progress",
+}
+
+// loopToolSaveLabels are the create and update labels of save tools; a call
+// with an id updates.
+var loopToolSaveLabels = map[string][2]string{
+	"save_issue":   {"Created issue", "Updated issue"},
+	"save_comment": {"Commented", "Updated comment"},
+	"save_project": {"Created project", "Updated project"},
+}
+
+// loopToolVerbTemplates label the other tools by verb; {subject} is the rest
+// of the tool name ("list_release_notes" → "Listed release notes").
+var loopToolVerbTemplates = map[string]string{
+	"get": "Read {subject}", "list": "Listed {subject}", "search": "Searched {subject}", "save": "Saved {subject}",
+	"delete": "Deleted {subject}", "create": "Created {subject}", "update": "Updated {subject}", "extract": "Extracted {subject}",
+	"prepare": "Prepared {subject}", "merge": "Merged {subject}", "submit": "Submitted {subject}", "resolve": "Resolved {subject}",
+}
+
+const (
+	// loopExternalToolTemplate labels connector tools ("external_<tool>").
+	loopExternalToolTemplate = "Used {subject}"
+	// loopOtherToolTemplate labels any other tool.
+	loopOtherToolTemplate = "Ran {subject}"
+)
+
 // loopToolLabel names a tool call the way the run log shows it.
 func loopToolLabel(name string, args map[string]any) string {
+	template, subject := loopToolLabelTemplate(name, args)
+	return strings.Replace(template, "{subject}", subject, 1)
+}
+
+// loopToolLabelTemplate is the label's fixed English text and, for labels
+// built from the tool name, the subject that fills {subject}.
+func loopToolLabelTemplate(name string, args map[string]any) (string, string) {
 	name = strings.TrimPrefix(name, "mcp__flow.")
-	switch name {
-	case webSearchToolName:
-		return "Searched the web"
-	case fetchURLToolName:
-		return "Read web page"
-	}
 	if strings.HasPrefix(name, "external_") {
-		return "Used " + strings.ReplaceAll(strings.TrimPrefix(name, "external_"), "_", " ")
+		return loopExternalToolTemplate, strings.ReplaceAll(strings.TrimPrefix(name, "external_"), "_", " ")
 	}
-	updating := loopStringArg(args, "id") != ""
-	labels := map[string]string{
-		"get_issue": "Read issue", "list_issues": "Listed issues", "search_issues": "Searched issues",
-		"list_comments": "Read comments", "triage_issue": "Triaged issue", "get_project": "Read project",
-		"list_projects": "Listed projects", "list_users": "Listed members", "get_user": "Looked up member",
-		"list_teams": "Listed teams", "get_team": "Read team", "list_issue_labels": "Listed labels",
-		"list_issue_statuses": "Listed statuses", "list_cycles": "Listed cycles", "list_customers": "Listed customers",
-		"save_status_update": "Posted status update", "get_status_updates": "Read status updates",
-		"list_issue_history": "Read issue history", "list_project_activity": "Read project activity",
-		"list_documents": "Listed documents", "get_document": "Read document", "search_documentation": "Searched documentation",
-		"save_reaction": "Reacted", "create_reminder": "Set reminder", "list_diffs": "Listed code changes",
-		"get_diff": "Read code change", "get_diff_threads": "Read review threads", "list_initiatives": "Listed initiatives",
-		"get_initiative": "Read initiative", "list_releases": "Listed releases", "list_milestones": "Listed milestones",
+	if label, ok := loopToolLabels[name]; ok {
+		return label, ""
 	}
-	if label, ok := labels[name]; ok {
-		return label
-	}
-	switch name {
-	case "save_issue":
-		if updating {
-			return "Updated issue"
+	if labels, ok := loopToolSaveLabels[name]; ok {
+		if loopStringArg(args, "id") != "" {
+			return labels[1], ""
 		}
-		return "Created issue"
-	case "save_comment":
-		if updating {
-			return "Updated comment"
-		}
-		return "Commented"
-	case "save_project":
-		if updating {
-			return "Updated project"
-		}
-		return "Created project"
+		return labels[0], ""
 	}
 	verb, noun, _ := strings.Cut(name, "_")
-	noun = strings.ReplaceAll(noun, "_", " ")
-	switch verb {
-	case "get":
-		return "Read " + noun
-	case "list":
-		return "Listed " + noun
-	case "search":
-		return "Searched " + noun
-	case "save":
-		return "Saved " + noun
-	case "delete":
-		return "Deleted " + noun
-	case "create":
-		return "Created " + noun
+	if template, ok := loopToolVerbTemplates[verb]; ok && noun != "" {
+		return template, strings.ReplaceAll(noun, "_", " ")
 	}
-	return strings.ReplaceAll(name, "_", " ")
+	return loopOtherToolTemplate, strings.ReplaceAll(name, "_", " ")
 }
 
 // loopToolArgsSummary is a short, readable summary of a call's arguments.

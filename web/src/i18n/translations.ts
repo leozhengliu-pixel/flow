@@ -14,6 +14,7 @@ import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
 import { agentMentionsZhCN } from './translations-agent-mentions';
 import { loopRunsZhCN } from './translations-loop-runs';
+import { agentStepsZhCN } from './translations-agent-steps';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -4743,6 +4744,8 @@ Object.assign(zhCN, {
   "Could not delete loop": "无法删除 Loop",
   "Could not duplicate loop": "无法复制 Loop",
   "Could not load loop runs": "无法加载 Loop 运行记录",
+  "Could not load loop runs. Retrying…": "无法加载 Loop 运行记录，正在重试…",
+  "Connection lost. Retrying…": "连接已断开，正在重试…",
   "Could not open draft": "无法打开草稿",
   "Could not save draft": "无法保存草稿",
   "Could not save loop": "无法保存 Loop",
@@ -4766,13 +4769,13 @@ Object.assign(zhCN, {
   "For example, review the release's changes, check for blockers, and suggest next steps…": "例如：审查发布的变更，检查阻塞，并建议后续步骤…",
   "For example, review the team's changes, check for blockers, and suggest next steps…": "例如：审查团队的变更，检查阻塞，并建议后续步骤…",
   "For example, review the cycle's changes, check for blockers, and suggest next steps…": "例如：审查周期的变更，检查阻塞，并建议后续步骤…",
-  "Su": "日",
-  "Mo": "一",
-  "Tu": "二",
-  "We": "三",
-  "Th": "四",
-  "Fr": "五",
-  "Sa": "六",
+  "Su": "周日",
+  "Mo": "周一",
+  "Tu": "周二",
+  "We": "周三",
+  "Th": "周四",
+  "Fr": "周五",
+  "Sa": "周六",
   "Group by team": "按团队分组",
   "ID copied": "已复制 ID",
   "Issue updated": "事项已更新",
@@ -5758,3 +5761,5 @@ Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
 Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
+// Agent step and loop run vocabulary fills gaps only: shared nouns ("issue", "team"…) keep their existing copy.
+for (const [source, translation] of Object.entries(agentStepsZhCN)) zhCN[source] ??= translation;

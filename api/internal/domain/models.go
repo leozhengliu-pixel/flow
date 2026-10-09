@@ -997,9 +997,16 @@ type LoopRun struct {
 	ID     string `json:"id"`
 	LoopID string `json:"loopId"`
 	// running | completed | needs_review | failed | cancelled | interrupted
-	Status           string            `json:"status"`
-	Trigger          string            `json:"trigger"` // manual | schedule | event
-	TriggerLabel     string            `json:"triggerLabel,omitempty"`
+	Status       string `json:"status"`
+	Trigger      string `json:"trigger"` // manual | schedule | event
+	TriggerLabel string `json:"triggerLabel,omitempty"`
+	// TriggerReason is why an event fired the run, as a stable code (created,
+	// updated, comment, customerRequest, triage, status, statusChanged,
+	// priority, assignee, agent, project, team, label, update, started,
+	// completed); TriggerValue is the property's new value, empty when it was
+	// cleared. Clients translate them; TriggerLabel stays the English label.
+	TriggerReason    string            `json:"triggerReason,omitempty"`
+	TriggerValue     string            `json:"triggerValue,omitempty"`
 	EventType        string            `json:"eventType,omitempty"`
 	EntityType       string            `json:"entityType,omitempty"`
 	EntityID         string            `json:"entityId,omitempty"`

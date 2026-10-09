@@ -548,7 +548,7 @@ function ScheduleSentence({ config, onChange, readOnly }: { config: Config; onCh
       ) : (
         <SelectControl className="loops-time-select" label={t("Time")} value={time} onChange={(value) => onChange({ time: value })} options={timeOptions} />
       )}
-      {unit === "week" && (
+      {unit === "week" && (!readOnly || WEEKDAYS.some((day) => weekdays.includes(day.id))) && (
         <span className="loops-weekdays" role="group" aria-label={t("Weekdays")}>
           <span className="loops-sentence-text">{t("On")}</span>
           {WEEKDAYS.map((day) => {

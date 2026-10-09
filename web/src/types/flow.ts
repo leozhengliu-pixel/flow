@@ -1084,8 +1084,12 @@ export interface LoopRun {
   loopId: UUID;
   status: LoopRunStatus;
   trigger: "manual" | "schedule" | "event";
-  /** "Manual run", "Scheduled run", "Triggered by DEV-14 status → Triage"… */
+  /** English label kept for older clients: "Manual run", "Scheduled run", "Triggered by DEV-14 status → Triage"… */
   triggerLabel?: string;
+  /** Why an event fired the run: created, updated, comment, customerRequest, triage, status, statusChanged, priority, assignee, agent, project, team, label, update, started or completed. */
+  triggerReason?: string;
+  /** The changed property's new value (status, priority, assignee… name); empty when it was cleared. */
+  triggerValue?: string;
   eventType?: string;
   entityType?: "issue" | "project" | "initiative" | "release" | "team" | "cycle";
   entityId?: UUID;
