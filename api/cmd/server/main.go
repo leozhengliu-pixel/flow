@@ -68,7 +68,10 @@ type server struct {
 	webSearch                      websearch.Provider // nil when no provider is configured
 	webFetcher                     *websearch.Fetcher
 	triageRuns                     sync.Map
-	recurringNormalized            sync.Map // workspace keys whose legacy recurring schedules were upgraded
+	triageEdits                    sync.Map      // debounced regeneration after material title/description edits
+	triageUpgrades                 sync.Map      // last attempt to replace heuristic suggestions with model ones
+	triageEditDebounce             time.Duration // zero means triageAIEditDebounce
+	recurringNormalized            sync.Map      // workspace keys whose legacy recurring schedules were upgraded
 	agentRuns                      sync.Map
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool

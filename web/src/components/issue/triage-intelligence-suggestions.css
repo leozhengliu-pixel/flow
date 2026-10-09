@@ -138,6 +138,26 @@
   font-size: 13px;
 }
 
+.triage-intelligence-loader {
+  flex: none;
+  color: var(--theme-text-secondary);
+}
+
+.triage-intelligence-generating {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.triage-intelligence-elapsed {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
 .triage-intelligence-body {
   display: grid;
   gap: 6px;
@@ -497,6 +517,7 @@ ul.triage-intelligence-thinking-text {
 .triage-intelligence-title { font-size: 12px; }
 .triage-intelligence-gradient { color: transparent; background: var(--triage-ti-gradient); background-clip: text; -webkit-background-clip: text; font-size: 12px; font-weight: 500; }
 .triage-intelligence-empty { justify-content: space-between; color: var(--triage-ti-muted); font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.triage-intelligence-generating { color: var(--triage-ti-muted); font: 12px/16px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .triage-intelligence-run-again { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--theme-text-secondary); font: 500 12px var(--font); cursor: pointer; }
 .triage-intelligence-run-again:hover { background: var(--theme-control-hover); color: var(--theme-text-primary); }
 .triage-intelligence-run-again:disabled { opacity: 0.5; cursor: default; }

@@ -162,6 +162,24 @@ describe('TriageIntelligenceSuggestions', () => {
     expect(screen.queryByText('No suggestions found')).not.toBeInTheDocument()
   })
 
+  it('keeps the generating state while the server reports a background run, then shows its results', async () => {
+    const issue = triageIssue({ suggestionsGeneratedAt: GENERATED })
+    // Heuristic suggestions generated earlier found nothing; the model is now replacing them in the background.
+    respond(issue.id, [], { suggestionsGeneratedAt: GENERATED, pending: true, source: 'heuristic' })
+
+    renderCard(<TriageIntelligenceSuggestions issue={issue} data={bootstrap([issue])} />)
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Finding suggestions…')
+    expect(screen.getByText('Comparing with similar issues, projects and owners…')).toBeInTheDocument()
+    expect(screen.queryByText('No suggestions found')).not.toBeInTheDocument()
+
+    const assignee = suggestion({ suggestedUserId: viewer.id, metadata: { rank: 1, source: 'ai' } })
+    respond(issue.id, [assignee], { suggestionsGeneratedAt: '2026-09-13T01:01:00.000Z', pending: false, source: 'ai' })
+    expect(await screen.findByRole('button', { name: 'Assign to user: Viewer' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Triage Intelligence' })).toHaveAttribute('data-state', 'ready')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  }, 10000)
+
   it('shows the empty state and runs again', async () => {
     const user = userEvent.setup()
     const issue = triageIssue()

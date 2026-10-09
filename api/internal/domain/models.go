@@ -441,6 +441,7 @@ type Issue struct {
 	SuggestionsGeneratedAt *time.Time       `json:"suggestionsGeneratedAt,omitempty"`
 	SuggestionsSource      string           `json:"suggestionsSource,omitempty"`
 	SuggestionsThinking    string           `json:"suggestionsThinking,omitempty"`
+	SuggestionsInputSketch string           `json:"suggestionsInputSketch,omitempty"` // title/description fingerprint of the last generation
 	StatusChangedAt        *time.Time       `json:"statusChangedAt,omitempty"`
 	AutoClosedAt           *time.Time       `json:"autoClosedAt,omitempty"`
 	CanceledAt             *time.Time       `json:"canceledAt,omitempty"`

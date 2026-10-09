@@ -4587,6 +4587,7 @@ Object.assign(zhCN, {
   "Accepted issues move to": "接受的事项将移至",
   "Finding suggestions…": "正在查找建议…",
   "No suggestions found": "未找到建议",
+  "Comparing with similar issues, projects and owners…": "正在与相似事项、项目和负责人进行比对…",
   "Run again": "重新运行",
   "Show thinking…": "查看思考过程…",
   "Dismiss all suggestions": "忽略所有建议",
