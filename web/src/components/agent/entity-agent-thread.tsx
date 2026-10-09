@@ -3,7 +3,7 @@ import { ArrowUp, Check, Copy, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
 import { AgentRichText } from './agent-rich-text'
-import { AgentAnswerText, AgentReferencedIssues, AgentSuggestionChips } from './agent-answer'
+import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from './agent-answer'
 import { parseAgentAnswer } from './agent-answer-content'
 import { useAgentEntityData } from './agent-entity-data'
 import { AgentWorkGroup } from './agent-work-group'
@@ -235,7 +235,7 @@ export function EntityAgentThread({
                     content={message.content}
                   />
                 )}
-                {answer && !streaming && !renderAssistantBody && <AgentReferencedIssues data={entityData} issues={answer.referencedIssues} />}
+                {answer && !streaming && !renderAssistantBody && <AgentReferencedResources data={entityData} references={answer.references} />}
                 {!isUser && !streaming && !renderAssistantBody && renderMessageAttachment?.(message, index)}
                 <AgentSuggestionChips disabled={!enabled || composerDisabled} onSelect={sendSuggestion} suggestions={suggestions} />
                 {isUser && index === firstUserIndex && addedContext.length > 0 && (

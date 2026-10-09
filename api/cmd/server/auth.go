@@ -752,6 +752,16 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 	if strings.HasPrefix(r.URL.Path, "/api/pulse/") {
 		return true
 	}
+	// Loop handlers check loop permissions themselves; the request needs an
+	// active membership only, not a projected workspace (the run page polls).
+	if r.URL.Path == "/api/loops" || strings.HasPrefix(r.URL.Path, "/api/loops/") {
+		data, ok := s.store.WorkspaceSettingsMetadata(workspace)
+		if !ok {
+			return false
+		}
+		_, status, err := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, userID)
+		return err == nil && status == "active"
+	}
 	if boundedIssueAuthorizationRequest(r) {
 		_, _, err := s.requestIssueQueryAccess(r)
 		return err == nil

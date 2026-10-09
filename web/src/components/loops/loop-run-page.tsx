@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, Info, Link2, Paperclip, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Ban, CheckCircle2, CircleAlert, CircleStop, Info, Link2, Paperclip, Pencil, Search, Settings2, ThumbsDown, ThumbsUp, Unplug, XCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -16,25 +16,82 @@ import { AgentAttachIcon } from "@/components/agent/agent-icons";
 import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { toast } from "sonner";
-import { getLoopRun, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
+import { cancelLoopRun, getLoopRun, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
+import { LOOP_RUN_ACTIVITY_EVENT, type LoopRunActivity } from "@/lib/loop-run-activity";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { editLoopPath, loopPath, loopRunPath, loopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
-import type { BootstrapData, LoopRun, LoopRunReply } from "@/types/flow";
+import type { BootstrapData, LoopRun, LoopRunReply, LoopRunStatus } from "@/types/flow";
 import { copyText, loopUrl, runParts, useLoopRecord } from "./loop-data";
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { dayLabel, runDuration, runTriggerLabel } from "./loop-model";
 import { GridLoader } from '@/components/ui/grid-loader'
+import { REASON_LABELS, RUN_STATUSES, STATUS_LABELS } from './loop-run-status'
 
 const POLL_MS = 1500;
 /** Loop runs never wait for approvals in the transcript. */
 const ignoreApproval = () => undefined;
 
-function RunStatusIcon({ status }: { status: LoopRun["status"] }) {
-  if (status === "running") return <GridLoader variant="agent" label="Running" className="loops-run-status is-running" size={14} />;
-  if (status === "failed") return <AlertTriangle aria-label="Failed" className="loops-run-status is-failed" size={14} />;
-  return <CheckCircle2 aria-label="Completed" className="loops-run-status is-completed" size={14} />;
+function RunStatusIcon({ status }: { status: LoopRunStatus }) {
+  const { t } = useI18n();
+  const label = t(STATUS_LABELS[status] ?? "Completed");
+  if (status === "running") return <GridLoader variant="agent" label={label} className="loops-run-status is-running" size={14} />;
+  if (status === "failed") return <AlertTriangle aria-label={label} className="loops-run-status is-failed" size={14} />;
+  if (status === "needs_review") return <CircleAlert aria-label={label} className="loops-run-status is-review" size={14} />;
+  if (status === "cancelled") return <Ban aria-label={label} className="loops-run-status is-stopped" size={14} />;
+  if (status === "interrupted") return <Unplug aria-label={label} className="loops-run-status is-stopped" size={14} />;
+  return <CheckCircle2 aria-label={label} className="loops-run-status is-completed" size={14} />;
+}
+
+/** Why a finished run did not simply complete: needs review, failed, cancelled or interrupted. */
+function RunOutcome({ data, run }: { data: BootstrapData; run: LoopRun }) {
+  const { t } = useI18n();
+  if (run.status === "completed" || run.status === "running") return null;
+  const reason = run.failureReason ? t(REASON_LABELS[run.failureReason] ?? run.failureReason) : undefined;
+  if (run.status === "needs_review")
+    return (
+      <div className="loops-run-error is-review" role="alert">
+        <CircleAlert size={16} />
+        <div>
+          <strong>{t("Needs review")}</strong>
+          {reason && <p className="loops-run-error-reason">{reason}</p>}
+          {run.error && <p data-i18n-ignore>{run.error}</p>}
+        </div>
+      </div>
+    );
+  if (run.status === "cancelled") {
+    const by = run.cancelledBy ? data.users.find((user) => user.id === run.cancelledBy) : undefined;
+    return (
+      <div className="loops-run-error is-stopped" role="status">
+        <Ban size={16} />
+        <div>
+          <strong>{t("Run cancelled")}</strong>
+          {by && <p>{t("Cancelled by {name}").replace("{name}", by.displayName || by.name)}</p>}
+        </div>
+      </div>
+    );
+  }
+  if (run.status === "interrupted")
+    return (
+      <div className="loops-run-error is-stopped" role="status">
+        <Unplug size={16} />
+        <div>
+          <strong>{t("Run interrupted")}</strong>
+          <p>{t("The server stopped while this run was working. Run the loop again to finish the work.")}</p>
+        </div>
+      </div>
+    );
+  return (
+    <div className="loops-run-error" role="alert">
+      <XCircle size={16} />
+      <div>
+        <strong>{t("Loop couldn't run")}</strong>
+        {reason && run.failureReason !== "error" && <p className="loops-run-error-reason">{reason}</p>}
+        {run.error && <p data-i18n-ignore>{run.error}</p>}
+      </div>
+    </div>
+  );
 }
 
 /** Run history: runs on the left, the selected run's live transcript on the right. */
@@ -57,7 +114,8 @@ export function LoopRunPage({
   const [runs, setRuns] = useState<LoopRun[]>();
   const [selected, setSelected] = useState<LoopRun>();
   const [query, setQuery] = useState("");
-  const [statusFilters, setStatusFilters] = useState<LoopRun["status"][]>([]);
+  const [statusFilters, setStatusFilters] = useState<LoopRunStatus[]>([]);
+  const [cancelling, setCancelling] = useState(false);
   const [triggerFilters, setTriggerFilters] = useState<LoopRun["trigger"][]>([]);
   const [showDuration, setShowDuration] = useState(true);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
@@ -99,20 +157,34 @@ export function LoopRunPage({
   // Poll the selected run and the list while anything is still running (a run, or the agent answering a reply).
   const replying = Boolean(selected?.replies?.some((reply) => reply.status === "running"));
   const running = selected?.status === "running" || replying || Boolean(runs?.some((item) => item.status === "running"));
+  const refreshSelected = useCallback(() => {
+    if (!activeId) return;
+    void getLoopRun(loopId, activeId)
+      .then((run) => {
+        setSelected(run);
+        setRuns((current) => current?.map((item) => (item.id === run.id ? run : item)));
+      })
+      .catch(() => undefined);
+  }, [activeId, loopId]);
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => {
-      if (activeId)
-        void getLoopRun(loopId, activeId)
-          .then((run) => {
-            setSelected(run);
-            setRuns((current) => current?.map((item) => (item.id === run.id ? run : item)));
-          })
-          .catch(() => undefined);
+      refreshSelected();
       void loadRuns();
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [activeId, loadRuns, loopId, running]);
+  }, [loadRuns, refreshSelected, running]);
+  // Realtime run signals refresh at once instead of waiting for the next poll.
+  useEffect(() => {
+    const onActivity = (event: Event) => {
+      const detail = (event as CustomEvent<LoopRunActivity>).detail;
+      if (detail?.loopId && detail.loopId !== loopId) return;
+      if (!detail?.runId || detail.runId === activeId) refreshSelected();
+      if (detail?.type !== "loop_run.progress" || !runsRef.current?.some((item) => item.id === detail.runId)) void loadRuns();
+    };
+    window.addEventListener(LOOP_RUN_ACTIVITY_EVENT, onActivity);
+    return () => window.removeEventListener(LOOP_RUN_ACTIVITY_EVENT, onActivity);
+  }, [activeId, loadRuns, loopId, refreshSelected]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -186,6 +258,17 @@ export function LoopRunPage({
       toast.error(reason instanceof Error ? reason.message : t("Could not save feedback"));
     }
   };
+  const cancel = async () => {
+    if (!selected || cancelling) return;
+    setCancelling(true);
+    try {
+      applyRun(await cancelLoopRun(loopId, selected.id));
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : t("Could not cancel the run"));
+    } finally {
+      setCancelling(false);
+    }
+  };
   const parts = selected ? runParts(selected) : [];
   const started = selected ? new Date(selected.startedAt) : undefined;
   return (
@@ -224,9 +307,9 @@ export function LoopRunPage({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="loops-menu">
                 <DropdownMenuLabel>{t("Status")}</DropdownMenuLabel>
-                {(["completed", "failed", "running"] as const).map((item) => (
+                {RUN_STATUSES.map((item) => (
                   <DropdownMenuCheckboxItem key={item} checked={statusFilters.includes(item)} onSelect={(event) => event.preventDefault()} onCheckedChange={() => setStatusFilters((current) => toggle(current, item))}>
-                    {t(item === "completed" ? "Completed" : item === "failed" ? "Failed" : "Running")}
+                    {t(STATUS_LABELS[item])}
                   </DropdownMenuCheckboxItem>
                 ))}
                 <DropdownMenuSeparator />
@@ -284,10 +367,18 @@ export function LoopRunPage({
                 <h1>
                   {t(dayLabel(selected.startedAt))} {t("at")} {started?.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
                 </h1>
-                <button className="loops-run-edit" onClick={() => onNavigate(editLoopPath(workspace, loopId))}>
-                  <Pencil size={14} />
-                  {t("Edit loop")}
-                </button>
+                <div className="loops-run-header-actions">
+                  {(selected.status === "running" || replying) && (
+                    <button className="loops-run-edit is-cancel" type="button" disabled={cancelling} onClick={() => void cancel()}>
+                      <CircleStop size={14} />
+                      {t(cancelling ? "Cancelling…" : "Cancel run")}
+                    </button>
+                  )}
+                  <button className="loops-run-edit" onClick={() => onNavigate(editLoopPath(workspace, loopId))}>
+                    <Pencil size={14} />
+                    {t("Edit loop")}
+                  </button>
+                </div>
               </header>
               <p className="loops-run-subtitle">
                 <RunStatusIcon status={selected.status} />
@@ -335,15 +426,7 @@ export function LoopRunPage({
               )}
               {selected.status === "running" && parts.length === 0 && !selected.output && <p className="loops-run-working">{t("Working…")}</p>}
               {selected.output && <AgentAnswerText className="loops-run-answer" data={data} markdown={selected.output} />}
-              {selected.status === "failed" && (
-                <div className="loops-run-error" role="alert">
-                  <XCircle size={16} />
-                  <div>
-                    <strong>{t("Loop couldn't run")}</strong>
-                    {selected.error && <p data-i18n-ignore>{selected.error}</p>}
-                  </div>
-                </div>
-              )}
+              <RunOutcome data={data} run={selected} />
               {selected.status !== "running" && (
                 <div className="loops-run-feedback" role="group" aria-label={t("Rate this run")}>
                   <button aria-label={t("Good response")} aria-pressed={feedback === "up"} className={feedback === "up" ? "is-active" : undefined} onClick={() => void rate("up")}>
@@ -405,6 +488,14 @@ function RunReply({ data, reply }: { data: BootstrapData; reply: LoopRunReply })
           <div>
             <strong>{t("The agent couldn't reply")}</strong>
             {reply.error && <p data-i18n-ignore>{reply.error}</p>}
+          </div>
+        </div>
+      )}
+      {(reply.status === "cancelled" || reply.status === "interrupted") && (
+        <div className="loops-run-error is-stopped" role="status">
+          {reply.status === "cancelled" ? <Ban size={16} /> : <Unplug size={16} />}
+          <div>
+            <strong>{t(reply.status === "cancelled" ? "Reply cancelled" : "Reply interrupted")}</strong>
           </div>
         </div>
       )}

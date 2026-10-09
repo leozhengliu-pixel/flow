@@ -41,6 +41,9 @@ type loopInput struct {
 	OwnerID                    *string         `json:"ownerId,omitempty"`
 	EditPolicy                 *string         `json:"editPolicy,omitempty"`
 	TrustedSourceKeys          *[]string       `json:"trustedSourceKeys,omitempty"`
+	// ExpectedOutputs: [] infers from the instructions, ["none"] expects no
+	// output, else statusUpdate, issue, comment, document or change.
+	ExpectedOutputs *[]string `json:"expectedOutputs,omitempty"`
 }
 
 var loopTriggerTypes = []string{"schedule", "issue", "project", "initiative", "release", "team", "cycle"}
@@ -127,6 +130,16 @@ func validateLoopInput(input loopInput) error {
 	if len(input.AttachmentIDs) > 10 {
 		return fmt.Errorf("attach at most 10 files")
 	}
+	if input.ExpectedOutputs != nil {
+		for _, item := range *input.ExpectedOutputs {
+			if item != "none" && !slices.Contains(loopOutputKinds, item) {
+				return fmt.Errorf("expectedOutputs items must be none, %s", strings.Join(loopOutputKinds, ", "))
+			}
+		}
+		if slices.Contains(*input.ExpectedOutputs, "none") && len(*input.ExpectedOutputs) > 1 {
+			return fmt.Errorf("expectedOutputs cannot combine none with other outputs")
+		}
+	}
 	return nil
 }
 
@@ -204,6 +217,12 @@ func applyLoopInput(loop *domain.Loop, input loopInput) {
 	if input.WebSearch != nil {
 		loop.WebSearch = *input.WebSearch
 	}
+	if input.ExpectedOutputs != nil {
+		loop.ExpectedOutputs = slices.Compact(slices.Clone(*input.ExpectedOutputs))
+		if len(loop.ExpectedOutputs) == 0 {
+			loop.ExpectedOutputs = nil
+		}
+	}
 	if input.CodeAccess != nil {
 		loop.CodeAccess = *input.CodeAccess
 	}
@@ -275,7 +294,9 @@ func checkLoop(data *domain.Bootstrap, loop domain.Loop, publishing bool) error 
 
 // presentLoop returns a loop in the current API shape: legacy trigger
 // configurations mapped, defaults filled and the 30-day run count computed.
-func presentLoop(runs []domain.LoopRun, loop domain.Loop) domain.Loop {
+// presentLoop fills defaults for loops stored before a setting existed and the
+// 30-day run count (counts: runs per loop id; nil when not loaded).
+func presentLoop(counts map[string]int, loop domain.Loop) domain.Loop {
 	if loop.Status == "" {
 		loop.Status = "published"
 	}
@@ -290,37 +311,32 @@ func presentLoop(runs []domain.LoopRun, loop domain.Loop) domain.Loop {
 	if loop.Description == "" && loop.Status == "published" {
 		loop.Description = fallbackLoopDescription(loop.Instructions)
 	}
-	since := time.Now().Add(-30 * 24 * time.Hour)
-	loop.RunCount30d = 0
-	for _, run := range runs {
-		if run.LoopID == loop.ID && run.StartedAt.After(since) {
-			loop.RunCount30d++
-		}
-	}
+	loop.RunCount30d = counts[loop.ID]
 	return loop
 }
 
 func (s *server) listLoops(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops")
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
+	counts := s.loopRunCounts(r.Context(), data.Workspace.URLKey)
 	loops := make([]domain.Loop, 0, len(data.Loops))
 	for _, loop := range data.Loops {
-		loops = append(loops, presentLoop(data.LoopRuns, loop))
+		loops = append(loops, presentLoop(counts, loop))
 	}
 	writeJSON(w, http.StatusOK, loops)
 }
 
 func (s *server) getLoop(w http.ResponseWriter, r *http.Request) {
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+	data, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "loops")
 	if !ok {
 		writeError(w, http.StatusNotFound, "workspace not found")
 		return
 	}
 	if loop := loopByID(&data, r.PathValue("id")); loop != nil {
-		writeJSON(w, http.StatusOK, presentLoop(data.LoopRuns, *loop))
+		writeJSON(w, http.StatusOK, presentLoop(s.loopRunCounts(r.Context(), data.Workspace.URLKey), *loop))
 		return
 	}
 	writeError(w, http.StatusNotFound, "loop not found")
@@ -348,7 +364,6 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Loop
-	var runs []domain.LoopRun
 	var referenced []domain.Issue
 	if len(input.InstructionsData) == 0 {
 		markdowns := []string{}
@@ -410,13 +425,12 @@ func (s *server) createLoop(w http.ResponseWriter, r *http.Request) {
 		}
 		data.Loops = append([]domain.Loop{created}, data.Loops...)
 		appendAudit(data, "created", "loop", created.ID, map[string]any{"triggerType": created.TriggerType, "status": created.Status})
-		runs = data.LoopRuns
 		return created.ID, nil
 	})
 	if err == nil && created.Status == "published" && input.Description == nil {
 		s.describeLoopAsync(workspaceKey(r), created)
 	}
-	respondMutation(w, err, http.StatusCreated, presentLoop(runs, created))
+	respondMutation(w, err, http.StatusCreated, presentLoop(nil, created))
 }
 
 func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
@@ -430,7 +444,6 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Loop
-	var runs []domain.LoopRun
 	describe := false
 	var referenced []domain.Issue
 	if input.Instructions != nil && len(input.InstructionsData) == 0 {
@@ -491,13 +504,12 @@ func (s *server) updateLoop(w http.ResponseWriter, r *http.Request) {
 		*loop = next
 		updated = next
 		appendAudit(data, "updated", "loop", id, nil)
-		runs = data.LoopRuns
 		return nil
 	})
 	if err == nil && describe {
 		s.describeLoopAsync(workspaceKey(r), updated)
 	}
-	respondLoopMutation(w, err, http.StatusOK, presentLoop(runs, updated))
+	respondLoopMutation(w, err, http.StatusOK, presentLoop(s.loopRunCounts(r.Context(), s.workspaceURLKey(r)), updated))
 }
 
 // duplicateLoop copies a loop into a new draft ("⋯ › Duplicate").
@@ -545,10 +557,14 @@ func (s *server) deleteLoop(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		data.Loops = slices.Delete(data.Loops, index, index+1)
-		data.LoopRuns = slices.DeleteFunc(data.LoopRuns, func(run domain.LoopRun) bool { return run.LoopID == id })
 		data.LoopVersions = slices.DeleteFunc(data.LoopVersions, func(version domain.LoopVersion) bool { return version.LoopID == id })
 		return nil
 	})
+	if err == nil {
+		if err := s.store.DeleteLoopRuns(r.Context(), s.workspaceURLKey(r), id); err != nil {
+			log.Printf("Loop run cleanup workspace=%s loop=%s: %v", s.workspaceURLKey(r), id, err)
+		}
+	}
 	respondLoopMutation(w, err, http.StatusNoContent, nil)
 }
 

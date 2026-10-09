@@ -215,6 +215,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureAPIKeyLookup", s.ensureAPIKeyLookup},
 		{"ensureCustomerFilterIndex", s.ensureCustomerFilterIndex},
 		{"ensureTeamDefaultFavorites", s.ensureTeamDefaultFavorites},
+		{"ensureLoopRunRecords", s.ensureLoopRunRecords},
 		{"loadOrSeed", s.loadOrSeed},
 		{"seedWorkspaceOwners", func(ctx context.Context) error {
 			if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {
@@ -235,6 +236,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"migrateMetadataSearchIndex", s.migrateMetadataSearchIndex},
 		{"migrateAPIKeyLookup", s.migrateAPIKeyLookup},
 		{"migrateCustomerFilterIndex", s.migrateCustomerFilterIndex},
+		{"migrateLoopRunRecords", s.migrateLoopRunRecords},
 		{"backfillAllProjectProgress", s.backfillAllProjectProgress},
 	}
 	opened := time.Now()

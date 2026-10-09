@@ -24,6 +24,8 @@ type fakeLoopProvider struct {
 	inputs  []string
 	// wait, when set, runs before request n (0-based) is answered.
 	wait func(n int)
+	// aborted counts "block" requests the client cancelled.
+	aborted int
 }
 
 func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
@@ -49,6 +51,20 @@ func (p *fakeLoopProvider) serve(w http.ResponseWriter, r *http.Request) {
 	p.mu.Unlock()
 	if wait != nil {
 		wait(index)
+	}
+	// "block" holds the request until the client gives up (a cancelled run).
+	if reply == "block" {
+		<-r.Context().Done()
+		p.mu.Lock()
+		p.aborted++
+		p.mu.Unlock()
+		return
+	}
+	// "status:503" fails the request with that status.
+	if code, ok := strings.CutPrefix(reply, "status:"); ok {
+		status, _ := strconv.Atoi(code)
+		http.Error(w, `{"error":{"message":"upstream unavailable"}}`, status)
+		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	if strings.HasPrefix(reply, "tool:") {

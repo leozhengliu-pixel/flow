@@ -714,7 +714,8 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 		return []byte(`{"ok":true}`), nil
 	}
 	if s.store != nil {
-		fresh, ok := s.store.WorkspaceMetadata(workspaceKey(r))
+		// The policy check needs the workspace id and settings only.
+		fresh, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 		if !ok {
 			return nil, errNotFound
 		}

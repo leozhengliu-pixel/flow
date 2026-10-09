@@ -355,6 +355,32 @@ For a legacy OpenAI-compatible endpoint, use
 `FLOW_AGENT_PROTOCOL=openai-chat-completions`. Responses and Messages streams
 are normalized into text, reasoning, tool-call, error, and completion events.
 
+### Loop runs
+
+Loop runs are stored in their own tables (`loop_run_records` for each run's
+state, `loop_run_events` for its append-only log); recording progress never
+writes the workspace metadata. On first start after the upgrade, runs kept in
+the workspace metadata by earlier versions are copied into `loop_run_records`
+once (`migrateLoopRunRecords`, idempotent; about 0.7 s per 1,000 runs on MySQL)
+and removed from the metadata. A running run holds a lease that its server
+renews every quarter of `FLOW_LOOP_LEASE_TTL`; runs whose lease expired, or that
+a previous process on the same host still held at startup, are marked
+`interrupted`. Every run works within these budgets; exceeding one fails the run
+with `failureReason` `budget_exhausted` or `timeout`.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_LOOP_MAX_CONCURRENT_RUNS_PER_WORKSPACE` | `2` | Runs (and replies on runs) executing at once per workspace on one server. Runs over the limit are recorded as failed. |
+| `FLOW_LOOP_MAX_CONCURRENT_RUNS` | `4` | Runs executing at once on one server. |
+| `FLOW_LOOP_MAX_TOOL_OUTPUT_BYTES` | `49152` | Tool results sent to the model are cut to this size. |
+| `FLOW_LOOP_MAX_CONTEXT_BYTES` | `786432` | Largest conversation a run may send to the model in one turn. |
+| `FLOW_LOOP_MAX_TOOL_CALLS` | `80` | Tool calls per run. |
+| `FLOW_LOOP_MAX_TURNS` | `24` | Model turns that may call tools; the run then has to summarize. |
+| `FLOW_LOOP_RUN_TIMEOUT` | `10m` | Wall-clock limit of a run. |
+| `FLOW_LOOP_LEASE_TTL` | `60s` | How long a run's lease holds without a heartbeat. |
+| `FLOW_LOOP_RETRY_ATTEMPTS` | `2` | Retries of transient model-provider failures (timeouts, 429, 5xx) and of read-only tools. Changes are never retried. |
+| `FLOW_LOOP_RETRY_BACKOFF` | `1s` | First retry delay; doubled for each further retry. |
+
 ## Pulse summaries and audio
 
 Pulse summary notifications ("Daily Pulse" / "Weekly Pulse") are created by the

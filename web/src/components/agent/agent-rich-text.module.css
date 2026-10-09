@@ -1,0 +1,6 @@
+/* Markdown tables in agent answers: a hairline grid with a tinted header row, scrolling sideways instead of squashing columns. */
+.richText :global(.tableWrapper){max-width:100%;margin:8px 0;overflow-x:auto}
+.richText table{width:100%;border-collapse:separate;border-spacing:0;border-top:.5px solid var(--theme-border);border-left:.5px solid var(--theme-border);table-layout:auto}
+.richText th,.richText td{min-width:72px;padding:6px 8px;border-right:.5px solid var(--theme-border);border-bottom:.5px solid var(--theme-border);text-align:left;vertical-align:top}
+.richText th{background:var(--theme-surface-hover);color:var(--text);font-weight:500}
+.richText td p,.richText th p{margin:0}

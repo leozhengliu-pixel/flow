@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/coordination"
@@ -42,6 +43,11 @@ func (s *server) startCoordination() {
 					return
 				}
 				if s.receiveCollaborationEvent(envelope.Workspace, envelope.Event) {
+					return
+				}
+				// Loop run signals change no workspace state.
+				if strings.HasPrefix(envelope.Event.Type, "loop_run.") {
+					s.realtime.publish(envelope.Workspace, envelope.Event)
 					return
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

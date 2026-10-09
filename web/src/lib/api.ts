@@ -438,13 +438,13 @@ export type ProjectCustomerSummary = { customers: Array<{ id: string; important?
 export type ProjectQueryPage = { items: Project[]; nextCursor?: string; hasMore: boolean; total: number; customerSummaries?: Record<string, ProjectCustomerSummary>; customers?: Customer[] }
 export type ProjectQueryInput = { q?: string; teamId?: string | string[]; archived?: 'true' | 'false' | 'all'; filter?: Array<{ field: string; operator: string; values: string[] }>; cursor?: string; limit?: number; includeTotal?: boolean }
 
-export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: AbortSignal): Promise<ProjectQueryPage> {
+export function listProjectRecords(filters: ProjectQueryInput = {}, signal?: AbortSignal, workspaceKey?: string): Promise<ProjectQueryPage> {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(filters)) {
     if (value === undefined) continue
     params.set(key, key === 'filter' ? JSON.stringify(value) : Array.isArray(value) ? value.join(',') : String(value))
   }
-  return request(`/api/projects${params.size ? `?${params}` : ''}`, { signal })
+  return request(`/api/projects${params.size ? `?${params}` : ''}`, { signal, ...(workspaceKey ? { headers: { 'X-Workspace-Key': workspaceKey } } : {}) })
 }
 
 export function listIssueRecordGroups(filters: IssueQueryInput, signal?: AbortSignal): Promise<{ groups: { value: string; count: number }[] }> {
@@ -2650,6 +2650,10 @@ export function restoreLoopVersion(id: string, versionId: string): Promise<Loop>
   return request(`/api/loops/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`, { method: "POST" });
 }
 /** 👍 / 👎 on a run; `null` removes the viewer's rating. */
+/** Stops a running run (or the agent's answer to a reply), including the model request in flight. */
+export function cancelLoopRun(id: string, runId: string): Promise<LoopRun> {
+  return request(`/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/cancel`, { method: "POST" });
+}
 export function rateLoopRun(id: string, runId: string, rating: "up" | "down" | null, comment?: string): Promise<LoopRun> {
   return request(
     `/api/loops/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/feedback`,
