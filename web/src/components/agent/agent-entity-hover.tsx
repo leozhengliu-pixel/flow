@@ -12,6 +12,7 @@ import { ReleaseStatusIcon } from '@/components/releases/release-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import type { BootstrapData, FlowDocument, Initiative, Issue, Project, SavedView } from '@/types/flow'
 import type { AgentEntity } from './agent-entity-refs'
 import styles from './agent-entity-hover.module.css'
@@ -88,7 +89,7 @@ function ProjectCard({ data, project }: { data: BootstrapData; project: Project 
   const percent = Math.round((project.progress ?? 0) * 100)
   return <>
     <div className={styles.title}><ProjectGlyph project={project}/><span data-i18n-ignore>{project.name}</span></div>
-    {(project.summary || project.description) && <p className={styles.summary} data-i18n-ignore>{project.summary || project.description}</p>}
+    {(project.summary || project.description) && <p className={styles.summary} data-i18n-ignore>{markdownPlainText(project.summary || project.description)}</p>}
     <hr className={styles.rule}/>
     <div className={styles.props}>
       <Prop icon={<ProjectStatusIcon color={project.status.color} name={project.status.name} progress={project.progress} size={16} type={project.status.type}/>}>{t(project.status.name)}</Prop>
@@ -117,7 +118,7 @@ function InitiativeCard({ data, initiative }: { data: BootstrapData; initiative:
       <div className={styles.title}><ViewGlyph color={initiative.color} icon={initiative.icon || 'Initiative'}/><span data-i18n-ignore>{initiative.name}</span></div>
       {initiative.health !== 'noUpdate' && <span className={styles.health} style={{ color: healthColor(initiative.health) }}><HealthGlyph className={styles.healthGlyph} health={initiative.health}/>{healthText(initiative.health, t)}{latest ? ` · ${formatDate(latest.createdAt, { month: 'short', day: 'numeric' })}` : ''}</span>}
     </div>
-    {(initiative.summary || initiative.description) && <p className={styles.summary} data-i18n-ignore>{initiative.summary || initiative.description}</p>}
+    {(initiative.summary || initiative.description) && <p className={styles.summary} data-i18n-ignore>{markdownPlainText(initiative.summary || initiative.description)}</p>}
     <hr className={styles.rule}/>
     <div className={styles.props}>
       <Prop icon={<InitiativeStatusIcon status={initiative.status}/>}>{t(status)}</Prop>
@@ -148,7 +149,7 @@ function ViewCard({ data, view }: { data: BootstrapData; view: SavedView }) {
   const owner = (data.users ?? []).find(user => user.id === view.ownerId)
   return <>
     <div className={styles.title}><ViewGlyph color={view.color} icon={view.icon}/><span data-i18n-ignore>{view.name}</span></div>
-    {view.description && <p className={styles.summary} data-i18n-ignore>{view.description}</p>}
+    {view.description && <p className={styles.summary} data-i18n-ignore>{markdownPlainText(view.description)}</p>}
     <hr className={styles.rule}/>
     <div className={styles.props}>
       {owner && <Person user={owner}/>}

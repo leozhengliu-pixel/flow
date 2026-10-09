@@ -10,6 +10,7 @@ import { PeopleProvider } from './people-provider'
 import { PropertyMenu } from './property-menu'
 import { PeopleMenuItems } from './people-menu-items'
 import { PersonInfo } from './person-info'
+import { mentionOptions } from '@/components/editor/mentions/mention-options'
 import { MentionMenu } from '@/components/issue/editor/mention-menu'
 import { makeBootstrap, project } from '@/test/fixtures'
 import { personSearchText } from '@/lib/people'
@@ -107,14 +108,15 @@ describe('enterprise people pickers', () => {
     const user = userEvent.setup()
     const onSelect = vi.fn()
     const emailUser = {...users[1],userId:undefined}
-    render(<Shell><MentionMenu users={[users[0],emailUser]} selectedIndex={0} position={{left:0,top:0}} query="" onSelect={onSelect}/></Shell>)
-    const options = screen.getAllByRole('option')
-    expect(options[0]).toHaveTextContent('EMP-1001')
-    expect(options[0]).not.toHaveTextContent('usr-one')
-    expect(options[1].querySelector('small')).toHaveTextContent(/^second@example\.test$/)
-    expect(options[1]).not.toHaveTextContent('usr-two')
-    await user.click(options[1])
-    expect(onSelect).toHaveBeenCalledWith(emailUser)
+    const options = mentionOptions(undefined, '', { users: [users[0], emailUser], issues: [] })
+    render(<Shell><MentionMenu options={options} selectedIndex={0} anchor={{left:0,top:0,bottom:0}} query="" onSelect={onSelect}/></Shell>)
+    const rows = screen.getAllByRole('option')
+    expect(rows[0]).toHaveTextContent('EMP-1001')
+    expect(rows[0]).not.toHaveTextContent('usr-one')
+    expect(rows[1].querySelector('small')).toHaveTextContent(/^second@example\.test$/)
+    expect(rows[1]).not.toHaveTextContent('usr-two')
+    await user.click(rows[1])
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ key: `user:${emailUser.id}` }))
   })
 
   it('shows identity details on the selected person trigger', async () => {

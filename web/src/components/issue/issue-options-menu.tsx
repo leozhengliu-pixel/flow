@@ -37,6 +37,7 @@ import { CustomerRequestCreateDialog } from '@/components/customer/customer-requ
 import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { RecurrenceDialog } from './recurrence-picker'
+import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
@@ -391,7 +392,7 @@ export function IssueOptionsMenu({
           <button className="issue-description-history__close" aria-label="Close modal dialog" onClick={() => setDialog(null)}><X size={15}/></button>
           <div className="issue-description-history__body">
             <nav>{history.map(version => <button className={version.id === selectedHistory?.id ? 'selected' : ''} key={version.id} onClick={() => setSelectedHistoryId(version.id)}><strong>{version.id === 'current' ? 'Current' : new Date(version.createdAt).toLocaleString()}</strong><small>{version.actor}</small></button>)}</nav>
-            <section><time>{new Date(selectedHistory.createdAt).toLocaleString()}</time><pre>{selectedHistory.description || 'No description'}</pre><button disabled={selectedHistory.id === 'current' || busy} onClick={() => actions && void perform(() => actions.restoreDescription(selectedHistory.description, selectedHistory.descriptionState), 'Description restored')}>Restore version</button></section>
+            <section><time>{new Date(selectedHistory.createdAt).toLocaleString()}</time>{selectedHistory.description ? <MentionBody body={selectedHistory.description} panel/> : <pre>No description</pre>}<button disabled={selectedHistory.id === 'current' || busy} onClick={() => actions && void perform(() => actions.restoreDescription(selectedHistory.description, selectedHistory.descriptionState), 'Description restored')}>Restore version</button></section>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

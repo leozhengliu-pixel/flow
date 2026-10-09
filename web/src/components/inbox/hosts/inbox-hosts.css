@@ -175,18 +175,16 @@
   gap: 12px;
 }
 
-.flow-inbox-host__composer textarea {
-  width: 100%;
-  min-height: 96px;
-  resize: vertical;
+.flow-inbox-host__composer .flow-inbox-host__body {
+  --mention-field-min-height: 72px;
   padding: 10px 12px;
   border: 1px solid var(--color-border-subtle, var(--theme-border));
   border-radius: 8px;
   background: var(--color-bg-primary, transparent);
-  color: inherit;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.45;
+}
+
+.flow-inbox-host__composer .flow-inbox-host__body:focus-within {
+  border-color: var(--focus-ring);
 }
 
 .flow-inbox-host__healths {

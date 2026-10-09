@@ -153,6 +153,25 @@
   border-color: var(--accent-primary);
 }
 
+.meeting-editor-field .meeting-notes-field {
+  --mention-field-min-height: 114px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--theme-border);
+  border-radius: 9px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-primary);
+}
+
+.meeting-editor-field .meeting-notes-field:focus-within {
+  border-color: var(--accent-primary);
+}
+
+.meeting-editor-field .meeting-notes-field.mention-text-field .issue-description-root .description-editor {
+  font: 14px/22px var(--font);
+}
+
 .meeting-editor-field textarea.transcript-content {
   min-height: 180px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

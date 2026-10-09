@@ -3,7 +3,11 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap, teammate, viewer } from '@/test/fixtures'
+import { MemoryRouter } from 'react-router-dom'
+import { resetAgentRecordCache } from '@/components/agent/agent-entity-fetch'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
+import { WorkspaceStoreProvider } from '@/store/application-store-context'
+import { makeBootstrap, makeIssue, teammate, viewer } from '@/test/fixtures'
 import type { FlowDocument } from '@/types/flow'
 
 const api = vi.hoisted(() => ({
@@ -14,6 +18,7 @@ const api = vi.hoisted(() => ({
   removeSubscription: vi.fn(),
   listDocumentPermissions: vi.fn(),
   replaceDocumentPermissions: vi.fn(),
+  fetchIssueRecord: vi.fn(),
 }))
 vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: api.refreshResourcePreferences }))
 
@@ -154,5 +159,22 @@ describe('DocumentPage edited details', () => {
     await user.click(screen.getByRole('combobox', { name: 'Access for Teammate' }))
     await user.click(screen.getByRole('option', { name: 'Can edit' }))
     await waitFor(() => expect(api.replaceDocumentPermissions).toHaveBeenCalledWith(flowDocument.id, [{ subjectType: 'user', subjectId: viewer.id, role: 'owner' }, { subjectType: 'user', subjectId: teammate.id, role: 'editor' }]))
+  })
+})
+
+describe('DocumentPage comments', () => {
+  const comment = (id: string, body: string, parentId?: string) => ({ id, body, parentId, user: teammate, createdAt: '2026-09-02T00:00:00.000Z', reactions: {}, version: 1 })
+
+  it('renders references in comments and replies as chips', async () => {
+    resetAgentRecordCache()
+    api.fetchIssueRecord.mockReset().mockResolvedValue(makeIssue({ id: '0a1b2c3d-1111-2222-3333-444455556666', identifier: 'TST-9', title: 'Remote issue' }))
+    const data = mentionFixture({ issueCollectionPaged: true, issues: [], comments: { [flowDocument.id]: [comment('c1', `Plan in [Project one](${mentionUrls.project}) by @viewer`), comment('c2', 'Blocked by [TST-9](/workspace/issue/TST-9/remote)', 'c1')] } as never, documents: [flowDocument], favorites: [], subscriptions: [] })
+    render(<I18nProvider><MemoryRouter><WorkspaceStoreProvider account={null} data={data} session={null}><DocumentPage data={data} document={flowDocument} onBack={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/></WorkspaceStoreProvider></MemoryRouter></I18nProvider>)
+
+    const comments = document.querySelector('.document-comments') as HTMLElement
+    await waitFor(() => expect(comments.querySelector('a[data-agent-entity="project"]')).toHaveAttribute('href', mentionUrls.project))
+    expect(comments.querySelector('a[data-agent-entity="user"]')).toHaveTextContent('@Viewer')
+    await waitFor(() => expect(comments.querySelector('.document-comment-reply a[data-agent-entity="issue"]')).toHaveTextContent('TST-9 Remote issue'))
+    expect(comments.textContent).not.toContain('](')
   })
 })

@@ -14,3 +14,7 @@
 /* Initiative project list: one collapsible group per project status, with its count. */
 .li-project-group__count{margin-left:2px;color:var(--faint)}
 .li-project-group>button:first-child svg{flex:none}
+
+.li-rich-text{margin:10px 0 3px;color:var(--theme-text-secondary);font-size:13px;line-height:1.55;overflow-wrap:anywhere}
+.li-update-card .li-rich-text p,.li-comment-card .li-rich-text p{margin:0 0 6px;white-space:normal}
+.li-update-card .li-rich-text p:last-child,.li-comment-card .li-rich-text p:last-child{margin-bottom:0}

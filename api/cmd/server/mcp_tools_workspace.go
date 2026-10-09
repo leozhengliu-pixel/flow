@@ -1297,9 +1297,10 @@ func (s *server) saveMCPDocument(ctx context.Context, actor mcpActor, data domai
 	}
 	if hasContent {
 		// The editor renders contentData over the Markdown projection, so keep
-		// both in step and drop any stale collaborative state.
+		// both in step (references as mention nodes) and drop any stale
+		// collaborative state.
 		empty := ""
-		input.Content, input.ContentData, input.ContentState = &content, mcpMarkdownDocument(content), &empty
+		input.Content, input.ContentData, input.ContentState = &content, s.mcpMentionResolver(ctx, actor, &data, content).markdownDocument(content), &empty
 	}
 	if value, present := nullableStringArg(args, "project"); present {
 		ids := []string{}
@@ -1515,7 +1516,7 @@ func (s *server) saveMCPTemplate(ctx context.Context, actor mcpActor, data domai
 		}
 		if content, ok := args["content"].(string); ok {
 			empty := ""
-			input.Content, input.ContentData, input.ContentState = &content, mcpMarkdownDocument(content), &empty
+			input.Content, input.ContentData, input.ContentState = &content, s.mcpMentionResolver(ctx, actor, &data, content).markdownDocument(content), &empty
 		}
 		if id == "" {
 			result, err = s.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/document-templates", nil, input, s.createDocumentTemplate)

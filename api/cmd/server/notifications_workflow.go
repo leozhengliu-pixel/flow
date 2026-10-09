@@ -2107,18 +2107,18 @@ func mentionedUserIDs(data *domain.Bootstrap, issue domain.Issue, activity domai
 func collectMentionIDs(value any, result *[]string) {
 	switch typed := value.(type) {
 	case map[string]any:
-		mentionLike := typed["type"] == "mention" || typed["type"] == "userMention" || typed["type"] == "user"
+		attrs, _ := typed["attrs"].(map[string]any)
+		// A `mention` node names any workspace resource; only user mentions carry a person's id.
+		mentionLike := typed["type"] == "mention" && domain.IsUserMention(attrs) || typed["type"] == "userMention" || typed["type"] == "user"
 		if mentionLike {
 			for _, key := range []string{"userId", "id"} {
 				if id, ok := typed[key].(string); ok && id != "" {
 					*result = appendUnique(*result, id)
 				}
 			}
-			if attrs, ok := typed["attrs"].(map[string]any); ok {
-				for _, key := range []string{"userId", "id"} {
-					if id, ok := attrs[key].(string); ok && id != "" {
-						*result = appendUnique(*result, id)
-					}
+			for _, key := range []string{"userId", "id"} {
+				if id, ok := attrs[key].(string); ok && id != "" {
+					*result = appendUnique(*result, id)
 				}
 			}
 		}

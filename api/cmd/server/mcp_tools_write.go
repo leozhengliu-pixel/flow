@@ -74,7 +74,7 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 	case "save_status_update":
 		return s.saveMCPStatusUpdate(ctx, actor, data, args)
 	case "save_draft":
-		return s.saveMCPDraft(ctx, data, args)
+		return s.saveMCPDraft(ctx, actor, data, args)
 	case "create_reminder":
 		return s.createMCPReminder(ctx, data, args)
 	case "delete_issue":
@@ -236,6 +236,12 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			return nil, err
 		}
 	}
+	// References in the markdown are stored as mention nodes beside it, as the
+	// editor stores them.
+	var descriptionData map[string]any
+	if _, ok := args["description"]; ok || args["patch"] != nil {
+		descriptionData = s.mcpMentionResolver(ctx, actor, &data, description).companionDocument(description)
+	}
 	stateID, err := resolveStateID(data, team.ID, stringArg(args, "state"))
 	if err != nil {
 		return nil, err
@@ -292,7 +298,7 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 		if title == "" {
 			return nil, fmt.Errorf("title is required when creating an issue")
 		}
-		input := domain.IssueCreateInput{Title: title, Description: description, TeamID: team.ID}
+		input := domain.IssueCreateInput{Title: title, Description: description, DescriptionData: descriptionData, TeamID: team.ID}
 		if stateID != "" {
 			input.StateID = &stateID
 		}
@@ -327,7 +333,7 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			input.Title = &value
 		}
 		if _, ok := args["description"]; ok || args["patch"] != nil {
-			input.Description = &description
+			input.Description, input.DescriptionData = &description, descriptionData
 		}
 		if stateID != "" {
 			input.StateID = &stateID
@@ -976,6 +982,11 @@ func (s *server) deleteMCPComment(ctx context.Context, actor mcpActor, id string
 }
 
 func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data domain.Bootstrap, targetID, body string, bodyData map[string]any, operation string) (any, error) {
+	if bodyData == nil && operation != "delete" {
+		// Markdown-only bodies get the editor document beside them when they
+		// reference workspace resources, so the mentions are real nodes.
+		bodyData = s.mcpMentionResolver(ctx, actor, &data, body).companionDocument(body)
+	}
 	// The MCP write path invokes handlers directly, so the normal HTTP resource
 	// authorization middleware is not run. Validate the parent or comment
 	// against the already projected workspace before mutating the persisted

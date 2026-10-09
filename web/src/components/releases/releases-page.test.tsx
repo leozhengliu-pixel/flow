@@ -1,7 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.hoisted(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -23,6 +23,8 @@ const api = vi.hoisted(() => ({
   updateRelease: vi.fn().mockResolvedValue({}),
   deleteRelease: vi.fn().mockResolvedValue({}),
   recordRecentResource: vi.fn().mockResolvedValue({}),
+  createReleaseNote: vi.fn().mockResolvedValue({}),
+  updateReleaseNote: vi.fn().mockResolvedValue({}),
 }))
 
 vi.mock('@/lib/api', async (importOriginal) => ({
@@ -37,6 +39,8 @@ vi.mock('@/lib/favorites', async (importOriginal) => ({
 
 import { I18nProvider } from '@/i18n/i18n'
 import { backlog, completed, makeBootstrap, makeIssue, started, viewer } from '@/test/fixtures'
+import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
+import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import type { Release, ReleasePipeline } from '@/types/flow'
 
 import { ReleasesPage } from './releases-page'
@@ -105,7 +109,9 @@ beforeEach(() => {
   localStorage.clear()
   localStorage.setItem('flow:locale', 'en-US')
   api.listIssueRecords.mockResolvedValue({ items: [], hasMore: false, total: 0 })
+  stubEditorEnvironment()
 })
+afterEach(() => { vi.unstubAllGlobals() })
 
 describe('ReleasesPage icons', () => {
   it('renders pipeline rows with the pipeline icon instead of a rocket', () => {
@@ -430,5 +436,39 @@ describe('changelog notes scope (LS-0459)', () => {
     )
     expect(screen.getByLabelText('Select release notes scope')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Write with Agent' })).toBeDisabled()
+  })
+})
+
+describe('ReleasesPage release notes mentions', () => {
+  it('saves release notes holding a mention and a pasted Flow URL, and shows the chip in the changelog', async () => {
+    const user = userEvent.setup()
+    const data = mentionFixture({ releasePipelines: [pipeline()] as never, releases: [release({ description: '' })] as never, releaseNotes: [], favorites: [] })
+    const first = render(
+      <I18nProvider><MentionShell data={data}>
+        <ReleasesPage data={data} pipelineSlug="app" releaseSlug="one" releaseTab="release-notes" onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/>
+      </MentionShell></I18nProvider>,
+    )
+
+    const box = await screen.findByRole('textbox', { name: 'Release notes' })
+    await user.click(box)
+    await user.keyboard('Fixes: @Launch')
+    await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
+    pasteText(box, `${window.location.origin}${mentionUrls.project}`)
+    await waitFor(() => expect(box.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one'))
+    await user.click(screen.getByRole('button', { name: 'Save release notes' }))
+
+    await waitFor(() => expect(api.updateRelease).toHaveBeenCalled())
+    const saved = (api.updateRelease.mock.calls[api.updateRelease.mock.calls.length - 1][1] as { releaseNotes: string }).releaseNotes
+    expect(saved).toContain('[Launch plan](/workspace/document/plan-abc)')
+    expect(saved).toContain(`[Project one](${mentionUrls.project})`)
+    first.unmount()
+
+    const changelog = mentionFixture({ releasePipelines: [pipeline()] as never, releases: [release({ status: 'released', releaseNotes: saved, releasedAt: '2026-09-01T00:00:00Z' })] as never, releaseNotes: [], favorites: [] })
+    render(
+      <I18nProvider><MentionShell data={changelog}>
+        <ReleasesPage data={changelog} pipelineSlug="app" pipelineTab="changelog" onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onReload={vi.fn().mockResolvedValue(undefined)}/>
+      </MentionShell></I18nProvider>,
+    )
+    await waitFor(() => expect(document.querySelector('.flow-release-changelog a[data-agent-entity="document"]')).toHaveTextContent('Launch plan'))
   })
 })

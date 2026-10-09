@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarDays,
   ChevronRight,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/api";
 import { meetingPath, meetingsPath } from "@/lib/app-routes";
 import type { BootstrapData, Meeting, User } from "@/types/flow";
+import { MentionTextField } from "@/components/editor/mention-text-field";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useI18n } from "@/i18n/i18n";
 import "./meeting-page.css";
@@ -206,6 +207,8 @@ function MeetingDetail({
   const [title, setTitle] = useState(meeting.title);
   const [startsAt, setStartsAt] = useState(toLocalInput(meeting.startsAt));
   const [notes, setNotes] = useState(meeting.notes || "");
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
   const [transcript, setTranscript] = useState(meeting.transcript || "");
   const [attendeeIds, setAttendeeIds] = useState(meeting.attendeeIds);
   const [saving, setSaving] = useState(false);
@@ -337,18 +340,20 @@ function MeetingDetail({
           ) : null}
         </div>
       </div>
-      <label className="meeting-editor-field">
+      <div className="meeting-editor-field">
         <span>{t("Notes")}</span>
-        <textarea
-          aria-label={t("Meeting notes")}
+        <MentionTextField
+          ariaLabel={t("Meeting notes")}
+          className="meeting-notes-field"
           placeholder={t("Add meeting notes…")}
           value={notes}
-          onChange={(event) => setNotes(event.target.value)}
+          onChange={setNotes}
           onBlur={() => {
-            if (notes !== (meeting.notes || "")) void persist({ notes });
+            const next = notesRef.current;
+            if (next !== (meeting.notes || "")) void persist({ notes: next });
           }}
         />
-      </label>
+      </div>
       <label className="meeting-editor-field">
         <span>{t("Transcript")}</span>
         <textarea

@@ -16,6 +16,7 @@ import type { BootstrapData, InitiativeUpdate, Project, ProjectUpdate, PulseCapa
 
 import { healthLabel } from './hosts/inbox-host-types'
 import { loadPulseCapabilities, readPulseSummaryDisplay, writePulseSummaryDisplay, type PulseSummaryDisplay } from './pulse-summary-model'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import './pulse-summary-view.css'
 
 type SourceKind = 'project' | 'initiative'
@@ -114,7 +115,7 @@ export function PulseSummaryView({ notificationId, title, data, onOpenProject, o
     )
   } else if (!sections.length) {
     body = summary.text.trim()
-      ? <p className="flow-pulse-summary__text">{summary.text}</p>
+      ? <p className="flow-pulse-summary__text">{markdownPlainText(summary.text)}</p>
       : <p className="flow-pulse-summary__empty">{t('No updates')}</p>
   } else {
     body = sections.map(section => (
@@ -312,7 +313,7 @@ function PulseSummaryCard(props: CardProps & { onReport: () => void }) {
   return (
     <article className="flow-pulse-summary-card" data-pulse-anchor={props.item.updateId} aria-label={props.item.sourceName}>
       <CardHeader {...props} menu={menu} />
-      <p className="flow-pulse-summary-card__summary" data-i18n-ignore>{props.item.summary}</p>
+      <p className="flow-pulse-summary-card__summary" data-i18n-ignore>{markdownPlainText(props.item.summary)}</p>
     </article>
   )
 }
@@ -325,7 +326,7 @@ function PulseFullUpdateCard(props: CardProps) {
       <CardHeader {...props} />
       {update
         ? <div className="flow-pulse-summary-card__body" data-i18n-ignore><RichComment body={update.body} data={update.bodyData} /></div>
-        : <p className="flow-pulse-summary-card__summary" data-i18n-ignore>{props.item.summary}</p>}
+        : <p className="flow-pulse-summary-card__summary" data-i18n-ignore>{markdownPlainText(props.item.summary)}</p>}
       {update ? <PulseDiffBlock diff={update.diff} kind={props.kind} /> : null}
     </article>
   )

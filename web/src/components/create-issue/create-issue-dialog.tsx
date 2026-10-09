@@ -538,7 +538,9 @@ function MoreActions({ active, dueDate, recurrence, onDueDateChange, onRecurrenc
   useEffect(() => {
     if (!active) return
     const shortcut = (event: KeyboardEvent) => {
-      if (event.shiftKey && !event.metaKey && !event.ctrlKey && event.key.toLowerCase() === 'd') {
+      // Shift+D inside the title or description is just a capital D.
+      const typing = event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.matches('input, textarea, select'))
+      if (event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && !typing && event.key.toLowerCase() === 'd') {
         event.preventDefault()
         setOpen(true)
         setDateOpen(true)

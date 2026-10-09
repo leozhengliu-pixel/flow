@@ -28,14 +28,15 @@ import { projectLabelOptions } from '@/components/property/project-label-menu-mo
 import { ProjectStatusGlyph } from './project-property-picker'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
 import { listProjectRecords, type ProjectCustomerSummary, type ProjectQueryPage } from '@/lib/api'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
 
 /** The row's one-line summary falls back to the description as plain text (descriptions are stored as HTML). */
 function descriptionPreview(description: string | undefined) {
   if (!description) return ''
-  if (!/[<&]/.test(description)) return description
+  if (!/[<&]/.test(description)) return markdownPlainText(description)
   const text = typeof DOMParser === 'undefined' ? description.replace(/<[^>]*>/g, ' ') : new DOMParser().parseFromString(description, 'text/html').body.textContent ?? ''
-  return text.replace(/\s+/g, ' ').trim()
+  return markdownPlainText(text)
 }
 
 export type ProjectMutationInput = {

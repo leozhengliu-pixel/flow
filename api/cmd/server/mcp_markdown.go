@@ -207,7 +207,14 @@ func mcpMarkdownInlineNodes(text string) []any {
 		case match[12] >= 0:
 			appendText(group(6), map[string]any{"type": "italic"})
 		default:
-			appendText(group(7), map[string]any{"type": "link", "attrs": map[string]any{"href": group(8)}})
+			// Link text keeps its own inline formatting (code, bold, ...).
+			link := map[string]any{"type": "link", "attrs": map[string]any{"href": group(8)}}
+			for _, child := range mcpMarkdownInlineNodes(group(7)) {
+				node := child.(map[string]any)
+				marks, _ := node["marks"].([]any)
+				node["marks"] = append(marks, link)
+				nodes = append(nodes, node)
+			}
 		}
 		cursor = match[1]
 	}

@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { Markdown } from '@tiptap/markdown'
 import { EditorContent, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { MentionExtension } from '@/components/issue/editor/mention-extension'
+import { EmbedNode } from '@/components/editor/embeds/embed-extension'
+import { MentionChipNode } from '@/components/editor/mentions/mention-chip-extension'
+import { useMentionConversion } from '@/components/editor/mentions/use-mention-conversion'
 import { DescriptionImage } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo } from '@/components/issue/editor/file-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
@@ -14,23 +16,22 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,
-    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionExtension, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
+    extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
     editorProps: { attributes: { role: 'document', 'aria-label': 'Comment' } },
   })
 
+  const contentKey = useMemo(() => `${version ?? ''}:${body}:${data ? JSON.stringify(data) : ''}`, [body, data, version])
+  const appliedKey = useRef(contentKey)
   useEffect(() => {
-    if (!editor || editor.isDestroyed) return
+    if (!editor || editor.isDestroyed || appliedKey.current === contentKey) return
+    appliedKey.current = contentKey
     const next = commentContent(body, data)
-    if (next.contentType === 'json') {
-      if (JSON.stringify(editor.getJSON()) === JSON.stringify(next.content)) return
-      editor.commands.setContent(next.content, { contentType: 'json' })
-      return
-    }
-    if (editor.getMarkdown() === next.content) return
-    editor.commands.setContent(next.content, { contentType: 'markdown' })
-  }, [body, data, version, editor])
+    editor.commands.setContent(next.content, { contentType: next.contentType })
+  }, [body, contentKey, data, editor])
+  // After the content effect: the references in the new content become mentions (display only).
+  useMentionConversion(editor, contentKey, true, !validDocument(data))
 
   if (!editor) return <div aria-label="Comment" role="document"><p>{body}</p></div>
   return <>{selection?.text && <button className="comment-selection-quote" type="button" onClick={() => window.dispatchEvent(new CustomEvent('flow-reveal-description-selection', { detail: selection }))}>{selection.text}</button>}<EditorContent editor={editor}/></>

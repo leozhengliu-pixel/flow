@@ -12,6 +12,9 @@ import { ProjectStatusGlyph } from './project-property-picker'
 import { ProjectDatePicker } from './project-target-date-picker'
 import { formatProjectPropertyDate } from '@/components/project-detail/project-detail-helpers'
 import { useI18n } from '@/i18n/i18n'
+import { MentionTextField } from '@/components/editor/mention-text-field'
+import { SyncedMentionField } from '@/components/ui/synced-mention-field'
+import { markdownPlainText } from '@/lib/markdown-plain-text'
 import type { PersonalAgentSkill, ProjectDependencyRelationInput } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ProjectCreationAgent } from './project-creation-agent'
@@ -234,7 +237,7 @@ export function NewProjectDialog({
           <ProjectDraftProperty icon={<LabelIcon size={14}/>} label="Change labels" multiple options={labels.filter(label => projectLabelInTeams(label, draft.teamIds))} placeholder="Labels" value={draft.labelIds} onChange={value => set('labelIds', value)} />
           <ProjectDependencyPicker ariaLabel="Add dependencies" onChange={value => setDraft(current => ({ ...current, dependencyIds: value.filter(item => item.type === 'blocked_by').map(item => item.projectId), dependencyRelations: value }))} projects={dependencies.filter(project => !project.id.startsWith('__')).map(project => ({ id: project.id, label: project.label, icon: typeof project.icon === 'string' ? project.icon : undefined, color: project.color, group: project.group, keywords: [project.name, project.email].filter(Boolean).join(' '), disabled: project.disabled, previewData: project.previewData }))} triggerClassName={`lp-new-project-picker__trigger lp-new-project-dependency-trigger create-pill${draft.dependencyRelations.length ? '' : ' is-placeholder'}`} value={draft.dependencyRelations as ProjectDependencyValue[]} />
         </div>
-        <textarea aria-label="Project description" className="lp-new-project__description" onChange={event => set('description', event.target.value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
+        <SyncedMentionField ariaLabel="Project description" className="lp-new-project__description" onChange={value => set('description', value)} placeholder="Write a description, a project brief, or collect ideas…" value={draft.description} />
         <MilestonesEditor
           milestones={draft.milestoneDetails ?? draft.milestones.map(name => ({ name }))}
           onChange={milestones => setDraft(current => ({ ...current, milestoneDetails: milestones, milestones: milestones.map(item => item.name) }))}
@@ -352,7 +355,7 @@ function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMile
         <ProjectDatePicker align="end" ariaLabel="Choose date" buttonClassName={`lp-new-project__milestone-date${dateOpen || targetDate ? ' has-value' : ''}`} compactCalendar contentClassName="lp-new-project__milestone-calendar" label="Target date" onChange={value => setTargetDate(value)} onOpenChange={setDateOpen} side="top" value={targetDate}>
           {targetDate ? <span>{locale === 'en-US' ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(`${targetDate}T00:00:00`)) : formatDate(`${targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</span> : dateOpen ? <span>{t('Target date')}</span> : <CalendarPlus size={16}/>}
         </ProjectDatePicker>
-        <textarea aria-label={t('Milestone description')} className="lp-new-project__milestone-description" onChange={event => setDescription(event.target.value)} placeholder={t('Add a description…')} value={description}/>
+        <MentionTextField ariaLabel={t('Milestone description')} className="lp-new-project__milestone-description" onChange={setDescription} placeholder={t('Add a description…')} value={description}/>
       </div>
       <footer><button aria-label={t('Discard changes')} onClick={cancel} type="button">{t('Cancel')}</button><button aria-label={t('Add milestone')} className="is-primary" onClick={add} type="button">{t('Add milestone')}</button></footer>
     </div>
@@ -360,7 +363,7 @@ function MilestonesEditor({ milestones, onChange }: { milestones: NewProjectMile
   return <section className="lp-new-project__milestones" ref={sectionRef}>
     <header><button aria-expanded={!collapsed} onClick={() => setCollapsed(value => !value)} className="lp-new-project__milestone-toggle" type="button"><ViewIconPickerGlyph icon="MilestoneNone"/><strong>{t('Milestones')}</strong></button><button aria-label={t('Add')} onClick={() => setAdding(true)} type="button"><PlusIcon /></button></header>
     <AnimatedCollapse open={!collapsed}>
-    {milestones.map((item, index) => <div className="lp-new-project__milestone-row" key={`${item.name}-${index}`}><MilestoneProgressIcon className="lp-new-project__milestone-outline" empty/><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span>{item.targetDate && <time dateTime={item.targetDate}>{formatDate(`${item.targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</time>}<button aria-label={`${t('Remove')} ${item.name}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}
+    {milestones.map((item, index) => <div className="lp-new-project__milestone-row" key={`${item.name}-${index}`}><MilestoneProgressIcon className="lp-new-project__milestone-outline" empty/><span><strong>{item.name}</strong>{item.description && <small>{markdownPlainText(item.description)}</small>}</span>{item.targetDate && <time dateTime={item.targetDate}>{formatDate(`${item.targetDate}T00:00:00`, { month: 'short', day: 'numeric' })}</time>}<button aria-label={`${t('Remove')} ${item.name}`} onClick={() => onChange(milestones.filter((_, itemIndex) => itemIndex !== index))} type="button"><X size={13}/></button></div>)}
     </AnimatedCollapse>
   </section>
 }

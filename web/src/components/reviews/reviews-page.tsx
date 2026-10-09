@@ -60,6 +60,7 @@ import {
   PullRequestReviewShortcutsProvider,
   useOptionalPullRequestReviewShortcuts,
 } from './pull-request-review-shortcuts-context';
+import { MentionBody } from '@/components/editor/mentions/mention-body';
 import {
   ReviewProviderIcon,
   reviewProviderIdentifier,
@@ -656,7 +657,7 @@ function ReviewDetail({
             </dl>
             <section className="review-description">
               <h3>{t("Description")}</h3>
-              <p data-i18n-ignore>{review.description}</p>
+              <MentionBody body={review.description}/>
             </section>
             <section className="review-activity">
               <h3>{t("Activity")}</h3>

@@ -1,6 +1,6 @@
 import { ArrowLeft } from 'lucide-react'
 import type { Issue } from '@/types/flow'
-import { AgentRichText } from '@/components/agent/agent-rich-text'
+import { RichComment } from '@/components/activity/rich-comment'
 import { StatusIcon, TeamIcon } from './issue-icons'
 import './issue-loading-preview.css'
 
@@ -15,7 +15,7 @@ export function IssueLoadingPreview({issue,onBack}:{issue:Issue;onBack:()=>void}
       <article className="issue-document issue-loading-preview-document">
         <div className="issue-title-field"><div aria-level={1} className="flow-prosemirror title-editor issue-loading-preview-title" role="heading"><p>{issue.title}</p></div></div>
         <div className="issue-mobile-properties issue-loading-preview-mobile-properties">{properties}</div>
-        <div className="issue-description-root issue-loading-preview-description-root"><AgentRichText className="flow-prosemirror description-editor issue-loading-preview-description" ariaLabel="Issue description" content={issue.description}/></div>
+        <div className="issue-description-root issue-loading-preview-description-root"><div aria-label="Issue description" className="flow-prosemirror description-editor issue-loading-preview-description" role="group"><RichComment body={issue.description} data={issue.documentContent?.contentData}/></div></div>
       </article>
       <aside className="issue-properties issue-loading-preview-properties"><h3>Properties</h3><div className="issue-loading-preview-property">{properties}</div></aside>
     </div></div>
