@@ -20,6 +20,8 @@
 }
 
 .flow-tooltip-content--title { height: auto; white-space: pre-line; }
+/* Rich hover cards (customer lists, stats): size to their content instead of the one-line tooltip height. */
+.flow-tooltip-content--card { height: auto; min-height: 0; }
 .flow-tooltip-content--title .flow-tooltip-copy { overflow-wrap: anywhere; }
 .flow-tooltip-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .flow-tooltip-shortcut { color: var(--theme-text-tertiary); font: 10px/1 var(--font-monospace); }
