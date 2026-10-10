@@ -9,13 +9,24 @@ import (
 )
 
 func workspaceAgentSystemPrompt(data domain.Bootstrap, issues []domain.Issue, skills []domain.PersonalAgentSkill) string {
+	return buildWorkspaceAgentPrompt(data, issues, skills, agentProgressRule, "", "")
+}
+
+// buildWorkspaceAgentPrompt puts what stays the same between requests first (rules, link paths, extraStatic,
+// workspace and personal guidance) so providers can reuse their prompt cache, and the per-request context last
+// (today, loaded issues, skills, extraDynamic).
+func buildWorkspaceAgentPrompt(data domain.Bootstrap, issues []domain.Issue, skills []domain.PersonalAgentSkill, toolRule, extraStatic, extraDynamic string) string {
 	var prompt strings.Builder
-	prompt.WriteString(agentSystemPrompt(data.Workspace.Name, issues, skills))
+	prompt.WriteString(agentPromptRules(toolRule))
 	prompt.WriteString(agentResourceLinkGuidance(data.Workspace.URLKey))
-	if guidance:=strings.TrimSpace(data.WorkspaceSettings.AgentInstructions);guidance!="" {fmt.Fprintf(&prompt,"\nWorkspace guidance:\n%s\n",truncateSettingsText(guidance,8000))}
+	prompt.WriteString(extraStatic)
+	if guidance := strings.TrimSpace(data.WorkspaceSettings.AgentInstructions); guidance != "" {
+		fmt.Fprintf(&prompt, "\nWorkspace guidance:\n%s\n", truncateSettingsText(guidance, 8000))
+	}
 	if guidance := strings.TrimSpace(data.UserSettings[data.Viewer.ID].AgentInstructions); guidance != "" {
 		fmt.Fprintf(&prompt, "\nPersonal guidance:\n%s\n", truncateSettingsText(guidance, 4000))
 	}
+	prompt.WriteString(agentPromptContext(data.Workspace.Name, issues, skills))
 	teams := map[string]bool{}
 	for _, issue := range issues {
 		if teams[issue.Team.ID] {
@@ -29,6 +40,7 @@ func workspaceAgentSystemPrompt(data domain.Bootstrap, issues []domain.Issue, sk
 			}
 		}
 	}
+	prompt.WriteString(extraDynamic)
 	return prompt.String()
 }
 

@@ -242,7 +242,12 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, err
 	}
 	if sink := s.realtime(); sink != nil {
-		sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d", id, task.Version), Type: "agent_task.updated", AggregateID: task.IssueID, CreatedAt: task.UpdatedAt})
+		// Clients refresh the task panel of this resource on the push instead of polling.
+		resource := task.IssueID
+		if resource == "" {
+			resource = task.ResourceID
+		}
+		sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d", id, task.Version), Type: "agent_task.updated", AggregateID: resource, CreatedAt: task.UpdatedAt})
 	}
 	return task, nil
 }

@@ -9,7 +9,7 @@ a.entityMention:hover{background:transparent;text-decoration:underline}
 .entityLead{white-space:nowrap}
 .entityChip svg{display:inline-block;flex:0 0 auto;width:15px;height:15px;vertical-align:-3px}
 .entityIdentifier{color:var(--theme-text-secondary)}
-.entityTitle{color:var(--theme-text-primary)}
+.entityTitle{color:var(--text)}
 .entityPending{color:var(--theme-text-secondary)}
 .entityMissing{color:var(--theme-text-tertiary,var(--theme-text-secondary))}
 a.entityMissing{text-decoration:line-through;text-decoration-color:var(--theme-border-strong,currentColor)}

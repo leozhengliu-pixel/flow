@@ -44,8 +44,9 @@
   color: var(--theme-text-primary);
 }
 
-.description-image-node { margin: 0 0 12px; }
-.description-image-frame { position: relative; display: block; width: fit-content; max-width: 100%; }
+/* An image block is the column plus 16px (at most 785px) wide with the image centered in it, 22px from the blocks around it. */
+.description-image-node { width: min(785px, calc(100% + 16px)); margin: 22px 0; }
+.description-image-frame { position: relative; display: block; width: fit-content; max-width: 100%; margin: 0 auto; }
 .description-image {
   display: block;
   width: auto;
@@ -57,8 +58,8 @@
 }
 .description-image-toolbar {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   display: none;
   align-items: center;
   gap: 0;
@@ -67,6 +68,8 @@
   border: .5px solid var(--description-media-toolbar-border);
   border-radius: 9999px;
   background: var(--description-media-toolbar-bg);
+  box-shadow: var(--description-toolbar-shadow);
+  backdrop-filter: saturate(1.8) blur(20px);
 }
 .description-image-frame:hover .description-image-toolbar,
 .description-image-frame:focus-within .description-image-toolbar { display: flex; }
@@ -79,9 +82,20 @@
   border-radius: 9999px;
   background: transparent;
   color: var(--description-media-toolbar-fg);
-  padding: 5px;
+  padding: 6px;
 }
-.description-image-toolbar svg { width: 16px; height: 16px; }
+.description-image-toolbar svg { width: 14px; height: 14px; }
+/* A hairline sets the comment and delete actions apart from the four that act on the image itself. */
+.description-image-toolbar button:nth-child(5) { position: relative; margin-left: 9px; }
+.description-image-toolbar button:nth-child(5)::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: -4.5px;
+  width: .5px;
+  height: 18px;
+  background: var(--description-toolbar-separator);
+}
 .description-image-toolbar button:hover { background: var(--description-media-toolbar-hover); }
 .description-image-lightbox {
   position: fixed;
@@ -101,7 +115,7 @@
 }
 .description-image-node.ProseMirror-selectednode .description-image-frame {
   outline: 2px solid var(--description-selected-outline);
-  outline-offset: 1px;
+  outline-offset: 0;
   border-radius: 6px;
 }
 .description-image-menu {

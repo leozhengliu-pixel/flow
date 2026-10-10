@@ -11,6 +11,7 @@ vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
 
 import { AgentChatPanel } from './agent-chat-panel'
+import { AgentRichText } from './agent-rich-text'
 import { linkAgentEntities, parseAgentAnswer, splitAgentSuggestions } from './agent-answer-content'
 
 const data = makeBootstrap({
@@ -118,3 +119,17 @@ describe('stripLeakedProgress', () => {
   })
 })
 
+
+describe('Agent answer code blocks', () => {
+  it('render with the editor code block: line numbers, a read-only header with copy, and syntax highlighting', async () => {
+    render(<I18nProvider><AgentRichText className="answer" content={'Here is code:\n\n```ts\nconst a = 1\nreturn a\n```'}/></I18nProvider>)
+    await waitFor(() => expect(document.querySelector('.flow-code-block')).toBeTruthy())
+    const block = document.querySelector('.flow-code-block') as HTMLElement
+    expect(block.querySelectorAll('.flow-code-block__gutter span')).toHaveLength(2)
+    expect(within(block).getByRole('button', { name: 'Copy code' })).toBeInTheDocument()
+    expect(block.querySelector('.flow-code-block__language')).toHaveTextContent('TypeScript')
+    expect(block.querySelector('.flow-code-block__language')).toHaveAttribute('data-readonly')
+    await waitFor(() => expect(block.querySelector('.hljs-keyword')).toHaveTextContent('const'))
+    expect(block.querySelector('.hljs-control')).toHaveTextContent('return')
+  })
+})

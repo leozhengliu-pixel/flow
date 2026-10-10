@@ -132,9 +132,18 @@ export interface DocumentInlineCommentsProps {
   onReload: () => Promise<void>
   /** Reports whether gutter cards are shown, so the page can shift the document left. */
   onGutterChange?: (shown: boolean) => void
+  /** The agent rail is open: no room beside the text, so threads open as popovers. */
+  railOpen?: boolean
 }
 
-export function DocumentInlineComments({ data, document, comments, editor, shell, draft, onDraftChange, canComment, canEdit, visible = true, onReload, onGutterChange }: DocumentInlineCommentsProps) {
+/** Pages narrower than this (in CSS px, the document page's own width) show the open thread as a popover, not a gutter card. */
+export const GUTTER_MIN_WIDTH = 1040
+/** The popover is 360px wide, starts 12.5px left of the text it is about and sits just under it. */
+const POPOVER_WIDTH = 360
+const POPOVER_INSET = 12.5
+const POPOVER_GAP = 8
+
+export function DocumentInlineComments({ data, document, comments, editor, shell, draft, onDraftChange, canComment, canEdit, visible = true, onReload, onGutterChange, railOpen = false }: DocumentInlineCommentsProps) {
   const { t } = useI18n()
   const { open } = useInlineThreads(comments)
   const [active, setActive] = useState<string>()
@@ -143,6 +152,9 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
   const [tops, setTops] = useState<Map<string, number>>(new Map())
   const [heights, setHeights] = useState<Map<string, number>>(new Map())
   const [layoutTick, setLayoutTick] = useState(0)
+  // Unknown until the page has been measured: threads stay closed (popover rules) rather than flashing as gutter cards.
+  const [narrow, setNarrow] = useState<boolean | undefined>(undefined)
+  const popover = narrow !== false || railOpen
   const materialized = useRef(new Set<string>())
   const observer = useRef<ResizeObserver | null>(null)
   const cards = useRef(new Map<string, HTMLDivElement>())
@@ -262,6 +274,17 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
     return callback
   }, [])
 
+  // The document page decides between gutter and popover by its own width (the CSS container query uses the same threshold).
+  useEffect(() => {
+    const page = shell?.closest<HTMLElement>('.document-page')
+    if (!page) { setNarrow(false); return }
+    const measure = () => setNarrow(page.clientWidth < GUTTER_MIN_WIDTH)
+    measure()
+    const watcher = new ResizeObserver(measure)
+    watcher.observe(page)
+    return () => watcher.disconnect()
+  }, [shell])
+
   useEffect(() => {
     const onResize = () => setLayoutTick(value => value + 1)
     window.addEventListener('resize', onResize)
@@ -272,11 +295,25 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
     if (!editor || editor.isDestroyed || !shell || !range) return 0
     try {
       const position = Math.min(Math.max(range.from, 0), editor.state.doc.content.size)
-      return editor.view.coordsAtPos(position).top - shell.getBoundingClientRect().top
+      // The card's top edge lines up with the top of the text's 24px line box (the glyph box starts 3px lower).
+      return editor.view.coordsAtPos(position).top - shell.getBoundingClientRect().top - 3
     } catch { return 0 }
   }, [editor, shell])
 
-  const visibleThreads = visible ? open : []
+  /** Popover placement: under the text of the range, 12.5px left of it, kept inside the page. */
+  const popoverStyle = useCallback((range: AnchorRange | undefined): React.CSSProperties => {
+    if (!editor || editor.isDestroyed || !shell || !range) return { top: 0, left: 0 }
+    try {
+      const position = Math.min(Math.max(range.from, 0), editor.state.doc.content.size)
+      const coords = editor.view.coordsAtPos(position)
+      const box = shell.getBoundingClientRect()
+      const left = Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
+      return { top: coords.bottom - box.top + POPOVER_GAP, left }
+    } catch { return { top: 0, left: 0 } }
+  }, [editor, shell])
+
+  // A popover shows only the thread being read (or the composer being written); the others wait to be clicked.
+  const visibleThreads = visible ? (popover ? open.filter(thread => thread.root.id === active) : open) : []
   useLayoutEffect(() => {
     const items = visibleThreads.map(thread => ({ id: threadKey(thread), top: thread.anchorId ? anchorTop(anchors.get(thread.anchorId)) : 0, height: heights.get(threadKey(thread)) ?? 96 }))
     if (draft) items.push({ id: 'draft', top: anchorTop(draft), height: heights.get('draft') ?? 96 })
@@ -288,7 +325,20 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
   }, [active, anchorTop, anchors, draft, heights, layoutTick, visibleThreads]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = visibleThreads.length > 0 || Boolean(draft)
-  useEffect(() => { onGutterChange?.(shown) }, [onGutterChange, shown])
+  const shifts = shown && !popover
+  useEffect(() => { onGutterChange?.(shifts) }, [onGutterChange, shifts])
+
+  // In popover mode, clicking anywhere outside the thread, its anchor text and its menus closes it.
+  useEffect(() => {
+    if (!popover || !active) return
+    const onDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target?.closest('.document-inline-gutter, [data-comment-anchor], [role="menu"], [role="dialog"], [data-radix-popper-content-wrapper]')) return
+      setActive(undefined)
+    }
+    window.document.addEventListener('mousedown', onDown)
+    return () => window.document.removeEventListener('mousedown', onDown)
+  }, [active, popover])
 
   // Escape closes the composer / deactivates the thread.
   useEffect(() => {
@@ -331,8 +381,8 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
   }
 
   if (!shown) return null
-  return <TooltipProvider><div className="document-inline-gutter" aria-label={t('Comments')} role="complementary">
-    {draft && <div className="document-thread-card is-draft is-active" data-draft-card="draft" ref={cardRef('draft')} style={{ top: tops.get('draft') ?? anchorTop(draft) }}>
+  return <TooltipProvider><div className={`document-inline-gutter${popover ? ' is-popover' : ''}`} aria-label={t('Comments')} role="complementary">
+    {draft && <div className="document-thread-card is-draft is-active" data-draft-card="draft" ref={cardRef('draft')} style={popover ? popoverStyle(draft) : { top: tops.get('draft') ?? anchorTop(draft) }}>
       <div className="document-thread-draft">
         <UserAvatar avatarUrl={data.viewer.avatarUrl} className="document-thread-avatar" name={data.viewer.displayName || data.viewer.name}/>
         <div className="document-thread-draft-composer" ref={focusComposer}>
@@ -352,7 +402,7 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
       muted={threadMuted(data, document, thread)}
       actions={actions}
       onActivate={() => setActive(thread.root.id)}
-      style={{ top: tops.get(threadKey(thread)) ?? 0 }}
+      style={popover ? popoverStyle(thread.anchorId ? anchors.get(thread.anchorId) : undefined) : { top: tops.get(threadKey(thread)) ?? 0 }}
     />)}
   </div></TooltipProvider>
 }

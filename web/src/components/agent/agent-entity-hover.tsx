@@ -29,7 +29,7 @@ export function AgentEntityHover({ children, data, entity }: { children: ReactEl
       <Tooltip.Root disableHoverableContent>
         <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
         <Tooltip.Portal>
-          <Tooltip.Content align="start" className={styles.card} collisionPadding={8} data-agent-entity-card={entity.kind === 'link' ? entity.icon : entity.kind} data-flow-motion="tooltip" side="bottom" sideOffset={6}>
+          <Tooltip.Content align="start" className={styles.card} collisionPadding={8} data-agent-entity-card={entity.kind === 'link' ? entity.icon : entity.kind} data-flow-motion="tooltip" side="top" sideOffset={3}>
             <AgentEntityCardBody data={data} entity={entity}/>
           </Tooltip.Content>
         </Tooltip.Portal>

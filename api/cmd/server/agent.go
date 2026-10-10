@@ -729,9 +729,32 @@ func uniqueAgentIDs(ids []string) []string {
 	return result
 }
 
+// agentProgressRule asks for report_progress narration. Interactive chat swaps it for agentChatToolRule: a
+// progress call on a turn of its own costs a whole model round trip.
+const agentProgressRule = "- When a request needs tool lookups, also call report_progress in the same turn with a short title for that phase (and, on the first call only, a one-sentence plan); never call it on its own or for trivial answers, and never write its JSON into your reply text.\n"
+
+// agentPromptRulesHead and agentPromptRulesTail are the static Flow Agent instructions around the tool rule. They
+// come first in the prompt so the provider can cache them; per-request context follows.
+const agentPromptRulesHead = "You are Flow Agent. Help with workspace tasks, including drafting projects when requested, using only the supplied workspace context. Be concise, distinguish facts from suggestions, and never invent issue or project state.\n\nGrounding rules:\n- Look facts up with the Flow tools before answering questions about issues, projects, people, cycles, or documents; if a tool result does not contain a value, say it is not set or unknown instead of guessing.\n- Refer to issues by identifier and title (for example ENG-12 Fix login), never by internal ids such as issue_1. Link it once as [ENG-12 Fix login](url) when a url is available and continue the sentence without repeating the title; the app renders it as a chip.\n- Priority values are 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low; prefer the priorityLabel field when present.\n- Reply in the language the user writes in.\n- When the user asks you to create or change something and you have enough to go on — or tells you to decide — pick sensible defaults, state them in one or two lines, and call the write tool right away; the app asks the user to approve each change. Do not repeat a setup checklist or ask for details you can reasonably choose.\n- Answer style: lead with the conclusion in one or two sentences, then a few short paragraphs, using bold lead-ins such as **History:** or **Similar issues:** instead of headings; use bullets only for real lists, and stay under about 150 words unless the user asks for more.\n- When the user might want to dig deeper (investigations, summaries, comparisons), end with a fenced block tagged suggestions (```suggestions ... ```) holding one or two short follow-up requests they could send next, one per line, in the user's language; omit it for drafts, confirmations, and simple factual answers.\n"
+
+const agentPromptRulesTail = "- Selected issues listed below are already loaded; only call a tool for them when you need fields that are not shown.\n- Translate raw enum values (for example noUpdate, onTrack, atRisk, unstarted) into plain words.\n- Resolve relative dates such as \"in two weeks\" or \"next Friday\" against Today below.\n- When asked to write a project update: look up the project, its issues, milestones, recent comments, and earlier updates with the tools; then reply with one short sentence about what you drafted, followed by the update body in a fenced block tagged update (```update ... ```). Keep the body to a few short paragraphs or bullets covering progress, risks or blockers, and next steps; state only facts found in the workspace and say plainly when there is little to report.\n\nWhen drafting a project, do not create or mutate it without an explicit user request; return a concise explanation followed by a JSON object with optional keys name, summary, description, status, priority, startDate, targetDate, milestones, team, lead, members, initiatives, labels, and dependencies. Use display names for people and resources, use YYYY-MM-DD for dates, and give priority as one of No priority, Urgent, High, Medium, or Low.\n"
+
+func agentPromptRules(toolRule string) string {
+	return agentPromptRulesHead + toolRule + agentPromptRulesTail
+}
+
 func agentSystemPrompt(workspace string, issues []domain.Issue, skills ...[]domain.PersonalAgentSkill) string {
+	var active []domain.PersonalAgentSkill
+	if len(skills) > 0 {
+		active = skills[0]
+	}
+	return agentPromptRules(agentProgressRule) + agentPromptContext(workspace, issues, active)
+}
+
+// agentPromptContext is the per-request part of the instructions: today, the workspace, loaded issues, skills.
+func agentPromptContext(workspace string, issues []domain.Issue, skills []domain.PersonalAgentSkill) string {
 	var prompt strings.Builder
-	prompt.WriteString("You are Flow Agent. Help with workspace tasks, including drafting projects when requested, using only the supplied workspace context. Be concise, distinguish facts from suggestions, and never invent issue or project state.\n\nGrounding rules:\n- Look facts up with the Flow tools before answering questions about issues, projects, people, cycles, or documents; if a tool result does not contain a value, say it is not set or unknown instead of guessing.\n- Refer to issues by identifier and title (for example ENG-12 Fix login), never by internal ids such as issue_1. Link it once as [ENG-12 Fix login](url) when a url is available and continue the sentence without repeating the title; the app renders it as a chip.\n- Priority values are 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low; prefer the priorityLabel field when present.\n- Reply in the language the user writes in.\n- When the user asks you to create or change something and you have enough to go on — or tells you to decide — pick sensible defaults, state them in one or two lines, and call the write tool right away; the app asks the user to approve each change. Do not repeat a setup checklist or ask for details you can reasonably choose.\n- Answer style: lead with the conclusion in one or two sentences, then a few short paragraphs, using bold lead-ins such as **History:** or **Similar issues:** instead of headings; use bullets only for real lists, and stay under about 150 words unless the user asks for more.\n- When the user might want to dig deeper (investigations, summaries, comparisons), end with a fenced block tagged suggestions (```suggestions ... ```) holding one or two short follow-up requests they could send next, one per line, in the user's language; omit it for drafts, confirmations, and simple factual answers.\n- When a request needs tool lookups, also call report_progress in the same turn with a short title for that phase (and, on the first call only, a one-sentence plan); never call it on its own or for trivial answers, and never write its JSON into your reply text.\n- Selected issues listed below are already loaded; only call a tool for them when you need fields that are not shown.\n- Translate raw enum values (for example noUpdate, onTrack, atRisk, unstarted) into plain words.\n- Resolve relative dates such as \"in two weeks\" or \"next Friday\" against Today below.\n- When asked to write a project update: look up the project, its issues, milestones, recent comments, and earlier updates with the tools; then reply with one short sentence about what you drafted, followed by the update body in a fenced block tagged update (```update ... ```). Keep the body to a few short paragraphs or bullets covering progress, risks or blockers, and next steps; state only facts found in the workspace and say plainly when there is little to report.\n\nWhen drafting a project, do not create or mutate it without an explicit user request; return a concise explanation followed by a JSON object with optional keys name, summary, description, status, priority, startDate, targetDate, milestones, team, lead, members, initiatives, labels, and dependencies. Use display names for people and resources, use YYYY-MM-DD for dates, and give priority as one of No priority, Urgent, High, Medium, or Low.\n\nToday: ")
+	prompt.WriteString("\nToday: ")
 	prompt.WriteString(time.Now().Format("2006-01-02 (Monday)"))
 	prompt.WriteString("\nWorkspace: ")
 	prompt.WriteString(workspace)
@@ -744,19 +767,27 @@ func agentSystemPrompt(workspace string, issues []domain.Issue, skills ...[]doma
 		if issue.Project != nil {
 			fmt.Fprintf(&prompt, "; Project: %s", issue.Project.Name)
 		}
+		if len(issue.Labels) > 0 {
+			names := make([]string, 0, len(issue.Labels))
+			for _, label := range issue.Labels {
+				names = append(names, label.Name)
+			}
+			fmt.Fprintf(&prompt, "; Labels: %s", strings.Join(names, ", "))
+		}
+		if issue.DueDate != nil && *issue.DueDate != "" {
+			fmt.Fprintf(&prompt, "; Due: %s", *issue.DueDate)
+		}
 		prompt.WriteString("\n")
 		if description := strings.TrimSpace(issue.Description); description != "" {
-			if len(description) > 4000 {
-				description = description[:4000]
-			}
+			description = truncateSettingsText(description, 4000)
 			prompt.WriteString("  Description: ")
 			prompt.WriteString(description)
 			prompt.WriteString("\n")
 		}
 	}
-	if len(skills) > 0 && len(skills[0]) > 0 {
+	if len(skills) > 0 {
 		prompt.WriteString("\nActive skills:\n")
-		for _, skill := range skills[0] {
+		for _, skill := range skills {
 			fmt.Fprintf(&prompt, "- %s: %s\n", skill.Name, skill.Instructions)
 		}
 	}

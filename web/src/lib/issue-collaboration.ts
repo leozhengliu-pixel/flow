@@ -3,6 +3,8 @@ import { applyUpdate, encodeStateAsUpdate, encodeStateVector, parseUpdateMeta, t
 import { realtimeClientId } from '@/lib/api'
 import type { User } from '@/types/flow'
 
+/** How long a tab may stay hidden before its collaboration socket is released. */
+const hiddenSuspendMs = 20_000
 const updateFrame = 1
 const awarenessFrame = 2
 
@@ -42,6 +44,10 @@ export class IssueCollaborationProvider {
   private started = false
   private synced = false
   private conflicted = false
+  // A hidden tab drops its socket after a grace period and reconnects when it
+  // is shown again, so background tabs do not hold connections open.
+  private suspended = false
+  private hiddenTimer?: number
 
   constructor({ document, workspaceKey, issueId, documentId, viewer, seededWithoutServerState }: {
     document: Doc
@@ -71,12 +77,21 @@ export class IssueCollaborationProvider {
     if (this.destroyed || this.started || this.conflicted) return
     this.started = true
     if (!this.awareness.getLocalState()) this.awareness.setLocalStateField('user', this.localUser)
+    document.addEventListener('visibilitychange', this.onVisibilityChange)
+    if (document.visibilityState === 'hidden') {
+      // Opened in a background tab: connect when it is first shown.
+      this.suspended = true
+      return
+    }
     this.connect()
   }
 
   stop() {
     if (!this.started) return
     this.started = false
+    this.suspended = false
+    document.removeEventListener('visibilitychange', this.onVisibilityChange)
+    window.clearTimeout(this.hiddenTimer)
     this.synced = false
     this.sentUpdates.clear()
     this.receivedServerState = false
@@ -151,13 +166,15 @@ export class IssueCollaborationProvider {
     }
     socket.onerror = () => socket.close()
     socket.onclose = () => {
+      // A superseded socket (suspend/resume, restart) must not reset the live one.
+      if (this.socket && this.socket !== socket) return
       if (this.socket === socket) this.socket = undefined
       this.synced = false
       this.sentUpdates.clear()
       this.receivedServerState = false
       removeAwarenessStates(this.awareness, [...this.awareness.getStates().keys()].filter(id => id !== this.document.clientID), this)
       this.emit('disconnected')
-      if (!this.destroyed && this.started) {
+      if (!this.destroyed && this.started && !this.suspended) {
         const delay = Math.min(10_000, 400 * 2 ** this.retry++)
         this.reconnectTimer = window.setTimeout(this.connect, delay)
       }
@@ -168,6 +185,42 @@ export class IssueCollaborationProvider {
       this.awareness.setLocalStateField('heartbeat', Date.now())
       this.flushPendingUpdates()
     }, 15_000)
+  }
+
+  private onVisibilityChange = () => {
+    if (this.destroyed || !this.started) return
+    window.clearTimeout(this.hiddenTimer)
+    if (document.visibilityState === 'hidden') {
+      this.hiddenTimer = window.setTimeout(this.suspendWhenHidden, hiddenSuspendMs)
+      return
+    }
+    if (!this.suspended) return
+    this.suspended = false
+    this.retry = 0
+    this.connect()
+  }
+
+  private suspendWhenHidden = () => {
+    if (this.destroyed || !this.started || this.suspended || document.visibilityState !== 'hidden') return
+    // Unsent edits keep the socket until they are flushed.
+    if (this.pendingUpdates.size > 0 || this.deferredUpdate) {
+      this.hiddenTimer = window.setTimeout(this.suspendWhenHidden, 5_000)
+      return
+    }
+    this.suspended = true
+    window.clearTimeout(this.reconnectTimer)
+    window.clearInterval(this.heartbeatTimer)
+    this.synced = false
+    this.sentUpdates.clear()
+    this.receivedServerState = false
+    const socket = this.socket
+    this.socket = undefined
+    if (socket?.readyState === WebSocket.OPEN) {
+      removeAwarenessStates(this.awareness, [this.document.clientID], this)
+      socket.send(encodeFrame(awarenessFrame, this.documentId, '', encodeAwarenessUpdate(this.awareness, [this.document.clientID])))
+    }
+    socket?.close(1000, 'tab hidden')
+    this.emit('disconnected')
   }
 
   private handleTextMessage(raw: string) {
