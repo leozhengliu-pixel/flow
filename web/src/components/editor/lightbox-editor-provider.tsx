@@ -8,7 +8,9 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react'
+import { Clipboard, Download, Link2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
+import { toast } from 'sonner'
 
 import { CommentPopover, type LightboxComment } from './comment-popover'
 import { registerLightboxOpener, type LightboxItem } from './lightbox-bridge'
@@ -30,6 +32,35 @@ export type LightboxEditorProviderProps = {
 }
 
 type Session = { items: LightboxItem[]; index: number }
+
+/** The percentage of the image's own size it is shown at. */
+function zoomOf(image: HTMLImageElement) {
+  return image.naturalWidth ? Math.round((image.clientWidth / image.naturalWidth) * 100) : 100
+}
+
+function downloadImage(item: LightboxItem) {
+  const link = document.createElement('a')
+  link.href = item.src
+  link.download = item.alt || 'image'
+  link.rel = 'noopener'
+  link.click()
+}
+
+async function copyText(text: string) {
+  try { await navigator.clipboard.writeText(text); toast.success('Copied to clipboard') }
+  catch { toast.error('Could not copy') }
+}
+
+/** Copies the picture itself where the browser allows it, and its link otherwise. */
+async function copyImage(item: LightboxItem) {
+  try {
+    const blob = await (await fetch(item.src)).blob()
+    await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })])
+    toast.success('Copied to clipboard')
+  } catch {
+    await copyText(item.src)
+  }
+}
 
 export function LightboxEditorProvider({
   children,
@@ -72,6 +103,7 @@ function LightboxEditorProviderInner({
   const insets = useWindowControlsInsets()
   const commentHash = useCommentHashPopover(enableCommentHashPopover)
   const [comment, setComment] = useState<LightboxComment | undefined>()
+  const [zoom, setZoom] = useState(100)
 
   const open = useCallback((items: LightboxItem[], index = 0) => {
     if (!items.length) return
@@ -161,9 +193,16 @@ function LightboxEditorProviderInner({
             ['--flow-lightbox-inset-right' as string]: `${insets.right}px`,
           }}
         >
-          <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button">
-            ×
-          </button>
+          <div className="flow-lightbox-bar" onClick={event => event.stopPropagation()}>
+            <span className="flow-lightbox-zoom">{zoom}%</span>
+            <div className="flow-lightbox-actions">
+              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={16}/></button>
+              <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><Clipboard size={16}/></button>
+              <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><Link2 size={16}/></button>
+              <span aria-hidden className="flow-lightbox-separator"/>
+              <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><X size={16}/></button>
+            </div>
+          </div>
           <div className="flow-lightbox-stage" onClick={event => event.stopPropagation()}>
             {session.items.length > 1 && (
               <button
@@ -176,7 +215,7 @@ function LightboxEditorProviderInner({
                 ‹
               </button>
             )}
-            <img alt={active.alt ?? ''} src={active.src} />
+            <img alt={active.alt ?? ''} onLoad={event => setZoom(zoomOf(event.currentTarget))} src={active.src} />
             {session.items.length > 1 && (
               <button
                 aria-label="Next image"
@@ -194,6 +233,7 @@ function LightboxEditorProviderInner({
               </span>
             )}
           </div>
+          {active.alt && <p className="flow-lightbox-caption" data-i18n-ignore onClick={event => event.stopPropagation()}>{active.alt}</p>}
           {comment && (
             <div className="flow-lightbox-comment-slot" onClick={event => event.stopPropagation()}>
               <CommentPopover comment={comment} onClose={commentHash.clear} />

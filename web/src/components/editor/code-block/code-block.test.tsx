@@ -111,9 +111,12 @@ describe('code block node view', () => {
     const { container } = await mount('```js\nlong\n```')
     const block = container.querySelector('.flow-code-block') as HTMLElement
     expect(block).not.toHaveAttribute('data-wrap')
+    // Long lines scroll sideways by default: the node view's inline `pre-wrap` must not win.
+    expect((container.querySelector('.flow-code-block__code') as HTMLElement).style.whiteSpace).toBe('pre')
     await user.click(screen.getByRole('button', { name: 'Code block settings' }))
     await user.click(await screen.findByRole('checkbox', { name: 'Wrap lines' }))
     expect(block).toHaveAttribute('data-wrap')
+    expect((container.querySelector('.flow-code-block__code') as HTMLElement).style.whiteSpace).toBe('pre-wrap')
     expect(container.querySelector('.flow-code-block__gutter')).toBeNull()
   })
 

@@ -6,6 +6,10 @@ function apiRequest<T>(path: string, workspace: string, options: RequestInit = {
 
 export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; builtin: boolean; active: boolean; allTeams?: boolean; serverSuspended?: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
 export type ApplicationTask = { id: string; issueId: string; teamId: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled'; prompt: string; trigger: string; version: number; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string} }
+/** Window event fired when the realtime stream reports an agent task change; detail is the task's resource id. */
+export const AGENT_TASK_ACTIVITY_EVENT = 'flow:agent-task-activity'
+/** Task states the agent may still change on its own; only these keep a fallback poll running. */
+export const isApplicationTaskRunning = (task: Pick<ApplicationTask, 'status'>) => task.status === 'pending' || task.status === 'active'
 export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string }
 export const isAgentMember = (user: User) => Boolean(user.app && user.active && (user.appScopes?.includes('app:assignable') || user.appScopes?.includes('app:mentionable')))
 export const canDelegateTo = (user: User, teamId: string) => Boolean(user.app && user.active && user.appScopes?.includes('app:assignable') && user.appTeamIds?.includes(teamId))

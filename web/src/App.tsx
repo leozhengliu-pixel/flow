@@ -294,6 +294,7 @@ import { useSaveBrowserTimeZone } from "@/hooks/use-browser-timezone";
 import { subscriptionAfterGenericDelete } from "@/lib/subscription-records";
 import { INBOX_ACTIVITY_EVENT, inboxRealtimeRelevant, inboxUnread } from "@/lib/inbox-unread";
 import { LOOP_RUN_ACTIVITY_EVENT, isLoopRunSignal, loopRunActivity } from "@/lib/loop-run-activity";
+import { AGENT_TASK_ACTIVITY_EVENT } from "@/lib/application-agents";
 import { labelsForResource, setGroupedLabelSelected } from "@/lib/labels";
 import { applyAccountTheme, themeNeedsAccountSync } from "@/lib/theme";
 import { persistUserSettings } from "@/lib/settings-persistence";
@@ -1184,6 +1185,7 @@ function App() {
   }, []);
   const realtime = useWorkspaceRealtime({
     workspaceKey: data?.workspace.urlKey,
+    viewerId: data?.viewer.id,
     snapshot: data,
     issueId: selectedIssue?.id,
     route: location.pathname,
@@ -1221,6 +1223,8 @@ function App() {
         await reloadAgentRecords(workspace, viewerId, event);
         return;
       }
+      // Delegated-agent task panels refresh on this push instead of polling.
+      if (event.type.startsWith('agent_task.')) window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: event.aggregateId ?? '' }));
       const entity = event.payload?.entity;
       if (/^(favorite\.|favorite_folder\.|subscription\.)/.test(event.type)) {
         const preferences = await fetchResourcePreferences(workspace);
@@ -1239,6 +1243,8 @@ function App() {
       if (/^document\.comment_/.test(event.type) && event.aggregateId) {
         const document = data.documents.find(item => item.id === event.aggregateId || item.slugId === event.aggregateId);
         if (document) {
+          // A comment can @-mention an agent, which starts a task on the document.
+          window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: document.id }));
           const comments = await listDocumentComments(document.id);
           setData(current => current?.workspace.urlKey === workspace && current.viewer.id === viewerId ? { ...current, comments: { ...current.comments, [document.id]: comments } } : current);
           return;

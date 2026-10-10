@@ -4,7 +4,7 @@
  * a reply composer.
  */
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Bell, BellOff, Check, CircleDot, Copy, FilePlus2, Link2, MoreHorizontal, Pencil, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
+import { ArrowUp, Bell, BellOff, Check, CircleDot, Copy, FilePlus2, Link2, MoreHorizontal, Pencil, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import { forwardRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -78,8 +78,15 @@ export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(func
     />
     {thread.replies.map(reply => <ThreadComment key={reply.id} comment={reply} viewer={viewer} users={users} canComment={canComment} canModerate={canModerate} actions={actions} thread={thread}/>)}
     {!resolved && canComment && (active
-      ? <div className="document-thread-reply"><Composer compact users={users} placeholder={t('Reply…')} onSubmit={(body, bodyData) => actions.reply(thread, body, bodyData)}/></div>
-      : <button className="document-thread-reply-trigger" onClick={onActivate} type="button">{t('Reply…')}</button>)}
+      ? <div className="document-thread-reply">
+        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
+        <div className="document-thread-reply-composer"><Composer compact users={users} placeholder={t('Reply…')} onSubmit={(body, bodyData) => actions.reply(thread, body, bodyData)}/></div>
+      </div>
+      : <button aria-label={t('Reply…')} className="document-thread-reply-trigger" onClick={onActivate} type="button">
+        <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
+        <span>{t('Reply…')}</span>
+        <span aria-hidden className="document-thread-send"><ArrowUp size={14}/></span>
+      </button>)}
   </div></TooltipProvider>
 })
 

@@ -21,9 +21,9 @@
 .document-page .document-editor .inline-comment-pending { background: var(--document-comment-pending); }
 
 /* ---------- gutter ---------- */
-/* The gutter needs 16px + 284px beside the 805px column (294px past the
-   canvas); the column and the gutter are centered together, which moves the
-   document left. */
+/* Wide pages: the cards sit in a 300px gutter right of the 805px column. The column moves left to make room, keeping 48px
+   from the sidebar, and gives up width before it would overlap the gutter (a 284px card 10px right of the text). The decision is made
+   in document-inline-comments.tsx with the same threshold (`is-popover`): below it, the open thread is a popover under its text. */
 .document-page { container: document-page / inline-size; }
 .document-inline-gutter {
   position: absolute;
@@ -32,10 +32,27 @@
   width: 284px;
   z-index: 3;
 }
-@container document-page (min-width: 1150px) {
+@container document-page (min-width: 1040px) {
   .document-page.has-comment-gutter:not(.has-agent) .document-canvas {
-    margin-left: max(16px, calc((100% - var(--document-column) - 2 * var(--document-gutter) - 294px) / 2));
+    --document-shift: max(33.5px, min(calc((100% - var(--document-column) - 2 * var(--document-gutter)) / 2), calc(100% - 1127.5px)));
+    margin-left: var(--document-shift);
+    margin-right: 0;
+    width: min(calc(var(--document-column) + 2 * var(--document-gutter)), calc(100% - var(--document-shift) - 294.5px));
   }
+}
+
+/* Narrow pages (and with the agent rail open): no room beside the text, so the open thread (or the composer) is a 360px
+   popover 5px under the text it is about, 12.5px left of the selection. Other threads stay hidden until clicked. */
+.document-inline-gutter.is-popover { left: 0; width: 100%; height: 0; }
+.document-inline-gutter.is-popover .document-thread-card {
+  width: 360px;
+  max-width: 100%;
+  border-radius: 8px;
+  background: var(--document-popover-bg);
+  border-color: var(--document-popover-border);
+  box-shadow: var(--document-comment-card-shadow);
+  transform: none;
+  z-index: 4;
 }
 
 .document-thread-card {
@@ -43,7 +60,8 @@
   left: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px 8px;
+  padding: 12px;
+  border: .5px solid var(--document-comment-card-border);
   border-radius: 10px;
   background: var(--document-comment-card-bg);
   box-shadow: var(--document-comment-card-shadow);
@@ -56,33 +74,37 @@
 .document-thread-card.is-active { z-index: 2; transform: translateX(-6px); }
 .document-thread-card.is-resolved { position: relative; transform: none; cursor: default; }
 
-.document-thread-comment + .document-thread-comment { margin-top: 10px; }
+.document-thread-comment + .document-thread-comment { margin-top: 12px; }
+/* Header row: 18px avatar, 13px name and time; the round 28px action buttons float over the row's right edge. */
 .document-thread-comment > header {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 24px;
+  gap: 9px;
+  height: 18px;
 }
 .document-thread-comment > header > strong {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 18px;
 }
 .document-thread-comment > header > time,
 .document-thread-edited {
   flex: 0 0 auto;
-  color: var(--theme-text-tertiary);
+  margin-left: -3px;
+  color: var(--theme-text-secondary);
   font-size: 13px;
   font-weight: 450;
+  line-height: 18px;
 }
-:root:not([data-theme="light"]) .document-thread-comment > header > time,
-:root:not([data-theme="light"]) .document-thread-edited { color: var(--theme-text-secondary); }
 .document-thread-avatar {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -94,66 +116,113 @@
 }
 .document-thread-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .document-thread-actions {
-  margin-left: auto;
+  position: absolute;
+  top: -5px;
+  right: -4px;
   display: flex;
   align-items: center;
-  gap: 2px;
+  background: var(--document-comment-card-bg);
   opacity: 0;
   transition: opacity var(--quick) ease;
 }
+.document-inline-gutter.is-popover .document-thread-actions { background: var(--document-popover-bg); }
 .document-thread-card:hover .document-thread-actions,
 .document-thread-card.is-active .document-thread-actions,
 .document-thread-actions:focus-within,
 .document-thread-card.is-resolved .document-thread-actions { opacity: 1; }
 .document-thread-icon {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-tertiary);
+  color: var(--theme-text-primary);
   cursor: pointer;
 }
 .document-thread-icon:hover,
-.document-thread-icon[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.document-thread-body { padding-left: 26px; color: var(--theme-text-primary); font-size: 15px; line-height: 24px; letter-spacing: -.00666667em; overflow-wrap: anywhere; }
+.document-thread-icon[data-state="open"] { background: var(--theme-surface-hover); }
+/* 15px / 24px, flush with the header (no avatar indent), 6px under it. */
+.document-thread-body { margin-top: 6px; color: var(--theme-text-primary); font-size: 15px; font-weight: 450; line-height: 24px; letter-spacing: -.00666667em; overflow-wrap: anywhere; }
 .document-thread-body .comment-prosemirror p,
 .document-thread-body p { margin: 0; }
-:root:not([data-theme="light"]) .document-thread-body { color: var(--text); }
-.document-thread-comment .reaction-pills { margin: 6px 0 0 26px; }
+:root .document-thread-body { color: var(--text); }
+/* Inline code and links in a thread follow the rich-text body rules (14.0625px code chip, plain-until-hovered links). */
+.document-thread-body code {
+  padding: .5px .25em;
+  border-radius: .2em;
+  font-size: .9375em;
+  letter-spacing: calc(-.1px - .002em);
+}
+.document-thread-body a { text-decoration: none; }
+.document-thread-body a:hover { text-decoration: underline; text-underline-offset: 2px; }
+:root .document-thread-body a { color: var(--rt-link); }
+:root .document-thread-body code {
+  background: var(--rt-inline-code-bg);
+  box-shadow: inset 0 0 0 .5px var(--rt-inline-code-border);
+  color: inherit;
+}
+.document-thread-comment .reaction-pills { min-height: 0; margin: 6px 0 0; }
 
-.document-thread-reply { margin: 8px 0 2px; }
+/* Reply row: a hairline, then avatar, "Reply…" and a round send button, 12px inside the card edge. */
+.document-thread-reply,
 .document-thread-reply-trigger {
-  width: 100%;
-  margin-top: 8px;
-  padding: 4px 0 2px 26px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  width: calc(100% + 24px);
+  margin: 12px -12px -12px;
+  padding: 12px;
   border: 0;
-  border-top: .5px solid var(--theme-border);
+  border-top: .5px solid var(--document-comment-card-border);
   background: transparent;
   color: var(--theme-text-tertiary);
-  font: inherit;
+  font: 450 15px / 24px var(--font);
   text-align: left;
   cursor: text;
 }
+.document-inline-gutter.is-popover .document-thread-reply,
+.document-inline-gutter.is-popover .document-thread-reply-trigger { border-top-color: var(--document-popover-border); }
+.document-thread-reply-trigger > span:not(.document-thread-avatar):not(.document-thread-send) { flex: 1 1 auto; min-width: 0; letter-spacing: -.00666667em; }
+.document-thread-reply-trigger > .document-thread-avatar,
+.document-thread-reply > .document-thread-avatar { align-self: center; }
+.document-thread-send {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--document-send-bg);
+  color: var(--theme-text-secondary);
+}
+.document-thread-reply-composer { flex: 1 1 auto; min-width: 0; }
 
 /* Composers sit inside the card: no box of their own. */
 .document-thread-card .composer,
 .document-thread-card .composer.compact {
   margin: 0;
-  padding: 2px 0;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
 }
 .document-thread-card .composer .comment-prosemirror { font-size: 15px; line-height: 24px; }
-.document-thread-reply .composer { padding-left: 26px; }
+/* Reply and draft composers are one row: the text, then the round 24px send button (no attach or cancel buttons; Escape cancels). */
+.document-thread-card .composer.compact { display: flex; align-items: center; gap: 8px; }
+.document-thread-card .composer.compact > div:first-child { flex: 1 1 auto; min-width: 0; }
+.document-thread-card .composer-toolbar { flex: 0 0 auto; display: flex; height: 24px; margin: 0; padding: 0; }
+.document-thread-card .composer-tools,
+.document-thread-card .composer-cancel { display: none; }
+.document-thread-card .composer-send { width: 24px; height: 24px; padding: 0; border-radius: 50%; }
+.document-thread-card .composer-send:disabled { background: var(--document-send-bg); color: var(--theme-text-secondary); opacity: 1; }
 
-.document-thread-draft { display: flex; align-items: flex-start; gap: 8px; }
-.document-thread-draft > .document-thread-avatar { margin-top: 6px; }
+.document-thread-draft { display: flex; align-items: center; gap: 9px; }
+.document-thread-draft > .document-thread-avatar { align-self: flex-start; margin-top: 3px; }
 .document-thread-draft-composer { flex: 1 1 auto; min-width: 0; }
 
 .document-thread-quote {
@@ -195,16 +264,8 @@
 }
 .document-resolved-panel > header strong { font-weight: 500; }
 .document-resolved-list { flex: 1 1 auto; overflow: auto; padding: 10px; display: grid; align-content: start; gap: 10px; }
-.document-resolved-list .document-thread-card { box-shadow: 0 0 0 .5px var(--theme-border); }
+.document-resolved-list .document-thread-card { box-shadow: none; }
 
-/* Narrow pages (or with the agent rail open): no room beside the text, so
-   cards stack under the document. */
-@container document-page (max-width: 1149px) {
-  .document-inline-gutter { position: static; width: auto; margin-top: 24px; display: grid; gap: 10px; }
-  .document-inline-gutter .document-thread-card { position: relative; top: auto !important; transform: none; }
-}
-.document-page.has-agent .document-inline-gutter { position: static; width: auto; margin-top: 24px; display: grid; gap: 10px; }
-.document-page.has-agent .document-inline-gutter .document-thread-card { position: relative; top: auto !important; transform: none; }
 @media (max-width: 800px) {
   .document-resolved-panel { top: 48px; right: 0; bottom: 0; width: 100%; border-radius: 0; }
 }

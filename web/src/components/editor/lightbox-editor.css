@@ -7,11 +7,54 @@
   padding: 32px;
   padding-left: calc(32px + var(--flow-lightbox-inset-left, 0px));
   padding-right: calc(32px + var(--flow-lightbox-inset-right, 0px));
-  background: lch(0 0 0 / .72);
+  background: var(--lightbox-bg);
   cursor: zoom-out;
 }
 .flow-lightbox-root[data-translucent="false"] {
-  background: lch(0 0 0 / .86);
+  background: var(--lightbox-bg);
+}
+/* Top bar: the zoom the picture is shown at on the left, download / copy / link and close on the right. */
+.flow-lightbox-bar {
+  position: absolute;
+  top: 0;
+  right: calc(var(--flow-lightbox-inset-right, 0px));
+  left: calc(var(--flow-lightbox-inset-left, 0px));
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px 0 18px;
+  cursor: default;
+}
+.flow-lightbox-zoom { color: var(--theme-text-secondary); font: 450 13px / 20px var(--font); }
+.flow-lightbox-actions { display: flex; align-items: center; gap: 4px; }
+.flow-lightbox-actions button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  cursor: pointer;
+}
+.flow-lightbox-actions button:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.flow-lightbox-separator { width: .5px; height: 18px; margin: 0 4px; background: var(--document-popover-border); }
+.flow-lightbox-caption {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  max-width: min(100% - 64px, 800px);
+  margin: 0;
+  transform: translateX(-50%);
+  overflow: hidden;
+  color: var(--theme-text-primary);
+  font: 450 13px / 20px var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
 }
 .flow-lightbox-stage {
   position: relative;
@@ -25,7 +68,7 @@
 .flow-lightbox-stage img {
   max-width: min(100%, 1200px);
   max-height: calc(100vh - 96px);
-  border-radius: 8px;
+  background: conic-gradient(var(--lightbox-checker) 25%, transparent 0 50%, var(--lightbox-checker) 0 75%, transparent 0) 0 0 / 16px 16px;
   object-fit: contain;
   user-select: none;
 }
@@ -54,20 +97,6 @@
   font: 500 12px/16px var(--font);
   letter-spacing: .02em;
 }
-.flow-lightbox-close {
-  position: absolute;
-  top: 16px;
-  right: calc(16px + var(--flow-lightbox-inset-right, 0px));
-  width: 32px;
-  height: 32px;
-  border: 0;
-  border-radius: 8px;
-  background: lch(100 0 0 / .1);
-  color: lch(96 1 272);
-  font: 600 18px/1 var(--font);
-  cursor: pointer;
-}
-.flow-lightbox-close:hover { background: lch(100 0 0 / .18); }
 .flow-lightbox-comment-slot {
   position: absolute;
   left: calc(24px + var(--flow-lightbox-inset-left, 0px));
