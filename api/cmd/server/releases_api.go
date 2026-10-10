@@ -1,9 +1,7 @@
 package main
 
 import (
-	"crypto/subtle"
 	"errors"
-	"fmt"
 	"net/http"
 	"slices"
 	"sort"
@@ -104,13 +102,6 @@ func (s *server) setIssueReleases(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-type releasePipelineAccessKey struct {
-	PipelineID string    `json:"pipelineId"`
-	Prefix     string    `json:"prefix"`
-	Secret     string    `json:"secret"`
-	CreatedAt  time.Time `json:"createdAt"`
-}
-
 func stringValue(value *string) string {
 	if value == nil {
 		return ""
@@ -136,8 +127,10 @@ func releaseStageFrozen(data *domain.Bootstrap, release domain.Release) bool {
 	return pipeline != nil && release.Stage != "" && slices.Contains(pipeline.FrozenStages, release.Stage)
 }
 
+// publicReleasePipeline strips key hashes; only prefixes and timestamps leave the server.
 func publicReleasePipeline(item domain.ReleasePipeline) domain.ReleasePipeline {
 	item.AccessKeyHash = ""
+	item.PreviousAccessKeyHash = ""
 	return item
 }
 
@@ -332,161 +325,6 @@ func sameIDs(expected, actual []string) bool {
 	return len(seen) == 0
 }
 
-func (s *server) rotateReleasePipelineAccessKey(w http.ResponseWriter, r *http.Request) {
-	secret, err := randomSecret("flow_release_")
-	if err != nil {
-		respondMutation(w, err, http.StatusCreated, nil)
-		return
-	}
-	id := r.PathValue("id")
-	var result releasePipelineAccessKey
-	role, teamRoles := s.requestWorkspaceRole(r)
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.access_key_rotated", id, nil, func(data *domain.Bootstrap) error {
-		pipeline := releasePipelineByID(data, id)
-		if pipeline == nil {
-			return errNotFound
-		}
-		if !releasePipelineAdministrable(data, pipeline.TeamIDs, teamRoles, role) {
-			return store.ErrAuthForbidden
-		}
-		now := time.Now().UTC()
-		prefix := secret[:min(len(secret), 21)]
-		pipeline.AccessKeyPrefix, pipeline.AccessKeyHash, pipeline.AccessKeyCreatedAt, pipeline.UpdatedAt = prefix, secretHash(secret), &now, now
-		result = releasePipelineAccessKey{PipelineID: id, Prefix: prefix, Secret: secret, CreatedAt: now}
-		return nil
-	})
-	respondMutation(w, err, http.StatusCreated, result)
-}
-
-func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-	secret := strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
-	if secret == "" || secret == r.Header.Get("Authorization") {
-		writeError(w, http.StatusUnauthorized, "invalid release pipeline access key")
-		return
-	}
-	pipelineID := r.PathValue("id")
-	workspaceKey := ""
-	for _, key := range s.store.WorkspaceKeys() {
-		data, ok := s.store.WorkspaceMetadata(key)
-		if !ok {
-			continue
-		}
-		pipeline := releasePipelineByID(&data, pipelineID)
-		if pipeline != nil && pipeline.AccessKeyHash != "" && subtle.ConstantTimeCompare([]byte(pipeline.AccessKeyHash), []byte(secretHash(secret))) == 1 {
-			workspaceKey = key
-			break
-		}
-	}
-	if workspaceKey == "" {
-		writeError(w, http.StatusUnauthorized, "invalid release pipeline access key")
-		return
-	}
-	var input struct {
-		Name        string `json:"name"`
-		Version     string `json:"version"`
-		Description string `json:"description"`
-		CommitSHA   string `json:"commitSha"`
-		Stage       string `json:"stage"`
-	}
-	if !decodeJSON(w, r, &input) {
-		return
-	}
-	input.Name, input.Version, input.CommitSHA, input.Stage = strings.TrimSpace(input.Name), strings.TrimSpace(input.Version), strings.TrimSpace(input.CommitSHA), strings.TrimSpace(input.Stage)
-	if input.Version == "" && input.Name == "" {
-		writeError(w, http.StatusBadRequest, "name or version is required")
-		return
-	}
-	var saved domain.Release
-	created := false
-	// A CI event can move an existing release to a released stage, which runs
-	// completion automations over that release's issues.
-	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
-		extra := store.MutationScope{}
-		for _, release := range data.Releases {
-			if release.PipelineID == pipelineID && input.Version != "" && release.Version == input.Version {
-				extra.IssueIDs = append(extra.IssueIDs, release.IssueIDs...)
-			}
-		}
-		return extra
-	}})
-	err := s.store.MutateWorkspace(ctx, workspaceKey, "release.ci_event", pipelineID, input, func(data *domain.Bootstrap) error {
-		pipeline := releasePipelineByID(data, pipelineID)
-		if pipeline == nil || pipeline.AccessKeyHash == "" {
-			return errNotFound
-		}
-		stage := input.Stage
-		if stage == "" {
-			stage = "inProgress"
-		}
-		status := ""
-		for _, candidate := range pipeline.Stages {
-			candidateStatus := pipeline.StageStatuses[candidate]
-			// A status alias resolves to the first stage of that type that is not
-			// frozen, so syncs never land new releases in frozen stages.
-			if strings.EqualFold(stage, candidate) || strings.EqualFold(stage, candidateStatus) && !slices.Contains(pipeline.FrozenStages, candidate) {
-				stage, status = candidate, candidateStatus
-				break
-			}
-		}
-		if status == "" || !slices.Contains([]string{"planned", "inProgress", "released", "canceled"}, status) {
-			return fmt.Errorf("%w: release stage not found", errInvalid)
-		}
-		index := slices.IndexFunc(data.Releases, func(item domain.Release) bool {
-			return item.PipelineID == pipelineID && input.Version != "" && item.Version == input.Version
-		})
-		previousStatus := ""
-		if index >= 0 {
-			previousStatus = data.Releases[index].Status
-		}
-		now := time.Now().UTC()
-		if index < 0 {
-			name := input.Name
-			if name == "" {
-				name = input.Version
-			}
-			saved = domain.Release{ID: fmt.Sprintf("release_%d", now.UnixNano()), SlugID: uniqueReleaseSlug(data, name, now), Name: name, Version: input.Version, Description: input.Description, CommitSHA: input.CommitSHA, PipelineID: pipelineID, Stage: stage, Status: status, Position: nextReleasePosition(data, pipelineID), ProjectIDs: []string{}, IssueIDs: []string{}, SubscriberIDs: []string{data.Viewer.ID}, Resources: []domain.ReleaseResource{}, Creator: data.Viewer, CreatedAt: now, UpdatedAt: now}
-			data.Releases = append([]domain.Release{saved}, data.Releases...)
-			created = true
-		} else {
-			release := &data.Releases[index]
-			if input.Name != "" {
-				release.Name = input.Name
-			}
-			if input.Description != "" {
-				release.Description = input.Description
-			}
-			if input.CommitSHA != "" {
-				release.CommitSHA = input.CommitSHA
-			}
-			release.Stage, release.Status, release.UpdatedAt = stage, status, now
-			saved = *release
-		}
-		if status == "inProgress" && saved.StartedAt == nil {
-			saved.StartedAt = &now
-		}
-		if status == "released" {
-			if saved.StartedAt == nil {
-				saved.StartedAt = &now
-			}
-			saved.ReleasedAt = &now
-		}
-		if created {
-			data.Releases[0] = saved
-		} else {
-			data.Releases[index] = saved
-		}
-		data.ReleaseHistory = append(data.ReleaseHistory, domain.ReleaseHistory{ID: fmt.Sprintf("release_history_%d", now.UnixNano()), ReleaseID: saved.ID, Actor: data.Viewer, Action: "ci_event", Metadata: map[string]any{"stage": stage, "commitSha": input.CommitSHA}, CreatedAt: now})
-		return applyReleaseSettingAutomations(data, previousStatus, saved, now)
-	})
-	if errors.Is(err, errInvalid) || err != nil && strings.Contains(err.Error(), errInvalid.Error()) {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	respondMutation(w, err, map[bool]int{true: http.StatusCreated, false: http.StatusOK}[created], saved)
-}
-
 func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	role, teamRoles := s.requestWorkspaceRole(r)
@@ -514,8 +352,7 @@ func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		for _, releaseID := range removedReleaseIDs {
 			removeResourcePreferences(data, "release", releaseID)
 		}
-		item := data.ReleasePipelines[index]
-		item.AccessKeyHash = ""
+		item := publicReleasePipeline(data.ReleasePipelines[index])
 		if err := appendTrash(data, "release_pipeline", item.ID, item.Name, item); err != nil {
 			return err
 		}

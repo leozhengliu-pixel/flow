@@ -2,7 +2,8 @@ import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, t
 import { Virtuoso, type Components } from 'react-virtuoso'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, Clock3, Link2, PackageOpen, Plus } from 'lucide-react'
+import { Check, ChevronDown, Clock3, Link2, Plus } from 'lucide-react'
+import { IssueReleaseChip, type IssueReleaseEntry } from '@/components/issue/issue-release-chip'
 import type { MyIssuesProperty } from './my-issues-surface'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, WorkflowStatusGlyph } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
@@ -140,6 +141,7 @@ export interface MyIssuesRowData {
   blockedByCount?: number
   blockingCount?: number
   releaseCount?: number
+  releases?: IssueReleaseEntry[]
   hasContent?: boolean
   estimate?: number
   dueDate?: string
@@ -305,7 +307,7 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
     if ((event.target as Element).closest('button,input,[role="checkbox"]')) { event.preventDefault(); return }
     if (onOpen && !event.metaKey && !event.ctrlKey && !event.shiftKey && event.button === 0) { event.preventDefault(); open() }
   }
-  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('release') && '52px', displayProperties.has('links') && '52px', displayProperties.has('pullRequests') && '52px', '18px'].filter(Boolean).join(' ')
+  const columns = ['8px', '18px', displayProperties.has('priority') && '16px', displayProperties.has('id') && 'var(--issue-identifier-width, 52px)', displayProperties.has('status') && '22px', 'minmax(80px,1fr)', displayProperties.has('created') && '60px', displayProperties.has('updated') && '60px', displayProperties.has('myActivity') && '60px', displayProperties.has('timeInStatus') && '72px', displayProperties.has('links') && '52px', displayProperties.has('pullRequests') && '52px', '18px'].filter(Boolean).join(' ')
   const change = (property: MyIssuesEditableProperty, value: string | string[]) => onPropertyChange?.(issue, property, value)
   return <ContextMenu.Root>
     <ContextMenu.Trigger asChild>
@@ -348,6 +350,7 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
             {displayProperties.has('labels') && issue.labels?.length ? <RowCommandPicker propertyLabel="Labels" kind="labels" multi label={`Change labels. ${issue.labels.map(label => label.name).join(', ')} selected`} searchLabel="Change or add labels..." selectedIds={issue.labels.map(label => label.id)} options={propertyOptions.labels} onSelect={value => change('labels', toggleGroupedLabelIds(issue.labels?.map(label => label.id) ?? [], value, propertyOptions.labels))} triggerClassName={styles.labelsTrigger} trigger={<span className={styles.badgeGroup}>{issue.labels.map(label => <span key={label.id} className={styles.badgeSlot}><PropertyBadge label={label}/></span>)}</span>}/> : null}
         {displayProperties.has('project') && issue.project ? <RowCommandPicker propertyLabel="Project" kind="project" label={`Change project. Current project is ${issue.project.name}`} searchLabel="Set project..." selectedIds={[issue.project.id]} options={propertyOptions.project} onSelect={value => change('project', value)} triggerClassName={`${styles.propertyTrigger} ${styles.projectTrigger}`} trigger={<PropertyBadge color={issue.project.color}>{issue.project.name}</PropertyBadge>}/> : null}
             {displayProperties.has('cycle') && issue.cycleId ? <RowCommandPicker propertyLabel="Cycle" label={`Change cycle. Current cycle is ${issue.cycleName ?? issue.cycleId}`} searchLabel="Add to cycle..." selectedIds={[issue.cycleId]} options={propertyOptions.cycle ?? []} onSelect={value => change('cycle', value)} trigger={<span className={styles.dueDate}><CycleIcon size={13}/><span data-i18n-ignore>{issue.cycleName ?? issue.cycleId}</span></span>}/> : null}
+            {displayProperties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.dueDate} releases={issue.releases}/> : null}
             {displayProperties.has('milestone') && issue.milestoneName ? <span className={styles.dueDate} aria-label={`Milestone ${issue.milestoneName}`}><MilestoneProgressIcon overdue={isMilestoneDateOverdue(issue.rawMilestoneDate)} progress={issue.milestoneProgress ?? 0} size={13} /><span data-i18n-ignore>{issue.milestoneName}</span></span> : null}
             {displayProperties.has('customers') && (issue.customerCount ?? issue.customerIds?.length ?? 0) > 0 ? <CustomersRowChip customers={issue.customers ?? []} customerCount={issue.customerCount ?? issue.customerIds?.length ?? 0} importantCustomerIds={issue.importantCustomerIds ?? []} settings={issue.customerRevenueSettings}/> : null}
             {displayProperties.has('customerRevenue') && issue.customers?.length ? <CustomerRevenueRowChip customers={issue.customers} settings={issue.customerRevenueSettings}/> : null}
@@ -363,7 +366,6 @@ export function MyIssuesRow({ issue, active = false, selected = false, displayPr
         {displayProperties.has('updated') && <time className={styles.rowDate} aria-label={`Updated ${formatFullDate(issue.updatedAt)}`} dateTime={issue.updatedAt}>{formatRowDate(issue.updatedAt)}</time>}
         {displayProperties.has('myActivity') && <time className={styles.rowDate} aria-label={issue.myActivityAt ? `My activity ${formatFullDate(issue.myActivityAt)}` : 'No activity'} dateTime={issue.myActivityAt}>{issue.myActivityAt ? formatRowDate(issue.myActivityAt) : null}</time>}
         {displayProperties.has('timeInStatus') && <time className={styles.rowDate} aria-label={issue.timeInStatusMinutes == null ? 'Time in status unavailable' : `${formatTimeInStatus(issue.timeInStatusMinutes)} in status`}>{issue.timeInStatusMinutes == null ? null : <><Clock3 size={12}/>{formatTimeInStatus(issue.timeInStatusMinutes)}</>}</time>}
-        {displayProperties.has('release') && <span className={styles.rowDate} aria-label={issue.releaseCount ? `${issue.releaseCount} releases` : 'No releases'}>{issue.releaseCount ? <><PackageOpen size={12}/>{issue.releaseCount}</> : null}</span>}
         {displayProperties.has('links') && <span className={styles.rowDate} aria-label={issue.linkCount ? `${issue.linkCount} links` : 'No links'}>{issue.linkCount ? <><Link2 size={12}/>{issue.linkCount}</> : null}</span>}
         {displayProperties.has('pullRequests') || issue.blockedByCount || issue.blockingCount ? (
           <span className={styles.rowDate}>

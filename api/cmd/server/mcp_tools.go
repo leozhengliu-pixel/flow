@@ -212,7 +212,7 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 	case "list_release_pipelines":
 		items := slices.Clone(data.ReleasePipelines)
 		for i := range items {
-			items[i].AccessKeyHash = ""
+			items[i] = publicReleasePipeline(items[i])
 		}
 		query := lowerArg(args, "query")
 		items = slices.DeleteFunc(items, func(item domain.ReleasePipeline) bool {

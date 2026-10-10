@@ -902,6 +902,8 @@ export interface ReleaseResource {
   title: string;
   url?: string;
   documentId?: UUID;
+  /** Markdown of a document attached by CI (no workspace document). */
+  content?: string;
   createdAt: string;
 }
 export interface Release {
@@ -1443,6 +1445,10 @@ export interface ReleasePipeline {
   moveOpenIssuesToNextRelease?: boolean;
   accessKeyPrefix?: string;
   accessKeyCreatedAt?: string;
+  /** When CI last authenticated with the current key. */
+  accessKeyLastUsedAt?: string;
+  /** A future time means the key is expiring; the key stops working then. */
+  accessKeyRevokedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1451,6 +1457,8 @@ export interface ReleasePipelineAccessKey {
   prefix: string;
   secret: string;
   createdAt: string;
+  /** Set when the replaced key keeps working for a grace period. */
+  previousKeyExpiresAt?: string;
 }
 export interface CustomEmoji {
   id: UUID;

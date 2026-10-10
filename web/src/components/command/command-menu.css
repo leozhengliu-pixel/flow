@@ -44,6 +44,7 @@ html:root body .command-dialog .command-option-detail {
   margin-left: 4px;
   color: var(--pk-faint);
   font-size: 12px;
+  text-transform: none;
   white-space: nowrap;
 }
 html:root body .command-dialog .command-option-current {

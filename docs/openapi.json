@@ -12969,6 +12969,106 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/release-ci/complete": {
+      "post": {
+        "operationId": "post_release_ci_complete",
+        "tags": [
+          "release-ci"
+        ],
+        "summary": "POST /api/release-ci/complete",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/release-ci/pipeline": {
+      "get": {
+        "operationId": "get_release_ci_pipeline",
+        "tags": [
+          "release-ci"
+        ],
+        "summary": "GET /api/release-ci/pipeline",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/release-ci/releases": {
+      "get": {
+        "operationId": "get_release_ci_releases",
+        "tags": [
+          "release-ci"
+        ],
+        "summary": "GET /api/release-ci/releases",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/release-ci/sync": {
+      "post": {
+        "operationId": "post_release_ci_sync",
+        "tags": [
+          "release-ci"
+        ],
+        "summary": "POST /api/release-ci/sync",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/release-ci/update": {
+      "post": {
+        "operationId": "post_release_ci_update",
+        "tags": [
+          "release-ci"
+        ],
+        "summary": "POST /api/release-ci/update",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/release-pipelines": {
       "get": {
         "operationId": "get_release_pipelines",
@@ -13094,6 +13194,34 @@
       }
     },
     "/api/release-pipelines/{id}/access-key": {
+      "delete": {
+        "operationId": "delete_release_pipelines_id_access_key",
+        "tags": [
+          "release-pipelines"
+        ],
+        "summary": "DELETE /api/release-pipelines/{id}/access-key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
       "post": {
         "operationId": "post_release_pipelines_id_access_key",
         "tags": [

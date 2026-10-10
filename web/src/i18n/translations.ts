@@ -3,6 +3,8 @@ import { viewFiltersZhCN } from './translations-view-filters';
 import { insightsZhCN } from './translations-insights';
 import { agentTriageZhCN } from './translations-agent-triage';
 import { releaseIntakeZhCN } from './translations-release-intake';
+import { releasePipelinesZhCN } from './translations-release-pipelines';
+import { releaseViewsZhCN } from './translations-release-views';
 import { customerSettingsZhCN } from './translations-customer-settings';
 import { customersListZhCN } from './translations-customers-list';
 import { customerDetailZhCN } from './translations-customer-detail';
@@ -5778,6 +5780,9 @@ Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
 Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
+// Release pipeline settings copy, and one zh term (发布管线) for "pipeline" there.
+Object.assign(zhCN, releasePipelinesZhCN);
+Object.assign(zhCN, releaseViewsZhCN);
 // Agent step and loop run vocabulary fills gaps only: shared nouns ("issue", "team"…) keep their existing copy.
 for (const [source, translation] of Object.entries(agentStepsZhCN)) zhCN[source] ??= translation;
 // Mention menu / chip copy and the surfaces that show references fill gaps only.

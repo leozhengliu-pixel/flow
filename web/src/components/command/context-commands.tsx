@@ -33,10 +33,13 @@ import { labelTeamScopeIds, labelsForResource, setGroupedLabelSelected } from '@
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput, WorkflowState } from '@/types/flow'
 import type { CommandContext, CommandIssueRef, IssueCommandContext } from './command-context'
+import { useI18n } from '@/i18n/i18n'
+import { issueReleaseCommands } from './release-commands'
 
 export type CommandPageId =
   | 'status' | 'assignee' | 'priority' | 'labels' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
   | 'relation' | 'relatedIssue' | 'parent' | 'subIssue'
+  | 'issueRelease' | 'issueReleaseRemove' | 'releaseOpenPipeline' | 'releaseCreate'
   | 'projectStatus' | 'projectLead' | 'projectTargetDate' | 'projectInitiative'
   | 'documentOpen' | 'documentCreateIn' | 'documentFromTemplate' | 'documentFromTemplateIn' | 'documentTeamOverview' | 'documentTeamOverviewDoc'
   | 'documentOwner' | 'documentRemind' | 'documentMove' | 'documentPin' | 'documentApplyTemplate' | 'documentNewTemplate' | 'documentSubscribers'
@@ -88,6 +91,8 @@ export interface ContextCommandHandlers {
   onDeleteIssues?: (issueIds: string[]) => Promise<void>
   onCreateRelation?: (issueId: string, type: IssueRelationType, relatedIssueId: string) => Promise<void>
   onCreateIssueWith?: (context: MyIssuesCreateContext) => void
+  /** Reload release membership after "Add to release…" / "Remove from release…". */
+  onReleasesChanged?: () => Promise<void>
 }
 
 const PRIORITIES = [
@@ -143,16 +148,17 @@ export function useContextCommands({ context, data, page, query, handlers, close
   t: (value: string) => string
 }): { heading: string; actions: ContextAction[]; options: PageOption[] } {
   const { refs, issues, remember } = useContextIssues(context, data)
+  const { formatDate } = useI18n()
   const pickerOpen = Boolean(data && page && ['relatedIssue', 'parent', 'subIssue'].includes(page.id))
   const candidates = useIssueSearch(pickerOpen ? query : '', data?.issues ?? [], pickerOpen)
   if (!context || !data) return { actions: [], options: [], heading: '' }
   if (context.kind === 'project') return projectCommands(context, data, page, query, close, t)
   // Document pages and selections are served by document-commands.tsx.
   if (context.kind === 'document') return { heading: 'Document', actions: [], options: [] }
-  return issueCommands({ context, data, page, query, handlers, close, t, refs, issues, remember, candidates })
+  return issueCommands({ context, data, page, query, handlers, close, t, refs, issues, remember, candidates, formatDate })
 }
 
-function issueCommands({ context, data, page, query, handlers, close, t, refs, issues, remember, candidates }: {
+function issueCommands({ context, data, page, query, handlers, close, t, refs, issues, remember, candidates, formatDate }: {
   context: IssueCommandContext
   data: BootstrapData
   page: CommandPage | undefined
@@ -164,6 +170,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
   issues: Issue[]
   remember: (updated: unknown) => void
   candidates: Issue[]
+  formatDate: (value: string, options?: Intl.DateTimeFormatOptions) => string
 }) {
   const ids = refs.map(ref => ref.id)
   const single = ids.length === 1
@@ -207,6 +214,8 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     await copyIssues(issue => isFullIssue(issue) ? configuredIssueBranch(issue, data) : issue.identifier.toLowerCase(), 'Copied git branch names')
   }
 
+  const releaseCommands = issueReleaseCommands({ data, issues, page, query, close, formatDate: value => formatDate(value, { month: 'short', day: 'numeric' }), onChanged: handlers.onReleasesChanged })
+  const releaseActions = releaseCommands.actions
   const actions: ContextAction[] = [
     { id: 'ctx-status', label: 'Change status…', icon: <Layers3/>, shortcut: ['S'], page: { id: 'status', label: 'Change status…' } },
     { id: 'ctx-assignee', label: 'Assign to…', icon: <UserRound/>, shortcut: ['A'], keywords: 'assignee owner', page: { id: 'assignee', label: 'Assign to…' } },
@@ -227,6 +236,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     { id: 'ctx-duplicate', label: 'Mark as duplicate…', icon: <Copy/>, keywords: 'duplicate of', page: { id: 'relatedIssue', label: 'Mark as duplicate…', relationType: 'duplicate' } },
     { id: 'ctx-relation', label: 'Add relation…', icon: <Link2/>, keywords: 'related blocking blocked by', page: { id: 'relation', label: 'Add relation…' } },
     ...(single && context.source === 'detail' && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, 'customer-requests') ? [{ id: 'ctx-customer-request', label: 'Add customer request to issue…', icon: <IssueActionGlyph label="Add customer request…" fallback={<UserRound/>}/>, shortcut: isMacPlatform() ? ['Ctrl', 'R'] : ['Ctrl', 'Alt', 'R'], keywords: 'new customer request need', run: () => { close(); requestIssueCustomerRequest(ids[0]) } }] : []),
+    ...releaseActions,
     subscribed
       ? { id: 'ctx-subscribe', label: 'Unsubscribe', icon: <BellOff/>, keywords: 'notifications', run: choose(() => applyEach(issue => ({ subscriberIds: issue.subscriberIds.filter(id => id !== viewerId) }))) }
       : { id: 'ctx-subscribe', label: 'Subscribe', icon: <Bell/>, keywords: 'notifications', run: choose(() => applyEach(issue => issue.subscriberIds.includes(viewerId) ? undefined : ({ subscriberIds: [...issue.subscriberIds, viewerId] }))) },
@@ -250,6 +260,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
 
   function issuePageOptions(): PageOption[] {
     if (!page) return []
+    if (page.id === 'issueRelease' || page.id === 'issueReleaseRemove') return releaseCommands.options
     if (page.id === 'status') {
       const current = same(issue => issue.state.id)
       return statesFor(data, oneTeam).map(state => ({ id: state.id, label: state.name, icon: <StatusIcon state={state}/>, current: current === state.id, select: choose(() => apply({ stateId: state.id })) }))

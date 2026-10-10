@@ -52,8 +52,8 @@ const defaultPersonalOrder: SidebarEntry[] = [
   "inbox", "reviews", "myIssues", "pulse", "drafts", "agent",
 ];
 const defaultWorkspaceOrder: SidebarEntry[] = [
-  "initiatives", "projects", "loops", "views", "members", "releases",
-  "teams", "customers",
+  "initiatives", "projects", "loops", "views", "members", "customers",
+  "releases", "teams",
 ];
 const legacyWorkspaceOrder: SidebarEntry[] = [
   "members", "initiatives", "projects", "teams", "views",

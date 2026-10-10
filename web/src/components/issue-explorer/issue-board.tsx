@@ -4,7 +4,8 @@ import { ProjectGlyph } from '@/components/views/project-glyph'
 import { useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Clock3, Ellipsis, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
+import { Clock3, Ellipsis, Link2, Minus, Plus } from 'lucide-react'
+import { IssueReleaseChip } from '@/components/issue/issue-release-chip'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
 import { DelegateAvatar, IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
@@ -275,7 +276,7 @@ function CardProperties({ issue, properties, propertyOptions, onPropertyChange }
     {properties.has('priority') && <RowCommandPicker propertyLabel="Priority" label={`${priorityName(issue.priority)} priority`} searchLabel="Change priority to..." selectedIds={[String(issue.priority)]} options={propertyOptions.priority} onSelect={value => onPropertyChange('priority', value)} triggerClassName={`${styles.metaTrigger} ${styles.iconBadge}`} trigger={<PriorityIcon priority={issue.priority} size={14}/>}/>}
     {properties.has('estimate') && issue.estimate != null && issue.estimate > 0 && <span className={styles.badge}><span className={styles.estimateIcon}><Minus size={10}/></span><span>{issue.estimate}</span></span>}
     {properties.has('sla') && issue.sla && <IssueSLAIndicator compact sla={issue.sla} ruleName={issue.sla.ruleName}/>}
-    {properties.has('release') && issue.releaseCount ? <span className={styles.badge}><PackageOpen size={12}/><span>{issue.releaseCount}</span></span> : null}
+    {properties.has('release') && issue.releases?.length ? <IssueReleaseChip className={styles.badge} iconSize={12} releases={issue.releases}/> : null}
     {properties.has('links') && issue.linkCount ? <span className={styles.badge}><Link2 size={12}/><span>{issue.linkCount}</span></span> : null}
     {(properties.has('pullRequests') || issue.blockedByCount || issue.blockingCount) ? <span className={styles.badge}><IssueWidgetAdornments showPullRequests={properties.has('pullRequests')} pullRequestLifecycle={issue.pullRequestLifecycle} pullRequestCount={issue.pullRequestCount ?? 0} blockedByCount={issue.blockedByCount ?? 0} blockingCount={issue.blockingCount ?? 0}/></span> : null}
     {properties.has('timeInStatus') && issue.timeInStatusMinutes != null ? <span className={styles.badge}><Clock3 size={12}/><span>{formatTimeInStatus(issue.timeInStatusMinutes)}</span></span> : null}
