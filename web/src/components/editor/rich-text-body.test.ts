@@ -51,8 +51,18 @@ describe('rich-text body parity styles', () => {
     for (const token of ['--rt-link', '--rt-inline-code-bg', '--rt-inline-code-border', '--rt-rule', '--rt-code-border', '--rt-chip-bg', '--rt-hairline']) expect(css, token).toContain(`var(${token})`)
     // The light surfaces read --text (#2f2f31), not --bright (#1b1b1b), for body copy.
     expect(css).toContain('color: var(--text)')
-    expect(css).not.toContain('var(--bright)')
+    // Only headings are brighter than the body (#1b1b1b against #2f2f31), as in the reference light theme.
+    expect(css.match(/var\(--bright\)/g)).toHaveLength(1)
+    expect(css).toMatch(/:is\(h1, h2, h3, h4\)\{ color: var\(--bright\);/)
     for (const token of ['--rt-link', '--rt-inline-code-bg', '--rt-rule', '--rt-chip-bg']) expect(tokens, token).toMatch(new RegExp(`:root\\[data-theme="light"\\]\\{[^}]*${token}:`))
+  })
+
+  it('sets the lightbox from the reference app: solid page, faint 8px checkerboard, 80% caption', () => {
+    const lightbox = read('lightbox-editor.css')
+    expect(tokens).toContain(':root{--lightbox-bg:lch(5.52% .4 272);--lightbox-checker:lch(90.451% 1.2 272 / .08);--lightbox-caption-bg:lch(5.52% .4 272 / .8)}')
+    expect(tokens).toContain(':root[data-theme="light"]{--lightbox-bg:lch(97.94% .5 282);--lightbox-checker:lch(19.588% 1.25 282 / .08);--lightbox-caption-bg:lch(97.94% .5 282 / .8)}')
+    expect(lightbox).toContain('repeating-conic-gradient(var(--lightbox-checker) 0% 25%, transparent 0% 50%) 0 0 / 8px 8px')
+    expect(lightbox).toMatch(/\.flow-lightbox-zoom \{[^}]*min-width: 56px;/)
   })
 
   it('draws bullets and numbers as hanging glyphs 24px left of the text, one glyph per nesting level', () => {
@@ -137,6 +147,24 @@ describe('code block syntax scopes', () => {
     expect(tokens.get('s')).toBe('hljs-ident')
   })
 
+  it('tells JSX components from intrinsic tags and keeps brace expressions out of the string colour', () => {
+    const tokens = classes('const a = <Layout title="x"><div className="a" onClick={() => go(true)}>{items.map(i => i)}</div></Layout>', 'tsx')
+    expect(tokens.get('Layout')).toBe('hljs-ident-type')
+    expect(tokens.get('div')).toBe('hljs-ident')
+    expect(tokens.get('"x"')).toBe('hljs-string')
+    expect(tokens.get('className')).not.toBe('hljs-string')
+  })
+
+  it('colours qualified Go types as types and the package and values as plain or variables', () => {
+    const tokens = classes('func (s *Server) Serve(ctx context.Context, r *http.Request, w http.ResponseWriter) error {\n\tvar t time.Duration = time.Second\n\treturn nil\n}', 'go')
+    expect(tokens.get('Context')).toBe('hljs-ident-type')
+    expect(tokens.get('Request')).toBe('hljs-ident-type')
+    expect(tokens.get('ResponseWriter')).toBe('hljs-ident-type')
+    expect(tokens.get('Duration')).toBe('hljs-ident-type')
+    expect(tokens.get('context')).toBe('hljs-plain')
+    expect(tokens.get('Second')).not.toBe('hljs-ident-type')
+  })
+
   it('colours shell commands as calls, assignments as variables and keeps the sigil plain', () => {
     const tokens = classes('export FOO="bar"\nif [ -f $FILE ]; then npm run build; fi', 'bash')
     expect(tokens.get('export')).toBe('hljs-keyword hljs-control')
@@ -200,17 +228,19 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
     }
   })
 
-  it('switches between gutter cards and the popover at the same page width in CSS and in the component', () => {
+  it('switches between gutter cards and the popover at the same viewport width in CSS and in the component', () => {
     const css = flat(read('../documents/inline-comments/document-inline-comments.css'))
     const source = read('../documents/inline-comments/document-inline-comments.tsx')
-    const width = source.match(/GUTTER_MIN_WIDTH = (\d+)/)?.[1]
-    expect(width).toBe('1040')
-    expect(css).toContain(`@container document-page (min-width: ${width}px)`)
-    // Cards sit 10px right of the 805px column; the column keeps 48px from the sidebar and gives up width before overlapping the gutter.
+    const width = source.match(/GUTTER_MIN_VIEWPORT = (\d+)/)?.[1]
+    expect(width).toBe('1232')
+    expect(css).toContain(`@media (min-width: ${width}px)`)
+    // Cards sit 2px right of the 833px editor; it keeps 34px from the sidebar, is centred on wide pages and gives up width before overlapping the gutter.
     expect(css).toContain('left: calc(100% + 16px)')
     expect(css).toContain('max(33.5px')
     expect(css).toContain('calc(100% - 1127.5px)')
     expect(css).toContain('calc(100% - var(--document-shift) - 294.5px)')
+    // Cards fill the rest of the page, 10px short of its right edge, from 284px up to 372px.
+    expect(css).toContain('width: min(372px, calc(100cqw - var(--document-shift) - var(--document-canvas-width) - 10px))')
     expect(css).toMatch(/\.document-inline-gutter\.is-popover \.document-thread-card \{ width: 360px;/)
   })
 

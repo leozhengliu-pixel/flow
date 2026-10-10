@@ -23,10 +23,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px 0 18px;
+  padding: 0 8px;
   cursor: default;
 }
-.flow-lightbox-zoom { color: var(--theme-text-secondary); font: 450 13px / 20px var(--font); }
+.flow-lightbox-zoom {
+  height: 28px;
+  min-width: 56px;
+  padding: 0 10px;
+  text-align: center;
+  border-radius: 9999px;
+  color: var(--text);
+  font: 450 12px / 28px var(--font);
+}
+.flow-lightbox-zoom:hover { background: var(--theme-surface-hover); }
 .flow-lightbox-actions { display: flex; align-items: center; gap: 4px; }
 .flow-lightbox-actions button {
   width: 28px;
@@ -37,21 +46,24 @@
   border: 0;
   border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: var(--text);
   cursor: pointer;
 }
-.flow-lightbox-actions button:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.flow-lightbox-actions button:hover { background: var(--theme-surface-hover); }
 .flow-lightbox-separator { width: .5px; height: 18px; margin: 0 4px; background: var(--document-popover-border); }
 .flow-lightbox-caption {
   position: absolute;
-  bottom: 8px;
+  bottom: 4px;
   left: 50%;
   max-width: min(100% - 64px, 800px);
   margin: 0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--lightbox-caption-bg);
   transform: translateX(-50%);
   overflow: hidden;
-  color: var(--theme-text-primary);
-  font: 450 13px / 20px var(--font);
+  color: var(--text);
+  font: 450 13px / normal var(--font);
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: default;
@@ -68,7 +80,7 @@
 .flow-lightbox-stage img {
   max-width: min(100%, 1200px);
   max-height: calc(100vh - 96px);
-  background: conic-gradient(var(--lightbox-checker) 25%, transparent 0 50%, var(--lightbox-checker) 0 75%, transparent 0) 0 0 / 16px 16px;
+  background: repeating-conic-gradient(var(--lightbox-checker) 0% 25%, transparent 0% 50%) 0 0 / 8px 8px;
   object-fit: contain;
   user-select: none;
 }
