@@ -24,6 +24,9 @@ export function tokenRanges(html: string): TokenRange[] {
   return ranges
 }
 
+/** Keywords that steer control flow; themes may colour them apart from declarations (`hljs-keyword hljs-control`). */
+const CONTROL_KEYWORDS = new Set(['return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'throw', 'try', 'catch', 'finally', 'await', 'yield'])
+
 /** The highlight.js token ranges for a code block's text; empty for plain text, unknown languages and huge blocks. */
 export function highlightCode(code: string, language: string | null | undefined): TokenRange[] {
   if (!code || code.length > HIGHLIGHT_LIMIT) return []
@@ -32,6 +35,7 @@ export function highlightCode(code: string, language: string | null | undefined)
     const id = !raw || raw === 'auto' ? detectLanguage(code) ?? undefined : resolveLanguage(raw)
     if (!id || id === 'plaintext') return []
     return tokenRanges(hljs.highlight(code, { language: id, ignoreIllegals: true }).value)
+      .map(range => range.className === 'hljs-keyword' && CONTROL_KEYWORDS.has(code.slice(range.from, range.to)) ? { ...range, className: 'hljs-keyword hljs-control' } : range)
   } catch {
     return []
   }
