@@ -1,22 +1,11 @@
 import type { SVGProps } from "react";
+import { AttachmentIcon } from "@/components/issue/issue-icons";
+import { AgentCursorGlyph, AgentWriteGlyph } from "@/components/ui/agent-glyph";
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
 
 export function AgentPointerIcon({ size = 16, ...props }: IconProps) {
-  return (
-    <svg
-      {...props}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      role="img"
-      focusable="false"
-      aria-hidden="true"
-      fill="currentColor"
-    >
-      <path d="M4.07132 3.8283C4.04394 3.81721 4.01406 3.81379 3.98488 3.8184C3.95566 3.82301 3.92826 3.83551 3.90561 3.85453C3.88297 3.87356 3.86594 3.8984 3.85636 3.92639C3.84678 3.95437 3.84501 3.98443 3.85124 4.01335L5.80802 13.1405C5.81898 13.1915 5.83884 13.2155 5.85542 13.2298C5.87605 13.2476 5.9078 13.2631 5.94754 13.268C5.98728 13.2729 6.0217 13.2654 6.04578 13.2532C6.06507 13.2434 6.08993 13.2252 6.11273 13.1784L7.83779 9.64746C8.05513 9.20258 8.45077 8.87059 8.92663 8.73378L12.7035 7.64791C12.7535 7.63353 12.776 7.61215 12.789 7.59475C12.8052 7.57307 12.8186 7.54044 12.8207 7.50049C12.8228 7.46054 12.813 7.42669 12.7992 7.40342C12.788 7.38476 12.7681 7.36116 12.7199 7.34158L4.07132 3.8283ZM3.75083 2.33677C4.04945 2.2896 4.35527 2.32474 4.63541 2.43841L13.2843 5.95183C14.747 6.54596 14.6351 8.65343 13.1179 9.08953L9.34109 10.1754C9.27311 10.1949 9.21659 10.2424 9.18554 10.3059L7.46077 13.8363C6.76755 15.2562 4.67275 14.9979 4.34147 13.4555L2.38492 4.3294C2.32134 4.03401 2.33935 3.72642 2.43722 3.44054C2.53514 3.15452 2.70919 2.90061 2.94065 2.70612C3.17211 2.51164 3.45221 2.38394 3.75083 2.33677Z" />
-    </svg>
-  );
+  return <AgentCursorGlyph size={size} {...props} />;
 }
 export function AgentSkillsIcon({ size = 14, ...props }: IconProps) {
   return (
@@ -47,25 +36,14 @@ export function AgentChevronDownIcon({ ...props }: IconProps) {
       fill="currentColor"
     >
       <path
-        d="M10.1611.314 5.995 4.481 1.828.314A1.071 1.071 0 0 0 .314 1.828l4.929 4.929a1.071 1.071 0 0 0 1.514 0l4.929-4.929A1.071 1.071 0 1 0 10.16.314Z"
-        transform="translate(.778 .999)"
+        d="M10.1611 0.314094L5.99463 4.48054L1.82819 0.314094C1.4094 -0.104698 0.732886 -0.104698 0.314094 0.314094C-0.104698 0.732886 -0.104698 1.4094 0.314094 1.82819L5.24295 6.75705C5.66175 7.17584 6.33825 7.17584 6.75705 6.75705L11.6859 1.82819C12.1047 1.4094 12.1047 0.732886 11.6859 0.314094C11.2671 -0.0939598 10.5799 -0.104698 10.1611 0.314094Z"
+        transform="translate(0.77832 0.998535)"
       />
     </svg>
   );
 }
 export function AgentAttachIcon({ size = 16, ...props }: IconProps) {
-  return (
-    <svg
-      {...props}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      fill="currentColor"
-    >
-      <path d="m12.643 7.69-3.714 3.714c-1.447 1.448-3.586 1.606-4.762.43-1.18-1.18-1.023-3.312.425-4.76l3.41-3.41c.934-.933 2.296-1.033 3.031-.297.735.734.633 2.1-.297 3.03L7.324 9.81c-.422.421-1.002.464-1.3.166-.297-.297-.255-.879.175-1.308L9.29 5.576a.707.707 0 0 0-1-1L5.2 7.668c-.952.951-1.06 2.423-.175 3.308.886.886 2.356.777 3.3-.166l3.412-3.413c1.452-1.451 1.62-3.707.297-5.03s-3.575-1.158-5.03.298l-3.41 3.41c-1.97 1.97-2.193 4.991-.426 6.758 1.764 1.765 4.793 1.54 6.762-.429l3.714-3.714a.707.707 0 0 0-1-1Z" />
-    </svg>
-  );
+  return <AttachmentIcon size={size} {...props} />;
 }
 export function AgentSubmitIcon({ size = 16, ...props }: IconProps) {
   return (
@@ -100,23 +78,5 @@ export function AgentStopIcon({ size = 16, ...props }: IconProps) {
 }
 
 export function AgentWriteIcon({ size = 16, ...props }: IconProps) {
-  return (
-    <svg
-      {...props}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      role="img"
-      focusable="false"
-      aria-hidden="true"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.4"
-    >
-      <path d="M1.75 3.75h6.5M1.75 7h3.5M1.75 10.25h2.5" />
-      <path d="M7.1 6.3l7.1 2.85-3.2.95-1.45 3.05z" />
-    </svg>
-  );
+  return <AgentWriteGlyph size={size} {...props} />;
 }

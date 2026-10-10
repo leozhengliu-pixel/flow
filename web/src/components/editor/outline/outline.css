@@ -1,0 +1,92 @@
+/* Document outline: fixed at the left edge of the document scroll area, vertically centred in its visible
+   rect. --outline-left / --outline-top / --outline-max-height are set from JS (see outline-minimap.tsx). */
+/* Defaults; overridden inline on the nav once placement is measured. */
+:root { --outline-left: 6px; --outline-top: 50%; --outline-max-height: calc(100vh - 240px); }
+.doc-outline {
+  --doc-outline-width: 150px;
+  --doc-outline-collapsed: 16px;
+  position: fixed;
+  left: var(--outline-left);
+  top: var(--outline-top);
+  transform: translateY(-50%);
+  z-index: 3;
+  /* The host never intercepts clicks; only the card (below) does. */
+  pointer-events: none;
+}
+.doc-outline__card {
+  width: var(--doc-outline-collapsed);
+  max-height: var(--outline-max-height);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 0;
+  border: .5px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  pointer-events: auto;
+  transition: width var(--quick) var(--ease), background var(--quick) var(--ease), box-shadow var(--quick) var(--ease), border-color var(--quick) var(--ease);
+}
+.doc-outline__card:hover,
+.doc-outline__card:focus-within {
+  width: var(--doc-outline-width);
+  padding: 6px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  background: var(--theme-surface-2);
+  border-color: var(--theme-border-strong);
+  box-shadow: var(--shadow-control);
+}
+.doc-outline__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: left;
+  cursor: pointer;
+}
+.doc-outline__row:hover { color: var(--theme-text-primary); }
+.doc-outline__row.is-active { color: var(--theme-text-primary); }
+.doc-outline__row:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: 1px; }
+.doc-outline__marker {
+  flex: 0 0 auto;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
+.doc-outline__row--l1 .doc-outline__marker { width: 12px; }
+.doc-outline__row--l2 .doc-outline__marker { width: 9px; }
+.doc-outline__row--l3 .doc-outline__marker { width: 6px; }
+.doc-outline__row--l4 .doc-outline__marker { width: 4px; }
+.doc-outline__title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity var(--quick) var(--ease);
+}
+.doc-outline__row--l2 .doc-outline__title { padding-left: 6px; }
+.doc-outline__row--l3 .doc-outline__title { padding-left: 12px; }
+.doc-outline__row--l4 .doc-outline__title { padding-left: 24px; }
+.doc-outline__card:hover .doc-outline__title,
+.doc-outline__card:focus-within .doc-outline__title { opacity: 1; }
+
+@media (max-width: 999px) {
+  .doc-outline { display: none; }
+}
+@media print {
+  .doc-outline { display: none; }
+}

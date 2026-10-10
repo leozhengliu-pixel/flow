@@ -222,7 +222,7 @@ export function TriageIntelligenceSuggestions({
       <div className="triage-intelligence-card">
         <header>
           <span className="triage-intelligence-title">
-            <FlowGlyph name="triage" size={16} />
+            <FlowGlyph name="aiBurst" size={16} />
             <span className={pending ? 'triage-intelligence-shimmer' : undefined}>Triage Intelligence</span>
           </span>
           <DropdownMenu modal={false}>
@@ -282,7 +282,7 @@ export function TriageIntelligenceSuggestions({
           <Dialog.Content data-flow-motion="dialog" className="triage-intelligence-thinking-dialog" aria-describedby={undefined}>
             <header>
               <Dialog.Title>
-                <FlowGlyph name="triage" size={14} />
+                <FlowGlyph name="aiBurst" size={14} />
                 Triage Intelligence thinking
               </Dialog.Title>
               <Dialog.Close asChild>

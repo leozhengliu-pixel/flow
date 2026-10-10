@@ -7,7 +7,7 @@ import { PriorityIcon, ProjectIcon, ReviewStatusGlyph, ReviewStatusValueGlyph, W
 import { usePropertyCommand } from '@/components/property/use-property-command'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { useI18n } from '@/i18n/i18n'
-import { UserAvatar } from '@/components/ui/user-avatar'
+import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { PersonHover } from '@/components/property/person-info'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { inboxValueMenuHeight, partitionInboxOptions, UNMATCHED_OPTION_ID } from './inbox-filter-model'
@@ -811,7 +811,7 @@ function InboxFilterPropertyGlyph({ property }: { property: InboxFilterProperty 
 
 function OptionVisual({ option, property }: { option: InboxFilterOption; property: InboxFilterProperty }) {
   if (property === 'from') return <UserAvatar className={styles.avatar} avatarUrl={option.avatarUrl} name={option.label}/>
-  if (option.avatarUrl) return <img className={styles.avatar} src={option.avatarUrl} alt="" />
+  if (option.avatarUrl) return <AvatarImage className={styles.avatar} src={option.avatarUrl} alt="" />
   if (option.icon) return <span className={styles.optionIcon} aria-hidden="true">{option.icon}</span>
   // Review status values use the filled branch glyph from the review bundle,
   // not a generic color dot. Keep the exact shape at the 16px picker size.

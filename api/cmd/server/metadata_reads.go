@@ -12,7 +12,7 @@ func metadataReadRequest(r *http.Request) bool {
 	}
 	if r.Method == http.MethodGet {
 		switch r.URL.Path {
-		case "/api/workflows", "/api/workflow-runs", "/api/dashboards", "/api/posts", "/api/meetings", "/api/ai/conversations", "/api/customer-taxonomy":
+		case "/api/workflows", "/api/workflow-runs", "/api/dashboards", "/api/posts", "/api/meetings", "/api/ai/conversations", "/api/customer-taxonomy", "/api/integrations/file-preview", "/api/integrations/link-preview":
 			return true
 		}
 		if p[1] == "imports" && len(p) <= 3 {

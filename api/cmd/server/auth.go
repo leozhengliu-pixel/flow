@@ -1373,6 +1373,12 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 			}
 			return true
 		}
+		if len(parts) == 3 && (r.Method == http.MethodGet || r.Method == http.MethodHead) || len(parts) == 4 && parts[3] == "restore" && r.Method == http.MethodPost {
+			// Reading a document (also an old slug or a deleted one) and
+			// restoring a deleted one are authorized by their handlers,
+			// which check the document's role.
+			return true
+		}
 		if len(parts) < 3 || !documentAllowed(parts[2]) {
 			return false
 		}
@@ -1380,28 +1386,16 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		if documentIndex < 0 {
 			return false
 		}
-		// Document comment threads use the same role semantics as issue
-		// comments: commenters may create and manage their own comments,
-		// editors may moderate any comment, and viewers are read-only.
+		// Document comment threads: commenters may comment, react and resolve;
+		// a comment's text is edited and deleted only by its author (or a
+		// workspace admin) — the handlers check authorship against the
+		// loaded thread. Viewers are read-only.
 		if len(parts) >= 4 && parts[3] == "comments" {
 			documentRoleRankValue := documentRoleRank(documentRole(s, data, data.Documents[documentIndex]))
-			if len(parts) == 4 && r.Method == http.MethodPost {
-				return documentRoleRankValue >= documentRoleRank("commenter")
+			if r.Method == http.MethodGet || r.Method == http.MethodHead {
+				return true
 			}
-			if len(parts) >= 5 {
-				if len(parts) == 6 && parts[5] == "reactions" && r.Method == http.MethodPost {
-					return documentRoleRankValue >= documentRoleRank("commenter")
-				}
-				commentIndex := slices.IndexFunc(data.Comments[parts[2]], func(comment domain.Comment) bool { return comment.ID == parts[4] })
-				if commentIndex < 0 {
-					return false
-				}
-				if r.Method == http.MethodPatch || r.Method == http.MethodDelete {
-					comment := data.Comments[parts[2]][commentIndex]
-					return documentRoleRankValue >= documentRoleRank("editor") || comment.User.ID == userID
-				}
-			}
-			return true
+			return documentRoleRankValue >= documentRoleRank("commenter")
 		}
 		if r.Method == http.MethodPatch {
 			var input documentInput

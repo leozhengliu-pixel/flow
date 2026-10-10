@@ -1,0 +1,7 @@
+/* The built-in agent avatar: a label-coloured disc with the product mark in the page background colour (inverts with the theme). */
+.agent-avatar-mark { display: block; flex: none; width: 100%; height: 100%; border-radius: 50%; }
+.agent-avatar-mark__disc { fill: var(--label-base); }
+.agent-avatar-mark__logo { fill: var(--bg-primary); }
+
+/* An avatar slot (span) holding the mark draws no disc of its own: the mark is the disc. */
+span[data-agent-avatar-slot] { background: transparent; color: inherit; overflow: hidden; }

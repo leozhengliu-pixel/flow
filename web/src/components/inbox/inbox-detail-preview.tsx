@@ -14,6 +14,7 @@ import { PulseFrequencyDropdownSubmenu } from './pulse-frequency-menu'
 import type { PulseFrequency } from './pulse-summary-model'
 import './inbox.css'
 import { GridLoader } from '@/components/ui/grid-loader'
+import { AvatarImage } from '@/components/ui/user-avatar'
 
 export interface InboxDetailPreviewProps {
   notification: InboxNotificationRowData
@@ -165,7 +166,7 @@ const DetailIconButton = forwardRef<HTMLButtonElement, DetailIconButtonProps>(fu
 export function InboxDetailActivity({ actor, actorAvatarUrl, time, children }: { actor?: string; actorAvatarUrl?: string; time?: string; children: ReactNode }) {
   const actorName = actor?.trim() || 'Unknown user'
   const timeLabel = time?.trim() || 'Just now'
-  return <section className="flow-inbox-detail-activity" aria-label="Notification activity"><h3>Activity</h3><div className="flow-inbox-detail-activity__meta">{actorAvatarUrl ? <img src={actorAvatarUrl} alt="" /> : <i>{actorName[0]?.toUpperCase() || '?'}</i>}<span><b>{actorName}</b> · {timeLabel}</span></div><div className="flow-inbox-detail-activity__content">{children}</div></section>
+  return <section className="flow-inbox-detail-activity" aria-label="Notification activity"><h3>Activity</h3><div className="flow-inbox-detail-activity__meta">{actorAvatarUrl ? <AvatarImage src={actorAvatarUrl} alt="" /> : <i>{actorName[0]?.toUpperCase() || '?'}</i>}<span><b>{actorName}</b> · {timeLabel}</span></div><div className="flow-inbox-detail-activity__content">{children}</div></section>
 }
 
 export function InboxDetailLoading() {

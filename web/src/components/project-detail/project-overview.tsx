@@ -30,7 +30,7 @@ import { ProjectPropertiesMenu } from './project-properties-menu'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { RichComment } from '@/components/activity/rich-comment'
 import { ResourceExternalArrow, ResourceLinkIcon } from './project-resource-link'
-import { resourceDisplayTitle } from './project-resource-link-name'
+import { resourceChipTitle } from './project-resource-link-name'
 import { ProjectResourceMenu } from './project-resource-menu'
 import { projectShortcutLabels, useProjectPickerOpen, type ProjectPickerRequest } from './project-detail-shortcuts'
 import { ProjectMilestoneMenu } from './project-milestone-menu'
@@ -85,7 +85,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     {issueData?.workspaceSettings.featureFlags.initiatives !== false && selectedInitiatives.length > 0 && <InitiativeSection initiatives={initiatives} project={project} save={save}/>}
     {selectedLabelIds.length > 0 && <ProjectLabelSection labels={labels} labelGroups={labelGroups} project={project} save={save} onCreateLabel={onCreateLabel} open={labelsOpen} onOpenChange={setLabelsOpen}/>}
-    <ResourceSection data={issueData} documents={documents} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReloadWorkspace} project={project} projects={projects} users={users} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
+    <ResourceSection data={issueData} documents={documents} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReloadWorkspace} users={users} onCreate={input => onCreateResource(project.id, input)} onDelete={resourceId => onDeleteResource(project.id, resourceId)} onUpdate={(resourceId, input) => onUpdateResource(project.id, resourceId, input)} resources={project.resources ?? []} teams={teams}/>
     {customersEnabled && issueData && <ProjectCustomersRow data={issueData} project={project} issueIds={projectIssueIds}/>}
 
     <section className={`project-overview__latest${projectUpdates[0] ? '' : ' is-empty'}`}>
@@ -159,17 +159,17 @@ function OverviewMilestoneCreator({ onCancel, onCreate }: { onCancel: () => void
 }
 
 
-function ResourceSection({ data, documents, onCreate, onDelete, onOpenDocumentHistory, onReload, onUpdate, project, projects, resources, teams, users }: { data?: BootstrapData; project?: Project; projects?: Project[]; onOpenDocumentHistory?: (document: FlowDocument) => void; onReload?: () => Promise<void>; documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; users: Props['users']; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
+function ResourceSection({ data, documents, onCreate, onDelete, onOpenDocumentHistory, onReload, onUpdate, resources, teams, users }: { data?: BootstrapData; onOpenDocumentHistory?: (document: FlowDocument) => void; onReload?: () => Promise<void>; documents: Props['documents']; resources: ProjectResource[]; teams: Team[]; users: Props['users']; onCreate: (input: { type?: 'link'|'document'; title?: string; url?: string }) => Promise<ProjectResource>; onDelete: (id: string) => Promise<void>; onUpdate: (id: string, input: { type?: 'link'|'document'; title?: string; url?: string; pinnedTeamIds?: string[] }) => Promise<ProjectResource> }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [dialog, setDialog] = useState<{ mode: 'create'|'edit'; resource?: ProjectResource }>()
   const [deleteResource, setDeleteResource] = useState<ProjectResource>()
   const { t } = useI18n()
   const createDocument = async () => {
-    await onCreate({ type: 'document', title: 'Untitled document' })
+    await onCreate({ type: 'document', title: '' })
     setMenuOpen(false)
   }
   return <section className="project-overview__row-section project-overview__resources"><h3>Resources</h3><div className="project-overview__row-content">
-    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; const creator = document ? document.creator?.displayName : users.find(user => user.id === resource.creatorId)?.displayName; const age = resourceAge(document?.updatedAt ?? resource.createdAt); const title = resourceDisplayTitle(resource); const link = resource.type === 'link'; return <div className="project-overview__resource" data-kind={resource.type} key={resource.id}><FlowTooltip align="start" contentClassName="flow-tooltip-content--title" label={<span className="project-resource-tip"><strong data-i18n-ignore>{title}</strong>{link ? <span data-i18n-ignore>{resource.url}</span> : (creator || age) && <span data-i18n-ignore>{[creator, age].filter(Boolean).join(' · ')}</span>}</span>}><a data-i18n-ignore href={resource.url} rel={link ? 'noreferrer' : undefined} target={link ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:link ? <ResourceLinkIcon url={resource.url}/> : <FileText size={16}/>}<span className="project-resource-title">{title}</span>{link && <ResourceExternalArrow/>}</a></FlowTooltip><ProjectResourceMenu data={data} document={document} onDeleteLink={() => setDeleteResource(resource)} onEditLink={() => setDialog({ mode: 'edit', resource })} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReload} onUpdate={onUpdate} project={project} projects={projects} resource={resource} teams={teams}/></div>})}
+    {resources.map(resource => { const document=resource.type==='document'?documents.find(item=>item.id===resource.id):undefined; const creator = document ? document.creator?.displayName : users.find(user => user.id === resource.creatorId)?.displayName; const age = resourceAge(document?.updatedAt ?? resource.createdAt); const title = resourceChipTitle(resource, document, t); const link = resource.type === 'link'; return <div className="project-overview__resource" data-kind={resource.type} key={resource.id}><FlowTooltip align="start" contentClassName="flow-tooltip-content--title" label={<span className="project-resource-tip"><strong data-i18n-ignore>{title}</strong>{link ? <span data-i18n-ignore>{resource.url}</span> : (creator || age) && <span data-i18n-ignore>{[creator, age].filter(Boolean).join(' · ')}</span>}</span>}><a data-i18n-ignore href={resource.url} rel={link ? 'noreferrer' : undefined} target={link ? '_blank' : undefined}>{document?<DocumentGlyph document={document}/>:link ? <ResourceLinkIcon url={resource.url}/> : <FileText size={16}/>}<span className="project-resource-title">{title}</span>{link && <ResourceExternalArrow/>}</a></FlowTooltip><ProjectResourceMenu data={data} document={document} onDeleteLink={() => setDeleteResource(resource)} onEditLink={() => setDialog({ mode: 'edit', resource })} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReload} onUpdate={onUpdate} resource={resource} teams={teams}/></div>})}
     <DropdownMenu.Root onOpenChange={setMenuOpen} open={menuOpen}><FlowTooltip disabled={menuOpen} label={t('Add document or link')}><DropdownMenu.Trigger asChild>{resources.length
       ? <button aria-label="Add document or link…" className="project-overview__inline-add project-resource-add is-icon" type="button"><Plus size={16}/></button>
       : <button className="project-overview__inline-add project-resource-add" type="button"><Plus size={16}/>Add document or link…</button>}</DropdownMenu.Trigger></FlowTooltip><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-overview__resource-menu" sideOffset={4}><DropdownMenu.Label className="sr-only">Add document or link…</DropdownMenu.Label><DropdownMenu.Item onSelect={() => void createDocument()}><FileText size={16}/><span>Create new document…</span></DropdownMenu.Item><DropdownMenu.Item onSelect={() => setDialog({ mode: 'create' })}><Link2 size={16}/><span>Add a link…</span><kbd>Ctrl L</kbd></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
@@ -229,12 +229,12 @@ function projectOutline(description: string, milestones: Array<{ id: string; nam
   let fenced = false
   for (const line of (description ?? '').split('\n')) {
     if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue }
-    const match = fenced ? null : /^(#{1,3})\s+(.+?)\s*#*\s*$/.exec(line)
+    const match = fenced ? null : /^(#{1,4})\s+(.+?)\s*#*\s*$/.exec(line)
     if (match) headings.push(match[2].replace(/[*_`~]/g, '').trim())
   }
-  // Descriptions stored as HTML list their H1–H3 elements too.
-  if (!headings.length && /<h[1-3][\s>]/i.test(description ?? '')) {
-    for (const match of (description ?? '').matchAll(/<h([1-3])[^>]*>([\s\S]*?)<\/h\1>/gi)) {
+  // Descriptions stored as HTML list their H1–H4 elements too.
+  if (!headings.length && /<h[1-4][\s>]/i.test(description ?? '')) {
+    for (const match of (description ?? '').matchAll(/<h([1-4])[^>]*>([\s\S]*?)<\/h\1>/gi)) {
       const text = match[2].replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
       if (text) headings.push(text)
     }
@@ -242,7 +242,7 @@ function projectOutline(description: string, milestones: Array<{ id: string; nam
   const descriptionSection = () => document.getElementById('project-overview-description')
   return [
     { key: 'description', label: 'Description', level: 0, target: descriptionSection },
-    ...headings.filter(Boolean).map((label, index) => ({ key: `heading-${index}`, label, level: 1 as const, userText: true, target: () => descriptionSection()?.querySelectorAll('h1,h2,h3')[index] ?? null })),
+    ...headings.filter(Boolean).map((label, index) => ({ key: `heading-${index}`, label, level: 1 as const, userText: true, target: () => descriptionSection()?.querySelectorAll('h1,h2,h3,h4')[index] ?? null })),
     ...(milestones.length ? [{ key: 'milestones', label: 'Milestones', level: 0 as const, target: () => document.getElementById('project-overview-milestones') }] : []),
     ...milestones.map(milestone => ({ key: `milestone-${milestone.id}`, label: milestone.name, level: 1 as const, userText: true, target: () => document.getElementById(`milestone-${milestone.id}`) })),
   ]

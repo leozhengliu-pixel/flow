@@ -9,7 +9,6 @@ export type SidebarEntry =
   | "agent"
   | "initiatives"
   | "projects"
-  | "documents"
   | "views"
   | "members"
   | "customers"
@@ -66,7 +65,7 @@ const legacyWorkspaceOrder: SidebarEntry[] = [
 const defaultPreferences: SidebarPreferences = {
   inbox: "always", reviews: "always", myIssues: "always", pulse: "always",
   drafts: "always", agent: "always", initiatives: "always",
-  projects: "always", documents: "always", views: "always",
+  projects: "always", views: "always",
   members: "never", customers: "never", teams: "never",
   releases: "never", loops: "always",
 };

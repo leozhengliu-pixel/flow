@@ -101,6 +101,13 @@ type NotificationPayload struct {
 	Updates     []PulseUpdateRef `json:"updates,omitempty"`
 	// Total counts every update in the window; Updates is capped.
 	Total int `json:"total,omitempty"`
+	// Document notifications (documentMention, documentNewComment, ...) carry
+	// the document's current slug for links, a short excerpt (the comment
+	// text, or the mention's surrounding text) and, for reactions, the emoji.
+	DocumentSlugID string `json:"documentSlugId,omitempty"`
+	Excerpt        string `json:"excerpt,omitempty"`
+	QuotedText     string `json:"quotedText,omitempty"`
+	Emoji          string `json:"emoji,omitempty"`
 }
 
 type PulseUpdateRef struct {

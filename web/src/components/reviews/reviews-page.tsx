@@ -71,6 +71,7 @@ import {
   scrollToAnchoredComment,
   targetCommentHash,
 } from '@/lib/review-comment-navigation';
+import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 
 export function ReviewsPage({
   data,
@@ -1369,7 +1370,7 @@ function ReviewGuide({ review }: { review: CodeReview }) {
   const { t } = useI18n();
   return (
     <div className="review-guide">
-      <Sparkles />
+      <AiBurstGlyph size={16} />
       <h2>{t("Review guide")}</h2>
       <p>
         {t(

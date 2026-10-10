@@ -27,7 +27,7 @@ describe('⌘K Display options commands', () => {
     ]
     const noop = vi.fn()
     render(<MemoryRouter><I18nProvider><Register commands={commands}/><CommandMenu open onOpenChange={noop} data={makeBootstrap()}
-      onCreateIssue={noop} onCreateDocument={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
+      onCreateIssue={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
       onNavigateInbox={noop} onNavigateMyIssues={noop} onNavigateProjects={noop} onNavigateInitiatives={noop} onNavigateViews={noop} onNavigateMembers={noop}
       onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={noop}/></I18nProvider></MemoryRouter>)
     await userEvent.type(screen.getByLabelText('Command menu', { selector: 'input' }), 'customer')

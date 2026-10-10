@@ -1,4 +1,4 @@
-import { type AppRoute, agentPath, customersPath, documentsPath, draftsPath, inboxPath, initiativesPath, loopsPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, teamCyclesPath, teamHomePath, teamInitiativesPath, teamIssuesPath, teamProjectsPath, teamsPath, teamTriagePath, teamViewsPath, workspaceViewsPath } from './app-routes'
+import { type AppRoute, agentPath, customersPath, draftsPath, inboxPath, initiativesPath, loopsPath, membersPath, myIssuesPath, projectsPath, pulsePath, releasePipelinesPath, reviewsPath, teamCyclesPath, teamHomePath, teamInitiativesPath, teamIssuesPath, teamProjectsPath, teamsPath, teamTriagePath, teamViewsPath, workspaceViewsPath } from './app-routes'
 
 export function sidebarRoutePath(route: AppRoute): string | undefined {
   if (!('workspaceSlug' in route) || !route.workspaceSlug) return
@@ -12,7 +12,6 @@ export function sidebarRoutePath(route: AppRoute): string | undefined {
     case 'agent': return agentPath(w)
     case 'initiatives': case 'initiative': return initiativesPath(w)
     case 'projects': case 'project': case 'project-saved-view': case 'projects-saved-view': case 'projects-new-view': return projectsPath(w)
-    case 'documents': case 'document': return documentsPath(w)
     case 'workspace-members': case 'member-profile': return membersPath(w)
     case 'workspace-customers': case 'customer': return customersPath(w)
     case 'workspace-teams': case 'new-team': return teamsPath(w)

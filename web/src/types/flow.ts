@@ -248,7 +248,12 @@ export interface DocumentRevision {
   contentState?: string;
   contentData?: Record<string, unknown>;
   author: User;
+  /** Everyone who edited during the burst this version covers (author is the latest). */
+  authorIds?: UUID[];
+  /** When the version's editing burst ended (versions are post-update snapshots). */
   createdAt: string;
+  /** When the version's editing burst began. Absent on versions saved before bursts. */
+  startedAt?: string;
 }
 export interface DocumentPermission {
   id: UUID;
@@ -279,6 +284,16 @@ export interface FlowDocument {
   updatedAt: string;
   revisions: DocumentRevision[];
   permissions?: DocumentPermission[];
+  /** Increases with every write; send as `expectedVersion` to detect concurrent changes (409). */
+  version?: number;
+  /** Version of the collaborative base state (`contentState`), guarding update-log compaction. */
+  contentVersion?: number;
+  /** Earlier slugs of a renamed document; links using them still resolve. */
+  previousSlugIds?: string[];
+  /** Realtime (Yjs) document the editor joins; defaults to `id`. Changes when a version is restored. */
+  collaborationId?: string;
+  /** Set only on a document read back from "Recently deleted". */
+  deletedAt?: string;
 }
 export interface DocumentTemplate {
   id: UUID;
@@ -488,6 +503,10 @@ export interface Comment {
   createdAt: string;
   editedAt?: string;
   user: User;
+  /** Document inline threads: the editor mark id (`data-comment-id`) anchoring the thread. */
+  anchorId?: string;
+  /** Document inline threads: the selected text the thread was started on. */
+  quotedText?: string;
 }
 export interface ActivityEvent {
   id: UUID;
@@ -533,6 +552,11 @@ export interface PulseSummaryPayload {
   windowEnd?: string;
   updates?: { id: string; kind: "project" | "initiative" | string; sourceId: string; source?: string; createdAt?: string }[];
   total?: number;
+  /** Document notifications: the document's current slug, an excerpt, the quoted selection and a reaction emoji. */
+  documentSlugId?: string;
+  excerpt?: string;
+  quotedText?: string;
+  emoji?: string;
   [key: string]: unknown;
 }
 export type NotificationCategory =

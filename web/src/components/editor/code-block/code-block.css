@@ -1,0 +1,207 @@
+/* Code block node view. Colours come from the existing theme and code-theme tokens (dark by default, light overrides). */
+.flow-code-block {
+  --code-block-fg: var(--theme-text-primary);
+  --code-block-keyword: var(--code-dark-keyword);
+  --code-block-string: var(--code-dark-string);
+  --code-block-comment: var(--code-dark-comment);
+  --code-block-number: var(--code-dark-number);
+  position: relative;
+  margin: 12px 0;
+  overflow: hidden;
+  border: .5px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-1);
+  color: var(--code-block-fg);
+  font-family: var(--font-monospace);
+  font-size: 13px;
+  line-height: 20px;
+}
+:root[data-theme="light"] .flow-code-block {
+  --code-block-keyword: var(--code-light-keyword);
+  --code-block-string: var(--code-light-string);
+  --code-block-comment: var(--code-light-comment);
+  --code-block-number: var(--code-light-number);
+}
+
+.flow-code-block__controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 2px;
+  border: .5px solid var(--theme-border);
+  border-radius: 8px;
+  background: var(--theme-surface-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--fade);
+  user-select: none;
+  font-family: var(--font);
+}
+.flow-code-block:hover .flow-code-block__controls,
+.flow-code-block:focus-within .flow-code-block__controls,
+.flow-code-block__controls:has([data-state="open"]) { opacity: 1; pointer-events: auto; }
+@media (hover: none) { .flow-code-block__controls { opacity: 1; pointer-events: auto; } }
+.flow-code-block__language,
+.flow-code-block__icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: 450 12px/22px var(--font);
+}
+.flow-code-block__language[data-readonly] { padding-left: 8px; }
+.flow-code-block__icon { width: 24px; justify-content: center; padding: 0; }
+button.flow-code-block__language:hover,
+.flow-code-block__icon:hover,
+.flow-code-block__language[data-state="open"],
+.flow-code-block__icon[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.flow-code-block__icon[data-copied] { color: var(--code-block-string); }
+.flow-code-block__language:focus-visible,
+.flow-code-block__icon:focus-visible,
+.flow-code-block__expander:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+.flow-code-block__body {
+  --flow-code-lines: 15;
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 0;
+}
+.flow-code-block[data-collapsed] .flow-code-block__body {
+  max-height: calc(var(--flow-code-lines) * 20px);
+  padding-bottom: 0;
+  overflow: hidden;
+}
+.flow-code-block__gutter {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  min-width: 2.5ch;
+  box-sizing: content-box;
+  padding: 0 12px 0 14px;
+  color: var(--theme-text-tertiary);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.flow-code-block__code { flex: 1 1 auto; min-width: 0; overflow-x: auto; display: block; margin: 0; tab-size: 4; white-space: pre; word-break: normal; }
+/* Beats the rich-text inline `code` surface (including its light-theme variants) so only the block's own background shows. */
+:root .flow-code-block .flow-code-block__code.flow-code-block__code {
+  padding: 0 14px 0 14px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+:root .flow-code-block[data-line-numbers] .flow-code-block__code.flow-code-block__code { padding-left: 0; }
+.flow-code-block[data-wrap] .flow-code-block__code { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
+
+.flow-code-block__expander {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  border: 0;
+  border-top: .5px solid var(--theme-border);
+  background: transparent;
+  color: var(--theme-text-secondary);
+  font: 450 12px/20px var(--font);
+}
+.flow-code-block__expander:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+
+/* Syntax highlighting (decoration classes from highlight.js) */
+.flow-code-block .hljs-keyword,
+.flow-code-block .hljs-selector-tag,
+.flow-code-block .hljs-doctag,
+.flow-code-block .hljs-type,
+.flow-code-block .hljs-name,
+.flow-code-block .hljs-section,
+.flow-code-block .hljs-deletion { color: var(--code-block-keyword); }
+.flow-code-block .hljs-string,
+.flow-code-block .hljs-attr,
+.flow-code-block .hljs-regexp,
+.flow-code-block .hljs-symbol,
+.flow-code-block .hljs-bullet,
+.flow-code-block .hljs-selector-attr,
+.flow-code-block .hljs-selector-id,
+.flow-code-block .hljs-selector-class,
+.flow-code-block .hljs-template-variable,
+.flow-code-block .hljs-addition { color: var(--code-block-string); }
+.flow-code-block .hljs-comment,
+.flow-code-block .hljs-quote { color: var(--code-block-comment); font-style: italic; }
+.flow-code-block .hljs-number,
+.flow-code-block .hljs-literal,
+.flow-code-block .hljs-built_in,
+.flow-code-block .hljs-title,
+.flow-code-block .hljs-variable,
+.flow-code-block .hljs-attribute,
+.flow-code-block .hljs-meta,
+.flow-code-block .hljs-property { color: var(--code-block-number); }
+.flow-code-block .hljs-emphasis { font-style: italic; }
+.flow-code-block .hljs-strong { font-weight: 600; }
+
+/* Popovers are portalled out of the editor, so they carry their own tokens. */
+.flow-code-block__popover {
+  z-index: 1200;
+  border: .5px solid var(--popover-border);
+  border-radius: 8px;
+  outline: 0;
+  background: var(--theme-surface-2);
+  box-shadow: var(--shadow-control);
+  color: var(--theme-text-primary);
+  font: 450 13px/20px var(--font);
+}
+.flow-code-block__languages { width: 220px; padding: 4px; }
+.flow-code-block__languages input {
+  width: 100%;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: .5px solid var(--theme-border);
+  outline: 0;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: inherit;
+}
+.flow-code-block__languages input::placeholder { color: var(--theme-text-tertiary); }
+.flow-code-block__divider { height: .5px; margin: 4px 0; background: var(--theme-border); }
+.flow-code-block__options { max-height: min(260px, calc(var(--radix-popover-content-available-height, 320px) - 48px)); margin-top: 4px; overflow-y: auto; }
+.flow-code-block__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--theme-text-primary);
+  font: inherit;
+  text-align: left;
+}
+.flow-code-block__option[data-active="true"] { background: var(--theme-surface-hover); }
+.flow-code-block__empty { padding: 8px; color: var(--theme-text-tertiary); }
+.flow-code-block__settings { display: grid; gap: 2px; min-width: 200px; padding: 6px; }
+.flow-code-block__settings label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 28px;
+  padding: 0 6px;
+  border-radius: 5px;
+}
+.flow-code-block__settings label:hover { background: var(--theme-surface-hover); }

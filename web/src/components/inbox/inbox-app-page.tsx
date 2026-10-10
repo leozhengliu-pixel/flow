@@ -32,6 +32,7 @@ import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
+import { DocumentInboxView, documentNotificationKind, documentNotificationLine, isDocumentNotification, notificationDocument } from './hosts/document-inbox-view'
 
 const initialDisplayOptions: InboxDisplayOptions = {
   ordering: 'newest',
@@ -58,6 +59,8 @@ interface InboxProjection extends InboxNotificationRowData {
   reviewStatus?: string
   updateId?: string
   hostKind?: ReturnType<typeof classifyInboxHost>
+  /** Document notifications render the document host. */
+  documentId?: string
 }
 
 export interface InboxAppPageProps {
@@ -341,6 +344,11 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
             })
           : 'other')
 
+      if (projection?.documentId) {
+        const raw = inboxData.notifications.find(item => item.id === projection.id)
+        if (raw) return { content: <DocumentInboxView key={raw.id} data={data} notification={raw}/> }
+      }
+
       if (projection?.kind === 'pulse') {
         return {
           content: <PulseSummaryView key={projection.id} notificationId={projection.id} title={projection.title} data={data} onOpenProject={onOpenProject} onOpenInitiative={onOpenInitiative} />,
@@ -560,6 +568,34 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
         issuePriority: 0,
         issueStatusType: 'started' as const,
         hostKind: 'other',
+      }]
+    }
+    if (isDocumentNotification(notification) && !notification.issueId) {
+      if (notification.deletedAt || notification.archivedAt) return []
+      const document = notificationDocument(data, notification)
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: notification.commentId ? 'comment' as const : 'activity' as const,
+        sourceId: notification.sourceId,
+        notificationType: inboxNotificationCategory(notification),
+        actorId: notification.actor.id,
+        actor: notification.actor.displayName,
+        actorAvatarUrl: notification.actor.avatarUrl,
+        kind: documentNotificationKind(notification),
+        identifier: notification.type === 'documentReminder' ? t('Reminder') : t('Document'),
+        title: document?.title || notification.title || t('Untitled document'),
+        body: documentNotificationLine(notification, t),
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        projectId: document?.projectIds[0],
+        initiativeIds: [],
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+        documentId: notification.sourceId,
       }]
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined

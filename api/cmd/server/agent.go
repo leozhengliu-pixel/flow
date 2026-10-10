@@ -235,7 +235,7 @@ func agentMentionPrompt(projects []domain.Project, documents []domain.Document, 
 		fmt.Fprintf(&prompt, "- Person %s (@%s, id %s)\n", user.DisplayName, user.Name, user.ID)
 	}
 	for _, document := range documents {
-		fmt.Fprintf(&prompt, "- Document %q (id %s)\n", document.Title, document.ID)
+		fmt.Fprintf(&prompt, "- Document %q (id %s)\n", documentDisplayTitle(document.Title), document.ID)
 		if content := strings.TrimSpace(document.Content); content != "" {
 			fmt.Fprintf(&prompt, "  Content: %s\n", truncateSettingsText(content, 4000))
 		}

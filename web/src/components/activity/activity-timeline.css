@@ -133,7 +133,9 @@
 .issue-activity-timeline .comment-body h2,
 .issue-activity-timeline .reply-body h2 { font-size: 15px; line-height: 22px; }
 .issue-activity-timeline .comment-body h3,
-.issue-activity-timeline .reply-body h3 { margin: 10px 0 5px; font-size: 13px; line-height: 21px; }
+.issue-activity-timeline .reply-body h3,
+.issue-activity-timeline .comment-body h4,
+.issue-activity-timeline .reply-body h4 { margin: 10px 0 5px; font-size: 13px; line-height: 21px; }
 .issue-activity-timeline .comment-body ul,
 .issue-activity-timeline .comment-body ol,
 .issue-activity-timeline .reply-body ul,

@@ -1,0 +1,50 @@
+/* Callout block: a tinted box with an icon button (the shared icon picker) at its left. */
+:root { --callout-color: var(--description-callout-cyan); }
+
+.description-callout {
+  --callout-color: var(--description-callout-cyan);
+  position: relative;
+  margin: 22px 0;
+  padding: 10px 16px 10px 38px;
+  border: .5px solid color-mix(in srgb, var(--callout-color) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--callout-color) 5%, transparent);
+  color: var(--issue-fg);
+}
+.description-callout.is-gray { --callout-color: var(--description-callout-gray); }
+.description-callout.is-green { --callout-color: var(--description-callout-green); }
+.description-callout.is-yellow { --callout-color: var(--description-callout-yellow); }
+.description-callout.is-orange { --callout-color: var(--description-callout-orange); }
+.description-callout.is-red { --callout-color: var(--description-callout-red); }
+.description-callout.is-purple { --callout-color: var(--description-callout-purple); }
+
+.description-callout-controls {
+  position: absolute;
+  left: 8px;
+  top: 10px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  user-select: none;
+}
+.description-callout-controls > button,
+.description-callout-glyph {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--callout-color);
+}
+.description-callout-controls > button:hover,
+.description-callout-controls > button[data-state="open"] {
+  background: color-mix(in srgb, var(--callout-color) 17%, transparent);
+}
+.description-callout-controls svg { width: 16px; height: 16px; flex: none; }
+.description-callout-content > :first-child { margin-top: 0; }
+.description-callout-content > :last-child { margin-bottom: 0; }
+.description-callout-content p { margin: 0; }

@@ -2,7 +2,7 @@
   {
     "name": "mcp__flow.list_comments",
     "access": "read",
-    "description": "List comments on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, and initiatives this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for.",
+    "description": "List comments on a Flow issue, project, initiative, document, project milestone, or project/initiative status update. Provide exactly one of `issueId`, `projectId`, `initiativeId`, `documentId`, `milestoneId`, or `statusUpdateId`. For issues, projects, initiatives, and documents this returns both top-level discussion threads and inline description comments. Inline (anchored) comments carry a non-null `quotedText` set to the snippet of description text they reference. Document comments also carry `anchorId` (the inline comment mark in the document body, null for page-level comments and replies) and `resolved`. Returned comments include `author` and nullable `onBehalfOf`; when set, `onBehalfOf` identifies the user the agent author acted for.",
     "input_schema": {
       "type": "object",
       "required": [],
@@ -643,8 +643,8 @@
   {
     "name": "mcp__flow.get_document",
     "access": "read",
-    "description": "Retrieve a Flow document by ID or slug",
-    "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Document ID or slug" } } }
+    "description": "Retrieve a Flow document by ID or slug. Slugs a renamed document used before still resolve.",
+    "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Document ID, slug (current or previous), or title" } } }
   },
   {
     "name": "mcp__flow.create_attachment_from_upload",
@@ -959,11 +959,12 @@
   {
     "name": "mcp__flow.create_reminder",
     "access": "write",
-    "description": "Remind the current user about an issue, project, or initiative at a future time. The reminder arrives in their inbox.",
+    "description": "Remind the current user about an issue, project, initiative, or document at a future time. The reminder arrives in their inbox.",
     "input_schema": {
       "type": "object",
       "required": ["remindAt"],
       "properties": {
+        "document": { "type": "string", "description": "Document ID, slug, or title (provide exactly one target)" },
         "initiative": { "type": "string", "description": "Initiative name, ID, or slug (provide exactly one target)" },
         "issue": { "type": "string", "description": "Issue ID or identifier (provide exactly one target)" },
         "project": { "type": "string", "description": "Project name, ID, or slug (provide exactly one target)" },
@@ -1121,6 +1122,94 @@
         "issue": {"type": ["string", "null"], "description": "Issue ID or identifier to attach the document to; null to detach"},
         "template": {"type": "string", "description": "Document template ID or name (create only)"},
         "archived": {"type": "boolean", "description": "Archive (true) or restore (false) an existing document"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_document",
+    "access": "write",
+    "description": "Delete a Flow document. Only its owners (and workspace admins) can delete it. The document moves to Recently deleted for 30 days, where `restore_document` brings it back; after that it is gone for good. Use `save_document` with `archived: true` instead when the document should stay readable.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "Document ID, slug, or title"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.restore_document",
+    "access": "write",
+    "description": "Restore a deleted Flow document from Recently deleted (documents stay there for 30 days after `delete_document`). The document comes back as it was when deleted.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "ID, slug, or title of the deleted document"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.list_document_history",
+    "access": "read",
+    "description": "List a Flow document's saved versions, newest first. Each version has `id`, `title`, Markdown `content` (cut to 20,000 characters, with `contentTruncated: true` when cut), `author`, `authors` (everyone who edited in that burst), `startedAt`, and `createdAt`. The newest version is marked `current: true`. Pass a version's `id` to `restore_document_version` to roll back.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "Document ID, slug, or title"},
+        "limit": {"type": "integer", "minimum": 1, "maximum": 50, "default": 20, "description": "Max versions (default 20, max 50)"},
+        "cursor": {"type": "string", "description": "Next page cursor"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.restore_document_version",
+    "access": "write",
+    "description": "Restore a Flow document to one of its saved versions (from `list_document_history`). The version's title and content replace the current ones and become the newest version; earlier versions are kept, so the restore can itself be undone. Requires edit access.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id", "revisionId"],
+      "properties": {
+        "id": {"type": "string", "description": "Document ID, slug, or title"},
+        "revisionId": {"type": "string", "description": "Version ID from list_document_history"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.get_document_permissions",
+    "access": "read",
+    "description": "List who can access a Flow document: each entry has `subjectType` (user, team, or workspace), the resolved `subject`, and `role` (viewer, commenter, editor, or owner). An empty list means the document has no explicit access list: everyone in the workspace (or in its team, for team documents) can view it.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "Document ID, slug, or title"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_document_permissions",
+    "access": "write",
+    "description": "Replace a Flow document's whole access list (owners only). Entries not listed lose their access; the document's creator always keeps owner access. Each entry names a user (ID, name, email, or \"me\"), a team (ID, key, or name), or \"workspace\" (everyone in the workspace) and a role: viewer, commenter, editor, or owner (owner is for users only). Pass an empty list to make the document private to its creator. Read the current list with `get_document_permissions` first to add or remove a single entry.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id", "permissions"],
+      "properties": {
+        "id": {"type": "string", "description": "Document ID, slug, or title"},
+        "permissions": {
+          "type": "array",
+          "description": "The complete new access list",
+          "items": {
+            "type": "object",
+            "required": ["role"],
+            "properties": {
+              "subjectType": {"type": "string", "enum": ["user", "team", "workspace"], "description": "Kind of subject; inferred from `subject` when omitted"},
+              "subject": {"type": "string", "description": "User ID, name, email, or \"me\"; team ID, key, or name; or \"workspace\""},
+              "role": {"type": "string", "enum": ["viewer", "commenter", "editor", "owner"], "description": "Access level"}
+            }
+          }
+        }
       }
     }
   },

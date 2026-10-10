@@ -859,6 +859,7 @@ var loopToolLabels = map[string]string{
 	"save_reaction": "Reacted", "create_reminder": "Set reminder", "list_diffs": "Listed code changes",
 	"get_diff": "Read code change", "get_diff_threads": "Read review threads", "list_initiatives": "Listed initiatives",
 	"get_initiative": "Read initiative", "list_releases": "Listed releases", "list_milestones": "Listed milestones",
+	"restore_document": "Restored document", "restore_document_version": "Restored document version",
 	agentProgressTool: "Reported progress",
 }
 

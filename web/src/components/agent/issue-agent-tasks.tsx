@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Bot, RefreshCw, Send, Square } from 'lucide-react'
+import { RefreshCw, Send, Square } from 'lucide-react'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { PersonPicker } from '@/components/issue/core-property-pickers'
 import { canDelegateTo, getApplicationTask, listApplicationTasks, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { AgentAnswerText } from './agent-answer'
 import { useI18n } from '@/i18n/i18n'
 import './application-agents.css'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export function IssueAgentPicker({issue,data,onUpdate}:{issue:Issue;data:BootstrapData;onUpdate:(input:IssueUpdateInput)=>Promise<void>}) {
   const {t}=useI18n()
@@ -26,7 +27,7 @@ export function IssueAgentTasks({issue,data,resourceType='issue'}:{issue:Pick<Is
     void load();return()=>{abort.abort();clearTimeout(timer)}
   },[data.workspace.urlKey,issue.id,issue.agentSessionId,revision,hasApplications,resourceType])
   if(!issue.delegate&&!tasks.length&&!error)return null
-  return <section className="issue-agent-tasks" aria-label={t('Agent sessions')}><header><Bot size={16}/><strong>{t('Agent sessions')}</strong><button type="button" aria-label={t('Refresh')} onClick={()=>setRevision(value=>value+1)}><RefreshCw size={14}/></button></header>{error&&<p role="alert">{error}</p>}{tasks.map(task=><Task key={task.id} task={task} data={data} workspace={data.workspace.urlKey} name={data.users.find(user=>user.id===task.appUserId)?.displayName??t('Application')} onChanged={()=>setRevision(value=>value+1)}/>)}</section>
+  return <section className="issue-agent-tasks" aria-label={t('Agent sessions')}><header><AgentCursorGlyph size={16}/><strong>{t('Agent sessions')}</strong><button type="button" aria-label={t('Refresh')} onClick={()=>setRevision(value=>value+1)}><RefreshCw size={14}/></button></header>{error&&<p role="alert">{error}</p>}{tasks.map(task=><Task key={task.id} task={task} data={data} workspace={data.workspace.urlKey} name={data.users.find(user=>user.id===task.appUserId)?.displayName??t('Application')} onChanged={()=>setRevision(value=>value+1)}/>)}</section>
 }
 
 function Task({task,data,workspace,name,onChanged}:{task:ApplicationTask;data:BootstrapData;workspace:string;name:string;onChanged:()=>void}) {

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { SelectControl } from '@/components/ui/select-control'
 
 import { zhCN } from './translations'
+import { formatRelativeTime } from '@/lib/relative-time'
 
 export type AppLocale = 'en-US' | 'zh-CN'
 
@@ -13,6 +14,8 @@ type I18nValue = {
   t: (source: string) => string
   formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
+  /** Compact relative time ("31min ago" / "31分钟前") in the active locale. */
+  formatRelative: (value: Date | string | number) => string
 }
 
 const STORAGE_KEY = 'flow:locale'
@@ -31,6 +34,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     t,
     formatDate: (input, options) => new Intl.DateTimeFormat(locale, options).format(new Date(input)),
     formatNumber: (input, options) => new Intl.NumberFormat(locale, options).format(input),
+    formatRelative: input => formatRelativeTime(input, locale),
   }), [locale, setLocale, t])
 
   useEffect(() => {

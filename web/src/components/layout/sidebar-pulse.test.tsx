@@ -32,7 +32,7 @@ function renderSidebar(data = sidebarData(), page: 'inbox' | 'pulse' = 'inbox') 
 }
 
 function setVisibility(pulse: 'always' | 'badged' | 'never') {
-  const preferences = { inbox: 'always', reviews: 'always', myIssues: 'always', pulse, drafts: 'always', agent: 'always', initiatives: 'always', projects: 'always', documents: 'always', views: 'always', members: 'always', customers: 'never', teams: 'always', releases: 'always', loops: 'always' }
+  const preferences = { inbox: 'always', reviews: 'always', myIssues: 'always', pulse, drafts: 'always', agent: 'always', initiatives: 'always', projects: 'always', views: 'always', members: 'always', customers: 'never', teams: 'always', releases: 'always', loops: 'always' }
   localStorage.setItem('flow.sidebar.preferences', JSON.stringify(preferences))
 }
 

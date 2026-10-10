@@ -2,10 +2,11 @@
  * LS-0569 SuggestedIssueProperties — detail-editor accept/dismiss chrome.
  * Complements create-dialog quickSuggestions + TriageIntelligenceSuggestions.
  */
-import { Check, Sparkles, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { BootstrapData, Issue, IssueSuggestion } from '@/types/flow'
 import styles from './suggested-issue-properties.module.css'
+import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 
 export interface SuggestedIssuePropertiesProps {
   issue: Issue
@@ -109,7 +110,7 @@ export function SuggestedIssueProperties({
       aria-label="Suggested properties"
     >
       <header className={styles.header}>
-        <Sparkles size={14} aria-hidden="true" />
+        <AiBurstGlyph size={14} aria-hidden="true" />
         <span>{loading && visible.length === 0 ? 'Analyzing…' : 'Suggested properties'}</span>
         {visible.length > 1 && onAcceptAll ? (
           <button

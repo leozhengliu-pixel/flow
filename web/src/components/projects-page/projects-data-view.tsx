@@ -22,6 +22,7 @@ import './projects-bundle-parity.css'
 import { ProjectsPageEmptyIcon } from './projects-page-empty-icon'
 import { ProjectTimeline } from './project-timeline'
 import type { TimelineZoom } from './project-timeline-model'
+import { AvatarImage } from '@/components/ui/user-avatar'
 
 export type ProjectPageItem = {
   id: string
@@ -695,7 +696,7 @@ function DataViewPriorityIcon({ value }: { value: ProjectPageItem['priority'] })
 
 function ProjectAvatar({ lead }: { lead?: ProjectPageItem['lead'] }) {
   if (!lead) return <NoAssigneeIcon aria-label="No lead" className="lp-project-avatar is-empty" size={16} />
-  if (lead.avatarUrl) return <img alt={lead.name} className="lp-project-avatar" src={lead.avatarUrl} />
+  if (lead.avatarUrl) return <AvatarImage alt={lead.name} className="lp-project-avatar" src={lead.avatarUrl} />
   return <span aria-label={lead.name} className="lp-project-avatar" style={{ backgroundColor: lead.color ?? '#c65b5b' }}>{lead.initials ?? initials(lead.name)}</span>
 }
 

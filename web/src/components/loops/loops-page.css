@@ -531,7 +531,8 @@ html:root[data-theme="light"] body .dialog-content .loops-hub-composer textarea 
 .loops-instructions-prosemirror li p { margin: 0; }
 .loops-instructions-prosemirror h1,
 .loops-instructions-prosemirror h2,
-.loops-instructions-prosemirror h3 { margin: 12px 0 6px; font-size: 14px; font-weight: 600; line-height: 20px; }
+.loops-instructions-prosemirror h3,
+.loops-instructions-prosemirror h4 { margin: 12px 0 6px; font-size: 14px; font-weight: 600; line-height: 20px; }
 .loops-instructions-prosemirror code { padding: 1px 4px; border-radius: 4px; background: var(--theme-surface-hover); font-size: 12px; }
 .loops-instructions-prosemirror a:not([data-agent-entity]) { color: var(--accent-primary); }
 .loops-instructions-prosemirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: var(--theme-text-tertiary); pointer-events: none; }

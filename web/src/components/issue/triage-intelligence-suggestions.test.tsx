@@ -208,7 +208,7 @@ describe('TriageIntelligenceSuggestions', () => {
     expect(text).toHaveClass('triage-intelligence-footer-text')
     expect(within(card).getByText('Triage Intelligence')).toBeInTheDocument()
     expect(container.querySelector('[class*="gradient"]')).toBeNull()
-    expect(card.querySelector('header svg')).toHaveAttribute('data-flow-glyph', 'triage')
+    expect(card.querySelector('header svg')).toHaveAttribute('data-flow-glyph', 'aiBurst') // The reference app's Triage Intelligence mark is the AI burst, not the triage queue glyph
     expect(screen.getByRole('button', { name: 'Run again' }).querySelector('svg')).toHaveAttribute('data-flow-glyph', 'rerun')
 
     // The CSS draws the frame hairline, white card, monospace footer text and a plain (not gradient) title.

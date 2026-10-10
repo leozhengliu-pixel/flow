@@ -1,0 +1,122 @@
+.document-template-editor {
+  width: min(760px, 100%);
+  padding: 0 16px 56px;
+}
+.document-template-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 48px;
+  margin-bottom: 12px;
+}
+.document-template-editor > header > strong {
+  color: var(--theme-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+}
+.document-template-editor > header > button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--theme-control);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.document-template-editor > header > button.primary {
+  border-color: transparent;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+}
+.document-template-editor > header > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.document-template-editor__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.document-template-editor__body > label,
+.document-template-editor__content {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.document-template-editor__name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.document-template-editor__name > input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 22px;
+  font-weight: 600;
+}
+.document-template-editor__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 33px;
+  height: 33px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+.document-template-editor__icon:hover {
+  background: var(--theme-control);
+}
+.document-template-editor__body > label > input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--theme-control);
+  color: var(--text);
+  font: inherit;
+}
+.document-template-editor__editor {
+  padding: 4px 0;
+}
+.document-template-editor__editor .issue-description-root .description-editor {
+  min-height: 280px;
+  font-size: 15px;
+  line-height: 24px;
+}
+.document-template-editor__editor .issue-description-root .description-editor:focus,
+.document-template-editor__editor .issue-description-root .description-editor:focus-within {
+  background: transparent;
+  box-shadow: none;
+}
+.document-template-editor__delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 6px 10px;
+  border: 0.5px solid var(--border-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}

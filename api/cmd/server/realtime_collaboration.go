@@ -40,6 +40,9 @@ type realtimeSocketClient struct {
 	workspace      string
 	documents      map[string]struct{}
 	issueDocuments map[string]string
+	// documentAccess caches what this socket may do on each joined
+	// standalone document; it is re-checked on updates once stale.
+	documentAccess map[string]*documentSocketAccess
 	send           chan realtimeSocketMessage
 	queuedBytes    atomic.Int64
 	cancel         context.CancelFunc
@@ -85,13 +88,26 @@ type collaborationSyncMessage struct {
 	ContentState string                    `json:"contentState,omitempty"`
 	Updates      []collaborationSyncUpdate `json:"updates"`
 	More         bool                      `json:"more,omitempty"`
+	// ReadOnly tells viewers and commenters the server rejects their edits.
+	ReadOnly bool `json:"readOnly,omitempty"`
 }
+
+// documentSocketAccess is a joined document's cached authorization.
+type documentSocketAccess struct {
+	documentID string
+	canEdit    bool
+	checkedAt  time.Time
+}
+
+// documentAccessTTL bounds how long a socket keeps editing a document after
+// its access changed without an explicit invalidation (e.g. a team change).
+const documentAccessTTL = 5 * time.Second
 
 func (h *realtimeHub) addSocket(workspace, clientID string, cancel context.CancelFunc) *realtimeSocketClient {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextID++
-	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
+	client := &realtimeSocketClient{id: h.nextID, clientID: clientID, workspace: workspace, documents: map[string]struct{}{}, issueDocuments: map[string]string{}, documentAccess: map[string]*documentSocketAccess{}, send: make(chan realtimeSocketMessage, 256), cancel: cancel}
 	if h.sockets[workspace] == nil {
 		h.sockets[workspace] = map[uint64]*realtimeSocketClient{}
 	}
@@ -119,6 +135,34 @@ func (h *realtimeHub) joinedDocument(client *realtimeSocketClient, documentID st
 	_, joined := client.documents[documentID]
 	h.mu.Unlock()
 	return joined
+}
+
+// invalidateDocumentAccess makes every socket re-check its access to a
+// document (by id or collaboration id) before its next update.
+func (h *realtimeHub) invalidateDocumentAccess(workspace, documentID string) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, client := range h.sockets[workspace] {
+		for collaborationID, access := range client.documentAccess {
+			if access.documentID == documentID || collaborationID == documentID {
+				access.checkedAt = time.Time{}
+			}
+		}
+	}
+}
+
+// broadcastDocumentConflict tells every editor joined to a replaced
+// collaboration generation to reload the document.
+func (h *realtimeHub) broadcastDocumentConflict(workspace, collaborationID string) {
+	if h == nil || collaborationID == "" {
+		return
+	}
+	raw, _ := json.Marshal(map[string]any{"type": "document.conflict", "documentId": collaborationID})
+	h.broadcastDocument(workspace, collaborationID, 0, realtimeSocketMessage{data: raw})
+	h.invalidateDocumentAccess(workspace, collaborationID)
 }
 
 func (h *realtimeHub) broadcastDocument(workspace, documentID string, excludedSocketID uint64, message realtimeSocketMessage) {
@@ -196,7 +240,7 @@ func (s *server) realtimeSocket(w http.ResponseWriter, r *http.Request) {
 				sendSocketJSON(client, map[string]any{"type": "error", "message": err.Error()})
 			}
 		case websocket.MessageBinary:
-			if err := s.handleCollaborationFrame(r.Context(), client, message); err != nil {
+			if err := s.handleCollaborationFrame(r, client, message); err != nil {
 				sendSocketJSON(client, map[string]any{"type": "error", "message": err.Error()})
 			}
 		}
@@ -233,6 +277,7 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		filterBootstrapForAPIKey(&data, r)
 	}
 	var contentState string
+	readOnly := false
 	if command.IssueID != "" {
 		query.Filter = store.IssueFilter{Field: "id", Values: []string{command.IssueID}}
 		query.Archived = "all"
@@ -261,21 +306,24 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 		s.realtime.mu.Unlock()
 	} else {
 		// Standalone workspace documents use the same collaboration protocol as
-		// issue descriptions, but are authorized by the document's team scope.
-		index := slices.IndexFunc(data.Documents, func(document domain.Document) bool {
-			return document.ID == command.DocumentID || document.SlugID == command.DocumentID
-		})
-		if index < 0 {
+		// issue descriptions, but are authorized by the document's role:
+		// viewers and commenters join read-only.
+		document, conflict, err := collaborationDocument(data, command.DocumentID)
+		if err != nil || documentRole(s, data, document) == "none" {
 			return errors.New("document is outside your teams")
 		}
-		document := data.Documents[index]
-		if documentRole(s, data, document) == "none" {
-			return errors.New("document is outside your teams")
+		if conflict {
+			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": command.DocumentID})
+			return nil
 		}
 		contentState = document.ContentState
+		readOnly = !canEditDocument(documentRole(s, data, document))
+		s.realtime.mu.Lock()
+		client.documentAccess[command.DocumentID] = &documentSocketAccess{documentID: document.ID, canEdit: !readOnly, checkedAt: time.Now()}
+		s.realtime.mu.Unlock()
 	}
 	s.realtime.joinDocument(client, command.DocumentID)
-	message := collaborationSyncMessage{Type: "document.sync", DocumentID: command.DocumentID, ContentState: contentState, Updates: []collaborationSyncUpdate{}}
+	message := collaborationSyncMessage{Type: "document.sync", DocumentID: command.DocumentID, ContentState: contentState, Updates: []collaborationSyncUpdate{}, ReadOnly: readOnly}
 	bytes := len(contentState)
 	flush := func(more bool) error {
 		message.More = more
@@ -321,7 +369,8 @@ func (s *server) handleCollaborationCommand(r *http.Request, client *realtimeSoc
 	return flush(false)
 }
 
-func (s *server) handleCollaborationFrame(ctx context.Context, client *realtimeSocketClient, raw []byte) error {
+func (s *server) handleCollaborationFrame(r *http.Request, client *realtimeSocketClient, raw []byte) error {
+	ctx := r.Context()
 	kind, documentID, requestedUpdateID, payload, err := decodeCollaborationFrame(raw)
 	if err != nil {
 		return err
@@ -339,6 +388,22 @@ func (s *server) handleCollaborationFrame(ctx context.Context, client *realtimeS
 		}
 		if documentID != currentDocumentID {
 			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": documentID})
+			return nil
+		}
+	}
+	if kind == collaborationUpdateFrame {
+		allowed, conflict, err := s.documentSocketCanEdit(r, client, documentID)
+		if err != nil {
+			return err
+		}
+		if conflict {
+			sendSocketJSON(client, map[string]any{"type": "document.conflict", "documentId": documentID})
+			return nil
+		}
+		if !allowed {
+			// The update is dropped; the client switches its editor to
+			// read-only and discards its local edits on reload.
+			sendSocketJSON(client, map[string]any{"type": "document.readonly", "documentId": documentID})
 			return nil
 		}
 	}
@@ -370,6 +435,58 @@ func (s *server) handleCollaborationFrame(ctx context.Context, client *realtimeS
 	s.realtime.broadcastDocument(client.workspace, documentID, 0, realtimeSocketMessage{binary: true, data: frame})
 	s.publishCollaborationEvent(client.workspace, "document.update", collaborationEventPayload{DocumentID: documentID, ClientID: client.clientID, UpdateID: updateID, Data: base64.StdEncoding.EncodeToString(payload)})
 	return nil
+}
+
+// collaborationDocument finds the standalone document a collaboration id
+// names. conflict reports a join with the document's id or slug while its
+// realtime state moved to a new generation (a restored version).
+func collaborationDocument(data domain.Bootstrap, collaborationID string) (domain.Document, bool, error) {
+	for _, document := range data.Documents {
+		current := document.CollaborationID
+		if current == "" {
+			current = document.ID
+		}
+		if current == collaborationID {
+			return document, false, nil
+		}
+		if document.ID == collaborationID || document.SlugID == collaborationID {
+			return document, true, nil
+		}
+	}
+	return domain.Document{}, false, errNotFound
+}
+
+// documentSocketCanEdit authorizes an update frame on a standalone document,
+// re-reading the viewer's role once the cached decision is stale. Issue
+// description documents are authorized by their issue on join.
+func (s *server) documentSocketCanEdit(r *http.Request, client *realtimeSocketClient, collaborationID string) (bool, bool, error) {
+	s.realtime.mu.Lock()
+	access := client.documentAccess[collaborationID]
+	fresh := access != nil && time.Since(access.checkedAt) < documentAccessTTL
+	canEdit := access != nil && access.canEdit
+	s.realtime.mu.Unlock()
+	if access == nil || fresh {
+		return access == nil || canEdit, false, nil
+	}
+	var data domain.Bootstrap
+	if s.authDisabled {
+		var ok bool
+		if data, ok = s.store.WorkspaceMetadata(client.workspace); !ok {
+			return false, false, store.ErrAuthForbidden
+		}
+	} else {
+		var err error
+		if data, err = s.store.PagedWorkspaceMetadata(r.Context(), client.workspace, authUser(r).ID); err != nil {
+			return false, false, err
+		}
+		filterBootstrapForAPIKey(&data, r)
+	}
+	document, conflict, err := collaborationDocument(data, collaborationID)
+	allowed := err == nil && !conflict && canEditDocument(documentRole(s, data, document))
+	s.realtime.mu.Lock()
+	access.canEdit, access.checkedAt = allowed, time.Now()
+	s.realtime.mu.Unlock()
+	return allowed, conflict || errors.Is(err, errNotFound), nil
 }
 
 func (s *server) publishCollaborationEvent(workspace, eventType string, payload collaborationEventPayload) {

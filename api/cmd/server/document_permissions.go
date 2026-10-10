@@ -52,7 +52,9 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 	id := r.PathValue("id")
 	viewerData := s.workspaceData(r)
 	var updated []domain.DocumentPermission
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.permissions_updated", id, input, func(data *domain.Bootstrap) error {
+	directory := s.documentMemberDirectory(r)
+	accessWorkspace, accessDocumentID := workspaceKey(r), id
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.permissions_updated", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -60,6 +62,10 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 		if documentRole(s, *data, *document) != "owner" {
 			return store.ErrAuthForbidden
 		}
+		before := *document
+		before.Permissions = slices.Clone(document.Permissions)
+		accessWorkspace, accessDocumentID = data.Workspace.URLKey, document.ID
+		defer func() { notifyDocumentOwnerChanges(s, data, directory, before, *document, time.Now().UTC()) }()
 		now := time.Now().UTC()
 		permissions := make([]domain.DocumentPermission, 0, len(input.Permissions)+1)
 		seen := map[string]struct{}{}
@@ -87,6 +93,9 @@ func (s *server) replaceDocumentPermissions(w http.ResponseWriter, r *http.Reque
 		updated = slices.Clone(permissions)
 		return nil
 	})
+	if err == nil {
+		s.realtime.invalidateDocumentAccess(accessWorkspace, accessDocumentID)
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
@@ -101,7 +110,9 @@ func (s *server) updateDocumentPermission(w http.ResponseWriter, r *http.Request
 	role := strings.ToLower(strings.TrimSpace(*input.Role))
 	id, permissionID := r.PathValue("id"), r.PathValue("permissionId")
 	var updated domain.DocumentPermission
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.permission_updated", id, input, func(data *domain.Bootstrap) error {
+	directory := s.documentMemberDirectory(r)
+	accessWorkspace, accessDocumentID := workspaceKey(r), id
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.permission_updated", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -109,6 +120,10 @@ func (s *server) updateDocumentPermission(w http.ResponseWriter, r *http.Request
 		if documentRole(s, *data, *document) != "owner" {
 			return store.ErrAuthForbidden
 		}
+		before := *document
+		before.Permissions = slices.Clone(document.Permissions)
+		accessWorkspace, accessDocumentID = data.Workspace.URLKey, document.ID
+		defer func() { notifyDocumentOwnerChanges(s, data, directory, before, *document, time.Now().UTC()) }()
 		index := slices.IndexFunc(document.Permissions, func(permission domain.DocumentPermission) bool { return permission.ID == permissionID })
 		if index < 0 || !slices.Contains([]string{"owner", "editor", "commenter", "viewer"}, role) {
 			return errInvalid
@@ -122,12 +137,17 @@ func (s *server) updateDocumentPermission(w http.ResponseWriter, r *http.Request
 		updated = document.Permissions[index]
 		return nil
 	})
+	if err == nil {
+		s.realtime.invalidateDocumentAccess(accessWorkspace, accessDocumentID)
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteDocumentPermission(w http.ResponseWriter, r *http.Request) {
 	id, permissionID := r.PathValue("id"), r.PathValue("permissionId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.permission_deleted", id, map[string]string{"permissionId": permissionID}, func(data *domain.Bootstrap) error {
+	directory := s.documentMemberDirectory(r)
+	accessWorkspace, accessDocumentID := workspaceKey(r), id
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.permission_deleted", id, map[string]string{"permissionId": permissionID}, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -135,6 +155,10 @@ func (s *server) deleteDocumentPermission(w http.ResponseWriter, r *http.Request
 		if documentRole(s, *data, *document) != "owner" {
 			return store.ErrAuthForbidden
 		}
+		before := *document
+		before.Permissions = slices.Clone(document.Permissions)
+		accessWorkspace, accessDocumentID = data.Workspace.URLKey, document.ID
+		defer func() { notifyDocumentOwnerChanges(s, data, directory, before, *document, time.Now().UTC()) }()
 		index := slices.IndexFunc(document.Permissions, func(permission domain.DocumentPermission) bool { return permission.ID == permissionID })
 		if index < 0 {
 			return errNotFound
@@ -146,6 +170,9 @@ func (s *server) deleteDocumentPermission(w http.ResponseWriter, r *http.Request
 		document.UpdatedAt = time.Now().UTC()
 		return nil
 	})
+	if err == nil {
+		s.realtime.invalidateDocumentAccess(accessWorkspace, accessDocumentID)
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 

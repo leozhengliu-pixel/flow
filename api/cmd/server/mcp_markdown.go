@@ -13,7 +13,7 @@ import (
 // document templates). The editor renders contentData in preference to the
 // Markdown text, so saving Markdown alone would leave an empty or stale editor
 // document behind. It covers the StarterKit blocks the editor offers:
-// headings (1-3), paragraphs, bullet/ordered/task lists, quotes, code blocks
+// headings (1-4), paragraphs, bullet/ordered/task lists, quotes, code blocks
 // and dividers, plus bold, italic, strike, inline code and links.
 func mcpMarkdownDocument(markdown string) map[string]any {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
@@ -63,7 +63,7 @@ func mcpMarkdownBlocks(lines []string) []any {
 			index++
 		case mcpMarkdownHeading.MatchString(trimmed):
 			match := mcpMarkdownHeading.FindStringSubmatch(trimmed)
-			level := min(len(match[1]), 3)
+			level := min(len(match[1]), 4)
 			block := map[string]any{"type": "heading", "attrs": map[string]any{"level": level}}
 			if inline := mcpMarkdownInlineNodes(match[2]); len(inline) > 0 {
 				block["content"] = inline

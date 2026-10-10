@@ -2,7 +2,7 @@
  * LS-0311 InitiativePageChrome — packs AgentSidebar + UpdatesFloatingPanel into detail chrome.
  */
 import type { ReactNode } from 'react'
-import { Bot, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { InitiativeAgentSidebarContainer } from './initiative-agent-sidebar-container'
 import { UpdatesFloatingPanel } from './updates-floating-panel'
 import type {
@@ -12,6 +12,7 @@ import type {
   Project,
   User,
 } from '@/types/flow'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export type InitiativePageChromeProps = {
   initiative: Initiative
@@ -122,7 +123,7 @@ export function InitiativePageChromeActions({
         title="Agent"
         type="button"
       >
-        <Bot size={14} />
+        <AgentCursorGlyph size={14} />
       </button>
     </>
   )
