@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 
 describe('saved-view editing and advanced filter strings', () => {
   it('translates every operator, band and editor label', () => {

@@ -1,11 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import {
-  EmbeddedCustomerNeedForm,
-  importantFromPriority,
-  priorityFromImportant,
-} from './embedded-customer-need-form'
+import { EmbeddedCustomerNeedForm } from './embedded-customer-need-form'
+import { importantFromPriority, priorityFromImportant } from './customer-request-model'
 import type { BootstrapData, CustomerRequest } from '@/types/flow'
 import { I18nProvider } from '@/i18n/i18n'
 import { TooltipProvider } from '@/components/ui/tooltip'

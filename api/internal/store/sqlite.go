@@ -12,7 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode"
 
 	"flow/api/internal/domain"
 )
@@ -385,42 +384,6 @@ func (s *SQLiteStore) addDomainEventPreviousValues(ctx context.Context) error {
 		}
 	}
 	return err
-}
-
-// backfillWorkspaceOwners upgrades existing installations without changing
-// the role of every administrator. The oldest active administrator becomes
-// the durable workspace owner; subsequent administrators remain admins.
-func (s *SQLiteStore) backfillWorkspaceOwners(ctx context.Context) error {
-	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT workspace_id FROM workspace_memberships`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	var workspaceID string
-	for rows.Next() {
-		if err := rows.Scan(&workspaceID); err != nil {
-			return err
-		}
-		var ownerCount int
-		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM workspace_memberships WHERE workspace_id=? AND role='owner'`, workspaceID).Scan(&ownerCount); err != nil {
-			return err
-		}
-		if ownerCount > 0 {
-			continue
-		}
-		var userID string
-		err := s.db.QueryRowContext(ctx, `SELECT user_id FROM workspace_memberships WHERE workspace_id=? AND role='admin' AND status='active' ORDER BY joined_at,user_id LIMIT 1`, workspaceID).Scan(&userID)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if _, err := s.db.ExecContext(ctx, `UPDATE workspace_memberships SET role='owner' WHERE workspace_id=? AND user_id=?`, workspaceID, userID); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
 }
 
 func (s *SQLiteStore) applyMigrationStatements(ctx context.Context, statements []string) error {
@@ -1179,63 +1142,6 @@ func normalize(data *domain.Bootstrap) {
 	refreshResourceCounts(data)
 }
 
-// Saved view URLs use a stable, human-readable slug instead of the storage key.
-// Keep old records addressable by deriving one once when they are loaded.
-func ensureSavedViewSlugIDs(data *domain.Bootstrap) bool {
-	seen := make(map[string]struct{}, len(data.SavedViews))
-	changed := false
-	for index := range data.SavedViews {
-		view := &data.SavedViews[index]
-		desired := savedViewSlugID(view.Name, view.ID)
-		if view.SlugID == "" || strings.HasPrefix(view.SlugID, "view-") {
-			if view.SlugID != desired {
-				view.SlugID = desired
-				changed = true
-			}
-		}
-		candidate := view.SlugID
-		for suffix := 2; ; suffix++ {
-			if _, exists := seen[candidate]; !exists {
-				break
-			}
-			candidate = fmt.Sprintf("%s-%d", view.SlugID, suffix)
-		}
-		if candidate != view.SlugID {
-			view.SlugID = candidate
-			changed = true
-		}
-		seen[view.SlugID] = struct{}{}
-	}
-	return changed
-}
-
-func savedViewSlugID(name, id string) string {
-	base := slugUnicode(name)
-	if base == "" {
-		base = "view"
-	}
-	suffix := slugUnicode(strings.TrimPrefix(id, "view_"))
-	if suffix == "" {
-		return base
-	}
-	return base + "-" + suffix
-}
-
-func slugUnicode(value string) string {
-	var builder strings.Builder
-	lastDash := false
-	for _, character := range strings.ToLower(strings.TrimSpace(value)) {
-		if unicode.IsLetter(character) || unicode.IsDigit(character) {
-			builder.WriteRune(character)
-			lastDash = false
-		} else if builder.Len() > 0 && !lastDash {
-			builder.WriteByte('-')
-			lastDash = true
-		}
-	}
-	return strings.Trim(builder.String(), "-")
-}
-
 // FirstDay stays empty until the user picks one so clients can apply the
 // locale default (Sunday for English, Monday for zh-CN).
 func defaultUserSettings(userID string) domain.UserSettings {
@@ -1695,31 +1601,6 @@ func aggregateEntityByID(data domain.Bootstrap, id string) (any, bool) {
 		}
 	}
 	return nil, false
-}
-
-func findJSONObjectByID(value any, aggregateID string) any {
-	switch item := value.(type) {
-	case map[string]any:
-		if id, ok := item["id"].(string); ok && id == aggregateID {
-			return item
-		}
-		for _, child := range item {
-			if found := findJSONObjectByID(child, aggregateID); found != nil {
-				return found
-			}
-		}
-	case []any:
-		for _, child := range item {
-			if found := findJSONObjectByID(child, aggregateID); found != nil {
-				return found
-			}
-		}
-	}
-	return nil
-}
-
-func (s *SQLiteStore) persist(ctx context.Context, data domain.Bootstrap, event *domain.DomainEvent) error {
-	return s.persistWorkspace(ctx, data.Workspace.URLKey, data, event)
 }
 
 func (s *SQLiteStore) persistWorkspace(ctx context.Context, workspaceKey string, data domain.Bootstrap, event *domain.DomainEvent) error {

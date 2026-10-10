@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 import { customerRequestsZhCN } from './translations-customer-requests'
 
 describe('customer requests on issues and projects', () => {

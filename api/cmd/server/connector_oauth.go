@@ -415,7 +415,7 @@ func (s *server) finishConnectorOAuth(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	callbackWorkspace = pending.Workspace
-	raw, err = s.store.ReadConnectorSecret(r.Context(), state, true)
+	_, err = s.store.ReadConnectorSecret(r.Context(), state, true)
 	if err != nil {
 		fail(400, "Authorization already used")
 		return

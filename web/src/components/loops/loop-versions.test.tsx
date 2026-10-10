@@ -18,7 +18,8 @@ vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof 
 vi.mock('@/components/ui/action-dialog-service', async importOriginal => ({ ...(await importOriginal<typeof import('@/components/ui/action-dialog-service')>()), ...dialogs }))
 
 import { LoopDetail } from './loop-detail'
-import { LoopVersionsDialog, versionDiff, versionSummary } from './loop-versions'
+import { LoopVersionsDialog } from './loop-versions'
+import { versionDiff, versionSummary } from './loop-version-diff'
 
 const loop: Loop = {
   id: 'loop-1', name: 'Weekly wrap', status: 'published', level: 'workspace', triggerType: 'schedule',

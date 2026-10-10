@@ -690,34 +690,6 @@ func mcpDateAt(value string, anchor time.Time) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("invalid date %q", value)
 }
 
-func filterIssues(data domain.Bootstrap, items []domain.Issue, args map[string]any) []domain.Issue {
-	query := lowerArg(args, "query")
-	return slices.DeleteFunc(items, func(item domain.Issue) bool {
-		if !boolArg(args, "includeArchived") && item.ArchivedAt != nil || query != "" && !containsFold(item.Title+" "+item.Description+" "+item.Identifier, query) || hasNumberArg(args, "priority") && item.Priority != intArg(args, "priority", 0) || stringArg(args, "parentId") != "" && (item.ParentID == nil || !equalFoldAny(stringArg(args, "parentId"), *item.ParentID)) {
-			return true
-		}
-		if team := stringArg(args, "team"); team != "" && !equalFoldAny(team, item.Team.ID, item.Team.Key, item.Team.Name) {
-			return true
-		}
-		if state := stringArg(args, "state"); state != "" && !equalFoldAny(state, item.State.ID, item.State.Name, item.State.Type) {
-			return true
-		}
-		if assignee := stringArg(args, "assignee"); assignee != "" && !matchesUser(item.Assignee, data.Viewer, assignee) {
-			return true
-		}
-		if project := stringArg(args, "project"); project != "" && (item.Project == nil || !equalFoldAny(project, item.Project.ID, item.Project.Name)) {
-			return true
-		}
-		if cycle := stringArg(args, "cycle"); cycle != "" && (item.CycleID == nil || !cycleMatches(data, *item.CycleID, cycle)) {
-			return true
-		}
-		if label := stringArg(args, "label"); label != "" && !slices.ContainsFunc(item.Labels, func(item domain.IssueLabel) bool { return equalFoldAny(label, item.ID, item.Name) }) {
-			return true
-		}
-		return false
-	})
-}
-
 func filterProjects(data domain.Bootstrap, items []domain.Project, args map[string]any) []domain.Project {
 	query := lowerArg(args, "query")
 	return slices.DeleteFunc(items, func(item domain.Project) bool {

@@ -17,7 +17,7 @@ import {
   subtypesFor,
   type IntegrationCatalogEntry,
 } from "@/lib/integration-catalog";
-import type { BootstrapData, IntegrationConnection } from "@/types/flow";
+import type { BootstrapData } from "@/types/flow";
 import { toast } from "sonner";
 import { useState } from "react";
 
@@ -225,13 +225,4 @@ function IntegrationSettingsIcon({ entry }: { entry: IntegrationCatalogEntry }) 
       <Plug size={20} />
     </span>
   );
-}
-
-export function resolveIntegrationSettings(
-  slug: string,
-  data: BootstrapData,
-): IntegrationConnection | undefined {
-  const entry = getIntegrationCatalogEntry(slug);
-  if (!entry?.connectProvider) return undefined;
-  return data.integrationConnections.find((item) => item.provider === entry.connectProvider);
 }

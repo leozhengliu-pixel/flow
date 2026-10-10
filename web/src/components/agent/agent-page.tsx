@@ -29,7 +29,8 @@ import {
 } from "./agent-icons";
 import { AgentRichText } from "./agent-rich-text";
 import { AgentDraftCard } from "./agent-draft-card";
-import { HealthGlyph, healthColor } from "@/components/project-detail/health-glyph";
+import { HealthGlyph } from "@/components/project-detail/health-glyph";
+import { healthColor } from "@/components/project-detail/health-color";
 import { splitAgentDraft } from "./agent-draft";
 import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from "./agent-answer";
 import { parseAgentAnswer, splitAgentSuggestions } from "./agent-answer-content";
@@ -48,7 +49,8 @@ import {
   asPersistedConversation,
   useDeferredHydratedConversation,
 } from '@/hooks/use-deferred-hydrated-conversation';
-import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue';
+import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue';
+import { summarizeElicitationQueue } from './agent-elicitation-queue-model';
 import { FlowLogo } from '@/components/ui/flow-logo';
 import { AgentHistoryList } from './agent-history-list';
 import { AgentErrorDetail } from './agent-error-detail';
@@ -161,22 +163,28 @@ export function AgentPage({
   // The last message is still waiting for its reply on the server (the page
   // that asked was closed or reloaded): poll just this chat until it lands.
   const awaitingReply = Boolean(!busy && !live && current && current.messages.at(-1)?.role === "user" && Date.now() - Date.parse(current.messages.at(-1)?.createdAt ?? "") < 10 * 60_000);
+  const currentId = current?.id;
+  // Latest callback for the poller, so a new function identity does not restart the polling interval.
+  const onSessionChangeRef = useRef(onSessionChange);
   useEffect(() => {
-    if (!awaitingReply || !current) return;
-    const id = current.id;
+    onSessionChangeRef.current = onSessionChange;
+  });
+  useEffect(() => {
+    if (!awaitingReply || !currentId) return;
+    const id = currentId;
     let active = true;
     const timer = window.setInterval(() => {
       void getAgentSession(id).then((latest) => {
         if (!active || latest.messages.at(-1)?.role !== "assistant") return;
         setSessions((list) => list.map((item) => (item.id === latest.id ? latest : item)));
-        onSessionChange(latest.id, latest);
+        onSessionChangeRef.current(latest.id, latest);
       }).catch(() => undefined);
     }, 2000);
     return () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [awaitingReply, current?.id]);
+  }, [awaitingReply, currentId]);
   const replyRunning = busy || Boolean(live) || awaitingReply;
   // Seeing a chat (once its reply has settled) clears its unread dot here and in the history list.
   useMarkAgentSessionRead(current, replyRunning, (read, lastReadAt) => {

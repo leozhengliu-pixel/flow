@@ -20,7 +20,6 @@ import { makeIssue } from '@/test/fixtures'
 import { FeatureSettingsPage } from './feature-settings'
 import { Shell } from './mention-field-shell'
 import { documentMarkdown, paste, pickDocument, stubEditorDom } from './mention-field-test-kit'
-import { RecurringIssuesSettingsPage } from './recurring-issues-settings'
 import { TeamWorkflowSettings } from './team-workflow-settings'
 
 const docChip = () => document.querySelector('a[data-agent-entity="document"]')

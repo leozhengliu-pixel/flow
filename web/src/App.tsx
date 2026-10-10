@@ -303,7 +303,8 @@ import { PeopleProvider } from '@/components/property/people-provider'
 import { WorkspaceStoreProvider } from '@/store/application-store-context'
 import { applyRealtimePatch, canApplyRealtimePatch } from '@/store/apply-realtime-patch'
 import { ActiveTeamProvider } from '@/lib/active-team'
-import { TeamPagesLayout, isTeamPagesRoute } from '@/components/team/team-pages-layout'
+import { TeamPagesLayout } from '@/components/team/team-pages-layout'
+import { isTeamPagesRoute } from '@/components/team/team-pages-routes'
 import { searchResultLink } from '@/lib/search-result-link'
 import { mergeIssueRecords, mergeWorkspaceDirectory, requiresIssueVisibilityCheck } from '@/lib/issue-detail-cache'
 import { triageState } from '@/components/triage/triage-model'
@@ -590,15 +591,19 @@ function App() {
     window.addEventListener(USER_SETTINGS_OVERRIDES_EVENT, bump);
     return () => window.removeEventListener(USER_SETTINGS_OVERRIDES_EVENT, bump);
   }, []);
+  const accountWorkspaceKey = data?.workspace.urlKey;
+  const accountViewerId = data?.viewer.id;
+  const accountUserSettings = data?.userSettings;
+  const accountWorkspaceSettings = data?.workspaceSettings;
   useEffect(() => {
-    if (!data) return;
-    const serverSettings = data.userSettings[data.viewer.id];
+    if (!accountWorkspaceKey || !accountViewerId || !accountUserSettings || !accountWorkspaceSettings) return;
+    const serverSettings = accountUserSettings[accountViewerId];
     if (!serverSettings) return;
     // A refresh fetched before a preference save landed still carries the old
     // values; newer local writes win until the server reflects them.
-    const settings = overlayUserSettings(data.workspace.urlKey, serverSettings);
+    const settings = overlayUserSettings(accountWorkspaceKey, serverSettings);
     setRuntimePreferences(settings);
-    setWorkspaceRuntimePreferences(data.workspaceSettings);
+    setWorkspaceRuntimePreferences(accountWorkspaceSettings);
     const root = document.documentElement;
     // Reconcile account settings with the first-paint cache so default
     // "System preference" does not wipe an explicit Light/Dark choice.
@@ -609,10 +614,10 @@ function App() {
     });
     if (
       themeNeedsAccountSync(settings, applied) &&
-      themeSyncRef.current !== `${data.workspace.urlKey}:${data.viewer.id}:${applied.interfaceTheme}`
+      themeSyncRef.current !== `${accountWorkspaceKey}:${accountViewerId}:${applied.interfaceTheme}`
     ) {
-      themeSyncRef.current = `${data.workspace.urlKey}:${data.viewer.id}:${applied.interfaceTheme}`;
-      void persistUserSettings(data.workspace.urlKey, data.viewer.id, {
+      themeSyncRef.current = `${accountWorkspaceKey}:${accountViewerId}:${applied.interfaceTheme}`;
+      void persistUserSettings(accountWorkspaceKey, accountViewerId, {
         interfaceTheme: applied.interfaceTheme,
         lightTheme: applied.lightTheme,
         darkTheme: applied.darkTheme,
@@ -639,10 +644,10 @@ function App() {
       Boolean(settings.disableAnimatedImages),
     );
   }, [
-    data?.workspace.urlKey,
-    data?.viewer.id,
-    data?.userSettings,
-    data?.workspaceSettings,
+    accountWorkspaceKey,
+    accountViewerId,
+    accountUserSettings,
+    accountWorkspaceSettings,
     settingsOverridesRevision,
   ]);
   const oauthPath = location.pathname === "/oauth/authorize";

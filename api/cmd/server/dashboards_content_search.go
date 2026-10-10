@@ -13,7 +13,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -213,7 +215,7 @@ func validateDashboard(data domain.Bootstrap, value *domain.Dashboard) error {
 		seen[widget.ID] = true
 		widget.Title = strings.TrimSpace(widget.Title)
 		if widget.Title == "" {
-			widget.Title = strings.ReplaceAll(strings.Title(strings.ReplaceAll(widget.Type, "_", " ")), "  ", " ") //nolint:staticcheck
+			widget.Title = strings.ReplaceAll(cases.Title(language.Und, cases.NoLower).String(strings.ReplaceAll(widget.Type, "_", " ")), "  ", " ")
 		}
 		widget.Position = index
 		if widget.Width != 1 && widget.Width != 2 {
@@ -1506,10 +1508,4 @@ func (s *server) filterSuggestions(w http.ResponseWriter, r *http.Request) {
 		result = result[:50]
 	}
 	writeJSON(w, http.StatusOK, result)
-}
-
-// Keep unicode import meaningful and make token normalization explicit for
-// callers that supply punctuation-only queries.
-func hasSemanticRune(value string) bool {
-	return strings.ContainsFunc(value, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsNumber(r) })
 }

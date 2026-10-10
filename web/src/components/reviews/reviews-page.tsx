@@ -51,21 +51,13 @@ import { resolveCodeReviewAccess } from '@/lib/code-access';
 import { DiffView } from './diff-view';
 import { EditableDiffView } from './editable-diff-view';
 import { PullRequestCommentActions } from './pull-request-comment-actions';
-import {
-  PullRequestHeader,
-  resolvePreferredMergeMethod,
-  type MergeMethod,
-} from './pull-request-header';
-import {
-  PullRequestReviewShortcutsProvider,
-  useOptionalPullRequestReviewShortcuts,
-} from './pull-request-review-shortcuts-context';
+import { PullRequestHeader } from './pull-request-header';
+import { resolvePreferredMergeMethod, type MergeMethod } from './pull-request-merge-method';
+import { PullRequestReviewShortcutsProvider } from './pull-request-review-shortcuts-context';
+import { useOptionalPullRequestReviewShortcuts } from './pull-request-review-shortcuts';
 import { MentionBody } from '@/components/editor/mentions/mention-body';
-import {
-  ReviewProviderIcon,
-  reviewProviderIdentifier,
-  reviewProviderNoun,
-} from './review-provider';
+import { ReviewProviderIcon } from './review-provider';
+import { reviewProviderIdentifier, reviewProviderNoun } from './review-provider-model';
 import {
   getAnchoredCommentEvent,
   scrollToAnchoredComment,

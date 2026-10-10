@@ -988,7 +988,7 @@ func (s *server) createMCPReminder(ctx context.Context, actor mcpActor, data dom
 		return nil, fmt.Errorf("provide exactly one of issue, project, initiative, or document")
 	}
 	input := domain.IssueReminderInput{RemindAt: remindAt.UTC().Format(time.RFC3339)}
-	target := map[string]any{}
+	var target map[string]any
 	var handler http.HandlerFunc
 	var targetID string
 	switch {

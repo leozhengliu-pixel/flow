@@ -8,7 +8,8 @@ import { newLoopPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop, LoopAttachment, LoopTemplate } from "@/types/flow";
 import { markLoopAgentAutostart, useLoopTemplates } from "./loop-data";
-import { LoopGlyph, LoopIcon, loopIconColor } from "./loop-glyph";
+import { LoopGlyph, LoopIcon } from "./loop-glyph";
+import { loopIconColor } from "./loop-template-visuals";
 import { LoopLocationPicker, type LoopLocation } from "./loop-pickers";
 import { GridLoader } from '@/components/ui/grid-loader'
 

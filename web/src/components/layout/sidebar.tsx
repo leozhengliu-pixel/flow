@@ -2186,10 +2186,8 @@ function SidebarSelect({
         aria-label={ariaLabel}
         className="sidebar-customize-select"
       >
-        <Select.Value asChild>
-          <span className="sidebar-customize-select-value">
-            {renderValue ? renderValue(selected.value) : selected.label}
-          </span>
+        <Select.Value className="sidebar-customize-select-value">
+          {renderValue ? renderValue(selected.value) : selected.label}
         </Select.Value>
         <Select.Icon asChild>
           <SidebarChevronIcon />

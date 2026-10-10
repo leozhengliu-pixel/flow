@@ -7,8 +7,3 @@ export function HealthGlyph({ health, className = 'project-activity__health-icon
   const trend = HEALTH_TRENDS[health]
   return <svg aria-hidden="true" className={className} height="16" viewBox="0 0 16 16" width="16"><circle cx="8" cy="8" fill="currentColor" fillOpacity={.25} r="8"/>{trend && <polyline fill="none" points={trend} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>}</svg>
 }
-
-/** Colour token for a health value, for places outside the project detail styles. */
-export function healthColor(health: Project['health']) {
-  return health === 'onTrack' ? 'var(--project-health-on-track)' : health === 'atRisk' ? 'var(--project-health-at-risk)' : health === 'offTrack' ? 'var(--project-health-off-track)' : 'var(--theme-text-tertiary)'
-}

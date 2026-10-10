@@ -32,7 +32,8 @@ import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
-import { DocumentInboxView, documentNotificationKind, documentNotificationLine, isDocumentNotification, notificationDocument } from './hosts/document-inbox-view'
+import { DocumentInboxView } from './hosts/document-inbox-view'
+import { documentNotificationKind, documentNotificationLine, isDocumentNotification, notificationDocument } from './hosts/document-inbox-model'
 
 const initialDisplayOptions: InboxDisplayOptions = {
   ordering: 'newest',

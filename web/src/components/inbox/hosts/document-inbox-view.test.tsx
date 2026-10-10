@@ -11,7 +11,8 @@ const api = vi.hoisted(() => ({ listDocumentComments: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 vi.mock('@/components/activity/rich-comment', () => ({ RichComment: ({ body }: { body: string }) => <p>{body}</p> }))
 
-import { DocumentInboxView, documentNotificationKind, documentNotificationLine, documentNotificationPath, isDocumentNotification } from './document-inbox-view'
+import { DocumentInboxView } from './document-inbox-view'
+import { documentNotificationKind, documentNotificationLine, documentNotificationPath, isDocumentNotification } from './document-inbox-model'
 
 const flowDocument = { id: 'document-1', slugId: 'plan-1a2b3c4d5e6f', title: 'Plan', content: '', creator: viewer, projectIds: [], teamIds: [], subscriberIds: [], favorite: false, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-01T00:00:00Z', revisions: [] } as FlowDocument
 

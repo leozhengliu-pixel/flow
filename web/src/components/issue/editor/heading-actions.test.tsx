@@ -4,7 +4,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { Editor } from '@tiptap/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IssueDescriptionEditor } from '../issue-description-editor'
-import { headingLink, headingSlug, makeHeadingCollapsible } from './heading-actions'
+import { headingLink, headingSlug, makeHeadingCollapsible } from './heading-links'
 
 vi.mock('@/i18n/i18n', () => ({ useI18n: () => ({ t: (value: string) => value }) }))
 vi.mock('@/lib/api', () => ({ realtimeClientId: () => 'editor-test' }))

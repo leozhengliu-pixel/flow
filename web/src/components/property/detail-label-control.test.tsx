@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { customersForInitiative, DetailLabelControl } from './detail-label-control'
+import { DetailLabelControl } from './detail-label-control'
+import { customersForInitiative } from './initiative-customers'
 
 describe('DetailLabelControl', () => {
   it('exposes changeLabelAction and host', () => {

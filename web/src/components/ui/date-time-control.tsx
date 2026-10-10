@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { SelectControl } from './select-control'
 import './date-time-control.css'
 import { firstWeekday, useUserPreferences } from '@/lib/runtime-preferences'
-import { translateToChinese, type AppLocale } from '@/i18n/i18n'
+import type { AppLocale } from '@/i18n/locale'
+import { translateToChinese } from '@/i18n/translate'
 
 type Mode = 'date' | 'datetime'
 

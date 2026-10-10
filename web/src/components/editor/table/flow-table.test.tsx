@@ -97,7 +97,7 @@ describe('hover affordances', () => {
 
   it('adds at the end even when the caret is in the first row', async () => {
     const editor = await withTable()
-    act(() => { editor.commands.setTextSelection(5) })
+    act(() => { editor.commands.setTextSelection(4) })
     await userEvent.click(screen.getByRole('button', { name: 'Add row' }))
     const last = tableJson(editor)!.content!.at(-1)!
     expect(last.content!.every(cell => cell.type === 'tableCell')).toBe(true)

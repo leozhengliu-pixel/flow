@@ -28,7 +28,10 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
     if (!editor || editor.isDestroyed || appliedKey.current === contentKey) return
     appliedKey.current = contentKey
     const next = commentContent(body, data)
-    editor.commands.setContent(next.content, { contentType: next.contentType })
+    // Mention node views render with flushSync, which React rejects inside an effect, so set the content right after it.
+    queueMicrotask(() => {
+      if (!editor.isDestroyed) editor.commands.setContent(next.content, { contentType: next.contentType })
+    })
   }, [body, contentKey, data, editor])
   // After the content effect: the references in the new content become mentions (display only).
   useMentionConversion(editor, contentKey, true, !validDocument(data))

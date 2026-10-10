@@ -185,10 +185,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     return () => abort.abort()
   }, [baseQuery])
   const clientBaseCount = useMemo(() => bandActive && extraFilters.length && !data.issueCollectionPaged ? applyExplorerFilters(scopedIssues, filters, data).length : undefined, [bandActive, data, extraFilters.length, filters, scopedIssues])
+  // Insights re-query only when the filters/scope change, not on every bootstrap/sync update of `data`.
+  const dataRef = useRef(data)
+  dataRef.current = data
   const insightQuery = useMemo(() => ({
     teamId: scope.kind === 'team' ? scope.team.id : initialInsightFilters?.teamIds,
     includeSubTeams: scope.kind === 'team',
-    filter: { and: [issueFiltersToQueryAst(effectiveFilters, { data }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
+    filter: { and: [issueFiltersToQueryAst(effectiveFilters, { data: dataRef.current }), ...(view === 'backlog' ? [{ field: 'status', values: ['backlog'] }] : view === 'active' ? [{ field: 'status', values: ['unstarted', 'started'] }] : [])] },
   }), [effectiveFilters, initialInsightFilters?.teamIds, scope, view])
   const selection = useMyIssuesSelection(groups)
   useActionGroupsForSelection(['Issues', 'Projects'])
@@ -206,12 +209,13 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
   ], [data.teams])
   const initialSaveTarget = saveTargets.find(target => target.scope === (sourceView?.scope ?? defaultSaveScope ?? scope.kind) && (target.scope !== 'team' || target.teamId === (sourceView?.teamId ?? (scope.kind === 'team' ? scope.team.id : undefined)))) ?? saveTargets[0]
 
+  const workspaceKey = data.workspace.urlKey
   useEffect(() => {
     if (!savedView || hydratedSavedViewId.current === savedView.id) return
     hydratedSavedViewId.current = savedView.id
     setFilters(filtersFromSavedView(savedView))
-    setDisplay(readPersonalDisplay(`${data.workspace.urlKey}:issue-explorer:view:${savedView.id}:display`, savedView, savedView.view))
-  }, [savedView])
+    setDisplay(readPersonalDisplay(`${workspaceKey}:issue-explorer:view:${savedView.id}:display`, savedView, savedView.view))
+  }, [savedView, workspaceKey])
 
   const split = display.layout === 'split'
   useEffect(() => { if (!detailsOpen && !split) setPreviewIssueId(undefined) }, [detailsOpen, split])

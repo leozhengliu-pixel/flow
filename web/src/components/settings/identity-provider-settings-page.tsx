@@ -14,7 +14,6 @@ import {
 } from "@/lib/api";
 import type {
   BootstrapData,
-  IdentityProvider,
   SCIMToken,
   WorkspaceSettings,
 } from "@/types/flow";

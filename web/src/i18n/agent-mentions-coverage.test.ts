@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 
 describe('agent mention strings', () => {
   it('translates the chip, hover card and reference card copy', () => {

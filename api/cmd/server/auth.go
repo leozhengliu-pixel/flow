@@ -2113,10 +2113,6 @@ func validMemberRole(role string) bool {
 	return role == "owner" || role == "admin" || role == "member" || role == "guest"
 }
 
-func validWorkspaceRole(role string) bool {
-	return role == "owner" || role == "admin" || role == "member" || role == "guest"
-}
-
 func activeAdminCount(data *domain.Bootstrap) int {
 	count := 0
 	for _, member := range data.Members {

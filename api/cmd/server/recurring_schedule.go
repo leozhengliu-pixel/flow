@@ -351,18 +351,6 @@ func (rule recurrenceRule) nextAfter(date time.Time) time.Time {
 	return date.AddDate(0, 0, interval)
 }
 
-// resolveRecurrenceStart returns the canonical schedule and first occurrence
-// date for a schedule starting at start (a calendar date). Presets without a
-// fixed day repeat on the start date's weekday/day of month.
-func resolveRecurrenceStart(value string, start time.Time) (string, time.Time, error) {
-	rule, err := parseRecurrence(value)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	rule = rule.anchored(start)
-	return rule.String(), rule.firstOnOrAfter(start), nil
-}
-
 func parseRecurrenceDate(value string, loc *time.Location) (time.Time, error) {
 	value = strings.TrimSpace(value)
 	if date, err := time.Parse("2006-01-02", value); err == nil {

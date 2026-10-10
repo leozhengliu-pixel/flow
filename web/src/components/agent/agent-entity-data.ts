@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import { ApplicationStoreContext } from '@/store/application-store-context'
+import { ApplicationStoreContext } from '@/store/application-store-contexts'
 import type { BootstrapData } from '@/types/flow'
 import { agentEntityPath, type AgentEntity } from './agent-entity-refs'
 

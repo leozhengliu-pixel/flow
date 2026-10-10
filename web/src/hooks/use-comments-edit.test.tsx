@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useCommentsEditState } from './use-comments-edit'
+import { useCommentsEditState } from './use-comments-edit-state'
 
 vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: vi.fn() } }))
 

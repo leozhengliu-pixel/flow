@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -237,11 +237,9 @@ describe("GitLab integration settings", () => {
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Disconnect GitLab?");
     expect(dialog).toHaveTextContent("Integration functionality will stop and related settings will be deleted.");
-    await act(async () => {
-      await user.click(within(dialog).getByRole("button", { name: "Disconnect" }));
-    });
+    await user.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(toast.info).toHaveBeenCalledWith("Disconnected GitLab integration"));
     expect(api.disconnectIntegrationConnection).toHaveBeenCalledWith("gitlab", "gitlab-connection");
-    expect(toast.info).toHaveBeenCalledWith("Disconnected GitLab integration");
   });
 
   it("builds branch name examples for every format", () => {

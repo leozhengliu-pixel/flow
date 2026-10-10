@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -13,21 +11,13 @@ import {
 import { createPortal } from 'react-dom'
 
 import { CommentPopover, type LightboxComment } from './comment-popover'
-import { openLightbox, registerLightboxOpener, type LightboxItem } from './lightbox-bridge'
-import { WindowControlsAwareLightboxProvider, useWindowControlsInsets } from './window-controls-aware-lightbox-provider'
+import { registerLightboxOpener, type LightboxItem } from './lightbox-bridge'
+import { LightboxEditorContext, type LightboxEditorContextValue } from './lightbox-editor-context'
+import { WindowControlsAwareLightboxProvider } from './window-controls-aware-lightbox-provider'
+import { useWindowControlsInsets } from './window-controls-insets-context'
 import { useCommentHashPopover } from '@/hooks/use-comment-hash-popover'
 
 import './lightbox-editor.css'
-
-export type LightboxEditorContextValue = {
-  open: (items: LightboxItem[], index?: number) => void
-  close: () => void
-  editorInstanceRef: MutableRefObject<unknown>
-  activeIndex: number
-  items: LightboxItem[]
-}
-
-const LightboxEditorContext = createContext<LightboxEditorContextValue | null>(null)
 
 export type LightboxEditorProviderProps = {
   children: ReactNode
@@ -220,22 +210,4 @@ function LightboxEditorProviderInner({
       )}
     </LightboxEditorContext.Provider>
   )
-}
-
-export function useLightboxEditor() {
-  const value = useContext(LightboxEditorContext)
-  if (!value) throw new Error('useLightboxEditor must be used within LightboxEditorProvider')
-  return value
-}
-
-export function useOptionalLightboxEditor() {
-  return useContext(LightboxEditorContext)
-}
-
-/** Prefer React portal; fall back to legacy DOM overlay when provider is absent. */
-export function openDescriptionLightboxViaProvider(src: string, alt = '', siblings?: LightboxItem[]) {
-  const items = siblings?.length ? siblings : [{ src, alt }]
-  const index = Math.max(0, items.findIndex(item => item.src === src))
-  if (openLightbox(items, index === -1 ? 0 : index)) return true
-  return false
 }

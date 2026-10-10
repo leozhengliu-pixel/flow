@@ -890,25 +890,6 @@ func issueDateFilterValues(issue domain.Issue) []string {
 	return values
 }
 
-func encodeCursor(offset int) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset)))
-}
-
-func decodeCursor(cursor string) int {
-	if cursor == "" {
-		return 0
-	}
-	decoded, err := base64.RawURLEncoding.DecodeString(cursor)
-	if err != nil {
-		decoded = []byte(cursor)
-	}
-	offset, _ := strconv.Atoi(string(decoded))
-	if offset < 0 {
-		return 0
-	}
-	return offset
-}
-
 func priorityRank(priority int) int {
 	if priority == 0 {
 		return 5

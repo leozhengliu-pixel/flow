@@ -13,7 +13,8 @@ import { LoopActionsMenu, LoopEditPolicyIcon, LoopEditPolicyItems } from "./loop
 import { LoopBreadcrumb } from "./loop-breadcrumb";
 import { copyText, loopOwner, loopUrl, takeLoopAgentHandoff, useLoopRecord } from "./loop-data";
 import { LoopAgentPanel } from "./loop-agent-panel";
-import { LoopIcon, loopIconColor } from "./loop-glyph";
+import { LoopIcon } from "./loop-glyph";
+import { loopIconColor } from "./loop-template-visuals";
 import { LoopInstructionsEditor } from "./loop-instructions-editor";
 import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, isLoopDraft, loopEditPolicyLabel, loopTeam, relativeTime } from "./loop-model";
 import { LoopCommandPicker, RunLoopOnPicker, type PickerItem } from "./loop-pickers";

@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import type { BootstrapData, Issue, IssueSuggestion } from '@/types/flow'
 import styles from './suggested-issue-properties.module.css'
 import { AiBurstGlyph } from '@/components/ui/agent-glyph'
+import { propertySuggestionsForEditor, suggestionKind } from './suggested-issue-property-model'
 
 export interface SuggestedIssuePropertiesProps {
   issue: Issue
@@ -37,44 +38,6 @@ function suggestionLabel(suggestion: IssueSuggestion, data: BootstrapData): stri
   }
   const reason = suggestion.metadata.reasons?.[0]
   return reason ?? suggestion.type
-}
-
-function suggestionKind(suggestion: IssueSuggestion): string {
-  switch (suggestion.type) {
-    case 'assignee':
-      return 'Assignee'
-    case 'project':
-      return 'Project'
-    case 'label':
-      return 'Label'
-    case 'team':
-      return 'Team'
-    case 'similarIssue':
-      return 'Similar'
-    case 'relatedIssue':
-      return 'Related'
-    default:
-      return 'Property'
-  }
-}
-
-export function propertySuggestionsForEditor(
-  suggestions: IssueSuggestion[],
-  issueId: string,
-): IssueSuggestion[] {
-  return suggestions
-    .filter(
-      item =>
-        item.issueId === issueId &&
-        item.state === 'active' &&
-        (item.type === 'assignee' ||
-          item.type === 'project' ||
-          item.type === 'label' ||
-          item.type === 'team'),
-    )
-    .sort(
-      (left, right) => Number(left.metadata.rank ?? 0) - Number(right.metadata.rank ?? 0),
-    )
 }
 
 export function SuggestedIssueProperties({

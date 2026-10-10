@@ -3,8 +3,6 @@ import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   BarChart3,
-  ArrowDown,
-  ArrowUp,
   Bell,
   BellOff,
   Check,
@@ -69,12 +67,12 @@ import {
   moveWidgetInLayout,
   widgetsToLayout,
 } from "./dashboard-layout";
+import { WidgetActionsMenu } from "./widget-actions";
 import {
-  WidgetActionsMenu,
   cloneWidget,
   formatOriginDescription,
   insightDefaultTitle as widgetInsightDefaultTitle,
-} from "./widget-actions";
+} from "./widget-actions-model";
 import { useWidgetInsight } from "@/components/insights/use-widget-insight";
 import { workspaceIssuesPath } from "@/lib/app-routes";
 import { GridLoader } from '@/components/ui/grid-loader'
@@ -378,16 +376,6 @@ export function DashboardsPage({
     });
     clearInsightURLState();
     onNavigate(selected.id);
-  };
-  const reorderWidget = async (widgetId: string, targetIndex: number) => {
-    if (!selected) return;
-    const currentIndex = selected.widgets.findIndex((item) => item.id === widgetId);
-    const bounded = Math.max(0, Math.min(targetIndex, selected.widgets.length - 1));
-    if (currentIndex < 0 || currentIndex === bounded) return;
-    const widgets = [...selected.widgets];
-    const [moved] = widgets.splice(currentIndex, 1);
-    widgets.splice(bounded, 0, moved);
-    await patchDashboard({ widgets: widgets.map((item, position) => ({ ...item, position })) });
   };
   const subscribed = Boolean(selected?.subscriberIds.includes(data.viewer.id));
   const visibleItems = routeTeam

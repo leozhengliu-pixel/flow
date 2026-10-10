@@ -15,7 +15,8 @@ import { resetAgentRecordCache } from '@/components/agent/agent-entity-fetch'
 import { parseAgentEntityUrl } from '@/components/agent/agent-entity-refs'
 import { mentionFixture, mentionLabels, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import { mentionAttrsForTarget } from '@/components/editor/mentions/mention-model'
-import { loopEntityMarkdown, LoopInstructionsEditor } from './loop-instructions-editor'
+import { LoopInstructionsEditor } from './loop-instructions-editor'
+import { loopEntityMarkdown } from './loop-entity-node'
 
 function Where() {
   const location = useLocation()
@@ -107,7 +108,8 @@ describe('LoopInstructionsEditor', () => {
   it('opens the hover card of a chip', async () => {
     const data = mentionFixture()
     render(<Shell><LoopInstructionsEditor readOnly ariaLabel="Instructions" data={data} value="" valueData={docOf(attrsFor(data, 'project'))}/></Shell>)
-    await act(async () => { (await chip('project')).focus() })
+    const projectChip = await chip('project')
+    await act(async () => { projectChip.focus() })
     const card = await waitFor(() => {
       const element = document.querySelector('[data-agent-entity-card="project"]')
       expect(element).not.toBeNull()
