@@ -694,8 +694,8 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 /* Integration detail pages (GitLab): logo tile, link, status dots and error text. */
 :root{--integration-logo-tile:lch(0% 0 0);--integration-logo-border:lch(100% 0 0 / .08);--integration-link:lch(68% 42 286.91);--integration-status-ok:lch(66% 52 145);--integration-status-warn:lch(82% 78 82);--integration-error-text:lch(66% 58 25)}
 :root[data-theme="light"]{--integration-logo-tile:lch(0% 0 0);--integration-logo-border:lch(88.49% 0 282);--integration-link:lch(45% 70 286.91);--integration-status-ok:lch(60% 55 145);--integration-status-warn:lch(72% 80 75);--integration-error-text:lch(50% 72 25)}
-:root{--document-comment-highlight:lch(32.568% 37.936 84.425);--document-comment-underline:lch(66% 62 62);--document-comment-pending:lch(32.568% 37.936 84.425);--document-comment-card-bg:lch(12.945% 1.3 272);--document-comment-card-border:lch(20.505% 2.38 272);--document-comment-card-shadow:0 3px 8px lch(0% 0 0 / .125),0 2px 5px lch(0% 0 0 / .125),0 1px 1px lch(0% 0 0 / .125);--document-popover-bg:lch(12.72% .85 272);--document-popover-border:lch(27.12% 1.48 272);--document-send-bg:lch(17.574% 1.589 272);--document-comment-quote-bar:lch(45% 30 82)}
-:root[data-theme="light"]{--document-comment-highlight:lch(91.6% 36 82);--document-comment-underline:lch(72% 60 62);--document-comment-pending:lch(94% 26 82);--document-comment-card-bg:#fff;--document-comment-card-border:#e8e8e8;--document-comment-card-shadow:0 6px 18px lch(0% 0 0 / .02),0 3px 9px lch(0% 0 0 / .04),0 1px 1px lch(0% 0 0 / .04);--document-popover-bg:#fff;--document-popover-border:#e8e8e8;--document-send-bg:#fff;--document-comment-quote-bar:lch(80% 40 82)}
+:root{--document-comment-highlight:lch(32.568% 37.936 84.425);--document-comment-underline:lch(66% 62 62);--document-comment-pending:lch(32.568% 37.936 84.425);--document-comment-card-bg:lch(12.945% 1.3 272);--document-comment-card-border:lch(20.505% 2.38 272);--document-comment-card-shadow:0 3px 8px lch(0% 0 0 / .125),0 2px 5px lch(0% 0 0 / .125),0 1px 1px lch(0% 0 0 / .125);--document-comment-name:var(--theme-text-primary);--document-comment-time:var(--theme-text-secondary);--document-comment-text:var(--text);--document-popover-bg:lch(12.72% .85 272);--document-popover-border:lch(27.12% 1.48 272);--document-send-bg:lch(17.574% 1.589 272);--document-comment-quote-bar:lch(45% 30 82)}
+:root[data-theme="light"]{--document-comment-highlight:lch(91.6% 36 82);--document-comment-underline:lch(72% 60 62);--document-comment-pending:lch(94% 26 82);--document-comment-card-bg:#fff;--document-comment-card-border:#e8e8e8;--document-comment-card-shadow:0 3px 6px -2px lch(0% 0 0 / .02),0 1px 1px lch(0% 0 0 / .04);--document-comment-name:lch(10% 0 282);--document-comment-time:lch(40% 1 282);--document-comment-text:lch(20% 1 282);--document-popover-bg:#fff;--document-popover-border:#e8e8e8;--document-send-bg:#fff;--document-comment-quote-bar:lch(80% 40 82)}
 :root{--document-group-bg:var(--bg-subtle)}
 :root[data-theme="light"]{--document-group-bg:lch(94.44% .5 282)}
 
@@ -721,8 +721,8 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 :root{--description-toolbar-separator:lch(27.12% 1.48 272)}
 :root[data-theme="light"]{--description-toolbar-separator:#b5b5b5}
 /* Image lightbox: a solid page and a faint checkerboard behind transparent pictures. */
-:root{--lightbox-bg:lch(7.5% .5 272);--lightbox-checker:lch(9.5% .6 272)}
-:root[data-theme="light"]{--lightbox-bg:lch(98% .3 282);--lightbox-checker:lch(95% .3 282)}
+:root{--lightbox-bg:lch(5.52% .4 272);--lightbox-checker:lch(90.451% 1.2 272 / .08);--lightbox-caption-bg:lch(5.52% .4 272 / .8)}
+:root[data-theme="light"]{--lightbox-bg:lch(97.94% .5 282);--lightbox-checker:lch(19.588% 1.25 282 / .08);--lightbox-caption-bg:lch(97.94% .5 282 / .8)}
 /* Entity hover cards (issue, document, project, person): the popover surface of the reference app. */
 :root{--hover-card-bg:lch(12.72% .85 272);--hover-card-border:lch(25.68% 1.93 272);--hover-card-rule:lch(34.32% 1.93 272);--hover-card-shadow:0 .5px 1px 1px lch(0% 0 0 / .3)}
 :root[data-theme="light"]{--hover-card-bg:#fff;--hover-card-border:#e8e8e8;--hover-card-rule:#d8d8d8;--hover-card-shadow:0 3px 6px -2px lch(0% 0 0 / .02),0 1px 1px lch(0% 0 0 / .04)}

@@ -136,8 +136,8 @@ export interface DocumentInlineCommentsProps {
   railOpen?: boolean
 }
 
-/** Pages narrower than this (in CSS px, the document page's own width) show the open thread as a popover, not a gutter card. */
-export const GUTTER_MIN_WIDTH = 1040
+/** Viewports narrower than this (CSS px; the reference app flips between 1230 and 1232) show the open thread as a popover, not a gutter card. */
+export const GUTTER_MIN_VIEWPORT = 1232
 /** The popover is 360px wide, starts 12.5px left of the text it is about and sits just under it. */
 const POPOVER_WIDTH = 360
 const POPOVER_INSET = 12.5
@@ -274,16 +274,14 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
     return callback
   }, [])
 
-  // The document page decides between gutter and popover by its own width (the CSS container query uses the same threshold).
+  // Gutter cards need a wide viewport (a media query, like the reference app: the page's own width plays no part).
   useEffect(() => {
-    const page = shell?.closest<HTMLElement>('.document-page')
-    if (!page) { setNarrow(false); return }
-    const measure = () => setNarrow(page.clientWidth < GUTTER_MIN_WIDTH)
-    measure()
-    const watcher = new ResizeObserver(measure)
-    watcher.observe(page)
-    return () => watcher.disconnect()
-  }, [shell])
+    const query = window.matchMedia(`(min-width: ${GUTTER_MIN_VIEWPORT}px)`)
+    const update = () => setNarrow(!query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
 
   useEffect(() => {
     const onResize = () => setLayoutTick(value => value + 1)

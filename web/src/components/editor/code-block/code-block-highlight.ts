@@ -35,6 +35,7 @@ const WRAPPER_CLASSES = new Set(['hljs-params', 'hljs-function', 'hljs-subst', '
 const DECLARATION_WORDS = /(?:^|[^\w$])(?:function|def|func|fn|fun|sub|proc)\s+$/
 
 const CONST_DECLARATION = /\bconst\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=(?!=)/g
+const LITERAL_WORDS = new Set(['true', 'false', 'null', 'undefined', 'nil', 'None', 'True', 'False', 'NaN'])
 const IDENTIFIER = /[A-Za-z_$][\w$]*/g
 const BASH_ASSIGNMENT = /(?:^|[\s;|&({])([A-Za-z_]\w*)=/gm
 const BASH_COMMAND = /(^|[|;&({]|\b(?:then|do|else|elif)\b|\$\()\s*(?!(?:then|do|else|elif|if|while|for|case|in)\b)([A-Za-z_./~][\w./~-]*)/gm
@@ -58,6 +59,12 @@ function refine(code: string, language: string, ranges: TokenRange[]): TokenRang
       if (text.startsWith('@')) className = 'hljs-call'
       else if (text.startsWith('#!')) className = 'hljs-comment'
       else if (text.startsWith('<!')) { className = 'hljs-plain'; for (const inner of ranges) if (inner !== range && inner.from >= range.from && inner.to <= range.to) dropped.add(inner) }
+    } else if (hasClass(range, 'hljs-name') && (language === 'javascript' || language === 'typescript')) {
+      // JSX: components (`<Layout>`) read as types, intrinsic elements (`<div>`) as variables.
+      className = /^[A-Z]/.test(text) ? 'hljs-ident-type' : 'hljs-ident'
+    } else if (hasClass(range, 'hljs-string') && (language === 'javascript' || language === 'typescript') && text.startsWith('{')) {
+      // A JSX attribute expression (`onClick={() => go()}`) is code, not a string.
+      continue
     } else if (hasClass(range, 'hljs-attr') && language === 'json') className = 'hljs-string'
     else if (hasClass(range, 'hljs-string') && language === 'xml' && /^(["']).*\1$/s.test(text)) {
       // Attribute values keep the string colour; their quotes read as punctuation.
@@ -84,17 +91,51 @@ function refine(code: string, language: string, ranges: TokenRange[]): TokenRang
   return result.filter(range => !dropped.has(range))
 }
 
+/** Whether `at` sits inside an unclosed `{` counted from `from` (a JSX expression). */
+function insideBraces(code: string, from: number, at: number) {
+  let depth = 0
+  for (let index = from; index < at; index++) {
+    const char = code[index]
+    if (char === '{') depth++
+    else if (char === '}') depth = Math.max(0, depth - 1)
+  }
+  return depth > 0
+}
+
+const GO_QUALIFIED = /(?<![\w.])([a-z_]\w*)\.([A-Z]\w*)(?![\w(])(?!\s*\()/g
+const GO_EXPRESSION_WORDS = new Set(['return', 'case', 'go', 'defer', 'range', 'else', 'if', 'for', 'switch', 'in', 'var', 'const'])
+
+/** `context.Context` / `*http.Request` in a type position: the package is plain text and the name a type (`time.Second` stays a variable). */
+function qualifiedGoTypes(code: string) {
+  const classes = new Map<number, string>()
+  for (const match of code.matchAll(GO_QUALIFIED)) {
+    const before = code.slice(0, match.index).replace(/[ \t]+$/, '')
+    const previous = before.slice(-1)
+    if (!/[\w*\])]/.test(previous)) continue
+    const word = before.match(/\w+$/)?.[0]
+    if (word && GO_EXPRESSION_WORDS.has(word)) continue
+    classes.set(match.index, 'hljs-plain')
+    classes.set(match.index + match[1].length + 1, 'hljs-ident-type')
+  }
+  return classes
+}
+
 /** Adds the identifiers highlight.js leaves unmarked, so variables, calls, types and constants get their own colours. */
 function addIdentifiers(code: string, language: string, ranges: TokenRange[]): TokenRange[] {
   const owner = new Int32Array(code.length).fill(-1)
   const byLength = ranges.map((range, index) => ({ range, index })).sort((a, b) => (b.range.to - b.range.from) - (a.range.to - a.range.from))
   for (const { range, index } of byLength) owner.fill(index, range.from, range.to)
   const extra: TokenRange[] = []
+  const jsx = language === 'javascript' || language === 'typescript'
   const covered = (at: number) => {
     const index = owner[at]
     if (index < 0) return false
-    return !isWrapper(ranges[index])
+    const range = ranges[index]
+    // Text between JSX tags is plain, but an expression in braces is code.
+    if (jsx && hasClass(range, 'language-xml')) return !insideBraces(code, range.from, at)
+    return !isWrapper(range)
   }
+  const qualified = language === 'go' ? qualifiedGoTypes(code) : new Map<number, string>()
   if (IDENTIFIER_LANGUAGES.has(language)) {
     const constants = language === 'javascript' || language === 'typescript' ? new Set([...code.matchAll(CONST_DECLARATION)].map(match => match[1])) : null
     for (const match of code.matchAll(IDENTIFIER)) {
@@ -105,8 +146,10 @@ function addIdentifiers(code: string, language: string, ranges: TokenRange[]): T
       const callable = /^[ \t]*\(/.test(code.slice(to, to + 16)) || DECLARATION_WORDS.test(code.slice(Math.max(0, from - 16), from))
       const member = code[from - 1] === '.'
       let className = 'hljs-ident'
-      if (callable) className = 'hljs-call'
+      if (qualified.has(from)) className = qualified.get(from)!
+      else if (callable) className = 'hljs-call'
       else if (language === 'go' && /\bpackage\s+$/.test(code.slice(Math.max(0, from - 12), from))) className = 'hljs-plain'
+      else if (LITERAL_WORDS.has(word)) className = 'hljs-constant'
       else if (constants?.has(word)) className = 'hljs-constant'
       else if (/^[A-Z][A-Z0-9_]+$/.test(word)) className = 'hljs-constant'
       else if (/^[A-Z]/.test(word) && !member) className = 'hljs-ident-type'

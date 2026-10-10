@@ -23,7 +23,7 @@
 /* ---------- gutter ---------- */
 /* Wide pages: the cards sit in a 300px gutter right of the 805px column. The column moves left to make room, keeping 48px
    from the sidebar, and gives up width before it would overlap the gutter (a 284px card 10px right of the text). The decision is made
-   in document-inline-comments.tsx with the same threshold (`is-popover`): below it, the open thread is a popover under its text. */
+   in document-inline-comments.tsx with the same viewport threshold (`is-popover`): below it, the open thread is a popover under its text. */
 .document-page { container: document-page / inline-size; }
 .document-inline-gutter {
   position: absolute;
@@ -32,12 +32,17 @@
   width: 284px;
   z-index: 3;
 }
-@container document-page (min-width: 1040px) {
+@media (min-width: 1232px) {
   .document-page.has-comment-gutter:not(.has-agent) .document-canvas {
     --document-shift: max(33.5px, min(calc((100% - var(--document-column) - 2 * var(--document-gutter)) / 2), calc(100% - 1127.5px)));
+    --document-canvas-width: min(calc(var(--document-column) + 2 * var(--document-gutter)), calc(100% - var(--document-shift) - 294.5px));
     margin-left: var(--document-shift);
     margin-right: 0;
-    width: min(calc(var(--document-column) + 2 * var(--document-gutter)), calc(100% - var(--document-shift) - 294.5px));
+    width: var(--document-canvas-width);
+  }
+  /* Cards fill what is left of the page, 10px short of its right edge: 284px at the threshold, up to 372px on wide screens. */
+  .document-page.has-comment-gutter:not(.has-agent) .document-inline-gutter:not(.is-popover) {
+    width: min(372px, calc(100cqw - var(--document-shift) - var(--document-canvas-width) - 10px));
   }
 }
 
@@ -88,6 +93,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--document-comment-name);
   font-size: 13px;
   font-weight: 500;
   line-height: 18px;
@@ -96,7 +102,7 @@
 .document-thread-edited {
   flex: 0 0 auto;
   margin-left: -3px;
-  color: var(--theme-text-secondary);
+  color: var(--document-comment-time);
   font-size: 13px;
   font-weight: 450;
   line-height: 18px;
@@ -148,7 +154,7 @@
 .document-thread-body { margin-top: 6px; color: var(--theme-text-primary); font-size: 15px; font-weight: 450; line-height: 24px; letter-spacing: -.00666667em; overflow-wrap: anywhere; }
 .document-thread-body .comment-prosemirror p,
 .document-thread-body p { margin: 0; }
-:root .document-thread-body { color: var(--text); }
+:root .document-thread-body { color: var(--document-comment-text); }
 /* Inline code and links in a thread follow the rich-text body rules (14.0625px code chip, plain-until-hovered links). */
 .document-thread-body code {
   padding: .5px .25em;

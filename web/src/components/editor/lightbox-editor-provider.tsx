@@ -196,11 +196,11 @@ function LightboxEditorProviderInner({
           <div className="flow-lightbox-bar" onClick={event => event.stopPropagation()}>
             <span className="flow-lightbox-zoom">{zoom}%</span>
             <div className="flow-lightbox-actions">
-              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={16}/></button>
-              <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><Clipboard size={16}/></button>
-              <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><Link2 size={16}/></button>
+              <button aria-label="Download" onClick={() => downloadImage(active)} type="button"><Download size={14}/></button>
+              <button aria-label="Copy image" onClick={() => void copyImage(active)} type="button"><Clipboard size={14}/></button>
+              <button aria-label="Copy link" onClick={() => void copyText(active.src)} type="button"><Link2 size={14}/></button>
               <span aria-hidden className="flow-lightbox-separator"/>
-              <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><X size={16}/></button>
+              <button aria-label="Close" className="flow-lightbox-close" onClick={close} type="button"><X size={14}/></button>
             </div>
           </div>
           <div className="flow-lightbox-stage" onClick={event => event.stopPropagation()}>
