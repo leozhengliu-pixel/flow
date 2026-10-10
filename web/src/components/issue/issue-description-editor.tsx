@@ -49,6 +49,7 @@ import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
 import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRecovery, readDescriptionRecovery, writeDescriptionRecovery } from './editor/description-recovery'
 import './issue-description-editor.css'
+import '@/components/editor/rich-text-body.css'
 
 interface DescriptionEditorProps {
   /** Renders the content without editing (deleted documents). */

@@ -426,8 +426,8 @@
 .user .messageContent {
   max-width: 75%;
   padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--theme-surface-2);
+  border-radius: 8px;
+  background: var(--agent-user-bubble-bg);
 }
 .assistant {
   align-items: flex-start;
@@ -541,7 +541,7 @@
 .thinkingPlaceholder svg { width: 14px; height: 14px; }
 .workGroup {
   color: var(--theme-text-secondary);
-  font: 500 12px/15px var(--font);
+  font: 500 13px/15px var(--font);
 }
 .workGroup > summary {
   width: max-content;
