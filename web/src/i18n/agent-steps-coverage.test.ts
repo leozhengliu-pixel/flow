@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_ERROR_MESSAGES } from '@/components/agent/agent-error-detail'
-import { CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_TOOL_TEMPLATES, toolStatusLabel, translateToolTitle } from '@/components/agent/agent-step-labels'
+import { CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOOL_VERBS, LOOP_TOOL_TEMPLATES, PHASE_TITLE_TEMPLATES, toolStatusLabel, translatePhaseTitle, translateToolTitle } from '@/components/agent/agent-step-labels'
 // Kept equal to api/cmd/server/flow_mcp_tools.json by TestAgentToolNamesFixtureCurrent (Go).
 import toolNames from '@/components/agent/agent-tool-names.json'
 import { FAILURE_MESSAGES, OUTPUT_LABELS, TRIGGER_REASON_NONE, TRIGGER_REASON_TEXTS, triggerReasonTemplate } from '@/components/loops/loop-run-labels'
@@ -44,6 +44,16 @@ describe('agent step and loop run vocabulary', () => {
     expect(toolStatusLabel('github_search_code', true, source => source)).toBe('Running github search code…')
     expect(toolStatusLabel('list_issues', false, source => source)).toBe('Looked at issues')
     expect(toolStatusLabel('list_release_notes', true, source => source)).toBe('Looking at release notes…')
+  })
+
+  it('translates every chat phase title template, including tool-name subjects', () => {
+    for (const template of PHASE_TITLE_TEMPLATES) expectTranslated(template)
+    for (const name of toolNames) {
+      const noun = name.replace(/^mcp__flow\./, '').split('_').slice(1).join(' ')
+      if (!noun) continue
+      const title = translatePhaseTitle(`Looking at ${noun}`, translateToChinese)
+      expect(englishWords(title), `${name}: ${title}`).toEqual([])
+    }
   })
 
   it('translates the server loop run labels, by entry or by verb template', () => {

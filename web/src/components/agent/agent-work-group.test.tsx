@@ -4,6 +4,9 @@ import { I18nProvider } from '@/i18n/i18n'
 import type { AgentMessage } from '@/types/flow'
 import { AgentErrorDetail, classifyAgentError } from './agent-error-detail'
 import { AgentWorkGroup } from './agent-work-group'
+import { applyAgentStreamEvent } from './agent-stream-state'
+import { translatePhaseTitle, workingLabel } from './agent-step-labels'
+import { translateToChinese } from '@/i18n/translate'
 
 type Parts = NonNullable<AgentMessage['parts']>
 
@@ -41,6 +44,39 @@ describe('AgentWorkGroup', () => {
 })
 
 describe('AgentErrorDetail', () => {
+  it('translates server phase titles by template and keeps model-written titles', () => {
+    const zh = (title: string) => translatePhaseTitle(title, translateToChinese)
+    expect(zh('Looking up DEV-16, DEV-24')).toBe('查找 DEV-16、DEV-24')
+    expect(zh('Searching issues for "导出", "export, csv"')).toBe('搜索"导出"、"export, csv"相关事项')
+    expect(zh('Updating priority of DEV-16')).toBe('更新 DEV-16 的优先级')
+    expect(zh('Looking at projects, users')).toBe('查看项目、成员')
+    expect(zh('Creating issue Fix login')).toBe('创建事项 Fix login')
+    expect(zh('查找 DEV-16')).toBe('查找 DEV-16')
+    expect(translatePhaseTitle('Updating priority of DEV-16', source => source)).toBe('Updating priority of DEV-16')
+  })
+
+  it('shows the phase title above its tools and Linear-style live headers', () => {
+    const tool = (id: string, name: string, status: 'running' | 'completed', args?: Record<string, unknown>) => ({ id, type: 'toolCall' as const, status, toolCall: { id, name, arguments: args, status } })
+    const en = (source: string) => source
+    expect(workingLabel([], en)).toBe('Thinking…')
+    expect(workingLabel([{ id: 'r', type: 'reasoning', status: 'running' }], en)).toBe('Thinking…')
+    expect(workingLabel([tool('a', 'get_issue', 'running', { id: 'DEV-16' })], en)).toBe('Looking at issue…')
+    expect(workingLabel([{ id: 's', type: 'step', title: 'Looking up DEV-16, DEV-24', status: 'completed' }, tool('a', 'get_issue', 'completed'), tool('b', 'get_issue', 'running')], translateToChinese)).toBe('查找 DEV-16、DEV-24…')
+    expect(workingLabel([{ id: 's', type: 'step', title: 'Looking up DEV-16, DEV-24', status: 'completed' }, tool('a', 'get_issue', 'completed'), { id: 'x', type: 'reasoning', status: 'completed', text: 'next' }, tool('c', 'search_issues', 'running')], en)).toBe('Searching issues…')
+    renderGroup([{ id: 's', type: 'step', title: 'Looking up DEV-16, DEV-24', status: 'completed' }, tool('a', 'get_issue', 'completed', { id: 'DEV-16' }), tool('b', 'get_issue', 'completed', { id: 'DEV-24' })], 'zh-CN')
+    expect(screen.getByText('查找 DEV-16、DEV-24')).toBeInTheDocument()
+    expect(screen.getByText('处理耗时 3 秒')).toBeInTheDocument()
+  })
+
+  it('streams a phase title in above the tool rows it names', () => {
+    const started = applyAgentStreamEvent(undefined, { type: 'session.started', messageId: 'm', session: { id: 's', title: '', messages: [] } as never })
+    let session = applyAgentStreamEvent(started, { type: 'tool.started', messageId: 'm', part: { id: 'a', type: 'toolCall', status: 'running' } })
+    session = applyAgentStreamEvent(session, { type: 'tool.started', messageId: 'm', part: { id: 'b', type: 'toolCall', status: 'running' } })
+    session = applyAgentStreamEvent(session, { type: 'tool.completed', messageId: 'm', beforePartId: 'a', part: { id: 'phase', type: 'step', title: 'Looking up DEV-16, DEV-24', status: 'completed' } })
+    session = applyAgentStreamEvent(session, { type: 'tool.completed', messageId: 'm', beforePartId: 'a', part: { id: 'phase', type: 'step', title: 'Looking up DEV-16, DEV-24', status: 'completed' } })
+    expect(session!.messages.at(-1)!.parts!.map(part => part.id)).toEqual(['phase', 'a', 'b'])
+  })
+
   it('classifies the server error text', () => {
     expect(classifyAgentError('Flow Agent provider returned status 429: Rate limit reached')).toBe('rate_limit')
     expect(classifyAgentError('Flow Agent provider returned status 401: Incorrect API key provided')).toBe('auth')

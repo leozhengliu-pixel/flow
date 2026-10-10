@@ -199,3 +199,113 @@ it('searches team settings and opens the matching section', async () => {
   await user.click(screen.getByRole('button', { name: 'Cycle duration' }));
   expect(input.onNavigate).toHaveBeenCalledWith('team', 'ENG', 'cycles');
 });
+
+function navLabels() {
+  return Array.from(document.querySelectorAll('.settings-sidebar nav section, aside nav section'))
+    .flatMap(section => Array.from(section.querySelectorAll('button')).map(button => button.textContent?.trim() ?? ''))
+}
+
+it('shows members the workspace feature pages and hides administration like Linear', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'preferences';
+  input.data = { ...input.data, viewerRole: 'member', workspaceSettings: { ...input.data.workspaceSettings, labelPermission: 'members', templatePermission: 'members', teamCreatePermission: 'members' } };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const labels = navLabels();
+  for (const visible of ['Preferences', 'Labels', 'Templates', 'SLAs', 'Statuses', 'Updates', 'AI & Agents', 'Loops', 'Initiatives', 'Documents', 'Customer requests', 'Releases', 'Pulse', 'Asks', 'Emojis', 'Integrations', 'Create a team'])
+    expect(labels).toContain(visible);
+  for (const hidden of ['Workspace', 'Members', 'Security', 'API', 'Applications', 'Import & export'])
+    expect(labels).not.toContain(hidden);
+});
+
+it('hides workspace templates from members when only admins manage templates', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'preferences';
+  input.data = { ...input.data, viewerRole: 'member', workspaceSettings: { ...input.data.workspaceSettings, labelPermission: 'admins', templatePermission: 'admins', teamCreatePermission: 'admins' } };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const labels = navLabels();
+  expect(labels).toContain('Labels');
+  expect(labels).not.toContain('Templates');
+  expect(labels).not.toContain('Documents');
+  expect(labels).not.toContain('Create a team');
+});
+
+it('limits guests to their personal settings', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'preferences';
+  input.data = { ...input.data, viewerRole: 'guest', workspaceSettings: { ...input.data.workspaceSettings, labelPermission: 'members', templatePermission: 'members' } };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const labels = navLabels();
+  expect(labels).toEqual(expect.arrayContaining(['Preferences', 'Profile', 'Notifications', 'Security & access', 'Connected accounts']));
+  for (const hidden of ['Labels', 'Releases', 'Asks', 'Integrations', 'Members', 'API']) expect(labels).not.toContain(hidden);
+});
+
+it('blocks administration pages opened by URL for members', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'security';
+  input.data = { ...input.data, viewerRole: 'member' };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(screen.getByRole('heading', { name: 'Admin access required' })).toBeVisible();
+});
+
+it('renders admin-only workspace configuration read-only for members with Linear wording', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'project-statuses';
+  input.data = { ...input.data, viewerRole: 'member' };
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(await screen.findByRole('note')).toHaveTextContent('Only admins can edit project statuses');
+  const fields = document.querySelector('fieldset.settings-read-only-fields') as HTMLFieldSetElement;
+  expect(fields).toBeDisabled();
+  expect(fields.querySelectorAll('button').length).toBeGreaterThan(0);
+});
+
+it('lets members open release pipeline settings and create a pipeline', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'releases';
+  input.data = { ...input.data, viewerRole: 'member', trash: [] } as never;
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const create = await screen.findByRole('button', { name: 'New pipeline' });
+  expect(create).toBeEnabled();
+  await userEvent.setup().click(create);
+  expect(input.onCreateReleasePipeline).toHaveBeenCalled();
+});
+
+it('shows team settings read-only to team members when only owners manage them', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'team';
+  input.teamKey = 'ENG';
+  input.teamSection = 'cycles';
+  input.data = {
+    ...input.data,
+    viewerRole: 'member',
+    teams: [{ id: 'team-eng', key: 'ENG', name: 'Engineering', color: '#777777' }],
+    teamMembers: [{ teamId: 'team-eng', userId: input.data.viewer.id, role: 'member', joinedAt: '' }],
+    teamSettings: { 'team-eng': { teamId: 'team-eng', settingsPermission: 'owners' } },
+    cycleSettings: {},
+  } as never;
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(await screen.findByRole('note')).toHaveTextContent('Only admins and team owners can modify the team’s cycle settings');
+  expect(document.querySelector('fieldset.settings-read-only-fields')).toBeDisabled();
+  // The crumb back to the team stays usable above the read-only fields.
+  const crumb = document.querySelector('.settings-read-only-crumb .settings-crumb') as HTMLButtonElement;
+  expect(crumb).toHaveTextContent('Engineering');
+  expect(crumb.closest('fieldset')).toBeNull();
+  expect(crumb).toBeEnabled();
+});
+
+it('asks non-members for permission before showing team settings', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'team';
+  input.teamKey = 'ENG';
+  input.teamSection = 'general';
+  input.data = { ...input.data, viewerRole: 'member', teams: [{ id: 'team-eng', key: 'ENG', name: 'Engineering', color: '#777777' }], teamMembers: [], teamSettings: {} } as never;
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  expect(screen.getByRole('heading', { name: 'You need permission to view this team’s settings.' })).toBeVisible();
+});

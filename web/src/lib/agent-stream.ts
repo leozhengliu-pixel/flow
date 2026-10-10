@@ -10,6 +10,8 @@ export interface AgentStreamEvent {
   approvalId?: string
   decision?: 'approved' | 'rejected'
   error?: string
+  /** A new part goes ahead of this one (a phase title above the tool rows it names). */
+  beforePartId?: string
 }
 
 export type AgentStreamInput = {

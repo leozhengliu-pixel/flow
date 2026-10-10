@@ -274,8 +274,11 @@ func TestReleaseAuthorizationAndFeatureGate(t *testing.T) {
 	authRequest[any](t, member, http.MethodPost, server.URL+"/api/releases/reorder", map[string]any{"pipelineId": privatePipeline.ID, "ids": []string{privateRelease.ID}}, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, member, http.MethodDelete, server.URL+"/api/releases/"+privateRelease.ID, nil, "test-workspace", http.StatusForbidden)
 
+	// Linear canCreateReleasePipeline: members may create pipelines, guests may not.
+	authRequest[domain.ReleasePipeline](t, member, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Member pipeline", "teamIds": []string{publicTeam.ID}}, "test-workspace", http.StatusCreated)
+	authRequest[any](t, guest, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Denied", "teamIds": []string{publicTeam.ID}}, "test-workspace", http.StatusForbidden)
+	// Changing a pipeline needs admin or ownership of every pipeline team.
 	for _, client := range []*http.Client{member, guest} {
-		authRequest[any](t, client, http.MethodPost, server.URL+"/api/release-pipelines", map[string]any{"name": "Denied", "teamIds": []string{publicTeam.ID}}, "test-workspace", http.StatusForbidden)
 		authRequest[any](t, client, http.MethodPatch, server.URL+"/api/release-pipelines/"+publicPipeline.ID, map[string]any{"name": "Denied"}, "test-workspace", http.StatusForbidden)
 		authRequest[any](t, client, http.MethodPost, server.URL+"/api/release-pipelines/reorder", map[string]any{"ids": []string{publicPipeline.ID}}, "test-workspace", http.StatusForbidden)
 		authRequest[any](t, client, http.MethodPost, server.URL+"/api/release-pipelines/"+publicPipeline.ID+"/access-key", nil, "test-workspace", http.StatusForbidden)

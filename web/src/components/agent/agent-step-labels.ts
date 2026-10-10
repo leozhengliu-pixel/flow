@@ -4,6 +4,9 @@
  * (loopToolLabel in api/cmd/server/loop_runtime.go), translated here by exact entry or by its verb template.
  * Chinese copy lives in i18n/translations-agent-steps.ts.
  */
+import type { AgentMessage, AgentToolCall } from "@/types/flow"
+import phaseTemplates from "./agent-phase-titles.json"
+
 type Translate = (source: string) => string
 
 /** Chat labels by tool name: [running, done]. */
@@ -112,3 +115,42 @@ function spaceMixedScripts(text: string) {
     .replace(/([㐀-鿿])([A-Za-z0-9])/g, "$1 $2")
     .replace(/([A-Za-z0-9])([㐀-鿿])/g, "$1 $2")
 }
+
+/**
+ * Phase title templates the server writes above a turn's tool rows ("Looking up DEV-16, DEV-24"); mirrors
+ * agentPhaseTemplates in api/cmd/server/agent_chat_steps.go. Longest first, so "Updating priority of {subject}"
+ * wins over "Updating {subject}".
+ */
+export const PHASE_TITLE_TEMPLATES: string[] = [...phaseTemplates].sort((a, b) => b.length - a.length)
+
+/**
+ * A step title, translated when the server wrote it from a phase template. Its subject is a list ("DEV-16, DEV-24",
+ * "\"导出\", \"export\"") whose nouns translate one by one; model-written titles (older chats) stay as written.
+ */
+export function translatePhaseTitle(title: string, t: Translate) {
+  for (const template of PHASE_TITLE_TEMPLATES) {
+    const [prefix, suffix = ""] = template.split("{subject}")
+    if (title.length <= prefix.length + suffix.length || !title.startsWith(prefix) || !title.endsWith(suffix)) continue
+    const translated = t(template)
+    if (translated === template) return title
+    const items = title.slice(prefix.length, title.length - suffix.length).split(/, (?=(?:[^"]*"[^"]*")*[^"]*$)/)
+    return spaceMixedScripts(translated.replace("{subject}", () => items.map(item => subjectNoun(item, t)).join("、")))
+  }
+  return title
+}
+
+/**
+ * The live header, like Linear's: the phase whose tools are running ("Looking up DEV-16, DEV-24…"), else the running
+ * tool ("Looking at issue…"), else "Thinking…" while the model works out its next step.
+ */
+export function workingLabel(parts: NonNullable<AgentMessage["parts"]>, t: Translate) {
+  const isRunning = (call?: AgentToolCall) => call?.status === "running" || call?.status === "pending";
+  const tool = parts.findLastIndex(part => isRunning(part.toolCall));
+  if (tool < 0) return t("Thinking…");
+  const step = parts.findLastIndex((part, index) => index < tool && part.type === "step" && Boolean(part.title));
+  const between = step >= 0 && parts.slice(step + 1, tool).every(part => part.type === "toolCall");
+  if (between) return `${translatePhaseTitle(parts[step].title!, t).replace(/…$/, "")}…`;
+  const call = parts[tool].toolCall!;
+  return toolStatusLabel(call.name, true, t, call.arguments);
+}
+

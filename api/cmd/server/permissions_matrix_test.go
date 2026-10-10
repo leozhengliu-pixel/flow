@@ -70,7 +70,15 @@ func TestPermissionPathClassification(t *testing.T) {
 	}{
 		{http.MethodGet, "/api/webhooks", true},
 		{http.MethodGet, "/api/release-pipelines/p-1", false},
-		{http.MethodPost, "/api/release-pipelines/p-1/access-key", true},
+		{http.MethodPost, "/api/release-pipelines/p-1/access-key", false},
+		{http.MethodPost, "/api/release-pipelines/reorder", true},
+		{http.MethodPut, "/api/sla-settings", true},
+		{http.MethodPost, "/api/sla-rules", true},
+		{http.MethodPut, "/api/project-update-settings", true},
+		{http.MethodPost, "/api/customer-tiers", true},
+		{http.MethodPut, "/api/integrations/slack", true},
+		{http.MethodPost, "/api/integrations/slack/test", false},
+		{http.MethodPost, "/api/git-automations", false},
 		{http.MethodGet, "/api/workspaces/acme/members/u-1", true},
 		{http.MethodGet, "/api/workspaces/acme/teams/t-1/members", false},
 	}

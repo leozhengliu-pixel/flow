@@ -829,7 +829,8 @@ function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToo
   const queue = summarizeElicitationQueue(other);
   const submitting = other.some(part => part.type === "elicitation" && part.status === "running");
   return <div className={styles.messageParts}>
-    {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text}/>}
+    {/* Like Linear, the work folds to "Worked for N seconds ▸" once the answer starts. */}
+    {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text} collapseWhenDone/>}
     <AgentElicitationResponseQueue answeredCount={queue.answeredCount} elicitationCount={queue.elicitationCount} isSubmitting={submitting} />
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>

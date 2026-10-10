@@ -119,3 +119,6 @@ body .flow-pipeline-team-menu{width:149px;padding:0;animation-duration:.15s!impo
 .flow-pipeline-stage-menu [role=menuitem][data-disabled]{opacity:.5}
 .flow-pipeline-menu-reason{display:block}
 @media(max-width:760px){.flow-pipeline-stage-edit{flex-wrap:wrap}.flow-pipeline-stage-edit>input{min-width:calc(100% - 45px)}.flow-pipeline-stage-edit-actions{width:100%;justify-content:flex-end}}
+.flow-pipeline-fieldset{display:contents;min-width:0;margin:0;padding:0;border:0}
+.flow-pipeline-fieldset:disabled [draggable="true"],.flow-pipeline-fieldset:disabled [role="button"]{pointer-events:none}
+.flow-pipeline-settings-heading>p.flow-pipeline-read-only{width:max-content;max-width:100%;margin-top:12px;padding:6px 10px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-hover);color:var(--theme-text-secondary);font-size:12px}

@@ -14,7 +14,7 @@ import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
-import { canManageTeamSettings } from '@/lib/settings-permissions';
+import { isPersonalSettingsPage, isWorkspaceAdmin, roleAllowed, teamReadOnlyNotice, teamSettingsAccess, workspaceReadOnlyNotice, workspaceSettingsAccess } from '@/lib/settings-access';
 import { personUsername } from '@/lib/people';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
 import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
@@ -59,6 +59,7 @@ import {
   UsersRound,
   X,
   Zap,
+  Lock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/i18n";
@@ -147,6 +148,7 @@ import {
   SettingsSelect as Select,
   SettingsToggle as Toggle,
 } from "./settings-primitives";
+import { SettingsReadOnlyCrumbSlot } from "./settings-read-only-context";
 import { SettingsSearchResults } from "./settings-search-results";
 import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from "./settings-search";
 
@@ -481,8 +483,8 @@ export function SettingsPage(props: SettingsPageProps) {
   const searchTargetRequestRef = useRef(0);
   const sidebarCustomization = useSidebarCustomizationState(props.data.viewer.id);
   const [settings, setSettings] = useUserStoredSettings(props.data);
-  const isAdmin =
-    props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
+  // Linear: "Team creation" (Settings → Security) defaults to all members.
+  const canCreateTeam = roleAllowed(props.data.viewerRole, props.data.workspaceSettings?.teamCreatePermission);
   const allSidebarTeams = useMemo(() => settingsSidebarTeams(props.data, ""), [props.data]);
   const sidebarTeams = allSidebarTeams;
   const visible = useMemo(
@@ -490,14 +492,10 @@ export function SettingsPage(props: SettingsPageProps) {
       NAV.map((section) => ({
         ...section,
         items: section.items.filter(
-          (item) =>
-            (isAdmin ||
-              section.title === "Personal" ||
-              item.id === "asks" ||
-              memberCanManage(item.id, props.data.workspaceSettings)),
+          (item) => workspaceSettingsAccess(props.data, item.id) !== "hidden",
         ),
       })).filter((section) => section.items.length),
-    [isAdmin, props.data.workspaceSettings],
+    [props.data],
   );
   const accessiblePageIds = useMemo(
     () => new Set(visible.flatMap(section => section.items.map(item => item.id))),
@@ -730,7 +728,7 @@ export function SettingsPage(props: SettingsPageProps) {
                       <span data-i18n-ignore>{team.name}</span>
                     </button>
                   ))}
-                {isAdmin && !query.trim() && (
+                {canCreateTeam && !query.trim() && (
                   <button onPointerEnter={() => { void TeamCreatePage.preload().catch(() => undefined); }} onFocus={() => { void TeamCreatePage.preload().catch(() => undefined); }} onClick={props.onCreateTeam}>
                     <Plus size={16} />
                       <span>{t("Create a team")}</span>
@@ -864,34 +862,89 @@ function SettingsBody(
   },
 ) {
   const { t } = useI18n();
-  const { page } = props;
-  const isWorkspaceAdmin =
-    props.data.viewerRole === "admin" || props.data.viewerRole === "owner";
-  if (page === 'shortcuts') return <div className="settings-shortcuts-not-found" role="status"><KeyboardOff size={68} strokeWidth={1}/><strong>{t('Not found')}</strong><span>{t('We could not find the page you were looking for')}</span></div>;
-  const personal = [
-    "preferences",
-    "profile",
-    "notifications",
-    "code-and-reviews",
-    "account-security",
-    "connections",
-    "agents",
-  ].includes(page);
-  const teamOwner = page === 'team' && props.data.teams.some(team => team.key.toLowerCase()===props.teamKey?.toLowerCase() && canManageTeamSettings(props.data,team.id,props.teamSection));
-  if (
-    !personal &&
-    !isWorkspaceAdmin &&
-    !teamOwner &&
-    page !== "asks" &&
-    !memberCanManage(page, props.data.workspaceSettings)
-  )
+  const access = settingsBodyAccess(props);
+  if (access.kind === "hidden")
     return (
-      <div className="settings-empty">
+      <div className="settings-empty" role="status">
         <ShieldCheck size={28} />
-        <h3>{t("Admin access required")}</h3>
-        <p>{t("You don't have permission to manage this workspace setting.")}</p>
+        {access.team ? (
+          <h3>{t("You need permission to view this team’s settings.")}</h3>
+        ) : (
+          <>
+            <h3>{t("Admin access required")}</h3>
+            <p>{t("You don't have permission to manage this workspace setting.")}</p>
+          </>
+        )}
       </div>
     );
+  const body = <SettingsBodyContent {...props} />;
+  return access.kind === "read" ? <ReadOnlySettings notice={access.notice}>{body}</ReadOnlySettings> : body;
+}
+
+type SettingsBodyAccess = { kind: "hidden"; team: boolean } | { kind: "read"; notice: string } | { kind: "edit" };
+
+function settingsBodyAccess(props: SettingsPageProps): SettingsBodyAccess {
+  const { page, data } = props;
+  if (page === "team") {
+    const team = data.teams.find((item) => item.key.toLowerCase() === props.teamKey?.toLowerCase());
+    // Unknown teams fall through to the "Team not found" state.
+    if (!team) return { kind: "edit" };
+    const section = props.teamSection ?? "overview";
+    const access = teamSettingsAccess(data, team.id, section);
+    if (access === "hidden") return { kind: "hidden", team: true };
+    // The overview is a navigation hub; it disables owner-only actions itself.
+    if (access === "read" && section !== "overview") return { kind: "read", notice: teamReadOnlyNotice(section) };
+    return { kind: "edit" };
+  }
+  const access = workspaceSettingsAccess(data, page);
+  if (access === "hidden") return { kind: "hidden", team: false };
+  if (access === "read") return { kind: "read", notice: workspaceReadOnlyNotice(page) };
+  if (isWorkspaceAdmin(data)) return { kind: "edit" };
+  // Members may browse the integrations directory and Asks, but configuring an
+  // integration or an Asks intake is an admin operation (Linear: integrationManagement).
+  if (page === "integrations" && (props.integrationProvider || props.integrationSlug) && props.integrationSlug !== "enabled")
+    return { kind: "read", notice: "Only workspace admins can configure this" };
+  if (page === "asks" && (props.asksIntegrationId || props.asksEmailIntakeMode || props.asksEmailIntakeId))
+    return { kind: "read", notice: "You do not have permission to change Asks settings" };
+  return { kind: "edit" };
+}
+
+function ReadOnlySettings({ notice, children }: { notice: string; children: ReactNode }) {
+  const { t } = useI18n();
+  // A stable element (not state) so Suspense re-attaching refs cannot loop.
+  const [crumbSlot] = useState(() => document.createElement("div"));
+  return (
+    <div className="settings-read-only">
+      <div
+        className="settings-read-only-crumb"
+        ref={(element) => {
+          if (element && crumbSlot.parentNode !== element) element.appendChild(crumbSlot);
+        }}
+      />
+      <p className="settings-read-only-notice" role="note">
+        <Lock size={14} aria-hidden />
+        <span>{t(notice)}</span>
+      </p>
+      <fieldset disabled className="settings-read-only-fields" aria-label={t(notice)}>
+        <SettingsReadOnlyCrumbSlot.Provider value={crumbSlot}>
+          {children}
+        </SettingsReadOnlyCrumbSlot.Provider>
+      </fieldset>
+    </div>
+  );
+}
+
+function SettingsBodyContent(
+  props: SettingsPageProps & {
+    settings: StoredSettings;
+    setSettings: React.Dispatch<React.SetStateAction<StoredSettings>>;
+    setValue: (key: string, value: string | boolean) => void;
+    onCustomizeSidebar: () => void;
+  },
+) {
+  const { t } = useI18n();
+  const { page } = props;
+  if (page === 'shortcuts') return <div className="settings-shortcuts-not-found" role="status"><KeyboardOff size={68} strokeWidth={1}/><strong>{t('Not found')}</strong><span>{t('We could not find the page you were looking for')}</span></div>;
   if (props.agentSkillMode)
     return (
       <AgentSkillEditor
@@ -910,7 +963,7 @@ function SettingsBody(
         onReload={props.onReload}
       />
     );
-  if (personal)
+  if (isPersonalSettingsPage(page))
     return (
       <PersonalSettings
         onOpenCodingTools={props.onOpenCodingTools}
@@ -4332,15 +4385,6 @@ function useUserStoredSettings(data: BootstrapData) {
   return [state, setState] as const;
 }
 
-function memberCanManage(page: SettingsPageId, settings: WorkspaceSettings) {
-  if (page === 'ai') return settings.agentGuidancePermission === 'members';
-  if (["issue-labels", "project-labels"].includes(page))
-    return settings.labelPermission === "members";
-  if (["issue-templates", "project-templates"].includes(page))
-    return settings.templatePermission === "members";
-  if (page === "api") return settings.apiKeyPermission === "members";
-  return false;
-}
 function initials(value: string) {
   return (
     value

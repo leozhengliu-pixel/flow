@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
+import { viewerOwnsTeam } from '@/lib/settings-permissions';
 import * as Popover from "@radix-ui/react-popover";
 import {
   ChevronRight,
@@ -443,10 +444,12 @@ function TeamOverview({
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
+  // Linear "dangerousOperations": hierarchy, retire and delete are team-owner only.
+  const owner = viewerOwnsTeam(data, team.id);
   const [retireOpen, setRetireOpen] = useState(false);
   useEffect(() => {
-    if (action === "retire" && !team.retiredAt) setRetireOpen(true);
-  }, [action, team.retiredAt]);
+    if (owner && action === "retire" && !team.retiredAt) setRetireOpen(true);
+  }, [action, owner, team.retiredAt]);
   const parentAction = action === "set-parent" || action === "change-parent" ? "pick" : action === "remove-parent" ? "remove" : undefined;
   const descendantCount = Math.max(0, teamHierarchy(data.teams, data.teamSettings).subtree(team.id).size - 1);
   const retire = async () => {
@@ -559,7 +562,9 @@ function TeamOverview({
         title="Team hierarchy"
         description="Organize teams into a hierarchy of up to five levels."
       >
-        <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} action={parentAction} onActionHandled={onActionHandled} onChange={value => { void save({parentTeamId: value}) }}/>
+        <fieldset className="settings-read-only-fields" disabled={!owner}>
+          <ParentTeamPicker data={data} teams={data.teams} settings={data.teamSettings} teamId={team.id} value={settings.parentTeamId} action={owner ? parentAction : undefined} onActionHandled={onActionHandled} onChange={value => { void save({parentTeamId: value}) }}/>
+        </fieldset>
       </TeamSection>
       <TeamSection title="Danger zone">
         <TeamRow
@@ -587,6 +592,7 @@ function TeamOverview({
           <button
             type="button"
             className="settings-action"
+            disabled={!owner}
             onClick={() => void retire()}
           >
             {team.retiredAt ? "Restore…" : "Retire…"}
@@ -599,7 +605,7 @@ function TeamOverview({
           <button
             type="button"
             className="settings-action"
-            disabled={data.teams.filter((item) => !item.retiredAt).length <= 1}
+            disabled={!owner || data.teams.filter((item) => !item.retiredAt).length <= 1}
             onClick={() => void remove()}
           >
             Delete…

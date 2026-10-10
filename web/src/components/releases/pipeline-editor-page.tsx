@@ -13,6 +13,7 @@ import { usePropertyCommand } from '@/components/property/use-property-command'
 import { Toggle } from '@/components/ui/toggle'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { createReleasePipeline, deleteReleasePipeline, rotateReleasePipelineAccessKey, updateReleasePipeline } from '@/lib/api'
+import { canAdministerReleasePipeline, canCreateReleasePipeline } from '@/lib/settings-access'
 import type { BootstrapData, ReleasePipeline } from '@/types/flow'
 
 import { PipelineStageEditor } from './pipeline-stage-editor'
@@ -39,6 +40,10 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
   const [accessKey,setAccessKey]=useState<string>()
   const [deleteOpen,setDeleteOpen]=useState(false)
   const [saving, setSaving] = useState(false)
+  // Linear: pipeline settings are editable by workspace admins and by owners of
+  // every team the pipeline belongs to; everyone else sees them read-only.
+  const readOnly = Boolean(pipeline) && !canAdministerReleasePipeline(data, pipeline!)
+  const canDuplicate = canCreateReleasePipeline(data)
   const teamOptions = useMemo(() => data.teams.map(team => ({ id: team.id, label: team.name, keywords: team.key })), [data.teams])
   const selectedTeams = data.teams.filter(team => teamIds.includes(team.id))
 
@@ -51,7 +56,7 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
     return counts
   }, [data.releases, pipeline])
   const save = async () => {
-    if (!name.trim() || saving) return
+    if (!name.trim() || saving || readOnly) return
     setSaving(true)
     try {
       const { stageRenames, ...stageFields } = stageMutation(stages)
@@ -73,13 +78,14 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
   const remove=async()=>{if(!pipeline||saving)return;setSaving(true);try{await deleteReleasePipeline(pipeline.id);await onSaved(pipeline)}catch(error){toast.error(error instanceof Error?error.message:t('Could not delete release pipeline'))}finally{setSaving(false)}}
   const generateKey=async()=>{if(!pipeline||saving)return;setSaving(true);try{const key=await rotateReleasePipelineAccessKey(pipeline.id);setAccessKey(key.secret)}catch(error){toast.error(error instanceof Error?error.message:t('Could not generate access key'))}finally{setSaving(false)}}
   return <form className="flow-pipeline-settings-editor" aria-label={t(pipeline?'Release pipeline settings':'New release pipeline')} onSubmit={event => { event.preventDefault(); void save() }}>
-    <header className="flow-pipeline-settings-heading"><div><button type="button" onClick={onCancel}>{t('Releases')}</button><ChevronRight/><strong data-i18n-ignore>{pipeline?.name||t('Create a new release pipeline')}</strong>{pipeline&&<span>{t(pipeline.type==='scheduled'?'Scheduled':'Continuous')}</span>}</div>{pipeline&&<DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Open menu')}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-pipeline-settings-menu" align="end"><DropdownMenu.Item onSelect={()=>void duplicate()}><Copy/><span>{t('Duplicate…')}</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={()=>setDeleteOpen(true)}><Trash2/><span>{t('Delete')}</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}<p>{t(pipeline?'Configure the release pipeline.':'Track the lifecycle of your releases.')}</p></header>
+    <header className="flow-pipeline-settings-heading"><div><button type="button" onClick={onCancel}>{t('Releases')}</button><ChevronRight/><strong data-i18n-ignore>{pipeline?.name||t('Create a new release pipeline')}</strong>{pipeline&&<span>{t(pipeline.type==='scheduled'?'Scheduled':'Continuous')}</span>}</div>{pipeline&&(canDuplicate||!readOnly)&&<DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Open menu')}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="flow-pipeline-settings-menu" align="end">{canDuplicate&&<DropdownMenu.Item onSelect={()=>void duplicate()}><Copy/><span>{t('Duplicate…')}</span></DropdownMenu.Item>}{canDuplicate&&!readOnly&&<DropdownMenu.Separator/>}{!readOnly&&<DropdownMenu.Item className="danger" onSelect={()=>setDeleteOpen(true)}><Trash2/><span>{t('Delete')}</span></DropdownMenu.Item>}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}<p>{t(pipeline?'Configure the release pipeline.':'Track the lifecycle of your releases.')}</p>{readOnly&&<p className="flow-pipeline-read-only" role="note">{t('Only admins and team owners can modify this pipeline')}</p>}</header>
+    <fieldset className="flow-pipeline-fieldset" disabled={readOnly}>
     <section className="flow-pipeline-general" aria-labelledby="pipeline-general-heading">
       <h2 id="pipeline-general-heading">{t('General')}</h2>
       <div className="flow-pipeline-general-rows">
         <div className="flow-pipeline-setting-row">
           <label htmlFor="pipeline-name">{t('Name')}</label>
-          <input id="pipeline-name" autoFocus value={name} onChange={event => setName(event.target.value)} placeholder={t('Pipeline name')}/>
+          <input id="pipeline-name" autoFocus={!readOnly} value={name} onChange={event => setName(event.target.value)} placeholder={t('Pipeline name')}/>
         </div>
 
         <div className="flow-pipeline-setting-row flow-pipeline-team-row">
@@ -130,7 +136,9 @@ export function PipelineEditorPage({ data, pipeline, onCancel, onSaved }: {
     <section className="flow-pipeline-settings-section"><header><h2>{t('Release notes')}</h2></header><label className="flow-pipeline-setting-toggle"><span><strong>{t('Auto-generate on completion')}</strong><small>{t('Automatically create a release note when a release is completed')}</small></span><div className="flow-pipeline-toggle-control"><Toggle checked={autoNotes} label={t('Auto-generate on completion')} onChange={setAutoNotes} size="regular"/></div></label><label className="flow-pipeline-template-field"><strong>{t('Template')}</strong><small>{t('Define the template used when generating release notes.')}</small><textarea aria-label={t('Release notes template content')} value={notesTemplate} onChange={event=>setNotesTemplate(event.target.value)} placeholder={t('e.g. New, Improvements, Fixes…')}/></label></section>
     <section className="flow-pipeline-settings-section"><header><h2>{t('CI setup')}</h2><p>{t('Integrate your CI/CD pipeline to automatically track deployments and create releases.')}</p></header><div className="flow-pipeline-ci-links"><a href="https://github.com/leozhengliu-pixel/flow/blob/main/docs/release-automation.md" target="_blank" rel="noreferrer">{t('Flow API guide')}</a></div><div className="flow-pipeline-access-key"><KeyRound/><div><strong>{t('Access key')}</strong><small>{accessKey?<span data-i18n-ignore>{accessKey}</span>:pipeline?.accessKeyPrefix?<span data-i18n-ignore>{pipeline.accessKeyPrefix}…</span>:t('No access key has been generated yet.')}</small></div><button type="button" disabled={!pipeline||saving} onClick={()=>void generateKey()}>{t(pipeline?.accessKeyPrefix?'Regenerate access key':'Generate access key')}</button></div><label className="flow-pipeline-template-field"><strong>{t('Path filters')}</strong><small>{t('Filter releases to only include commits affecting specific paths.')}</small><textarea disabled={!pipeline?.accessKeyPrefix&&!accessKey} value={pathFilters} onChange={event=>setPathFilters(event.target.value)} placeholder={'frontend/**\npackages/api/**'}/></label></section>
 
-    <footer className="flow-pipeline-settings-actions"><button type="button" disabled={saving} onClick={onCancel}>{t('Cancel')}</button><button type="submit" className="primary" disabled={saving || !name.trim()}>{t(saving ? 'Saving…' : pipeline?'Save changes':'Create pipeline')}</button></footer>
+    </fieldset>
+
+    <footer className="flow-pipeline-settings-actions"><button type="button" disabled={saving} onClick={onCancel}>{t(readOnly?'Back':'Cancel')}</button>{!readOnly&&<button type="submit" className="primary" disabled={saving || !name.trim()}>{t(saving ? 'Saving…' : pipeline?'Save changes':'Create pipeline')}</button>}</footer>
     {pipeline&&<Dialog.Root open={deleteOpen} onOpenChange={setDeleteOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="flow-pipeline-delete-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="flow-pipeline-delete-dialog"><Dialog.Title>{t('Delete release pipeline')}</Dialog.Title><p>{t('This moves the release pipeline to recently deleted.')} <strong data-i18n-ignore>{pipeline.name}</strong></p><footer><Dialog.Close>{t('Cancel')}</Dialog.Close><button type="button" className="danger" disabled={saving} onClick={()=>void remove()}>{t('Delete')}</button></footer></Dialog.Content></Dialog.Portal></Dialog.Root>}
   </form>
 }

@@ -462,7 +462,11 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	trashResourceType := trashRestoreResourceType(data, r)
-	if (adminOnlyRequest(r) || trashResourceType == "release_pipeline") && !workspaceAdminRole(role) {
+	if trashResourceType == "release_pipeline" && !workspaceAdminRole(role) && !s.trashedReleasePipelineAdministrable(r, data, role, user.ID) {
+		writeError(w, http.StatusForbidden, "Only admins and team owners can restore this pipeline")
+		return false
+	}
+	if adminOnlyRequest(r) && !workspaceAdminRole(role) {
 		writeError(w, http.StatusForbidden, "Workspace admin access required")
 		return false
 	}
@@ -508,6 +512,31 @@ func (s *server) authorizeWorkspaceRequest(w http.ResponseWriter, r *http.Reques
 		return false
 	}
 	return true
+}
+
+// trashedReleasePipelineAdministrable applies Linear's canAdministerPipeline to
+// a deleted pipeline: members must own every team it belonged to.
+func (s *server) trashedReleasePipelineAdministrable(r *http.Request, data domain.Bootstrap, role, userID string) bool {
+	if role != "member" {
+		return false
+	}
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	for _, item := range data.Trash {
+		if len(parts) < 3 || item.ID != parts[2] {
+			continue
+		}
+		var pipeline domain.ReleasePipeline
+		if json.Unmarshal(item.Payload, &pipeline) != nil || len(pipeline.TeamIDs) == 0 {
+			return false
+		}
+		for _, teamID := range pipeline.TeamIDs {
+			if teamRole, err := s.store.TeamRole(r.Context(), data.Workspace.ID, teamID, userID); err != nil || teamRole != "owner" {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func trashRestoreResourceType(data domain.Bootstrap, r *http.Request) string {
@@ -579,7 +608,10 @@ func adminOnlyRequest(r *http.Request) bool {
 	if strings.HasPrefix(path, "/api/oauth-applications") || strings.HasPrefix(path, "/api/project-statuses") {
 		return true
 	}
-	if strings.HasPrefix(path, "/api/identity-providers") || strings.HasPrefix(path, "/api/git-automations") || strings.HasPrefix(path, "/api/target-branches") || strings.HasPrefix(path, "/api/integration-deliveries") {
+	// Git automations and target branches are team settings: their handlers
+	// apply the team "Settings management" permission (team owners, or all
+	// team members when allowed), matching /api/teams/{id}/settings.
+	if strings.HasPrefix(path, "/api/identity-providers") || strings.HasPrefix(path, "/api/integration-deliveries") {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/webhooks") {
@@ -594,7 +626,20 @@ func adminOnlyRequest(r *http.Request) bool {
 	if strings.HasPrefix(path, "/api/migrations") && r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return true
 	}
-	if strings.HasPrefix(path, "/api/release-pipelines") && r.Method != http.MethodGet && r.Method != http.MethodHead {
+	// Workspace configuration members can view but not change (Linear: slas,
+	// scheduleManagement, customers and integrationManagement are admin-only).
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		if strings.HasPrefix(path, "/api/sla-rules") || path == "/api/sla-settings" || path == "/api/project-update-settings" || strings.HasPrefix(path, "/api/customer-statuses") || strings.HasPrefix(path, "/api/customer-tiers") {
+			return true
+		}
+		if integrationConfigurationRequest(r) {
+			return true
+		}
+	}
+	// Release pipelines follow Linear: any member may create one and pipeline
+	// handlers allow admins or owners of every pipeline team to change it.
+	// Reordering the workspace-wide list stays an admin operation.
+	if path == "/api/release-pipelines/reorder" {
 		return true
 	}
 	if strings.HasPrefix(path, "/api/workspaces/") && (r.Method == http.MethodPatch || r.Method == http.MethodDelete) && !strings.Contains(path, "/teams/") {
@@ -602,6 +647,30 @@ func adminOnlyRequest(r *http.Request) bool {
 	}
 	if strings.HasPrefix(path, "/api/workspaces/") && strings.HasSuffix(path, "/cancel-deletion") {
 		return true
+	}
+	return false
+}
+
+// integrationConfigurationRequest reports workspace integration connect,
+// update and disconnect calls (PUT/DELETE /api/integrations/{provider},
+// PATCH/DELETE /api/integrations/{provider}/{id}). OAuth callbacks, webhooks and
+// connection tests are excluded; OAuth completion checks the admin role itself.
+func integrationConfigurationRequest(r *http.Request) bool {
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(parts) < 3 || parts[0] != "api" || parts[1] != "integrations" {
+		return false
+	}
+	switch len(parts) {
+	case 3:
+		return r.Method == http.MethodPut || r.Method == http.MethodDelete
+	case 4:
+		switch parts[3] {
+		case "webhook", "test", "oauth", "configure":
+			return false
+		}
+		return r.Method == http.MethodPatch || r.Method == http.MethodDelete
+	case 6:
+		return r.Method == http.MethodDelete && parts[4] == "oauth" && parts[5] == "token"
 	}
 	return false
 }
@@ -718,7 +787,7 @@ func teamIDFromWorkspacePath(path string) string {
 }
 
 func guestRestrictedPath(path string) bool {
-	return strings.HasPrefix(path, "/api/pulse/") || strings.HasPrefix(path, "/api/initiatives") || strings.HasPrefix(path, "/api/customers") || strings.HasPrefix(path, "/api/customer-requests") || strings.HasPrefix(path, "/api/views") || strings.HasPrefix(path, "/api/analytics") || strings.HasPrefix(path, "/api/dashboards")
+	return strings.HasPrefix(path, "/api/pulse/") || strings.HasPrefix(path, "/api/custom-emojis") || strings.HasPrefix(path, "/api/initiatives") || strings.HasPrefix(path, "/api/customers") || strings.HasPrefix(path, "/api/customer-requests") || strings.HasPrefix(path, "/api/views") || strings.HasPrefix(path, "/api/analytics") || strings.HasPrefix(path, "/api/dashboards")
 }
 
 func (s *server) resourceAllowed(r *http.Request, workspace string, userID string) bool {

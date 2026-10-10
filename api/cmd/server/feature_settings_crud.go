@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 type releasePipelineInput struct {
@@ -195,6 +196,11 @@ func (s *server) createReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) || input.Name == nil {
 		return
 	}
+	// Linear canCreateReleasePipeline: any non-guest workspace member.
+	if role, _ := s.requestWorkspaceRole(r); role != "member" && !workspaceAdminRole(role) {
+		writeError(w, http.StatusForbidden, "Guests cannot create release pipelines")
+		return
+	}
 	var created domain.ReleasePipeline
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.created", "release_pipeline", input, func(data *domain.Bootstrap) error {
 		now := time.Now().UTC()
@@ -223,10 +229,19 @@ func (s *server) updateReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.ReleasePipeline
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.updated", id, input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
+		}
+		var nextTeamIDs *[]string
+		if input.TeamIDs != nil {
+			normalized := normalizedStrings(*input.TeamIDs)
+			nextTeamIDs = &normalized
+		}
+		if !releasePipelineChangeAllowed(data, data.ReleasePipelines[index], nextTeamIDs, teamRoles, role) {
+			return store.ErrAuthForbidden
 		}
 		if err := applyReleasePipelineInput(data, &data.ReleasePipelines[index], input); err != nil {
 			return err

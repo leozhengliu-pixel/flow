@@ -191,7 +191,8 @@ describe('agent page composer', () => {
     setLiveAgentSession(liveSession)
     try {
       render(<I18nProvider><AgentPage chatSlug="between" data={makeBootstrap({ agentSessions: [{ ...liveSession, messages: liveSession.messages.slice(0, 1) }], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
-      expect(await screen.findByText('Checking the project…')).toBeVisible()
+      // Like Linear, the header says Thinking… while the model works out its next step after the tools finished.
+      expect(await screen.findByText('Thinking…', { selector: 'summary span' })).toBeVisible()
       expect(screen.queryByText('Work completed')).not.toBeInTheDocument()
     } finally {
       clearLiveAgentSession('session-between')

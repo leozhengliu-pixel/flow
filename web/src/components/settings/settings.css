@@ -264,3 +264,11 @@ body .domain-label-row-menu .menu-separator:after,body .domain-label-group-subme
   font-size: 12px;
   font-weight: 500;
 }
+/* Read-only settings pages (members viewing admin/team-owner configuration). */
+.settings-read-only{display:contents}
+.settings-read-only-notice{box-sizing:border-box;display:flex;align-items:center;gap:8px;margin:0 0 20px;padding:8px 12px;border:.5px solid var(--theme-border);border-radius:8px;background:var(--theme-surface-hover);color:var(--theme-text-secondary);font-size:12px;line-height:18px}
+.settings-read-only-notice>svg{flex:none;color:var(--theme-text-tertiary)}
+.settings-read-only-fields{display:contents;min-width:0;margin:0;padding:0;border:0}
+.settings-read-only-fields [contenteditable="true"],.settings-read-only-fields [role="button"],.settings-read-only-fields [role="switch"],.settings-read-only-fields [role="checkbox"],.settings-read-only-fields [draggable="true"]{pointer-events:none}
+.settings-read-only-fields :is(button,input,select,textarea):disabled{cursor:default}
+.settings-read-only-crumb:has(>div:empty){display:none}

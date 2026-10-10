@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AgentMessage, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { AgentRichText } from "./agent-rich-text";
-import { toolStatusLabel, translateToolTitle } from "./agent-step-labels";
+import { toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
 import styles from "./agent-page.module.css";
 import workStyles from "./agent-work-group.module.css";
 
@@ -22,10 +22,8 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
   }, [collapseWhenDone, failed, running]);
   const toolCount = parts.filter(part => part.type === "toolCall").length;
   const duration = Math.max(1, Math.round((message.durationMs ?? 0) / 1000));
-  // Linear shows the current phase ("Reviewing inbox…") while working.
-  const currentStep = [...parts].reverse().find(part => part.type === "step" && part.title)?.title;
   const label = running
-    ? currentStep ? `${currentStep}…` : t("Working…")
+    ? workingLabel(parts, t)
     : message.durationMs
       ? `${t("Worked for")} ${duration} ${t(duration === 1 ? "second" : "seconds")}`
       : toolCount > 2
@@ -36,7 +34,7 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
     <summary><span className={running ? styles.workShimmer : undefined}>{label}</span><WorkDisclosureIcon/></summary>
     <div className={styles.workItems}>
       {parts.map(part => part.type === "step"
-        ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{part.title}</span>{part.text && <div className={styles.reasoningRow}><AgentReasoningText text={part.text}/></div>}</div>
+        ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{translatePhaseTitle(part.title ?? "", t)}</span>{part.text && <div className={styles.reasoningRow}><AgentReasoningText text={part.text}/></div>}</div>
         : part.type === "reasoning"
         ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <AgentReasoningText text={part.text}/>}</div>
         : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
