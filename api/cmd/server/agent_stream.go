@@ -29,6 +29,8 @@ type agentStreamEvent struct {
 	ApprovalID string                   `json:"approvalId,omitempty"`
 	Decision   string                   `json:"decision,omitempty"`
 	Error      string                   `json:"error,omitempty"`
+	// BeforePartID places a new part ahead of an existing one (a phase title above the tool rows it names).
+	BeforePartID string `json:"beforePartId,omitempty"`
 }
 
 // agentApproval coordinates a pending write tool call with the browser. The
@@ -464,6 +466,34 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			break
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
+		// A turn running several tools gets a phase title above their rows, named from the calls (no model call).
+		phaseKey := ""
+		if title := agentPhaseTitle(turn.ToolCalls); title != "" {
+			phaseKey = fmt.Sprintf("phase:%d", turnIndex)
+			step := domain.AgentMessagePart{ID: fmt.Sprintf("%s_phase_%d", messageID, turnIndex), Type: "step", Title: title, Status: "completed"}
+			at, before := len(parts), ""
+			for _, call := range agentPhaseCalls(turn.ToolCalls) {
+				if index, ok := partIndex["tool:"+call.ID]; ok && index < at {
+					at = index
+				}
+			}
+			if at < len(parts) {
+				before = parts[at].ID
+			}
+			parts = append(parts[:at], append([]domain.AgentMessagePart{step}, parts[at:]...)...)
+			for key, index := range partIndex {
+				if index >= at {
+					partIndex[key] = index + 1
+				}
+			}
+			partIndex[phaseKey] = at
+			if writer != nil {
+				if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &step, BeforePartID: before}); err != nil {
+					return domain.AgentSession{}, err
+				}
+			}
+		}
+		executed := make([]domain.AgentToolCall, 0, len(turn.ToolCalls))
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
 			if call.Name == agentProgressTool {
@@ -612,6 +642,19 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				content = callErr.Error()
 			}
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: callErr != nil}})
+			executed = append(executed, call)
+		}
+		// Results can name what the arguments only referenced by id ("issue_16" → DEV-16).
+		if index, ok := partIndex[phaseKey]; ok && phaseKey != "" && len(executed) == len(agentPhaseCalls(turn.ToolCalls)) {
+			if title := agentPhaseTitle(executed); title != "" && title != parts[index].Title {
+				parts[index].Title = title
+				if writer != nil {
+					part := parts[index]
+					if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+						return domain.AgentSession{}, err
+					}
+				}
+			}
 		}
 		if turnIndex == maxAgentToolTurns-1 {
 			return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent exceeded the tool turn limit"))

@@ -340,10 +340,14 @@ func (s *server) rotateReleasePipelineAccessKey(w http.ResponseWriter, r *http.R
 	}
 	id := r.PathValue("id")
 	var result releasePipelineAccessKey
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.access_key_rotated", id, nil, func(data *domain.Bootstrap) error {
 		pipeline := releasePipelineByID(data, id)
 		if pipeline == nil {
 			return errNotFound
+		}
+		if !releasePipelineAdministrable(data, pipeline.TeamIDs, teamRoles, role) {
+			return store.ErrAuthForbidden
 		}
 		now := time.Now().UTC()
 		prefix := secret[:min(len(secret), 21)]
@@ -485,10 +489,14 @@ func (s *server) receiveReleasePipelineEvent(w http.ResponseWriter, r *http.Requ
 
 func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "release_pipeline.deleted", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.ReleasePipelines, func(item domain.ReleasePipeline) bool { return item.ID == id })
 		if index < 0 {
 			return errNotFound
+		}
+		if !releasePipelineAdministrable(data, data.ReleasePipelines[index].TeamIDs, teamRoles, role) {
+			return store.ErrAuthForbidden
 		}
 		remainingReleases := make([]domain.Release, 0, len(data.Releases))
 		removedReleaseIDs := make([]string, 0)
