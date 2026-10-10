@@ -133,3 +133,22 @@ it('falls back to Untitled for an untitled document favorite and keeps long name
   // The parent is a muted span inside the title element, so the ellipsis applies to both.
   expect(long.querySelector('.sidebar-favorite-parent')).toHaveTextContent(base.teams[0].name)
 })
+
+it('shows release pipeline and release favorites with their own icons (Linear: stage icon, pipeline as detail)', () => {
+  const data = makeBootstrap({
+    releasePipelines: [{ id: 'pipe-1', slugId: 'web-app', name: 'Web app', type: 'scheduled', teamIds: [], stages: [], stageStatuses: {} }],
+    releases: [{ id: 'rel-1', slugId: 'v1-0', name: 'v1.0', pipelineId: 'pipe-1', status: 'inProgress', issueIds: [] }],
+  } as unknown as Partial<ReturnType<typeof makeBootstrap>>)
+  const favorites: Favorite[] = [
+    { id: 'favorite-pipeline', userId: data.viewer.id, resourceType: 'release_pipeline', resourceId: 'pipe-1', position: 0, createdAt: '2026-09-01T00:00:00Z' },
+    { id: 'favorite-release', userId: data.viewer.id, resourceType: 'release', resourceId: 'rel-1', position: 1, createdAt: '2026-09-01T00:00:01Z' },
+  ]
+  renderFavorites(data, favorites)
+  const pipeline = screen.getByRole('link', { name: /^Web app$/ })
+  expect(pipeline).toHaveAttribute('href', '/workspace/pipeline/web-app/releases')
+  expect(pipeline.querySelector('[data-icon="release-pipeline"]')).not.toBeNull()
+  const release = screen.getByRole('link', { name: /v1\.0/ })
+  expect(release).toHaveAttribute('href', '/workspace/pipeline/web-app/release/v1-0/issues')
+  expect(release.querySelector('[data-icon="release-status"]')).toHaveAttribute('data-status', 'inProgress')
+  expect(release).toHaveTextContent('v1.0 Web app')
+})

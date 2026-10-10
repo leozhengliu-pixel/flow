@@ -33,6 +33,7 @@ import { useCommandContext } from './command-context'
 import { useDisplayCommands } from './display-commands'
 import { documentCommands, type DocumentCommandHost } from './document-commands'
 import { GLOBAL_DOCUMENT_PAGES } from './document-command-pages'
+import { GLOBAL_RELEASE_PAGES, releaseCommands, type ReleaseCommandHost } from './release-commands'
 import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
 import './command-menu.css'
 import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
@@ -78,7 +79,9 @@ export function CommandMenu({
   data,
   initialCustomerPicker = false,
   initialDocumentPicker = false,
+  initialReleasePicker = false,
   documentHost,
+  releaseHost,
   ...contextHandlers
 }: {
   open: boolean
@@ -118,12 +121,16 @@ export function CommandMenu({
   initialCustomerPicker?: boolean
   /** Open straight on the "Open document…" picker (the O then D shortcut). */
   initialDocumentPicker?: boolean
+  /** Open straight on the "Create new release…" pipeline picker (the N then R shortcut). */
+  initialReleasePicker?: boolean
+  /** Navigation and the New release composer for the release commands; omitted where releases are unavailable. */
+  releaseHost?: ReleaseCommandHost
   /** Reload and navigation for document writes; defaults to router navigation without a reload. */
   documentHost?: DocumentCommandHost
 } & ContextCommandHandlers) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [pages, setPages] = useState<CommandPage[]>(() => initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : [])
+  const [pages, setPages] = useState<CommandPage[]>(() => initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : initialReleasePicker ? [{ id: 'releaseCreate', label: 'Create new release…' }] : [])
   const page = pages.at(-1)
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
@@ -144,10 +151,12 @@ export function CommandMenu({
   const host = useMemo<DocumentCommandHost>(() => documentHost ?? { reload: async () => undefined, navigate: path => navigate(path) }, [documentHost, navigate])
   const issueCommands = useContextCommands({ context, data, page, query, handlers: contextHandlers, close: () => onOpenChange(false), t })
   const documents = documentCommands({ context, data, page, query, host, close: () => onOpenChange(false), t, pathname: location.pathname })
+  const releases = releaseCommands({ data: releaseHost ? data : undefined, pathname: location.pathname, page, host: releaseHost ?? { navigate: () => undefined, createRelease: () => undefined }, close: () => onOpenChange(false) })
+  const releasePage = Boolean(page && GLOBAL_RELEASE_PAGES.has(page.id))
   const contextCommands = {
     heading: context?.kind === 'document' ? 'Document' : issueCommands.heading,
     actions: context?.kind === 'document' ? documents.actions : issueCommands.actions,
-    options: documents.options.length ? documents.options : issueCommands.options,
+    options: documents.options.length ? documents.options : releasePage ? releases.options : issueCommands.options,
   }
   const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
   const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
@@ -158,6 +167,7 @@ export function CommandMenu({
     { id: 'create-initiative', group: 'Initiatives', label: 'Create new initiative', icon: <Lightbulb/>, shortcut: ['N', 'then', 'I'], run: closeAnd(onCreateInitiative) },
     ...(onGoToCustomers ? [{ id: 'create-customer', group: 'Customers', label: 'Create new customer…', icon: <CustomerCommandIcon/>, keywords: 'add create', run: closeAnd(onNavigateCustomers) }] : []),
     ...documents.global.map(action => ({ id: action.id, group: 'Documents', label: action.label, icon: action.icon, shortcut: action.shortcut, keywords: action.keywords, run: () => { if (action.page) openPage(action.page); else void action.run?.() } })),
+    ...releases.global.map(action => ({ id: action.id, group: action.group, label: action.label, icon: action.icon, shortcut: action.shortcut, keywords: action.keywords, run: () => { if (action.page) openPage(action.page); else void action.run?.() } })),
     { id: 'search-workspace', group: 'Filter', label: 'Search workspace...', icon: <Search/>, run: closeAnd(onSearchWorkspace) },
     { id: 'issue-template', group: 'Templates', label: 'Create new issue template...', icon: <FileText/>, run: closeAnd(onCreateIssueTemplate) },
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
@@ -213,7 +223,7 @@ export function CommandMenu({
     [groupIds.join("|"), allowedActionGroups, location.pathname, selectedModels],
   )
   // The context vanished (selection cleared, issue closed): nested pages no longer apply.
-  useEffect(() => { if (!context) setPages(current => current.filter(item => GLOBAL_DOCUMENT_PAGES.has(item.id))) }, [context])
+  useEffect(() => { if (!context) setPages(current => current.filter(item => GLOBAL_DOCUMENT_PAGES.has(item.id) || GLOBAL_RELEASE_PAGES.has(item.id))) }, [context])
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Backspace' && !query && customerPicker) { event.preventDefault(); setCustomerPicker(false); return }
     if (event.key === 'Backspace' && !query && pastChats) { event.preventDefault(); setPastChats(false); return }

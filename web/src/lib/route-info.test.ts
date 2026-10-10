@@ -126,3 +126,12 @@ describe("routeInfo documents", () => {
     expect(routeInfo({ kind: "document", workspaceSlug: "acme", documentSlugId: "gone-abc" }, { ...withDocuments, trash } as unknown as BootstrapData).title).toBe("Gone doc");
   });
 });
+
+describe('release route titles', () => {
+  it('names pipeline tabs and releases like Linear', () => {
+    const data = { workspace: { name: 'Acme', urlKey: 'acme' }, releasePipelines: [{ slugId: 'app', name: 'App' }], releases: [{ slugId: 'one', name: 'v1' }] } as never
+    expect(routeInfo({ kind: 'release-pipeline', workspaceSlug: 'acme', pipelineSlug: 'app', tab: 'changelog' }, data).title).toBe('App › Changelog')
+    expect(routeInfo({ kind: 'release-pipeline', workspaceSlug: 'acme', pipelineSlug: 'app', tab: 'releases' }, data).title).toBe('App › Releases')
+    expect(routeInfo({ kind: 'release', workspaceSlug: 'acme', pipelineSlug: 'app', releaseSlug: 'one', tab: 'issues' }, data).title).toBe('App › v1')
+  })
+})

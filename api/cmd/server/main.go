@@ -392,7 +392,14 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/release-pipelines/{id}", s.getReleasePipeline)
 	mux.HandleFunc("POST /api/release-pipelines/reorder", s.reorderReleasePipelines)
 	mux.HandleFunc("POST /api/release-pipelines/{id}/access-key", s.rotateReleasePipelineAccessKey)
+	mux.HandleFunc("DELETE /api/release-pipelines/{id}/access-key", s.revokeReleasePipelineAccessKey)
 	mux.HandleFunc("POST /api/release-pipelines/{id}/events", s.receiveReleasePipelineEvent)
+	// CI endpoints authenticated by a pipeline access key alone (Linear's *ByAccessKey operations).
+	mux.HandleFunc("GET /api/release-ci/pipeline", s.releaseCIPipelineSettings)
+	mux.HandleFunc("GET /api/release-ci/releases", s.releaseCIRecentReleases)
+	mux.HandleFunc("POST /api/release-ci/sync", s.releaseCISync)
+	mux.HandleFunc("POST /api/release-ci/complete", s.releaseCIComplete)
+	mux.HandleFunc("POST /api/release-ci/update", s.releaseCIUpdate)
 	mux.HandleFunc("PATCH /api/release-pipelines/{id}", s.updateReleasePipeline)
 	mux.HandleFunc("DELETE /api/release-pipelines/{id}", s.deleteReleasePipeline)
 	mux.HandleFunc("POST /api/custom-emojis", s.createCustomEmoji)
@@ -1079,7 +1086,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 		}
 	}
 	for index := range data.ReleasePipelines {
-		data.ReleasePipelines[index].AccessKeyHash = ""
+		data.ReleasePipelines[index] = publicReleasePipeline(data.ReleasePipelines[index])
 	}
 	for index := range data.OAuthApplications {
 		data.OAuthApplications[index].ClientSecret = ""

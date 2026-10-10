@@ -208,7 +208,7 @@ export const agentStepsZhCN: Record<string, string> = {
   "subject:release": "发布版本",
   "subject:releases": "发布版本",
   "subject:release notes": "发布说明",
-  "subject:release pipelines": "发布流水线",
+  "subject:release pipelines": "发布管线",
   "subject:diff": "代码变更",
   "subject:diffs": "代码变更",
   "subject:diff comment": "代码变更评论",

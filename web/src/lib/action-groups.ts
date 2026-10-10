@@ -50,6 +50,7 @@ export type ActionGroupId =
   | "Initiatives"
   | "Customers"
   | "Reviews"
+  | "Releases"
   | "Agent chat"
   | "AI panel"
   | "Asks Page"
@@ -116,6 +117,12 @@ export const ACTION_GROUP_DEFINITIONS: ActionGroupDefinition[] = [
     models: ["Review"],
     pathLift: ["review", "reviews"],
     promoteToTitle: true,
+  },
+  {
+    id: "Releases",
+    band: "nonTargetedModelActions",
+    models: ["Release"],
+    pathLift: ["pipeline", "release-pipelines"],
   },
   {
     id: "Agent chat",

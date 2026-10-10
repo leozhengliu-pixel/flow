@@ -289,7 +289,7 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
     expect(css).toContain('background:var(--hover-card-bg)')
     expect(css).toContain('box-shadow:var(--hover-card-shadow)')
     expect(css).toContain('.rule{height:0;margin:10px 0 10.5px;')
-    expect(read('../agent/agent-entity-hover.tsx')).toContain('side="top" sideOffset={3}')
+    expect(read('../agent/agent-entity-hover.tsx')).toContain('side={side} sideOffset={3}')
     expect(tokens).toContain('--hover-card-bg:lch(12.72% .85 272)')
   })
 

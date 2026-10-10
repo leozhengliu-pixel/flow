@@ -287,14 +287,17 @@ export function SettingsCrumb({
   children,
   icon,
   onClick,
+  pinned = false,
 }: {
   children: ReactNode;
   icon?: ReactNode;
   onClick: () => void;
+  /** Stays in the panel corner while the page scrolls (Linear's titleBackLink). */
+  pinned?: boolean;
 }) {
   const readOnlySlot = useContext(SettingsReadOnlyCrumbSlot);
   const crumb = (
-    <button className="settings-crumb" type="button" onClick={onClick}>
+    <button className={`settings-crumb${pinned ? " is-pinned" : ""}`} type="button" onClick={onClick}>
       <ChevronLeft size={14} aria-hidden />
       {icon && <span className="settings-crumb-icon">{icon}</span>}
       <span className="settings-crumb-label">{children}</span>

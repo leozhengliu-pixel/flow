@@ -11,6 +11,11 @@ describe('sidebar defaults (Linear parity)', () => {
     expect(result.current.order.workspace.slice(0, 4)).toEqual(['initiatives', 'projects', 'loops', 'views'])
   })
 
+  it('lists the More entries in Linear order: Members, Customers, Releases, Teams', () => {
+    const { result } = renderHook(() => useSidebarCustomizationState('usr_order'))
+    expect(result.current.order.workspace.slice(4)).toEqual(['members', 'customers', 'releases', 'teams'])
+  })
+
   it('migrates a full legacy save: old defaults follow the new ones, real choices stay', () => {
     localStorage.setItem('flow.sidebar.preferences:usr_old', JSON.stringify({ members: 'always', teams: 'always', releases: 'always', loops: 'never', projects: 'always' }))
     localStorage.setItem('flow.sidebar.order:usr_old', JSON.stringify({ workspace: ['members', 'initiatives', 'projects', 'teams', 'views', 'dashboards', 'releases', 'loops', 'customers'] }))

@@ -31,12 +31,15 @@ type releasePipelineInput struct {
 	MoveOpenIssuesToNextRelease *bool              `json:"moveOpenIssuesToNextRelease,omitempty"`
 }
 
+const releasePipelineNameMaxLength = 120
+
 var releaseStageColorPattern = regexp.MustCompile(`^#[0-9a-f]{6}$`)
 
 func applyReleasePipelineInput(data *domain.Bootstrap, item *domain.ReleasePipeline, input releasePipelineInput) error {
 	if input.Name != nil {
 		item.Name = strings.TrimSpace(*input.Name)
-		if item.Name == "" {
+		// Linear: "Name cannot exceed 120 characters."
+		if item.Name == "" || len([]rune(item.Name)) > releasePipelineNameMaxLength {
 			return errInvalid
 		}
 	}
@@ -206,6 +209,10 @@ func (s *server) createReleasePipeline(w http.ResponseWriter, r *http.Request) {
 		now := time.Now().UTC()
 		moveOpenIssues := true
 		created = domain.ReleasePipeline{ID: fmt.Sprintf("release_pipeline_%d", now.UnixNano()), SlugID: uniqueReleasePipelineSlug(data, strings.TrimSpace(*input.Name)), Type: "scheduled", Production: true, MoveOpenIssuesToNextRelease: &moveOpenIssues, Position: nextReleasePipelinePosition(data), TeamIDs: []string{}, Stages: []string{"Planned", "In Progress", "Released", "Canceled"}, StageStatuses: map[string]string{"Planned": "planned", "In Progress": "inProgress", "Released": "released", "Canceled": "canceled"}, PathFilters: []string{}, CreatedAt: now, UpdatedAt: now}
+		// Linear: continuous pipelines start with a single completed stage.
+		if input.Type != nil && *input.Type == "continuous" && input.Stages == nil {
+			created.Stages, created.StageStatuses = []string{"Released"}, map[string]string{"Released": "released"}
+		}
 		if err := applyReleasePipelineInput(data, &created, input); err != nil {
 			return err
 		}

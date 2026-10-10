@@ -77,3 +77,36 @@ describe('releasesInInclusiveRange', () => {
     expect(releasesInInclusiveRange(releases, 'a', 'c').map(item => item.id)).toEqual(['a', 'b', 'c'])
   })
 })
+
+describe('release list helpers', () => {
+  const now = new Date(2026, 9, 10, 9, 0)
+  it('parses Linear fuzzy dates in English and Chinese', async () => {
+    const { parseReleaseDateQuery } = await import('./release-view-model')
+    expect(parseReleaseDateQuery('24h', now)).toBe('2026-10-11')
+    expect(parseReleaseDateQuery('7 days', now)).toBe('2026-10-17')
+    expect(parseReleaseDateQuery('2 weeks', now)).toBe('2026-10-24')
+    expect(parseReleaseDateQuery('Feb 9', now)).toBe('2027-02-09')
+    expect(parseReleaseDateQuery('7 天', now)).toBe('2026-10-17')
+    expect(parseReleaseDateQuery('12月1日', now)).toBe('2026-12-01')
+    expect(parseReleaseDateQuery('nonsense', now)).toBeUndefined()
+  })
+
+  it('groups stages started, planned, completed, canceled and sorts by release date', async () => {
+    const { releaseStageGroups, sortReleases } = await import('./release-view-model')
+    const make = (id: string, stage: string, targetDate?: string) => ({ id, name: id, version: '', stage, position: 0, createdAt: '2026-01-01', targetDate } as unknown as Release)
+    const items = [make('a', 'Planning', '2026-10-01'), make('b', 'In progress', '2026-11-01'), make('c', 'Released'), make('d', 'Planning')]
+    expect(releaseStageGroups(items, pipeline).map(group => group.stage)).toEqual(['In progress', 'Planning', 'Released'])
+    expect(sortReleases(items, pipeline, 'releaseDate', 'desc').map(item => item.id)).toEqual(['b', 'a', 'c', 'd'])
+  })
+
+  it('picks the changelog target like Linear: latest completed, else the first scheduled release', async () => {
+    const { changelogTargetRelease } = await import('./release-view-model')
+    const scheduled = { ...pipeline, id: 'p', type: 'scheduled' } as ReleasePipeline
+    const base = { pipelineId: 'p', issueIds: [], createdAt: '2026-01-01', position: 0 }
+    const planned = { ...base, id: 'planned', status: 'planned' } as unknown as Release
+    const shipped = { ...base, id: 'shipped', status: 'released', releasedAt: '2026-09-01T00:00:00Z', position: 1 } as unknown as Release
+    expect(changelogTargetRelease(makeBootstrap({ releases: [planned] }), scheduled)?.id).toBe('planned')
+    expect(changelogTargetRelease(makeBootstrap({ releases: [planned, shipped] }), scheduled)?.id).toBe('shipped')
+    expect(changelogTargetRelease(makeBootstrap({ releases: [planned] }), { ...scheduled, type: 'continuous' })).toBeUndefined()
+  })
+})

@@ -114,7 +114,7 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals() })
 
 describe('ReleasesPage icons', () => {
-  it('renders pipeline rows with the pipeline icon instead of a rocket', () => {
+  it('renders pipeline rows like Linear: name, active release chips and team keys, no rocket', () => {
     const { container } = renderPage(
       <ReleasesPage
         data={pageData({ releasePipelines: [pipeline()] })}
@@ -125,9 +125,11 @@ describe('ReleasesPage icons', () => {
     )
 
     const row = container.querySelector('.flow-pipeline-row')
-    expect(row?.querySelector('[data-icon="release-pipeline"]')).toBeTruthy()
+    expect(row).toHaveAttribute('href', '/workspace/pipeline/app/releases')
+    expect(row).toHaveTextContent('App')
     expect(container.querySelector('.lucide-rocket')).toBeNull()
-    expect(screen.getByRole('button', { name: /App/ })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'A–Z' })).toBeVisible()
+    expect(screen.getByText('Active releases')).toBeVisible()
   })
 
   it('filters release pipelines from the directory search and clears with Escape', async () => {
@@ -145,12 +147,12 @@ describe('ReleasesPage icons', () => {
 
     const search = screen.getByRole('searchbox', { name: 'Find release pipelines…' })
     await user.type(search, 'api')
-    expect(screen.getByRole('button', { name: /API/ })).toBeVisible()
-    expect(screen.queryByRole('button', { name: /App/ })).toBeNull()
+    expect(screen.getByRole('row', { name: /API/ })).toBeVisible()
+    expect(screen.queryByRole('row', { name: /App/ })).toBeNull()
 
     await user.keyboard('{Escape}')
     expect(search).toHaveValue('')
-    expect(screen.getByRole('button', { name: /App/ })).toBeVisible()
+    expect(screen.getByRole('row', { name: /App/ })).toBeVisible()
   })
 
   it('uses an empty-state pipeline icon when no pipelines exist', () => {
@@ -163,8 +165,10 @@ describe('ReleasesPage icons', () => {
       />,
     )
 
-    expect(screen.getByText('No release pipelines')).toBeVisible()
-    expect(container.querySelector('.flow-release-empty [data-icon="release-pipeline"]')).toBeTruthy()
+    expect(screen.getByText('Create release pipelines')).toBeVisible()
+    expect(container.querySelector('.flow-releases-empty [data-illustration="release-pipelines"]')).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: 'Create new pipeline' })).toHaveLength(2)
+    expect(screen.getByRole('link', { name: 'Documentation' })).toBeVisible()
     expect(container.querySelector('.lucide-rocket')).toBeNull()
   })
 
@@ -186,25 +190,20 @@ describe('ReleasesPage icons', () => {
     )
 
     expect(container.querySelector('.lucide-circle-dashed')).toBeNull()
+    // Linear orders stage groups started, planned, completed, canceled.
     const rows = [...container.querySelectorAll('.flow-release-row')]
     expect(rows.map(row => row.querySelector('[data-icon="release-status"]')?.getAttribute('data-status'))).toEqual([
-      'planned',
       'inProgress',
+      'planned',
       'released',
       'canceled',
     ])
     expect(screen.getByText('1.0.0')).toBeVisible()
 
-    const headers = [...container.querySelectorAll('.flow-release-group > header button')]
-    expect(headers.map(header => [
-      header.querySelector('strong')?.textContent,
-      header.querySelector('[data-icon="release-status"]')?.getAttribute('data-status'),
-    ])).toEqual([
-      ['Planning', 'planned'],
-      ['In progress', 'inProgress'],
-      ['Released', 'released'],
-      ['Canceled', 'canceled'],
-    ])
+    // Group headers carry only the stage name (Linear ListGroupDividerCell).
+    const headers = [...container.querySelectorAll('.flow-releases-group-header')]
+    expect(headers.map(header => header.querySelector('strong')?.textContent)).toEqual(['In progress', 'Planning', 'Released', 'Canceled'])
+    expect(headers.every(header => !header.querySelector('[data-icon="release-status"]'))).toBe(true)
   })
 
   it('uses the current stage status on the detail sidebar and stage menu', async () => {
@@ -262,8 +261,8 @@ describe('release display select alignment', () => {
       const label = option.querySelector('span:first-child')
       expect(label).not.toHaveClass('flow-pipeline-display-select-indicator')
     }
-    expect(options.map(option => option.textContent)).toEqual(['Release date', 'Release', 'Name'])
-    expect(options[0].querySelector('.flow-pipeline-display-select-indicator')).toBeTruthy()
+    expect(options.map(option => option.textContent)).toEqual(['Release', 'Stage', 'Release date'])
+    expect(options[2].querySelector('.flow-pipeline-display-select-indicator')).toBeTruthy()
   })
 })
 
@@ -420,12 +419,12 @@ describe('deleted releases route (LS-0190)', () => {
 })
 
 describe('changelog notes scope (LS-0459)', () => {
-  it('shows scope picker and Write with Agent on changelog', () => {
+  it('asks for the target release notes like Linear (Missing release notes, Create)', () => {
     renderPage(
       <ReleasesPage
         data={pageData({
           releasePipelines: [pipeline()],
-          releases: [release({ status: 'released', releaseNotes: 'Shipped', releasedAt: '2026-09-01T00:00:00Z' })],
+          releases: [release({ status: 'released', stage: 'Released', releasedAt: '2026-09-01T00:00:00Z' })],
         })}
         pipelineSlug="app"
         pipelineTab="changelog"
@@ -434,8 +433,10 @@ describe('changelog notes scope (LS-0459)', () => {
         onReload={vi.fn().mockResolvedValue(undefined)}
       />,
     )
-    expect(screen.getByLabelText('Select release notes scope')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Write with Agent' })).toBeDisabled()
+    expect(screen.getByText('Missing release notes')).toBeVisible()
+    expect(screen.getByText('Create release notes for this release.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Create' })).toBeVisible()
+    expect(screen.getByRole('link', { name: 'pipeline settings' })).toBeVisible()
   })
 })
 
@@ -455,10 +456,11 @@ describe('ReleasesPage release notes mentions', () => {
     await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
     pasteText(box, `${window.location.origin}${mentionUrls.project}`)
     await waitFor(() => expect(box.querySelector('a[data-agent-entity="project"]')).toHaveTextContent('Project one'))
-    await user.click(screen.getByRole('button', { name: 'Save release notes' }))
-
-    await waitFor(() => expect(api.updateRelease).toHaveBeenCalled())
-    const saved = (api.updateRelease.mock.calls[api.updateRelease.mock.calls.length - 1][1] as { releaseNotes: string }).releaseNotes
+    // Release notes autosave like Linear's document editor (no Save button).
+    expect(screen.queryByRole('button', { name: 'Save release notes' })).toBeNull()
+    const lastSaved = () => (api.updateRelease.mock.calls.at(-1)?.[1] as { releaseNotes?: string } | undefined)?.releaseNotes ?? ''
+    await waitFor(() => expect(lastSaved()).toContain(mentionUrls.project), { timeout: 3000 })
+    const saved = lastSaved()
     expect(saved).toContain('[Launch plan](/workspace/document/plan-abc)')
     expect(saved).toContain(`[Project one](${mentionUrls.project})`)
     first.unmount()
@@ -470,5 +472,27 @@ describe('ReleasesPage release notes mentions', () => {
       </MentionShell></I18nProvider>,
     )
     await waitFor(() => expect(document.querySelector('.flow-release-changelog a[data-agent-entity="document"]')).toHaveTextContent('Launch plan'))
+  })
+
+  it('opens documents attached by CI inline', async () => {
+    renderPage(
+      <ReleasesPage
+        data={pageData({
+          releasePipelines: [pipeline()],
+          releases: [release({ resources: [{ id: 'doc', type: 'document', title: 'Changelog', content: 'Shipped the **first** change', createdAt: '2026-01-01T00:00:00.000Z' }] })],
+        })}
+        pipelineSlug="app"
+        releaseSlug="one"
+        releaseTab="issues"
+        onNavigate={vi.fn()}
+        onOpenSidebar={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+    const link = await screen.findByRole('button', { name: 'Changelog' })
+    expect(screen.queryByRole('link', { name: 'Changelog' })).toBeNull()
+    await userEvent.click(link)
+    const dialog = await screen.findByRole('dialog', { name: 'Changelog' })
+    expect(dialog).toHaveTextContent('Shipped the first change')
   })
 })

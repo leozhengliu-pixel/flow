@@ -1626,7 +1626,7 @@ export function reorderReleases(
     jsonRequest("POST", { pipelineId, ids, archived }),
   );
 }
-type ReleasePipelineMutation = Partial<
+export type ReleasePipelineMutation = Partial<
   Pick<
     ReleasePipeline,
     | "name"
@@ -1674,10 +1674,25 @@ export function reorderReleasePipelines(
     jsonRequest("POST", { ids }),
   );
 }
+/** Creates or rotates the pipeline key; a rotated key keeps working for an hour unless revokeImmediately. */
 export function rotateReleasePipelineAccessKey(
   id: string,
+  options: { revokeImmediately?: boolean } = {},
 ): Promise<ReleasePipelineAccessKey> {
-  return request(`/api/release-pipelines/${id}/access-key`, { method: "POST" });
+  return request(
+    `/api/release-pipelines/${id}/access-key`,
+    jsonRequest("POST", { revokeImmediately: Boolean(options.revokeImmediately) }),
+  );
+}
+/** Revokes the pipeline key after an hour, or at once when immediate. */
+export function revokeReleasePipelineAccessKey(
+  id: string,
+  immediate = false,
+): Promise<ReleasePipeline> {
+  return request(
+    `/api/release-pipelines/${id}/access-key${immediate ? "?immediate=true" : ""}`,
+    { method: "DELETE" },
+  );
 }
 export function createCustomEmoji(input: {
   name: string;

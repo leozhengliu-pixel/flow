@@ -241,7 +241,7 @@ describe('agent entity chips', () => {
       ['label', urls.label, ['Feature']],
       ['milestone', urls.milestone, ['Alpha', 'Project one']],
       ['customer', urls.customer, ['Acme Corp', 'Active', 'Gold']],
-      ['release', urls.release, ['Version one', 'Web', '1.0']],
+      ['release', urls.release, ['Version one', 'Web', 'Planned']],
       ['view', urls.view, ['Urgent view', 'All urgent work', 'Teammate']],
       ['review', urls.review, ['acme/web#7', 'Fix login', 'In review', 'Teammate']],
     ]

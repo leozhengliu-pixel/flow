@@ -1,5 +1,5 @@
 import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
-import { canAdministerReleasePipeline, canCreateReleasePipeline } from '@/lib/settings-access';
+import { canCreateReleasePipeline } from '@/lib/settings-access';
 import { ApplicationMembers } from '@/components/agent/application-members'
 import {
   ArrowUpRight,
@@ -9,7 +9,6 @@ import {
   FileText,
   MessageSquare,
   Plus,
-  Rocket,
   Search,
   Smile,
   Sparkles,
@@ -35,18 +34,20 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useI18n } from "@/i18n/i18n";
 import { DocumentTemplateEditor } from "@/components/documents/document-template-editor";
 import {
-  createCustomEmoji, restoreTrashEntry,
+  createCustomEmoji,
   updateCustomEmoji,
   updateIntegrationConnection, updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
-import { loopsPath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
+import { loopsPath, newReleasePipelinePath, releasePipelinePath, type SettingsPageId, type IntegrationProvider } from "@/lib/app-routes";
+import { DeletedPipelineRows, PipelinesEmptyState, PipelineSettingsRows } from "@/components/releases/pipeline-settings-list";
+import { RELEASES_DOCS_URL } from "@/components/releases/pipeline-settings-model";
 import { persistUserSettings } from "@/lib/settings-persistence";
 import { confirmAction } from "@/components/ui/action-dialog-service";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import type {
   BootstrapData, CustomEmoji, DocumentTemplate, FeatureSettings,
-  ReleasePipeline, TrashEntry, WorkspaceSettings,
+  ReleasePipeline, WorkspaceSettings,
 } from "@/types/flow";
 
 import { keepMentionMenuOpen } from "./mention-field-host";
@@ -355,18 +356,26 @@ function CustomerRequestsPage(props:{data:BootstrapData;settings:WorkspaceSettin
   return <CustomerRequestsSettings {...props}/>;
 }
 
-function deletedPipelineTeamIds(entry:TrashEntry):string[] {
-  const teamIds=(entry.payload as {teamIds?:unknown}|undefined)?.teamIds;
-  return Array.isArray(teamIds)?teamIds.filter((id):id is string=>typeof id==="string"):[];
-}
-
+/** Linear's Settings › Releases: search, Active / Recently deleted filter, pipeline rows and the empty state. */
 function ReleasesFeatureSettings({data,onCreate,onOpen,onReload}:{data:BootstrapData;onCreate:()=>void;onOpen:(pipeline:ReleasePipeline)=>void;onReload:()=>Promise<void>}) {
-  const { formatDate, t } = useI18n();
-  const [query,setQuery]=useState(""); const [state,setState]=useState<'active'|'deleted'>('active');
-  const pipelines=(data.releasePipelines??[]).filter(item=>item.name.toLowerCase().includes(query.toLowerCase()));
-  const deleted=data.trash.filter(item=>item.resourceType==='release_pipeline'&&item.title.toLowerCase().includes(query.toLowerCase()));
-  return <div className="feature-wide"><FeatureShell title="Releases" description="Track which issues ship in each release."><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by pipeline name")} placeholder={t("Filter by pipeline name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline state" value={state} options={[{value:"active",label:"Active pipelines"},{value:"deleted",label:"Recently deleted pipelines"}]} onChange={value=>setState(value as 'active'|'deleted')}/><span/><FeatureButton primary disabled={state==='deleted'||!canCreateReleasePipeline(data)} onClick={onCreate}><Plus size={14}/>New pipeline</FeatureButton></div>
-    <div className="feature-table"><header><span>{t("Pipeline name")}</span><span>{t("Teams")}</span><span>{t("Type")}</span><span>{t("Releases")}</span><span/></header>{state==='active'?pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>onOpen(item)}><Rocket size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore={item.teamIds.length?true:undefined}>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||t("All teams")}</span><span>{t(item.type==="scheduled"?"Scheduled":"Continuous")}</span><span>{data.releases.filter(release=>release.pipelineId===item.id).length}</span><ChevronRight size={15}/></button>):deleted.map(item=><div className="feature-table-row flow-deleted-pipeline-row" key={item.id}><Rocket size={16}/><strong data-i18n-ignore>{item.title}</strong><span/><span>{formatDate(item.deletedAt,{dateStyle:"medium"})}</span><span/><FeatureButton disabled={!canAdministerReleasePipeline(data,{teamIds:deletedPipelineTeamIds(item)})} onClick={()=>void restoreTrashEntry(item.id).then(onReload)}>Restore</FeatureButton></div>)}{state==='active'&&!pipelines.length&&<FeatureEmpty icon={Rocket} title={query?"No matching pipelines":"No release pipelines"}/>} {state==='deleted'&&!deleted.length&&<FeatureEmpty icon={Rocket} title="No recently deleted pipelines"/>}</div></FeatureShell></div>;
+  const { locale, t } = useI18n();
+  // Linear labels the filter "Active"; the shared "Active" key means in-progress elsewhere in zh.
+  const activeLabel=locale==="zh-CN"?t("Active pipelines"):"Active";
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [query,setQuery]=useState("");
+  // Like Linear, the filter lives in the URL (?display=deleted) so it survives reloads and toasts can link to it.
+  const state:'active'|'deleted'=new URLSearchParams(location.search).get("display")==="deleted"?"deleted":"active";
+  const setState=(next:'active'|'deleted')=>navigate({pathname:location.pathname,search:next==="deleted"?"?display=deleted":""},{replace:true});
+  const needle=query.trim().toLocaleLowerCase();
+  const pipelines=(data.releasePipelines??[]).filter(item=>item.name.toLocaleLowerCase().includes(needle));
+  const deleted=data.trash.filter(item=>item.resourceType==='release_pipeline'&&item.title.toLocaleLowerCase().includes(needle));
+  const docs=<a className="flow-pipelines-docs-link" href={RELEASES_DOCS_URL} target="_blank" rel="noreferrer">{t("Docs")}<ArrowUpRight size={12}/></a>;
+  const description=state==="deleted"?t("Deleted pipelines are retained here for 30 days before being permanently deleted along with all their releases."):<>{t("Track which issues ship in each release.")} {docs}</>;
+  const empty=state==="active"&&!(data.releasePipelines??[]).length;
+  return <div className="feature-wide"><FeatureShell className="flow-pipelines-settings" title="Releases" description={description}><div className="feature-toolbar flow-pipelines-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by pipeline name")} placeholder={t("Filter by pipeline name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline status" value={state} options={[{value:"active",label:activeLabel,translate:false},{value:"deleted",label:"Recently deleted pipelines"}]} onChange={value=>setState(value as 'active'|'deleted')}/><span/>{state==="active"&&<FeatureButton primary disabled={!canCreateReleasePipeline(data)} onClick={onCreate}>New pipeline</FeatureButton>}</div>
+    {empty?<PipelinesEmptyState/>:state==="active"?<PipelineSettingsRows data={data} pipelines={pipelines} filtering={Boolean(needle)} onClearFilter={()=>setQuery("")} onOpen={onOpen} onOpenReleases={pipeline=>navigate(releasePipelinePath(data.workspace.urlKey,pipeline.slugId))} onDuplicate={pipeline=>navigate(`${newReleasePipelinePath(data.workspace.urlKey)}?copyFrom=${encodeURIComponent(pipeline.slugId)}`)} onDeleted={onReload} onViewDeleted={()=>setState("deleted")}/>:<DeletedPipelineRows data={data} entries={deleted} filtering={Boolean(needle)} onRestored={onReload}/>}
+  </FeatureShell></div>;
 }
 
 const PULSE_SCHEDULE_OPTIONS=[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"never",label:"Never"}];

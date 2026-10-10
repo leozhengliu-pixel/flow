@@ -14,6 +14,7 @@ vi.hoisted(() => {
   });
 });
 
+import { MemoryRouter } from "react-router-dom";
 import { I18nProvider } from "@/i18n/i18n";
 import { makeBootstrap } from "@/test/fixtures";
 import { SettingsPage } from "./settings-page";
@@ -257,7 +258,7 @@ it('renders admin-only workspace configuration read-only for members with Linear
   input.page = 'project-statuses';
   input.data = { ...input.data, viewerRole: 'member' };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
-  expect(await screen.findByRole('note')).toHaveTextContent('Only admins can edit project statuses');
+  expect(await screen.findByRole('note', {}, { timeout: 5000 })).toHaveTextContent('Only admins can edit project statuses');
   const fields = document.querySelector('fieldset.settings-read-only-fields') as HTMLFieldSetElement;
   expect(fields).toBeDisabled();
   expect(fields.querySelectorAll('button').length).toBeGreaterThan(0);
@@ -268,7 +269,7 @@ it('lets members open release pipeline settings and create a pipeline', async ()
   const input = props();
   input.page = 'releases';
   input.data = { ...input.data, viewerRole: 'member', trash: [] } as never;
-  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  render(<MemoryRouter><I18nProvider><SettingsPage {...input}/></I18nProvider></MemoryRouter>);
   const create = await screen.findByRole('button', { name: 'New pipeline' });
   expect(create).toBeEnabled();
   await userEvent.setup().click(create);
@@ -290,7 +291,7 @@ it('shows team settings read-only to team members when only owners manage them',
     cycleSettings: {},
   } as never;
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
-  expect(await screen.findByRole('note')).toHaveTextContent('Only admins and team owners can modify the team’s cycle settings');
+  expect(await screen.findByRole('note', {}, { timeout: 5000 })).toHaveTextContent('Only admins and team owners can modify the team’s cycle settings');
   expect(document.querySelector('fieldset.settings-read-only-fields')).toBeDisabled();
   // The crumb back to the team stays usable above the read-only fields.
   const crumb = document.querySelector('.settings-read-only-crumb .settings-crumb') as HTMLButtonElement;

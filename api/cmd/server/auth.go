@@ -365,7 +365,7 @@ func publicAuthPath(path string) bool {
 		// browser session for IdP provisioning requests.
 		return true
 	}
-	if strings.HasPrefix(path, "/api/release-pipelines/") && strings.HasSuffix(path, "/events") {
+	if strings.HasPrefix(path, "/api/release-pipelines/") && strings.HasSuffix(path, "/events") || strings.HasPrefix(path, "/api/release-ci/") {
 		return true
 	}
 	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {

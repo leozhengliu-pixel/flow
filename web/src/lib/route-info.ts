@@ -24,7 +24,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash">> & {
+> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -168,6 +168,20 @@ export function routeInfo(
     if (view) {
       const editing = "editing" in route && route.editing;
       return { title: editing ? `${view.name} > ${t("Edit")}` : view.name, pinnedTitle: view.name, icon: "view" };
+    }
+  }
+
+  if (route.kind === "release-pipeline" || route.kind === "release") {
+    // Linear: "QA pipeline › Releases", "QA pipeline › Changelog", "QA pipeline › QA release 1".
+    const pipeline = data?.releasePipelines?.find((item) => item.slugId === route.pipelineSlug);
+    if (pipeline) {
+      if (route.kind === "release") {
+        const release = data?.releases?.find((item) => item.slugId === route.releaseSlug);
+        if (release) return { title: `${pipeline.name} › ${release.name}`, pinnedTitle: release.name, icon: "release" };
+      } else {
+        const section = route.tab === "changelog" ? "Changelog" : route.tab === "archive" ? "Archived releases" : route.tab === "deleted" ? "Recently deleted releases" : "Releases";
+        return { title: `${pipeline.name} › ${t(section)}`, pinnedTitle: pipeline.name, icon: "release" };
+      }
     }
   }
 

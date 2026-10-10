@@ -61,7 +61,7 @@ func TestReleasePipelineAndReleaseAPILifecycle(t *testing.T) {
 	}, http.StatusBadRequest)
 
 	firstKey := requestJSON[releasePipelineAccessKey](t, handler, http.MethodPost, "/api/release-pipelines/"+pipeline.ID+"/access-key", nil, http.StatusCreated)
-	secondKey := requestJSON[releasePipelineAccessKey](t, handler, http.MethodPost, "/api/release-pipelines/"+pipeline.ID+"/access-key", nil, http.StatusCreated)
+	secondKey := requestJSON[releasePipelineAccessKey](t, handler, http.MethodPost, "/api/release-pipelines/"+pipeline.ID+"/access-key", map[string]any{"revokeImmediately": true}, http.StatusCreated)
 	if firstKey.Secret == "" || firstKey.Prefix == "" || secondKey.Secret == firstKey.Secret {
 		t.Fatalf("access key rotation did not return one-time credentials: first=%#v second=%#v", firstKey, secondKey)
 	}

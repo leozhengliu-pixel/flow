@@ -1309,7 +1309,9 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 					resource.Title = documentDisplayTitle(document.Title)
 				}
 			}
-			if resource.Type != "link" && resource.Type != "document" || resource.Title == "" || resource.Type == "link" && resource.URL == "" || resource.Type == "document" && !validateResourceIDs(data, "document", []string{resource.DocumentID}) {
+			// Documents attached by CI carry their markdown inline instead of a workspace document.
+			ciDocument := resource.Type == "document" && resource.DocumentID == "" && strings.TrimSpace(resource.Content) != ""
+			if resource.Type != "link" && resource.Type != "document" || resource.Title == "" || resource.Type == "link" && resource.URL == "" || resource.Type == "document" && !ciDocument && !validateResourceIDs(data, "document", []string{resource.DocumentID}) {
 				return errInvalid
 			}
 			if resource.ID == "" {
@@ -1350,7 +1352,7 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 			release.ArchivedAt = nil
 		}
 	}
-	return applyReleaseSettingAutomations(data, previousStatus, *release, time.Now().UTC())
+	return applyReleaseSettingAutomations(data, previousStatus, release, time.Now().UTC())
 }
 
 func (s *server) createRelease(w http.ResponseWriter, r *http.Request) {

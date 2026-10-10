@@ -23,13 +23,13 @@ import styles from './agent-entity-hover.module.css'
 const HOVER_DELAY_MS = 500
 
 /** Wraps a chip (or list row) so hovering or focusing it opens the entity's card. */
-export function AgentEntityHover({ children, data, entity }: { children: ReactElement; data: BootstrapData; entity: AgentEntity }) {
+export function AgentEntityHover({ children, data, entity, side = 'top' }: { children: ReactElement; data: BootstrapData; entity: AgentEntity; side?: 'top' | 'left' | 'right' | 'bottom' }) {
   return (
     <Tooltip.Provider delayDuration={HOVER_DELAY_MS} skipDelayDuration={0}>
       <Tooltip.Root disableHoverableContent>
         <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
         <Tooltip.Portal>
-          <Tooltip.Content align="start" className={styles.card} collisionPadding={8} data-agent-entity-card={entity.kind === 'link' ? entity.icon : entity.kind} data-flow-motion="tooltip" side="top" sideOffset={3}>
+          <Tooltip.Content align="start" className={styles.card} collisionPadding={8} data-agent-entity-card={entity.kind === 'link' ? entity.icon : entity.kind} data-flow-motion="tooltip" side={side} sideOffset={3}>
             <AgentEntityCardBody data={data} entity={entity}/>
           </Tooltip.Content>
         </Tooltip.Portal>
@@ -259,14 +259,16 @@ export function AgentEntityCardBody({ data, entity }: { data: BootstrapData; ent
       </>
     }
     case 'release': {
+      // Linear's release card: "Release · Pipeline", then its stage, date and (continuous pipelines) commit.
       const { release, pipeline } = entity
+      const shown = release.releasedAt || release.targetDate
       return <>
-        <div className={styles.title}><ReleaseStatusIcon size={16} status={release.status}/><span data-i18n-ignore>{release.name}{release.version ? <span className={styles.muted}> {release.version}</span> : null}</span></div>
+        <div className={styles.title}><span data-i18n-ignore>{release.name}{pipeline ? <span className={styles.muted}> · {pipeline.name}</span> : null}</span></div>
         <hr className={styles.rule}/>
         <div className={styles.props}>
-          {pipeline && <Prop><span data-i18n-ignore>{pipeline.name}</span></Prop>}
-          {release.stage && <Prop><span data-i18n-ignore>{release.stage}</span></Prop>}
-          {release.targetDate && <Prop icon={<CalendarIcon className={styles.dim} size={16}/>}>{date(release.targetDate)}</Prop>}
+          <Prop icon={<ReleaseStatusIcon size={16} status={release.status}/>}><span data-i18n-ignore>{release.stage || t(release.status === 'inProgress' ? 'In progress' : release.status === 'released' ? 'Released' : release.status === 'canceled' ? 'Canceled' : 'Planned')}</span></Prop>
+          {shown && <Prop icon={<CalendarIcon className={styles.dim} size={16}/>}>{date(shown)}</Prop>}
+          {pipeline?.type === 'continuous' && release.commitSha && <Prop><span data-i18n-ignore>{release.commitSha.slice(0, 7)}</span></Prop>}
         </div>
       </>
     }

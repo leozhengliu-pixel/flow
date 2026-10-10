@@ -60,6 +60,7 @@ import {
   CycleIcon as FlowCycleIcon,
   StatusIcon,
 } from "@/components/issue/issue-icons";
+import { ReleasePipelineIcon, ReleaseStatusIcon } from "@/components/releases/release-icons";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { WorkspaceMenu } from "@/components/workspace/workspace-menu";
 import {
@@ -1319,7 +1320,7 @@ function favoriteDescriptor(
       return {
         favorite,
         href: releasePipelinePath(workspaceSlug, pipeline.slugId),
-        icon: <ReleasesIcon />,
+        icon: <ReleasePipelineIcon />,
         title: pipeline.name,
       };
   }
@@ -1334,8 +1335,10 @@ function favoriteDescriptor(
       return {
         favorite,
         href: releasePath(workspaceSlug, pipeline.slugId, release.slugId),
-        icon: <ReleasesIcon />,
+        // Linear: the release's stage icon, with its pipeline as the detail text.
+        icon: <ReleaseStatusIcon status={release.status} />,
         title: release.name,
+        parent: pipeline.name,
       };
   }
   if (favorite.resourceType === "dashboard")

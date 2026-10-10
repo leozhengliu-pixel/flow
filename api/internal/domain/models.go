@@ -881,12 +881,14 @@ type Release struct {
 }
 
 type ReleaseResource struct {
-	ID         string    `json:"id"`
-	Type       string    `json:"type"`
-	Title      string    `json:"title"`
-	URL        string    `json:"url,omitempty"`
-	DocumentID string    `json:"documentId,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         string `json:"id"`
+	Type       string `json:"type"`
+	Title      string `json:"title"`
+	URL        string `json:"url,omitempty"`
+	DocumentID string `json:"documentId,omitempty"`
+	// Content holds markdown for documents attached by CI (Linear's --document).
+	Content   string    `json:"content,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type Ask struct {
@@ -1384,8 +1386,17 @@ type ReleasePipeline struct {
 	AccessKeyPrefix             string            `json:"accessKeyPrefix,omitempty"`
 	AccessKeyHash               string            `json:"accessKeyHash,omitempty"`
 	AccessKeyCreatedAt          *time.Time        `json:"accessKeyCreatedAt,omitempty"`
-	CreatedAt                   time.Time         `json:"createdAt"`
-	UpdatedAt                   time.Time         `json:"updatedAt"`
+	// AccessKeyLastUsedAt is when CI last authenticated with the current key.
+	AccessKeyLastUsedAt *time.Time `json:"accessKeyLastUsedAt,omitempty"`
+	// AccessKeyRevokedAt schedules (future) or records (past) the current key's
+	// revocation, like Linear's revokedAt on pipeline access keys.
+	AccessKeyRevokedAt *time.Time `json:"accessKeyRevokedAt,omitempty"`
+	// PreviousAccessKeyHash keeps a rotated key working until
+	// PreviousAccessKeyExpiresAt so CI can be updated without downtime.
+	PreviousAccessKeyHash      string     `json:"previousAccessKeyHash,omitempty"`
+	PreviousAccessKeyExpiresAt *time.Time `json:"previousAccessKeyExpiresAt,omitempty"`
+	CreatedAt                  time.Time  `json:"createdAt"`
+	UpdatedAt                  time.Time  `json:"updatedAt"`
 }
 
 type CustomEmoji struct {

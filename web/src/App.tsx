@@ -169,7 +169,8 @@ import {
 } from "@/lib/navigation-cache";
 import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
 import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
-import type { AgentSession } from "@/types/flow";
+import type { AgentSession, ReleasePipeline } from "@/types/flow";
+import { creatablePipelines, releasesAvailable, routePipeline } from "@/components/command/release-command-model";
 import { navigationReturnPath, navigationLabel, projectsListOriginPath, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
   IssueOptionsActions,
@@ -240,6 +241,7 @@ import {
   pulsePath,
   pulseViewPath,
   pulseNewViewPath,
+  releasePath,
   releasePipelinesPath,
   releasePipelineSettingsPath,
   reviewPath,
@@ -313,6 +315,7 @@ import type { WorkspaceSecondaryKind } from '@/components/workspace/workspace-se
 import { applyLabelUpdate, archiveProjectUpdateReminders, mergeRefreshedIssues, mergeScopedIssues, mergeWorkspaceMetadata, metadataOnlyRealtimeEvent, newlyReleasedIssueIds, syncIssueProjectSummaries, teamIssueScope, type IssueRefreshScope } from '@/lib/workspace-metadata-refresh'
 import { ISSUE_QUERY_INVALIDATED } from '@/components/issue-explorer/paged-issue-invalidation'
 
+const ReleaseEditorDialog = lazy(() => import('@/components/releases/release-editor-dialog').then(module => ({default:module.ReleaseEditorDialog})))
 const IssueLoadingPreview = lazy(() => import('@/components/issue/issue-loading-preview').then(module => ({default:module.IssueLoadingPreview})))
 
 function App() {
@@ -478,6 +481,10 @@ function App() {
     [commandCustomerPicker, setCommandCustomerPicker] = useState(false),
     // "O then D" opens it on "Open document…".
     [commandDocumentPicker, setCommandDocumentPicker] = useState(false),
+    // "N then R" opens it on "Create new release…" (pipeline picker).
+    [commandReleasePicker, setCommandReleasePicker] = useState(false),
+    // The New release composer opened from ⌘K or N then R.
+    [releaseComposer, setReleaseComposer] = useState<ReleasePipeline | undefined>(),
     [createOpen, setCreateOpen] = useState(false),
     [createDraftId, setCreateDraftId] = useState<string>(),
     [createTeamId, setCreateTeamId] = useState<string>(),
@@ -830,6 +837,17 @@ function App() {
         e.preventDefault();
         shortcutSequence.current = { key: "", at: 0 };
         navigateTo(`${projectsPath(data.workspace.urlKey)}?create=1`);
+        return;
+      }
+      if (inSequence && sequence.key === "n" && pressed === "r" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        if (releasesAvailable(data)) {
+          // On a scheduled pipeline's page (or one of its releases) the composer opens for it; elsewhere pick a pipeline first.
+          const open = routePipeline(data, window.location.pathname)?.pipeline;
+          if (open?.type === "scheduled") setReleaseComposer(open);
+          else if (creatablePipelines(data).length) { setCommandReleasePicker(true); setCommandOpen(true); }
+        }
         return;
       }
       if (inSequence && sequence.key === "n" && pressed === "i" && data) {
@@ -6723,9 +6741,12 @@ function App() {
         {commandOpen && (
           <CommandMenu
             open={commandOpen}
-            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); } }}
+            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); setCommandReleasePicker(false); } }}
             initialCustomerPicker={commandCustomerPicker}
             initialDocumentPicker={commandDocumentPicker}
+            initialReleasePicker={commandReleasePicker}
+            releaseHost={releasesAvailable(data) ? { navigate: navigateTo, createRelease: setReleaseComposer } : undefined}
+            onReleasesChanged={async () => { await reloadWorkspaceMetadata(data.workspace.urlKey); }}
             documentHost={{ reload: async () => { await reloadWorkspaceMetadata(data.workspace.urlKey); }, navigate: navigateTo }}
             onCreateIssue={() => openCreateIssue()}
             onCreateIssueTemplate={() =>
@@ -6784,6 +6805,17 @@ function App() {
               await refreshActivity();
             }}
             onCreateIssueWith={openCreateIssue}
+          />
+        )}
+      </Suspense>
+      <Suspense fallback={null}>
+        {releaseComposer && (
+          <ReleaseEditorDialog
+            data={data}
+            pipeline={releaseComposer}
+            onClose={() => setReleaseComposer(undefined)}
+            onSaved={async () => { setReleaseComposer(undefined); await reloadWorkspaceMetadata(data.workspace.urlKey); }}
+            onOpenRelease={(release) => navigateTo(releasePath(data.workspace.urlKey, releaseComposer.slugId, release.slugId))}
           />
         )}
       </Suspense>

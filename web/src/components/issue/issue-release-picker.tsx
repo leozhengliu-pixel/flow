@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type KeyboardEvent, type RefObject, type 
 import { toast } from 'sonner'
 
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { AgentEntityHover } from '@/components/agent/agent-entity-hover'
 import { ReleasePipelineIcon, ReleaseStatusIcon } from '@/components/releases/release-icons'
 import { useI18n } from '@/i18n/i18n'
 import { createRelease, setIssueReleases } from '@/lib/api'
@@ -12,6 +13,7 @@ import type { BootstrapData, Issue, Release, ReleasePipeline } from '@/types/flo
 
 import './issue-release-picker.css'
 
+const ROW_LIMIT = 3
 const groupOrder: Release['status'][] = ['inProgress', 'planned', 'released', 'canceled']
 
 export function IssueReleasePicker({ data, issue, grouped = false, externalAnchor, popoverOpen, onPopoverOpenChange, onMenuEscape }: { data: BootstrapData; issue: Issue; grouped?: boolean; externalAnchor?: RefObject<HTMLElement | null>; popoverOpen?: boolean; onPopoverOpenChange?: (open: boolean) => void; onMenuEscape?: () => void }) {
@@ -113,16 +115,36 @@ export function IssueReleasePicker({ data, issue, grouped = false, externalAncho
     ? <button type="button" className="issue-release-add" aria-label={t('Add to release')} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}><Plus/></button>
     : <button type="button" className="issue-release-empty-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}><ReleaseStatusIcon color="currentColor" status="planned"/><span>{t('Set release')}</span></button>
 
-  const values = <div className="issue-release-values">{selectedReleases.map(item => {
-    const pipeline = pipelines.find(value => value.id === item.pipelineId)
-    const date = item.releasedAt || item.targetDate
-    return <div className="issue-release-value" key={item.id}>
-      <button type="button" className="issue-release-pill" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
-        <ReleaseStatusIcon status={item.status}/><span data-i18n-ignore>{pipeline?.name}</span><strong data-i18n-ignore>{item.name}</strong>{date && <small>{formatDate(date, { month: 'short', day: 'numeric' })}</small>}
-      </button>
-      {pipeline && <a className="issue-release-open" href={releasePath(data.workspace.urlKey, pipeline.slugId, item.slugId)} aria-label={t('Open release')}><OpenReleaseChevron/></a>}
+  // Linear: releases of one pipeline share a row ("2 releases"), three rows
+  // show at once and the rest hide behind Show more.
+  const rows = useMemo(() => {
+    const byPipeline = new Map<string, Release[]>()
+    const order: Array<string | Release> = []
+    for (const item of selectedReleases) {
+      const key = item.pipelineId
+      if (!key) { order.push(item); continue }
+      const bucket = byPipeline.get(key)
+      if (bucket) bucket.push(item)
+      else { byPipeline.set(key, [item]); order.push(key) }
+    }
+    return order.map(entry => typeof entry === 'string' ? byPipeline.get(entry) ?? [] : [entry])
+  }, [selectedReleases])
+  const [expanded, setExpanded] = useState(false)
+  const collapsible = rows.length > ROW_LIMIT + 1
+  const shownRows = collapsible && !expanded ? rows.slice(0, ROW_LIMIT) : rows
+  const values = <div className="issue-release-values">{shownRows.map(group => {
+    const first = group[0]
+    const pipeline = pipelines.find(value => value.id === first.pipelineId)
+    const date = first.releasedAt || first.targetDate
+    const single = group.length === 1
+    const pill = <button type="button" className="issue-release-pill" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
+      <ReleaseStatusIcon status={first.status}/><span data-i18n-ignore>{pipeline?.name}</span>{single ? <strong data-i18n-ignore>{first.name}</strong> : <strong>{t('{count} releases').replace('{count}', String(group.length))}</strong>}{date && <small>{formatDate(date, { month: 'short', day: 'numeric' })}</small>}
+    </button>
+    return <div className="issue-release-value" data-release-group={single ? undefined : ''} key={group.map(item => item.id).join(',')}>
+      {single && pipeline ? <AgentEntityHover data={data} entity={{ kind: 'release', release: first, pipeline }} side="left">{pill}</AgentEntityHover> : pill}
+      {single && pipeline && <a className="issue-release-open" href={releasePath(data.workspace.urlKey, pipeline.slugId, first.slugId)} aria-label={t('Open release')}><OpenReleaseChevron/></a>}
     </div>
-  })}</div>
+  })}{collapsible && <button type="button" className="issue-release-more" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? t('Show less') : t('Show {count} more').replace('{count}', String(rows.length - ROW_LIMIT))}</button>}</div>
 
   const anchor = grouped
     ? <section className="property-group issue-release-group"><h4><span>{t('Releases')}</span>{selectedReleases.length ? trigger : null}</h4>{!selectedReleases.length && trigger}{values}</section>
