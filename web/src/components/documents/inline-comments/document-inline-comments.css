@@ -74,8 +74,11 @@
 .document-thread-edited {
   flex: 0 0 auto;
   color: var(--theme-text-tertiary);
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 450;
 }
+:root:not([data-theme="light"]) .document-thread-comment > header > time,
+:root:not([data-theme="light"]) .document-thread-edited { color: var(--theme-text-secondary); }
 .document-thread-avatar {
   width: 20px;
   height: 20px;
@@ -116,9 +119,10 @@
 }
 .document-thread-icon:hover,
 .document-thread-icon[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.document-thread-body { padding-left: 26px; color: var(--theme-text-primary); overflow-wrap: anywhere; }
+.document-thread-body { padding-left: 26px; color: var(--theme-text-primary); font-size: 15px; line-height: 24px; letter-spacing: -.00666667em; overflow-wrap: anywhere; }
 .document-thread-body .comment-prosemirror p,
 .document-thread-body p { margin: 0; }
+:root:not([data-theme="light"]) .document-thread-body { color: var(--text); }
 .document-thread-comment .reaction-pills { margin: 6px 0 0 26px; }
 
 .document-thread-reply { margin: 8px 0 2px; }
@@ -145,7 +149,7 @@
   background: transparent;
   box-shadow: none;
 }
-.document-thread-card .composer .comment-prosemirror { font-size: 13px; line-height: 20px; }
+.document-thread-card .composer .comment-prosemirror { font-size: 15px; line-height: 24px; }
 .document-thread-reply .composer { padding-left: 26px; }
 
 .document-thread-draft { display: flex; align-items: flex-start; gap: 8px; }

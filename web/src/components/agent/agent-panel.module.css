@@ -200,5 +200,9 @@
   background: var(--theme-surface-1);
   box-shadow: var(--pk-shadow);
 }
+:global(:root:not([data-theme='light'])) .panel[data-variant='floating']:not(#_) {
+  border-color: var(--rt-hairline);
+  background: var(--theme-surface-2);
+}
 .panel[data-variant='floating']:not(#_) .header { height: 48px; padding-left: 13px; }
 .panel[data-variant='floating']:not(#_) .header strong { color: var(--pk-text-strong); font-size: 13px; font-weight: 500; }
