@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from '@/i18n/i18n'
+import { translateToChinese } from '@/i18n/translate'
 import type { LoopRun } from '@/types/flow'
 import { describeRunFailure, fixedFailureMessage, parseTriggerLabel, runTriggerText } from './loop-run-labels'
 

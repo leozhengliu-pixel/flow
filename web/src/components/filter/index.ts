@@ -48,11 +48,12 @@ export {
   subscribeFilterValueRegistry,
 } from './register-filter-values'
 
+export { RegisterFilterValuesShouldBeLazyLoaded } from './register-filter-values-lazy'
+
 export {
-  RegisterFilterValuesShouldBeLazyLoaded,
   ensureFilterValuesRegistered,
   preloadFilterValuePacks,
-} from './register-filter-values-lazy'
+} from './ensure-filter-values-registered'
 
 export {
   useFilterValidation,

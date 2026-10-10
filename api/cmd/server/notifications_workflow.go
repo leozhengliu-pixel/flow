@@ -1012,18 +1012,6 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
-func teamParentCreatesCycle(data *domain.Bootstrap, teamID, parentID string) bool {
-	seen := map[string]bool{teamID: true}
-	for parentID != "" {
-		if seen[parentID] {
-			return true
-		}
-		seen[parentID] = true
-		parentID = data.TeamSettings[parentID].ParentTeamID
-	}
-	return false
-}
-
 func (s *server) listIssueTemplates(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	teamID := r.PathValue("id")

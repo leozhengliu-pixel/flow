@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 import { zhCN } from './translations'
 
 // The rich-text editor's chrome is rendered inside React (the DOM translator skips ProseMirror), so every

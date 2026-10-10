@@ -10,7 +10,7 @@ import { useI18n } from "@/i18n/i18n";
 import { resolveCodeReviewAccess } from "@/lib/code-access";
 import type { BootstrapData, CodeReview } from "@/types/flow";
 
-import { reviewProviderIdentifier } from "./review-provider";
+import { reviewProviderIdentifier } from "./review-provider-model";
 
 export function PullRequestInboxView({
   data,

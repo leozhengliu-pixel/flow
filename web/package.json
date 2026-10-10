@@ -23,7 +23,7 @@
     "test:coverage:workflows": "vitest run --coverage --config vitest.workflows.config.ts",
     "test:coverage:all": "vitest run --coverage --config vitest.all.config.ts",
     "test:e2e": "playwright test",
-    "lint": "oxlint && npm run check:pickers && npm run check:design-tokens && npm run check:ui-foundations && npm run check:functional-controls && npm run check:motion",
+    "lint": "oxlint --deny-warnings && npm run check:pickers && npm run check:design-tokens && npm run check:ui-foundations && npm run check:functional-controls && npm run check:motion",
     "check:motion": "node scripts/check-motion-surfaces.mjs",
     "check:pickers": "node scripts/check-picker-architecture.mjs",
     "check:design-tokens": "node scripts/check-design-token-colors.mjs",

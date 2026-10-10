@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, Trash2, X } from "lucide-react";
 import { MilestoneProgressIcon } from "@/components/issue/milestone-progress-icon";
@@ -344,13 +344,16 @@ export function ProjectIssues({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<Issue>();
   const [loadedIssues, setLoadedIssues] = useState<Issue[]>([]);
+  // Latest data for the paged query below, which rebuilds only on filter/display changes (a new object per data refresh would refetch).
+  const issueDataRef = useRef(issueData);
+  issueDataRef.current = issueData;
   // Paged pages only hold a slice of the project, so rely on the server-side project summary total.
   const projectHasNoIssues = issueData?.issueCollectionPaged ? issueSummary?.total === 0 : projectIssues.length === 0;
   const showProjectIntro = !milestoneScope && projectHasNoIssues;
   const pagedQuery = useMemo<IssueQueryInput>(() => {
     const { sort, direction, groupBy, archived, conditions } = pagedDisplayQuery(display);
     if (milestoneScope) conditions.push({ field: 'projectMilestoneId', values: [milestoneScope.id] });
-    return { projectId: project.id, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueData ? { data: issueData } : undefined), ...conditions] } };
+    return { projectId: project.id, archived, groupBy, sort, direction, filter: { and: [issueFiltersToQueryAst(filters, issueDataRef.current ? { data: issueDataRef.current } : undefined), ...conditions] } };
   }, [project.id, milestoneScope, filters, display]);
   const visible = useMemo(
     () => applyExplorerFilters(projectIssues, filters, issueData),

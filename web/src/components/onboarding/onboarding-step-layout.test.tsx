@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import {
   OnboardingNavigationProvider,
   OnboardingStepLayout,
-  useOnboardingNavigation,
 } from "./onboarding-step-layout";
+import { useOnboardingNavigation } from "./onboarding-navigation";
 
 function Probe() {
   const nav = useOnboardingNavigation();

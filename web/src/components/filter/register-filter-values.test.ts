@@ -6,7 +6,7 @@ import {
   listRegisteredFilterEntityTypes,
   registerFilterValues,
 } from './register-filter-values'
-import { ensureFilterValuesRegistered, preloadFilterValuePacks } from './register-filter-values-lazy'
+import { ensureFilterValuesRegistered, preloadFilterValuePacks } from './ensure-filter-values-registered'
 
 describe('RegisterFilterValues', () => {
   beforeEach(() => clearFilterValueRegistry())

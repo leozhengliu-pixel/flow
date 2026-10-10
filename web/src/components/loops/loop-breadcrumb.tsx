@@ -4,7 +4,8 @@ import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { loopPath, loopsPath, teamLoopsPath } from "@/lib/app-routes";
 import { useI18n } from "@/i18n/i18n";
 import type { BootstrapData, Loop } from "@/types/flow";
-import { LoopIcon, loopIconColor } from "./loop-glyph";
+import { LoopIcon } from "./loop-glyph";
+import { loopIconColor } from "./loop-template-visuals";
 import { loopTeam } from "./loop-model";
 
 /**

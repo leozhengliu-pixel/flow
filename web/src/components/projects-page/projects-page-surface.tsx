@@ -8,7 +8,6 @@ import { AlignLeft, BarChart3, CalendarDays, ChevronRight, CircleDot, FileText, 
 import {
   AddViewIcon,
   CheckIcon,
-  ChevronRightIcon,
   DisplayIcon,
   FilterIcon,
   PlusIcon,

@@ -132,13 +132,6 @@ func normalizeSearchTerms(terms []string) []string {
 	return result
 }
 
-func searchHitLimit(limit int) int {
-	if limit < 1 {
-		limit = 100
-	}
-	return min(max(limit*8, 256), 500)
-}
-
 // MySQL rejects LIMIT in an IN/ANY subquery. Nest the cap so the IN operand
 // itself has no LIMIT.
 func cappedSearchHitIN(column, resultColumn, hitsSQL string) string {

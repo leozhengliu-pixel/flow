@@ -34,8 +34,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useI18n } from "@/i18n/i18n";
 import { DocumentTemplateEditor } from "@/components/documents/document-template-editor";
 import {
-  createCustomEmoji, createDocumentTemplate, restoreTrashEntry,
-  deleteDocumentTemplate, updateCustomEmoji, updateDocumentTemplate,
+  createCustomEmoji, restoreTrashEntry,
+  updateCustomEmoji,
   updateIntegrationConnection, updateWorkspacePreferences, getLoopConfig, updateLoopSettings,
   updateWorkspaceAgentGuidance,
 } from "@/lib/api";
@@ -48,7 +48,6 @@ import type {
   ReleasePipeline, WorkspaceSettings,
 } from "@/types/flow";
 
-import { MentionTextField } from "@/components/editor/mention-text-field";
 import { keepMentionMenuOpen } from "./mention-field-host";
 import "./feature-settings.css";
 import { SettingsToggle as BaseSettingsToggle } from './settings-primitives'

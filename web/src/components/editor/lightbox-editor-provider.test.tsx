@@ -2,10 +2,12 @@ import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it } from 'vitest'
 import { useRef } from 'react'
-import { LightboxEditorProvider, useLightboxEditor } from './lightbox-editor-provider'
+import { LightboxEditorProvider } from './lightbox-editor-provider'
+import { useLightboxEditor } from './lightbox-editor-context'
 import { openLightbox, isLightboxRegistered } from './lightbox-bridge'
 import { isAnyCommentInHash, isCommentIdInHash } from '@/hooks/use-comment-hash-popover'
-import { useWindowControlsInsets, WindowControlsAwareLightboxProvider } from './window-controls-aware-lightbox-provider'
+import { WindowControlsAwareLightboxProvider } from './window-controls-aware-lightbox-provider'
+import { useWindowControlsInsets } from './window-controls-insets-context'
 
 afterEach(() => {
   cleanup()

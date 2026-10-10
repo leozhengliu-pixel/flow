@@ -8,7 +8,8 @@ import { makeBootstrap, project, viewer } from '@/test/fixtures'
 import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-host-harness'
 import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import type { AuditLogEntry, Comment, ProjectUpdate } from '@/types/flow'
-import { ProjectActivity, projectUpdateChanges } from './project-activity'
+import { ProjectActivity } from './project-activity'
+import { projectUpdateChanges } from './project-update-changes'
 
 const apiMocks = vi.hoisted(() => ({
   listProjectHistory: vi.fn(async () => ({ nodes: [] as unknown[], nextCursor: '', total: 0 })),

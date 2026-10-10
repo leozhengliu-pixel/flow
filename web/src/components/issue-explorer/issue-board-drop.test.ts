@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardDropRejectReason } from './issue-board'
+import { boardDropRejectReason } from './issue-board-drop'
 import type { MyIssuesGroupData, MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 
 const issue = (priority: 0 | 1 | 2 | 3 | 4): MyIssuesRowData => ({

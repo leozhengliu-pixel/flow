@@ -17,16 +17,38 @@ function inlineIconSprites() {
   }
 }
 
+// elkjs (1.4 MB) and @mermaid-js/parser (660 kB) ship as one pre-bundled file each, so they cannot be split any further.
+// Both are fetched only when a mermaid diagram renders. `chunkSizeWarningLimit` below is raised to fit them, so this
+// plugin keeps Vite's usual 500 kB warning for every other chunk.
+const CHUNK_WARNING_BYTES = 500_000
+const UNSPLITTABLE_VENDOR = /node_modules[\\/](?:elkjs|@mermaid-js[\\/]parser)[\\/]/
+
+function chunkSizeBudget() {
+  return {
+    name: 'flow-chunk-size-budget',
+    generateBundle(_options: unknown, bundle: Record<string, { type: string; fileName: string; code?: string; moduleIds?: string[] }>) {
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'chunk' || Buffer.byteLength(chunk.code ?? '') <= CHUNK_WARNING_BYTES) continue
+        if ((chunk.moduleIds ?? []).every(id => id.startsWith('\0') || UNSPLITTABLE_VENDOR.test(id))) continue
+        ;(this as unknown as { warn(message: string): void }).warn(`Chunk ${chunk.fileName} is larger than ${CHUNK_WARNING_BYTES / 1000} kB; split it with build.rolldownOptions.output.codeSplitting or lazy-load it.`)
+      }
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), inlineIconSprites()],
+  plugins: [react(), tailwindcss(), inlineIconSprites(), chunkSizeBudget()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   build: {
+    chunkSizeWarningLimit: 1500,
     rolldownOptions: {
       output: {
         strictExecutionOrder: true,
         codeSplitting: {
           groups: [
+            // Diagram rendering is loaded on demand (see mermaid-preview.ts); keep its libraries out of the shared vendor chunks.
+            { name: 'diagram-vendor', test: /node_modules[\\/](?:mermaid|@mermaid-js|elkjs|cytoscape[^\\/]*|dagre-d3-es|langium|chevrotain[^\\/]*|@chevrotain|katex|roughjs|khroma|stylis|marked)[\\/]/, priority: 40, maxSize: 250_000 },
             { name: 'react-vendor', test: /node_modules[\\/](?:react|react-dom|react-router|react-router-dom|scheduler)[\\/]/, priority: 30 },
             { name: 'editor-vendor', test: /node_modules[\\/](?:@tiptap|prosemirror|yjs|y-prosemirror|lib0|markdown-it)[\\/]/, priority: 25, maxSize: 250_000 },
             { name: 'ui-vendor', test: /node_modules[\\/](?:@radix-ui|cmdk|lucide-react|sonner)[\\/]/, priority: 20, maxSize: 220_000 },

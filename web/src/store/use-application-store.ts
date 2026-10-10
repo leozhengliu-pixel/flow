@@ -2,7 +2,7 @@ import { useContext } from 'react'
 import {
   ApplicationStoreContext,
   type ApplicationStoreValue,
-} from './application-store-context'
+} from './application-store-contexts'
 
 /**
  * Application shell store (LS-0724): bootstrap snapshot, session, account,

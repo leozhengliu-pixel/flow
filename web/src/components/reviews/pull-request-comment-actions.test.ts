@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAgentDispatchPrompt,
   formatReviewCommentMarkdown,
-} from "./pull-request-comment-actions";
+} from "./pull-request-comment-markdown";
 import { teammate } from "@/test/fixtures";
 
 describe("PullRequestCommentActions (LS-0503)", () => {

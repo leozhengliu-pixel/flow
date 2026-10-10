@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeIssue } from '@/test/fixtures'
-import { similarIssues, titleSimilarity } from './similar-issues'
+import { similarIssues, titleSimilarity } from './similar-issues-model'
 
 describe('similar issues', () => {
   it('scores overlapping titles and ignores stop words', () => {

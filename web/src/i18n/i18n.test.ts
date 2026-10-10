@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 
 describe('translateToChinese', () => {
   it('translates exact strings and preserves surrounding whitespace', () => {

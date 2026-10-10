@@ -21,9 +21,9 @@ import {
   requestDocumentUiAction, setDocumentSubscribers, toggleDocumentFavorite, toggleDocumentPinnedToTeam, viewerTeams,
   type DocumentActionContext, type DocumentMoveTarget,
 } from '@/components/documents/document-actions'
-import { documentOwnerOptions } from '@/components/documents/document-owner-picker'
+import { documentOwnerOptions } from '@/components/documents/document-owner-options'
 import { NoAssigneeIcon, ProjectIcon, TeamIcon } from '@/components/issue/issue-icons'
-import { reminderPresetOptions } from '@/components/ui/reminder-options'
+import { reminderPresetOptions } from '@/components/ui/reminder-presets'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { documentPath, initiativePath, projectPath, settingsPath, teamArchivePath, teamDocumentsPath, workspaceRootPath } from '@/lib/app-routes'
 import type { BootstrapData, DocumentTemplate, FlowDocument, Team } from '@/types/flow'
@@ -35,9 +35,6 @@ export interface DocumentCommandHost {
   reload: () => Promise<void>
   navigate: (path: string) => void
 }
-
-/** Pages of the global document commands (they work without a registered context). */
-export const GLOBAL_DOCUMENT_PAGES: ReadonlySet<string> = new Set(['documentOpen', 'documentCreateIn', 'documentFromTemplate', 'documentFromTemplateIn', 'documentTeamOverview', 'documentTeamOverviewDoc'])
 
 type Translate = (value: string) => string
 
@@ -82,7 +79,7 @@ function parentLabel(data: BootstrapData, document: FlowDocument) {
 }
 
 /** Where to land after the open document is deleted: its parent's page. */
-export function documentParentPath(data: BootstrapData, document: FlowDocument) {
+function documentParentPath(data: BootstrapData, document: FlowDocument) {
   const workspace = data.workspace.urlKey
   const parent = documentParent(data, document)
   if (parent?.type === 'project') return projectPath(workspace, parent.project)

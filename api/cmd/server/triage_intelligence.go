@@ -895,7 +895,7 @@ func triageTokens(values ...string) map[string]bool {
 			tokens[strings.ToLower(string(word))] = true
 			word = word[:0]
 		}
-		for _, character := range []rune(strings.ToLower(value)) {
+		for _, character := range strings.ToLower(value) {
 			if unicode.IsLetter(character) || unicode.IsDigit(character) {
 				word = append(word, character)
 				continue

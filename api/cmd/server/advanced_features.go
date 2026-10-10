@@ -2221,10 +2221,6 @@ func draftBelongsToResource(item domain.Draft, resourceType, resourceID string) 
 	return parentType == resourceType
 }
 
-func validateDraft(data *domain.Bootstrap, item domain.Draft) error {
-	return validateDraftResource(data, item, resourceExists)
-}
-
 func validateDraftResource(data *domain.Bootstrap, item domain.Draft, exists func(*domain.Bootstrap, string, string) bool) error {
 	if !slices.Contains([]string{"issue", "comment", "document", "loop", "project_update", "initiative_update", "customer_need", "pull_request_comment"}, item.Type) {
 		return fmt.Errorf("%w: unsupported draft type", errInvalid)

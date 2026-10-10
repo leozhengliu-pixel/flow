@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -13,28 +13,13 @@ import { StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import type { BootstrapData, Issue, IssueRelation, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 import type { MyIssuesCreateContext, MyIssuesRowData } from './my-issues-list'
+import { IssueRowActionContext, useIssueRowActions, type IssueRowActionContextValue } from './use-issue-row-actions'
 import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
-
-/**
- * Host callbacks for the full row context menu. Pages that render issue lists provide this once;
- * every row menu below them gets the same actions.
- */
-export interface IssueRowActionContextValue {
-  data: BootstrapData
-  onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<unknown>
-  onDeleteIssues?: (issueIds: string[]) => Promise<void>
-  onOpenIssue?: (issue: Issue) => void
-  onCreateIssue?: (context: MyIssuesCreateContext) => void
-}
-
-const IssueRowActionContext = createContext<IssueRowActionContextValue | undefined>(undefined)
 
 export function IssueRowActionsProvider({ value, children }: { value: IssueRowActionContextValue; children: ReactNode }) {
   return <IssueRowActionContext.Provider value={value}>{children}</IssueRowActionContext.Provider>
 }
-
-export function useIssueRowActions() { return useContext(IssueRowActionContext) }
 
 type MarkAs = { id: string; label: string; shortcut?: string; relation?: IssueRelationType }
 const MARK_AS: MarkAs[] = [

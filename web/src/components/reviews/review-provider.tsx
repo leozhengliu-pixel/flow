@@ -10,11 +10,3 @@ export function ReviewProviderIcon({
   const Icon = provider === "gitlab" ? GitMerge : GitPullRequest;
   return <Icon {...props} />;
 }
-
-export function reviewProviderNoun(provider: CodeReview["provider"]) {
-  return provider === "gitlab" ? "merge request" : "pull request";
-}
-
-export function reviewProviderIdentifier(review: Pick<CodeReview, "provider" | "number">) {
-  return `${review.provider === "gitlab" ? "!" : "#"}${review.number}`;
-}

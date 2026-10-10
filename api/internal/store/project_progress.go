@@ -166,10 +166,6 @@ func weeklyProgressDates(start, end time.Time) []time.Time {
 	return dates
 }
 
-func countedProgressIssue(issue domain.Issue) bool {
-	return countedProgressState(issue.State.Type)
-}
-
 func countedProgressState(stateType string) bool {
 	switch stateType {
 	case "canceled", "duplicate", "triage":

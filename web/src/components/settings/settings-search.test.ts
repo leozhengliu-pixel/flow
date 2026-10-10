@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { createSettingsSearchIndex, searchTeams, SETTINGS_SEARCH_PAGES } from './settings-search'
-import { translateToChinese } from '@/i18n/i18n'
+import { translateToChinese } from '@/i18n/translate'
 
 describe('settings search index', () => {
   it('finds the actual Asks enable control in both languages', () => {

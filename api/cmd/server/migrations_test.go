@@ -129,7 +129,7 @@ func TestLinearMigrationExecutesIssueAndMetadataPhases(t *testing.T) {
 		var payload map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&payload)
 		query, _ := payload["query"].(string)
-		data := map[string]any{}
+		var data map[string]any
 		switch {
 		case strings.Contains(query, "MigrationTarget"):
 			data = map[string]any{"viewer": map[string]any{"id": "linear_viewer"}, "team": map[string]any{"id": "linear_team", "name": "Linear team", "key": "LIN", "members": map[string]any{"nodes": []map[string]any{{"id": "linear_user", "name": bootstrap.Viewer.DisplayName, "email": bootstrap.Viewer.Email}}}, "states": map[string]any{"nodes": []map[string]any{{"id": "linear_state", "name": "Todo", "type": "unstarted"}}}, "labels": map[string]any{"nodes": []any{}}, "projects": map[string]any{"nodes": []any{}}}}

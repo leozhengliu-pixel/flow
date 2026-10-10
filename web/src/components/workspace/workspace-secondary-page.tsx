@@ -40,7 +40,8 @@ import { useI18n } from "@/i18n/i18n";
 import { MeetingPage } from "@/components/meetings/meeting-page";
 import { DiaryPage } from "@/components/diary/diary-page";
 import { TriagePage, type TriageSelectOptions } from "@/components/triage";
-import { filterLabelItems, LabelPageToolbar } from "./label-page-toolbar";
+import { LabelPageToolbar } from "./label-page-toolbar";
+import { filterLabelItems } from "./label-page-model";
 import { resourceDisplayTitle, resourceLinkName } from "@/components/project-detail/project-resource-link-name";
 import "./workspace-secondary-page.css";
 import { GridLoader } from '@/components/ui/grid-loader'

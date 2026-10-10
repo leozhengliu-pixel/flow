@@ -110,12 +110,6 @@ func localSQLiteFixture() domain.Bootstrap {
 	return data
 }
 
-func cycleWeekStart(value time.Time) time.Time {
-	day := time.Date(value.Year(), value.Month(), value.Day(), 0, 0, 0, 0, time.UTC)
-	daysSinceMonday := (int(day.Weekday()) + 6) % 7
-	return day.AddDate(0, 0, -daysSinceMonday)
-}
-
 func stringPointer(value string) *string { return &value }
 
 func canonicalProjectStatuses() []domain.ProjectStatus {

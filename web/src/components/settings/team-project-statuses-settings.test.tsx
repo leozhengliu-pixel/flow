@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { I18nProvider } from '@/i18n/i18n'
 import type { BootstrapData, Team } from '@/types/flow'
+import { TeamProjectStatusesSettingsPage } from './team-project-statuses-settings'
 import {
   getProjectStatusInheritanceConflicts,
   projectStatusInheritanceSource,
-  TeamProjectStatusesSettingsPage,
-} from './team-project-statuses-settings'
+} from './team-project-statuses-model'
 
 vi.mock('@/lib/api', () => ({
   updateStructuredTeamSettings: vi.fn(async () => ({})),

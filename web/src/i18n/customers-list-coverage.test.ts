@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 
 describe('customers page, create customer dialog and customer commands', () => {
   it('translates every visible string', () => {

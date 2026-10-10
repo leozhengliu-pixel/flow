@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { CustomerStatusIcon, CustomerTierIcon, findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-icon'
+import { CustomerStatusIcon, CustomerTierIcon } from '@/components/customer/customer-status-icon'
+import { findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-lookup'
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { AppLink } from '@/components/ui/app-link'

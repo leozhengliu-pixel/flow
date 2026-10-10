@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import './activity-page.css'
 
 export type ActivityPageEntityType = 'project' | 'initiative' | 'issue' | 'document'
@@ -103,13 +103,13 @@ export function ActivityPage({
     return () => window.cancelAnimationFrame(frame)
   }, [initialUpdateId, entityId])
 
-  const updatePreferences = (next: ActivityPagePreferences) => {
+  const updatePreferences = useCallback((next: ActivityPagePreferences) => {
     setPreferences(next)
     onPreferencesChange?.(next)
     try {
       localStorage.setItem(`${PREFS_PREFIX}${entityType}:${entityId}`, JSON.stringify(next))
     } catch { /* ignore */ }
-  }
+  }, [entityType, entityId, onPreferencesChange])
 
   const initiativePrefs = preferences.initiative ?? defaultPreferences('initiative').initiative!
   const projectPrefs = preferences.project ?? defaultPreferences('project').project!
@@ -161,7 +161,7 @@ export function ActivityPage({
       )
     }
     return null
-  }, [entityType, initiativePrefs, preferences, projectPrefs])
+  }, [entityType, initiativePrefs, preferences, projectPrefs, updatePreferences])
 
   return (
     <div className={['activity-page', className].filter(Boolean).join(' ')} data-entity-type={entityType}>
@@ -183,18 +183,4 @@ export function ActivityPage({
       </div>
     </div>
   )
-}
-
-export function useActivityPagePreferences(entityType: ActivityPageEntityType, entityId: string) {
-  const [preferences, setPreferences] = useState(() => readStoredPreferences(entityType, entityId))
-  useEffect(() => {
-    setPreferences(readStoredPreferences(entityType, entityId))
-  }, [entityType, entityId])
-  const save = (next: ActivityPagePreferences) => {
-    setPreferences(next)
-    try {
-      localStorage.setItem(`${PREFS_PREFIX}${entityType}:${entityId}`, JSON.stringify(next))
-    } catch { /* ignore */ }
-  }
-  return [preferences, save] as const
 }

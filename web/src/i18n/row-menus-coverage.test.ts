@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 import { zhCN } from './translations'
 
 // The project / initiative row context menus pass English keys through t(); every key needs zh-CN.
@@ -8,6 +8,7 @@ const sources = import.meta.glob(
   [
     '../components/ui/row-context-menu.tsx',
     '../components/ui/reminder-options.tsx',
+    '../components/ui/reminder-presets.ts',
     '../components/projects-page/project-row-menu.tsx',
     '../components/initiatives/initiative-row-menu.tsx',
     '../components/initiatives/initiative-header-menus.tsx',

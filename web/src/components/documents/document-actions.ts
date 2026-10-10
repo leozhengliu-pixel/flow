@@ -89,6 +89,7 @@ export function documentMarkdown(document: Pick<FlowDocument, 'title' | 'content
 }
 
 export function documentFileName(document: Pick<FlowDocument, 'title'>, extension: string, t: Translate = value => value) {
+  // oxlint-disable-next-line no-control-regex -- stripping control characters from file names is intentional
   const base = (document.title.trim() || t('Untitled')).replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || 'document'
   return `${base}.${extension}`
 }

@@ -111,8 +111,7 @@ func TestFetchBlocksInternalAddressesAndSchemes(t *testing.T) {
 func loopbackOnly(addr netip.Addr) bool { return addr.Unmap() == netip.MustParseAddr("127.0.0.1") }
 
 func TestFetchRedirectsAreRecheckedAndLimited(t *testing.T) {
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/internal":
 			http.Redirect(w, r, "http://10.0.0.1/admin", http.StatusFound)

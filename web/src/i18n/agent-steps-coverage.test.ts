@@ -5,7 +5,7 @@ import { CHAT_TOOL_FALLBACK, CHAT_TOOL_LABELS, CHAT_TOOL_UPDATE_LABELS, CHAT_TOO
 import toolNames from '@/components/agent/agent-tool-names.json'
 import { FAILURE_MESSAGES, OUTPUT_LABELS, TRIGGER_REASON_NONE, TRIGGER_REASON_TEXTS, triggerReasonTemplate } from '@/components/loops/loop-run-labels'
 import { REASON_LABELS } from '@/components/loops/loop-run-status'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 import { zhCN } from './translations'
 
 const cjk = /[㐀-鿿]/

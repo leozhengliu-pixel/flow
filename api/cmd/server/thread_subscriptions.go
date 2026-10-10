@@ -29,16 +29,6 @@ func threadRootID(comments []domain.Comment, commentID string) (string, bool) {
 	return "", false
 }
 
-func threadSubscriptionState(data *domain.Bootstrap, userID, issueID, rootID string) string {
-	index := slices.IndexFunc(data.ThreadSubscriptions, func(item domain.ThreadSubscription) bool {
-		return item.UserID == userID && item.IssueID == issueID && item.CommentID == rootID
-	})
-	if index < 0 {
-		return ""
-	}
-	return data.ThreadSubscriptions[index].State
-}
-
 // threadAudience returns thread watchers (participants and explicit
 // subscribers, minus muted users) and the users who muted the thread.
 func threadAudience(data *domain.Bootstrap, issueID, rootID string) (watchers []string, muted map[string]bool) {

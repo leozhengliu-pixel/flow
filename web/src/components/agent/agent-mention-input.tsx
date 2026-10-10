@@ -3,30 +3,13 @@ import { createPortal } from 'react-dom'
 import { FileText } from 'lucide-react'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
-import { avatarColor } from '@/components/issue/core-property-pickers'
+import { avatarColor } from '@/components/issue/avatar-color'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
 import styles from './agent-mention-input.module.css'
 
 export type AgentMention = { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }
-
-/** Icon for a mention chip or option: status, project, document or avatar. */
-export function mentionIcon(mention: Pick<AgentMention, 'type' | 'id'>, data: BootstrapData): ReactNode {
-  if (mention.type === 'issue') {
-    const issue = data.issues.find(item => item.id === mention.id)
-    return issue ? <StatusIcon state={issue.state} size={14}/> : null
-  }
-  if (mention.type === 'project') {
-    const project = data.projects.find(item => item.id === mention.id)
-    return <ProjectIcon size={14} style={{ color: project?.color }}/>
-  }
-  if (mention.type === 'user') {
-    const user = data.users.find(item => item.id === mention.id)
-    return <UserAvatar className={styles.avatar} avatarUrl={user?.avatarUrl} color={avatarColor(mention.id)} name={user?.displayName ?? '?'}/>
-  }
-  return <FileText size={14}/>
-}
 
 type MentionOption = AgentMention & { key: string; detail?: string; icon: ReactNode; group: string }
 
@@ -110,7 +93,7 @@ export function AgentMentionInput({
     const text = walk(editor).replace(/\u00a0/g, ' ')
     const unique = mentions.filter((item, index) => mentions.findIndex(other => other.type === item.type && other.id === item.id) === index)
     return { text, mentions: unique }
-  }, [])
+  }, [editorRef])
 
   const sync = useCallback(() => {
     const { text, mentions } = read()
@@ -125,7 +108,7 @@ export function AgentMentionInput({
     if (!editor) return
     if (!value && editor.textContent) { editor.textContent = ''; setChips([]); setEmpty(true); setQuery(null) }
     else if (value && !editor.textContent && !editor.querySelector('[data-mention-id]')) { editor.textContent = value; setEmpty(false) }
-  }, [value])
+  }, [editorRef, value])
 
   const detectQuery = () => {
     const selection = window.getSelection()

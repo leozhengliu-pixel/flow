@@ -60,11 +60,6 @@ func requestLog(next http.Handler) http.Handler {
 	})
 }
 
-func requestID(ctx context.Context) string {
-	value, _ := ctx.Value(requestIDKey{}).(string)
-	return value
-}
-
 func newRequestID() string {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {

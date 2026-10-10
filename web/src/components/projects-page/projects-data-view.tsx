@@ -10,7 +10,7 @@ import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { CalendarIcon, NoAssigneeIcon } from '@/components/issue/issue-icons'
 import { MilestoneProgressIcon } from '@/components/issue/milestone-progress-icon'
 import { isMilestoneDateOverdue } from '@/components/issue/milestone-progress'
-import { ViewGlyph, ViewIconPicker } from '@/components/views/view-icon-picker'
+import { ViewIconPicker } from '@/components/views/view-icon-picker'
 import { CheckIcon, ChevronRightIcon, PlusIcon } from './projects-page-icons'
 import { ProjectPropertyPicker, ProjectStatusGlyph, type ProjectPropertyOption } from './project-property-picker'
 import { ProjectTargetDatePicker } from './project-target-date-picker'
@@ -679,10 +679,6 @@ function LeadPropertyButton({ lead, onChange, options }: {
       </Tooltip.Portal>
     </Tooltip.Root>
   </Tooltip.Provider>
-}
-
-function DataViewProjectIcon({ color = '#8b8b90', icon }: { color?: string, icon?: string }) {
-  return <span aria-hidden="true" className="lp-project-symbol"><ViewGlyph color={color} icon={icon || 'Project'}/></span>
 }
 
 function HealthIcon({ value }: { value: ProjectPageItem['health'] }) {

@@ -13,7 +13,7 @@ import { createCustomerRequest, updateCustomerRequest, uploadCustomerRequestAtta
 import type { BootstrapData, Customer, CustomerRequest } from '@/types/flow'
 import { CustomerLogo } from './customer-logo'
 import { AttachIcon, ClearIcon, RequestPlusIcon, SourceLinkIcon } from './customer-request-glyphs'
-import { IMPORTANT_PRIORITY, looksLikeUrl, normalizeSourceUrl, sourceHost } from './customer-request-model'
+import { looksLikeUrl, normalizeSourceUrl, sourceHost } from './customer-request-model'
 import './embedded-customer-need-form.css'
 
 export type EmbeddedCustomerNeedHost = 'issuePage' | 'projectPage' | 'customerPage'
@@ -274,13 +274,4 @@ function SourceButton({ value, onChange }: { value: string; onChange: (value: st
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
-}
-
-/** Map Important ↔ REST priority (1 = important). */
-export function importantFromPriority(priority?: number) {
-  return (priority ?? 0) >= IMPORTANT_PRIORITY
-}
-
-export function priorityFromImportant(important: boolean) {
-  return important ? IMPORTANT_PRIORITY : undefined
 }

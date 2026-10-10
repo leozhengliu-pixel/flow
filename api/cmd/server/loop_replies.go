@@ -68,7 +68,6 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	skillIDs := uniqueAgentIDs(input.SkillIDs)
-	workspace := workspaceKey(r)
 	id, runID := r.PathValue("id"), r.PathValue("runId")
 	data, err := s.loopViewerData(r)
 	if errors.Is(err, errNotFound) {
@@ -79,7 +78,7 @@ func (s *server) replyLoopRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "You don't have permission to perform this action")
 		return
 	}
-	workspace = data.Workspace.URLKey
+	workspace := data.Workspace.URLKey
 	loop := loopByID(&data, id)
 	if loop == nil {
 		writeError(w, http.StatusNotFound, "loop not found")

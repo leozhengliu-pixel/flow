@@ -54,17 +54,18 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
   const trash=tab.resource?data.trash.filter(item=>item.resourceType===tab.resource&&item.teamIds?.includes(team.id)):[]
   const count = trash.length + archivedIssues.length + archivedProjects.length + archivedCycles.length
   const listRef = useRef<HTMLDivElement | null>(null)
+  const { loadMore } = archivedLoader
   useEffect(() => {
     if (tab.id !== 'issues') return
     const node = listRef.current
     if (!node) return
     const onScroll = () => {
       const distance = node.scrollHeight - node.scrollTop - node.clientHeight
-      archivedLoader.loadMore(distance)
+      loadMore(distance)
     }
     node.addEventListener('scroll', onScroll, { passive: true })
     return () => node.removeEventListener('scroll', onScroll)
-  }, [archivedLoader.loadMore, tab.id])
+  }, [loadMore, tab.id])
 
   useEffect(()=>{setFilterOpen(false);setFilters([])},[tab.id])
 

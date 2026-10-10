@@ -20,24 +20,16 @@ import { issuePath, reviewPath, reviewsPath, type ReviewRouteTab } from "@/lib/a
 import { resolveCodeReviewAccess } from "@/lib/code-access";
 import type { BootstrapData, CodeReview, Issue } from "@/types/flow";
 
-import { ReviewProviderIcon, reviewProviderIdentifier } from "./review-provider";
+import { ReviewProviderIcon } from "./review-provider";
+import { reviewProviderIdentifier } from "./review-provider-model";
 
-export type MergeMethod = "squash" | "merge" | "rebase";
+import type { MergeMethod } from "./pull-request-merge-method";
 
 const MERGE_LABELS: Record<MergeMethod, string> = {
   squash: "Squash and merge",
   merge: "Create a merge commit",
   rebase: "Rebase and merge",
 };
-
-export function resolvePreferredMergeMethod(
-  preference: string | undefined,
-): MergeMethod {
-  const value = (preference ?? "").toLowerCase();
-  if (value.includes("rebase")) return "rebase";
-  if (value.includes("merge commit") || value === "merge") return "merge";
-  return "squash";
-}
 
 export function PullRequestHeader({
   data,

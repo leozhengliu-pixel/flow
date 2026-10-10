@@ -8,6 +8,7 @@ import './styles/micro-audit-overrides.css'
 import './components/ui/tooltip.css'
 import { BrowserRouter } from 'react-router-dom'
 import { I18nProvider } from './i18n/i18n'
+import { prepareInitialLocale } from './i18n/locale'
 import { initializeTheme } from './lib/theme'
 import { renderMermaidPreview } from './components/issue/editor/mermaid-preview'
 import { ThemedToaster } from './components/ui/themed-toaster'
@@ -24,7 +25,8 @@ import './styles/picker-parity.css'
 initializeTheme()
 window.__flowMermaidPreview = renderMermaidPreview
 
-createRoot(document.getElementById('root')!).render(
+// Await the (lazily loaded) Chinese dictionary when the saved locale needs it so the first paint is never English.
+void prepareInitialLocale().then(() => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <FlowMotionProvider><I18nProvider>
       <BrowserRouter>
@@ -39,4 +41,4 @@ createRoot(document.getElementById('root')!).render(
       </BrowserRouter>
     </I18nProvider></FlowMotionProvider>
   </StrictMode>,
-)
+))

@@ -2,36 +2,18 @@
  * LS-0511 PullRequestReviewShortcutsContext — review shortcut map (list + detail + inbox).
  */
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from "react";
 
-export type PullRequestReviewShortcutHandlers = {
-  focusFileFilter?: () => void;
-  searchInFiles?: () => void;
-  toggleHoveredFile?: () => void;
-  markHoveredFileReviewed?: () => void;
-  markHoveredSectionReviewed?: () => void;
-  markTourFileReviewed?: () => void;
-  submitReview?: () => void;
-  toggleReviewLayout?: () => void;
-  nextFile?: () => void;
-  previousFile?: () => void;
-  approve?: () => void;
-};
-
-export type PullRequestReviewShortcutsContextValue = PullRequestReviewShortcutHandlers & {
-  register: (partial: Partial<PullRequestReviewShortcutHandlers>) => () => void;
-};
-
-const PullRequestReviewShortcutsContext = createContext<PullRequestReviewShortcutsContextValue | null>(
-  null,
-);
+import {
+  PullRequestReviewShortcutsContext,
+  type PullRequestReviewShortcutHandlers,
+  type PullRequestReviewShortcutsContextValue,
+} from "./pull-request-review-shortcuts";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -124,16 +106,4 @@ export function PullRequestReviewShortcutsProvider({
       {children}
     </PullRequestReviewShortcutsContext.Provider>
   );
-}
-
-export function usePullRequestReviewShortcuts() {
-  const ctx = useContext(PullRequestReviewShortcutsContext);
-  if (!ctx) {
-    throw new Error("usePullRequestReviewShortcuts requires PullRequestReviewShortcutsProvider");
-  }
-  return ctx;
-}
-
-export function useOptionalPullRequestReviewShortcuts() {
-  return useContext(PullRequestReviewShortcutsContext);
 }
