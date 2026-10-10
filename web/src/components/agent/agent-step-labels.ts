@@ -146,7 +146,11 @@ export function translatePhaseTitle(title: string, t: Translate) {
 export function workingLabel(parts: NonNullable<AgentMessage["parts"]>, t: Translate) {
   const isRunning = (call?: AgentToolCall) => call?.status === "running" || call?.status === "pending";
   const tool = parts.findLastIndex(part => isRunning(part.toolCall));
-  if (tool < 0) return t("Thinking…");
+  if (tool < 0) {
+    // A step reported with nothing after it yet (loops' report_progress) is the current phase.
+    const last = parts.at(-1);
+    return last?.type === "step" && last.title ? `${translatePhaseTitle(last.title, t).replace(/…$/, "")}…` : t("Thinking…");
+  }
   const step = parts.findLastIndex((part, index) => index < tool && part.type === "step" && Boolean(part.title));
   const between = step >= 0 && parts.slice(step + 1, tool).every(part => part.type === "toolCall");
   if (between) return `${translatePhaseTitle(parts[step].title!, t).replace(/…$/, "")}…`;

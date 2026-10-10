@@ -1305,6 +1305,7 @@ export const zhCN: Record<string, string> = {
   "Accept issue": "接受事项",
   "Comment for accepting issue": "接受事项时的评论",
   "Add an optional comment…": "添加可选评论…",
+  "Set priority": "设置优先级",
   "Set a priority before moving this issue out of triage.": "将事项移出分流前请先设置优先级。",
   "Issue accepted": "事项已接受",
   "Could not accept issue": "无法接受事项",

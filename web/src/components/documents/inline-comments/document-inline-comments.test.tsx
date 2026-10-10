@@ -69,23 +69,21 @@ function rangeOf(editor: Editor, text: string) {
   return found!
 }
 
-function renderComments(props: { data?: BootstrapData; comments: Comment[]; editor: Editor | null; draft?: CommentDraft; onDraftChange?: (draft?: CommentDraft) => void; canEdit?: boolean; canComment?: boolean; pageWidth?: number; railOpen?: boolean }) {
+/** The viewport decides between gutter cards (1232px and wider) and a popover, through a media query. */
+function setViewport(width: number) {
+  window.matchMedia = ((query: string) => ({ matches: width >= Number(/min-width: (\d+)px/.exec(query)?.[1] ?? 0), media: query, addEventListener: () => {}, removeEventListener: () => {}, addListener: () => {}, removeListener: () => {}, onchange: null, dispatchEvent: () => false })) as typeof window.matchMedia
+}
+
+function renderComments(props: { data?: BootstrapData; comments: Comment[]; editor: Editor | null; draft?: CommentDraft; onDraftChange?: (draft?: CommentDraft) => void; canEdit?: boolean; canComment?: boolean; viewport?: number; railOpen?: boolean }) {
   const data = props.data ?? makeBootstrap({ documents: [flowDocument] })
   const shell = document.createElement('div')
-  if (props.pageWidth !== undefined) {
-    // The page decides between gutter cards and a popover by its own width.
-    const page = document.createElement('main')
-    page.className = 'document-page'
-    Object.defineProperty(page, 'clientWidth', { configurable: true, value: props.pageWidth })
-    page.appendChild(shell)
-    document.body.appendChild(page)
-  }
+  if (props.viewport !== undefined) setViewport(props.viewport)
   const onReload = vi.fn().mockResolvedValue(undefined)
   const view = render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={props.comments} editor={props.editor} shell={shell} draft={props.draft} onDraftChange={props.onDraftChange ?? vi.fn()} canComment={props.canComment ?? true} canEdit={props.canEdit ?? true} onReload={onReload} railOpen={props.railOpen}/></I18nProvider>)
   return { ...view, onReload, data }
 }
 
-beforeEach(() => { Object.values(api).forEach(mock => mock.mockReset()); toasts.success.mockReset(); toasts.error.mockReset() })
+beforeEach(() => { setViewport(1470); Object.values(api).forEach(mock => mock.mockReset()); toasts.success.mockReset(); toasts.error.mockReset() })
 afterEach(() => { editors.forEach(editor => editor.destroy()); editors = []; document.body.innerHTML = '' })
 
 describe('inline comments model', () => {
@@ -149,32 +147,24 @@ describe('DocumentInlineComments', () => {
     return editor
   }
 
-  it('lists every open thread in the gutter on a wide page and reports it so the document shifts left', async () => {
+  it('lists every open thread in the gutter on a wide viewport and reports it so the document shifts left', async () => {
     const editor = markedEditor()
     const onGutterChange = vi.fn()
     const data = makeBootstrap({ documents: [flowDocument] })
+    setViewport(1470)
     const shell = document.createElement('div')
-    const page = document.createElement('main')
-    page.className = 'document-page'
-    Object.defineProperty(page, 'clientWidth', { configurable: true, value: 1217 })
-    page.appendChild(shell)
-    document.body.appendChild(page)
     render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={threads} editor={editor} shell={shell} onDraftChange={vi.fn()} canComment canEdit onReload={vi.fn()} onGutterChange={onGutterChange}/></I18nProvider>)
     expect(await screen.findAllByRole('group', { name: 'Comment thread' })).toHaveLength(2)
     expect(document.querySelector('.document-inline-gutter')).not.toHaveClass('is-popover')
     await waitFor(() => expect(onGutterChange).toHaveBeenLastCalledWith(true))
   })
 
-  it('opens only the clicked thread as a 360px popover under its text on a narrow page, and leaves the document where it is', async () => {
+  it('opens only the clicked thread as a 360px popover under its text on a narrow viewport, and leaves the document where it is', async () => {
     const editor = markedEditor()
     const onGutterChange = vi.fn()
     const data = makeBootstrap({ documents: [flowDocument] })
+    setViewport(1200)
     const shell = document.createElement('div')
-    const page = document.createElement('main')
-    page.className = 'document-page'
-    Object.defineProperty(page, 'clientWidth', { configurable: true, value: 980 })
-    page.appendChild(shell)
-    document.body.appendChild(page)
     render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={threads} editor={editor} shell={shell} onDraftChange={vi.fn()} canComment canEdit onReload={vi.fn()} onGutterChange={onGutterChange}/></I18nProvider>)
     // Nothing is open until a highlight is clicked.
     await waitFor(() => expect(document.querySelector('.inline-comment-open')).toBeTruthy())
@@ -194,7 +184,7 @@ describe('DocumentInlineComments', () => {
 
   it('uses the popover whenever the agent rail is open', async () => {
     const editor = markedEditor()
-    renderComments({ comments: threads, editor, pageWidth: 1400, railOpen: true })
+    renderComments({ comments: threads, editor, viewport: 1470, railOpen: true })
     fireEvent.click(await waitFor(() => editor.view.dom.querySelector<HTMLElement>('[data-comment-anchor="cmt_a"]')!))
     await screen.findByRole('group', { name: 'Comment thread' })
     expect(document.querySelector('.document-inline-gutter')).toHaveClass('is-popover')
@@ -203,7 +193,7 @@ describe('DocumentInlineComments', () => {
   it('shows a draft composer as a popover too, with the avatar and a one-row composer', async () => {
     const editor = makeEditor()
     const range = rangeOf(editor, 'launch plan')
-    renderComments({ comments: [], editor, draft: { ...range, text: 'launch plan' }, pageWidth: 900 })
+    renderComments({ comments: [], editor, draft: { ...range, text: 'launch plan' }, viewport: 900 })
     expect(await screen.findByRole('textbox', { name: 'Add a comment…' })).toBeTruthy()
     expect(document.querySelector('.document-inline-gutter.is-popover .document-thread-card.is-draft')).toBeTruthy()
   })
