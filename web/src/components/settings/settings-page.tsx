@@ -1126,6 +1126,11 @@ function SettingsBodyContent(
           await props.onReload();
           props.onNavigate("releases");
         }}
+        onCreated={async (created) => {
+          await props.onReload();
+          props.onOpenReleasePipeline(created);
+        }}
+        onChanged={props.onReload}
       />
     );
   }

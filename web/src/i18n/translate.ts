@@ -54,7 +54,7 @@ export function translateToChinese(source: string): string {
     [/^(\d+) active connections across workspace members$/, count => `工作区成员共有 ${count} 个活跃连接`],
     [/^(\d+) pull requests?$/, count => `${count} 个合并请求`],
     [/^(\d+) reactions?$/, count => `${count} 个反应`],
-    [/^(\d+) release pipelines?$/, count => `${count} 个发布流水线`],
+    [/^(\d+) release pipelines?$/, count => `${count} 个发布管线`],
     [/^(\d+) reviews?$/, count => `${count} 个评审`],
     [/^(\d+) filters?$/, count => `${count} 个筛选条件`],
     [/^(\d+) (statuses|labels|assignees|creators|subscribers|agents|milestones|customers|templates|relations|values)$/, (count, noun) => `${count} 个${({ statuses: '状态', labels: '标签', assignees: '负责人', creators: '创建者', subscribers: '订阅者', agents: ' Agent', milestones: '里程碑', customers: '客户', templates: '模板', relations: '关系', values: '值' } as Record<string, string>)[noun]}`],

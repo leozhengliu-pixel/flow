@@ -218,7 +218,8 @@
 .sidebar-favorite-link:focus-visible { background: lch(8.445% 1.3 272); color: var(--bright); outline: 2px solid var(--focus-ring); outline-offset: -1px; }
 .sidebar-favorite-link.active { background: lch(13.845% 1.3 272); color: var(--bright); }
 .sidebar-favorite-icon { width: 16px; height: 16px; display: grid; flex: 0 0 16px; place-items: center; }
-.sidebar-favorite-icon svg { width: 14px; height: 14px; fill: currentColor; }
+.sidebar-favorite-icon svg { width: 14px; height: 14px; }
+.sidebar-favorite-icon svg:not([data-icon="release-status"]) { fill: currentColor; }
 .sidebar-favorite-label-dot { width: 8px; height: 8px; border-radius: 50%; }
 .sidebar-favorite-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-favorite-parent { margin-left: 2px; color: var(--theme-text-tertiary); font-weight: 450; }

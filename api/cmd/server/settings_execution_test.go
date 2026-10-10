@@ -323,14 +323,14 @@ func TestReleaseRulesCompletionEdgeAndPipelineScope(t *testing.T) {
 		t.Fatal("stage change did not execute completion rule")
 	}
 	data.Issues[0].State = backlog
-	if err := applyReleaseSettingAutomations(&data, "released", release, time.Now()); err != nil {
+	if err := applyReleaseSettingAutomations(&data, "released", &release, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if data.Issues[0].State.ID != "backlog" {
 		t.Fatal("duplicate callback overwrote manual state")
 	}
 	data.ReleasePipelines[0].Production = false
-	if err := applyReleaseSettingAutomations(&data, "inProgress", release, time.Now()); err != nil {
+	if err := applyReleaseSettingAutomations(&data, "inProgress", &release, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if data.Issues[0].State.ID != "backlog" {

@@ -230,6 +230,10 @@ html:root .settings-app .settings-main .settings-crumb {
   font: 500 13px/28px var(--font);
   white-space: nowrap;
 }
+/* A pinned crumb stays in the panel corner while the page scrolls. */
+@media (min-width: 761px) {
+  html:root .settings-app .settings-main .settings-crumb.is-pinned { position: fixed; top: 18px; left: 252px; }
+}
 html:root .settings-app .settings-main .settings-crumb:hover { background: var(--bg-hover); color: var(--set-nav-active); }
 html:root .settings-app .settings-main .settings-crumb-icon { width: 16px; height: 16px; display: grid; place-items: center; }
 html:root .settings-app .settings-main .settings-crumb-icon svg { width: 16px; height: 16px; }
