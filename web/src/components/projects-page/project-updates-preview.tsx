@@ -13,6 +13,7 @@ import { normalizeProjectIcon } from '@/components/views/project-icon'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
 import { useCommentComposer } from '@/hooks/use-comment-composer'
 import type { Project, ProjectUpdate, User } from '@/types/flow'
+import { AvatarImage } from '@/components/ui/user-avatar'
 
 const HEALTHS: { id: Project['health']; label: string }[] = [{ id: 'onTrack', label: 'On track' }, { id: 'atRisk', label: 'At risk' }, { id: 'offTrack', label: 'Off track' }]
 
@@ -188,7 +189,7 @@ function NoProjectUpdatesIllustration() {
 }
 
 function UpdateAuthorAvatar({ user }: { user: User }) {
-  if (user.avatarUrl) return <img alt="" className="lp-project-updates-preview__avatar" src={user.avatarUrl}/>
+  if (user.avatarUrl) return <AvatarImage alt="" className="lp-project-updates-preview__avatar" src={user.avatarUrl}/>
   if (!user.displayName) return <NoAssigneeIcon size={16}/>
   return <span className="lp-project-updates-preview__avatar">{user.displayName.split(/\s|@/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('')}</span>
 }

@@ -14,7 +14,7 @@ const order: SidebarOrder = {
   personal: ['inbox', 'reviews', 'myIssues', 'pulse', 'drafts', 'agent'],
   workspace: ['members', 'initiatives', 'projects', 'teams', 'views', 'releases', 'loops', 'customers'],
 }
-const preferences = Object.fromEntries([...order.personal, ...order.workspace, 'documents'].map(id => [id, id === 'customers' ? 'never' : 'always'])) as SidebarPreferences
+const preferences = Object.fromEntries([...order.personal, ...order.workspace].map(id => [id, id === 'customers' ? 'never' : 'always'])) as SidebarPreferences
 
 it('matches sidebar customization controls and visibility rules', async () => {
   const user = userEvent.setup()
@@ -40,7 +40,7 @@ it('matches sidebar customization controls and visibility rules', async () => {
 const defaultVisibility: SidebarPreferences = {
   inbox: 'always', reviews: 'always', myIssues: 'always', pulse: 'always',
   drafts: 'always', agent: 'always', initiatives: 'always',
-  projects: 'always', documents: 'always', views: 'always',
+  projects: 'always', views: 'always',
   members: 'always', customers: 'never', teams: 'always',
   releases: 'always', loops: 'always',
 }

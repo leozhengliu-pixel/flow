@@ -39,6 +39,15 @@ func proseMirrorPlainText(document map[string]any) string {
 		case "hardBreak":
 			text.WriteString("\n")
 			return
+		case "embed":
+			// A pasted video / file link that became a player or file card: the model reads its link.
+			text.WriteString(stringAttr(attrs, "src"))
+			if prefix == "" {
+				text.WriteString("\n\n")
+			} else {
+				text.WriteString("\n")
+			}
+			return
 		case "mention":
 			label := firstNonEmpty(stringAttr(attrs, "label"), stringAttr(attrs, "title"), stringAttr(attrs, "id"))
 			if firstNonEmpty(stringAttr(attrs, "mentionType"), "user") == "user" {
@@ -174,7 +183,7 @@ func (s *server) loopInstructionReferences(ctx context.Context, workspace string
 			line = fmt.Sprintf("Document %q", fallback)
 			for _, document := range data.Documents {
 				if document.ID == mention.ID || document.SlugID == mention.ID {
-					line = fmt.Sprintf("Document %q (id %s)", document.Title, document.ID)
+					line = fmt.Sprintf("Document %q (id %s)", documentDisplayTitle(document.Title), document.ID)
 				}
 			}
 		case "user":

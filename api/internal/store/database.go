@@ -237,6 +237,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"migrateAPIKeyLookup", s.migrateAPIKeyLookup},
 		{"migrateCustomerFilterIndex", s.migrateCustomerFilterIndex},
 		{"migrateLoopRunRecords", s.migrateLoopRunRecords},
+		{"dataMigrations", s.runDataMigrations},
 		{"backfillAllProjectProgress", s.backfillAllProjectProgress},
 	}
 	opened := time.Now()

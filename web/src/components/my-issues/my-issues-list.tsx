@@ -13,7 +13,7 @@ import { DueDatePicker } from '@/components/issue/due-date-picker'
 import styles from './my-issues-list.module.css'
 import { ContextMenuIcon } from './context-menu-icon'
 import { IssueRowActionGroups, IssueRowEstimateItem, IssueRowMoreProperties, useIssueRowActions } from './issue-row-actions'
-import { UserAvatar } from '@/components/ui/user-avatar'
+import { AvatarImage, UserAvatar } from '@/components/ui/user-avatar'
 import { AgentBadge, AgentLabel } from '@/components/agent/agent-badge'
 import { useI18n } from '@/i18n/i18n'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
@@ -467,7 +467,7 @@ function MyIssuesMenuItem({ action, danger, label, onAction, shortcut, submenu =
 function MyIssuesOptionIcon({ option }: { option: MyIssuesContextOption }) {
   if (option.kind === 'priority' && option.priority !== undefined) return <PriorityIcon priority={option.priority}/>
   if (option.kind === 'status' && option.stateType && option.color) return <StatusIcon state={{ id: option.id, name: option.label, type: option.stateType, color: option.color }} size={14}/>
-  if (option.avatarUrl) return <img className={styles.optionAvatar} src={option.avatarUrl} alt=""/>
+  if (option.avatarUrl) return <AvatarImage className={styles.optionAvatar} src={option.avatarUrl} alt=""/>
   if (option.kind === 'assignee' && option.id) return <span className={styles.optionInitials}>{initials(option.label)}</span>
   if (option.kind === 'project' && option.id) return <ProjectIcon className={styles.optionIcon} size={14} style={{ color: option.color }}/>
   if (option.color) return <i className={styles.optionColor} style={{ backgroundColor: option.color }}/>

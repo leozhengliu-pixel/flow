@@ -19,7 +19,7 @@ const routePages = {
   'workspace-views': ['ViewsPage'], 'team-views': ['ViewsPage'],
   'workspace-views-new': [], 'team-views-new': [],
   'workspace-members': ['WorkspaceDirectoryPage'], 'workspace-customers': ['WorkspaceDirectoryPage'], 'workspace-teams': ['WorkspaceDirectoryPage'],
-  'member-profile': ['MemberProfilePage'], customer: ['CustomerDetailPage'], documents: ['DocumentsIndexPage'], document: ['DocumentPage'],
+  'member-profile': ['MemberProfilePage'], customer: ['CustomerDetailPage'], documents: ['TeamOverviewPage'], document: ['DocumentPage'],
   analytics: ['AnalyticsDashboardPage'], dashboards: ['DashboardsPage'],
   'release-note': ['WorkspaceSecondaryPage'], label: ['WorkspaceSecondaryPage'], drafts: ['WorkspaceOperationsPage'],
   agent: ['AgentPage'], releases: ['WorkspaceOperationsPage'], 'release-pipeline': ['WorkspaceOperationsPage'], release: ['WorkspaceOperationsPage'], asks: ['WorkspaceOperationsPage'],

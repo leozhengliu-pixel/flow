@@ -30,7 +30,7 @@ export function chipParts(entity: AgentEntity, t: (source: string) => string): C
     case 'issue': return { icon: <StatusIcon size={15} state={entity.issue.state}/>, identifier: entity.issue.identifier, label: entity.issue.title }
     case 'project': return { icon: entity.project.icon && entity.project.icon !== 'Project' ? <ViewGlyph color={entity.project.color} icon={entity.project.icon}/> : <ProjectIcon size={15} style={{ color: entity.project.color }}/>, label: entity.project.name }
     case 'initiative': return { icon: <ViewGlyph color={entity.initiative.color} icon={entity.initiative.icon || 'Initiative'}/>, label: entity.initiative.name }
-    case 'document': return { icon: <DocumentGlyph document={entity.document}/>, label: entity.document.title }
+    case 'document': return { icon: <DocumentGlyph document={entity.document}/>, label: entity.document.title.trim() || t('Untitled') }
     case 'user': return { label: `@${entity.user.displayName || entity.user.name}` }
     case 'team': return { icon: <TeamIcon size={15} team={entity.team}/>, label: entity.team.name }
     case 'cycle': return { icon: <CycleIcon cycle={entity.cycle} size={15}/>, label: entity.cycle.name || `${t('Cycle')} ${entity.cycle.number}` }

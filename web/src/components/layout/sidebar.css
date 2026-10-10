@@ -221,6 +221,7 @@
 .sidebar-favorite-icon svg { width: 14px; height: 14px; fill: currentColor; }
 .sidebar-favorite-label-dot { width: 8px; height: 8px; border-radius: 50%; }
 .sidebar-favorite-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-favorite-parent { margin-left: 2px; color: var(--theme-text-tertiary); font-weight: 450; }
 .sidebar-favorite-remove,.sidebar-favorite-move { width: 20px; height: 20px; display: grid; flex: 0 0 20px; place-items: center; margin-right: -5px; opacity: 0; border-radius: 5px; color: var(--issue-muted); cursor: pointer; }
 .sidebar-favorite-link:hover .sidebar-favorite-remove,.sidebar-favorite-link:focus-within .sidebar-favorite-remove,.sidebar-favorite-link:hover .sidebar-favorite-move,.sidebar-favorite-link:focus-within .sidebar-favorite-move { opacity: 1; }
 .sidebar-favorite-remove:hover,.sidebar-favorite-move:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }

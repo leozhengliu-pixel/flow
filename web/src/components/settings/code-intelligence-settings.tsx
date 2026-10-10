@@ -2,7 +2,7 @@
  * LS-0110 CodeIntelligenceSettingsPage + LS-0280 GitHubCodeAccessFeatureSetting
  * Honest gate: toggle only when hasCodeAccess; otherwise CTA to connect / enable code access.
  */
-import { Sparkles } from "lucide-react";
+
 import type { ReactNode } from "react";
 
 import { useI18n } from "@/i18n/i18n";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/code-access";
 import type { BootstrapData, WorkspaceSettings } from "@/types/flow";
 import { SettingsToggle } from "./settings-primitives";
+import { CodeIntelligenceGlyph } from '@/components/ui/agent-glyph'
 
 type Props = {
   data: BootstrapData;
@@ -95,7 +96,7 @@ export function GitHubCodeAccessFeatureSetting({
       <div className="feature-card">
         <div className="feature-row">
           <span className="feature-row-icon">
-            <Sparkles size={18} />
+            <CodeIntelligenceGlyph size={18} />
           </span>
           <div>
             <strong>
@@ -121,7 +122,7 @@ export function GitHubCodeAccessFeatureSetting({
     <div className="feature-card">
       <div className="feature-row code-access-gate">
         <span className="feature-row-icon">
-          <Sparkles size={18} />
+          <CodeIntelligenceGlyph size={18} />
         </span>
         <div>
           <strong>

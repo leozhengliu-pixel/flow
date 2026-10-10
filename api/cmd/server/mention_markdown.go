@@ -601,7 +601,7 @@ func (m *mentionResolver) urlTarget(raw, text string, link bool) (mentionAttrs, 
 		}
 		for _, document := range m.data.Documents {
 			if document.SlugID == third || document.ID == third {
-				return mentionAttrs{Kind: "document", ID: document.ID, Label: document.Title, Href: m.root() + "/document/" + encodeURIComponent(document.SlugID)}, true
+				return mentionAttrs{Kind: "document", ID: document.ID, Label: documentDisplayTitle(document.Title), Href: m.root() + "/document/" + encodeURIComponent(document.SlugID)}, true
 			}
 		}
 	case "profiles":

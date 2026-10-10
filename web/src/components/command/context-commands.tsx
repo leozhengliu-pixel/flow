@@ -19,7 +19,7 @@ import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useIssueSearch } from '@/components/issue/use-issue-search'
 import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
-import { documentPath, issuePath, projectPath } from '@/lib/app-routes'
+import { issuePath, projectPath } from '@/lib/app-routes'
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
@@ -38,8 +38,16 @@ export type CommandPageId =
   | 'status' | 'assignee' | 'priority' | 'labels' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
   | 'relation' | 'relatedIssue' | 'parent' | 'subIssue'
   | 'projectStatus' | 'projectLead' | 'projectTargetDate' | 'projectInitiative'
+  | 'documentOpen' | 'documentCreateIn' | 'documentFromTemplate' | 'documentFromTemplateIn' | 'documentTeamOverview' | 'documentTeamOverviewDoc'
+  | 'documentOwner' | 'documentRemind' | 'documentMove' | 'documentPin' | 'documentApplyTemplate' | 'documentNewTemplate' | 'documentSubscribers'
 
-export interface CommandPage { id: CommandPageId; label: string; relationType?: IssueRelationType }
+export interface CommandPage {
+  id: CommandPageId
+  label: string
+  relationType?: IssueRelationType
+  /** Carries the earlier pick of a two-step flow (template id, team id). */
+  payload?: string
+}
 
 export interface ContextAction {
   id: string
@@ -67,6 +75,8 @@ export interface PageOption {
   entity?: boolean
   /** Always rendered regardless of the query (typed custom dates). */
   forceMount?: boolean
+  /** Section heading inside a page (My teams / Projects / Initiatives); options of one group must be adjacent. */
+  group?: string
   /** Push another page instead of selecting. */
   page?: CommandPage
   select?: () => void | Promise<unknown>
@@ -97,7 +107,8 @@ export function contextChip(context: CommandContext | undefined, t: (value: stri
     return { label: `${context.issues.length} ${t('issues')}`, entity: false }
   }
   if (context.kind === 'project') return { label: context.project.name, entity: true }
-  return { label: context.document.title || t('Untitled document'), entity: true }
+  if (context.documents && context.documents.length > 1) return { label: `${context.documents.length} ${t('documents')}`, entity: false }
+  return { label: context.document.title.trim() || t('Untitled'), entity: true }
 }
 
 /** Resolves the context issues to full records (loaded, surface-provided, or fetched). */
@@ -136,13 +147,8 @@ export function useContextCommands({ context, data, page, query, handlers, close
   const candidates = useIssueSearch(pickerOpen ? query : '', data?.issues ?? [], pickerOpen)
   if (!context || !data) return { actions: [], options: [], heading: '' }
   if (context.kind === 'project') return projectCommands(context, data, page, query, close, t)
-  if (context.kind === 'document') {
-    const url = `${location.origin}${documentPath(data.workspace.urlKey, context.document)}`
-    return { heading: 'Document', options: [], actions: [
-      { id: 'ctx-copy-document-url', label: 'Copy document URL', icon: <Clipboard/>, shortcut: ['⌘', '⇧', ','], run: () => copyText(url, t('Copied to clipboard')) },
-      { id: 'ctx-copy-document-title', label: 'Copy document title', icon: <Copy/>, run: () => copyText(context.document.title, t('Copied to clipboard')) },
-    ] }
-  }
+  // Document pages and selections are served by document-commands.tsx.
+  if (context.kind === 'document') return { heading: 'Document', actions: [], options: [] }
   return issueCommands({ context, data, page, query, handlers, close, t, refs, issues, remember, candidates })
 }
 

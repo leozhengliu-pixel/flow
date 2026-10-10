@@ -973,25 +973,41 @@ func mcpComposerDescription(markdown string, mentions *mentionResolver) map[stri
 	return map[string]any{"markdown": markdown, "document": document, "documentJSON": string(raw), "contentState": ""}
 }
 
-func (s *server) createMCPReminder(ctx context.Context, data domain.Bootstrap, args map[string]any) (any, error) {
+func (s *server) createMCPReminder(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	remindAt, err := mcpFutureDate(stringArg(args, "remindAt"))
 	if err != nil {
 		return nil, err
 	}
 	targets := 0
-	for _, key := range []string{"issue", "project", "initiative"} {
+	for _, key := range []string{"issue", "project", "initiative", "document"} {
 		if stringArg(args, key) != "" {
 			targets++
 		}
 	}
 	if targets != 1 {
-		return nil, fmt.Errorf("provide exactly one of issue, project, or initiative")
+		return nil, fmt.Errorf("provide exactly one of issue, project, initiative, or document")
 	}
 	input := domain.IssueReminderInput{RemindAt: remindAt.UTC().Format(time.RFC3339)}
 	target := map[string]any{}
 	var handler http.HandlerFunc
 	var targetID string
 	switch {
+	case stringArg(args, "document") != "":
+		// Documents carry their own access list, so the reminder goes through
+		// the routed handler like the document page's "Remind me" menu.
+		document, err := mcpFindDocument(data, stringArg(args, "document"))
+		if err != nil {
+			return nil, err
+		}
+		result, err := s.invokeMCPRoute(ctx, actor, http.MethodPost, "/api/documents/"+pathID(document.ID)+"/reminders", map[string]string{"id": document.ID}, input, s.createDocumentReminder)
+		if err != nil {
+			return nil, err
+		}
+		var saved domain.Notification
+		if err := jsonClone(result, &saved); err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": saved.ID, "remindAt": input.RemindAt, "target": map[string]any{"type": "document", "id": document.ID, "slugId": document.SlugID, "title": document.Title}}, nil
 	case stringArg(args, "issue") != "":
 		issue, err := mcpFindIssue(data, stringArg(args, "issue"))
 		if err != nil {

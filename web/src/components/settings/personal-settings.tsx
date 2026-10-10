@@ -9,7 +9,6 @@ import {
 import { PriorityInboxSettings } from '@/components/inbox/hosts'
 import { readPriorityInboxRuleState } from '@/components/inbox/hosts/priority-inbox-settings-metadata'
 import {
-  Bot,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -96,6 +95,7 @@ import {
   parseThemeTransfer,
   serializeThemeTransfer,
 } from "@/lib/theme-transfer";
+import { AgentSkillsIcon } from '@/components/agent/agent-icons'
 
 export type PersonalSettingsValues = Record<string, string | boolean>;
 
@@ -3743,7 +3743,7 @@ function Agents({ data, values, setValue, onNavigate, p }: PersonalProps) {
                   key={skill.id}
                   to={agentSkillPath(data.workspace.urlKey, skill.id)}
                 >
-                  <Bot />
+                  <AgentSkillsIcon />
                   <span>
                     <strong>{skill.name}</strong>
                     <small>{skill.instructions}</small>

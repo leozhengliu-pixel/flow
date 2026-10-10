@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue, project } from '@/test/fixtures'
-import type { Issue, IssueUpdateInput } from '@/types/flow'
+import type { AgentSession, Issue, IssueUpdateInput } from '@/types/flow'
 import { CommandMenu } from './command-menu'
 import { resetCommandContext, useRegisterCommandContext, type CommandContext } from './command-context'
 
@@ -25,7 +25,9 @@ function Register({ context }: { context?: CommandContext }) {
   return null
 }
 
-function setup(context?: CommandContext) {
+function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = {}) {
+  const onAskAgent = vi.fn()
+  const onOpenAgentSession = vi.fn()
   const onUpdateIssue = vi.fn(async (id: string, input: IssueUpdateInput) => ({ ...(id === second.id ? second : first), ...input }) as Issue)
   const onUpdateIssues = vi.fn(async (ids: string[], input: IssueUpdateInput) => ids.map(id => ({ ...(id === second.id ? second : first), ...input }) as Issue))
   const onOpenChange = vi.fn()
@@ -35,13 +37,14 @@ function setup(context?: CommandContext) {
     return <>
       <Register context={context}/>
       <CommandMenu open={open} onOpenChange={value => { onOpenChange(value); setOpen(value) }} data={data} onUpdateIssue={onUpdateIssue} onUpdateIssues={onUpdateIssues}
-        onCreateIssue={noop} onCreateDocument={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
+        onCreateIssue={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
         onNavigateInbox={noop} onNavigateMyIssues={noop} onNavigateProjects={noop} onNavigateInitiatives={noop} onNavigateViews={noop} onNavigateMembers={noop}
-        onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={noop}/>
+        onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={noop}
+        onAskAgent={onAskAgent} agentSessions={agent.sessions} onOpenAgentSession={onOpenAgentSession}/>
     </>
   }
   render(<MemoryRouter><I18nProvider><Harness/></I18nProvider></MemoryRouter>)
-  return { onUpdateIssue, onUpdateIssues, onOpenChange, user: userEvent.setup() }
+  return { onUpdateIssue, onUpdateIssues, onOpenChange, onAskAgent, onOpenAgentSession, user: userEvent.setup() }
 }
 
 const input = () => document.querySelector<HTMLInputElement>('[cmdk-input]')!
@@ -143,5 +146,48 @@ describe('context-aware command menu', () => {
     await user.click(screen.getByRole('option', { name: /Change project lead…/ }))
     await user.click(screen.getByRole('option', { name: /Teammate/ }))
     expect(onUpdate).toHaveBeenCalledWith({ leadId: 'user-2' })
+  })
+  it('draws the agent entry with the agent cursor glyph, not a generic bot icon', () => {
+    setup()
+    const row = screen.getByRole('option', { name: /Go to Agent/ })
+    expect(row.querySelector('svg[data-agent-glyph="agentPointer"]')).toBeInTheDocument()
+    expect(row.querySelector('.lucide-bot')).toBeNull()
+  })
+  it('offers "Ask Flow" with the ⌘J shortcut and opens the floating chat', async () => {
+    const { user, onAskAgent, onOpenChange } = setup()
+    const row = screen.getByRole('option', { name: /Ask Flow/ })
+    expect(row.querySelector('svg[data-agent-glyph="agentPointer"]')).toBeInTheDocument()
+    expect([...row.querySelectorAll('kbd')].map(key => key.textContent)).toEqual(['⌘', 'J'])
+    await user.click(row)
+    expect(onAskAgent).toHaveBeenCalledTimes(1)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('lists past agent chats on "Open past agent chat…", filters them and opens the chosen one', async () => {
+    const now = Date.now()
+    const chat = (id: string, title: string, ageMs: number, extra: Partial<AgentSession> = {}) => ({ id, slugId: `${id}-slug`, userId: 'user-1', title, favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [], createdAt: new Date(now - ageMs).toISOString(), updatedAt: new Date(now - ageMs).toISOString(), ...extra }) as AgentSession
+    const sessions = [
+      chat('old', 'Quarterly planning', 10 * 86_400_000),
+      chat('new', 'Compare Test status', 3_600_000, { lastReadAt: new Date(now - 7_200_000).toISOString() }),
+    ]
+    const { user, onOpenAgentSession } = setup(undefined, { sessions })
+    await user.click(screen.getByRole('option', { name: /Open past agent chat…/ }))
+    expect(input()).toHaveAttribute('placeholder', 'Open past agent chat…')
+    const rows = screen.getAllByRole('option')
+    expect(rows.map(row => row.textContent)).toEqual([expect.stringContaining('Compare Test status'), expect.stringContaining('Quarterly planning')])
+    expect(rows[0].querySelector('.command-chat-dot')).toHaveAttribute('data-unread', 'true')
+    expect(rows[1].querySelector('.command-chat-dot')).not.toHaveAttribute('data-unread')
+    expect(screen.getByText('Today')).toBeInTheDocument()
+    await user.type(input(), 'quarter')
+    expect(screen.queryByRole('option', { name: /Compare Test status/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: /Quarterly planning/ }))
+    expect(onOpenAgentSession).toHaveBeenCalledWith(sessions[0])
+  })
+
+  it('goes back from the past chat list to the root commands with Backspace', async () => {
+    const { user } = setup(undefined, { sessions: [] })
+    await user.click(screen.getByRole('option', { name: /Open past agent chat…/ }))
+    await user.type(input(), '{Backspace}')
+    expect(screen.getByRole('option', { name: /Go to Agent/ })).toBeInTheDocument()
   })
 })

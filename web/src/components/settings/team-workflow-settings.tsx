@@ -9,16 +9,13 @@ import {
 } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import {
-  Bot,
   ChevronRight,
   Copy,
   GitBranch,
   MoreHorizontal,
   Plus,
   RefreshCw,
-  Sparkles,
   Trash2,
-  WandSparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RecurringIssuesSettingsPage } from "./recurring-issues-settings";
@@ -34,12 +31,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  createDocumentTemplate,
   createEmailIntakeAddress,
   createTriageResponsibility,
   createTriageRule,
   createWorkflowState,
-  deleteDocumentTemplate,
   deleteGitAutomation,
   deleteTargetBranch,
   deleteTeam,
@@ -53,7 +48,6 @@ import {
   updateCycleSettings,
   rotateEmailIntakeAddress,
   updateEmailIntakeAddress,
-  updateDocumentTemplate,
   updateStructuredTeamSettings,
   updateTeam,
   updateWorkflowState,
@@ -83,7 +77,7 @@ import {
 } from "@/lib/team-security-confirms";
 
 import { TemplateEditor } from "./advanced-settings";
-import { MentionTextField } from "@/components/editor/mention-text-field";
+import { DocumentTemplateEditor } from "@/components/documents/document-template-editor";
 import {
   SettingsCrumb,
   SettingsRow,
@@ -115,6 +109,8 @@ import {
 } from "./issues-projects-settings";
 
 import "./issues-projects-settings.css";
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
+import { AgentSkillsIcon } from '@/components/agent/agent-icons'
 
 const SECTIONS: {
   id: TeamSettingsSection;
@@ -1877,7 +1873,7 @@ function TeamAgentsSettings({ data }: { data: BootstrapData }) {
       ))}
       {!agents.length && (
         <TeamEmpty
-          icon={<Bot size={24} />}
+          icon={<AgentCursorGlyph size={24} />}
           title="No team agents"
           description="Agent integrations connected at workspace level will appear here."
         />
@@ -2003,7 +1999,7 @@ function TeamAgentConnectorsSettings({
         ))}
         {!connectors.length && !creating && (
           <TeamEmpty
-            icon={<Bot size={24} />}
+            icon={<AgentCursorGlyph size={24} />}
             title={t("No team agent connectors")}
             description={t(
               "Add MCP connectors that team members can use with Flow Agent.",
@@ -2097,7 +2093,7 @@ function AgentSkillsSettings({
         )}
         {settings.agentSkills.map((skill) => (
           <div className="agent-skill-row" key={skill.id}>
-            <WandSparkles size={17} />
+            <AgentSkillsIcon size={16} />
             <span data-i18n-ignore>
               <strong>{skill.name}</strong>
               <small>{skill.instructions}</small>
@@ -2126,7 +2122,7 @@ function AgentSkillsSettings({
         ))}
         {!settings.agentSkills.length && !creating && (
           <TeamEmpty
-            icon={<Sparkles size={24} />}
+            icon={<AgentSkillsIcon size={24} />}
             title="No agent skills"
             description="Add reusable instructions for agents working with this team."
           />
@@ -2338,7 +2334,8 @@ function TemplatesSettings({
       {editing !== undefined && editingKind &&
         (editingKind === "document" ? (
           <DocumentTemplateEditor
-            team={team}
+            data={data}
+            teamId={team.id}
             template={editing as DocumentTemplate | null}
             onClose={closeEditor}
             onSaved={onReload}
@@ -2354,117 +2351,6 @@ function TemplatesSettings({
           />
         ))}
     </>
-  );
-}
-
-function DocumentTemplateEditor({
-  team,
-  template,
-  onClose,
-  onSaved,
-}: {
-  team: Team;
-  template: DocumentTemplate | null;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const { t } = useI18n();
-  const [name, setName] = useState(template?.name ?? "");
-  const [description, setDescription] = useState(template?.description ?? "");
-  const [documentTitle, setDocumentTitle] = useState(template?.title ?? "");
-  const [content, setContent] = useState(template?.content ?? "");
-  const [saving, setSaving] = useState(false);
-  const save = async () => {
-    setSaving(true);
-    try {
-      const input = {
-        teamId: team.id,
-        name,
-        description,
-        title: documentTitle,
-        content,
-      };
-      if (template) await updateDocumentTemplate(template.id, input);
-      else await createDocumentTemplate(input);
-      await onSaved();
-      onClose();
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      setSaving(false);
-    }
-  };
-  const remove = async () => {
-    if (!template) return;
-    try {
-      await deleteDocumentTemplate(template.id);
-      await onSaved();
-      onClose();
-    } catch (error) {
-      toast.error(message(error));
-    }
-  };
-  return (
-    <div className="template-full-editor">
-      <header>
-        <button onClick={onClose}>{t("Cancel")}</button>
-        <strong>
-          {t(template ? "Edit document template" : "New document template")}
-        </strong>
-        <button
-          className="primary"
-          disabled={!name.trim() || saving}
-          onClick={() => void save()}
-        >
-          {t(saving ? "Saving…" : "Save")}
-        </button>
-      </header>
-      <div className="template-editor-content">
-        <label>
-          {t("Template name")}
-          <input
-            autoFocus
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label>
-          {t("Template description")}
-          <input
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </label>
-        <label>
-          {t("Document title")}
-          <input
-            value={documentTitle}
-            onChange={(event) => setDocumentTitle(event.target.value)}
-          />
-        </label>
-        <div className="template-content-field">
-          <span>{t("Document content")}</span>
-          <MentionTextField
-            className="template-content-editor"
-            ariaLabel={t("Document content")}
-            value={content}
-            onChange={setContent}
-            onSubmit={() => {
-              if (name.trim() && !saving) void save();
-            }}
-          />
-        </div>
-        {template && (
-          <button
-            className="settings-action danger"
-            onClick={() => void remove()}
-          >
-            <Trash2 size={14} />
-            {t("Delete template")}
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 

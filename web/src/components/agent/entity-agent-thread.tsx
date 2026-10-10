@@ -129,7 +129,13 @@ export function EntityAgentThread({
   }, [messages, streamParts, loading])
 
   useEffect(() => {
-    requestAnimationFrame(() => inputRef.current?.focus())
+    requestAnimationFrame(() => {
+      // Don't steal focus from the page (e.g. the document editor the user is clicking into) or scroll it.
+      const active = document.activeElement
+      const pageHasFocus = active && active !== document.body && !inputRef.current?.closest('[data-agent-thread]')?.contains(active)
+      if (pageHasFocus) return
+      inputRef.current?.focus({ preventScroll: true })
+    })
   }, [conversationDraftKey])
 
   const decide = onToolApproval ?? (() => undefined)
@@ -148,7 +154,7 @@ export function EntityAgentThread({
     : placeholder ?? (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))
 
   return (
-    <div className={styles.thread}>
+    <div className={styles.thread} data-agent-thread="">
       <div
         aria-label={t('Agent conversation')}
         aria-live="polite"

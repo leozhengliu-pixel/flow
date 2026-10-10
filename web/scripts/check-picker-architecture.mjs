@@ -23,6 +23,8 @@ const dedicated = new Set([
   'property/project-label-menu-content.tsx',
   // Universal advanced filter panel owns its own catalog listbox contract.
   'filter/universal-custom-filter-panel.tsx',
+  // Document history: arrow-key single-select list of dated versions (a version navigator, not a property picker).
+  'documents/document-history-dialog.tsx',
 ])
 
 const files = await collect(root)

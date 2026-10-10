@@ -30,6 +30,8 @@ export interface ProjectCommandContext {
 export interface DocumentCommandContext {
   kind: 'document'
   document: FlowDocument
+  /** A multi-selection (list rows): commands then apply to each of them; `document` is the first. */
+  documents?: FlowDocument[]
 }
 
 export type CommandContext = IssueCommandContext | ProjectCommandContext | DocumentCommandContext
@@ -75,7 +77,7 @@ function identity(context: CommandContext | undefined) {
   if (!context) return ''
   if (context.kind === 'issues') return `issues:${context.source}:${context.issues.map(issue => issue.id).join(',')}`
   if (context.kind === 'project') return `project:${context.project.id}`
-  return `document:${context.document.id}`
+  return `document:${(context.documents ?? [context.document]).map(item => item.id).join(',')}`
 }
 
 /**
@@ -94,3 +96,7 @@ export function useRegisterCommandContext(context: CommandContext | undefined) {
     return () => { entries.delete(key); emit() }
   }, [id, key])
 }
+
+/** Window event that opens ⌘K (App listens); surfaces register a context first to scope it ("Actions" buttons). */
+export const OPEN_COMMAND_MENU_EVENT = 'flow:open-command-menu'
+export function openCommandMenu() { window.dispatchEvent(new Event(OPEN_COMMAND_MENU_EVENT)) }

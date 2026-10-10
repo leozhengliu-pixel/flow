@@ -1,7 +1,8 @@
 import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Menu, MoreHorizontal, Rocket, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import type { BootstrapData, Team, TrashEntry } from '@/types/flow'
+import { toast } from 'sonner'
+import type { BootstrapData, FlowDocument, Team, TrashEntry } from '@/types/flow'
 import { purgeTrashEntry, restoreTrashEntry, updateCycle, updateIssue, updateProject } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
@@ -13,6 +14,9 @@ import { useArchivedModelsLoader } from '@/hooks/use-archived-models-loader'
 import { FilterIcon } from '@/components/ui/view-action-icons'
 import './workspace-operations.css'
 import { GridLoader } from '@/components/ui/grid-loader'
+import { confirmAction } from '@/components/ui/action-dialog-service'
+import { DocumentGlyph } from '@/components/documents/document-icon'
+import { documentDisplayTitle, documentParent, restoreDeletedDocument, type DocumentActionContext } from '@/components/documents/document-actions'
 
 type ArchiveTabDefinition = { id: TeamArchiveTab; label: string; title: string; empty: string; resource?: string }
 
@@ -96,13 +100,44 @@ export function TeamArchivePage({data,team,tab:tabId,onNavigate,onOpenSidebar,on
       {archivedIssues.map(item=><ArchiveRow icon={<CircleDashed/>} key={item.id} title={<span data-i18n-ignore>{item.identifier} {item.title}</span>} meta={<>{t('Issue')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateIssue(item.id,{archived:false});await onReload([item.id])}}/>)}
       {archivedProjects.map(item=><ArchiveRow icon={<Rocket/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Project')} · {t('archived')} {date(item.archivedAt!)}</>} onRestore={async()=>{await updateProject(item.id,{archived:false});await onReload()}}/>)}
       {archivedCycles.map(item=><ArchiveRow icon={<Archive/>} key={item.id} title={<span data-i18n-ignore>{item.name}</span>} meta={<>{t('Cycle')} · {t('ended')} {date(item.endsAt)}</>} onRestore={async()=>{await updateCycle(item.id,{status:'upcoming'});await onReload()}}/>)}
-      {trash.map(item=><ArchiveRow icon={archiveIcon(item.resourceType)} key={item.id} title={<span data-i18n-ignore>{item.title}</span>} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)} onPurge={()=>purge(item)}/>)}
+      {trash.map(item=>item.resourceType==='document'?<DeletedDocumentRow data={data} entry={item} key={item.id} onNavigate={onNavigate} onReload={onReload}/>:<ArchiveRow icon={archiveIcon(item.resourceType)} key={item.id} title={<span data-i18n-ignore>{item.title}</span>} meta={<>{t(typeLabel(item.resourceType))} · {t('deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {date(item.deletedAt)}</>} onRestore={()=>restoreTrash(item)} onPurge={()=>purge(item)}/>)}
       {tab.id==='issues' && archivedLoader.loading && <div className="archive-row archive-loading-row"><GridLoader size={14}/><span/><div><strong>{t('Loading…')}</strong></div></div>}
       {tab.id==='issues' && archivedLoader.hasMore && !archivedLoader.loading && <div className="archive-row"><span/><span/><div><button type="button" className="ui-pill" onClick={()=>archivedLoader.loadMore(0)}>{t('Load more')}</button></div></div>}
     </div>}
     {!count&&!(tab.id==='issues'&&archivedLoader.loading)&&<div className="archive-empty"><ArchiveEmptyIllustration/><strong>{t(tab.empty)}</strong></div>}
     {tab.id==='issues'&&!count&&archivedLoader.loading&&<div className="archive-empty"><strong>{t('Loading…')}</strong></div>}
   </main>
+}
+
+/** The document saved in a trash entry (the server stores the full document JSON as the payload). */
+function trashedDocument(entry:TrashEntry):FlowDocument{
+  const payload=entry.payload&&typeof entry.payload==='object'?entry.payload as Partial<FlowDocument>:{}
+  return {...payload,id:entry.resourceId,title:typeof payload.title==='string'?payload.title:entry.title,teamIds:payload.teamIds??entry.teamIds??[],projectIds:payload.projectIds??[]} as FlowDocument
+}
+
+/** A recently deleted document, laid out like a row of the team Documents list. */
+function DeletedDocumentRow({data,entry,onNavigate,onReload}:{data:BootstrapData;entry:TrashEntry;onNavigate:(path:string)=>void;onReload:(issueIds?:string[])=>Promise<void>}){
+  const{t,formatDate,formatRelative}=useI18n()
+  const document=trashedDocument(entry)
+  const title=documentDisplayTitle(document,t)
+  const parent=documentParent(data,document)
+  const parentName=parent?.type==='team'?parent.team.name:parent?.type==='project'?parent.project.name:parent?.type==='initiative'?parent.initiative.name:undefined
+  const ctx:DocumentActionContext={data,reload:()=>onReload(),navigate:onNavigate,t}
+  const purge=async()=>{
+    const confirmed=await confirmAction(t('Delete "{name}" permanently?').replace('{name}',title),{description:t('This document will be permanently deleted. This action cannot be undone.'),confirmLabel:t('Delete permanently')})
+    if(!confirmed)return
+    try{await purgeTrashEntry(entry.id);await onReload();toast.success(t('Document permanently deleted'))}
+    catch(error){toast.error(error instanceof Error&&error.message?error.message:t('Could not delete document'))}
+  }
+  return <div className="archive-doc-row" data-trash-id={entry.id}>
+    <DocumentGlyph className="archive-doc-glyph" document={document}/>
+    <span className="archive-doc-title"><strong data-i18n-ignore>{title}</strong>{parentName&&<>{' '}<span className="archive-doc-parent" data-i18n-ignore>{parentName}</span></>}</span>
+    <time className="archive-doc-date" dateTime={entry.deletedAt} title={formatDate(entry.deletedAt,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}>{formatRelative(entry.deletedAt)}</time>
+    <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className="operations-row-menu" aria-label={t('Open actions')}><MoreHorizontal/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="operations-menu" align="end" sideOffset={5}>
+      <DropdownMenu.Item onSelect={()=>void restoreDeletedDocument(ctx,entry.id)}><ArchiveRestore/><span>{t('Restore')}</span></DropdownMenu.Item>
+      <DropdownMenu.Item className="danger" onSelect={()=>void purge()}><Trash2/><span>{t('Delete permanently')}</span></DropdownMenu.Item>
+    </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
+  </div>
 }
 
 function ArchiveRow({icon,title,meta,onRestore,onPurge}:{icon:ReactNode;title:ReactNode;meta:ReactNode;onRestore?:()=>void|Promise<void>;onPurge?:()=>void|Promise<void>}){

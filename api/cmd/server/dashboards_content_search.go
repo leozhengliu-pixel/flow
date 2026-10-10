@@ -1333,7 +1333,7 @@ func (s *server) semanticSearch(w http.ResponseWriter, r *http.Request) {
 	if types["document"] {
 		for _, item := range data.Documents {
 			if scope.Archived == "all" || item.ArchivedAt == nil {
-				add(domain.SearchResult{ID: item.ID, Type: "document", Title: item.Title, Subtitle: "Document", Icon: item.Icon, Color: item.Color, UpdatedAt: item.UpdatedAt}, item.Title, item.Content)
+				add(domain.SearchResult{ID: item.ID, Type: "document", Title: documentDisplayTitle(item.Title), Subtitle: "Document", Icon: item.Icon, Color: item.Color, UpdatedAt: item.UpdatedAt}, item.Title, item.Content)
 			}
 		}
 	}

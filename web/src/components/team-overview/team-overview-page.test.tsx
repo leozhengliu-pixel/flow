@@ -4,6 +4,7 @@ import { VirtuosoMockContext } from 'react-virtuoso'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { BootstrapData, FlowDocument } from '@/types/flow'
 
@@ -28,6 +29,9 @@ vi.mock('@/lib/api', async importOriginal => ({
 
 import { TeamOverviewPage } from './team-overview-page'
 
+class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
+Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
+
 function renderPage(view: "overview" | "documents" | "loops" | "members", overrides: Partial<BootstrapData> = {}, onReload = vi.fn().mockResolvedValue(undefined)) {
   const data = makeBootstrap({
     documents: [],
@@ -41,7 +45,7 @@ function renderPage(view: "overview" | "documents" | "loops" | "members", overri
     ...overrides,
   })
   return render(
-    <I18nProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 480, itemHeight: 48 }}>
+    <I18nProvider><TooltipProvider><VirtuosoMockContext.Provider value={{ viewportHeight: 480, itemHeight: 48 }}>
       <TeamOverviewPage
         data={data}
         onNavigate={vi.fn()}
@@ -50,7 +54,7 @@ function renderPage(view: "overview" | "documents" | "loops" | "members", overri
         team={data.teams[0]}
         view={view}
       />
-    </VirtuosoMockContext.Provider></I18nProvider>,
+    </VirtuosoMockContext.Provider></TooltipProvider></I18nProvider>,
   )
 }
 
@@ -81,9 +85,9 @@ describe('team overview', () => {
     expect(screen.getByRole('heading', { name: 'Team documents' })).toBeVisible();
     expect(container.querySelector('.team-documents-empty svg')).toHaveAttribute('viewBox','0 0 74 81');
     expect(container.querySelectorAll('.team-documents-empty svg path')).toHaveLength(14);
-    expect(container.querySelector('.team-documents-column-header')).toBeNull();
+    expect(container.querySelector('.team-docs-header')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'Create document' }));
-    await waitFor(() => expect(api.createDocument).toHaveBeenCalledWith({ title: 'New document', teamIds: ['team-1'] }));
+    await waitFor(() => expect(api.createDocument).toHaveBeenCalledWith({ title: '', teamIds: ['team-1'] }));
   });
 
   it('searches documents without replacing a filtered-empty state with onboarding', async () => {
@@ -99,13 +103,14 @@ describe('team overview', () => {
     expect(screen.getByText('Roadmap')).toBeVisible();
   });
 
-  it('uses the same columns for header and row, suppresses grouping=None, and exposes selection actions', async () => {
+  it('suppresses group headers for grouping=None, shows only chosen columns, and exposes selection actions', async () => {
     const user = userEvent.setup();
     window.history.replaceState(null,'','/?doc-group=none&doc-columns=updated');
     const { container } = renderPage('documents',{documents:[document]});
-    const header=container.querySelector<HTMLElement>('.team-documents-column-header')!,row=container.querySelector<HTMLElement>('.team-document-row')!;
-    expect(header.style.gridTemplateColumns).toBe(row.style.gridTemplateColumns);
-    expect(container.querySelector('.team-documents-group-header')).toBeNull();
+    const header=container.querySelector<HTMLElement>('.team-docs-header')!,row=container.querySelector<HTMLElement>('.team-docs-row')!;
+    expect(header.querySelectorAll('.team-docs-heading')).toHaveLength(2);
+    expect(row.querySelectorAll('time')).toHaveLength(1);
+    expect(container.querySelector('.team-docs-group')).toBeNull();
     await user.click(screen.getByRole('checkbox',{name:'Select document'}));
     expect(screen.getByRole('toolbar',{name:'Selected documents'})).toHaveTextContent('1');
     await user.click(screen.getByRole('button',{name:'Clear selection'}));
@@ -115,8 +120,8 @@ describe('team overview', () => {
   it('virtualizes a large ungrouped document collection', async () => {
     window.history.replaceState(null,'','/?doc-group=none');
     const {container} = renderPage('documents',{documents:Array.from({length:1000},(_,i)=>({...document,id:`doc-${i}`,slugId:`doc-${i}`,title:`Document ${i}`}))});
-    await waitFor(()=>expect(container.querySelectorAll('.team-document-row').length).toBeGreaterThan(0));
-    expect(container.querySelectorAll('.team-document-row').length).toBeLessThan(50);
+    await waitFor(()=>expect(container.querySelectorAll('.team-docs-row').length).toBeGreaterThan(0));
+    expect(container.querySelectorAll('.team-docs-row').length).toBeLessThan(50);
     expect(container.querySelector('[data-virtuoso-scroller]')).not.toBeNull();
   });
 
@@ -174,6 +179,78 @@ describe('team overview', () => {
     expect(choice).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(choice);
     await waitFor(() => expect(api.deleteTeamResource).toHaveBeenCalledWith('team-1', 'pin-1'));
+  });
+
+  describe('document rows in team resources', () => {
+    const pin = (overrides = {}) => ({ id: 'pin-1', teamId: 'team-1', resourceType: 'document', resourceId: document.id, title: 'Stale stored title', sectionId: '', position: 0, ...overrides });
+
+    it('shows the live document title and Untitled for an empty title, with a document glyph', async () => {
+      const untitled = { ...document, id: 'doc-2', slugId: 'doc-2', title: '', icon: 'Rocket', color: '#5e6ad2' };
+      api.fetchTeamResources.mockResolvedValue({ resources: [pin(), pin({ id: 'pin-2', resourceId: 'doc-2', title: 'Untitled' })], sections: [] });
+      const { container } = renderOverview({ documents: [document, untitled] });
+      const rows = await waitFor(() => {
+        const found = container.querySelectorAll('.team-resource-row');
+        expect(found).toHaveLength(2);
+        return [...found];
+      });
+      expect(rows[0].querySelector('button[data-i18n-ignore]')).toHaveTextContent('Roadmap');
+      expect(rows[0]).not.toHaveTextContent('Stale stored title');
+      expect(rows[1].querySelector('button[data-i18n-ignore]')).toHaveTextContent('Untitled');
+      expect(rows[0].querySelector('svg')).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Open menu Untitled' })).toBeInTheDocument();
+    });
+
+    it('opens the shared document menu from the row "…" button, with the pin row reading Remove from overview', async () => {
+      const user = userEvent.setup();
+      api.fetchTeamResources.mockResolvedValue({ resources: [pin()], sections: [section] });
+      renderOverview({ documents: [document] });
+      await user.click(await screen.findByRole('button', { name: 'Open menu Roadmap' }));
+      const menu = await screen.findByRole('menu');
+      const labels = within(menu).getAllByRole('menuitem').map(item => item.textContent ?? '');
+      const at = (label: string) => labels.findIndex(text => text.startsWith(label));
+      for (const label of ['Move to', 'Remove from overview', 'Duplicate', 'New template from document', 'Rename…', 'Favorite', 'Copy', 'Remind me', 'Show document history', 'Delete', 'Move to section']) expect(at(label), label).toBeGreaterThanOrEqual(0);
+      expect(at('Move to')).toBeLessThan(at('Remove from overview'));
+      expect(at('Remove from overview')).toBeLessThan(at('Duplicate'));
+      expect(at('Delete')).toBeLessThan(at('Move to section'));
+      expect(within(menu).queryByRole('menuitem', { name: 'Pin to overview' })).toBeNull();
+      expect(within(menu).queryByRole('menuitem', { name: 'Remove' })).toBeNull();
+      await user.click(within(menu).getByRole('menuitem', { name: 'Remove from overview' }));
+      await waitFor(() => expect(api.deleteTeamResource).toHaveBeenCalledWith('team-1', 'pin-1'));
+    });
+
+    it('opens the same menu on right click and moves the pin to a section', async () => {
+      const user = userEvent.setup();
+      api.fetchTeamResources.mockResolvedValue({ resources: [pin()], sections: [section] });
+      const { container } = renderOverview({ documents: [document] });
+      await screen.findByRole('button', { name: 'Open menu Roadmap' });
+      fireEvent.contextMenu(container.querySelector('.team-resource-row')!);
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getByRole('menuitem', { name: 'Remove from overview' })).toBeVisible();
+      await user.hover(within(menu).getByRole('menuitem', { name: /^Move to section/ }));
+      fireEvent.pointerMove(within(menu).getByRole('menuitem', { name: /^Move to section/ }), { pointerType: 'mouse' });
+      await user.click(await screen.findByRole('menuitem', { name: 'Plans' }));
+      await waitFor(() => expect(api.updateTeamResource).toHaveBeenCalledWith('team-1', 'pin-1', { sectionId: 'section-1' }));
+    });
+
+    it('keeps the Move to / Remove menu for links', async () => {
+      const user = userEvent.setup();
+      api.fetchTeamResources.mockResolvedValue({ resources: [{ id: 'pin-link', teamId: 'team-1', resourceType: 'link', resourceId: '', url: 'https://example.com/spec', title: 'Spec', sectionId: '', position: 0 }], sections: [] });
+      renderOverview({ documents: [document] });
+      await user.click(await screen.findByRole('button', { name: 'Open menu Spec' }));
+      expect(screen.getByRole('menuitem', { name: 'Move to' })).toBeVisible();
+      expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
+      expect(screen.queryByRole('menuitem', { name: 'Duplicate' })).toBeNull();
+    });
+
+    it('creates an untitled document when adding a new pinned document', async () => {
+      const user = userEvent.setup();
+      api.createDocument.mockResolvedValue({ ...document, id: 'doc-new', slugId: 'untitled-1', title: '' });
+      renderOverview({ documents: [] });
+      await user.click(await screen.findByRole('button', { name: 'Add resources' }));
+      await user.click(await screen.findByRole('menuitem', { name: 'New document' }));
+      await waitFor(() => expect(api.createDocument).toHaveBeenCalledWith({ title: '', teamIds: ['team-1'] }));
+      await waitFor(() => expect(api.pinTeamResource).toHaveBeenCalledWith('team-1', expect.objectContaining({ resourceType: 'document', resourceId: 'doc-new', title: 'Untitled' })));
+    });
   });
 
   it('persists collapsed sections and supports Alt toggling all sections', async () => {
@@ -286,23 +363,24 @@ describe('team overview', () => {
     renderPage('documents', { documents: [{ ...document, projectIds: [project.id] }, { ...document, id: 'doc-team', slugId: 'team-notes', title: 'Team notes' }], projects: [project] })
 
     await user.click(screen.getByRole('button', { name: 'Add filter' }))
-    expect(screen.getByRole('menuitem', { name: 'Advanced filter' })).toBeVisible()
-    for (const label of ['Creator', 'Owner', 'Project', 'Cycle', 'Dates']) expect(screen.getByRole('menuitem', { name: label })).toBeVisible()
+    for (const label of ['Advanced filter', 'Creator', 'Owner', 'Project', 'Dates']) expect(screen.getByRole('option', { name: new RegExp(`^${label}`) })).toBeVisible()
     await user.keyboard('{Escape}')
 
     await user.click(screen.getByRole('button', { name: 'Display options' }))
-    expect(screen.getByRole('combobox', { name: 'Grouping' })).toHaveValue('project')
-    expect(screen.getByRole('combobox', { name: 'Ordering' })).toHaveValue('name')
-    expect(screen.getByRole('switch', { name: 'Show inactive projects' })).toHaveAttribute('aria-checked', 'false')
-    expect(screen.getByRole('switch', { name: 'Show only my projects' })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('combobox', { name: 'Grouping' })).toHaveTextContent('Project')
+    expect(screen.getByRole('combobox', { name: 'Ordering' })).toHaveTextContent('Name')
+    expect(screen.getByRole('checkbox', { name: 'Show inactive projects' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Show only my projects' })).not.toBeChecked()
     expect(screen.getByRole('button', { name: 'Owner', pressed: true })).toBeVisible()
     await user.keyboard('{Escape}')
 
     expect(screen.getByText('Team documents')).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Website' })).toHaveAttribute('href', expect.stringContaining('/project/'))
-    expect(screen.queryByLabelText('Pinned to team overview')).not.toBeInTheDocument()
+    expect(screen.getByText('Website')).toBeVisible()
+    expect(screen.getByText('Roadmap')).toBeVisible()
+    await user.click(screen.getAllByRole('button', { name: 'Collapse group' })[1])
+    expect(screen.queryByText('Roadmap')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Expand group' }))
-    expect(await screen.findByLabelText('Pinned to team overview')).toBeVisible()
+    expect(await screen.findByText('Roadmap')).toBeVisible()
   })
 
   it('makes document pinning and advanced filter matching functional', async () => {
@@ -310,14 +388,18 @@ describe('team overview', () => {
     api.fetchTeamResources.mockResolvedValue({ resources: [], sections: [] })
     renderPage('documents', { documents: [document] })
     await user.click(screen.getByRole('button', { name: 'Open menu' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Pin to team overview' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Pin to overview' }))
     await waitFor(() => expect(api.pinTeamResource).toHaveBeenCalledWith('team-1', expect.objectContaining({ resourceId: 'doc-1' })))
 
     await user.click(screen.getByRole('button', { name: 'Add filter' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Advanced filter' }))
-    const advanced = screen.getByRole('dialog', { name: 'Advanced filter' })
-    await user.click(within(advanced).getByRole('button', { name: 'Any filter' }))
-    expect(within(advanced).getByRole('button', { name: 'Any filter' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('option', { name: /^Advanced filter/ }))
+    const advanced = await screen.findByRole('dialog', { name: 'Advanced filter' })
+    await user.click(within(advanced).getByRole('button', { name: 'Add filter' }))
+    fireEvent.mouseMove(await screen.findByRole('option', { name: /^Creator/ }))
+    await user.click(await screen.findByRole('option', { name: new RegExp(`^${viewer.displayName}`) }))
+    // The advanced chip now holds "Creator is <viewer>" and the matching document stays listed.
+    expect(await screen.findByText(viewer.displayName, { selector: '[data-advanced-chip] *' })).toBeVisible()
+    expect(screen.getByText('Roadmap')).toBeVisible()
   })
 
   it('sorts members, configures columns, and virtualizes a long independently scrollable list', async () => {

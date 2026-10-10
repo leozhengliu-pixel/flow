@@ -373,7 +373,23 @@ type Document struct {
 	CreatedAt     time.Time            `json:"createdAt"`
 	UpdatedAt     time.Time            `json:"updatedAt"`
 	Revisions     []DocumentRevision   `json:"revisions"`
+	Attachments   []Attachment         `json:"attachments,omitempty"`
 	Permissions   []DocumentPermission `json:"permissions,omitempty"`
+	// Version increases with every accepted write; PATCH callers may send
+	// expectedVersion to detect a concurrent change (409 with the current
+	// document). ContentVersion increases only when the collaborative base
+	// state (contentState) is replaced, guarding update-log compaction.
+	Version        int64 `json:"version"`
+	ContentVersion int64 `json:"contentVersion"`
+	// PreviousSlugIDs keeps the slugs a renamed document used before, so old
+	// links keep resolving (and the web app redirects to slugId).
+	PreviousSlugIDs []string `json:"previousSlugIds,omitempty"`
+	// CollaborationID names the realtime (Yjs) document the editor joins; ""
+	// means the document id. Restoring a version starts a new generation so
+	// editors holding the replaced state reload instead of merging it back.
+	CollaborationID string `json:"collaborationId,omitempty"`
+	// DeletedAt is only set on a document read back from "Recently deleted".
+	DeletedAt *time.Time `json:"deletedAt,omitempty"`
 }
 
 // DocumentPermission grants a role to a workspace member, team, or the whole
@@ -396,7 +412,12 @@ type DocumentRevision struct {
 	ContentState string         `json:"contentState,omitempty"`
 	ContentData  map[string]any `json:"contentData,omitempty"`
 	Author       User           `json:"author"`
-	CreatedAt    time.Time      `json:"createdAt"`
+	// AuthorIDs lists everyone who edited during the burst this version
+	// covers (Author is the latest). CreatedAt is when the burst ended.
+	AuthorIDs []string  `json:"authorIds,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	// StartedAt is when the editing burst this version covers began.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
 }
 
 type DocumentTemplate struct {
@@ -2021,6 +2042,11 @@ type Comment struct {
 	CreatedAt     time.Time             `json:"createdAt"`
 	EditedAt      *time.Time            `json:"editedAt,omitempty"`
 	User          User                  `json:"user"`
+	// AnchorID names the inline comment mark (data-comment-id) that anchors a
+	// document thread in the editor; QuotedText is the selection it was
+	// created on. Both are empty for page-level comments and replies.
+	AnchorID   string `json:"anchorId,omitempty"`
+	QuotedText string `json:"quotedText,omitempty"`
 }
 
 type ActivityEvent struct {
@@ -2396,9 +2422,11 @@ type ProjectUpdateMutationInput struct {
 }
 
 type CommentCreateInput struct {
-	Body     string         `json:"body"`
-	BodyData map[string]any `json:"bodyData,omitempty"`
-	ParentID *string        `json:"parentId,omitempty"`
+	Body       string         `json:"body"`
+	BodyData   map[string]any `json:"bodyData,omitempty"`
+	ParentID   *string        `json:"parentId,omitempty"`
+	AnchorID   string         `json:"anchorId,omitempty"`
+	QuotedText string         `json:"quotedText,omitempty"`
 }
 
 type CommentUpdateInput struct {

@@ -18,6 +18,12 @@ import { agentStepsZhCN } from './translations-agent-steps';
 import { mentionsZhCN } from './translations-mentions';
 import { mentionsSurfacesZhCN } from './translations-mentions-surfaces';
 import { mentionsLoopsZhCN } from './translations-mentions-loops';
+import { documentsListsZhCN } from './translations-documents-lists';
+import { documentsCreateZhCN } from './translations-documents-create';
+import { documentsPageZhCN } from './translations-documents-page';
+import { documentsHistoryZhCN } from './translations-documents-history';
+import { documentsCommentsZhCN } from './translations-documents-comments';
+import { editorZhCN } from './translations-editor';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -5773,3 +5779,9 @@ Object.assign(zhCN, agentMentionsZhCN);
 for (const [source, translation] of Object.entries(agentStepsZhCN)) zhCN[source] ??= translation;
 // Mention menu / chip copy and the surfaces that show references fill gaps only.
 for (const group of [mentionsZhCN, mentionsSurfacesZhCN, mentionsLoopsZhCN]) for (const [source, translation] of Object.entries(group)) zhCN[source] ??= translation;
+// Documents area copy overrides earlier generic strings.
+for (const group of [documentsListsZhCN, documentsCreateZhCN, documentsPageZhCN, documentsHistoryZhCN]) Object.assign(zhCN, group);
+// Rich-text editor chrome overrides earlier generic strings.
+Object.assign(zhCN, editorZhCN);
+// Document inline comments and document notifications fill gaps only.
+for (const [source, translation] of Object.entries(documentsCommentsZhCN)) zhCN[source] ??= translation;

@@ -789,7 +789,7 @@ func acceptLoopRun(loop domain.Loop, run *domain.LoopRun) (string, string, strin
 // loopWriteToolName reports whether a recorded tool call could change data.
 func loopWriteToolName(name string) bool {
 	name = strings.TrimPrefix(name, "mcp__flow.")
-	for _, prefix := range []string{"save_", "create_", "delete_", "update_", "triage_", "merge_", "submit_", "resolve_"} {
+	for _, prefix := range []string{"save_", "create_", "delete_", "update_", "triage_", "merge_", "submit_", "resolve_", "restore_"} {
 		if strings.HasPrefix(name, prefix) {
 			return true
 		}

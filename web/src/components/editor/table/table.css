@@ -1,0 +1,143 @@
+/* Flow table: header row, cells and the hover chrome (add row / column, table actions, left block handle). Tokens only. */
+.flow-table {
+  position: relative;
+  margin: 14px 0;
+}
+.flow-table .tableWrapper {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.flow-table .tableWrapper table {
+  margin: 0;
+  border: .5px solid var(--theme-border);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.flow-table .tableWrapper table > tbody > tr > :is(th, td) {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 90px;
+  padding: 7px 9px;
+  border: 0;
+  border-right: .5px solid var(--theme-border);
+  border-bottom: .5px solid var(--theme-border);
+  text-align: left;
+  vertical-align: top;
+}
+.flow-table .tableWrapper table > tbody > tr > :is(th, td) > p { margin: 0; }
+.flow-table .tableWrapper table > tbody > tr:last-child > :is(th, td) { border-bottom: 0; }
+.flow-table .tableWrapper table > tbody > tr > :is(th, td):last-child { border-right: 0; }
+.flow-table .tableWrapper table > tbody > tr > th,
+.flow-table .tableWrapper table > tbody > tr > .flow-table-header {
+  background: var(--bg-subtle);
+  color: var(--bright);
+  font-weight: 600;
+}
+.flow-table .tableWrapper table > tbody > tr > .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--accent-primary) 14%, transparent);
+  pointer-events: none;
+}
+/* prosemirror-tables column-resize handle and cursor */
+.flow-table .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  bottom: -1px;
+  z-index: 2;
+  width: 4px;
+  background: var(--accent-primary);
+  pointer-events: none;
+}
+.ProseMirror.resize-cursor { cursor: col-resize; }
+
+/* Hover chrome -------------------------------------------------------------------------------------------- */
+.flow-table .flow-table__chrome-host {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.flow-table__chrome button {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--theme-text-secondary);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity var(--quick) var(--ease), background-color var(--quick) var(--ease);
+}
+.flow-table:hover .flow-table__chrome button,
+.flow-table:focus-within .flow-table__chrome button,
+.flow-table__chrome[data-open] button {
+  opacity: 1;
+  pointer-events: auto;
+}
+.flow-table__chrome button:hover,
+.flow-table__chrome button:focus-visible,
+.flow-table__chrome button[data-state="open"] {
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-primary);
+}
+.flow-table__chrome button:focus-visible { outline: 1px solid var(--focus-ring); outline-offset: 1px; }
+.flow-table__chrome svg { width: 14px; height: 14px; }
+
+/* "Add row": a thin full-width bar under the bottom edge; "Add column": a thin bar at the right edge. */
+.flow-table__chrome .flow-table__add-row {
+  left: 0;
+  right: 0;
+  bottom: -20px;
+  height: 16px;
+  background: var(--theme-soft-overlay);
+}
+.flow-table__chrome .flow-table__add-column {
+  top: 0;
+  right: -20px;
+  bottom: 0;
+  width: 16px;
+  background: var(--theme-soft-overlay);
+}
+.flow-table__chrome .flow-table__add-row:hover,
+.flow-table__chrome .flow-table__add-column:hover {
+  background: color-mix(in srgb, var(--accent-primary) 18%, transparent);
+  color: var(--accent-primary);
+}
+/* "Table actions": top-right corner. */
+.flow-table__chrome .flow-table__actions {
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  background: var(--theme-surface-2);
+  box-shadow: 0 0 0 .5px var(--theme-border);
+}
+.flow-table__chrome .flow-table__actions svg { width: 16px; height: 16px; }
+/* Left block handle: outside the first column. */
+.flow-table__chrome .flow-table__handle {
+  top: 4px;
+  left: -26px;
+  width: 20px;
+  height: 22px;
+}
+.flow-table__chrome .flow-table__handle svg { width: 16px; height: 16px; }
+.ProseMirror[contenteditable="false"] .flow-table__chrome { display: none; }
+
+.menu-content.flow-table__menu {
+  box-sizing: border-box;
+  min-width: 196px;
+  padding: 4px 0;
+  border: .5px solid var(--theme-border-strong);
+  border-radius: 10px;
+  background: var(--theme-surface-2);
+}
+.flow-table__menu .menu-item { height: 32px; gap: 8px; margin: 0; padding: 0 14px; border-radius: 0; white-space: nowrap; }
+.flow-table__menu .menu-item svg { flex: none; color: var(--action-menu-muted); }
