@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -541,7 +542,14 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.GitAutomationState
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "git_automation.upserted", input.ID, input, func(data *domain.Bootstrap) error {
+		if !teamSettingsWriteAllowed(data, input.TeamID, teamRoles, role) {
+			return store.ErrAuthForbidden
+		}
+		if existing := slices.IndexFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == input.ID && input.ID != "" }); existing >= 0 && !teamSettingsWriteAllowed(data, data.GitAutomationStates[existing].TeamID, teamRoles, role) {
+			return store.ErrAuthForbidden
+		}
 		if !slices.ContainsFunc(data.Teams, func(v domain.Team) bool { return v.ID == input.TeamID }) || !slices.ContainsFunc(data.States, func(v domain.WorkflowState) bool {
 			return v.ID == input.WorkflowStateID && (v.TeamID == input.TeamID || v.TeamID == "")
 		}) {
@@ -564,7 +572,11 @@ func (s *server) upsertGitAutomation(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteGitAutomation(w http.ResponseWriter, r *http.Request) {
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "git_automation.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+		if existing := slices.IndexFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == r.PathValue("id") }); existing >= 0 && !teamSettingsWriteAllowed(data, data.GitAutomationStates[existing].TeamID, teamRoles, role) {
+			return store.ErrAuthForbidden
+		}
 		before := len(data.GitAutomationStates)
 		data.GitAutomationStates = slices.DeleteFunc(data.GitAutomationStates, func(v domain.GitAutomationState) bool { return v.ID == r.PathValue("id") })
 		if before == len(data.GitAutomationStates) {
@@ -584,7 +596,14 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var result domain.TargetBranch
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.upserted", input.ID, input, func(data *domain.Bootstrap) error {
+		if !teamSettingsWriteAllowed(data, input.TeamID, teamRoles, role) {
+			return store.ErrAuthForbidden
+		}
+		if existing := slices.IndexFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == input.ID && input.ID != "" }); existing >= 0 && !teamSettingsWriteAllowed(data, data.TargetBranches[existing].TeamID, teamRoles, role) {
+			return store.ErrAuthForbidden
+		}
 		for event, stateID := range input.AutomationStates {
 			if !slices.Contains([]string{"draft", "opened", "reviewActivity", "ready", "merged"}, event) || (stateID != "" && stateForTeam(data, input.TeamID, stateID) == nil) {
 				return errInvalid
@@ -617,7 +636,11 @@ func (s *server) upsertTargetBranch(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteTargetBranch(w http.ResponseWriter, r *http.Request) {
+	role, teamRoles := s.requestWorkspaceRole(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "target_branch.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
+		if existing := slices.IndexFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == r.PathValue("id") }); existing >= 0 && !teamSettingsWriteAllowed(data, data.TargetBranches[existing].TeamID, teamRoles, role) {
+			return store.ErrAuthForbidden
+		}
 		before := len(data.TargetBranches)
 		data.TargetBranches = slices.DeleteFunc(data.TargetBranches, func(v domain.TargetBranch) bool { return v.ID == r.PathValue("id") })
 		if before == len(data.TargetBranches) {

@@ -13,7 +13,9 @@ export function applyAgentStreamEvent(session: AgentSession | undefined, event: 
     const parts = [...(message.parts ?? [])]
     if (event.part) {
       const index = parts.findIndex(part => part.id === event.part?.id)
+      const before = index < 0 && event.beforePartId ? parts.findIndex(part => part.id === event.beforePartId) : -1
       if (index >= 0) parts[index] = event.part
+      else if (before >= 0) parts.splice(before, 0, event.part)
       else parts.push(event.part)
     }
     // text.replaced: the server moved mid-task narration into the work group, so the answer restarts.

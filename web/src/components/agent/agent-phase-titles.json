@@ -1,0 +1,18 @@
+[
+  "Looking up {subject}",
+  "Looking at {subject}",
+  "Searching issues for {subject}",
+  "Searching documentation for {subject}",
+  "Reading comments on {subject}",
+  "Reviewing history of {subject}",
+  "Updating {subject}",
+  "Updating priority of {subject}",
+  "Updating status of {subject}",
+  "Updating labels of {subject}",
+  "Assigning {subject}",
+  "Creating issue {subject}",
+  "Creating {subject}",
+  "Commenting on {subject}",
+  "Deleting {subject}",
+  "Using {subject}"
+]

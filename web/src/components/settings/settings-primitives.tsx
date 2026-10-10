@@ -1,5 +1,8 @@
 import * as SelectPrimitive from "@radix-ui/react-select";
-import { Fragment } from "react";
+import { Fragment, useContext } from "react";
+import { createPortal } from "react-dom";
+
+import { SettingsReadOnlyCrumbSlot } from "./settings-read-only-context";
 import type {
   KeyboardEventHandler,
   MouseEventHandler,
@@ -289,13 +292,17 @@ export function SettingsCrumb({
   icon?: ReactNode;
   onClick: () => void;
 }) {
-  return (
+  const readOnlySlot = useContext(SettingsReadOnlyCrumbSlot);
+  const crumb = (
     <button className="settings-crumb" type="button" onClick={onClick}>
       <ChevronLeft size={14} aria-hidden />
       {icon && <span className="settings-crumb-icon">{icon}</span>}
       <span className="settings-crumb-label">{children}</span>
     </button>
   );
+  // Read-only settings render inside a disabled <fieldset>; navigation crumbs
+  // stay usable by rendering into a slot above it.
+  return readOnlySlot ? createPortal(crumb, readOnlySlot) : crumb;
 }
 
 export function TeamSettingsCrumb({

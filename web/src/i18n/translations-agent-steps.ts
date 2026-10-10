@@ -127,6 +127,24 @@ export const agentStepsZhCN: Record<string, string> = {
   "Running {subject}…": "正在运行{subject}…",
   "Ran {subject}": "已运行{subject}",
 
+  // Chat phase titles the server writes above a turn's tool rows (agentPhaseTemplates in agent_chat_steps.go).
+  "Looking up {subject}": "查找{subject}",
+  "Looking at {subject}": "查看{subject}",
+  "Searching issues for {subject}": "搜索{subject}相关事项",
+  "Searching documentation for {subject}": "搜索{subject}相关文档",
+  "Reading comments on {subject}": "查看{subject}的评论",
+  "Reviewing history of {subject}": "查看{subject}的历史",
+  "Updating {subject}": "更新{subject}",
+  "Updating priority of {subject}": "更新{subject}的优先级",
+  "Updating status of {subject}": "更新{subject}的状态",
+  "Updating labels of {subject}": "更新{subject}的标签",
+  "Assigning {subject}": "分配{subject}",
+  "Creating issue {subject}": "创建事项{subject}",
+  "Creating {subject}": "创建{subject}",
+  "Commenting on {subject}": "评论{subject}",
+  "Deleting {subject}": "删除{subject}",
+  "Using {subject}": "使用{subject}",
+
   // Loop run tool label templates (loopToolVerbTemplates, external and other tools).
   "Read {subject}": "已读取{subject}",
   "Listed {subject}": "已列出{subject}",
@@ -175,6 +193,7 @@ export const agentStepsZhCN: Record<string, string> = {
   "subject:documents": "文档",
   "subject:documentation": "文档",
   "subject:document history": "文档历史",
+  "subject:document version": "文档版本",
   "subject:document permissions": "文档访问权限",
   "subject:comment": "评论",
   "subject:comments": "评论",

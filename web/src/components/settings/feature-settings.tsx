@@ -1,4 +1,5 @@
 import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
+import { canAdministerReleasePipeline, canCreateReleasePipeline } from '@/lib/settings-access';
 import { ApplicationMembers } from '@/components/agent/application-members'
 import {
   ArrowUpRight,
@@ -45,7 +46,7 @@ import { confirmAction } from "@/components/ui/action-dialog-service";
 import { useNavigate } from "react-router-dom";
 import type {
   BootstrapData, CustomEmoji, DocumentTemplate, FeatureSettings,
-  ReleasePipeline, WorkspaceSettings,
+  ReleasePipeline, TrashEntry, WorkspaceSettings,
 } from "@/types/flow";
 
 import { keepMentionMenuOpen } from "./mention-field-host";
@@ -354,13 +355,18 @@ function CustomerRequestsPage(props:{data:BootstrapData;settings:WorkspaceSettin
   return <CustomerRequestsSettings {...props}/>;
 }
 
+function deletedPipelineTeamIds(entry:TrashEntry):string[] {
+  const teamIds=(entry.payload as {teamIds?:unknown}|undefined)?.teamIds;
+  return Array.isArray(teamIds)?teamIds.filter((id):id is string=>typeof id==="string"):[];
+}
+
 function ReleasesFeatureSettings({data,onCreate,onOpen,onReload}:{data:BootstrapData;onCreate:()=>void;onOpen:(pipeline:ReleasePipeline)=>void;onReload:()=>Promise<void>}) {
   const { formatDate, t } = useI18n();
   const [query,setQuery]=useState(""); const [state,setState]=useState<'active'|'deleted'>('active');
   const pipelines=(data.releasePipelines??[]).filter(item=>item.name.toLowerCase().includes(query.toLowerCase()));
   const deleted=data.trash.filter(item=>item.resourceType==='release_pipeline'&&item.title.toLowerCase().includes(query.toLowerCase()));
-  return <div className="feature-wide"><FeatureShell title="Releases" description="Track which issues ship in each release."><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by pipeline name")} placeholder={t("Filter by pipeline name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline state" value={state} options={[{value:"active",label:"Active pipelines"},{value:"deleted",label:"Recently deleted pipelines"}]} onChange={value=>setState(value as 'active'|'deleted')}/><span/><FeatureButton primary disabled={state==='deleted'} onClick={onCreate}><Plus size={14}/>New pipeline</FeatureButton></div>
-    <div className="feature-table"><header><span>{t("Pipeline name")}</span><span>{t("Teams")}</span><span>{t("Type")}</span><span>{t("Releases")}</span><span/></header>{state==='active'?pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>onOpen(item)}><Rocket size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore={item.teamIds.length?true:undefined}>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||t("All teams")}</span><span>{t(item.type==="scheduled"?"Scheduled":"Continuous")}</span><span>{data.releases.filter(release=>release.pipelineId===item.id).length}</span><ChevronRight size={15}/></button>):deleted.map(item=><div className="feature-table-row flow-deleted-pipeline-row" key={item.id}><Rocket size={16}/><strong data-i18n-ignore>{item.title}</strong><span/><span>{formatDate(item.deletedAt,{dateStyle:"medium"})}</span><span/><FeatureButton onClick={()=>void restoreTrashEntry(item.id).then(onReload)}>Restore</FeatureButton></div>)}{state==='active'&&!pipelines.length&&<FeatureEmpty icon={Rocket} title={query?"No matching pipelines":"No release pipelines"}/>} {state==='deleted'&&!deleted.length&&<FeatureEmpty icon={Rocket} title="No recently deleted pipelines"/>}</div></FeatureShell></div>;
+  return <div className="feature-wide"><FeatureShell title="Releases" description="Track which issues ship in each release."><div className="feature-toolbar"><label><Search size={15}/><input type="search" aria-label={t("Filter by pipeline name")} placeholder={t("Filter by pipeline name…")} value={query} onChange={event=>setQuery(event.target.value)}/></label><FeatureSelect label="Pipeline state" value={state} options={[{value:"active",label:"Active pipelines"},{value:"deleted",label:"Recently deleted pipelines"}]} onChange={value=>setState(value as 'active'|'deleted')}/><span/><FeatureButton primary disabled={state==='deleted'||!canCreateReleasePipeline(data)} onClick={onCreate}><Plus size={14}/>New pipeline</FeatureButton></div>
+    <div className="feature-table"><header><span>{t("Pipeline name")}</span><span>{t("Teams")}</span><span>{t("Type")}</span><span>{t("Releases")}</span><span/></header>{state==='active'?pipelines.map(item=><button key={item.id} className="feature-table-row" onClick={()=>onOpen(item)}><Rocket size={16}/><strong data-i18n-ignore>{item.name}</strong><span data-i18n-ignore={item.teamIds.length?true:undefined}>{item.teamIds.map(id=>data.teams.find(team=>team.id===id)?.name).filter(Boolean).join(", ")||t("All teams")}</span><span>{t(item.type==="scheduled"?"Scheduled":"Continuous")}</span><span>{data.releases.filter(release=>release.pipelineId===item.id).length}</span><ChevronRight size={15}/></button>):deleted.map(item=><div className="feature-table-row flow-deleted-pipeline-row" key={item.id}><Rocket size={16}/><strong data-i18n-ignore>{item.title}</strong><span/><span>{formatDate(item.deletedAt,{dateStyle:"medium"})}</span><span/><FeatureButton disabled={!canAdministerReleasePipeline(data,{teamIds:deletedPipelineTeamIds(item)})} onClick={()=>void restoreTrashEntry(item.id).then(onReload)}>Restore</FeatureButton></div>)}{state==='active'&&!pipelines.length&&<FeatureEmpty icon={Rocket} title={query?"No matching pipelines":"No release pipelines"}/>} {state==='deleted'&&!deleted.length&&<FeatureEmpty icon={Rocket} title="No recently deleted pipelines"/>}</div></FeatureShell></div>;
 }
 
 const PULSE_SCHEDULE_OPTIONS=[{value:"daily",label:"Daily"},{value:"weekly",label:"Weekly"},{value:"never",label:"Never"}];
