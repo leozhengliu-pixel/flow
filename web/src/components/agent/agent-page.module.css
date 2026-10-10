@@ -432,6 +432,11 @@
 .assistant {
   align-items: flex-start;
 }
+/* An answer spans the whole column (code blocks and tables included), not 85% of it. */
+.assistant .messageContent {
+  width: 100%;
+  max-width: 100%;
+}
 .isEditing .messageContent {
   box-shadow: 0 0 0 1px var(--accent-primary);
 }

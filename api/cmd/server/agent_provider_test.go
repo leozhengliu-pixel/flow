@@ -226,24 +226,104 @@ func TestAgentStreamTimeoutIsAnIdleTimeout(t *testing.T) {
 		return appconfig.AgentConfig{Protocol: "openai-responses", BaseURL: url, Model: "model", MaxOutputTokens: 100, Timeout: 250 * time.Millisecond}
 	}
 
-	steady := streamChunks(8, 80*time.Millisecond, false)
-	defer steady.Close()
-	s := &server{agent: config(steady.URL)}
-	start := time.Now()
-	turn, err := s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
-	if err != nil || turn.Text != "xxxxxxxx" {
-		t.Fatalf("steady stream: turn=%#v err=%v", turn, err)
+	if newAgentHTTPClient().Timeout != 0 {
+		t.Fatal("the server's provider client must not cap the whole streamed response")
 	}
-	if time.Since(start) < 500*time.Millisecond {
-		t.Fatalf("the stream finished before the timeout elapsed (%s), so it proves nothing", time.Since(start))
+	// nil is the fallback client; newAgentHTTPClient is the one main() installs. Both must keep long turns alive.
+	for name, client := range map[string]*http.Client{"fallback": nil, "server": newAgentHTTPClient()} {
+		t.Run(name, func(t *testing.T) {
+			steady := streamChunks(8, 80*time.Millisecond, false)
+			defer steady.Close()
+			s := &server{agent: config(steady.URL), agentClient: client}
+			start := time.Now()
+			turn, err := s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
+			if err != nil || turn.Text != "xxxxxxxx" {
+				t.Fatalf("steady stream: turn=%#v err=%v", turn, err)
+			}
+			if time.Since(start) < 500*time.Millisecond {
+				t.Fatalf("the stream finished before the timeout elapsed (%s), so it proves nothing", time.Since(start))
+			}
+
+			stalled := streamChunks(1, 0, true)
+			defer stalled.Close()
+			s = &server{agent: config(stalled.URL), agentClient: client}
+			_, err = s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
+			var providerErr *agentProviderError
+			if !errors.As(err, &providerErr) || !providerErr.timeout || !providerErr.transient {
+				t.Fatalf("stalled stream error = %v", err)
+			}
+			if strings.Contains(err.Error(), "could not read Agent stream") {
+				t.Fatalf("an idle timeout should read as the provider stalling, got %q", err)
+			}
+		})
+	}
+}
+
+// A provider hiccup before anything streamed is asked again once; a turn that already showed output is not.
+func TestAgentChatTurnRetriesTransientFailuresBeforeOutput(t *testing.T) {
+	previous := agentChatRetryDelay
+	agentChatRetryDelay = 0
+	defer func() { agentChatRetryDelay = previous }()
+	completed := "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n" +
+		"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp\",\"status\":\"completed\"}}\n\n"
+	failures := map[string]func(http.ResponseWriter){
+		"gateway 502": func(w http.ResponseWriter) {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"error":{"message":"upstream unavailable"}}`))
+		},
+		"stream server_error": func(w http.ResponseWriter) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(w, "event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"status\":\"failed\",\"error\":{\"code\":\"server_error\",\"message\":\"The server had an error\"}}}\n\n")
+		},
+	}
+	for name, fail := range failures {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if calls == 1 {
+					fail(w)
+					return
+				}
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = fmt.Fprint(w, completed)
+			}))
+			defer provider.Close()
+			s := &server{agent: appconfig.AgentConfig{Protocol: "openai-responses", BaseURL: provider.URL, Model: "model", MaxOutputTokens: 100}, agentClient: provider.Client()}
+			turn, err := s.requestAgentChatTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, func(agentProviderEvent) error { return nil })
+			if err != nil || turn.Text != "ok" || calls != 2 {
+				t.Fatalf("turn=%#v err=%v calls=%d", turn, err, calls)
+			}
+		})
 	}
 
-	stalled := streamChunks(1, 0, true)
-	defer stalled.Close()
-	s = &server{agent: config(stalled.URL)}
-	_, err = s.requestAgentTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, nil)
-	var providerErr *agentProviderError
-	if !errors.As(err, &providerErr) || !providerErr.timeout || !providerErr.transient {
-		t.Fatalf("stalled stream error = %v", err)
-	}
+	t.Run("after output", func(t *testing.T) {
+		calls := 0
+		provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(w, "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n"+
+				"event: response.failed\ndata: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"server_error\",\"message\":\"boom\"}}}\n\n")
+		}))
+		defer provider.Close()
+		s := &server{agent: appconfig.AgentConfig{Protocol: "openai-responses", BaseURL: provider.URL, Model: "model", MaxOutputTokens: 100}, agentClient: provider.Client()}
+		_, err := s.requestAgentChatTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, func(agentProviderEvent) error { return nil })
+		if err == nil || err.Error() != "boom" || calls != 1 {
+			t.Fatalf("err=%v calls=%d", err, calls)
+		}
+	})
+
+	t.Run("permanent", func(t *testing.T) {
+		calls := 0
+		provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			calls++
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"bad tools"}}`))
+		}))
+		defer provider.Close()
+		s := &server{agent: appconfig.AgentConfig{Protocol: "openai-responses", BaseURL: provider.URL, Model: "model", MaxOutputTokens: 100}, agentClient: provider.Client()}
+		if _, err := s.requestAgentChatTurn(context.Background(), []agentProviderMessage{{Role: "user", Content: "hello"}}, func(agentProviderEvent) error { return nil }); err == nil || calls != 1 {
+			t.Fatalf("err=%v calls=%d", err, calls)
+		}
+	})
 }

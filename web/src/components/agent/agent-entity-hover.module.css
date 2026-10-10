@@ -1,15 +1,15 @@
 /* Hover cards for the entity chips in agent answers: Linear's 8px surface with a 13px title, a hairline and a 12px property row. */
-.card{z-index:1300;box-sizing:border-box;width:max-content;min-width:236px;max-width:min(396px,calc(100vw - 16px));padding:11px 14px;border:.5px solid var(--popover-border);border-radius:8px;background:var(--theme-surface-2);color:var(--theme-text-primary);box-shadow:var(--shadow-control);font:450 12px/16px var(--font);outline:0}
-.identifier{color:var(--theme-text-secondary);font-size:13px;font-weight:500;line-height:16px}
-.title{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;font-weight:500;line-height:16px;color:var(--theme-text-primary)}
+.card{z-index:1300;box-sizing:border-box;width:max-content;min-width:236px;max-width:min(396px,calc(100vw - 16px));padding:11px 14px;border:.5px solid var(--hover-card-border);border-radius:8px;background:var(--hover-card-bg);color:var(--theme-text-primary);box-shadow:var(--hover-card-shadow);font:450 12px/16px var(--font);outline:0}
+.identifier{margin-bottom:5px;color:var(--theme-text-secondary);font-size:13px;font-weight:500;line-height:16px}
+.title{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;font-weight:500;line-height:18px;color:var(--theme-text-primary)}
 .title>svg{flex:0 0 auto;width:16px;height:16px}
 .titleRow{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .summary{display:-webkit-box;margin:6px 0 0;padding-left:24px;overflow:hidden;color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:18px;-webkit-box-orient:vertical;-webkit-line-clamp:2}
-.rule{height:0;margin:8px 0;border:0;border-top:.5px solid var(--theme-border)}
+.rule{height:0;margin:10px 0 10.5px;border:0;border-top:.5px solid var(--hover-card-rule)}
 .props{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px}
 .secondRow{margin-top:8px}
 .column{display:flex;flex-direction:column;gap:8px}
-.prop{display:inline-flex;align-items:center;gap:8px;min-width:0;color:var(--theme-text-primary)}
+.prop{display:inline-flex;align-items:center;gap:6px;min-width:0;color:var(--theme-text-primary)}
 .prop>svg,.prop>span>svg{flex:0 0 auto;width:16px;height:16px}
 .dim{color:var(--theme-text-secondary)}
 .muted{color:var(--theme-text-secondary)}

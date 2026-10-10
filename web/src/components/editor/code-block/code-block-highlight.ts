@@ -24,8 +24,112 @@ export function tokenRanges(html: string): TokenRange[] {
   return ranges
 }
 
-/** Keywords that steer control flow; themes may colour them apart from declarations (`hljs-keyword hljs-control`). */
-const CONTROL_KEYWORDS = new Set(['return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'throw', 'try', 'catch', 'finally', 'await', 'yield'])
+/** Keywords that steer control flow or module structure; themes colour them apart from declarations (`hljs-keyword hljs-control`). */
+const CONTROL_KEYWORDS = new Set(['return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default', 'break', 'continue', 'throw', 'try', 'catch', 'finally', 'yield', 'import', 'export', 'from', 'as', 'package', 'elif', 'except', 'raise'])
+/** Words that read as operators and keep the plain text colour. */
+const OPERATOR_WORDS = new Set(['in', 'of', 'instanceof', 'typeof', 'new', 'delete', 'void', 'and', 'or', 'not', 'is'])
+/** Languages whose plain identifiers are told apart: variables, calls, types and constants (highlight.js leaves them unmarked). */
+const IDENTIFIER_LANGUAGES = new Set(['javascript', 'typescript', 'go', 'python', 'java', 'kotlin', 'rust', 'csharp', 'swift', 'c', 'cpp', 'php', 'ruby', 'dart', 'scala', 'objectivec', 'lua', 'perl', 'r'])
+/** Ranges that only group other tokens; the plain text they hold is still code and gets coloured. */
+const WRAPPER_CLASSES = new Set(['hljs-params', 'hljs-function', 'hljs-subst', 'hljs-class', 'hljs-tag', 'language-javascript', 'language-typescript'])
+const DECLARATION_WORDS = /(?:^|[^\w$])(?:function|def|func|fn|fun|sub|proc)\s+$/
+
+const CONST_DECLARATION = /\bconst\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=(?!=)/g
+const IDENTIFIER = /[A-Za-z_$][\w$]*/g
+const BASH_ASSIGNMENT = /(?:^|[\s;|&({])([A-Za-z_]\w*)=/gm
+const BASH_COMMAND = /(^|[|;&({]|\b(?:then|do|else|elif)\b|\$\()\s*(?!(?:then|do|else|elif|if|while|for|case|in)\b)([A-Za-z_./~][\w./~-]*)/gm
+
+const hasClass = (range: TokenRange, name: string) => range.className.split(' ').includes(name)
+
+/** Re-classifies highlight.js scopes that Linear colours differently, per language. */
+function refine(code: string, language: string, ranges: TokenRange[]): TokenRange[] {
+  const literals = new Set(ranges.filter(range => hasClass(range, 'hljs-literal')).map(range => `${range.from}:${range.to}`))
+  const dropped = new Set<TokenRange>()
+  const result: TokenRange[] = []
+  for (const range of ranges) {
+    const text = code.slice(range.from, range.to)
+    let className = range.className
+    if (hasClass(range, 'hljs-keyword')) {
+      // `true` and `null` are marked as a literal wrapping a keyword; only the literal colour applies.
+      if (literals.has(`${range.from}:${range.to}`)) continue
+      if (CONTROL_KEYWORDS.has(text)) className = 'hljs-keyword hljs-control'
+      else if (OPERATOR_WORDS.has(text)) className = 'hljs-plain'
+    } else if (hasClass(range, 'hljs-meta')) {
+      if (text.startsWith('@')) className = 'hljs-call'
+      else if (text.startsWith('#!')) className = 'hljs-comment'
+      else if (text.startsWith('<!')) { className = 'hljs-plain'; for (const inner of ranges) if (inner !== range && inner.from >= range.from && inner.to <= range.to) dropped.add(inner) }
+    } else if (hasClass(range, 'hljs-attr') && language === 'json') className = 'hljs-string'
+    else if (hasClass(range, 'hljs-string') && language === 'xml' && /^(["']).*\1$/s.test(text)) {
+      // Attribute values keep the string colour; their quotes read as punctuation.
+      result.push({ ...range, from: range.from + 1, to: range.to - 1 })
+      continue
+    } else if (hasClass(range, 'hljs-regexp') && /^\/.+\/[a-z]*$/s.test(text)) {
+      // The delimiters read as punctuation; the pattern and its flags keep the regexp colour.
+      const close = range.from + text.lastIndexOf('/')
+      result.push({ ...range, from: range.from + 1, to: close })
+      if (close + 1 < range.to) result.push({ ...range, from: close + 1 })
+      continue
+    } else if (hasClass(range, 'hljs-variable') && language !== 'css' && text.startsWith('$') && text.length > 1) {
+      // `$NAME`: the sigil is an operator, the name a variable.
+      result.push({ ...range, from: range.from + 1 })
+      continue
+    } else if (hasClass(range, 'hljs-string') && (language === 'css' || language === 'scss' || language === 'less') && !/^["']/.test(text)) className = 'hljs-plain'
+    else if (hasClass(range, 'hljs-built_in')) {
+      const callable = /^\s*\(/.test(code.slice(range.to, range.to + 8))
+      if (language === 'bash' || language === 'shell') className = text === 'export' ? 'hljs-keyword hljs-control' : 'hljs-built_in hljs-call'
+      else if (callable || language === 'css' || language === 'scss' || language === 'less') className = 'hljs-built_in hljs-call'
+    }
+    result.push(className === range.className ? range : { ...range, className })
+  }
+  return result.filter(range => !dropped.has(range))
+}
+
+/** Adds the identifiers highlight.js leaves unmarked, so variables, calls, types and constants get their own colours. */
+function addIdentifiers(code: string, language: string, ranges: TokenRange[]): TokenRange[] {
+  const owner = new Int32Array(code.length).fill(-1)
+  const byLength = ranges.map((range, index) => ({ range, index })).sort((a, b) => (b.range.to - b.range.from) - (a.range.to - a.range.from))
+  for (const { range, index } of byLength) owner.fill(index, range.from, range.to)
+  const extra: TokenRange[] = []
+  const covered = (at: number) => {
+    const index = owner[at]
+    if (index < 0) return false
+    return !isWrapper(ranges[index])
+  }
+  if (IDENTIFIER_LANGUAGES.has(language)) {
+    const constants = language === 'javascript' || language === 'typescript' ? new Set([...code.matchAll(CONST_DECLARATION)].map(match => match[1])) : null
+    for (const match of code.matchAll(IDENTIFIER)) {
+      const from = match.index
+      const to = from + match[0].length
+      if (covered(from)) continue
+      const word = match[0]
+      const callable = /^[ \t]*\(/.test(code.slice(to, to + 16)) || DECLARATION_WORDS.test(code.slice(Math.max(0, from - 16), from))
+      const member = code[from - 1] === '.'
+      let className = 'hljs-ident'
+      if (callable) className = 'hljs-call'
+      else if (language === 'go' && /\bpackage\s+$/.test(code.slice(Math.max(0, from - 12), from))) className = 'hljs-plain'
+      else if (constants?.has(word)) className = 'hljs-constant'
+      else if (/^[A-Z][A-Z0-9_]+$/.test(word)) className = 'hljs-constant'
+      else if (/^[A-Z]/.test(word) && !member) className = 'hljs-ident-type'
+      extra.push({ from, to, className })
+    }
+  } else if (language === 'bash' || language === 'shell') {
+    for (const match of code.matchAll(BASH_COMMAND)) {
+      const word = match[2]
+      const from = match.index + match[0].length - word.length
+      if (owner[from] >= 0) continue
+      extra.push({ from, to: from + word.length, className: code[from + word.length] === '=' ? 'hljs-ident' : 'hljs-call' })
+    }
+    for (const match of code.matchAll(BASH_ASSIGNMENT)) {
+      const from = match.index + match[0].length - match[1].length - 1
+      if (owner[from] < 0 && !extra.some(range => range.from === from)) extra.push({ from, to: from + match[1].length, className: 'hljs-ident' })
+    }
+  }
+  return extra.length ? [...ranges, ...extra] : ranges
+}
+
+function isWrapper(range: TokenRange) {
+  return range.className.split(' ').some(name => WRAPPER_CLASSES.has(name))
+}
 
 /** The highlight.js token ranges for a code block's text; empty for plain text, unknown languages and huge blocks. */
 export function highlightCode(code: string, language: string | null | undefined): TokenRange[] {
@@ -34,8 +138,8 @@ export function highlightCode(code: string, language: string | null | undefined)
   try {
     const id = !raw || raw === 'auto' ? detectLanguage(code) ?? undefined : resolveLanguage(raw)
     if (!id || id === 'plaintext') return []
-    return tokenRanges(hljs.highlight(code, { language: id, ignoreIllegals: true }).value)
-      .map(range => range.className === 'hljs-keyword' && CONTROL_KEYWORDS.has(code.slice(range.from, range.to)) ? { ...range, className: 'hljs-keyword hljs-control' } : range)
+    const tokens = refine(code, id, tokenRanges(hljs.highlight(code, { language: id, ignoreIllegals: true }).value))
+    return addIdentifiers(code, id, tokens)
   } catch {
     return []
   }

@@ -155,4 +155,87 @@ describe('issue collaboration provider', () => {
     document.destroy()
     remote.destroy()
   })
+
+  describe('hidden tabs', () => {
+    let visibility = 'visible'
+    const setVisibility = (value: string) => {
+      visibility = value
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+    beforeEach(() => {
+      visibility = 'visible'
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => visibility })
+    })
+    afterEach(() => { Reflect.deleteProperty(document, 'visibilityState') })
+
+    async function syncedProvider() {
+      const { IssueCollaborationProvider } = await import('./issue-collaboration')
+      const doc = new Doc()
+      const provider = new IssueCollaborationProvider({ document: doc, workspaceKey: 'workspace', issueId: 'issue-1', documentId: 'document-1', viewer, seededWithoutServerState: false })
+      return { provider, doc }
+    }
+
+    it('releases the socket after a grace period in a hidden tab and reconnects when shown', async () => {
+      const { provider, doc } = await syncedProvider()
+      provider.start()
+      const socket = MockWebSocket.instances[0]
+      socket.open()
+      socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [] }))
+      setVisibility('hidden')
+      vi.advanceTimersByTime(19_000)
+      expect(socket.readyState).toBe(MockWebSocket.OPEN)
+      setVisibility('visible')
+      vi.advanceTimersByTime(60_000)
+      expect(socket.readyState).toBe(MockWebSocket.OPEN)
+      expect(MockWebSocket.instances).toHaveLength(1)
+
+      setVisibility('hidden')
+      vi.advanceTimersByTime(20_001)
+      expect(socket.readyState).toBe(MockWebSocket.CLOSED)
+      // No reconnect loop while hidden.
+      vi.advanceTimersByTime(60_000)
+      expect(MockWebSocket.instances).toHaveLength(1)
+      setVisibility('visible')
+      expect(MockWebSocket.instances).toHaveLength(2)
+      MockWebSocket.instances[1].open()
+      expect(JSON.parse(String(MockWebSocket.instances[1].sent[0]))).toMatchObject({ type: 'document.join', documentId: 'document-1' })
+      provider.destroy()
+      doc.destroy()
+    })
+
+    it('keeps the socket while local edits are unsent, then releases it', async () => {
+      const { provider, doc } = await syncedProvider()
+      provider.start()
+      const socket = MockWebSocket.instances[0]
+      socket.open()
+      // Not synced yet, so the edit stays pending.
+      doc.getText('content').insert(0, 'draft')
+      setVisibility('hidden')
+      vi.advanceTimersByTime(21_000)
+      expect(socket.readyState).toBe(MockWebSocket.OPEN)
+      socket.message(JSON.stringify({ type: 'document.sync', documentId: 'document-1', updates: [] }))
+      const frame = socket.sent.find(value => value instanceof Uint8Array && value[0] === 1) as Uint8Array
+      socket.message(frame.buffer)
+      vi.advanceTimersByTime(5_001)
+      expect(socket.readyState).toBe(MockWebSocket.CLOSED)
+      provider.destroy()
+      doc.destroy()
+    })
+
+    it('does not connect at all while opened in a background tab, and stops cleanly on close', async () => {
+      visibility = 'hidden'
+      const { provider, doc } = await syncedProvider()
+      provider.start()
+      expect(MockWebSocket.instances).toHaveLength(0)
+      setVisibility('visible')
+      expect(MockWebSocket.instances).toHaveLength(1)
+      provider.stop()
+      expect(MockWebSocket.instances[0].readyState).toBe(MockWebSocket.CLOSED)
+      setVisibility('hidden')
+      setVisibility('visible')
+      expect(MockWebSocket.instances).toHaveLength(1)
+      provider.destroy()
+      doc.destroy()
+    })
+  })
 })

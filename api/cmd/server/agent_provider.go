@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"slices"
@@ -94,6 +95,9 @@ func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 	if err != nil {
 		return nil
 	}
+	if toolset := agentChatToolsetFrom(ctx); toolset != nil && len(tools) > 0 {
+		tools = toolset.tools(tools)
+	}
 	if connectors, ok := ctx.Value(connectorToolsKey{}).([]connectorTool); ok {
 		for _, tool := range connectors {
 			tools = append(tools, tool.Definition)
@@ -111,6 +115,9 @@ func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 	}
 	return tools
 }
+
+// agentPromptCacheKey names the prompt cache a Responses request should use (see requestOpenAIResponses).
+type agentPromptCacheKey struct{}
 
 type agentMaxOutputTokensKey struct{}
 
@@ -196,7 +203,20 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 			return map[string]any{"type": "function", "name": tool.Name, "description": tool.Description, "parameters": parameters}
 		})
 	}
+	// Requests sharing a cache key are routed to where their common prefix (tools and instructions) is already
+	// processed. Without it this provider cached nothing, and every turn re-read ~15k tokens of tools.
+	cacheKey, _ := ctx.Value(agentPromptCacheKey{}).(string)
+	if cacheKey != "" && !s.agentPromptCacheOff.Load() {
+		payload["prompt_cache_key"] = cacheKey
+	}
 	response, err := s.agentProviderRequest(ctx, "/responses", payload, false)
+	var providerErr *agentProviderError
+	if payload["prompt_cache_key"] != nil && errors.As(err, &providerErr) && providerErr.status == http.StatusBadRequest && strings.Contains(providerErr.message, "prompt_cache_key") {
+		// An OpenAI-compatible gateway that doesn't know the field: drop it from now on.
+		s.agentPromptCacheOff.Store(true)
+		delete(payload, "prompt_cache_key")
+		response, err = s.agentProviderRequest(ctx, "/responses", payload, false)
+	}
 	if err != nil {
 		return agentProviderTurn{}, err
 	}
@@ -227,13 +247,28 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 			Response struct {
 				ID     string `json:"id"`
 				Status string `json:"status"`
-				Error  *struct {
+				Usage  *struct {
+					InputTokens        int `json:"input_tokens"`
+					OutputTokens       int `json:"output_tokens"`
+					InputTokensDetails struct {
+						CachedTokens int `json:"cached_tokens"`
+					} `json:"input_tokens_details"`
+					OutputTokensDetails struct {
+						ReasoningTokens int `json:"reasoning_tokens"`
+					} `json:"output_tokens_details"`
+				} `json:"usage"`
+				Error *struct {
+					Code    string `json:"code"`
 					Message string `json:"message"`
 				} `json:"error"`
 			} `json:"response"`
 			Error *struct {
+				Code    string `json:"code"`
 				Message string `json:"message"`
 			} `json:"error"`
+			// Some gateways put the error fields at the top level of an "error" event.
+			Code    string `json:"code"`
+			Message string `json:"message"`
 		}
 		if err := json.Unmarshal([]byte(data), &event); err != nil {
 			return nil
@@ -269,14 +304,21 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 			}
 		case "response.completed":
 			turn.StopReason = event.Response.Status
-		case "response.failed", "error":
-			message := "OpenAI Responses stream failed"
-			if event.Error != nil && event.Error.Message != "" {
-				message = event.Error.Message
-			} else if event.Response.Error != nil && event.Response.Error.Message != "" {
-				message = event.Response.Error.Message
+			if usage := event.Response.Usage; usage != nil {
+				slog.InfoContext(ctx, "agent provider usage", "model", s.agent.Model, "input_tokens", usage.InputTokens, "cached_tokens", usage.InputTokensDetails.CachedTokens, "output_tokens", usage.OutputTokens, "reasoning_tokens", usage.OutputTokensDetails.ReasoningTokens, "tools", len(tools))
 			}
-			return errors.New(message)
+		case "response.failed", "error":
+			message, code := "OpenAI Responses stream failed", event.Code
+			if event.Error != nil && event.Error.Message != "" {
+				message, code = event.Error.Message, event.Error.Code
+			} else if event.Response.Error != nil && event.Response.Error.Message != "" {
+				message, code = event.Response.Error.Message, event.Response.Error.Code
+			} else if event.Message != "" {
+				message = event.Message
+			}
+			// Server-side failures and rate limits may succeed when the turn is asked again.
+			transient := code == "server_error" || code == "rate_limit_exceeded" || code == "server_is_overloaded" || code == "slow_down"
+			return &agentProviderError{message: message, transient: transient}
 		}
 		return nil
 	})
@@ -470,11 +512,16 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 		return nil, fmt.Errorf("could not encode Agent request")
 	}
 	endpoint := agentEndpoint(s.agent.BaseURL, suffix)
-	// The provider's own client (tests) keeps its whole-request timeout. Otherwise FLOW_AGENT_TIMEOUT is an idle
-	// timeout: a streamed answer may run as long as the provider keeps sending, but not stall for that long.
+	client := s.agentClient
+	if client == nil {
+		client = newAgentHTTPClient()
+	}
+	// FLOW_AGENT_TIMEOUT is an idle timeout: a streamed answer may run as long as the provider keeps sending
+	// (reasoning models with tools routinely take more than a minute per turn), but not stall for that long.
+	// Only a client that sets its own whole-request Timeout opts out.
 	requestCtx, cancel := context.WithCancelCause(ctx)
 	var idle *time.Timer
-	if s.agentClient == nil && s.agent.Timeout > 0 {
+	if client.Timeout == 0 && s.agent.Timeout > 0 {
 		idle = time.AfterFunc(s.agent.Timeout, func() { cancel(errAgentProviderIdle) })
 	}
 	stop := func() {
@@ -498,10 +545,8 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 	} else if s.agent.APIKey != "" {
 		request.Header.Set("Authorization", "Bearer "+s.agent.APIKey)
 	}
-	client := s.agentClient
-	if client == nil {
-		client = &http.Client{}
-	}
+	started := time.Now()
+	logAttrs := []any{"endpoint", suffix, "model", s.agent.Model, "request_bytes", len(raw)}
 	response, err := client.Do(request)
 	if err != nil {
 		idled := errors.Is(context.Cause(requestCtx), errAgentProviderIdle)
@@ -510,20 +555,31 @@ func (s *server) agentProviderRequest(ctx context.Context, suffix string, payloa
 			return nil, ctx.Err()
 		}
 		var netErr net.Error
-		return nil, &agentProviderError{message: "Flow Agent provider is unavailable", transient: true, timeout: idled || errors.As(err, &netErr) && netErr.Timeout()}
+		providerErr := &agentProviderError{message: "Flow Agent provider is unavailable", transient: true, timeout: idled || errors.As(err, &netErr) && netErr.Timeout()}
+		slog.WarnContext(ctx, "agent provider request failed", append(logAttrs, "duration_ms", time.Since(started).Milliseconds(), "timeout", providerErr.timeout, "error", err.Error())...)
+		return nil, providerErr
 	}
+	headers := time.Since(started)
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		defer response.Body.Close()
 		defer stop()
 		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
 		status := response.StatusCode
+		slog.WarnContext(ctx, "agent provider request failed", append(logAttrs, "status", status, "duration_ms", headers.Milliseconds())...)
 		return nil, &agentProviderError{message: fmt.Sprintf("Flow Agent provider returned status %d: %s", status, providerError(body)), status: status, transient: status >= 500 || status == http.StatusTooManyRequests || status == http.StatusRequestTimeout, timeout: status == http.StatusGatewayTimeout || status == http.StatusRequestTimeout}
 	}
-	response.Body = &agentIdleBody{ReadCloser: response.Body, ctx: requestCtx, idle: idle, timeout: s.agent.Timeout, stop: stop}
+	response.Body = &agentIdleBody{ReadCloser: response.Body, ctx: requestCtx, idle: idle, timeout: s.agent.Timeout, stop: stop, logCtx: ctx, logAttrs: append(logAttrs, "status", response.StatusCode, "headers_ms", headers.Milliseconds()), started: started}
 	return response, nil
 }
 
 var errAgentProviderIdle = errors.New("Flow Agent provider stopped responding")
+
+// newAgentHTTPClient is the provider client. It must not set http.Client.Timeout: that caps the whole streamed
+// response, so a long but healthy turn would be cut off mid-answer ("context deadline exceeded … while reading
+// body"). agentProviderRequest enforces FLOW_AGENT_TIMEOUT as an idle timeout instead.
+func newAgentHTTPClient() *http.Client {
+	return &http.Client{}
+}
 
 // agentIdleBody is a provider response body that restarts the idle timer whenever data arrives and releases the
 // request when closed.
@@ -533,14 +589,29 @@ type agentIdleBody struct {
 	idle    *time.Timer
 	timeout time.Duration
 	stop    func()
+	// Timing for the "agent provider response" log line, so slow or stalled providers are visible in the API logs.
+	logCtx    context.Context
+	logAttrs  []any
+	started   time.Time
+	firstByte time.Duration
+	bytes     int
+	idled     bool
+	closed    bool
 }
 
 func (b *agentIdleBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
-	if n > 0 && b.idle != nil {
-		b.idle.Reset(b.timeout)
+	if n > 0 {
+		if b.bytes == 0 {
+			b.firstByte = time.Since(b.started)
+		}
+		b.bytes += n
+		if b.idle != nil {
+			b.idle.Reset(b.timeout)
+		}
 	}
 	if err != nil && err != io.EOF && errors.Is(context.Cause(b.ctx), errAgentProviderIdle) {
+		b.idled = true
 		return n, &agentProviderError{message: errAgentProviderIdle.Error(), transient: true, timeout: true}
 	}
 	return n, err
@@ -549,6 +620,15 @@ func (b *agentIdleBody) Read(p []byte) (int, error) {
 func (b *agentIdleBody) Close() error {
 	err := b.ReadCloser.Close()
 	b.stop()
+	if !b.closed && b.logCtx != nil {
+		b.closed = true
+		attrs := append(b.logAttrs, "first_byte_ms", b.firstByte.Milliseconds(), "duration_ms", time.Since(b.started).Milliseconds(), "response_bytes", b.bytes)
+		if b.idled {
+			slog.WarnContext(b.logCtx, "agent provider response stalled", append(attrs, "idle_timeout_ms", b.timeout.Milliseconds())...)
+		} else {
+			slog.InfoContext(b.logCtx, "agent provider response", attrs...)
+		}
+	}
 	return err
 }
 
@@ -716,6 +796,10 @@ func readSSE(reader io.Reader, visit func(event, data string) error) error {
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		var providerErr *agentProviderError
+		if errors.As(err, &providerErr) {
+			return providerErr
+		}
 		return fmt.Errorf("could not read Agent stream: %w", err)
 	}
 	return flush()

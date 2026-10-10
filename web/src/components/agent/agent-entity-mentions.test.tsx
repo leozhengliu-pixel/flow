@@ -176,7 +176,8 @@ describe('agent entity chips', () => {
     renderAnswer(`Inline \`TST-1\` and\n\n\`\`\`\nTST-1 ${urls.project}\n\`\`\``, fixture())
     await screen.findByRole('document', { name: 'AI message' })
     expect(document.querySelector('a[data-agent-entity]')).toBeNull()
-    expect(document.querySelector('pre')).toHaveTextContent('TST-1')
+    // Code blocks use the editor's node view (line numbers, header, highlighting) rather than a bare <pre>.
+    expect(document.querySelector('.flow-code-block code')).toHaveTextContent('TST-1')
   })
 
   it('renders chips inside tables and lists', async () => {

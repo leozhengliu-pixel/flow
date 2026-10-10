@@ -160,7 +160,8 @@ export function CodeBlockView({ editor, getPos, node }: ReactNodeViewProps) {
       </div>
       <div className="flow-code-block__body" style={{ '--flow-code-lines': COLLAPSED_LINES } as CSSProperties}>
         {showNumbers && <div aria-hidden className="flow-code-block__gutter" contentEditable={false}>{Array.from({ length: lineCount }, (_, index) => <span key={index}>{index + 1}</span>)}</div>}
-        <NodeViewContent<'code'> as="code" className="flow-code-block__code" spellCheck={false}/>
+        {/* The node view content defaults to `white-space: pre-wrap` inline; long lines scroll sideways unless "Wrap lines" is on. */}
+        <NodeViewContent<'code'> as="code" className="flow-code-block__code" spellCheck={false} style={{ whiteSpace: wrap ? 'pre-wrap' : 'pre' }}/>
       </div>
       {collapsible && (
         <button className="flow-code-block__expander" contentEditable={false} onClick={() => expanded ? collapse() : setShowAll(true)} type="button">

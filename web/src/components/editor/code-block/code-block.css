@@ -1,28 +1,19 @@
-/* Code block node view. Colours come from the existing theme and code-theme tokens (dark by default, light overrides). */
+/* Code block node view. Colours come from the theme tokens and the --syntax-* palette (tokens.css). */
 .flow-code-block {
   --code-block-fg: var(--theme-text-primary);
-  --code-block-keyword: var(--code-dark-keyword);
-  --code-block-string: var(--code-dark-string);
-  --code-block-comment: var(--code-dark-comment);
-  --code-block-number: var(--code-dark-number);
   position: relative;
-  margin: 12px 0;
+  margin: 22px 0;
   overflow: hidden;
   border: .5px solid var(--theme-border);
   border-radius: 8px;
   background: var(--theme-surface-1);
   color: var(--code-block-fg);
   font-family: var(--font-monospace);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 20px;
+  /* The system monospace advances 0.602em; -.002em lands on the reference font's 0.6em columns (7.2px at 12px). */
+  letter-spacing: -.002em;
 }
-:root[data-theme="light"] .flow-code-block {
-  --code-block-keyword: var(--code-light-keyword);
-  --code-block-string: var(--code-light-string);
-  --code-block-comment: var(--code-light-comment);
-  --code-block-number: var(--code-light-number);
-}
-
 .flow-code-block__controls {
   position: absolute;
   top: 8px;
@@ -64,7 +55,7 @@ button.flow-code-block__language:hover,
 .flow-code-block__icon:hover,
 .flow-code-block__language[data-state="open"],
 .flow-code-block__icon[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
-.flow-code-block__icon[data-copied] { color: var(--code-block-string); }
+.flow-code-block__icon[data-copied] { color: var(--syntax-string); }
 .flow-code-block__language:focus-visible,
 .flow-code-block__icon:focus-visible,
 .flow-code-block__expander:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
@@ -120,34 +111,49 @@ button.flow-code-block__language:hover,
 }
 .flow-code-block__expander:hover { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 
-/* Syntax highlighting (decoration classes from highlight.js) */
+/* Syntax highlighting: highlight.js scopes (plus the identifier classes added in code-block-highlight.ts) mapped onto the
+   --syntax-* palette, scope for scope like the reference editor's TextMate scopes (dark and light values live in tokens.css). */
 .flow-code-block .hljs-keyword,
 .flow-code-block .hljs-selector-tag,
 .flow-code-block .hljs-doctag,
-.flow-code-block .hljs-type,
-.flow-code-block .hljs-name,
 .flow-code-block .hljs-section,
-.flow-code-block .hljs-deletion { color: var(--code-block-keyword); }
-.flow-code-block .hljs-string,
+.flow-code-block .hljs-name,
+.flow-code-block .hljs-meta,
+.flow-code-block .hljs-deletion { color: var(--syntax-keyword); }
+.flow-code-block .hljs-keyword.hljs-control { color: var(--syntax-control); }
+.flow-code-block .hljs-type,
+.flow-code-block .hljs-built_in,
+.flow-code-block .hljs-title.class_,
+.flow-code-block .hljs-selector-class,
+.flow-code-block .hljs-selector-id { color: var(--syntax-type); }
+.flow-code-block .hljs-title,
+.flow-code-block .hljs-number,
+.flow-code-block .hljs-built_in.hljs-call { color: var(--syntax-function); }
 .flow-code-block .hljs-attr,
-.flow-code-block .hljs-regexp,
+.flow-code-block .hljs-attribute,
+.flow-code-block .hljs-variable,
+.flow-code-block .hljs-property,
+.flow-code-block .hljs-template-variable { color: var(--syntax-variable); }
+.flow-code-block .hljs-literal,
+.flow-code-block .hljs-variable.constant_ { color: var(--syntax-constant); }
+.flow-code-block .hljs-string,
 .flow-code-block .hljs-symbol,
 .flow-code-block .hljs-bullet,
-.flow-code-block .hljs-selector-attr,
-.flow-code-block .hljs-selector-id,
-.flow-code-block .hljs-selector-class,
-.flow-code-block .hljs-template-variable,
-.flow-code-block .hljs-addition { color: var(--code-block-string); }
+.flow-code-block .hljs-addition,
+.flow-code-block .hljs-selector-attr.hljs-string { color: var(--syntax-string); }
+.flow-code-block .hljs-regexp { color: var(--syntax-regexp); }
+.flow-code-block .hljs-string.hljs-variable { color: var(--syntax-variable); }
 .flow-code-block .hljs-comment,
-.flow-code-block .hljs-quote { color: var(--code-block-comment); font-style: italic; }
-.flow-code-block .hljs-number,
-.flow-code-block .hljs-literal,
-.flow-code-block .hljs-built_in,
-.flow-code-block .hljs-title,
-.flow-code-block .hljs-variable,
-.flow-code-block .hljs-attribute,
-.flow-code-block .hljs-meta,
-.flow-code-block .hljs-property { color: var(--code-block-number); }
+.flow-code-block .hljs-quote { color: var(--syntax-comment); }
+.flow-code-block .hljs-punctuation,
+.flow-code-block .hljs-selector-attr,
+.flow-code-block .hljs-subst { color: var(--code-block-fg); }
+/* Identifiers highlight.js leaves unmarked. They can share an element with a grouping scope (`hljs-string hljs-subst`), so they come last. */
+.flow-code-block .hljs-ident { color: var(--syntax-variable); }
+.flow-code-block .hljs-ident-type { color: var(--syntax-type); }
+.flow-code-block .hljs-call { color: var(--syntax-function); }
+.flow-code-block .hljs-constant { color: var(--syntax-constant); }
+.flow-code-block .hljs-plain { color: var(--code-block-fg); }
 .flow-code-block .hljs-emphasis { font-style: italic; }
 .flow-code-block .hljs-strong { font-weight: 600; }
 

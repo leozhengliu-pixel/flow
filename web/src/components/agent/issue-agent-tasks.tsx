@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, Send, Square } from 'lucide-react'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { PersonPicker } from '@/components/issue/core-property-pickers'
-import { canDelegateTo, getApplicationTask, listApplicationTasks, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
+import { AGENT_TASK_ACTIVITY_EVENT, canDelegateTo, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { AgentAnswerText } from './agent-answer'
 import { useI18n } from '@/i18n/i18n'
 import './application-agents.css'
@@ -16,15 +16,21 @@ export function IssueAgentPicker({issue,data,onUpdate}:{issue:Issue;data:Bootstr
   return <div className="core-property-picker"><PersonPicker label="Agent" ariaLabel={t('Delegate to agent')} people={users.map(user=>({...user,label:user.displayName}))} selectedId={issue.delegate?.id} onChange={delegateId=>onUpdate({delegateId})} emptyOptionLabel="No agent" emptyTriggerLabel="Delegate to agent" searchPlaceholder="Find agent…" triggerClassName="core-property-trigger"/></div>
 }
 
+const taskFallbackPollMs=10_000
+
 export function IssueAgentTasks({issue,data,resourceType='issue'}:{issue:Pick<Issue,'id'|'delegate'|'agentSessionId'>;data:BootstrapData;resourceType?:'issue'|'document'|'project'}) {
   const {t}=useI18n()
   const [tasks,setTasks]=useState<ApplicationTask[]>([]),[revision,setRevision]=useState(0),[error,setError]=useState('')
   const hasApplications = Boolean(issue.delegate || data.users.some(user=>user.app))
   useEffect(()=>{
     if(!hasApplications)return
-    const abort=new AbortController();let timer:ReturnType<typeof setTimeout>
-    const load=async()=>{let delay=5000;try{const tasks=await listApplicationTasks(data.workspace.urlKey,issue.id,abort.signal,resourceType);if(!abort.signal.aborted){setTasks(tasks);setError('');delay=tasks.some(task=>task.status==='pending'||task.status==='active')?1000:5000}}catch(error){if(!abort.signal.aborted)setError(String(error instanceof Error?error.message:error))}finally{if(!abort.signal.aborted)timer=setTimeout(load,delay)}}
-    void load();return()=>{abort.abort();clearTimeout(timer)}
+    // Like Linear, task changes arrive as pushes (agent_task.* realtime events, issue and comment updates).
+    // A slow fallback poll runs only while a task is working, in case a push is missed; idle tasks are not polled.
+    const abort=new AbortController();let timer:ReturnType<typeof setTimeout>|undefined
+    const load=async()=>{clearTimeout(timer);timer=undefined;let running=false;try{const tasks=await listApplicationTasks(data.workspace.urlKey,issue.id,abort.signal,resourceType);if(!abort.signal.aborted){setTasks(tasks);setError('');running=tasks.some(isApplicationTaskRunning)}}catch(error){if(!abort.signal.aborted)setError(String(error instanceof Error?error.message:error))}finally{if(!abort.signal.aborted&&running)timer=setTimeout(load,taskFallbackPollMs)}}
+    const changed=(event:Event)=>{const id=(event as CustomEvent<unknown>).detail;if(!id||id===issue.id)void load()}
+    window.addEventListener(AGENT_TASK_ACTIVITY_EVENT,changed);window.addEventListener('flow-issue-history-changed',changed)
+    void load();return()=>{abort.abort();clearTimeout(timer);window.removeEventListener(AGENT_TASK_ACTIVITY_EVENT,changed);window.removeEventListener('flow-issue-history-changed',changed)}
   },[data.workspace.urlKey,issue.id,issue.agentSessionId,revision,hasApplications,resourceType])
   if(!issue.delegate&&!tasks.length&&!error)return null
   return <section className="issue-agent-tasks" aria-label={t('Agent sessions')}><header><AgentCursorGlyph size={16}/><strong>{t('Agent sessions')}</strong><button type="button" aria-label={t('Refresh')} onClick={()=>setRevision(value=>value+1)}><RefreshCw size={14}/></button></header>{error&&<p role="alert">{error}</p>}{tasks.map(task=><Task key={task.id} task={task} data={data} workspace={data.workspace.urlKey} name={data.users.find(user=>user.id===task.appUserId)?.displayName??t('Application')} onChanged={()=>setRevision(value=>value+1)}/>)}</section>

@@ -63,6 +63,7 @@ type server struct {
 	externalAuth                   *externalAuth
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
+	agentPromptCacheOff            atomic.Bool // the provider rejected prompt_cache_key; later requests leave it out
 	tts                            appconfig.TTSConfig
 	ttsClient                      *http.Client
 	webSearch                      websearch.Provider // nil when no provider is configured
@@ -141,7 +142,7 @@ func main() {
 		mailer:                         smtpMailerFromEnv(),
 		externalAuth:                   external,
 		agent:                          applicationConfig.Agent,
-		agentClient:                    &http.Client{Timeout: applicationConfig.Agent.Timeout},
+		agentClient:                    newAgentHTTPClient(),
 		tts:                            applicationConfig.TTS,
 		ttsClient:                      &http.Client{Timeout: applicationConfig.TTS.Timeout},
 		webSearch:                      websearch.New(websearch.Config{Provider: applicationConfig.WebSearch.Provider, APIKey: applicationConfig.WebSearch.APIKey, URL: applicationConfig.WebSearch.URL}, nil),

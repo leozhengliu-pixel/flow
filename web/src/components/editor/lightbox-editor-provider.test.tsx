@@ -54,6 +54,20 @@ describe('LightboxEditorProvider (LS-0382)', () => {
     expect(screen.queryByRole('dialog', { name: 'View image' })).toBeNull()
   })
 
+  it('shows the zoom, the download / copy / link actions, a close button and the caption', async () => {
+    const user = userEvent.setup()
+    render(
+      <LightboxEditorProvider>
+        <OpenButton />
+      </LightboxEditorProvider>,
+    )
+    await user.click(screen.getByRole('button', { name: 'Open lightbox' }))
+    const dialog = await screen.findByRole('dialog', { name: 'View image' })
+    expect(dialog.querySelector('.flow-lightbox-zoom')).toHaveTextContent('100%')
+    for (const name of ['Download', 'Copy image', 'Copy link', 'Close']) expect(screen.getByRole('button', { name })).toBeVisible()
+    expect(dialog.querySelector('.flow-lightbox-caption')).toHaveTextContent('A')
+  })
+
   it('opens via lightbox-bridge openLightbox', async () => {
     render(
       <LightboxEditorProvider>

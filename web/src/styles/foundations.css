@@ -1,5 +1,5 @@
 :root {
-  --font-monospace: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  --font-monospace: ui-monospace, "SFMono-Regular", Menlo, "Cascadia Mono", "Liberation Mono", Consolas, "DejaVu Sans Mono", Courier, monospace;
   --font-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Twemoji Mozilla", "Noto Color Emoji", sans-serif;
   --speed-highlight-fade-in: 0s;
   --speed-highlight-fade-out: .15s;

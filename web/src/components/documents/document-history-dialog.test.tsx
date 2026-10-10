@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { teammate, viewer } from '@/test/fixtures'
@@ -56,6 +56,10 @@ beforeEach(() => {
 })
 
 describe('DocumentHistoryDialog', () => {
+  // Versions are dated hours ago and grouped by day: pin the clock to midday so they don't cross midnight.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 9, 12)) })
+  afterEach(() => { vi.useRealTimers() })
+
   it('titles the modal with the document and lists versions grouped by day with the Current tag and authors', () => {
     renderDialog(makeDocument())
     expect(screen.getByRole('dialog')).toHaveAccessibleName(/Restore version for\s*Roadmap/)

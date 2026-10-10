@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -275,7 +277,15 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		r = r.WithContext(withAgentWebTools(r.Context()))
 		webNote = agentWebSearchNote
 	}
-	messages := agentProviderHistory(*session, workspaceAgentSystemPrompt(data, issues, skills)+mentions+s.agentWriteAccessNote()+webNote+loopBuilderPrompt(data, *session))
+	// Resources the request names in plain text are loaded up front, so a simple question needs one model call.
+	refs := findAgentMessageReferences(data, agentLatestUserMessage(*session))
+	contextIssues := append(slices.Clone(issues), s.agentReferencedIssues(r, refs.IssueIdentifiers, issues)...)
+	contextMentions := agentMentionPrompt(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects), mergeAgentDocuments(selectedAgentDocuments(data.Documents, session.DocumentIDs), refs.Documents), selectedAgentUsers(data.Users, session.UserIDs))
+	// Chat offers a tool subset picked for this request (see agent_chat_tools.go) and shares a prompt cache per user.
+	r = r.WithContext(withAgentChatToolset(r.Context(), newAgentChatToolset(*session)))
+	r = r.WithContext(context.WithValue(r.Context(), agentPromptCacheKey{}, agentChatCacheKey(workspaceKey(r), data.Viewer.ID)))
+	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session))
+	messages := agentProviderHistory(*session, system)
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
 	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
@@ -348,7 +358,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				return writer.send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
 			}
 		case "tool.started", "tool.delta":
-			if event.ToolCall == nil {
+			// load_tools is bookkeeping, not work the user needs to see.
+			if event.ToolCall == nil || event.ToolCall.Name == agentLoadToolsTool {
 				return nil
 			}
 			key := "tool:" + event.ToolCall.ID
@@ -378,7 +389,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				finalText += "\n\n"
 			}
 		}
-		turn, err := s.requestAgentTurn(r.Context(), messages, emit)
+		turn, err := s.requestAgentChatTurn(r.Context(), messages, emit)
 		if err != nil {
 			failureRequest := r
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -485,6 +496,15 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					parts = removeAgentPart(parts, partIndex, placeholder)
 				}
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: `{"ok":true}`}})
+				continue
+			}
+			if call.Name == agentLoadToolsTool {
+				content, isError := `{"error":"load_tools is not available"}`, true
+				if toolset := agentChatToolsetFrom(r.Context()); toolset != nil {
+					available, _ := s.agentToolDefinitions()
+					content, isError = toolset.load(call.Arguments, available)
+				}
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
 				continue
 			}
 			if call.Name == loopQuestionTool {
@@ -607,12 +627,62 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 	// Give the parallel title request a moment so the completed session usually carries it.
 	if titleDone != nil {
+		// The page also picks up a late title, so a fast reply does not wait long for it.
 		select {
 		case <-titleDone:
-		case <-time.After(2500 * time.Millisecond):
+		case <-time.After(500 * time.Millisecond):
 		}
 	}
 	return s.persistAgentCompletion(r, *session, domain.AgentMessage{ID: messageID, Role: "assistant", Content: strings.TrimSpace(finalText), Parts: parts, DurationMS: time.Since(started).Milliseconds(), CreatedAt: time.Now().UTC()})
+}
+
+// agentChatCacheKey groups one user's chat requests in a workspace for provider prompt caching: they share the
+// static instructions and, mostly, the tool list.
+func agentChatCacheKey(workspace, userID string) string {
+	sum := sha256.Sum256([]byte(workspace + "\x00" + userID))
+	return "flow-chat-" + hex.EncodeToString(sum[:10])
+}
+
+func mergeAgentProjects(current, extra []domain.Project) []domain.Project {
+	for _, project := range extra {
+		if !slices.ContainsFunc(current, func(item domain.Project) bool { return item.ID == project.ID }) {
+			current = append(current, project)
+		}
+	}
+	return current
+}
+
+func mergeAgentDocuments(current, extra []domain.Document) []domain.Document {
+	for _, document := range extra {
+		if !slices.ContainsFunc(current, func(item domain.Document) bool { return item.ID == document.ID }) {
+			current = append(current, document)
+		}
+	}
+	return current
+}
+
+// agentChatRetryDelay is the pause before a chat turn that failed transiently is asked again.
+var agentChatRetryDelay = time.Second
+
+// requestAgentChatTurn asks the provider for one chat turn, retrying once when the request failed transiently
+// (connection error, 429/5xx, a stalled or overloaded gateway) before anything was streamed. A turn that already
+// showed output is never repeated, so the reply cannot duplicate.
+func (s *server) requestAgentChatTurn(ctx context.Context, messages []agentProviderMessage, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
+	for attempt := 0; ; attempt++ {
+		emitted := false
+		turn, err := s.requestAgentTurn(ctx, messages, func(event agentProviderEvent) error {
+			emitted = true
+			return emit(event)
+		})
+		if err == nil || emitted || attempt > 0 || ctx.Err() != nil || !loopTransientError(err) {
+			return turn, err
+		}
+		select {
+		case <-ctx.Done():
+			return turn, ctx.Err()
+		case <-time.After(agentChatRetryDelay):
+		}
+	}
 }
 
 const agentTitleSystemPrompt = `Write a short title for a chat that starts with the request below.

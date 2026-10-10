@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, makeIssue, project } from '@/test/fixtures'
@@ -164,6 +164,9 @@ describe('context-aware command menu', () => {
   })
 
   it('lists past agent chats on "Open past agent chat…", filters them and opens the chosen one', async () => {
+    // Chats are dated hours ago and grouped by day: pin the clock to midday so they don't cross midnight.
+    vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 9, 9, 12))
+    onTestFinished(() => { vi.useRealTimers() })
     const now = Date.now()
     const chat = (id: string, title: string, ageMs: number, extra: Partial<AgentSession> = {}) => ({ id, slugId: `${id}-slug`, userId: 'user-1', title, favorite: false, location: 'page', issueIds: [], skillIds: [], messages: [], createdAt: new Date(now - ageMs).toISOString(), updatedAt: new Date(now - ageMs).toISOString(), ...extra }) as AgentSession
     const sessions = [

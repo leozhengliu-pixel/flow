@@ -69,11 +69,19 @@ function rangeOf(editor: Editor, text: string) {
   return found!
 }
 
-function renderComments(props: { data?: BootstrapData; comments: Comment[]; editor: Editor | null; draft?: CommentDraft; onDraftChange?: (draft?: CommentDraft) => void; canEdit?: boolean; canComment?: boolean }) {
+function renderComments(props: { data?: BootstrapData; comments: Comment[]; editor: Editor | null; draft?: CommentDraft; onDraftChange?: (draft?: CommentDraft) => void; canEdit?: boolean; canComment?: boolean; pageWidth?: number; railOpen?: boolean }) {
   const data = props.data ?? makeBootstrap({ documents: [flowDocument] })
   const shell = document.createElement('div')
+  if (props.pageWidth !== undefined) {
+    // The page decides between gutter cards and a popover by its own width.
+    const page = document.createElement('main')
+    page.className = 'document-page'
+    Object.defineProperty(page, 'clientWidth', { configurable: true, value: props.pageWidth })
+    page.appendChild(shell)
+    document.body.appendChild(page)
+  }
   const onReload = vi.fn().mockResolvedValue(undefined)
-  const view = render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={props.comments} editor={props.editor} shell={shell} draft={props.draft} onDraftChange={props.onDraftChange ?? vi.fn()} canComment={props.canComment ?? true} canEdit={props.canEdit ?? true} onReload={onReload}/></I18nProvider>)
+  const view = render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={props.comments} editor={props.editor} shell={shell} draft={props.draft} onDraftChange={props.onDraftChange ?? vi.fn()} canComment={props.canComment ?? true} canEdit={props.canEdit ?? true} onReload={onReload} railOpen={props.railOpen}/></I18nProvider>)
   return { ...view, onReload, data }
 }
 
@@ -133,6 +141,73 @@ describe('inline comments plugin', () => {
 })
 
 describe('DocumentInlineComments', () => {
+  const threads = [comment({ id: 'root', anchorId: 'cmt_a', quotedText: 'two adds' }), comment({ id: 'other', anchorId: 'cmt_b', quotedText: 'launch plan', body: 'Other thread' })]
+  function markedEditor() {
+    const editor = makeEditor()
+    editor.chain().setTextSelection(rangeOf(editor, 'two adds')).setMark('inlineComment', { commentId: 'cmt_a' }).run()
+    editor.chain().setTextSelection(rangeOf(editor, 'launch plan')).setMark('inlineComment', { commentId: 'cmt_b' }).run()
+    return editor
+  }
+
+  it('lists every open thread in the gutter on a wide page and reports it so the document shifts left', async () => {
+    const editor = markedEditor()
+    const onGutterChange = vi.fn()
+    const data = makeBootstrap({ documents: [flowDocument] })
+    const shell = document.createElement('div')
+    const page = document.createElement('main')
+    page.className = 'document-page'
+    Object.defineProperty(page, 'clientWidth', { configurable: true, value: 1217 })
+    page.appendChild(shell)
+    document.body.appendChild(page)
+    render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={threads} editor={editor} shell={shell} onDraftChange={vi.fn()} canComment canEdit onReload={vi.fn()} onGutterChange={onGutterChange}/></I18nProvider>)
+    expect(await screen.findAllByRole('group', { name: 'Comment thread' })).toHaveLength(2)
+    expect(document.querySelector('.document-inline-gutter')).not.toHaveClass('is-popover')
+    await waitFor(() => expect(onGutterChange).toHaveBeenLastCalledWith(true))
+  })
+
+  it('opens only the clicked thread as a 360px popover under its text on a narrow page, and leaves the document where it is', async () => {
+    const editor = markedEditor()
+    const onGutterChange = vi.fn()
+    const data = makeBootstrap({ documents: [flowDocument] })
+    const shell = document.createElement('div')
+    const page = document.createElement('main')
+    page.className = 'document-page'
+    Object.defineProperty(page, 'clientWidth', { configurable: true, value: 980 })
+    page.appendChild(shell)
+    document.body.appendChild(page)
+    render(<I18nProvider><DocumentInlineComments data={data} document={flowDocument} comments={threads} editor={editor} shell={shell} onDraftChange={vi.fn()} canComment canEdit onReload={vi.fn()} onGutterChange={onGutterChange}/></I18nProvider>)
+    // Nothing is open until a highlight is clicked.
+    await waitFor(() => expect(document.querySelector('.inline-comment-open')).toBeTruthy())
+    expect(screen.queryAllByRole('group', { name: 'Comment thread' })).toHaveLength(0)
+    fireEvent.click(editor.view.dom.querySelector<HTMLElement>('[data-comment-anchor="cmt_a"]')!)
+    const cards = await screen.findAllByRole('group', { name: 'Comment thread' })
+    expect(cards).toHaveLength(1)
+    expect(cards[0].dataset.threadId).toBe('root')
+    expect(document.querySelector('.document-inline-gutter')).toHaveClass('is-popover')
+    expect(cards[0].style.left).not.toBe('')
+    expect(cards[0].style.top).not.toBe('')
+    expect(onGutterChange).not.toHaveBeenCalledWith(true)
+    // Clicking outside the thread closes it.
+    fireEvent.mouseDown(document.body)
+    await waitFor(() => expect(screen.queryAllByRole('group', { name: 'Comment thread' })).toHaveLength(0))
+  })
+
+  it('uses the popover whenever the agent rail is open', async () => {
+    const editor = markedEditor()
+    renderComments({ comments: threads, editor, pageWidth: 1400, railOpen: true })
+    fireEvent.click(await waitFor(() => editor.view.dom.querySelector<HTMLElement>('[data-comment-anchor="cmt_a"]')!))
+    await screen.findByRole('group', { name: 'Comment thread' })
+    expect(document.querySelector('.document-inline-gutter')).toHaveClass('is-popover')
+  })
+
+  it('shows a draft composer as a popover too, with the avatar and a one-row composer', async () => {
+    const editor = makeEditor()
+    const range = rangeOf(editor, 'launch plan')
+    renderComments({ comments: [], editor, draft: { ...range, text: 'launch plan' }, pageWidth: 900 })
+    expect(await screen.findByRole('textbox', { name: 'Add a comment…' })).toBeTruthy()
+    expect(document.querySelector('.document-inline-gutter.is-popover .document-thread-card.is-draft')).toBeTruthy()
+  })
+
   it('creates an anchored thread from the selection and writes the anchor mark', async () => {
     const editor = makeEditor()
     const range = rangeOf(editor, 'two adds comments')
