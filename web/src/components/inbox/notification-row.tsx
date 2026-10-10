@@ -14,6 +14,7 @@ import type { PulseFrequency } from './pulse-summary-model'
 import styles from './notification-row.module.css'
 import './inbox-date-control.css'
 import { GridLoader } from '@/components/ui/grid-loader'
+import { AvatarImage } from '@/components/ui/user-avatar'
 
 export type InboxNotificationKind = 'comment' | 'assignment' | 'mention' | 'status' | 'project' | 'review' | 'pulse' | 'generic'
 export type InboxSnoozePreset = 'hour' | 'tomorrow' | 'nextWeek' | 'month' | {
@@ -280,7 +281,7 @@ function ActorVisual({ notification }: { notification: InboxNotificationRowData 
   return (
     <div className="flow-inbox-row__actor">
       {notification.actorAvatarUrl ? (
-        <img className="flow-inbox-row__avatar" src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
+        <AvatarImage className="flow-inbox-row__avatar" src={notification.actorAvatarUrl} alt="" aria-label={notification.actor} />
       ) : (
         <span className="flow-inbox-row__avatar flow-inbox-row__initials" aria-label={notification.actor} style={{ '--flow-inbox-avatar': actorColor(notification.actorId ?? notification.actor) } as CSSProperties}>
           {notification.actorInitials ?? initials(notification.actor)}

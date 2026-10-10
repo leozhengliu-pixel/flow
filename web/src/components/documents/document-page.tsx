@@ -1,149 +1,305 @@
 import { EntityActivityPanel } from '@/components/panel/entity-activity-panel'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import * as Popover from '@radix-ui/react-popover'
-import { Bell, Check, ChevronDown, Copy, FileText, History, Link2, MessageCircle, MessageSquare, MoreHorizontal, SlidersHorizontal, Star, Trash2, Users, X } from 'lucide-react'
-import { Composer } from '@/components/editor/composer'
-import { RichComment } from '@/components/activity/rich-comment'
+import { Link2, Menu, MoreHorizontal, Star } from 'lucide-react'
+import type { Editor } from '@tiptap/react'
 import { DocumentAgentPanel } from '@/components/agent/document-agent-panel'
 import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
-import { toggleFavoriteFor } from '@/lib/favorites'
 import { toast } from 'sonner'
 
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'
 import { CollaborativeEditor } from '@/components/documents/collaborative-editor'
-import { DocumentCustomReminderDialog, DocumentPageReminderSubmenu, useDocumentReminder } from '@/components/documents/document-reminder'
+import { DocumentCustomReminderDialog, useDocumentReminder } from '@/components/documents/document-reminder'
 import { DocumentContentProvider } from '@/components/documents/document-content-context'
 import { clearDocumentContent, setDocumentContent } from '@/components/documents/document-content-editor-state'
-import { Toggle } from '@/components/ui/toggle'
-import { SelectControl } from '@/components/ui/select-control'
-import { UserAvatar } from '@/components/ui/user-avatar'
-import { ViewGlyph } from '@/components/views/view-icon-picker'
-import { normalizeProjectIcon } from '@/components/views/project-icon'
+import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
+import { LinearDropdownMenuContent } from '@/components/ui/row-context-menu'
+import { queueLinearMenuShortcut } from '@/components/ui/menu-shortcuts'
+import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
-import { documentPath, issuePath, projectPath, teamDocumentsPath, teamHomePath } from '@/lib/app-routes'
-import { addSubscription, createDocumentComment, deleteDocument, deleteDocumentComment, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument } from '@/lib/api'
-import type { BootstrapData, DocumentPermission, FlowDocument, User } from '@/types/flow'
+import { documentSelectionActions } from '@/components/documents/document-selection-actions'
+import { addSubscription, listDocumentPermissions, removeSubscription, replaceDocumentPermissions, restoreDocumentRevision, updateDocument, uploadDocumentAttachment } from '@/lib/api'
+import type { BootstrapData, Comment, DocumentPermission, FlowDocument, TrashEntry, User } from '@/types/flow'
 
 import './document-page.css'
+import './document-print.css'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 import { isActiveSubscription } from '@/lib/subscription-records'
+import {
+  copyDocumentMarkdown, copyDocumentTitle, copyDocumentUrl, documentDisplayTitle, documentOwner, renameDocument, toggleDocumentFavorite,
+  type DocumentActionContext, type DocumentUiAction,
+} from './document-actions'
+import { DocumentAccessDialog } from './document-access-dialog'
+import { DocumentAuthorLabels } from './document-author-labels'
+import { DocumentBreadcrumb, type DocumentOrigin } from './document-breadcrumb'
+import { DeletedDocumentMenuItems } from './document-deleted-menu'
+import { DocumentEditedPopover } from './document-edited-popover'
+import { DocumentHistoryDialog } from './document-history-dialog'
+import { DocumentMenuItems } from './document-menu'
+import { DocumentSubscribersPopover } from './document-subscribers-popover'
+import { DocumentTemplateChip } from './document-template-chip'
+import { useDocumentPageShortcuts, useDocumentUiActions } from './use-document-page-shortcuts'
+import { canCommentOnDocument, canEditDocument, documentViewerRole } from './document-role'
+import { DocumentInlineComments, DocumentResolvedCommentsButton, ResolvedCommentsPanel, useInlineThreads, type CommentDraft } from './inline-comments/document-inline-comments'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
-export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled }: { origin?: {label:string;entity?:boolean}; data: BootstrapData; document: FlowDocument; onReload: () => Promise<void>; onBack: () => void; /** Open the history dialog on arrival (e.g. from a project resource menu). */ openHistoryRequest?: boolean; onHistoryRequestHandled?: () => void }) {
-  const {t}=useI18n()
-  useRegisterCommandContext({kind:'document',document})
-  const [title,setTitle]=useState(document.title)
-  const editorState=document.contentData?JSON.stringify(document.contentData):document.contentState
-  const [body,setBody]=useState({value:document.content,state:editorState})
-  const [saveState,setSaveState]=useState<'idle'|'saving'|'saved'|'error'>('idle')
-  const [historyOpen,setHistoryOpen]=useState(false)
-  const [selectedRevisionId,setSelectedRevisionId]=useState(document.revisions[0]?.id??'')
-  const [highlightHistory,setHighlightHistory]=useState(true)
-  const [deleteOpen,setDeleteOpen]=useState(false)
-  const [editorVersion,setEditorVersion]=useState(0)
-  const [replyTo,setReplyTo]=useState<string>()
-  const [commentsOpen,setCommentsOpen]=useState(()=>readDocumentViewOption(document.id,'comments',true))
+export interface DocumentPageProps {
+  origin?: DocumentOrigin
+  data: BootstrapData
+  document: FlowDocument
+  onReload: () => Promise<void>
+  onBack: () => void
+  /** Open the history dialog on arrival (e.g. from a project resource menu). */
+  openHistoryRequest?: boolean
+  onHistoryRequestHandled?: () => void
+  /** Mobile: opens the app sidebar from the header. */
+  onOpenSidebar?: () => void
+  /** In-app navigation (falls back to a full page load). */
+  onNavigate?: (path: string) => void
+  /** Set when the document is in the trash: the page is read-only and offers "Restore document". */
+  deletedEntry?: TrashEntry
+}
+
+function latestRevision(document: FlowDocument) {
+  let latest = document.revisions[0]
+  for (const revision of document.revisions) if (Date.parse(revision.createdAt) > Date.parse(latest.createdAt)) latest = revision
+  return latest
+}
+
+export function DocumentPage({ data, document, onReload, onBack, origin, openHistoryRequest, onHistoryRequestHandled, onOpenSidebar, onNavigate, deletedEntry }: DocumentPageProps) {
+  const { t } = useI18n()
+  const deleted = Boolean(deletedEntry)
+  useRegisterCommandContext(deleted ? undefined : { kind: 'document', document })
+  const [title, setTitle] = useState(document.title)
+  const editorState = document.contentData ? JSON.stringify(document.contentData) : document.contentState
+  const [body, setBody] = useState({ value: document.content, state: editorState })
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [editedOpen, setEditedOpen] = useState(false)
+  const [ownerOpen, setOwnerOpen] = useState(false)
+  const [subscribersOpen, setSubscribersOpen] = useState(false)
+  const [editorVersion, setEditorVersion] = useState(0)
+  const [commentDraft, setCommentDraft] = useState<CommentDraft>()
+  const [resolvedOpen, setResolvedOpen] = useState(false)
+  const [commentGutter, setCommentGutter] = useState(false)
+  const [liveEditor, setLiveEditor] = useState<Editor | null>(null)
   const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`document:${document.id}`, false)
-  const [authorNamesOpen,setAuthorNamesOpen]=useState(()=>readDocumentViewOption(document.id,'authors',false))
-  const [presence,setPresence]=useState<User[]>([])
-  const [copyBusy,setCopyBusy]=useState(false)
-  const [subscriptionBusy,setSubscriptionBusy]=useState(false)
-  const [accessOpen,setAccessOpen]=useState(false)
-  const [accessBusy,setAccessBusy]=useState(false)
-  const [permissions,setPermissions]=useState<DocumentPermission[]>([])
-  const pending=useRef<number | undefined>(undefined)
-  const editedTriggerRef=useRef<HTMLButtonElement>(null)
-  const favorite=data.favorites.some(item=>item.resourceType==='document'&&item.resourceId===document.id) || document.favorite
-  const subscribed=data.subscriptions.some(item=>item.resourceType==='document'&&item.resourceId===document.id&&isActiveSubscription(item)) || document.subscriberIds.includes(data.viewer.id)
-  const collaborators=[...new Map(presence.filter(user=>Boolean(user.id)&&user.id!==data.viewer.id).map(user=>[user.id,user])).values()]
-  useEffect(()=>{setTitle(document.title);setBody({value:document.content,state:document.contentData?JSON.stringify(document.contentData):document.contentState})},[document])
-  useEffect(()=>{setDocumentContent(document.id,body.value,body.state);return()=>clearDocumentContent(document.id)},[document.id,body.value,body.state])
-  useEffect(()=>{if(historyOpen&&!document.revisions.some(item=>item.id===selectedRevisionId))setSelectedRevisionId(document.revisions[0]?.id??'')},[document.revisions,historyOpen,selectedRevisionId])
-  useEffect(()=>()=>window.clearTimeout(pending.current),[])
-  const schedule=(input: Parameters<typeof updateDocument>[1])=>{window.clearTimeout(pending.current);setSaveState('saving');pending.current=window.setTimeout(()=>{void updateDocument(document.id,input).then(async()=>{await onReload();setSaveState('saved');window.setTimeout(()=>setSaveState('idle'),900)}).catch(()=>setSaveState('error'))},600)}
-  const project=data.projects.find(item=>document.projectIds.includes(item.id))
-  const issue=data.issues.find(item=>item.id===document.issueId)
-  const team=data.teams.find(item=>document.teamIds.includes(item.id))
-  const selectedRevision=document.revisions.find(item=>item.id===selectedRevisionId)
-  const selectedRevisionCurrent=document.revisions[0]?.id===selectedRevisionId
-  const comments=data.comments[document.id] ?? []
-  const defaultDocumentIcon=!document.icon
-  const lastRevision=document.revisions[0]
-  const lastEditor=lastRevision?.author??document.creator
-  const lastEditedAt=lastRevision?.createdAt??document.updatedAt
-  const submitComment=async(body:string,bodyData?:Record<string,unknown>,parentId?:string)=>{await createDocumentComment(document.id,{body,bodyData,parentId});setReplyTo(undefined);await onReload()}
-  const openHistory=async()=>{await onReload();setSelectedRevisionId(document.revisions[0]?.id??'');setHighlightHistory(true);setHistoryOpen(true)}
-  const historyRequestHandled=useRef(false)
-  useEffect(()=>{if(!openHistoryRequest){historyRequestHandled.current=false;return}if(historyRequestHandled.current)return;historyRequestHandled.current=true;setSelectedRevisionId(document.revisions[0]?.id??'');setHighlightHistory(true);setHistoryOpen(true);onHistoryRequestHandled?.()},[openHistoryRequest,document.revisions,onHistoryRequestHandled])
-  const restoreRevision=async()=>{if(!selectedRevision||selectedRevisionCurrent)return;const restored=await restoreDocumentRevision(document.id,selectedRevision.id);setTitle(restored.title);setBody({value:restored.content,state:restored.contentData?JSON.stringify(restored.contentData):restored.contentState});setEditorVersion(value=>value+1);setHistoryOpen(false);await onReload();toast.success('Content has been restored.')}
-  const toggleProject=async(id:string)=>{const next=document.projectIds.includes(id)?document.projectIds.filter(value=>value!==id):[...document.projectIds,id];await updateDocument(document.id,{projectIds:next});await onReload()}
-  const copyDocumentURL=async()=>{if(copyBusy)return;setCopyBusy(true);try{await navigator.clipboard.writeText(new URL(documentPath(data.workspace.urlKey,document),location.origin).href);toast.success(t('Copied document link to clipboard'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not copy document link'))}finally{setCopyBusy(false)}}
-  const toggleFavorite=()=>{void toggleFavoriteFor(data,'document',document.id,undefined,favorite)}
-  const reminder=useDocumentReminder(document.id)
-  const toggleSubscription=async()=>{if(subscriptionBusy)return;setSubscriptionBusy(true);try{if(subscribed)await removeSubscription('document',document.id);else await addSubscription('document',document.id);await refreshResourcePreferences(data.workspace.urlKey);toast.success(t(subscribed?'Unsubscribed from document':'Subscribed to document'))}catch(error){toast.error(error instanceof Error?error.message:t('Could not update document subscription'))}finally{setSubscriptionBusy(false)}}
-  const canManageAccess=data.viewer.id===document.creator.id||data.viewerRole==='admin'||String(data.viewerRole)==='owner'
-  const documentMembers=data.members??[]
-  const accessSubjects=[{type:'workspace',id:data.workspace.id,label:t('Everyone in workspace'),entity:false},...data.teams.map(team=>({type:'team',id:team.id,label:team.name,entity:true})),...documentMembers.map(member=>({type:'user',id:member.user.id,label:member.user.displayName,entity:true}))]
-  const openAccess=async()=>{if(accessBusy)return;setAccessBusy(true);try{setPermissions(await listDocumentPermissions(document.id));setAccessOpen(true)}catch(error){toast.error(error instanceof Error?error.message:t('Could not load document access'))}finally{setAccessBusy(false)}}
-  const updateAccess=async(subjectType:string,subjectId:string,role:string)=>{if(accessBusy)return;setAccessBusy(true);try{const next=permissions.filter(item=>!(item.subjectType===subjectType&&item.subjectId===subjectId));if(role!=='none')next.push({subjectType,subjectId,role} as DocumentPermission);setPermissions(await replaceDocumentPermissions(document.id,next.map(item=>({subjectType:item.subjectType,subjectId:item.subjectId,role:item.role}))));await onReload()}catch(error){toast.error(error instanceof Error?error.message:t('Could not update document access'))}finally{setAccessBusy(false)}}
+  const [agentPrompt, setAgentPrompt] = useState<string>()
+  const [authorNamesOpen, setAuthorNamesOpen] = useState(() => readDocumentViewOption(document.id, 'authors', false))
+  const [presence, setPresenceState] = useState<User[]>([])
+  // Awareness changes on every cursor move; re-render only when the set of
+  // people changes (a re-render can dispatch editor transactions, which move
+  // awareness again).
+  const setPresence = useCallback((users: User[]) => setPresenceState(current => current.length === users.length && current.every((user, index) => user.id === users[index]?.id) ? current : users), [])
+  const [shell, setShell] = useState<HTMLElement | null>(null)
+  const [subscriptionBusy, setSubscriptionBusy] = useState(false)
+  const [accessOpen, setAccessOpen] = useState(false)
+  const [accessBusy, setAccessBusy] = useState(false)
+  const [permissions, setPermissions] = useState<DocumentPermission[]>([])
+  const pending = useRef<number | undefined>(undefined)
+  const titleFocused = useRef(false)
+
+  const navigate = useCallback((path: string) => { if (onNavigate) onNavigate(path); else window.location.assign(path) }, [onNavigate])
+  const ctx: DocumentActionContext = { data, reload: onReload, navigate, t }
+  const favorite = data.favorites.some(item => item.resourceType === 'document' && item.resourceId === document.id) || document.favorite
+  const subscribed = data.subscriptions.some(item => item.resourceType === 'document' && item.resourceId === document.id && isActiveSubscription(item)) || document.subscriberIds.includes(data.viewer.id)
+  const collaborators = [...new Map(presence.filter(user => Boolean(user.id) && user.id !== data.viewer.id).map(user => [user.id, user])).values()]
+
+  useEffect(() => {
+    if (!titleFocused.current) setTitle(document.title)
+    setBody({ value: document.content, state: document.contentData ? JSON.stringify(document.contentData) : document.contentState })
+  }, [document])
+  useEffect(() => { setDocumentContent(document.id, body.value, body.state); return () => clearDocumentContent(document.id) }, [document.id, body.value, body.state])
+  useEffect(() => () => window.clearTimeout(pending.current), [])
+
+  const schedule = (input: Parameters<typeof updateDocument>[1]) => {
+    window.clearTimeout(pending.current)
+    setSaveState('saving')
+    pending.current = window.setTimeout(() => {
+      void updateDocument(document.id, input).then(async () => { await onReload(); setSaveState('saved'); window.setTimeout(() => setSaveState('idle'), 900) }).catch(() => setSaveState('error'))
+    }, 600)
+  }
+
+  const comments = data.comments[document.id] ?? NO_COMMENTS
+  // Viewers and commenters read the document (the collaboration socket
+  // enforces the same); commenters can still start and answer threads.
+  const role = documentViewerRole(data, document)
+  const canEdit = !deleted && canEditDocument(role)
+  const canComment = !deleted && canCommentOnDocument(role)
+  const { resolved: resolvedThreads } = useInlineThreads(comments)
+  const closeResolved = useCallback(() => setResolvedOpen(false), [])
+  const startComment = (selection: { from: number; to: number; text: string }) => {
+    if (!selection.text.trim()) return
+    setCommentDraft({ from: selection.from, to: selection.to, text: selection.text })
+    // Keystrokes go to the comment, never over the selected text.
+    if (liveEditor && !liveEditor.isDestroyed) { liveEditor.commands.setTextSelection(selection.to); liveEditor.view.dom.blur(); window.getSelection()?.removeAllRanges() }
+  }
+  const defaultDocumentIcon = !document.icon
+  const lastRevision = document.revisions.length ? latestRevision(document) : undefined
+  const lastEditor = lastRevision?.author ?? document.creator
+  const lastEditedAt = lastRevision?.createdAt ?? document.updatedAt
+  const reminder = useDocumentReminder(document.id)
+
+  const openHistory = () => { setEditedOpen(false); setMenuOpen(false); setHistoryOpen(true) }
+  const historyRequestHandled = useRef(false)
+  useEffect(() => {
+    if (!openHistoryRequest) { historyRequestHandled.current = false; return }
+    if (historyRequestHandled.current) return
+    historyRequestHandled.current = true
+    setHistoryOpen(true)
+    onHistoryRequestHandled?.()
+  }, [openHistoryRequest, onHistoryRequestHandled])
+  const restoreRevision = async (revisionId: string) => {
+    const restored = await restoreDocumentRevision(document.id, revisionId)
+    setTitle(restored.title)
+    setBody({ value: restored.content, state: restored.contentData ? JSON.stringify(restored.contentData) : restored.contentState })
+    setEditorVersion(value => value + 1)
+    setHistoryOpen(false)
+    await onReload()
+    toast.success(t('Content has been restored.'), { id: 'document-version-restored' })
+  }
+
+  const setAuthorNames = (value: boolean) => { setAuthorNamesOpen(value); writeDocumentViewOption(document.id, 'authors', value) }
+  const toggleAuthorNames = () => setAuthorNames(!authorNamesOpen)
+  const toggleSubscription = async () => {
+    if (subscriptionBusy || deleted) return
+    setSubscriptionBusy(true)
+    try {
+      if (subscribed) await removeSubscription('document', document.id)
+      else await addSubscription('document', document.id)
+      await refreshResourcePreferences(data.workspace.urlKey)
+      toast.success(t(subscribed ? 'Unsubscribed from document' : 'Subscribed to document'))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('Could not update document subscription'))
+    } finally { setSubscriptionBusy(false) }
+  }
+  const viewerOwnsDocument = documentOwner(document, data.users)?.id === data.viewer.id
+  const canManageAccess = data.viewer.id === document.creator.id || data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
+  const openAccess = async () => {
+    if (accessBusy) return
+    setAccessBusy(true)
+    try { setPermissions(await listDocumentPermissions(document.id)); setAccessOpen(true) }
+    catch (error) { toast.error(error instanceof Error ? error.message : t('Could not load document access')) }
+    finally { setAccessBusy(false) }
+  }
+  const updateAccess = async (subjectType: string, subjectId: string, role: string) => {
+    if (accessBusy) return
+    setAccessBusy(true)
+    try {
+      const next = permissions.filter(item => !(item.subjectType === subjectType && item.subjectId === subjectId))
+      if (role !== 'none') next.push({ subjectType, subjectId, role } as DocumentPermission)
+      setPermissions(await replaceDocumentPermissions(document.id, next.map(item => ({ subjectType: item.subjectType, subjectId: item.subjectId, role: item.role }))))
+      await onReload()
+    } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not update document access')) }
+    finally { setAccessBusy(false) }
+  }
+
+  const openOwnerPicker = () => { setEditedOpen(true); setOwnerOpen(true) }
+  const runUiAction = (action: DocumentUiAction) => {
+    if (action === 'history') openHistory()
+    else if (action === 'authors') toggleAuthorNames()
+    else if (action === 'subscribers') setSubscribersOpen(true)
+    else openOwnerPicker()
+  }
+  useDocumentUiActions(document.id, deleted ? {} : { history: openHistory, authors: toggleAuthorNames, subscribers: () => setSubscribersOpen(true), owner: openOwnerPicker })
+  const openMenuAt = (shortcut: string) => { queueLinearMenuShortcut(shortcut); setMenuOpen(true) }
+  useDocumentPageShortcuts({
+    move: () => openMenuAt('⇧ P'),
+    rename: () => void renameDocument(ctx, document),
+    favorite: () => void toggleDocumentFavorite(ctx, document),
+    remind: () => openMenuAt('⇧ H'),
+    copyUrl: () => void copyDocumentUrl(ctx, document),
+    copyTitle: () => void copyDocumentTitle(ctx, document),
+    copyMarkdown: () => void copyDocumentMarkdown(ctx, document),
+    toggleAuthors: toggleAuthorNames,
+    subscribers: () => setSubscribersOpen(true),
+    toggleSubscription: () => void toggleSubscription(),
+    changeOwner: openOwnerPicker,
+  }, !deleted)
+
+  const issue = data.issues.find(item => item.id === document.issueId)
   const linkedIssue = issue ? issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data) : undefined
-  return <main className={`main-panel document-page${agentOpen ? " has-agent" : ""}`}>
+  const displayTitle = documentDisplayTitle({ title }, t)
+  const documentUrlLabel = t('Copy document URL')
+
+  return <main className={`main-panel document-page${agentOpen && !deleted ? ' has-agent' : ''}${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
     <header className="document-header">
-      <nav aria-label="Document breadcrumb" className="document-breadcrumbs">
-        {origin?<button className="document-breadcrumb-link" onClick={onBack}><FileText/><span data-i18n-ignore={origin.entity || undefined}>{origin.label}</span></button>:issue?<a className="document-breadcrumb-link" href={issuePath(data.workspace.urlKey,issue)}><FileText/><span data-i18n-ignore>{issue.identifier}</span></a>:project?<a className="document-breadcrumb-link" href={projectPath(data.workspace.urlKey,project)}><ViewGlyph color={project.color} icon={normalizeProjectIcon(project.icon)}/><span data-i18n-ignore>{project.name}</span></a>:team?<><a className="document-breadcrumb-link" href={teamHomePath(data.workspace.urlKey,team.key)}><ViewGlyph color={team.color} icon={team.icon||'Team'}/><span data-i18n-ignore>{team.name}</span></a><span aria-hidden="true" className="document-breadcrumb-separator">›</span><a className="document-breadcrumb-link document-breadcrumb-documents" href={teamDocumentsPath(data.workspace.urlKey,team.key)}>Documents</a></>:<button className="document-breadcrumb-link" onClick={onBack}><FileText/><span>Documents</span></button>}
-        <span aria-hidden="true" className="document-breadcrumb-separator">›</span><strong className="document-breadcrumb-current"><DocumentGlyph document={document}/><span data-i18n-ignore>{document.title}</span></strong>
-      </nav>
+      <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><Menu size={18}/></button>
+      <DocumentBreadcrumb data={data} document={{ ...document, title }} origin={origin} onBack={onBack}/>
+      {deleted && <span className="document-deleted-badge">{t('Deleted')}</span>}
+      <div className="document-title-actions">
+        {!deleted && <button aria-checked={favorite} aria-label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} className="document-icon-button" onClick={() => void toggleDocumentFavorite(ctx, document)} role="switch" type="button"><Star size={15} fill={favorite ? 'currentColor' : 'none'}/></button>}
+        <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenu.Trigger asChild><button aria-label={t('Document options')} className="document-icon-button" type="button"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <LinearDropdownMenuContent label={t('Document actions')}>
+              {deleted && deletedEntry
+                ? <DeletedDocumentMenuItems ctx={ctx} document={document} entry={deletedEntry}/>
+                : <DocumentMenuItems ctx={ctx} document={document} variant="page" showAuthorNames={authorNamesOpen} onToggleAuthorNames={toggleAuthorNames} onOpenAccess={canManageAccess ? () => void openAccess() : undefined} onUiAction={runUiAction} canDelete={canManageAccess || viewerOwnsDocument}/>}
+            </LinearDropdownMenuContent>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      </div>
       <div className="document-header-actions">
-        {saveState==='error'&&<span className="document-save-state error">Could not save</span>}
-        <button aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={toggleFavorite} role="switch"><Star size={15} fill={favorite?'currentColor':'none'}/></button>
-        <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Document options"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="document-menu" align="end" sideOffset={5}><DropdownMenu.Sub><DropdownMenu.SubTrigger><FileText size={14}/><span>Move to</span><ChevronDown size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="document-menu" sideOffset={6}>{data.projects.map(item=><DropdownMenu.CheckboxItem checked={document.projectIds.includes(item.id)} key={item.id} onCheckedChange={()=>void toggleProject(item.id)} onSelect={event=>event.preventDefault()}><i style={{background:item.color}}/><span data-i18n-ignore>{item.name}</span>{document.projectIds.includes(item.id)&&<Check size={13}/>}</DropdownMenu.CheckboxItem>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub><DropdownMenu.Item disabled={copyBusy} onSelect={()=>void copyDocumentURL()}><Copy size={14}/><span>Copy link</span></DropdownMenu.Item>{canManageAccess&&<DropdownMenu.Item onSelect={()=>void openAccess()}><Users size={14}/><span>People with access</span></DropdownMenu.Item>}<DocumentPageReminderSubmenu onCustom={()=>reminder.setCustomOpen(true)} onRemind={remindAt=>void reminder.remind(remindAt)}/><DropdownMenu.Separator/><DropdownMenu.Item onSelect={()=>void openHistory()}><History size={14}/><span>Show document history</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={()=>setDeleteOpen(true)}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-        <span className="document-header-spacer"/>
-        {collaborators.slice(0,4).map(user=>{const name=user.displayName||user.name||'?';return <span className="document-presence__avatar" key={user.id} title={`${name} is editing`}>{name.slice(0,2).toUpperCase()}</span>})}
-        <button aria-busy={copyBusy||undefined} aria-label={t('Copy document URL')} disabled={copyBusy} onClick={()=>void copyDocumentURL()}><Link2 size={15}/></button>
-        <button aria-expanded={agentOpen} aria-label={t(agentOpen?'Close chat':'Open chat')} className={agentOpen?'is-active':undefined} data-active={agentOpen||undefined} onClick={()=>setAgentOpen(open=>!open)} type="button"><MessageSquare size={15}/></button>
-        <button aria-busy={subscriptionBusy||undefined} aria-label={t(subscribed?'Unsubscribe':'Subscribe')} disabled={subscriptionBusy} onClick={()=>void toggleSubscription()}><Bell size={15} fill={subscribed?'currentColor':'none'}/></button>
+        {saveState === 'error' && <span className="document-save-state error">{t('Could not save')}</span>}
+        {collaborators.slice(0, 4).map(user => { const name = user.displayName || user.name || '?'; return <span className="document-presence__avatar" key={user.id} title={t('{name} is editing').replace('{name}', name)}>{name.slice(0, 2).toUpperCase()}</span> })}
+        <DocumentEditedPopover ctx={ctx} document={document} lastEditor={lastEditor} lastEditedAt={lastEditedAt} showAuthorNames={authorNamesOpen} onShowAuthorNames={setAuthorNames} onShowHistory={openHistory} open={editedOpen} onOpenChange={next => { setEditedOpen(next); if (!next) setOwnerOpen(false) }} ownerOpen={ownerOpen} onOwnerOpenChange={setOwnerOpen} readOnly={deleted}/>
+        {!deleted && <DocumentResolvedCommentsButton count={resolvedThreads.length} open={resolvedOpen} onToggle={() => setResolvedOpen(open => !open)}/>}
+        <ScopedFlowTooltip label={documentUrlLabel} shortcut="⌘ ⇧ ,">
+          <button aria-label={documentUrlLabel} className="document-icon-button" onClick={() => void copyDocumentUrl(ctx, document)} type="button"><Link2 size={16}/></button>
+        </ScopedFlowTooltip>
+        {!deleted && <button aria-expanded={agentOpen} aria-label={t(agentOpen ? 'Close chat' : 'Open chat')} className={`document-icon-button${agentOpen ? ' is-active' : ''}`} data-active={agentOpen || undefined} onClick={() => setAgentOpen(open => !open)} type="button"><AgentCursorGlyph size={14}/></button>}
+        {!deleted && <DocumentSubscribersPopover ctx={ctx} document={document} subscribed={subscribed} busy={subscriptionBusy} onToggleViewer={toggleSubscription} open={subscribersOpen} onOpenChange={setSubscribersOpen}/>}
       </div>
     </header>
-    <Popover.Root>
-      <Popover.Trigger asChild><button ref={editedTriggerRef} title={new Date(lastEditedAt).toLocaleString()} className="document-edited"><SlidersHorizontal size={13}/>Edited {new Date(lastEditedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})}</button></Popover.Trigger>
-      <Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="document-edited-popover" collisionPadding={10} onCloseAutoFocus={event=>{event.preventDefault();editedTriggerRef.current?.focus()}} sideOffset={4}>
-        <div className="document-view-options">
-          <span>Show comments</span><Toggle checked={commentsOpen} label="Show comments" onChange={value=>{setCommentsOpen(value);writeDocumentViewOption(document.id,'comments',value)}}/>
-          <span>Show author names</span><Toggle checked={authorNamesOpen} label={authorNamesOpen?'Hide author names':'Show author names'} onChange={value=>{setAuthorNamesOpen(value);writeDocumentViewOption(document.id,'authors',value)}}/>
-        </div>
-        <div className="document-owner-row"><span>Owned by</span><a href={`/${data.workspace.urlKey}/member/${encodeURIComponent(document.creator.name)}/assigned`}><UserAvatar className="document-meta-avatar" name={document.creator.displayName}/><strong data-i18n-ignore>{document.creator.displayName}</strong></a></div>
-        <div className="document-last-edit-row"><span>Last edit by</span><span><UserAvatar className="document-meta-avatar" name={lastEditor.displayName}/><strong data-i18n-ignore>{lastEditor.displayName}</strong></span><time dateTime={lastEditedAt}>{formatDocumentTimestamp(lastEditedAt)}</time></div>
-        <div className="document-history-action"><Popover.Close asChild><button onClick={()=>void openHistory()} type="button"><History size={14}/>Show document history</button></Popover.Close></div>
-      </Popover.Content></Popover.Portal>
-    </Popover.Root>
     <article className="document-canvas">
-      <DocumentIconPicker document={document} onChange={visual=>void updateDocument(document.id,visual).then(onReload)} triggerClassName={`document-icon${defaultDocumentIcon?' is-empty':''}`}/>
-      <input className="document-title" aria-label="Document title" value={title} onChange={event=>{setTitle(event.target.value);schedule({title:event.target.value})}} onBlur={()=>{if(title.trim()&&title!==document.title)void updateDocument(document.id,{title:title.trim()}).then(onReload)}}/>
-      <div className="document-editor-shell">{authorNamesOpen&&body.value.trim()&&<span className="document-author-name" data-i18n-ignore>{lastEditor.displayName}</span>}<DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}><CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false} onChange={snapshot=>{setBody({value:snapshot.markdown,state:snapshot.documentJSON});schedule({content:snapshot.markdown,contentState:snapshot.contentState,contentData:snapshot.document as Record<string,unknown>})}} onPersist={async snapshot=>{await updateDocument(document.id,{content:snapshot.markdown,contentState:snapshot.contentState,contentData:snapshot.document as Record<string,unknown>});await onReload()}}/></DocumentContentProvider></div>
-      <EntityActivityPanel allowAgent entityId={document.id} entityTitle={document.title || 'Document'} entityType="document" emptyLabel="No activity yet"><IssueAgentTasks resourceType="document" issue={{id:document.id}} data={data}/></EntityActivityPanel>
-      {commentsOpen&&<section className="document-comments" aria-label="Comments"><header><MessageCircle size={16}/><strong>Comments</strong><span>{comments.filter(item=>!item.parentId).length}</span></header><div className="document-comment-list">{comments.filter(item=>!item.parentId).map(comment=><article className="document-comment-thread" key={comment.id}><div className="document-comment"><strong>{comment.user.displayName}</strong><small>{new Date(comment.createdAt).toLocaleString()}</small><div className="document-comment-body"><RichComment body={comment.body} data={comment.bodyData}/></div><button type="button" onClick={()=>setReplyTo(replyTo===comment.id?undefined:comment.id)}>Reply</button><button type="button" onClick={()=>void deleteDocumentComment(document.id,comment.id).then(onReload)}>Delete</button></div>{comments.filter(item=>item.parentId===comment.id).map(reply=><div className="document-comment document-comment-reply" key={reply.id}><strong>{reply.user.displayName}</strong><small>{new Date(reply.createdAt).toLocaleString()}</small><div className="document-comment-body"><RichComment body={reply.body} data={reply.bodyData}/></div></div>)}{replyTo===comment.id&&<Composer compact users={data.users} placeholder="Reply" onSubmit={(body,bodyData)=>submitComment(body,bodyData,comment.id)}/>}</article>)}</div><Composer users={data.users} placeholder="Add a comment…" onSubmit={submitComment}/></section>}
-    </article>
-    <Dialog open={historyOpen} onOpenChange={setHistoryOpen}><DialogContent className="document-history"><DialogTitle>Restore version for <strong>{document.title}</strong></DialogTitle><button className="document-dialog-close" aria-label="Close modal dialog" onClick={()=>setHistoryOpen(false)}><X size={15}/></button>{document.revisions.length?<div className="document-history-body"><nav className="document-history-list">{document.revisions.map((revision,index)=><button className={revision.id===selectedRevisionId?'selected':''} key={revision.id} onClick={()=>setSelectedRevisionId(revision.id)}><span><strong>{new Date(revision.createdAt).toLocaleString()}</strong><small>{index===0?'Current · ':''}{revision.author.displayName}</small></span><History size={14}/></button>)}</nav>{selectedRevision&&<section className="document-history-preview"><header><div><strong>{new Date(selectedRevision.createdAt).toLocaleString()}</strong><small>Saved by {selectedRevision.author.displayName}</small></div><button aria-disabled={selectedRevisionCurrent} disabled={selectedRevisionCurrent} title={selectedRevisionCurrent?'This is the current version, you cannot restore it':undefined} onClick={()=>void restoreRevision()}><History size={13}/>Restore version</button></header>{!selectedRevisionCurrent&&<label className="document-history-highlight"><input checked={highlightHistory} onChange={event=>setHighlightHistory(event.target.checked)} type="checkbox"/>Highlight changes</label>}<div><article><h3>Current</h3><strong>{document.title}</strong>{renderHistoryContent(document.content||'Empty document',selectedRevision.content,highlightHistory)}</article><article><h3>Selected version</h3><strong>{selectedRevision.title}</strong>{renderHistoryContent(selectedRevision.content||'Empty document',document.content,highlightHistory)}</article></div></section>}</div>:<div className="document-history-empty">There is no history yet.</div>}</DialogContent></Dialog>
-    <Dialog open={accessOpen} onOpenChange={setAccessOpen}><DialogContent className="document-access"><DialogTitle>People with access</DialogTitle><p className="document-access-description">Choose who can view, comment on, or edit this document.</p><div className="document-access-list">{accessSubjects.map(subject=>{const role=permissions.find(item=>item.subjectType===subject.type&&item.subjectId===subject.id)?.role??(subject.type==='user'&&subject.id===document.creator.id?'owner':'none');return <div className="document-access-row" key={`${subject.type}:${subject.id}`}><span className="document-access-person">{subject.type==='user'?<UserAvatar className="document-meta-avatar" name={subject.label}/>:subject.type==='team'?<span className="document-access-team-mark">{subject.label.slice(0,1).toUpperCase()}</span>:<span className="document-access-team-mark">@</span>}<strong data-i18n-ignore={!subject.entity||undefined}>{subject.label}</strong></span><SelectControl disabled={subject.type==='user'&&subject.id===document.creator.id||accessBusy} label={`${t('Access for')} ${subject.label}`} value={role} onChange={value=>void updateAccess(subject.type,subject.id,value)} options={[{value:'none',label:t('No access')},{value:'viewer',label:t('Can view')},{value:'commenter',label:t('Can comment')},{value:'editor',label:t('Can edit')},{value:'owner',label:t('Owner'),disabled:true}]}/></div>})}</div></DialogContent></Dialog>
-    <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>
-    <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}><DialogContent className="document-delete"><DialogTitle>Delete "{document.title}"?</DialogTitle><p>Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.</p><footer><button onClick={()=>setDeleteOpen(false)}>Cancel</button><button className="danger" onClick={()=>void deleteDocument(document.id).then(onBack).catch(error=>toast.error(error instanceof Error?error.message:'Could not delete'))}>Delete</button></footer></DialogContent></Dialog>
-  {agentOpen && <aside className="document-agent-rail" aria-label={t('Entity agent panel')}>
-      <DocumentAgentPanel
-        data={data}
-        document={document}
-        contextIssues={linkedIssue ? [linkedIssue] : []}
-        onRequestClose={() => setAgentOpen(false)}
-        open={agentOpen}
+      <div className="document-icon-row">
+        {!canEdit
+          ? <span className={`document-icon${defaultDocumentIcon ? ' is-empty' : ''}`}><DocumentGlyph document={document}/></span>
+          : <DocumentIconPicker document={document} onChange={visual => void updateDocument(document.id, visual).then(onReload)} triggerClassName={`document-icon${defaultDocumentIcon ? ' is-empty' : ''}`}/>}
+        {canEdit && <DocumentTemplateChip ctx={ctx} document={document} className="document-template-chip"/>}
+      </div>
+      <input
+        aria-label={t('Document title')}
+        className="document-title"
+        onBlur={() => { titleFocused.current = false; if (canEdit && title !== document.title) { window.clearTimeout(pending.current); void updateDocument(document.id, { title }).then(onReload) } }}
+        onChange={event => { setTitle(event.target.value); schedule({ title: event.target.value }) }}
+        onFocus={() => { titleFocused.current = true }}
+        placeholder={t('New document')}
+        readOnly={!canEdit}
+        value={title}
       />
+      <div className="document-editor-shell" ref={setShell}>
+        <DocumentAuthorLabels document={document} enabled={authorNamesOpen} lastEditor={lastEditor} shell={shell} state={body.state}/>
+        <DocumentContentProvider documentId={document.id} content={body.value} contentState={body.state} presence={presence}>
+          {deleted
+            ? <IssueDescriptionEditor ariaLabel={t('Document content')} className="document-editor" key={`deleted:${document.id}`} placeholder="" readOnly state={editorState} users={data.users} value={document.content}/>
+            : <CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${document.collaborationId ?? ''}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false}
+              readOnly={!canEdit} editorRef={setLiveEditor}
+              onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
+              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: prompt => { setAgentPrompt(prompt); setAgentOpen(true) }, onComment: canComment ? startComment : undefined })}
+              onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
+              onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
+        </DocumentContentProvider>
+        {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter}/>}
+      </div>
+      {!deleted && <EntityActivityPanel allowAgent entityId={document.id} entityTitle={displayTitle} entityType="document" emptyLabel="No activity yet"><IssueAgentTasks resourceType="document" issue={{ id: document.id }} data={data}/></EntityActivityPanel>}
+    </article>
+    {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}
+    {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
+    {!deleted && <DocumentAccessDialog busy={accessBusy} data={data} document={document} onChangeRole={(type, id, role) => void updateAccess(type, id, role)} onOpenChange={setAccessOpen} open={accessOpen} permissions={permissions}/>}
+    <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>
+    {agentOpen && !deleted && <aside className="document-agent-rail" aria-label={t('Entity agent panel')}>
+      <DocumentAgentPanel key={agentPrompt ?? 'default'} data={data} document={document} contextIssues={linkedIssue ? [linkedIssue] : []} initialPrompt={agentPrompt} onRequestClose={() => { setAgentOpen(false); setAgentPrompt(undefined) }} open={agentOpen}/>
     </aside>}
   </main>
 }
 
-function readDocumentViewOption(id:string,key:string,fallback:boolean){try{const value=localStorage.getItem(`flow:document:${id}:${key}`);return value===null?fallback:value==='true'}catch{return fallback}}
-function writeDocumentViewOption(id:string,key:string,value:boolean){try{localStorage.setItem(`flow:document:${id}:${key}`,String(value))}catch{/* View preferences are best-effort. */}}
-function renderHistoryContent(content:string,other:string,highlight:boolean){if(!highlight)return <pre>{content}</pre>;const lines=content.split('\n'),otherLines=other.split('\n');return <pre className="history-highlight">{lines.map((line,index)=><span className={line!==otherLines[index]?'history-line is-changed':'history-line'} key={`${index}:${line}`}>{line||' '}\n</span>)}</pre>}
-function formatDocumentTimestamp(value:string){return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}).format(new Date(value))}
+const NO_COMMENTS: Comment[] = []
+
+function readDocumentViewOption(id: string, key: string, fallback: boolean) { try { const value = localStorage.getItem(`flow:document:${id}:${key}`); return value === null ? fallback : value === 'true' } catch { return fallback } }
+function writeDocumentViewOption(id: string, key: string, value: boolean) { try { localStorage.setItem(`flow:document:${id}:${key}`, String(value)) } catch { /* View preferences are best-effort. */ } }

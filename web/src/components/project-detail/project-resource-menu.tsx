@@ -1,19 +1,17 @@
-import { Fragment, type ReactNode } from 'react'
+import { useMemo } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Building2, MoreVertical, Star } from 'lucide-react'
+import { MoreVertical } from 'lucide-react'
 import { toast } from 'sonner'
 import { TeamIcon } from '@/components/issue/issue-icons'
-import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'
+import { DocumentMenuItems } from '@/components/documents/document-menu'
+import type { DocumentActionContext, DocumentUiAction } from '@/components/documents/document-actions'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
-import { ViewGlyph } from '@/components/views/view-icon-picker'
-import { normalizeProjectIcon } from '@/components/views/project-icon'
-import { toggleFavoriteFor } from '@/lib/favorites'
-import { createDocument, createDocumentTemplate, deleteDocument, updateDocument } from '@/lib/api'
+import { useOptionalRouteNavigation } from '@/hooks/use-optional-route-navigation'
+import { LinearDropdownMenuContent } from '@/components/ui/row-context-menu'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData, FlowDocument, Project, ProjectResource, Team } from '@/types/flow'
-import { ProjectMenuItem, ProjectMenuShortcut, ProjectSubmenu } from './project-menu-primitives'
-import { resourceDisplayTitle } from './project-resource-link-name'
-import { DocumentCustomReminderDialog, DocumentReminderSubmenu, useDocumentReminder } from '@/components/documents/document-reminder'
+import type { BootstrapData, FlowDocument, ProjectResource, Team } from '@/types/flow'
+import { ProjectMenuItem, ProjectSubmenu } from './project-menu-primitives'
+import { resourceChipTitle } from './project-resource-link-name'
 
 type ResourceUpdate = (id: string, input: { pinnedTeamIds?: string[] }) => Promise<ProjectResource>
 
@@ -28,11 +26,10 @@ const copyText = (t: Translate, value: string, message: string) => void navigato
 
 /**
  * The "⋮" menu on a project Resources pill. Links get Linear's short link menu
- * (Copy link, Pin to team, Edit, Delete); documents get the document context
- * menu (Move to, Pin to team, Duplicate, New template, Rename…, Favorite, Copy,
- * Remind me, Show document history, Delete).
+ * (Copy link, Pin to team, Edit, Delete); documents get the shared document menu
+ * (components/documents/document-menu.tsx, `resource` variant).
  */
-export function ProjectResourceMenu({ data, document, onDeleteLink, onEditLink, onOpenDocumentHistory, onReload, onUpdate, project, projects, resource, teams }: {
+export function ProjectResourceMenu({ data, document, onDeleteLink, onEditLink, onOpenDocumentHistory, onReload, onUpdate, resource, teams }: {
   data?: BootstrapData
   document?: FlowDocument
   onDeleteLink: () => void
@@ -40,29 +37,31 @@ export function ProjectResourceMenu({ data, document, onDeleteLink, onEditLink, 
   onOpenDocumentHistory?: (document: FlowDocument) => void
   onReload?: () => Promise<void>
   onUpdate: ResourceUpdate
-  project?: Project
-  projects?: Project[]
   resource: ProjectResource
   teams: Team[]
 }) {
   const { t } = useI18n()
-  const kind = document ? 'document' : 'link'
-  const reminder = useDocumentReminder(document?.id ?? '')
-  return <><DropdownMenu.Root>
-    <DropdownMenu.Trigger asChild><button aria-label={`${resourceDisplayTitle(resource)} actions`} data-i18n-ignore type="button"><MoreVertical size={14}/></button></DropdownMenu.Trigger>
-    <DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-action-menu project-resource-action-menu" data-kind={kind} collisionPadding={16} sideOffset={4}>
-      {document
-        ? <DocumentResourceItems data={data} document={document} onCustomReminder={() => reminder.setCustomOpen(true)} onOpenDocumentHistory={onOpenDocumentHistory} onReload={onReload} onRemind={remindAt => void reminder.remind(remindAt)} onUpdate={onUpdate} project={project} projects={projects} resource={resource} teams={teams}/>
-        : <>
+  const navigate = useOptionalRouteNavigation()
+  const ctx = useMemo<DocumentActionContext | undefined>(() => data ? { data, reload: () => onReload?.() ?? Promise.resolve(), navigate, t } : undefined, [data, navigate, onReload, t])
+  const title = resourceChipTitle(resource, document, t)
+  const onUiAction = document && onOpenDocumentHistory ? (action: DocumentUiAction) => { if (action === 'history') onOpenDocumentHistory(document) } : undefined
+  return <DropdownMenu.Root>
+    <DropdownMenu.Trigger asChild><button aria-label={`${title} actions`} data-i18n-ignore type="button"><MoreVertical size={14}/></button></DropdownMenu.Trigger>
+    <DropdownMenu.Portal>
+      {document && ctx
+        ? <LinearDropdownMenuContent align="end" className="project-resource-action-menu" label={t('Document actions')}>
+          <DocumentMenuItems ctx={ctx} document={document} onUiAction={onUiAction} variant="resource"/>
+        </LinearDropdownMenuContent>
+        : <DropdownMenu.Content data-flow-motion="floating" align="end" className="project-action-menu project-resource-action-menu" data-kind={document ? 'document' : 'link'} collisionPadding={16} sideOffset={4}>
           <ProjectMenuItem icon={null} label="Copy link" onSelect={() => copyText(t, resourceAbsoluteURL(resource.url), 'Resource link copied')}/>
-          <PinToTeam onUpdate={onUpdate} resource={resource} teams={teams}/>
-          <ProjectMenuItem icon={null} label="Edit" onSelect={onEditLink}/>
-          <ProjectMenuItem icon={null} label="Delete" onSelect={onDeleteLink}/>
-        </>}
-    </DropdownMenu.Content></DropdownMenu.Portal>
+          {!document && <>
+            <PinToTeam onUpdate={onUpdate} resource={resource} teams={teams}/>
+            <ProjectMenuItem icon={null} label="Edit" onSelect={onEditLink}/>
+            <ProjectMenuItem icon={null} label="Delete" onSelect={onDeleteLink}/>
+          </>}
+        </DropdownMenu.Content>}
+    </DropdownMenu.Portal>
   </DropdownMenu.Root>
-  {document && <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>}
-  </>
 }
 
 function PinToTeam({ onUpdate, resource, teams }: { onUpdate: ResourceUpdate; resource: ProjectResource; teams: Team[] }) {
@@ -82,76 +81,4 @@ function PinToTeam({ onUpdate, resource, teams }: { onUpdate: ResourceUpdate; re
 
 function TeamRow({ showKey = true, team }: { showKey?: boolean; team: Team }) {
   return <><span className="project-menu-icon project-resource-menu__team-icon"><TeamIcon team={team} size={14}/></span><span className="project-menu-label project-resource-menu__team" data-i18n-ignore>{team.name}{showKey && <small>{team.key}</small>}</span></>
-}
-
-function GroupLabel({ children }: { children: ReactNode }) {
-  const { t } = useI18n()
-  return <DropdownMenu.Label className="project-resource-menu__group">{typeof children === 'string' ? t(children) : children}</DropdownMenu.Label>
-}
-
-function DocumentResourceItems({ data, document, onCustomReminder, onOpenDocumentHistory, onReload, onRemind, onUpdate, project, projects = [], resource, teams }: {
-  data?: BootstrapData
-  document: FlowDocument
-  onCustomReminder: () => void
-  onOpenDocumentHistory?: (document: FlowDocument) => void
-  onReload?: () => Promise<void>
-  onRemind: (remindAt: string) => void
-  onUpdate: ResourceUpdate
-  project?: Project
-  projects?: Project[]
-  resource: ProjectResource
-  teams: Team[]
-}) {
-  const { t } = useI18n()
-  const reload = () => onReload?.() ?? Promise.resolve()
-  // `success` is already translated (it may interpolate a name); `failure` is a source string.
-  const run = (action: () => Promise<unknown>, success: string, failure: string) => void action().then(reload).then(() => { if (success) toast.success(success) }, error => toast.error(t(failure), { description: error instanceof Error ? error.message : undefined }))
-  const moved = (name: string) => t('Moved to {name}').replace('{name}', name)
-  const title = document.title || resource.title || 'Untitled document'
-  const url = resourceAbsoluteURL(resource.url)
-  const favorited = Boolean(data?.favorites?.some(item => item.userId === data.viewer.id && item.resourceType === 'document' && item.resourceId === document.id)) || document.favorite
-  const otherProjects = projects.filter(item => item.id !== project?.id && !item.archivedAt)
-  const moveToTeam = (team: Team) => run(() => updateDocument(document.id, { teamIds: [team.id], projectIds: [] }), moved(team.name), 'Could not move document')
-  const moveToProject = (target: Project) => run(() => updateDocument(document.id, { projectIds: [target.id] }), moved(target.name), 'Could not move document')
-  const duplicate = () => run(() => createDocument({ title: `${title} (copy)`, icon: document.icon, color: document.color, content: document.content, contentState: document.contentState, contentData: document.contentData, projectIds: document.projectIds, teamIds: document.teamIds }), t('Document duplicated'), 'Could not duplicate document')
-  // An empty team ID creates a workspace-wide template (Linear's "Workspace" option).
-  const createTemplate = (teamId: string) => run(() => createDocumentTemplate({ teamId, name: title, title, icon: document.icon, content: document.content, contentState: document.contentState, contentData: document.contentData }), t('Template created'), 'Could not create template')
-  const rename = () => void promptAction(t('Rename document'), title, { confirmLabel: t('Save') }).then(next => {
-    const value = next?.trim()
-    if (value && value !== document.title) run(() => updateDocument(document.id, { title: value }), '', 'Could not rename document')
-  })
-  const remove = () => void confirmAction(t('Delete "{name}"?').replace('{name}', title), { description: t('Deleted documents are available in the "Recently deleted" view for 30 days, before they are permanently deleted.'), confirmLabel: t('Delete') }).then(confirmed => {
-    if (confirmed) run(() => deleteDocument(document.id), '', 'Could not delete document')
-  })
-  return <>
-    <ProjectSubmenu label="Move to" icon={null} shortcut="⇧ P" className="project-resource-submenu">
-      <GroupLabel>My teams</GroupLabel>
-      {teams.map(team => <DropdownMenu.Item key={team.id} onSelect={() => moveToTeam(team)}><TeamRow team={team}/></DropdownMenu.Item>)}
-      {otherProjects.length > 0 && <><GroupLabel>Projects</GroupLabel>{otherProjects.map(item => <DropdownMenu.Item key={item.id} onSelect={() => moveToProject(item)}><span className="project-menu-icon project-resource-menu__team-icon"><ViewGlyph color={item.color} icon={normalizeProjectIcon(item.icon)} style={{ width: 14, height: 14 }}/></span><span className="project-menu-label" data-i18n-ignore>{item.name}</span></DropdownMenu.Item>)}</>}
-    </ProjectSubmenu>
-    <PinToTeam onUpdate={onUpdate} resource={resource} teams={teams}/>
-    <ProjectMenuItem icon={null} label="Duplicate" onSelect={duplicate}/>
-    <ProjectSubmenu label="New template from document" icon={null} className="project-resource-submenu">
-      <DropdownMenu.Item onSelect={() => createTemplate('')}><span className="project-menu-icon project-resource-menu__team-icon"><Building2 aria-hidden="true" size={14}/></span><span className="project-menu-label">{t('Workspace')}</span></DropdownMenu.Item>
-      {teams.length > 0 && <DropdownMenu.Separator/>}
-      {teams.map(team => <DropdownMenu.Item key={team.id} onSelect={() => createTemplate(team.id)}><TeamRow showKey={false} team={team}/></DropdownMenu.Item>)}
-    </ProjectSubmenu>
-    <ProjectMenuItem icon={null} label="Rename…" shortcut="⇧ R" onSelect={rename}/>
-    <DropdownMenu.Separator/>
-    {data && (favorited
-      ? <DropdownMenu.Item onSelect={() => void toggleFavoriteFor(data, 'document', document.id, false, true)}><span className="project-menu-icon" data-favorited=""><Star aria-hidden="true" fill="currentColor" size={16} strokeWidth={1.5}/></span><span className="project-menu-label">{t('Remove from favorites')}</span><ProjectMenuShortcut value="⌥ F"/></DropdownMenu.Item>
-      : <ProjectMenuItem icon={null} label="Favorite" shortcut="⌥ F" onSelect={() => void toggleFavoriteFor(data, 'document', document.id, true, false)}/>)}
-    <ProjectSubmenu label="Copy" icon={null} className="project-resource-submenu project-resource-copy-menu">
-      {([
-        ['Copy URL', '⌘ ⇧ ,', url, 'Document URL copied'],
-        ['Copy title', "⌘ ⇧ '", title, 'Document title copied'],
-        ['Copy title as link', '⌘ C', `[${title}](${url})`, 'Document title and link copied'],
-        ['Copy content as Markdown', '⌘ ⌥ C', document.content ?? '', 'Document content copied'],
-      ] as const).map(([label, shortcut, value, message]) => <Fragment key={label}><ProjectMenuItem icon={null} label={label} shortcut={shortcut} onSelect={() => copyText(t, value, message)}/></Fragment>)}
-    </ProjectSubmenu>
-    <DocumentReminderSubmenu onCustom={onCustomReminder} onRemind={onRemind}/>
-    <DropdownMenu.Separator/>
-    {onOpenDocumentHistory && <ProjectMenuItem icon={null} label="Show document history" onSelect={() => onOpenDocumentHistory(document)}/>}
-    <ProjectMenuItem icon={null} label="Delete" onSelect={remove}/>
-  </>
 }

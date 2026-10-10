@@ -111,7 +111,9 @@ func TestDocumentHistoryProjectAssociationAndTrashRestore(t *testing.T) {
 	document = requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+document.ID, map[string]any{
 		"title": "Renamed document", "content": "Second version", "projectIds": []string{},
 	}, http.StatusOK)
-	if len(document.Revisions) != 1 || document.Revisions[0].Content != "First version" {
+	// History stores post-update snapshots: the newest version is the
+	// current state.
+	if len(document.Revisions) != 1 || document.Revisions[0].Content != "Second version" || document.Revisions[0].Title != "Renamed document" {
 		t.Fatalf("document revision was not recorded: %#v", document.Revisions)
 	}
 	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
@@ -194,8 +196,33 @@ func TestDocumentPermissionsAndPresenceEndpoints(t *testing.T) {
 	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
 	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Permissions"}, http.StatusCreated)
 	permissions := requestJSON[[]domain.DocumentPermission](t, handler, http.MethodGet, "/api/documents/"+document.ID+"/permissions", nil, http.StatusOK)
-	if len(permissions) != 1 || permissions[0].Role != "owner" {
+	// New documents are owned by their creator and editable by everyone who
+	// can see them (the workspace for an unscoped document, its teams' members
+	// for a team document), like the reference app.
+	if len(permissions) != 2 || permissions[0].Role != "owner" || permissions[1].SubjectType != "workspace" || permissions[1].Role != "editor" {
 		t.Fatalf("default document permission = %#v", permissions)
+	}
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	firstTeam := bootstrap.Teams[0].ID
+	teamDocument := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"title": "Team doc", "teamIds": []string{firstTeam}}, http.StatusCreated)
+	if !slices.ContainsFunc(teamDocument.Permissions, func(item domain.DocumentPermission) bool {
+		return item.SubjectType == "team" && item.SubjectID == firstTeam && item.Role == "editor"
+	}) {
+		t.Fatalf("team document grants = %#v", teamDocument.Permissions)
+	}
+	otherTeam := ""
+	for _, team := range bootstrap.Teams {
+		if team.ID != firstTeam {
+			otherTeam = team.ID
+			break
+		}
+	}
+	if otherTeam != "" {
+		moved := requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+teamDocument.ID, map[string]any{"teamIds": []string{otherTeam}}, http.StatusOK)
+		if slices.ContainsFunc(moved.Permissions, func(item domain.DocumentPermission) bool { return item.SubjectType == "team" && item.SubjectID == firstTeam }) ||
+			!slices.ContainsFunc(moved.Permissions, func(item domain.DocumentPermission) bool { return item.SubjectType == "team" && item.SubjectID == otherTeam && item.Role == "editor" }) {
+			t.Fatalf("moving the document did not move its team access: %#v", moved.Permissions)
+		}
 	}
 	requestJSON[[]domain.DocumentPermission](t, handler, http.MethodPut, "/api/documents/"+document.ID+"/permissions", map[string]any{"permissions": []map[string]any{{"subjectType": "workspace", "role": "viewer"}}}, http.StatusOK)
 	comments := requestJSON[[]domain.Comment](t, handler, http.MethodGet, "/api/documents/"+document.ID+"/comments", nil, http.StatusOK)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, Link2, Plus, Settings2, Sparkles, X } from "lucide-react";
+import { ChevronDown, Link2, Plus, Settings2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ import { activeTeams, copyText, loopBuilderFirstMessage, loopUrl, markLoopAgentH
 import { ENTITY_NAMES, LOOP_PERMISSION_COPY, configStrings, defaultScheduleConfig, instructionsPlaceholder, isLoopDraft, loopTeamId } from "./loop-model";
 import { LoopTriggerEditor } from "./loop-trigger";
 import { LoopVersionsDialog } from "./loop-versions";
+import { AgentWriteGlyph } from '@/components/ui/agent-glyph'
 
 const DEFAULT_COLOR = "#d9b84b";
 
@@ -357,7 +358,7 @@ function LoopEditorForm({
             <div className="loops-section-heading">
               <h3 className="loops-section-title">{t("Instructions")}</h3>
               <button className="loops-compose-button" type="button" onClick={() => setAgentOpen(true)}>
-                <Sparkles size={14} />
+                <AgentWriteGlyph size={14} />
                 {t(agentDraft ? "Configure with Agent" : "Compose with Agent")}
               </button>
             </div>

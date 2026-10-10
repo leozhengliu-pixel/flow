@@ -10,6 +10,7 @@ const groups: { title: string; shortcuts: Shortcut[] }[] = [
     { label: 'Open command menu', keys: ['⌘', 'K'] },
     { label: 'Open search', keys: ['/'] },
     { label: 'View keyboard shortcuts', keys: ['⌘', '/'] },
+    { label: 'Ask Flow', keys: ['⌘', 'J'] },
   ] },
   { title: 'Navigation', shortcuts: [
     { label: 'Toggle left sidebar', keys: ['['] },

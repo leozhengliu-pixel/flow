@@ -1,0 +1,23 @@
+/** Chinese copy for the rich-text table chrome (add row / column, table actions menu, block menu, slash items). */
+export const editorTableZhCN: Record<string, string> = {
+  "Add row": "添加行",
+  "Add column": "添加列",
+  "Table actions": "表格操作",
+  "Table menu": "表格菜单",
+  "Insert row above": "在上方插入行",
+  "Insert row below": "在下方插入行",
+  "Insert column left": "在左侧插入列",
+  "Insert column right": "在右侧插入列",
+  "Toggle header row": "切换标题行",
+  "Toggle header column": "切换标题列",
+  "Delete row": "删除行",
+  "Delete column": "删除列",
+  "Delete table": "删除表格",
+  "Insert row": "插入行",
+  "Insert column": "插入列",
+  "Copy": "复制",
+  "Select": "选择",
+  "Delete": "删除",
+  "Table copied": "表格已复制",
+  "Could not copy table": "无法复制表格",
+}

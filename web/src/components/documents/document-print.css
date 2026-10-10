@@ -1,0 +1,80 @@
+/*
+ * "Download › PDF" prints the page (window.print): only the document is
+ * printed — no sidebar, header, comments or agent rail — full width, on white
+ * paper with dark text whatever the app theme is.
+ */
+@media print {
+  @page { margin: 18mm 16mm; }
+
+  html:has(.document-page),
+  body:has(.document-page) {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+  }
+  body:has(.document-page) > :not(#root) { display: none !important; }
+  body:has(.document-page) #root,
+  body:has(.document-page) .app {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .app:has(.document-page) > :not(.document-page) { display: none !important; }
+
+  .document-page {
+    --bg-panel: white;
+    --theme-surface-0: white;
+    --theme-surface-1: white;
+    --theme-surface-2: white;
+    --theme-surface-active: whitesmoke;
+    --theme-text-primary: black;
+    --theme-text-secondary: dimgray;
+    --theme-text-tertiary: gray;
+    --theme-border: lightgray;
+    --theme-border-strong: darkgray;
+    --faint: gray;
+    --muted: dimgray;
+    --text: black;
+    --bright: black;
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: white !important;
+    color: black !important;
+  }
+  .document-page .document-header,
+  .document-page .document-comments,
+  .document-page .entity-activity-panel,
+  .document-page .document-inline-gutter,
+  .document-page .document-resolved-panel,
+  .document-page .document-agent-rail,
+  .document-page .document-template-chip,
+  .document-page .document-author-name,
+  .document-page .collaboration-carets__caret,
+  .document-page [data-radix-popper-content-wrapper] { display: none !important; }
+
+  .document-page .document-canvas {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .document-page .document-title {
+    height: auto !important;
+    margin-bottom: 12pt !important;
+    padding: 0 !important;
+    color: black !important;
+  }
+  .document-page .document-editor .flow-prosemirror {
+    min-height: 0 !important;
+    padding: 0 !important;
+    color: black !important;
+  }
+  .document-page .document-editor .flow-prosemirror :is(h1, h2, h3, h4) { break-after: avoid; }
+  .document-page .document-editor .flow-prosemirror :is(pre, table, blockquote, img, figure) { break-inside: avoid; }
+}

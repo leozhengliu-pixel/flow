@@ -52,8 +52,8 @@ export function AgentChatPanel({
   onUseResponse?: (content: string) => void
   useResponseLabel?: string
   open: boolean
-  /** Current page entity (project, document, issue) shown as a removable context chip for new conversations. */
-  pageContext?: AgentPageContext
+  /** Current page entity (project, document, issue) shown as a removable context chip for new conversations; a list selection passes several. */
+  pageContext?: AgentPageContext | AgentPageContext[]
   /** Send `initialPrompt` as soon as the panel opens (Linear's "Write with Agent"). */
   autoSubmit?: boolean
   /** Fence tag (e.g. `update`) whose block is taken out of the reply and handed to `onDraft`. */
@@ -91,21 +91,22 @@ export function AgentChatPanel({
     const draft = message.role === 'assistant' ? splitAgentDraft(message.content, draftFence).draft : undefined
     return draft ? [[message.id, draft]] : []
   })), [draftFence, messages])
-  const card = draftCard ?? { context: pageContext?.label ?? session?.title ?? t('Project'), title: 'Update draft' }
+  const pageContexts = useMemo(() => pageContext ? Array.isArray(pageContext) ? pageContext : [pageContext] : [], [pageContext])
+  const card = draftCard ?? { context: pageContexts[0]?.label ?? session?.title ?? t('Project'), title: 'Update draft' }
   const autoSubmitted = useRef(false)
   const splitDraft = (content: string) => splitAgentDraft(content, draftFence)
   const displayMessages = useMemo(() => draftFence
     ? messages.map(message => message.role === 'assistant' ? { ...message, content: splitAgentDraft(message.content, draftFence).prose } : message)
     : messages, [draftFence, messages])
-  const pageContextKey = pageContext ? `${pageContext.type}:${pageContext.id}` : ''
-  // The page entity only applies to a conversation that has not started yet, and not once the user removed it.
-  const activePageContext = pageContext && !session && !messages.length && !removedContext.includes(pageContextKey) ? pageContext : undefined
-  const pageContextEntities: AgentContextEntity[] = activePageContext ? [{
-    key: pageContextKey,
-    icon: pageContextIcon(activePageContext, data),
-    label: activePageContext.label,
-    onRemove: () => setRemovedContext(current => [...current, pageContextKey]),
-  }] : []
+  const contextKeyOf = (context: AgentPageContext) => `${context.type}:${context.id}`
+  // Page entities only apply to a conversation that has not started yet, and not once the user removed them.
+  const activePageContexts = !session && !messages.length ? pageContexts.filter(context => !removedContext.includes(contextKeyOf(context))) : []
+  const pageContextEntities: AgentContextEntity[] = activePageContexts.map(context => ({
+    key: contextKeyOf(context),
+    icon: pageContextIcon(context, data),
+    label: context.label,
+    onRemove: () => setRemovedContext(current => [...current, contextKeyOf(context)]),
+  }))
   const idsOf = (type: AgentMention['type']) => mentions.filter(item => item.type === type).map(item => item.id)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
 
@@ -184,7 +185,7 @@ export function AgentChatPanel({
       { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, createdAt: new Date().toISOString() },
     ])
     const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), userIds: sentIdsOf('user'), mentions: sentMentions }
-    const pageIdsOf = (type: AgentPageContext['type']) => activePageContext?.type === type ? [activePageContext.id] : []
+    const pageIdsOf = (type: AgentPageContext['type']) => activePageContexts.filter(context => context.type === type).map(context => context.id)
     if (!session) {
       setAttachedContext([
         ...pageContextEntities.map(({ onRemove: _onRemove, ...item }) => item),

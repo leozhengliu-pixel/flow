@@ -151,70 +151,6 @@
   background: var(--description-menu-separator);
 }
 
-.description-callout {
-  position: relative;
-  margin: 22px 0;
-  padding: 10px 16px 10px 38px;
-  border: .5px solid color-mix(in srgb, var(--description-callout-cyan) 20%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--description-callout-cyan) 2%, transparent);
-  color: var(--issue-fg);
-}
-.description-callout-controls {
-  position: absolute;
-  left: 8px;
-  top: 10px;
-}
-.description-callout-controls button {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--description-callout-cyan);
-}
-.description-callout-controls button:hover { background: var(--description-callout-control-hover); }
-.description-callout-content p { margin: 0; }
-.description-callout.is-gray { border-color: var(--description-callout-gray-border); background: var(--description-callout-gray-bg); }
-.description-callout.is-gray .description-callout-controls button { color: var(--description-callout-gray); }
-.description-callout.is-green { border-color: color-mix(in srgb, var(--description-callout-green) 20%, transparent); background: color-mix(in srgb, var(--description-callout-green) 2%, transparent); }
-.description-callout.is-green .description-callout-controls button { color: var(--description-callout-green); }
-.description-callout.is-yellow { border-color: color-mix(in srgb, var(--description-callout-yellow) 20%, transparent); background: color-mix(in srgb, var(--description-callout-yellow) 2%, transparent); }
-.description-callout.is-yellow .description-callout-controls button { color: var(--description-callout-yellow); }
-.description-callout.is-orange { border-color: color-mix(in srgb, var(--description-callout-orange) 20%, transparent); background: color-mix(in srgb, var(--description-callout-orange) 2%, transparent); }
-.description-callout.is-orange .description-callout-controls button { color: var(--description-callout-orange); }
-.description-callout.is-red { border-color: color-mix(in srgb, var(--description-callout-red) 20%, transparent); background: color-mix(in srgb, var(--description-callout-red) 2%, transparent); }
-.description-callout.is-red .description-callout-controls button { color: var(--description-callout-red); }
-.description-callout.is-purple { border-color: color-mix(in srgb, var(--description-callout-purple) 20%, transparent); background: color-mix(in srgb, var(--description-callout-purple) 2%, transparent); }
-.description-callout.is-purple .description-callout-controls button { color: var(--description-callout-purple); }
-.description-callout-menu {
-  position: fixed;
-  z-index: 1500;
-  display: flex;
-  gap: 6px;
-  padding: 6px;
-  border: .5px solid var(--description-menu-border);
-  border-radius: 10px;
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow-control);
-}
-.description-callout-menu button {
-  width: 18px;
-  height: 18px;
-  border: 0;
-  border-radius: 9999px;
-}
-.description-callout-menu button[data-color="cyan"] { background: var(--description-callout-cyan); }
-.description-callout-menu button[data-color="gray"] { background: var(--description-callout-gray); }
-.description-callout-menu button[data-color="green"] { background: var(--description-callout-green); }
-.description-callout-menu button[data-color="yellow"] { background: var(--description-callout-yellow); }
-.description-callout-menu button[data-color="orange"] { background: var(--description-callout-orange); }
-.description-callout-menu button[data-color="red"] { background: var(--description-callout-red); }
-.description-callout-menu button[data-color="purple"] { background: var(--description-callout-purple); }
-
 .description-file-node {
   position: relative;
   display: flex;
@@ -428,3 +364,174 @@
 
 /* The "@" menu is portaled to the page so dialogs, popovers and scrolling editors never clip it (pointer-events: auto because a modal dialog disables them on the body). */
 .description-mention-menu--floating { position: fixed; z-index: 1100; pointer-events: auto; }
+
+/* ---- Block rhythm and list markers (measured against Linear: item pitch 30px, block gaps 16-22px) ---- */
+.issue-description-root .description-editor ul:not([data-type="taskList"]) { list-style: disc outside; }
+.issue-description-root .description-editor ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) { list-style: circle outside; }
+.issue-description-root .description-editor ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) { list-style: square outside; }
+.issue-description-root .description-editor ol { list-style: decimal outside; }
+.issue-description-root .description-editor ol ol { list-style: lower-alpha outside; }
+.issue-description-root .description-editor ol ol ol { list-style: lower-roman outside; }
+.issue-description-root .description-editor ul,
+.issue-description-root .description-editor ol { margin: 16px 0 0; padding-left: 24px; }
+.issue-description-root .description-editor p + ul,
+.issue-description-root .description-editor p + ol,
+.issue-description-root .description-editor li > ul,
+.issue-description-root .description-editor li > ol { margin-top: 6px; }
+.issue-description-root .description-editor li + li { margin-top: 6px; }
+.issue-description-root .description-editor li::marker { color: var(--theme-text-secondary); }
+.issue-description-root .description-editor ul + p,
+.issue-description-root .description-editor ol + p { margin-top: 16px; }
+.issue-description-root .description-editor hr {
+  height: 0;
+  margin: 22px 0;
+  border: 0;
+  border-top: 1px solid var(--theme-border);
+  background: transparent;
+}
+.issue-description-root .description-editor blockquote {
+  margin: 22px 0;
+  padding: 0 0 0 16px;
+  border-left: 4px solid var(--theme-border-strong);
+  border-radius: 2px;
+  color: inherit;
+}
+.issue-description-root .description-editor blockquote > :first-child { margin-top: 0; }
+.issue-description-root .description-editor blockquote > p + p { margin-top: 16px; }
+.issue-description-root .description-editor .flow-table { margin: 22px 0; }
+.issue-description-root .description-editor .flow-table table { margin: 0; }
+.issue-description-root .description-editor > table { margin: 22px 0; }
+
+/* Checklists: a 16px box that no longer overlaps the first character (the native input is invisible but still toggles). */
+.issue-description-root .description-editor ul[data-type="taskList"] { list-style: none; margin: 16px 0 0; padding-left: 0; }
+.issue-description-root .description-editor p + ul[data-type="taskList"] { margin-top: 6px; }
+.issue-description-root .description-editor ul[data-type="taskList"] > li { position: relative; display: block; min-height: 24px; padding-left: 29px; }
+.issue-description-root .description-editor ul[data-type="taskList"] > li > label {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  display: block;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.issue-description-root .description-editor ul[data-type="taskList"] > li > label > input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.issue-description-root .description-editor ul[data-type="taskList"] > li > label::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--theme-text-tertiary);
+  border-radius: 4px;
+  background: transparent;
+}
+.issue-description-root .description-editor ul[data-type="taskList"] > li[data-checked="true"] > label::before { border-color: var(--accent-primary); background: var(--accent-primary); }
+.issue-description-root .description-editor ul[data-type="taskList"] > li[data-checked="true"] > label::after {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 4px;
+  height: 8px;
+  box-sizing: border-box;
+  border: solid var(--on-accent);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.issue-description-root .description-editor ul[data-type="taskList"] > li[data-checked="true"] > div { color: var(--theme-text-tertiary); }
+.issue-description-root .description-editor ul[data-type="taskList"] > li > div > p { margin: 0; }
+
+/* ---- Placeholders ---- */
+.description-empty-hint {
+  float: left;
+  height: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--theme-text-tertiary);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+.description-empty-hint kbd {
+  min-width: 18px;
+  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border: .5px solid var(--theme-border-strong);
+  border-radius: 4px;
+  background: var(--theme-surface-1);
+  color: var(--theme-text-secondary);
+  font: 450 12px / 1 var(--font);
+}
+.description-slash-trigger {
+  padding: 0 2px;
+  margin: 0 -2px;
+  border-radius: 4px;
+  background: var(--theme-surface-hover);
+}
+
+/* ---- Slash menu: groups, dividers, empty state ---- */
+.description-slash-menu.description-slash-menu { padding: 4px 0; }
+/* Portaled to the page (fixed) so dialogs and scrolling panes never clip it; pointer-events: auto because a modal dialog disables them on the body. */
+.description-slash-menu.description-slash-menu--floating { position: fixed; z-index: 1100; pointer-events: auto; }
+.description-slash-menu .description-slash-separator { height: .5px; margin: 4px 0; background: var(--theme-border); }
+.description-slash-menu .description-slash-empty { height: 34px; justify-content: space-between; gap: 16px; padding: 0 14px; }
+.description-slash-menu .description-slash-empty .description-slash-dismiss {
+  width: auto;
+  height: 22px;
+  min-height: 22px;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--theme-text-secondary);
+  font: 450 12px / 18px var(--font);
+}
+.description-slash-menu .description-slash-empty .description-slash-dismiss::before { inset: 0; }
+.description-slash-menu .description-slash-empty .description-slash-dismiss:hover { color: var(--theme-text-primary); }
+
+/* ---- Floating toolbar: 34px, radius 8, .5px border, 26px buttons ---- */
+.description-bubble-menu.description-bubble-menu {
+  height: 34px;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 3px;
+  border: .5px solid var(--theme-border-strong);
+  border-radius: 8px;
+  flex-wrap: nowrap;
+  gap: 0;
+}
+.description-bubble-menu.description-bubble-menu > button,
+.description-bubble-menu .description-block-control > button,
+.description-bubble-menu .description-link-control > button { width: 26px; height: 26px; padding: 4px; border-radius: 4px; }
+.description-bubble-menu .description-block-control > button { width: 42px; }
+.description-bubble-menu .description-block-control { margin-right: 2px; }
+.description-bubble-menu svg { width: 16px; height: 16px; }
+.description-bubble-menu .description-block-control > button svg:last-child { width: 12px; height: 12px; }
+.description-bubble-menu .description-toolbar-separator { height: 18px; margin: 0 4px; background: var(--theme-border-strong); }
+.description-block-menu button[data-block] { grid-template-columns: minmax(0, 1fr) auto; }
+.description-block-menu .description-block-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.description-block-menu .description-block-label svg { color: var(--action-menu-muted); }
+.description-block-menu .description-block-keys { display: flex; gap: 3px; }
+.description-block-menu .description-block-keys kbd { font: 450 12px / 12px var(--font); color: var(--action-menu-muted); }
+.description-block-menu button[data-block="h1"] .description-block-label { font-size: 15px; font-weight: 600; }
+.description-block-menu button[data-block="h2"] .description-block-label { font-size: 14px; font-weight: 600; }
+.description-block-menu button[data-block="h3"] .description-block-label { font-size: 13px; font-weight: 600; }
+.description-block-menu button[data-block="h4"] .description-block-label { font-size: 12px; font-weight: 600; }
+
+@media (max-width: 640px) {
+  .description-bubble-menu.description-bubble-menu { height: auto; flex-wrap: wrap; max-width: calc(100vw - 16px); }
+}

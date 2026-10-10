@@ -1,3 +1,6 @@
+import { documentDisplayTitle } from '@/components/documents/document-actions'
+import type { FlowDocument } from '@/types/flow'
+
 export type LinkProvider = 'github' | 'gitlab' | 'slack' | 'jira'
 
 const BRAND_NAMES: Record<string, string> = {
@@ -57,4 +60,20 @@ export function resourceDisplayTitle(resource: { type: string; title: string; ur
   if (resource.type !== 'link') return resource.title
   const title = resource.title.trim()
   return !title || title === resource.url.trim() ? resourceLinkName(resource.url) : title
+}
+
+/** What the server stores as a document resource's title while the document has no title yet. */
+const LEGACY_UNTITLED_RESOURCE_TITLE = 'Untitled document'
+
+/**
+ * Title on a Resources chip. A document chip shows the live document title (the title stored on the
+ * resource row can be empty or stale) and "Untitled" while the document has none.
+ */
+export function resourceChipTitle(resource: { type: string; title: string; url: string }, document: Pick<FlowDocument, 'title'> | undefined, t: (source: string) => string) {
+  if (document) return documentDisplayTitle(document, t)
+  if (resource.type === 'document') {
+    const title = resource.title.trim()
+    return !title || title === LEGACY_UNTITLED_RESOURCE_TITLE ? t('Untitled') : title
+  }
+  return resourceDisplayTitle(resource)
 }

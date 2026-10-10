@@ -1,4 +1,5 @@
 import type { AppRoute, SettingsPageId } from "@/lib/app-routes";
+import { findTrashedDocument } from "@/components/documents/document-trash";
 import { SETTINGS_SEARCH_PAGES } from "@/components/settings/settings-search";
 import type { BootstrapData, Issue, Project } from "@/types/flow";
 
@@ -23,7 +24,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & Partial<Pick<BootstrapData, "savedViews" | "customers">> & {
+> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -86,6 +87,18 @@ export function routeInfo(
       };
     }
     return { title: t("Issue"), pinnedTitle: t("Issue"), icon: "issue" };
+  }
+
+  if (route.kind === "document") {
+    const document =
+      data?.documents?.find((item) => item.id === route.documentSlugId || item.slugId === route.documentSlugId) ??
+      findTrashedDocument(data?.trash, route.documentSlugId)?.document;
+    // An empty title is shown as "Untitled" (the page shows a "New document" placeholder).
+    if (document) {
+      const name = document.title.trim() || t("Untitled");
+      return { title: name, pinnedTitle: name, icon: "document" };
+    }
+    return { title: t("Documents"), pinnedTitle: t("Documents"), icon: "document" };
   }
 
   if (route.kind === "project") {

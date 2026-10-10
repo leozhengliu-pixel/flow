@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
 
-const HEADING_SELECTOR = 'h1,h2,h3'
+const HEADING_SELECTOR = 'h1,h2,h3,h4'
 const BUTTON_SIZE = 20
 const BUTTON_OFFSET = 28
 
@@ -80,7 +80,7 @@ export function makeHeadingCollapsible(editor: Editor, pos: number) {
 
 type Target = { element: HTMLElement; top: number; left: number }
 
-/** Linear-style "Heading actions" affordance: a 20px button 28px left of a hovered H1–H3. */
+/** Linear-style "Heading actions" affordance: a 20px button 28px left of a hovered H1–H4. */
 export function HeadingActions({ editor, rootRef }: { editor: Editor; rootRef: RefObject<HTMLDivElement | null> }) {
   const { t } = useI18n()
   const [target, setTarget] = useState<Target | null>(null)
@@ -109,13 +109,13 @@ export function HeadingActions({ editor, rootRef }: { editor: Editor; rootRef: R
       } else setTarget(current => current ? null : current)
     }
     const onLeave = () => { if (!openRef.current && !editor.isFocused) setTarget(null) }
-    // Keyboard reveal: when the caret sits in an H1–H3 the button shows for that heading, so it can be
+    // Keyboard reveal: when the caret sits in an H1–H4 the button shows for that heading, so it can be
     // reached with Tab from the editor without a mouse.
     const caretHeading = () => {
       const { $from } = editor.state.selection
       for (let depth = $from.depth; depth > 0; depth--) {
         const node = $from.node(depth)
-        if (node.type.name !== 'heading' || (Number(node.attrs.level) || 1) > 3) continue
+        if (node.type.name !== 'heading' || (Number(node.attrs.level) || 1) > 4) continue
         const dom = editor.view.nodeDOM($from.before(depth))
         return dom instanceof HTMLElement ? dom : null
       }

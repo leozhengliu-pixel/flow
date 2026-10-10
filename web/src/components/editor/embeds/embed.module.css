@@ -1,5 +1,70 @@
-.embed{position:relative;margin:12px 0;max-width:640px;border-radius:8px;overflow:hidden;background:var(--theme-surface-1);border:.5px solid var(--theme-border)}
-.frame{display:block;width:100%;aspect-ratio:16/9;border:0}
-.keep{position:absolute;top:8px;right:8px;display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 9px;border:.5px solid var(--theme-border-strong);border-radius:6px;background:var(--theme-surface-2);color:var(--theme-text-secondary);font-size:12px;opacity:0;transition:opacity var(--quick)}
-.embed:hover .keep,.keep:focus-visible{opacity:1}
-.keep:hover{color:var(--theme-text-primary);background:var(--theme-surface-hover)}
+/* Every embed spans the content column (Linear: 805px in a document, the description / comment / history column elsewhere). */
+.embed{position:relative;box-sizing:border-box;width:100%;margin:12px 0;border-radius:6px;overflow:hidden;background:var(--theme-surface-1);border:.5px solid var(--theme-border)}
+.selected{outline:2px solid var(--description-selected-outline,var(--selection-border))}
+/* Over a player while the block is not selected: the first click selects the block rather than reaching the iframe. */
+.shield{position:absolute;inset:0;z-index:1;cursor:default}
+
+/* Hover toolbar (Open link / Convert to text link / Copy link | Delete): Linear's 31px frosted pill, 26px round buttons, 10px from the corner. */
+.toolbar{position:absolute;top:10px;right:10px;z-index:2;display:flex;align-items:center;height:31px;box-sizing:border-box;padding:2px;border:.5px solid var(--description-media-toolbar-border);border-radius:9999px;background:var(--description-media-toolbar-bg);backdrop-filter:saturate(1.8) blur(20px);box-shadow:var(--shadow-control);opacity:0;pointer-events:none;transition:opacity var(--quick)}
+.embed:hover .toolbar,.embed:focus-within .toolbar,.selected .toolbar{opacity:1;pointer-events:auto}
+.embed .toolbarButton.toolbarButton{text-decoration:none}
+.toolbarButton{display:grid;flex:none;place-items:center;width:26px;height:26px;padding:0;border:0;border-radius:9999px;background:transparent;color:var(--description-media-toolbar-fg);cursor:pointer}
+/* The icon sets its own colour: the editor's own link colour (a much more specific rule) would otherwise tint the Open link icon. */
+.toolbarButton svg{color:var(--description-media-toolbar-fg)}
+.embed .toolbarButton.toolbarButton:hover{background:color-mix(in srgb,var(--theme-text-primary) 14%,transparent)}
+.toolbarButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.toolbarSeparator{flex:none;width:.5px;height:16px;margin:0 4px;background:var(--theme-border-strong)}
+@media (hover:none){.toolbar{opacity:1;pointer-events:auto}}
+.frame{display:block;width:100%;border:0}
+.video{aspect-ratio:5/3}
+.tall{aspect-ratio:4/3}
+
+.mark{flex:none;color:var(--theme-text-secondary)}
+.cardRange{flex:none;color:var(--theme-text-tertiary)}
+
+/* File preview card (GitHub / GitLab): header + the code block's body, gutter and highlighting. */
+.cardWrap .preview{margin:0;border:0;border-radius:0;background:transparent}
+.previewHeader.previewHeaderToolbar{padding-right:140px}
+.previewHeader{display:flex;align-items:center;gap:10px;min-height:44px;padding:8px 10px 8px 14px;border-bottom:.5px solid var(--theme-border);font-family:var(--font)}
+.previewTitle{display:flex;flex:1;flex-direction:column;gap:1px;min-width:0}
+.previewPath{overflow:hidden;color:var(--theme-text-primary);font:500 13px/18px var(--font-monospace);text-overflow:ellipsis;white-space:nowrap}
+.previewMeta{display:flex;align-items:center;gap:6px;min-width:0;color:var(--theme-text-secondary);font-size:12px;line-height:16px}
+.previewRepo{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.previewRef{flex:none;max-width:180px;overflow:hidden;padding:0 5px;border-radius:4px;background:var(--theme-soft-overlay);color:var(--theme-text-secondary);font-family:var(--font-monospace);font-size:11px;line-height:16px;text-overflow:ellipsis;white-space:nowrap}
+.previewActions{display:flex;flex:none;align-items:center;gap:4px}
+.embed.cardWrap a.previewOpen.previewOpen.previewOpen,.embed.cardWrap .previewButton.previewButton.previewButton{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-secondary);font:450 12px/24px var(--font);text-decoration:none;white-space:nowrap;cursor:pointer}
+.embed.cardWrap a.previewOpen.previewOpen.previewOpen:hover,.embed.cardWrap .previewButton.previewButton.previewButton:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
+.previewOpen:focus-visible,.previewButton:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.embed.cardWrap .previewButton.previewButton.previewButton{flex:none;border:.5px solid var(--theme-border-strong);background:var(--theme-surface-2);color:var(--theme-text-primary)}
+.previewLine{display:inline}
+.previewLoading{display:flex;flex-direction:column;gap:8px;padding:14px}
+.previewSkeleton{display:block;height:10px;border-radius:4px;background:var(--theme-surface-hover)}
+.previewStatus{display:flex;align-items:center;gap:10px;padding:14px;color:var(--theme-text-secondary);font:450 13px/20px var(--font)}
+.previewStatus>svg{flex:none;color:var(--theme-text-tertiary)}
+.previewStatusText{display:flex;flex:1;flex-direction:column;min-width:0;color:var(--theme-text-primary)}
+.previewStatusDetail{color:var(--theme-text-secondary);font-size:12px;line-height:18px}
+.previewNote{padding:6px 14px;border-top:.5px solid var(--theme-border);color:var(--theme-text-tertiary);font:450 12px/20px var(--font)}
+@media (max-width:640px){.previewHeader{flex-wrap:wrap}.previewActions{width:100%;justify-content:flex-end}}
+
+/* Link card (Figma / X post): Linear's 100px row, text on the left and the page's preview image on the right. */
+.linkWrap{box-shadow:0 3px 6px -2px var(--shadow-color-faint),0 1px 1px var(--shadow-color-soft)}
+.linkWrap:hover{background:color-mix(in srgb,var(--theme-surface-hover) 62%,var(--theme-surface-1))}
+.embed a.linkCard.linkCard.linkCard,.embed div.linkCard.linkCard{display:flex;box-sizing:border-box;height:100px;color:var(--theme-text-primary);text-decoration:none;cursor:pointer}
+.linkCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.linkText{display:flex;flex:1;flex-direction:column;gap:6px;min-width:0;padding:12px 20px 12px 16px;overflow:hidden}
+.linkTitle{overflow:hidden;color:var(--theme-text-primary);font:500 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
+.linkDescription{display:-webkit-box;overflow:hidden;color:var(--theme-text-secondary);font:450 13px/normal var(--font);text-overflow:ellipsis;white-space:pre-wrap;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.linkUrl{overflow:hidden;color:var(--theme-text-secondary);font:450 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
+.linkImage{display:block;flex:none;width:auto;max-width:50%;height:100%;object-fit:contain}
+
+/* Paste prompt (Embed ... / Keep as link): Linear's popover next to the pasted link, a fading 10px-radius menu of two 34px rows. */
+.popover{position:fixed;top:0;left:0;z-index:1200;box-sizing:border-box;padding:4px 0;border:.5px solid var(--theme-border);border-radius:10px;background:var(--theme-menu-bg);box-shadow:var(--shadow-control);color:var(--theme-text-primary);font:450 13px/19.5px var(--font);opacity:0;pointer-events:none;transition:opacity var(--quick);user-select:none}
+.popover[data-open="true"]{opacity:1;pointer-events:auto}
+.popoverItem{position:relative;display:flex;align-items:center;gap:8px;box-sizing:border-box;width:100%;height:34px;margin:0;padding:0 14px;border:0;background:transparent;color:inherit;font:inherit;text-align:left;white-space:nowrap;cursor:pointer}
+.popoverItem::before{content:"";position:absolute;inset:0 4px;border-radius:6px;background:transparent}
+.popoverItem[data-active="true"]::before{background:var(--theme-surface-hover)}
+.popoverItem:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
+.popoverIcon{position:relative;display:grid;flex:none;place-items:center;width:20px;height:16px;color:var(--theme-text-secondary)}
+.popoverLabel{position:relative}
+.popoverSpacer{flex:1 1 0;min-width:0}
+.popoverKey{position:relative;color:var(--theme-text-tertiary);font:450 11px/1 var(--font)}

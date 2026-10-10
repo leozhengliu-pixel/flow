@@ -107,3 +107,22 @@ describe("customer page titles", () => {
     expect(routeInfo({ kind: "customer", workspaceSlug: "w", customerSlugId: "missing-000000000000" }, { customers }).title).toBe("Customers");
   });
 });
+
+describe("routeInfo documents", () => {
+  const documents = [
+    { id: "d1", slugId: "plan-abc", title: "Plan" },
+    { id: "d2", slugId: "untitled-def", title: "  " },
+  ];
+  const withDocuments = { ...data, documents } as unknown as BootstrapData;
+
+  it("uses the document title for the tab and falls back to Untitled when it is empty", () => {
+    expect(routeInfo({ kind: "document", workspaceSlug: "acme", documentSlugId: "plan-abc" }, withDocuments).title).toBe("Plan");
+    expect(routeInfo({ kind: "document", workspaceSlug: "acme", documentSlugId: "d2" }, withDocuments).title).toBe("Untitled");
+    expect(routeInfo({ kind: "document", workspaceSlug: "acme", documentSlugId: "missing" }, withDocuments).title).toBe("Documents");
+  });
+
+  it("keeps the title of a deleted document that is still in the trash", () => {
+    const trash = [{ id: "t1", resourceType: "document", resourceId: "d9", title: "Gone", payload: { id: "d9", slugId: "gone-abc", title: "Gone doc" }, deletedBy: {}, deletedAt: "2026-01-01T00:00:00Z", expiresAt: "2026-02-01T00:00:00Z" }];
+    expect(routeInfo({ kind: "document", workspaceSlug: "acme", documentSlugId: "gone-abc" }, { ...withDocuments, trash } as unknown as BootstrapData).title).toBe("Gone doc");
+  });
+});

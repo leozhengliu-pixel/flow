@@ -55,6 +55,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FlowTooltip } from "@/components/ui/tooltip";
 import { DocumentGlyph } from "@/components/documents/document-icon";
+import { documentParent } from "@/components/documents/document-actions";
 import {
   CycleIcon as FlowCycleIcon,
   StatusIcon,
@@ -70,7 +71,6 @@ import {
   customersPath,
   dashboardsPath,
   documentPath,
-  documentsPath,
   draftsPath,
   inboxPath,
   initiativePath,
@@ -102,6 +102,7 @@ import {
   teamTriagePath,
 } from "@/lib/app-routes";
 import { useTriageCount } from "@/components/triage/use-triage-count";
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { useI18n } from "@/i18n/i18n";
 import type {
   AccountBootstrap,
@@ -311,13 +312,11 @@ export function Sidebar({
         ? "customers"
         : selectedNavigationPath === teamsPath(workspaceSlug)
           ? "teams"
-          : selectedNavigationPath === documentsPath(workspaceSlug)
-            ? "documents"
-            : selectedNavigationPath === releasePipelinesPath(workspaceSlug)
-              ? "releases"
-              : selectedNavigationPath === loopsPath(workspaceSlug)
-                ? "loops"
-                : undefined;
+          : selectedNavigationPath === releasePipelinesPath(workspaceSlug)
+            ? "releases"
+            : selectedNavigationPath === loopsPath(workspaceSlug)
+              ? "loops"
+              : undefined;
   // The item for the page you are on stays visible (Linear), e.g. Pulse set to
   // "Show when badged" after its badge clears because you are reading it.
   const activePersonalEntry: SidebarEntry | undefined =
@@ -530,7 +529,6 @@ export function Sidebar({
     ) : null,
     initiatives: null,
     projects: null,
-    documents: null,
     views: null,
     members: null,
     customers: null,
@@ -555,15 +553,6 @@ export function Sidebar({
         icon={<FlowIcon name="Project" />}
         label="Projects"
         to={projectsPath(workspaceSlug)}
-        onClick={close}
-      />
-    ),
-    documents: (
-      <Nav
-        active={page === "documents" || page === "document-detail"}
-        icon={<BookOpen />}
-        label="Documents"
-        to={documentsPath(workspaceSlug)}
         onClick={close}
       />
     ),
@@ -1174,6 +1163,10 @@ interface FavoriteDescriptor {
   href: string;
   icon: ReactNode;
   title: string;
+  /** The title is empty: the row shows the translated "Untitled". */
+  untitled?: boolean;
+  /** Muted name of the favorite's parent (documents: team, project or initiative). */
+  parent?: string;
 }
 
 function favoriteDescriptor(
@@ -1227,13 +1220,21 @@ function favoriteDescriptor(
     const document = data.documents.find(
       (item) => item.id === favorite.resourceId,
     );
-    if (document)
+    if (document) {
+      const parent = documentParent(data, document);
+      const parentName = parent?.type === "team" ? parent.team.name
+        : parent?.type === "project" ? parent.project.name
+        : parent?.type === "initiative" ? parent.initiative.name
+        : undefined;
       return {
         favorite,
         href: documentPath(workspaceSlug, document),
         icon: <DocumentGlyph document={document} />,
-        title: document.title,
+        title: document.title.trim(),
+        untitled: !document.title.trim(),
+        parent: parentName,
       };
+    }
   }
   if (favorite.resourceType === "label") {
     const label = data.labels.find((item) => item.id === favorite.resourceId);
@@ -1363,6 +1364,7 @@ function FavoriteLink({
   onRemove: (favorite: Favorite) => void;
 }) {
   const { t } = useI18n();
+  const title = item.untitled ? t("Untitled") : item.title;
   const link = (
     <NavLink
       className="sidebar-favorite-link"
@@ -1386,9 +1388,10 @@ function FavoriteLink({
       <span
         className="sidebar-favorite-title"
         data-i18n-ignore
-        title={item.title}
+        title={item.parent ? `${title} · ${item.parent}` : title}
       >
-        {item.title}
+        {title}
+        {item.parent && <>{" "}<span className="sidebar-favorite-parent">{item.parent}</span></>}
       </span>
       <span
         aria-label={t("Remove favorite")}
@@ -1699,11 +1702,6 @@ function MoreMenu({
       icon: <LoopsIcon />,
       to: loopsPath(workspaceSlug),
     },
-    documents: {
-      label: "Documents",
-      icon: <BookOpen />,
-      to: documentsPath(workspaceSlug),
-    },
   };
   return (
     <DropdownMenu.Root>
@@ -1929,7 +1927,6 @@ export function SidebarCustomization({
     agent: ["Agent", <AgentIcon key="agent" />],
     initiatives: ["", <></>],
     projects: ["", <></>],
-    documents: ["", <></>],
     views: ["", <></>],
     members: ["", <></>],
     customers: ["", <></>],
@@ -1940,7 +1937,6 @@ export function SidebarCustomization({
   const workspace: Record<SidebarEntry, [string, ReactElement]> = {
     initiatives: ["Initiatives", <InitiativeIcon key="initiatives" />],
     projects: ["Projects", <FlowIcon key="projects" name="Project" />],
-    documents: ["Documents", <BookOpen key="documents" />],
     views: ["Views", <FlowIcon key="views" name="CustomView" />],
     members: ["Members", <SidebarMembersIcon key="members" />],
     customers: ["Customers", <CustomersIcon key="customers" />],
@@ -2463,11 +2459,7 @@ function PulseIcon() {
   );
 }
 function AgentIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M4.07132 3.8283C4.04394 3.81721 4.01406 3.81379 3.98488 3.8184C3.95566 3.82301 3.92826 3.83551 3.90561 3.85453C3.88297 3.87356 3.86594 3.8984 3.85636 3.92639C3.84678 3.95437 3.84501 3.98443 3.85124 4.01335L5.80802 13.1405C5.81898 13.1915 5.83884 13.2155 5.85542 13.2298C5.87605 13.2476 5.9078 13.2631 5.94754 13.268C5.98728 13.2729 6.0217 13.2654 6.04578 13.2532C6.06507 13.2434 6.08993 13.2252 6.11273 13.1784L7.83779 9.64746C8.05513 9.20258 8.45077 8.87059 8.92663 8.73378L12.7035 7.64791C12.7535 7.63353 12.776 7.61215 12.789 7.59475C12.8052 7.57307 12.8186 7.54044 12.8207 7.50049C12.8228 7.46054 12.813 7.42669 12.7992 7.40342C12.788 7.38476 12.7681 7.36116 12.7199 7.34158L4.07132 3.8283C4.07129 3.82829 4.07135 3.82832 4.07132 3.8283ZM3.75083 2.33677C4.04945 2.2896 4.35527 2.32474 4.63541 2.43841L13.2843 5.95183C13.2843 5.95184 13.2843 5.95183 13.2843 5.95183C14.747 6.54596 14.6351 8.65343 13.1179 9.08953L9.34109 10.1754C9.27311 10.1949 9.21659 10.2424 9.18554 10.3059L7.46077 13.8363C7.46072 13.8364 7.46082 13.8362 7.46077 13.8363C6.76755 15.2562 4.67275 14.9979 4.34147 13.4555L2.38492 4.3294C2.38489 4.32925 2.38495 4.32956 2.38492 4.3294C2.32134 4.03401 2.33935 3.72642 2.43722 3.44054C2.53514 3.15452 2.70919 2.90061 2.94065 2.70612C3.17211 2.51164 3.45221 2.38394 3.75083 2.33677Z" />
-    </svg>
-  );
+  return <AgentCursorGlyph />;
 }
 function ComposeIcon() {
   return (

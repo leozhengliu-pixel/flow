@@ -3,7 +3,7 @@ import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { projectHasUpdates } from '@/lib/project-has-updates'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import * as Popover from '@radix-ui/react-popover'
-import { BarChart3, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, HeartPulse, ListFilter, MoreHorizontal, MousePointer2, Plus, Send, Sparkles, Tags, Trash2, UserRound, Users, X } from 'lucide-react'
+import { BarChart3, CalendarDays, Check, ChevronDown, ChevronRight, CircleDot, Clock3, HeartPulse, ListFilter, MoreHorizontal, Plus, Send, Tags, Trash2, UserRound, Users, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { VirtualColumnList } from '@/components/ui/virtual-column-list'
 import { SearchableMenuItems } from '@/components/ui/searchable-menu-items'
@@ -35,6 +35,8 @@ import { teamInitiativesPath } from '@/lib/app-routes'
 import { RichComment } from '@/components/activity/rich-comment'
 import { labelsForResource } from '@/lib/labels'
 import type { TeamSettings } from '@/types/flow'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
 
 type Props = {
   teamContext?: Team
@@ -241,7 +243,7 @@ function InitiativesBulkBar({ initiatives, users, labels, onClear, onDelete, onU
     <DropdownMenu.Sub><DropdownMenu.SubTrigger>Owner<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu"><PeopleMenuItems users={users} emptyLabel="No owner" onSelect={ownerId => void onUpdate({ ownerId })}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
     <DropdownMenu.Sub><DropdownMenu.SubTrigger>Labels<ChevronRight className="li-menu-end" size={12}/></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="li-menu">{labels.map(label => <DropdownMenu.Item key={label.id} onSelect={() => void onUpdate({ labelIds: allHaveLabel(label.id) ? initiatives.flatMap(item => item.labelIds).filter((id, index, ids) => id !== label.id && ids.indexOf(id) === index) : [...new Set(initiatives.flatMap(item => item.labelIds).concat(label.id))] })}><i className="li-filter-color" style={{ background: label.color }}/><span data-i18n-ignore>{label.name}</span>{allHaveLabel(label.id) && <Check className="li-menu-end" size={12}/>}</DropdownMenu.Item>)}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
     <DropdownMenu.Separator/><DropdownMenu.Item className="danger" onSelect={() => void onDelete()}><Trash2 size={14}/>Delete</DropdownMenu.Item>
-  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" aria-disabled="true" disabled title="Flow AI is not configured for this workspace" type="button"><MousePointer2 size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
+  </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root><button aria-label="Ask Flow" aria-disabled="true" disabled title="Flow AI is not configured for this workspace" type="button"><AgentCursorGlyph size={14}/></button><button aria-label="Clear selected" onClick={onClear} type="button"><X size={14}/></button></div>
 }
 
 /** One Linear initiative list row; also used for the Sub-initiatives list on an initiative's overview. */
@@ -329,7 +331,7 @@ export function InitiativeFilterMenu({ filters, initiatives, users, teams, label
   ].filter(item => item.label.toLowerCase().includes(query.toLowerCase()))
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button ui-pill" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="li-menu li-filter-menu" sideOffset={4} collisionPadding={8}>
     <div className="li-menu-search"><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
-    {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><Sparkles size={14} aria-hidden/><span>AI filter</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}><ListFilter size={14} aria-hidden/><span>Advanced filter</span></DropdownMenu.Item><DropdownMenu.Separator/></>}
+    {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><LinearGlyph name="aiFilter" size={16} aria-hidden/><span>AI filter</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}><ListFilter size={14} aria-hidden/><span>Advanced filter</span></DropdownMenu.Item><DropdownMenu.Separator/></>}
     {entries.map(entry => <DropdownMenu.Sub key={entry.id}><DropdownMenu.SubTrigger><FilterGlyph label={entry.label} fallback={<InitiativeFilterIcon field={entry.id}/>}/><span>{entry.label}</span><span className="li-menu-end li-filter-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className={`li-menu li-filter-values is-${entry.id}`} sideOffset={5} collisionPadding={8}><InitiativeFilterValues entry={entry} filters={filters} initiatives={initiatives} labels={labels} onChange={onChange} onCreateLabel={onCreateLabel} teams={teams} users={users}/></DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>)}
   </DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }

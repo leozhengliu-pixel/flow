@@ -626,6 +626,25 @@ func TestMCPMarkdownDocument(t *testing.T) {
 	}
 }
 
+// The editor offers Heading 1-4 (Linear's text-style menu); deeper Markdown
+// headings clamp to 4 and Heading 4 round-trips back to "####".
+func TestMCPMarkdownDocumentHeadingFour(t *testing.T) {
+	levels := []int{}
+	for _, block := range mcpMarkdownDocument("#### Four\n\n###### Six")["content"].([]any) {
+		levels = append(levels, block.(map[string]any)["attrs"].(map[string]any)["level"].(int))
+	}
+	if len(levels) != 2 || levels[0] != 4 || levels[1] != 4 {
+		t.Fatalf("heading levels = %v, want [4 4]", levels)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(mustJSON(t, mcpMarkdownDocument("#### Four")), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if text := proseMirrorPlainText(decoded); !strings.Contains(text, "#### Four") {
+		t.Fatalf("plain text = %q, want #### Four", text)
+	}
+}
+
 // save_team's `members` only adds people: listing the current owner among the
 // members must not demote them (it used to fail with "a team needs at least
 // one owner", or silently demote when the team had several owners). Owner

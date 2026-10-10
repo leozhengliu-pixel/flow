@@ -216,7 +216,7 @@ export function agentEntityLabel(entity: AgentEntity): string {
     case 'issue': return entity.issue.identifier
     case 'project': return entity.project.name
     case 'initiative': return entity.initiative.name
-    case 'document': return entity.document.title
+    case 'document': return entity.document.title.trim() || 'Untitled document'
     case 'user': return entity.user.displayName || entity.user.name
     case 'team': return entity.team.name
     case 'cycle': return entity.cycle.name || `Cycle ${entity.cycle.number}`

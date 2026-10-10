@@ -4,10 +4,7 @@ import * as Popover from "@radix-ui/react-popover";
 import {
   AlertCircle,
   Copy,
-  MoreHorizontal,
-  PanelTop,
   Plus,
-  Star,
   Trash2,
   X,
 } from "lucide-react";
@@ -55,7 +52,9 @@ import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agen
 import { FlowLogo } from '@/components/ui/flow-logo';
 import { AgentHistoryList } from './agent-history-list';
 import { AgentErrorDetail } from './agent-error-detail';
-import { agentSessionUnread, formatAgentHistoryTime, useMarkAgentSessionRead } from './agent-read-state';
+import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory, useMarkAgentSessionRead } from './agent-read-state';
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
+import { AgentCopyGlyph, AgentToolbarGlyph } from '@/components/ui/agent-glyph'
 
 export function AgentPage({
   chatSlug,
@@ -486,7 +485,7 @@ export function AgentPage({
               }
               type="button"
             >
-              <Star />
+              <LinearGlyph name="favorite" size={14} />
             </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -495,7 +494,7 @@ export function AgentPage({
                   aria-label={t("Chat options")}
                   type="button"
                 >
-                  <MoreHorizontal />
+                  <LinearGlyph name="ellipsis" size={14} />
                 </button>
               </DropdownMenu.Trigger>
               <DropdownMenu.Portal>
@@ -539,7 +538,7 @@ export function AgentPage({
           }
           type="button"
         >
-          <PanelTop />
+          <AgentToolbarGlyph size={14} />
         </button>}
       </header>
       <section className={`${styles.body}${shown ? ` ${styles.hasConversation}` : ""}`}>
@@ -791,7 +790,7 @@ function Conversation({
                   onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? splitAgentSuggestions(message.content).prose : message.content)}
                   type="button"
                 >
-                  <Copy />
+                  <AgentCopyGlyph size={14} />
                 </button>
                 {message.role === "user" && (
                   <button
@@ -880,20 +879,6 @@ function lastUserMessage(messages: AgentMessage[], before: number) {
     return message.content.trim() && !message.id.startsWith("pending-") ? message : undefined;
   }
   return undefined;
-}
-
-function groupAgentHistory(sessions: AgentSession[]) {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  const groups = new Map<string, AgentSession[]>();
-  for (const session of sessions) {
-    const days = Math.max(0, Math.floor((start.getTime() - new Date(session.updatedAt).setHours(0, 0, 0, 0)) / 86_400_000));
-    const label = days === 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? "Last week" : "Older";
-    groups.set(label, [...(groups.get(label) ?? []), session]);
-  }
-  return ["Today", "Yesterday", "Last week", "Older"]
-    .filter(label => groups.has(label))
-    .map(label => ({ label, sessions: groups.get(label)! }));
 }
 
 function markdown(session: AgentSession) {

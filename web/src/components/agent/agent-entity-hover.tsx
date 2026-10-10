@@ -1,6 +1,7 @@
 import * as Tooltip from '@radix-ui/react-tooltip'
 import { MessageSquare } from 'lucide-react'
 import type { ReactElement, ReactNode } from 'react'
+import { documentParent } from '@/components/documents/document-actions'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { CustomerDefaultLogoIcon } from '@/components/customer/customer-logo'
 import { CalendarIcon, CycleIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -131,16 +132,31 @@ function InitiativeCard({ data, initiative }: { data: BootstrapData; initiative:
 function DocumentCard({ data, document }: { data: BootstrapData; document: FlowDocument }) {
   const { t } = useI18n()
   const date = useDateFormat()
-  const project = (data.projects ?? []).find(item => (document.projectIds ?? []).includes(item.id))
-  const creator = document.creator?.displayName || document.creator?.name
+  const parent = documentParent(data, document)
+  const issue = parent?.type === 'issue' ? (data.issues ?? []).find(item => item.id === parent.id) : undefined
+  const summary = documentSummary(document)
+  const revisions = document.revisions ?? []
+  const lastEditor = revisions.length ? revisions.reduce((latest, revision) => Date.parse(revision.createdAt) > Date.parse(latest.createdAt) ? revision : latest).author : document.creator
+  const editor = lastEditor?.displayName || lastEditor?.name
   return <>
-    <div className={styles.title}><DocumentGlyph document={document}/><span data-i18n-ignore>{document.title}</span></div>
+    <div className={styles.title}><DocumentGlyph document={document}/><span data-i18n-ignore>{document.title.trim() || t('Untitled')}</span></div>
+    {summary && <p className={styles.summary} data-i18n-ignore>{summary}</p>}
     <hr className={styles.rule}/>
     <div className={styles.column}>
-      {project && <Prop icon={<ProjectGlyph project={project}/>}><span data-i18n-ignore>{project.name}</span></Prop>}
-      <Prop icon={<CalendarIcon className={styles.dim} size={16} variant="start"/>}>{creator ? fill(t('Last edited {date} by {name}'), { date: date(document.updatedAt), name: creator }) : fill(t('Last edited {date}'), { date: date(document.updatedAt) })}</Prop>
+      {parent?.type === 'project' && <Prop icon={<ProjectGlyph project={parent.project}/>}><span data-i18n-ignore>{parent.project.name}</span></Prop>}
+      {parent?.type === 'team' && <Prop icon={<TeamIcon size={16} team={parent.team}/>}><span data-i18n-ignore>{parent.team.name}</span></Prop>}
+      {parent?.type === 'initiative' && <Prop icon={<ViewGlyph color={parent.initiative.color} icon={parent.initiative.icon || 'Initiative'}/>}><span data-i18n-ignore>{parent.initiative.name}</span></Prop>}
+      {issue && <Prop icon={<StatusIcon size={16} state={issue.state}/>}><span data-i18n-ignore>{issue.identifier} {issue.title}</span></Prop>}
+      <Prop icon={<CalendarIcon className={styles.dim} size={16} variant="start"/>}>{editor ? fill(t('Last edited {date} by {name}'), { date: date(document.updatedAt), name: editor }) : fill(t('Last edited {date}'), { date: date(document.updatedAt) })}</Prop>
     </div>
   </>
+}
+
+/** The body as one line of plain text (a leading heading that repeats the title is dropped), for the card's summary line. */
+function documentSummary(document: Pick<FlowDocument, 'title' | 'content'>) {
+  const body = (document.content ?? '').replace(/^\s*#{1,6}[ \t]+(.*)\n+/, (match, heading: string) => heading.trim() === document.title.trim() ? '' : match)
+  const line = markdownPlainText(body).trim()
+  return line.length > 160 ? `${line.slice(0, 157)}…` : line
 }
 
 function ViewCard({ data, view }: { data: BootstrapData; view: SavedView }) {
@@ -199,7 +215,7 @@ export function AgentEntityCardBody({ data, entity }: { data: BootstrapData; ent
         <hr className={styles.rule}/>
         <div className={styles.column}>
           {project ? <Prop icon={<ProjectGlyph project={project}/>}><span data-i18n-ignore>{project.name}</span></Prop> : <Prop icon={<ProjectIcon size={16}/>}><span className={styles.muted}>{t('No projects')}</span></Prop>}
-          {document ? <Prop icon={<DocumentGlyph document={document}/>}><span data-i18n-ignore>{document.title}</span></Prop> : <Prop icon={<DocumentGlyph/>}><span className={styles.muted}>{t('No documents')}</span></Prop>}
+          {document ? <Prop icon={<DocumentGlyph document={document}/>}><span data-i18n-ignore>{document.title.trim() || t('Untitled')}</span></Prop> : <Prop icon={<DocumentGlyph/>}><span className={styles.muted}>{t('No documents')}</span></Prop>}
         </div>
       </>
     }

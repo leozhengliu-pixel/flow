@@ -35,4 +35,14 @@ describe('App reload wiring', () => {
     expect(props.length).toBeGreaterThan(10)
     expect(props.filter(prop => /fetchBootstrap|acceptBootstrap|\{load\}/.test(prop))).toEqual([])
   })
+
+  it('binds ⌘J to the floating agent chat without shadowing the plain J (triage next) shortcut', async () => {
+    const source = await appSource()
+    const keys = [...source.matchAll(/e\.key\.toLowerCase\(\) === "j"/g)]
+    expect(keys).toHaveLength(1)
+    const at = keys[0].index!
+    const block = source.slice(source.lastIndexOf('if (', at), at + 200)
+    expect(block).toContain('e.metaKey || e.ctrlKey')
+    expect(source.slice(at, at + 260)).toContain('setFloatingAgentOpen')
+  })
 })

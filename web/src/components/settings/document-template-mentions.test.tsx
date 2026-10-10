@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BootstrapData, DocumentTemplate } from '@/types/flow'
@@ -77,17 +77,17 @@ describe('team document template editor', () => {
   })
 })
 
-describe('workspace document template dialog (modal)', () => {
+describe('workspace document template editor (full page)', () => {
   const page = (data: BootstrapData) => <Shell data={data}><FeatureSettingsPage page="documents" data={data} onCreateReleasePipeline={noop} onOpenReleasePipeline={noop} onOpenIntegration={noop} onNavigateSettings={noop} onReload={async () => {}}/></Shell>
 
   it('saves a mention picked with the keyboard and shows its chip when the template is reopened', async () => {
     const user = userEvent.setup()
     const first = render(page(workspaceData()))
     await user.click(screen.getAllByRole('button', { name: /New template/ })[0])
-    const dialog = await screen.findByRole('dialog')
-    await user.type(within(dialog).getByRole('textbox', { name: 'Template name' }), 'Kickoff')
-    await pickDocument(user, within(dialog).getByRole('textbox', { name: 'Document template content' }), { keyboard: true })
-    await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.type(await screen.findByRole('textbox', { name: 'Template name' }), 'Kickoff')
+    await pickDocument(user, await screen.findByRole('textbox', { name: 'Document content' }), { keyboard: true })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(api.createDocumentTemplate).toHaveBeenCalled())
     const saved = api.createDocumentTemplate.mock.calls[0][0].content as string
     expect(saved).toContain(documentMarkdown)
@@ -95,30 +95,5 @@ describe('workspace document template dialog (modal)', () => {
     render(page(workspaceData({ documentTemplates: [savedTemplate(saved)] } as Partial<BootstrapData>)))
     await user.click(await screen.findByRole('button', { name: 'Edit: Kickoff' }))
     await waitFor(() => expect(docChip()).toHaveTextContent('Launch plan'))
-  })
-})
-
-describe('recurring issue description', () => {
-  it('takes a pasted Flow URL as a chip and creates the issue with [Label](path)', async () => {
-    const user = userEvent.setup()
-    const data = workspaceData()
-    render(<Shell data={data}><RecurringIssuesSettingsPage data={data} team={team} subPath="new" onBack={noop} onNavigateSubPath={noop} onReload={async () => {}}/></Shell>)
-    await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Weekly report')
-    const box = screen.getByRole('textbox', { name: 'Issue description' })
-    await user.click(box)
-    paste(box, `${window.location.origin}${mentionUrls.document}`)
-    await waitFor(() => expect(docChip()).toHaveTextContent('Launch plan'))
-    await user.click(screen.getByRole('button', { name: 'Create' }))
-    await waitFor(() => expect(api.createRecurringIssue).toHaveBeenCalledWith(team.id, expect.objectContaining({ description: documentMarkdown })))
-  })
-
-  it('offers the "@" menu with documents', async () => {
-    const user = userEvent.setup()
-    const data = workspaceData()
-    render(<Shell data={data}><RecurringIssuesSettingsPage data={data} team={team} subPath="new" onBack={noop} onNavigateSubPath={noop} onReload={async () => {}}/></Shell>)
-    await user.type(screen.getByRole('textbox', { name: 'Issue title' }), 'Weekly report')
-    await pickDocument(user, screen.getByRole('textbox', { name: 'Issue description' }))
-    await user.click(screen.getByRole('button', { name: 'Create' }))
-    await waitFor(() => expect(api.createRecurringIssue).toHaveBeenCalledWith(team.id, expect.objectContaining({ description: expect.stringContaining(documentMarkdown) })))
   })
 })

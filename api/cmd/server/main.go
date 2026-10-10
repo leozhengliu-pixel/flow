@@ -360,7 +360,12 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/customer-requests/{id}/attachments/{attachmentId}", s.deleteCustomerRequestAttachment)
 	mux.HandleFunc("GET /api/documents", s.listDocuments)
 	mux.HandleFunc("POST /api/documents", s.createDocument)
+	mux.HandleFunc("GET /api/documents/{id}", s.getDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", s.updateDocument)
+	mux.HandleFunc("POST /api/documents/{id}/restore", s.restoreDeletedDocument)
+	mux.HandleFunc("GET /api/documents/{id}/subscribers", s.listDocumentSubscribers)
+	mux.HandleFunc("POST /api/documents/{id}/subscribers", s.addDocumentSubscribers)
+	mux.HandleFunc("DELETE /api/documents/{id}/subscribers/{userId}", s.removeDocumentSubscriber)
 	mux.HandleFunc("DELETE /api/documents/{id}", s.deleteDocument)
 	mux.HandleFunc("POST /api/documents/{id}/reminders", s.createDocumentReminder)
 	mux.HandleFunc("GET /api/documents/{id}/permissions", s.listDocumentPermissions)
@@ -372,6 +377,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/documents/{id}/comments/{commentId}", s.updateDocumentComment)
 	mux.HandleFunc("DELETE /api/documents/{id}/comments/{commentId}", s.deleteDocumentComment)
 	mux.HandleFunc("POST /api/documents/{id}/comments/{commentId}/reactions", s.toggleDocumentCommentReaction)
+	mux.HandleFunc("PUT /api/documents/{id}/comments/{commentId}/subscription", s.setDocumentThreadSubscription)
+	mux.HandleFunc("DELETE /api/documents/{id}/comments/{commentId}/subscription", s.setDocumentThreadSubscription)
 	mux.HandleFunc("POST /api/documents/{id}/restore/{revisionId}", s.restoreDocumentRevision)
 	mux.HandleFunc("POST /api/releases", s.createRelease)
 	mux.HandleFunc("GET /api/releases", s.listReleases)
@@ -463,6 +470,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/webhooks/{id}/revoke-secret", s.revokeWebhookSecret)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
+	mux.HandleFunc("GET /api/integrations/file-preview", s.filePreview)
+	mux.HandleFunc("GET /api/integrations/link-preview", s.linkPreview)
 	mux.HandleFunc("GET /api/identity-providers", s.listIdentityProviders)
 	mux.HandleFunc("POST /api/identity-providers", s.createIdentityProvider)
 	mux.HandleFunc("PATCH /api/identity-providers/{id}", s.updateIdentityProvider)
@@ -791,6 +800,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PUT /api/projects/{id}/comments/{commentId}/subscription", s.setProjectThreadSubscription)
 	mux.HandleFunc("DELETE /api/projects/{id}/comments/{commentId}/subscription", s.clearProjectThreadSubscription)
 	mux.HandleFunc("POST /api/projects/{id}/comment-attachments", s.createProjectCommentAttachment)
+	mux.HandleFunc("POST /api/documents/{id}/attachments", s.createDocumentAttachment)
 	mux.HandleFunc("GET /api/pulse/feed", s.getPulseFeed)
 	mux.HandleFunc("GET /api/pulse/unread", s.getPulseUnread)
 	mux.HandleFunc("POST /api/pulse/seen", s.postPulseSeen)
@@ -3219,7 +3229,8 @@ func (s *server) createInitiativeResource(w http.ResponseWriter, r *http.Request
 			}
 			resourceURL = "/" + data.Workspace.URLKey + "/document/" + document.SlugID
 			if input.Title == nil || strings.TrimSpace(*input.Title) == "" {
-				input.Title = &document.Title
+				title := documentDisplayTitle(document.Title)
+				input.Title = &title
 			}
 		} else {
 			if input.URL == nil || strings.TrimSpace(*input.URL) == "" {
@@ -3283,7 +3294,7 @@ func (s *server) updateInitiativeResource(w http.ResponseWriter, r *http.Request
 			resource.DocumentID = document.ID
 			resource.URL = "/" + data.Workspace.URLKey + "/document/" + document.SlugID
 			if resource.Title == "" {
-				resource.Title = document.Title
+				resource.Title = documentDisplayTitle(document.Title)
 			}
 		}
 		initiative.UpdatedAt = time.Now().UTC()
@@ -5057,6 +5068,9 @@ func (s *server) attachmentVisible(ctx context.Context, account domain.AccountBo
 					return true
 				}
 			}
+		}
+		if documentAttachmentVisible(s, data, url) {
+			return true
 		}
 		for _, project := range data.Projects {
 			if slices.ContainsFunc(project.CommentAttachments, func(attachment domain.Attachment) bool { return attachment.URL == url }) {

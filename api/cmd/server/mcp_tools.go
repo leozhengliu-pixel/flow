@@ -201,6 +201,10 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		return paginate(items, args), nil
 	case "get_document":
 		return mcpFindDocument(data, stringArg(args, "id"))
+	case "list_document_history":
+		return s.listMCPDocumentHistory(ctx, actor, data, args)
+	case "get_document_permissions":
+		return s.getMCPDocumentPermissions(ctx, actor, data, args)
 	case "list_comments":
 		return s.listMCPComments(ctx, data, args)
 	case "get_status_updates":
@@ -762,7 +766,11 @@ func (s *server) listMCPComments(ctx context.Context, data domain.Bootstrap, arg
 		return paginate(initiative.Comments, args), nil
 	}
 	if document, err := mcpFindDocument(data, id); err == nil {
-		return page(document.ID)
+		items, cursor, err := s.store.ResourceCommentsPage(ctx, data.Workspace.URLKey, document.ID, stringArg(args, "cursor"), intArg(args, "limit", 50))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"items": mcpDocumentCommentViews(items), "nextCursor": cursor}, nil
 	}
 	for _, project := range data.Projects {
 		for _, milestone := range project.Milestones {
@@ -1107,6 +1115,12 @@ func mcpFindInitiative(data domain.Bootstrap, query string) (domain.Initiative, 
 func mcpFindDocument(data domain.Bootstrap, query string) (domain.Document, error) {
 	for _, item := range data.Documents {
 		if equalFoldAny(query, item.ID, item.SlugID, item.Title) {
+			return item, nil
+		}
+	}
+	// Links made before a rename keep the document's earlier slugs.
+	for _, item := range data.Documents {
+		if equalFoldAny(query, item.PreviousSlugIDs...) {
 			return item, nil
 		}
 	}

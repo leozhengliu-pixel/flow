@@ -3,7 +3,7 @@
  * Maps Linear's GraphQL PullRequestCommentDispatchToAgent onto REST createAgentSession.
  */
 import * as Popover from "@radix-ui/react-popover";
-import { Bot, Copy, Link2, MoreHorizontal } from "lucide-react";
+import { Copy, Link2, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -11,6 +11,7 @@ import { useI18n } from "@/i18n/i18n";
 import { createAgentSession } from "@/lib/api";
 import { targetCommentHash } from "@/lib/review-comment-navigation";
 import type { ReviewEvent } from "@/types/flow";
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export type PullRequestCommentActionsProps = {
   event: ReviewEvent;
@@ -108,7 +109,7 @@ export function PullRequestCommentActions({
           </button>
           {isCodeComment || event.type === "commented" || event.type === "review_commented" ? (
             <button type="button" disabled={busy} onClick={() => void sendToAgent()}>
-              <Bot size={14} />
+              <AgentCursorGlyph size={14} />
               {t("Send to agent")}
             </button>
           ) : null}

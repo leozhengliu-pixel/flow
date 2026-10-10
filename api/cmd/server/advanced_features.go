@@ -37,6 +37,15 @@ type documentInput struct {
 	SubscriberIDs *[]string      `json:"subscriberIds,omitempty"`
 	Favorite      *bool          `json:"favorite,omitempty"`
 	Archived      *bool          `json:"archived,omitempty"`
+	// ExpectedVersion rejects the write with 409 (and the current document)
+	// when the document changed since the caller read it.
+	ExpectedVersion *int64 `json:"expectedVersion,omitempty"`
+	// ExpectedContentVersion guards replacing contentState: the collaborative
+	// editor sends it with the Yjs update ids its snapshot includes, and the
+	// server prunes those ids from the update log after a successful write.
+	// A stale value keeps the content fields but skips contentState.
+	ExpectedContentVersion *int64   `json:"expectedContentVersion,omitempty"`
+	DocumentUpdateIDs      []string `json:"documentUpdateIds,omitempty"`
 }
 
 // documentVisibleToViewer mirrors Flow's document access rule: an unscoped
@@ -73,6 +82,14 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 		return best
 	}
 	if hasExplicit {
+		// A team document is listed for its teams' members (the bootstrap
+		// projection shows it), so they can always read it; editing and
+		// commenting follow the document's grants.
+		if slices.ContainsFunc(document.TeamIDs, func(teamID string) bool {
+			return slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == data.Viewer.ID && member.TeamID == teamID })
+		}) {
+			return "viewer"
+		}
 		return "none"
 	}
 	if len(document.TeamIDs) == 0 {
@@ -333,25 +350,14 @@ func validateResourceIDs(data *domain.Bootstrap, resourceType string, ids []stri
 
 func documentByID(data *domain.Bootstrap, id string) (*domain.Document, error) {
 	index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
+	if index < 0 && id != "" {
+		// A renamed document still answers to its earlier slugs.
+		index = slices.IndexFunc(data.Documents, func(item domain.Document) bool { return slices.Contains(item.PreviousSlugIDs, id) })
+	}
 	if index < 0 {
 		return nil, errNotFound
 	}
 	return &data.Documents[index], nil
-}
-
-func saveDocumentRevision(document *domain.Document, author domain.User) {
-	if len(document.Revisions) > 0 {
-		last := document.Revisions[0]
-		if last.Title == document.Title && last.Content == document.Content && last.ContentState == document.ContentState {
-			return
-		}
-	}
-	now := time.Now().UTC()
-	revision := domain.DocumentRevision{ID: fmt.Sprintf("revision_%d", now.UnixNano()), DocumentID: document.ID, Title: document.Title, Content: document.Content, ContentState: document.ContentState, ContentData: document.ContentData, Author: author, CreatedAt: now}
-	document.Revisions = append([]domain.DocumentRevision{revision}, document.Revisions...)
-	if len(document.Revisions) > 100 {
-		document.Revisions = document.Revisions[:100]
-	}
 }
 
 func syncDocumentProjectResources(data *domain.Bootstrap, document domain.Document) {
@@ -367,11 +373,11 @@ func syncDocumentProjectResources(data *domain.Bootstrap, document domain.Docume
 		}
 		url := "/" + data.Workspace.URLKey + "/document/" + document.SlugID
 		if resourceIndex >= 0 {
-			project.Resources[resourceIndex].Title = document.Title
+			project.Resources[resourceIndex].Title = documentDisplayTitle(document.Title)
 			project.Resources[resourceIndex].URL = url
 			continue
 		}
-		project.Resources = append(project.Resources, domain.ProjectResource{ID: document.ID, ProjectID: project.ID, Type: "document", Title: document.Title, URL: url, PinnedTeamIDs: []string{}, CreatedAt: document.CreatedAt})
+		project.Resources = append(project.Resources, domain.ProjectResource{ID: document.ID, ProjectID: project.ID, Type: "document", Title: documentDisplayTitle(document.Title), URL: url, PinnedTeamIDs: []string{}, CreatedAt: document.CreatedAt})
 	}
 }
 
@@ -383,7 +389,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 	var created domain.Document
 	err := s.store.MutateWorkspaceWithAggregate(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), "document.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		title := "New document"
+		title := ""
 		var template *domain.DocumentTemplate
 		if input.TemplateID != nil && *input.TemplateID != "" {
 			index := slices.IndexFunc(data.DocumentTemplates, func(item domain.DocumentTemplate) bool { return item.ID == *input.TemplateID })
@@ -418,8 +424,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: slug(title) + "-" + strconv.FormatInt(now.UnixNano()%0xffffff, 16), Title: title, Color: "#8b8b90", Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
+		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
 		created.Permissions[0].DocumentID = created.ID
+		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
 		if template != nil {
 			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
 			if template.ContentData != nil {
@@ -440,6 +447,10 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.ContentData != nil {
 			created.ContentData = input.ContentData
+		} else if input.Content != nil {
+			// Markdown-only content: the editor parses it (an empty editor
+			// document would hide it).
+			created.ContentData = nil
 		}
 		if input.SubscriberIDs != nil && validateResourceIDs(data, "user", *input.SubscriberIDs) {
 			created.SubscriberIDs = normalizedStrings(*input.SubscriberIDs)
@@ -461,8 +472,11 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	var updated domain.Document
-	err := s.store.MutateWorkspace(withIssueScope(r.Context(), input.IssueID), workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
+	var updated, current domain.Document
+	var compactCollaborationID, replacedCollaborationID string
+	workspace := workspaceKey(r)
+	directory := s.documentMemberDirectory(r)
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id, input.IssueID), workspaceKey(r), favoriteMutationEvent("document.updated", input), id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -470,12 +484,17 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 		if !canEditDocument(documentRole(s, *data, *document)) {
 			return store.ErrAuthForbidden
 		}
-		contentChange := input.Title != nil || input.Content != nil || input.ContentState != nil || input.ContentData != nil
-		if contentChange {
-			saveDocumentRevision(document, data.Viewer)
+		workspace = data.Workspace.URLKey
+		if input.ExpectedVersion != nil && *input.ExpectedVersion != document.Version {
+			current = *document
+			return errConflict
 		}
-		if input.Title != nil && strings.TrimSpace(*input.Title) != "" {
+		now := time.Now().UTC()
+		before := *document
+		if input.Title != nil {
+			// An explicit empty title clears it (the editor shows its placeholder); the slug follows.
 			document.Title = strings.TrimSpace(*input.Title)
+			renameDocumentSlug(document)
 		}
 		if input.Icon != nil {
 			document.Icon = *input.Icon
@@ -487,10 +506,31 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			document.Content = *input.Content
 		}
 		if input.ContentState != nil {
-			document.ContentState = *input.ContentState
+			// The collaborative base state may only move forward from the
+			// version the caller compacted against: a stale snapshot could
+			// lack updates another editor already pruned from the log.
+			// Without compaction (legacy callers) it is accepted until the
+			// first compaction happened.
+			accepted := input.ExpectedContentVersion == nil && document.ContentVersion == 0 || input.ExpectedContentVersion != nil && *input.ExpectedContentVersion == document.ContentVersion
+			if accepted && *input.ContentState != document.ContentState {
+				document.ContentState = *input.ContentState
+				document.ContentVersion++
+			}
+			if accepted && input.ExpectedContentVersion != nil && len(input.DocumentUpdateIDs) > 0 {
+				compactCollaborationID = document.CollaborationID
+				if compactCollaborationID == "" {
+					compactCollaborationID = document.ID
+				}
+			}
 		}
 		if input.ContentData != nil {
 			document.ContentData = input.ContentData
+		} else if input.Content != nil && input.ContentState == nil && *input.Content != before.Content {
+			// A Markdown-only replacement (API, MCP) cannot merge into the
+			// collaborative state: the editor re-reads the Markdown in a new
+			// realtime generation and open editors reload.
+			document.ContentData = nil
+			replacedCollaborationID = startCollaborationGeneration(document)
 		}
 		if input.ProjectIDs != nil {
 			values := normalizedStrings(*input.ProjectIDs)
@@ -505,6 +545,7 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			document.TeamIDs = values
+			moveDocumentTeamGrants(document, before.TeamIDs, now)
 		}
 		if input.IssueID != nil {
 			value := strings.TrimSpace(*input.IssueID)
@@ -524,26 +565,82 @@ func (s *server) updateDocument(w http.ResponseWriter, r *http.Request) {
 			setFavoriteRecord(data, "document", document.ID, *input.Favorite)
 		}
 		if input.Archived != nil {
-			now := time.Now().UTC()
 			if *input.Archived {
 				document.ArchivedAt = &now
 			} else {
 				document.ArchivedAt = nil
 			}
 		}
-		document.UpdatedAt = time.Now().UTC()
+		document.UpdatedAt = now
+		document.Version++
+		contentChanged := document.Title != before.Title || document.Content != before.Content || input.ContentData != nil && !jsonEqual(before.ContentData, document.ContentData)
+		if contentChanged && recordDocumentRevision(document, data.Viewer, now, false) {
+			// One "edited" notice per editing burst (debounced per editor).
+			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentChanges, recipients: documentSubscribers(data, *document)}, now)
+		}
+		if contentChanged {
+			if mentioned := newDocumentMentions(data, before.Content, before.ContentData, document.Content, document.ContentData); len(mentioned) > 0 {
+				appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentMention, recipients: mentioned}, now)
+			}
+		}
+		if input.ProjectIDs != nil && !slices.Equal(before.ProjectIDs, document.ProjectIDs) || input.TeamIDs != nil && !slices.Equal(before.TeamIDs, document.TeamIDs) || input.IssueID != nil && before.IssueID != document.IssueID {
+			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentMoved, recipients: documentSubscribers(data, *document), detail: documentDestinationName(data, *document)}, now)
+		}
+		if input.SubscriberIDs != nil {
+			added := slices.DeleteFunc(slices.Clone(document.SubscriberIDs), func(userID string) bool { return slices.Contains(before.SubscriberIDs, userID) })
+			removed := slices.DeleteFunc(slices.Clone(before.SubscriberIDs), func(userID string) bool { return slices.Contains(document.SubscriberIDs, userID) })
+			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentSubscribed, recipients: added}, now)
+			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentUnsubscribed, recipients: removed}, now)
+		}
 		syncDocumentProjectResources(data, *document)
 		appendAudit(data, "updated", "document", document.ID, nil)
 		updated = *document
 		return nil
 	})
+	if errors.Is(err, errConflict) {
+		writeVersionConflict(w, current)
+		return
+	}
+	if err == nil {
+		if compactCollaborationID != "" {
+			// The new base state is stored first; replaying an already
+			// included Yjs update is idempotent, so pruning is crash-safe.
+			if deleteErr := s.store.DeleteDocumentCollaborationUpdates(r.Context(), workspace, compactCollaborationID, input.DocumentUpdateIDs); deleteErr != nil {
+				log.Printf("compact collaboration updates document=%s: %v", compactCollaborationID, deleteErr)
+			}
+		}
+		if replacedCollaborationID != "" {
+			s.realtime.broadcastDocumentConflict(workspace, replacedCollaborationID)
+			if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, replacedCollaborationID); deleteErr != nil {
+				log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
+			}
+		}
+		if input.TeamIDs != nil || input.ProjectIDs != nil {
+			s.realtime.invalidateDocumentAccess(workspace, updated.ID)
+		}
+		s.dispatchNotificationEmails(r.Context(), workspace)
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
+// jsonEqual compares two decoded JSON values.
+func jsonEqual(left, right any) bool {
+	a, errA := json.Marshal(left)
+	b, errB := json.Marshal(right)
+	return errA == nil && errB == nil && bytes.Equal(a, b)
+}
+
+// restoreDocumentRevision makes a version the document's current state. The
+// collaborative editor state starts a new generation (collaborationId):
+// open editors holding the replaced Yjs history are told to reload, and the
+// replaced generation's update log is dropped.
 func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request) {
 	id, revisionID := r.PathValue("id"), r.PathValue("revisionId")
 	var updated domain.Document
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.revision_restored", id, map[string]string{"revisionId": revisionID}, func(data *domain.Bootstrap) error {
+	var replacedCollaborationID string
+	workspace := workspaceKey(r)
+	directory := s.documentMemberDirectory(r)
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.revision_restored", id, map[string]string{"revisionId": revisionID}, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
 			return err
@@ -555,21 +652,41 @@ func (s *server) restoreDocumentRevision(w http.ResponseWriter, r *http.Request)
 		if index < 0 {
 			return errNotFound
 		}
-		saveDocumentRevision(document, data.Viewer)
+		now := time.Now().UTC()
+		workspace = data.Workspace.URLKey
 		revision := document.Revisions[index]
-		document.Title, document.Content, document.ContentState, document.ContentData = revision.Title, revision.Content, revision.ContentState, revision.ContentData
-		document.UpdatedAt = time.Now().UTC()
+		document.Title, document.Content, document.ContentData = revision.Title, revision.Content, revision.ContentData
+		renameDocumentSlug(document)
+		replacedCollaborationID = startCollaborationGeneration(document)
+		document.Version++
+		document.UpdatedAt = now
+		recordDocumentRevision(document, data.Viewer, now, true)
+		appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentChanges, recipients: documentSubscribers(data, *document)}, now)
+		syncDocumentProjectResources(data, *document)
 		appendAudit(data, "revision_restored", "document", document.ID, map[string]any{"revisionId": revisionID})
 		updated = *document
 		return nil
 	})
+	if err == nil {
+		s.realtime.broadcastDocumentConflict(workspace, replacedCollaborationID)
+		if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, replacedCollaborationID); deleteErr != nil {
+			log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
+		}
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 
 func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.deleted", id, nil, func(data *domain.Bootstrap) error {
+	workspace, removedID := workspaceKey(r), id
+	directory := s.documentMemberDirectory(r)
+	err := s.store.MutateWorkspace(documentMutationScope(r.Context(), id), workspaceKey(r), "document.deleted", id, nil, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == id || item.SlugID == id })
+		if index < 0 {
+			if document, err := documentByID(data, id); err == nil {
+				index = slices.IndexFunc(data.Documents, func(item domain.Document) bool { return item.ID == document.ID })
+			}
+		}
 		if index < 0 {
 			return errNotFound
 		}
@@ -577,7 +694,8 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 			return store.ErrAuthForbidden
 		}
 		removed := data.Documents[index]
-		if err := appendTrash(data, "document", removed.ID, removed.Title, removed); err != nil {
+		workspace, removedID = data.Workspace.URLKey, removed.ID
+		if err := appendTrash(data, "document", removed.ID, documentDisplayTitle(removed.Title), removed); err != nil {
 			return err
 		}
 		data.Documents = slices.Delete(data.Documents, index, index+1)
@@ -586,8 +704,13 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		for projectIndex := range data.Projects {
 			data.Projects[projectIndex].Resources = slices.DeleteFunc(data.Projects[projectIndex].Resources, func(item domain.ProjectResource) bool { return item.ID == removed.ID })
 		}
+		appendDocumentNotifications(s, data, removed, documentNotice{directory: directory, kind: notificationDocumentDeleted, recipients: documentSubscribers(data, removed)}, time.Now().UTC())
 		return nil
 	})
+	if err == nil {
+		s.realtime.invalidateDocumentAccess(workspace, removedID)
+		s.dispatchNotificationEmails(r.Context(), workspace)
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -600,8 +723,14 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "body is required")
 		return
 	}
+	input.AnchorID, input.QuotedText = strings.TrimSpace(input.AnchorID), strings.TrimSpace(input.QuotedText)
+	if len(input.AnchorID) > 128 || len(input.QuotedText) > 4000 || input.ParentID != nil && (input.AnchorID != "" || input.QuotedText != "") {
+		writeError(w, http.StatusBadRequest, "anchorId and quotedText belong on a thread's first comment")
+		return
+	}
 	id := r.PathValue("id")
 	var created domain.Comment
+	directory := s.documentMemberDirectory(r)
 	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), "document.comment_created", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
@@ -610,15 +739,56 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 		if !canCommentDocument(documentRole(s, *data, *document)) {
 			return store.ErrAuthForbidden
 		}
-		if input.ParentID != nil && slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == *input.ParentID }) < 0 {
-			return errNotFound
+		comments := data.Comments[document.ID]
+		rootID := ""
+		if input.ParentID != nil {
+			parent := slices.IndexFunc(comments, func(item domain.Comment) bool { return item.ID == *input.ParentID })
+			if parent < 0 {
+				return errNotFound
+			}
+			// Threads are one level deep: a reply to a reply joins its root.
+			rootID = comments[parent].ID
+			if comments[parent].ParentID != nil {
+				rootID = *comments[parent].ParentID
+			}
+			input.ParentID = &rootID
+		}
+		if input.AnchorID != "" && slices.ContainsFunc(comments, func(item domain.Comment) bool { return item.AnchorID == input.AnchorID }) {
+			return errConflict
 		}
 		now := time.Now().UTC()
-		created = domain.Comment{ID: fmt.Sprintf("document_comment_%d", now.UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer}
-		data.Comments[id] = append(data.Comments[id], created)
+		created = domain.Comment{ID: fmt.Sprintf("document_comment_%d", now.UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, AnchorID: input.AnchorID, QuotedText: input.QuotedText}
+		data.Comments[document.ID] = append(comments, created)
+		mentioned := commentMentionIDs(data, created)
+		excerpt := notificationExcerpt(created.Body)
+		quote := created.QuotedText
+		audience := documentSubscribers(data, *document)
+		if rootID != "" {
+			watchers, muted := documentThreadAudience(data, document.ID, data.Comments[document.ID], rootID)
+			audience = append(slices.DeleteFunc(audience, func(userID string) bool { return muted[userID] }), watchers...)
+			if root := slices.IndexFunc(comments, func(item domain.Comment) bool { return item.ID == rootID }); root >= 0 {
+				quote = comments[root].QuotedText
+			}
+		}
+		audience = slices.DeleteFunc(audience, func(userID string) bool { return slices.Contains(mentioned, userID) })
+		appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentCommentMention, recipients: mentioned, comment: &created, excerpt: excerpt, quotedText: quote}, now)
+		appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentNewComment, recipients: audience, comment: &created, excerpt: excerpt, quotedText: quote}, now)
 		return nil
 	})
+	if errors.Is(err, errConflict) {
+		writeError(w, http.StatusConflict, "a thread already uses this anchor")
+		return
+	}
+	if err == nil {
+		s.dispatchNotificationEmails(r.Context(), workspaceKey(r))
+	}
 	respondMutation(w, err, http.StatusCreated, created)
+}
+
+// canManageDocumentComment: a comment's text is edited and deleted by its
+// author; workspace admins may moderate any comment.
+func canManageDocumentComment(data *domain.Bootstrap, comment domain.Comment) bool {
+	return comment.User.ID == data.Viewer.ID || workspaceAdminRole(data.ViewerRole)
 }
 
 func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
@@ -640,6 +810,7 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 			eventType = "document.comment_unresolved"
 		}
 	}
+	directory := s.documentMemberDirectory(r)
 	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
@@ -648,14 +819,19 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 		if !canCommentDocument(documentRole(s, *data, *document)) {
 			return store.ErrAuthForbidden
 		}
-		index := slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == commentID })
+		comments := data.Comments[document.ID]
+		index := slices.IndexFunc(comments, func(item domain.Comment) bool { return item.ID == commentID })
 		if index < 0 {
 			return errNotFound
 		}
-		if input.ExpectedVersion != nil && data.Comments[id][index].Version != *input.ExpectedVersion {
-			current = data.Comments[id][index]
+		if commentUpdateHasBody(input) && !canManageDocumentComment(data, comments[index]) {
+			return store.ErrAuthForbidden
+		}
+		if input.ExpectedVersion != nil && comments[index].Version != *input.ExpectedVersion {
+			current = comments[index]
 			return errConflict
 		}
+		wasResolved := comments[index].Resolved
 		summaries := false
 		if len(document.TeamIDs) > 0 {
 			summaries = teamResolvedThreadSummaries(data, document.TeamIDs[0])
@@ -664,8 +840,12 @@ func (s *server) updateDocumentComment(w http.ResponseWriter, r *http.Request) {
 				summaries = teamResolvedThreadSummaries(data, project.TeamIDs[0])
 			}
 		}
-		applyCommentPatch(&data.Comments[id][index], input, data.Comments[id], summaries)
-		updated = data.Comments[id][index]
+		applyCommentPatch(&comments[index], input, comments, summaries)
+		updated = comments[index]
+		if updated.Resolved && !wasResolved && updated.ParentID == nil {
+			watchers, _ := documentThreadAudience(data, document.ID, comments, updated.ID)
+			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentThreadResolved, recipients: watchers, comment: &updated, excerpt: notificationExcerpt(updated.Body), quotedText: updated.QuotedText}, time.Now().UTC())
+		}
 		return nil
 	})
 	if errors.Is(err, errConflict) {
@@ -685,13 +865,17 @@ func (s *server) deleteDocumentComment(w http.ResponseWriter, r *http.Request) {
 		if !canCommentDocument(documentRole(s, *data, *document)) {
 			return store.ErrAuthForbidden
 		}
-		before := len(data.Comments[id])
-		data.Comments[id] = slices.DeleteFunc(data.Comments[id], func(item domain.Comment) bool {
-			return item.ID == commentID || item.ParentID != nil && *item.ParentID == commentID
-		})
-		if len(data.Comments[id]) == before {
+		comments := data.Comments[document.ID]
+		index := slices.IndexFunc(comments, func(item domain.Comment) bool { return item.ID == commentID })
+		if index < 0 {
 			return errNotFound
 		}
+		if !canManageDocumentComment(data, comments[index]) {
+			return store.ErrAuthForbidden
+		}
+		data.Comments[document.ID] = slices.DeleteFunc(comments, func(item domain.Comment) bool {
+			return item.ID == commentID || item.ParentID != nil && *item.ParentID == commentID
+		})
 		return nil
 	})
 	if err != nil {
@@ -709,6 +893,7 @@ func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Re
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
+	directory := s.documentMemberDirectory(r)
 	err := s.store.MutateWorkspace(documentContentScope(r.Context(), id), workspaceKey(r), "document.comment_reaction_toggled", id, input, func(data *domain.Bootstrap) error {
 		document, err := documentByID(data, id)
 		if err != nil {
@@ -717,19 +902,20 @@ func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Re
 		if !canCommentDocument(documentRole(s, *data, *document)) {
 			return store.ErrAuthForbidden
 		}
-		index := slices.IndexFunc(data.Comments[id], func(item domain.Comment) bool { return item.ID == commentID })
+		index := slices.IndexFunc(data.Comments[document.ID], func(item domain.Comment) bool { return item.ID == commentID })
 		if index < 0 {
 			return errNotFound
 		}
-		comment := &data.Comments[id][index]
+		comment := &data.Comments[document.ID][index]
 		if comment.Reactions == nil {
 			comment.Reactions = map[string][]string{}
 		}
 		users := comment.Reactions[input.Emoji]
-		if slices.Contains(users, data.Viewer.ID) {
-			users = removeString(users, data.Viewer.ID)
-		} else {
+		added := !slices.Contains(users, data.Viewer.ID)
+		if added {
 			users = append(users, data.Viewer.ID)
+		} else {
+			users = removeString(users, data.Viewer.ID)
 		}
 		if len(users) == 0 {
 			delete(comment.Reactions, input.Emoji)
@@ -737,6 +923,9 @@ func (s *server) toggleDocumentCommentReaction(w http.ResponseWriter, r *http.Re
 			comment.Reactions[input.Emoji] = users
 		}
 		updated = *comment
+		if added {
+			appendDocumentNotifications(s, data, *document, documentNotice{directory: directory, kind: notificationDocumentCommentReaction, recipients: []string{comment.User.ID}, comment: &updated, detail: input.Emoji, excerpt: notificationExcerpt(comment.Body)}, time.Now().UTC())
+		}
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -1115,6 +1304,11 @@ func applyReleaseInput(data *domain.Bootstrap, release *domain.Release, input re
 		seen := map[string]bool{}
 		for index, resource := range *input.Resources {
 			resource.Title, resource.URL, resource.DocumentID = strings.TrimSpace(resource.Title), strings.TrimSpace(resource.URL), strings.TrimSpace(resource.DocumentID)
+			if resource.Type == "document" && resource.Title == "" {
+				if document, err := documentByID(data, resource.DocumentID); err == nil {
+					resource.Title = documentDisplayTitle(document.Title)
+				}
+			}
 			if resource.Type != "link" && resource.Type != "document" || resource.Title == "" || resource.Type == "link" && resource.URL == "" || resource.Type == "document" && !validateResourceIDs(data, "document", []string{resource.DocumentID}) {
 				return errInvalid
 			}
@@ -2621,9 +2815,41 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 	respondMutation(w, err, http.StatusOK, restored)
 }
 
+// trashedDocumentOwners lists the documents (and their collaboration
+// generations) among trash entries, so purging also drops their comment
+// threads and collaboration update logs.
+func trashedDocumentOwners(entries []domain.TrashEntry, keep func(domain.TrashEntry) bool) (ids, collaborationIDs []string) {
+	for _, entry := range entries {
+		if entry.ResourceType != "document" || !keep(entry) {
+			continue
+		}
+		var document domain.Document
+		if json.Unmarshal(entry.Payload, &document) != nil || document.ID == "" {
+			continue
+		}
+		ids = append(ids, document.ID)
+		collaborationIDs = appendUnique(collaborationIDs, document.ID)
+		if document.CollaborationID != "" {
+			collaborationIDs = appendUnique(collaborationIDs, document.CollaborationID)
+		}
+	}
+	return ids, collaborationIDs
+}
+
 func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "trash.purged", id, nil, func(data *domain.Bootstrap) error {
+	var purgedCollaborationIDs []string
+	workspace := workspaceKey(r)
+	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
+		documentIDs, _ := trashedDocumentOwners(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
+		return store.MutationScope{Resources: documentIDs}
+	}})
+	err := s.store.MutateWorkspace(scope, workspaceKey(r), "trash.purged", id, nil, func(data *domain.Bootstrap) error {
+		documentIDs, collaborationIDs := trashedDocumentOwners(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
+		for _, documentID := range documentIDs {
+			delete(data.Comments, documentID)
+		}
+		purgedCollaborationIDs, workspace = collaborationIDs, data.Workspace.URLKey
 		before := len(data.Trash)
 		if !workspaceAdminRole(data.ViewerRole) {
 			entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
@@ -2641,6 +2867,9 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 		appendAudit(data, "purged", "trash", id, nil)
 		return nil
 	})
+	if err == nil {
+		s.purgeDocumentContent(r.Context(), workspace, purgedCollaborationIDs)
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
@@ -3328,8 +3557,13 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		for _, project := range current.Projects {
 			scope.Resources = append(scope.Resources, project.ID)
 		}
+		// Expiring documents take their comment threads with them.
+		expiredDocuments, _ := trashedDocumentOwners(current.Trash, func(entry domain.TrashEntry) bool { return now.After(entry.ExpiresAt) })
+		scope.Resources = append(scope.Resources, expiredDocuments...)
 		return scope
 	}})
+	var purgedCollaborationIDs []string
+	defer func() { s.purgeDocumentContent(ctx, key, purgedCollaborationIDs) }()
 	_ = s.store.MutateWorkspace(mutationCtx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
 		// The trigger above can stay true when a reminder cannot be
 		// delivered (for example the recipient's inbox is off). Skip the
@@ -3376,10 +3610,15 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 				}
 			}
 		}
+		expiredDocuments, expiredCollaborationIDs := trashedDocumentOwners(next.Trash, func(entry domain.TrashEntry) bool { return now.After(entry.ExpiresAt) })
+		for _, documentID := range expiredDocuments {
+			delete(next.Comments, documentID)
+		}
 		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
-		if bytes.Equal(before, fingerprint()) {
+		if bytes.Equal(before, fingerprint()) && len(expiredDocuments) == 0 {
 			return store.ErrNoMutation
 		}
+		purgedCollaborationIDs = expiredCollaborationIDs
 		return nil
 	})
 }

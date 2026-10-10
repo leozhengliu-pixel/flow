@@ -62,7 +62,23 @@ describe('project overview workflow', () => {
 
     await user.click(screen.getByRole('button', { name: 'Add document or link…' }))
     await user.click(await screen.findByText('Create new document…'))
-    expect(onCreateResource).toHaveBeenCalledWith(project.id, { type: 'document', title: 'Untitled document' })
+    expect(onCreateResource).toHaveBeenCalledWith(project.id, { type: 'document', title: '' })
+  })
+
+  it('shows document resources with their live title and Untitled when empty', () => {
+    const data = makeBootstrap()
+    const doc = (id: string, title: string) => ({ id, slugId: id, title, content: '', projectIds: [project.id], teamIds: [], subscriberIds: [], favorite: false, revisions: [], creator: data.viewer, createdAt: '2026-09-01T00:00:00Z', updatedAt: '2026-09-01T00:00:00Z' })
+    const resource = (id: string, title: string) => ({ id, projectId: project.id, type: 'document', title, url: `/workspace/document/${id}`, pinnedTeamIds: [], createdAt: '2026-09-01T00:00:00Z' })
+    const props = {
+      issueData: data, project: { ...project, milestones: [], customers: [], resources: [resource('doc-a', 'Stale title'), resource('doc-b', 'Untitled document')] },
+      projects: [project], initiatives: [], documents: [doc('doc-a', 'Roadmap'), doc('doc-b', '')], projectStatuses: [project.status], projectUpdates: [], users: data.users, teams: data.teams,
+      labels: [], labelGroups: [], projectIssues: [], save: vi.fn(), onTabChange: vi.fn(), integrationConnections: [], viewer: data.viewer,
+      onCreateResource: vi.fn(), onUpdateResource: vi.fn(), onDeleteResource: vi.fn(), onCreateMilestone: vi.fn(), onUpdateMilestone: vi.fn(), onDeleteMilestone: vi.fn(),
+    } as unknown as ComponentProps<typeof ProjectOverview>
+    render(<I18nProvider><ProjectOverview {...props}/></I18nProvider>)
+    const titles = [...document.querySelectorAll('.project-overview__resource .project-resource-title')].map(node => node.textContent)
+    expect(titles).toEqual(['Roadmap', 'Untitled'])
+    expect(screen.getByRole('button', { name: 'Untitled actions' })).toBeInTheDocument()
   })
 
   it('hides empty optional rows and shows them once they have values', () => {

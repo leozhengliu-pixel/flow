@@ -24,13 +24,11 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Smile,
-  Sparkles,
   Tag,
   UserRound,
   UsersRound,
-  type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { type ComponentType, useMemo, useState, type FormEvent } from "react";
 
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
 import { TeamIcon } from "@/components/issue/issue-icons";
@@ -43,10 +41,11 @@ import type { BootstrapData, Team } from "@/types/flow";
 import type { SettingsPageId } from "@/lib/app-routes";
 
 import "./workspace-directory.css";
+import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 
 const SETTINGS_SECTIONS: {
   title: string;
-  items: { label: string; icon: LucideIcon }[];
+  items: { label: string; icon: ComponentType<{ size?: number | string }> }[];
 }[] = [
   {
     title: "Personal",
@@ -80,7 +79,7 @@ const SETTINGS_SECTIONS: {
   {
     title: "Features",
     items: [
-      { label: "AI & Agents", icon: Sparkles },
+      { label: "AI & Agents", icon: AiBurstGlyph },
       { label: "Initiatives", icon: Goal },
       { label: "Documents", icon: FileText },
       { label: "Customer requests", icon: UsersRound },

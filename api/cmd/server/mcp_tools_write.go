@@ -76,7 +76,7 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 	case "save_draft":
 		return s.saveMCPDraft(ctx, actor, data, args)
 	case "create_reminder":
-		return s.createMCPReminder(ctx, data, args)
+		return s.createMCPReminder(ctx, actor, data, args)
 	case "delete_issue":
 		return s.deleteMCPIssue(ctx, actor, data, args)
 	case "triage_issue":
@@ -95,6 +95,14 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.saveMCPSubscription(ctx, actor, data, args)
 	case "save_document":
 		return s.saveMCPDocument(ctx, actor, data, args)
+	case "delete_document":
+		return s.deleteMCPDocument(ctx, actor, data, args)
+	case "restore_document":
+		return s.restoreMCPDocument(ctx, actor, data, args)
+	case "restore_document_version":
+		return s.restoreMCPDocumentVersion(ctx, actor, data, args)
+	case "save_document_permissions":
+		return s.saveMCPDocumentPermissions(ctx, actor, data, args)
 	case "save_template":
 		return s.saveMCPTemplate(ctx, actor, data, args)
 	case "update_notification":

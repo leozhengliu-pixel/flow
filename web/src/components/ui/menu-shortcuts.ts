@@ -40,6 +40,9 @@ export function chordMatches(event: Pick<KeyboardEvent, 'key' | 'code' | 'metaKe
   return eventKey(event) === chord.key && event.metaKey === wantMeta && event.ctrlKey === wantCtrl && event.altKey === chord.alt && event.shiftKey === chord.shift
 }
 
+/** Open menus and modal dialogs swallow page hotkeys; a non-modal dialog (the floating agent chat) does not. */
+const BLOCKING_OVERLAYS = '[role="menu"],[role="dialog"]:not([aria-modal="false"]),[role="alertdialog"]'
+
 export const SHORTCUT_SEQUENCE_TIMEOUT = 1100
 
 /**
@@ -97,7 +100,7 @@ export function useLinearRowShortcuts(shortcuts: readonly string[], enabled = tr
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       const target = event.target instanceof Element ? event.target : null
       if (event.defaultPrevented || target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]')) return
-      if (document.querySelector('[role="menu"],[role="dialog"],[role="alertdialog"]')) return
+      if (document.querySelector(BLOCKING_OVERLAYS)) return
       const focused = target?.closest<HTMLElement>('[data-linear-menu-row]')
       const hovered = [...document.querySelectorAll<HTMLElement>('[data-linear-menu-row]')].find(row => safeMatches(row, ':hover'))
       const row = focused ?? hovered
@@ -137,7 +140,7 @@ export function useLinearHotkeys(handlers: Record<string, () => void>, enabled =
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       const target = event.target instanceof Element ? event.target : null
       if (event.defaultPrevented || target?.closest('input,textarea,select,[contenteditable="true"],[role="textbox"]')) return
-      if (document.querySelector('[role="menu"],[role="dialog"],[role="alertdialog"]')) return
+      if (document.querySelector(BLOCKING_OVERLAYS)) return
       const result = matcher.match(event, key.split('|').filter(Boolean))
       if (!result || result === 'pending') return
       event.preventDefault()

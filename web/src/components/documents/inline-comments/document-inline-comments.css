@@ -1,0 +1,211 @@
+/* Document inline comments: anchors in the text, gutter thread cards, resolved panel. */
+
+/* Marks carry the anchor only; the decorations draw open / active threads. */
+.document-page .document-editor .inline-comment-mark,
+.document-page .document-editor .inline-comment-mark[data-resolved="true"] {
+  background: none;
+  border-bottom: 0;
+  text-decoration: none;
+}
+.document-page .document-editor .inline-comment-open {
+  border-bottom: 2px solid var(--document-comment-underline);
+  cursor: pointer;
+  transition: background-color var(--quick) ease;
+}
+.document-page .document-editor .inline-comment-open.is-active,
+.document-page .document-editor .inline-comment-pending {
+  border-bottom-color: transparent;
+  border-radius: 2px;
+  background: var(--document-comment-highlight);
+}
+.document-page .document-editor .inline-comment-pending { background: var(--document-comment-pending); }
+
+/* ---------- gutter ---------- */
+/* The gutter needs 16px + 284px beside the 805px column (294px past the
+   canvas); the column and the gutter are centered together, which moves the
+   document left. */
+.document-page { container: document-page / inline-size; }
+.document-inline-gutter {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 16px);
+  width: 284px;
+  z-index: 3;
+}
+@container document-page (min-width: 1150px) {
+  .document-page.has-comment-gutter:not(.has-agent) .document-canvas {
+    margin-left: max(16px, calc((100% - var(--document-column) - 2 * var(--document-gutter) - 294px) / 2));
+  }
+}
+
+.document-thread-card {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px 8px;
+  border-radius: 10px;
+  background: var(--document-comment-card-bg);
+  box-shadow: var(--document-comment-card-shadow);
+  color: var(--theme-text-primary);
+  font-size: 13px;
+  line-height: 20px;
+  transition: top .25s var(--ease), transform var(--quick) ease;
+}
+.document-thread-card:not(.is-active) { cursor: pointer; }
+.document-thread-card.is-active { z-index: 2; transform: translateX(-6px); }
+.document-thread-card.is-resolved { position: relative; transform: none; cursor: default; }
+
+.document-thread-comment + .document-thread-comment { margin-top: 10px; }
+.document-thread-comment > header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+}
+.document-thread-comment > header > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.document-thread-comment > header > time,
+.document-thread-edited {
+  flex: 0 0 auto;
+  color: var(--theme-text-tertiary);
+  font-size: 12px;
+}
+.document-thread-avatar {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--theme-surface-active);
+  color: var(--theme-text-secondary);
+  font-size: 9px;
+  font-weight: 600;
+}
+.document-thread-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.document-thread-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--quick) ease;
+}
+.document-thread-card:hover .document-thread-actions,
+.document-thread-card.is-active .document-thread-actions,
+.document-thread-actions:focus-within,
+.document-thread-card.is-resolved .document-thread-actions { opacity: 1; }
+.document-thread-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  cursor: pointer;
+}
+.document-thread-icon:hover,
+.document-thread-icon[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.document-thread-body { padding-left: 26px; color: var(--theme-text-primary); overflow-wrap: anywhere; }
+.document-thread-body .comment-prosemirror p,
+.document-thread-body p { margin: 0; }
+.document-thread-comment .reaction-pills { margin: 6px 0 0 26px; }
+
+.document-thread-reply { margin: 8px 0 2px; }
+.document-thread-reply-trigger {
+  width: 100%;
+  margin-top: 8px;
+  padding: 4px 0 2px 26px;
+  border: 0;
+  border-top: .5px solid var(--theme-border);
+  background: transparent;
+  color: var(--theme-text-tertiary);
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+
+/* Composers sit inside the card: no box of their own. */
+.document-thread-card .composer,
+.document-thread-card .composer.compact {
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.document-thread-card .composer .comment-prosemirror { font-size: 13px; line-height: 20px; }
+.document-thread-reply .composer { padding-left: 26px; }
+
+.document-thread-draft { display: flex; align-items: flex-start; gap: 8px; }
+.document-thread-draft > .document-thread-avatar { margin-top: 6px; }
+.document-thread-draft-composer { flex: 1 1 auto; min-width: 0; }
+
+.document-thread-quote {
+  margin: 0 0 8px;
+  padding: 2px 0 2px 10px;
+  border-left: 3px solid var(--document-comment-quote-bar);
+  color: var(--theme-text-secondary);
+  font-size: 13px;
+  line-height: 19px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ---------- resolved comments panel ---------- */
+.document-resolved-panel {
+  position: fixed;
+  z-index: 30;
+  top: 52px;
+  right: 12px;
+  bottom: 12px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: var(--document-comment-card-bg);
+  box-shadow: var(--document-comment-card-shadow);
+}
+.document-resolved-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0 8px 0 14px;
+  border-bottom: .5px solid var(--theme-border);
+  font-size: 13px;
+}
+.document-resolved-panel > header strong { font-weight: 500; }
+.document-resolved-list { flex: 1 1 auto; overflow: auto; padding: 10px; display: grid; align-content: start; gap: 10px; }
+.document-resolved-list .document-thread-card { box-shadow: 0 0 0 .5px var(--theme-border); }
+
+/* Narrow pages (or with the agent rail open): no room beside the text, so
+   cards stack under the document. */
+@container document-page (max-width: 1149px) {
+  .document-inline-gutter { position: static; width: auto; margin-top: 24px; display: grid; gap: 10px; }
+  .document-inline-gutter .document-thread-card { position: relative; top: auto !important; transform: none; }
+}
+.document-page.has-agent .document-inline-gutter { position: static; width: auto; margin-top: 24px; display: grid; gap: 10px; }
+.document-page.has-agent .document-inline-gutter .document-thread-card { position: relative; top: auto !important; transform: none; }
+@media (max-width: 800px) {
+  .document-resolved-panel { top: 48px; right: 0; bottom: 0; width: 100%; border-radius: 0; }
+}
+@media print {
+  .document-inline-gutter,
+  .document-resolved-panel { display: none; }
+  .document-page .document-editor .inline-comment-open { border-bottom: 0; background: none; }
+}

@@ -6,7 +6,7 @@ import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimat
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Sparkles, Trash2, X } from 'lucide-react'
+import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue, IssueLabel, IssueSuggestionPreview } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -26,6 +26,7 @@ import { RecurrenceDialog } from '@/components/issue/recurrence-picker'
 import { useRecurrenceSummary } from '@/components/issue/use-recurrence-summary'
 import { useI18n } from '@/i18n/i18n'
 import { defaultRecurrenceFirstDue, recurrenceDate, recurrencePresetOptions, toDateInput } from '@/lib/recurrence'
+import { AiBurstGlyph } from '@/components/ui/agent-glyph'
 
 export interface CreateIssueInput {
   title: string
@@ -461,7 +462,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
           </div>
 
           {(quickSuggestionsLoading || quickSuggestions.length > 0) && <div className={styles.quickSuggestions}>
-            <span className={styles.quickSuggestionsLabel}><Sparkles/>{quickSuggestionsLoading && !quickSuggestions.length ? 'Analyzing…' : 'Quick suggestions'}</span>
+            <span className={styles.quickSuggestionsLabel}><AiBurstGlyph size={14}/>{quickSuggestionsLoading && !quickSuggestions.length ? 'Analyzing…' : 'Quick suggestions'}</span>
             <div>
               {quickSuggestions.length > 1 && <button className={styles.applyAllSuggestions} type="button" onClick={() => quickSuggestions.forEach(applyQuickSuggestion)}>Apply all</button>}
               {quickSuggestions.map(suggestion => {

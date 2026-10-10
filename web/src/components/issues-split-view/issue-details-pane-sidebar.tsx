@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
-import { MessageSquare } from 'lucide-react'
+
 import { PriorityIcon, StatusIcon } from '@/components/issue/issue-icons'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import styles from './issues-split-view.module.css'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export interface IssueDetailsPaneSidebarProps {
   issue?: MyIssuesRowData
@@ -47,7 +48,7 @@ export function IssueDetailsPaneSidebar({
             data-active={agentOpen || undefined}
             onClick={() => onAgentOpenChange(!agentOpen)}
           >
-            <MessageSquare size={14} />
+            <AgentCursorGlyph size={14} />
             <span>Chat</span>
           </button>
         </div>

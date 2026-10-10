@@ -161,7 +161,7 @@ export function advancedFilterSummary(tree: AdvancedFilterGroup, shown = 2): Adv
 
 /** Plural nouns for "2 priorities" style value summaries. */
 const VALUE_NOUNS: Partial<Record<MyIssuesFilterKey, [string, string]>> = {
-  status: ['status', 'statuses'], priority: ['priority', 'priorities'], assignee: ['assignee', 'assignees'], creator: ['creator', 'creators'],
+  owner: ['owner', 'owners'], status: ['status', 'statuses'], priority: ['priority', 'priorities'], assignee: ['assignee', 'assignees'], creator: ['creator', 'creators'],
   labels: ['label', 'labels'], project: ['project', 'projects'], cycle: ['cycle', 'cycles'], subscribers: ['subscriber', 'subscribers'],
   agent: ['agent', 'agents'], initiative: ['initiative', 'initiatives'], projectMilestone: ['milestone', 'milestones'], customers: ['customer', 'customers'],
   template: ['template', 'templates'], relations: ['relation', 'relations'], releases: ['release', 'releases'],

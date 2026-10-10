@@ -1,9 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Command } from 'cmdk'
 import {
-  Bot, Clipboard, FilePlus2, FileText, FolderKanban, GitPullRequest, Inbox, Layers3, Lightbulb,
-  Plus, Search, SquareDot, UserRound,
+  Clipboard,
+  FileText,
+  FolderKanban,
+  GitPullRequest,
+  Inbox,
+  Layers3,
+  Lightbulb,
+  Plus,
+  Search,
+  SquareDot,
+  UserRound,
 } from 'lucide-react'
 
 import { Check, ChevronRight, Minus } from 'lucide-react'
@@ -17,12 +26,15 @@ import { sortActionGroups } from '@/lib/action-groups'
 import { useSelectedModels } from '@/lib/selected-models-store'
 import { useAllowedActionGroups } from '@/hooks/use-action-groups-for-selection'
 import { useI18n } from '@/i18n/i18n'
-import type { BootstrapData, Customer, SearchResult } from '@/types/flow'
+import type { AgentSession, BootstrapData, Customer, SearchResult } from '@/types/flow'
+import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory } from '@/components/agent/agent-read-state'
 import { CustomerLogo } from '@/components/customer/customer-logo'
 import { useCommandContext } from './command-context'
 import { useDisplayCommands } from './display-commands'
+import { documentCommands, GLOBAL_DOCUMENT_PAGES, type DocumentCommandHost } from './document-commands'
 import { contextChip, useContextCommands, type CommandPage, type ContextCommandHandlers, type PageOption } from './context-commands'
 import './command-menu.css'
+import { AgentCursorGlyph, AgentHistoryGlyph } from '@/components/ui/agent-glyph'
 
 type CommandAction = {
   id: string
@@ -40,7 +52,6 @@ export function CommandMenu({
   open,
   onOpenChange,
   onCreateIssue,
-  onCreateDocument,
   onCreateIssueTemplate,
   onCreateProject,
   onCreateView,
@@ -56,18 +67,22 @@ export function CommandMenu({
   onGoToCustomers,
   onOpenCustomer,
   onNavigateAgent,
+  onAskAgent,
+  agentSessions,
+  onOpenAgentSession,
   onNavigateReviews,
   onNavigatePulse,
   pulseToggle,
   onOpenResult,
   data,
   initialCustomerPicker = false,
+  initialDocumentPicker = false,
+  documentHost,
   ...contextHandlers
 }: {
   open: boolean
   onOpenChange: (value: boolean) => void
   onCreateIssue: () => void
-  onCreateDocument: () => void
   onCreateIssueTemplate: () => void
   onCreateProject: () => void
   onCreateView: () => void
@@ -85,6 +100,11 @@ export function CommandMenu({
   /** "Open customer…" (O then Q) picks a customer from a nested page. */
   onOpenCustomer?: (customer: Customer) => void
   onNavigateAgent: () => void
+  /** "Ask Flow" (⌘J): open the floating agent chat; omitted where the shortcut does nothing. */
+  onAskAgent?: () => void
+  /** The viewer's agent chats for "Open past agent chat…"; the entry needs `onOpenAgentSession` too. */
+  agentSessions?: AgentSession[]
+  onOpenAgentSession?: (session: AgentSession) => void
   onNavigateReviews?: () => void
   /** "Go to pulse" (G then F); omitted when Pulse is off or for guests. */
   onNavigatePulse?: () => void
@@ -95,15 +115,23 @@ export function CommandMenu({
   data?: BootstrapData
   /** Open straight on the "Open customer…" picker (the O then Q shortcut). */
   initialCustomerPicker?: boolean
+  /** Open straight on the "Open document…" picker (the O then D shortcut). */
+  initialDocumentPicker?: boolean
+  /** Reload and navigation for document writes; defaults to router navigation without a reload. */
+  documentHost?: DocumentCommandHost
 } & ContextCommandHandlers) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const [pages, setPages] = useState<CommandPage[]>([])
+  const [pages, setPages] = useState<CommandPage[]>(() => initialDocumentPicker ? [{ id: 'documentOpen', label: 'Open document…' }] : [])
   const page = pages.at(-1)
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   // "Open customer…" lists the workspace's customers in place of the root commands.
   const [customerPicker, setCustomerPicker] = useState(Boolean(initialCustomerPicker))
+  // "Open past agent chat…" lists the viewer's chats in place of the root commands (Linear's searchable chat list).
+  const [pastChats, setPastChats] = useState(false)
+  const pastChatSessions = useMemo(() => [...(agentSessions ?? [])].filter(session => session.slugId).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)), [agentSessions])
+  const pastChatGroups = useMemo(() => groupAgentHistory(pastChatSessions), [pastChatSessions])
   const location = useLocation()
   const selectedModels = useSelectedModels()
   const allowedActionGroups = useAllowedActionGroups()
@@ -111,16 +139,24 @@ export function CommandMenu({
   const context = useCommandContext()
   const chip = contextChip(context, t)
   const displayCommands = useDisplayCommands(open)
-  const contextCommands = useContextCommands({ context, data, page, query, handlers: contextHandlers, close: () => onOpenChange(false), t })
+  const navigate = useNavigate()
+  const host = useMemo<DocumentCommandHost>(() => documentHost ?? { reload: async () => undefined, navigate: path => navigate(path) }, [documentHost, navigate])
+  const issueCommands = useContextCommands({ context, data, page, query, handlers: contextHandlers, close: () => onOpenChange(false), t })
+  const documents = documentCommands({ context, data, page, query, host, close: () => onOpenChange(false), t, pathname: location.pathname })
+  const contextCommands = {
+    heading: context?.kind === 'document' ? 'Document' : issueCommands.heading,
+    actions: context?.kind === 'document' ? documents.actions : issueCommands.actions,
+    options: documents.options.length ? documents.options : issueCommands.options,
+  }
   const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
   const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
   const actions: CommandAction[] = [
     { id: 'create-issue', group: 'Issues', label: 'Create new issue...', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
     { id: 'create-project', group: 'Projects', label: 'Create new project...', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
-    { id: 'create-document', group: 'Documents', label: 'Create new document...', icon: <FilePlus2/>, run: closeAnd(onCreateDocument) },
     { id: 'create-view', group: 'Views', label: 'Create view...', icon: <Layers3/>, run: closeAnd(onCreateView) },
     { id: 'create-initiative', group: 'Initiatives', label: 'Create new initiative', icon: <Lightbulb/>, shortcut: ['N', 'then', 'I'], run: closeAnd(onCreateInitiative) },
     ...(onGoToCustomers ? [{ id: 'create-customer', group: 'Customers', label: 'Create new customer…', icon: <CustomerCommandIcon/>, keywords: 'add create', run: closeAnd(onNavigateCustomers) }] : []),
+    ...documents.global.map(action => ({ id: action.id, group: 'Documents', label: action.label, icon: action.icon, shortcut: action.shortcut, keywords: action.keywords, run: () => { if (action.page) openPage(action.page); else void action.run?.() } })),
     { id: 'search-workspace', group: 'Filter', label: 'Search workspace...', icon: <Search/>, run: closeAnd(onSearchWorkspace) },
     { id: 'issue-template', group: 'Templates', label: 'Create new issue template...', icon: <FileText/>, run: closeAnd(onCreateIssueTemplate) },
     { id: 'go-inbox', group: 'Navigation', label: 'Go to Inbox', icon: <Inbox/>, shortcut: ['G', 'then', 'I'], run: closeAnd(onNavigateInbox) },
@@ -133,7 +169,9 @@ export function CommandMenu({
       { id: 'go-customers', group: 'Navigation', label: 'Go to customers', icon: <CustomerCommandIcon/>, shortcut: ['G', 'then', 'Q'], keywords: 'open', run: closeAnd(onGoToCustomers) },
       ...(onOpenCustomer ? [{ id: 'open-customer', group: 'Navigation', label: 'Open customer…', icon: <CustomerCommandIcon/>, shortcut: ['O', 'then', 'Q'], keywords: 'goto', run: () => { setCustomerPicker(true); setQuery('') } }] : []),
     ] : []),
-    { id: 'go-agent', group: 'Agent chat', label: 'Go to Agent', icon: <Bot/>, shortcut: ['G', 'then', 'J'], run: closeAnd(onNavigateAgent) },
+    ...(onAskAgent ? [{ id: 'ask-agent', group: 'Agent chat', label: 'Ask Flow', icon: <AgentCursorGlyph/>, shortcut: ['⌘', 'J'], keywords: 'agent chat ai assistant', run: closeAnd(onAskAgent) }] : []),
+    ...(onOpenAgentSession ? [{ id: 'open-past-chat', group: 'Agent chat', label: 'Open past agent chat…', icon: <AgentHistoryGlyph/>, keywords: 'agent chats history conversation recent', run: () => { setPastChats(true); setQuery('') } }] : []),
+    { id: 'go-agent', group: 'Agent chat', label: 'Go to Agent', icon: <AgentCursorGlyph/>, shortcut: ['G', 'then', 'J'], run: closeAnd(onNavigateAgent) },
     ...(onNavigatePulse ? [{ id: 'go-pulse', group: 'Navigation', label: 'Go to pulse', icon: <PulseIcon size={14}/>, shortcut: ['G', 'then', 'F'], keywords: 'feed updates', run: closeAnd(onNavigatePulse) }] : []),
     ...(pulseToggle ? [{ id: 'toggle-pulse', group: 'Pulse', label: pulseToggle.enabled ? 'Disable Pulse' : 'Enable Pulse', icon: <PulseIcon size={14}/>, keywords: 'feed updates', run: closeAnd(pulseToggle.run) }] : []),
     ...(onNavigateReviews ? [{ id: 'go-reviews', group: 'Reviews', label: 'Go to Reviews', icon: <GitPullRequest/>, shortcut: ['G', 'then', 'R'], run: closeAnd(onNavigateReviews) }] : []),
@@ -147,8 +185,8 @@ export function CommandMenu({
   contextCommands.actions.forEach(action => registry.register({ ...action, group: contextCommands.heading, run: () => { if (action.page) openPage(action.page); else void action.run?.() } }))
 
   useEffect(() => {
-    if (!open) { setQuery(''); setResults([]); setPages([]); setCustomerPicker(false); return }
-    if (page || customerPicker || !query.trim()) { setResults([]); setLoading(false); return }
+    if (!open) { setQuery(''); setResults([]); setPages([]); setCustomerPicker(false); setPastChats(false); return }
+    if (page || customerPicker || pastChats || !query.trim()) { setResults([]); setLoading(false); return }
     let active = true
     const controller = new AbortController()
     setLoading(true)
@@ -159,7 +197,7 @@ export function CommandMenu({
         .finally(() => { if (active) setLoading(false) })
     }, 140)
     return () => { active = false; window.clearTimeout(timer); controller.abort() }
-  }, [customerPicker, open, page, query])
+  }, [customerPicker, open, page, pastChats, query])
 
   const groupIds = [...new Set(actions.map(action => action.group))]
   const groups = useMemo(
@@ -174,9 +212,10 @@ export function CommandMenu({
     [groupIds.join("|"), allowedActionGroups, location.pathname, selectedModels],
   )
   // The context vanished (selection cleared, issue closed): nested pages no longer apply.
-  useEffect(() => { if (!context) setPages([]) }, [context])
+  useEffect(() => { if (!context) setPages(current => current.filter(item => GLOBAL_DOCUMENT_PAGES.has(item.id))) }, [context])
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Backspace' && !query && customerPicker) { event.preventDefault(); setCustomerPicker(false); return }
+    if (event.key === 'Backspace' && !query && pastChats) { event.preventDefault(); setPastChats(false); return }
     if (event.key === 'Backspace' && !query && pages.length) { event.preventDefault(); back(); return }
     if (event.key === 'Tab' && !page) { event.preventDefault(); closeAnd(onNavigateAgent)() }
   }
@@ -184,6 +223,12 @@ export function CommandMenu({
     if (option.page) { openPage(option.page); return }
     void option.select?.()
   }
+  const optionGroups = contextCommands.options.reduce<{ heading?: string; options: PageOption[] }[]>((groups, option) => {
+    const last = groups.at(-1)
+    if (last && last.heading === option.group) last.options.push(option)
+    else groups.push({ heading: option.group, options: [option] })
+    return groups
+  }, [])
   const searchResults = !loading && query && results.length > 0 && <Command.Group heading="Search results">
     {results.map(result => <Command.Item key={`${result.type}-${result.id}`} value={`${result.identifier ?? ''} ${result.title} ${result.subtitle ?? ''}`} onSelect={closeAnd(() => onOpenResult(result))}>
       <ResourceIcon result={result}/>
@@ -192,7 +237,7 @@ export function CommandMenu({
     </Command.Item>)}
   </Command.Group>
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (customerPicker && !initialCustomerPicker) { event.preventDefault(); setCustomerPicker(false); setQuery('') } else if (pages.length) { event.preventDefault(); back() } }}>
+    <DialogContent className="command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (pastChats) { event.preventDefault(); setPastChats(false); setQuery('') } else if (customerPicker && !initialCustomerPicker) { event.preventDefault(); setCustomerPicker(false); setQuery('') } else if (pages.length) { event.preventDefault(); back() } }}>
       <DialogTitle className="sr-only">Command menu</DialogTitle>
       <Command shouldFilter loop>
         {(chip || page) && <div className="command-context" aria-label={t('Command context')}>
@@ -200,10 +245,21 @@ export function CommandMenu({
           {pages.map((item, index) => <span key={`${item.id}-${index}`} className="command-context-page"><ChevronRight aria-hidden="true" size={12}/><span>{t(item.label)}</span></span>)}
         </div>}
         <div className="command-input">
-          <Command.Input aria-label="Command menu" placeholder={customerPicker ? t('Open customer…') : page ? t(page.label) : t('Type a command or search...')} autoFocus value={query} onValueChange={setQuery} onKeyDown={onInputKeyDown}/>
-          {!page && !customerPicker && <button type="button" onClick={closeAnd(onNavigateAgent)}><span>Ask Flow</span><kbd>Tab</kbd></button>}
+          <Command.Input aria-label="Command menu" placeholder={pastChats ? t('Open past agent chat…') : customerPicker ? t('Open customer…') : page ? t(page.label) : t('Type a command or search...')} autoFocus value={query} onValueChange={setQuery} onKeyDown={onInputKeyDown}/>
+          {!page && !customerPicker && !pastChats && <button type="button" onClick={closeAnd(onNavigateAgent)}><span>Ask Flow</span><kbd>Tab</kbd></button>}
         </div>
-        {customerPicker ? <Command.List>
+        {pastChats ? <Command.List>
+          {pastChatGroups.map(group => <Fragment key={group.label}>
+            <Command.Group heading={t(group.label)}>
+              {group.sessions.map(session => <Command.Item key={session.id} value={`${session.title} ${session.id}`} onSelect={closeAnd(() => onOpenAgentSession?.(session))}>
+                <i className="command-chat-dot" aria-hidden="true" data-unread={agentSessionUnread(session) || undefined}/>
+                <span className="command-option-label" data-i18n-ignore>{session.title}</span>
+                <time className="command-chat-time">{formatAgentHistoryTime(session.updatedAt, t)}</time>
+              </Command.Item>)}
+            </Command.Group>
+          </Fragment>)}
+          <Command.Empty>{t('No results found.')}</Command.Empty>
+        </Command.List> : customerPicker ? <Command.List>
           <Command.Group heading={t('Customers')}>
             {(data?.customers ?? []).map(customer => <Command.Item key={customer.id} value={`${customer.name} ${customer.domains.join(' ')} ${customer.id}`} onSelect={closeAnd(() => onOpenCustomer?.(customer))}>
               <span className="command-item-icon"><CustomerLogo customer={customer} size={16}/></span>
@@ -212,8 +268,8 @@ export function CommandMenu({
           </Command.Group>
           <Command.Empty>{t('No results found.')}</Command.Empty>
         </Command.List> : page ? <Command.List>
-          <Command.Group heading={t(page.label)}>
-            {contextCommands.options.map(option => <Command.Item key={option.id || 'none'} value={`${option.label} ${option.keywords ?? ''}`} forceMount={option.forceMount} onSelect={() => selectOption(option)}>
+          {optionGroups.map(group => <Command.Group key={group.heading ?? page.label} heading={t(group.heading ?? page.label)}>
+            {group.options.map(option => <Command.Item key={option.id || 'none'} value={`${option.label} ${option.keywords ?? ''}`} forceMount={option.forceMount} onSelect={() => selectOption(option)}>
               {option.checked !== undefined && <span className="command-checkbox" data-checked={option.checked === true ? 'true' : option.checked === 'mixed' ? 'mixed' : 'false'} aria-hidden="true">{option.checked === true ? <Check size={11}/> : option.checked === 'mixed' ? <Minus size={11}/> : null}</span>}
               {option.icon && <span className="command-item-icon">{option.icon}</span>}
               <span className="command-option-label" data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>
@@ -221,7 +277,7 @@ export function CommandMenu({
               {option.current && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
               {option.page && <ChevronRight className="command-option-current" size={14}/>}
             </Command.Item>)}
-          </Command.Group>
+          </Command.Group>)}
           <Command.Empty>{t('No results found.')}</Command.Empty>
         </Command.List> : <Command.List>
           {loading && <div className="command-loading">Searching...</div>}

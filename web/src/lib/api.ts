@@ -1479,9 +1479,40 @@ export function updateDocument(
       | "subscriberIds"
       | "favorite"
     >
-  > & { archived?: boolean },
+  > & {
+    archived?: boolean;
+    /** Rejects the write with 409 (body `current`) when the document changed since this version. */
+    expectedVersion?: number;
+    /** Compaction guard: `contentState` is only stored when this matches the document's `contentVersion`. */
+    expectedContentVersion?: number;
+    /** Collaboration update ids the `contentState` includes; the server prunes them from the update log. */
+    documentUpdateIds?: string[];
+  },
 ): Promise<FlowDocument> {
   return request(`/api/documents/${id}`, jsonRequest("PATCH", input));
+}
+/** One document by id, slug or an earlier slug; a deleted document comes back with `deletedAt`. */
+export function getDocument(id: string): Promise<FlowDocument> {
+  return request(`/api/documents/${encodeURIComponent(id)}`);
+}
+/** Restores a deleted document from "Recently deleted". */
+export function restoreDeletedDocument(id: string): Promise<FlowDocument> {
+  return request(`/api/documents/${encodeURIComponent(id)}/restore`, { method: "POST" });
+}
+export function listDocumentSubscribers(id: string): Promise<User[]> {
+  return request(`/api/documents/${encodeURIComponent(id)}/subscribers`);
+}
+/** Subscribes members (the viewer or others) to a document; returns the subscriber list. */
+export function addDocumentSubscribers(id: string, userIds: string[]): Promise<User[]> {
+  return request(`/api/documents/${encodeURIComponent(id)}/subscribers`, jsonRequest("POST", { userIds }));
+}
+export function removeDocumentSubscriber(id: string, userId: string): Promise<User[]> {
+  return request(`/api/documents/${encodeURIComponent(id)}/subscribers/${encodeURIComponent(userId)}`, { method: "DELETE" });
+}
+/** "Unsubscribe from thread" (`muted`), "Subscribe to thread" (`subscribed`), or back to the default (`null`). */
+export function setDocumentThreadSubscription(documentId: string, commentId: string, state: "subscribed" | "muted" | null): Promise<unknown> {
+  const path = `/api/documents/${encodeURIComponent(documentId)}/comments/${encodeURIComponent(commentId)}/subscription`;
+  return state ? request(path, jsonRequest("PUT", { state })) : request(path, { method: "DELETE" });
 }
 export function deleteDocument(id: string): Promise<void> {
   return request(`/api/documents/${id}`, { method: "DELETE" });
@@ -1497,9 +1528,15 @@ export function restoreDocumentRevision(
 export function listDocumentComments(id: string): Promise<Comment[]> {
   return request(`/api/documents/${encodeURIComponent(id)}/comments`);
 }
+/** Uploads a file pasted, dropped or picked into a document body; the returned URL is what the editor stores. */
+export function uploadDocumentAttachment(documentId: string, file: File): Promise<Attachment> {
+  const body = new FormData();
+  body.append("file", file);
+  return request(`/api/documents/${documentId}/attachments`, { method: "POST", body });
+}
 export function createDocumentComment(
   id: string,
-  input: Pick<Comment, "body" | "bodyData" | "parentId">,
+  input: Pick<Comment, "body" | "bodyData" | "parentId" | "anchorId" | "quotedText">,
 ): Promise<Comment> {
   return request(`/api/documents/${id}/comments`, jsonRequest("POST", input));
 }

@@ -72,3 +72,15 @@ func TestLatestLoopVersionGetsGeneratedDescription(t *testing.T) {
 		t.Fatal("a description for other instructions overwrote the version")
 	}
 }
+
+// A pasted video or file link that became an embed block keeps its link in the text the model reads.
+func TestProseMirrorPlainTextKeepsEmbedLinks(t *testing.T) {
+	doc := map[string]any{"type": "doc", "content": []any{
+		map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "text", "text": "Watch this"}}},
+		map[string]any{"type": "embed", "attrs": map[string]any{"src": "https://youtu.be/dQw4w9WgXcQ", "embedUrl": "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ", "provider": "youtube"}},
+		map[string]any{"type": "embed", "attrs": map[string]any{"src": "https://github.com/acme/web/blob/main/a.ts#L1-L5", "provider": "github"}},
+	}}
+	if got, want := proseMirrorPlainText(doc), "Watch this\n\nhttps://youtu.be/dQw4w9WgXcQ\n\nhttps://github.com/acme/web/blob/main/a.ts#L1-L5"; got != want {
+		t.Fatalf("plain text = %q, want %q", got, want)
+	}
+}

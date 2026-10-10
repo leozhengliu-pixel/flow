@@ -8,7 +8,7 @@ describe('route preloading', () => {
     ['/acme/views/issues', 'ViewsPage'], ['/acme/views/projects/new', 'ProjectsPage'],
     ['/acme/team/ENG/views/issues/new', 'IssueExplorerPage'], ['/acme/projects/all', 'ProjectsPage'],
     ['/acme/settings/account/security', 'SettingsPage'], ['/acme/inbox', 'InboxAppPage'],
-    ['/acme/documents', 'DocumentsIndexPage'], ['/acme/teams', 'WorkspaceDirectoryPage'],
+    ['/acme/documents', 'TeamOverviewPage'], ['/acme/teams', 'WorkspaceDirectoryPage'],
     ['/acme/members', 'WorkspaceDirectoryPage'], ['/acme/reviews', 'ReviewsPage'],
     ['/acme/initiatives', 'InitiativesPage'], ['/acme/agent', 'AgentPage'],
   ])('maps %s to the module rendered by the route', (path, module) => {

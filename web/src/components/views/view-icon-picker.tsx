@@ -13,7 +13,7 @@ const ICON_NAME_SET = new Set<string>(ICON_NAMES)
 
 const FREQUENT_EMOJIS = `👍 👌 🙏 😂 ❤️ 👀 ✅ 🙂 😃 😄 😀 🤔 😅 ⚠️ 😕 ❌ 🙌 🎉 😉 😊 🤷 👋 ❓`.split(' ')
 const PEOPLE_EMOJIS = `😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 🫠 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 😶‍🌫️ 😏 😒 🙄 😬 😮‍💨 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 😵‍💫 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👻 👽 👾 🤖 👋 🤚 🖐️ ✋ 🖖 🫱 🫲 🫳 🫴 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 🫵 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅`.split(' ')
-const PRESET_COLORS = ['#95a2b3', '#5e6ad2', '#24b4c7', '#4cb782', '#f2c300', '#eb9138', '#c99790', '#ee565d']
+const PRESET_COLORS = ['#95a2b3', '#5e6ad2', '#4ea7fc', '#24b4c7', '#4cb782', '#f2c300', '#eb9138', '#c99790', '#ee565d']
 const EMOJI_NAMES: Record<string, string> = { '👍': '+1', '👌': 'ok_hand', '🙏': 'pray', '😂': 'joy', '❤️': 'heart', '👀': 'eyes', '✅': 'white_check_mark', '🙂': 'slightly_smiling_face', '⚠️': 'warning', '❌': 'x', '🙌': 'raised_hands', '🎉': 'tada', '🤷': 'shrug', '👋': 'wave', '❓': 'question' }
 
 export type ViewVisual = { icon: string; color: string }

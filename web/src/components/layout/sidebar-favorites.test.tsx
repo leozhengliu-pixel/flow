@@ -59,3 +59,77 @@ it('renders every core favorite type and manages favorite folders', async () => 
   await user.click(screen.getAllByRole('button', { name: 'Remove favorite' })[0])
   expect(onRemoveFavorite).toHaveBeenCalledWith(favorites[0])
 })
+
+function renderFavorites(data: ReturnType<typeof makeBootstrap>, favorites: Favorite[]) {
+  return render(
+    <MemoryRouter>
+      <I18nProvider>
+        <FavoritesSection
+          data={data}
+          favorites={favorites}
+          folders={[]}
+          onCreateFolder={vi.fn().mockResolvedValue(undefined)}
+          onMoveFavorite={vi.fn().mockResolvedValue(undefined)}
+          onMoveFolder={vi.fn().mockResolvedValue(undefined)}
+          onNavigate={vi.fn()}
+          onRemoveFavorite={vi.fn()}
+          onRemoveFolder={vi.fn().mockResolvedValue(undefined)}
+          onRenameFolder={vi.fn().mockResolvedValue(undefined)}
+          workspaceSlug={data.workspace.urlKey}
+        />
+      </I18nProvider>
+    </MemoryRouter>,
+  )
+}
+
+function documentFixture(overrides: Partial<FlowDocument>): FlowDocument {
+  return { id: 'document-1', slugId: 'doc', title: 'Release notes', icon: '', color: '', projectIds: [], teamIds: [], subscriberIds: [], favorite: true, content: '', creator: viewer, createdAt: '', updatedAt: '', revisions: [], ...overrides } as FlowDocument
+}
+
+function documentFavorite(id: string, position: number): Favorite {
+  return { id: `favorite-${id}`, userId: viewer.id, resourceType: 'document', resourceId: id, position, createdAt: '2026-09-01T00:00:00Z' }
+}
+
+it('shows a document favorite with its team, project or initiative name muted after the title', () => {
+  const base = makeBootstrap()
+  const project = base.projects[0]
+  const data = makeBootstrap({
+    documents: [
+      documentFixture({ id: 'in-team', slugId: 'in-team', title: 'Team doc', teamIds: [base.teams[0].id] }),
+      documentFixture({ id: 'in-project', slugId: 'in-project', title: 'Project doc', projectIds: [project.id] }),
+      documentFixture({ id: 'in-issue', slugId: 'in-issue', title: 'Issue doc', teamIds: [base.teams[0].id], issueId: base.issues[0].id }),
+      documentFixture({ id: 'loose', slugId: 'loose', title: 'Loose doc' }),
+    ],
+    initiatives: [{ ...base.initiatives[0], id: 'initiative-1', name: 'Grow revenue', resources: [{ id: 'resource-1', type: 'document', documentId: 'in-initiative' }] } as never],
+  })
+  data.documents.push(documentFixture({ id: 'in-initiative', slugId: 'in-initiative', title: 'Initiative doc' }))
+  renderFavorites(data, ['in-team', 'in-project', 'in-issue', 'loose', 'in-initiative'].map(documentFavorite))
+
+  const parentOf = (name: RegExp) => screen.getByRole('link', { name }).querySelector('.sidebar-favorite-parent')
+  expect(parentOf(/Team doc/)).toHaveTextContent(base.teams[0].name)
+  expect(parentOf(/Project doc/)).toHaveTextContent(project.name)
+  expect(parentOf(/Initiative doc/)).toHaveTextContent('Grow revenue')
+  expect(parentOf(/Issue doc/)).toBeNull()
+  expect(parentOf(/Loose doc/)).toBeNull()
+  // The title and the muted parent share one truncating line.
+  expect(screen.getByRole('link', { name: /Team doc/ }).querySelector('.sidebar-favorite-title')).toHaveAttribute('title', `Team doc · ${base.teams[0].name}`)
+})
+
+it('falls back to Untitled for an untitled document favorite and keeps long names in one truncating title', () => {
+  const base = makeBootstrap()
+  const longTitle = 'A very long document title that cannot possibly fit inside the sidebar row'
+  const data = makeBootstrap({
+    documents: [
+      documentFixture({ id: 'blank', slugId: 'blank', title: '  ', teamIds: [base.teams[0].id] }),
+      documentFixture({ id: 'long', slugId: 'long', title: longTitle, teamIds: [base.teams[0].id] }),
+    ],
+  })
+  renderFavorites(data, [documentFavorite('blank', 0), documentFavorite('long', 1)])
+
+  const untitled = screen.getByRole('link', { name: new RegExp(`^Untitled ${base.teams[0].name}`) })
+  expect(untitled.querySelector('.sidebar-favorite-title')).toHaveTextContent(`Untitled ${base.teams[0].name}`)
+  const long = screen.getByRole('link', { name: new RegExp(longTitle) }).querySelector('.sidebar-favorite-title')!
+  expect(long).toHaveAttribute('title', `${longTitle} · ${base.teams[0].name}`)
+  // The parent is a muted span inside the title element, so the ellipsis applies to both.
+  expect(long.querySelector('.sidebar-favorite-parent')).toHaveTextContent(base.teams[0].name)
+})

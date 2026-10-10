@@ -38,6 +38,11 @@ function presetApplies(kind: ReminderPreset, from: Date) {
   return true
 }
 
+/** The presets that apply right now with their dates (the ⌘K "Remind me" page uses the same list). */
+export function reminderPresetOptions(now = new Date()) {
+  return PRESETS.filter(preset => presetApplies(preset.id, now)).map(preset => ({ ...preset, date: reminderPresetDate(preset.id, now) }))
+}
+
 const alarm = <ViewGlyph icon="Alarm" color="currentColor"/>
 
 /** The "Remind me" submenu body: a natural-language field over the presets and Custom…. */

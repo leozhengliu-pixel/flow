@@ -73,7 +73,8 @@ export interface MyIssuesSurfaceProps {
 }
 
 /** `suggestedLabel` is the pre-Triage-Intelligence field, kept so saved filters still apply. */
-export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id'] | 'suggestedLabel'
+/** `owner` is the Documents list's owner filter (documents have owners, issues have assignees). */
+export type MyIssuesFilterKey = typeof filterGroups[number]['items'][number]['id'] | 'suggestedLabel' | 'owner'
 export interface MyIssuesFilterOption { id: string; label: string; /** Agent member: rendered with Linear's "Agent" pill. */ agent?: boolean; color?: string; count?: number; children?: MyIssuesFilterOption[]; kind?: string; stateType?: 'backlog'|'unstarted'|'started'|'completed'|'canceled'; projectType?: string; priority?: 0|1|2|3|4; avatarUrl?: string; filterLabel?: string; operatorLabel?: string; negativeOperatorLabel?: string; textConditionPrefix?: string; textConditionInput?: 'text' | 'date'; /** Linear's number sub-menu ("Enter customer count…"): picking a comparison applies `<prefix><number>`. */ numberInput?: { prefix: string; placeholder: string; revenue?: { currency: string; monthly: boolean } }; /** A number filter's comparison (the chip operator). */ comparison?: 'gte' | 'lte' | 'eq' | 'neq'; /** Hides the "N issues" match count (Linear's hideMatchCount). */ hideCount?: boolean }
 
 const views: { id: MyIssuesView; label: string }[] = [

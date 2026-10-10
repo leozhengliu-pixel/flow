@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Bot, History } from "lucide-react";
+import { AgentCursorGlyph, AgentHistoryGlyph } from "@/components/ui/agent-glyph";
 import { AppStartup } from '@/components/layout/app-startup';
 import { setRuntimePreferences, setWorkspaceRuntimePreferences } from '@/lib/runtime-preferences';
 import { AuthenticationPolicyPage } from '@/components/auth/authentication-policy-page';
@@ -186,7 +186,8 @@ import type {
 } from "@/components/projects-page/projects-page";
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { LabelActions } from "@/components/workspace/label-page-toolbar";
-import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, DocumentsIndexPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { documentsRedirectPath } from "@/lib/documents-redirect";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
 import { createIssueShortcutContext } from "@/lib/create-issue-shortcut";
@@ -206,7 +207,6 @@ import {
   customerPath,
   cyclePath,
   documentPath,
-  documentsPath,
   loopsPath,
   inboxPath,
   initiativePath,
@@ -274,6 +274,9 @@ import {
   settingsPath,
   type AppRoute,
 } from "@/lib/app-routes";
+import { findDocumentBySlugSuffix } from "@/lib/document-slug";
+import { findTrashedDocument } from "@/components/documents/document-trash";
+import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
 import type { CreateIssueInput } from "@/components/create-issue/create-issue-dialog";
 
 function mergeProjectRelations(data: BootstrapData, projectId: string, relations: ProjectRelation[]) {
@@ -471,6 +474,8 @@ function App() {
     [commandOpen, setCommandOpen] = useState(false),
     // "O then Q" opens the command menu on its "Open customer…" picker.
     [commandCustomerPicker, setCommandCustomerPicker] = useState(false),
+    // "O then D" opens it on "Open document…".
+    [commandDocumentPicker, setCommandDocumentPicker] = useState(false),
     [createOpen, setCreateOpen] = useState(false),
     [createDraftId, setCreateDraftId] = useState<string>(),
     [createTeamId, setCreateTeamId] = useState<string>(),
@@ -782,6 +787,12 @@ function App() {
       .catch(() => { if (!cancelled) setError(true); });
     return () => { cancelled = true; };
   }, [account, connectPath, loadedWorkspaceKey, navigateTo, oauthPath, projectListProjection, bootstrapProjection, requestedWorkspaceKey, route.kind]);
+  // Surfaces ("Actions" buttons) register a command context and ask for the palette.
+  useEffect(() => {
+    const open = () => setCommandOpen(true);
+    window.addEventListener(OPEN_COMMAND_MENU_EVENT, open);
+    return () => window.removeEventListener(OPEN_COMMAND_MENU_EVENT, open);
+  }, []);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing) return;
@@ -789,6 +800,12 @@ function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandOpen((open) => !open);
+        return;
+      }
+      // "Ask Flow" (⌘J, Linear's "Ask Linear"): open or close the floating agent chat. The Agent page is the chat already.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        if (route.kind !== "agent") setFloatingAgentOpen((open) => !open);
         return;
       }
       if (
@@ -873,6 +890,13 @@ function App() {
           setCommandCustomerPicker(true);
           setCommandOpen(true);
         }
+        return;
+      }
+      if (inSequence && sequence.key === "o" && pressed === "d" && data) {
+        e.preventDefault();
+        shortcutSequence.current = { key: "", at: 0 };
+        setCommandDocumentPicker(true);
+        setCommandOpen(true);
         return;
       }
       if (inSequence && sequence.key === "g" && pressed === "s" && data) {
@@ -1004,12 +1028,18 @@ function App() {
   }, [historyIssueId, data?.workspace.urlKey, data?.viewer.id]);
   const selectedDocument =
     !data?.resourceDetailsOmitted && route.kind === "document"
-      ? data?.documents.find(
+      ? (data?.documents.find(
           (document) =>
             document.slugId === route.documentSlugId ||
             document.id === route.documentSlugId,
-        ) || null
+        ) ??
+          // Slugs follow the title but keep their trailing hex suffix, so links made before a rename still resolve.
+          findDocumentBySlugSuffix(data?.documents ?? [], route.documentSlugId)) ||
+        null
       : null;
+  // A deleted document stays on its URL (read-only, restorable) while it is in the trash.
+  const trashedDocument = !selectedDocument && !data?.resourceDetailsOmitted && route.kind === "document" ? findTrashedDocument(data?.trash, route.documentSlugId) : undefined;
+  const pageDocument = selectedDocument ?? trashedDocument?.document ?? null;
   const selectedCustomer =
     route.kind === "customer"
       ? data?.customers.find((customer) =>
@@ -1760,7 +1790,7 @@ function App() {
     const document = await run(
       () =>
         createDocument({
-          title: "New document",
+          title: "",
           teamIds: [selectedIssue.team.id],
           issueId: selectedIssue.id,
         }),
@@ -2895,7 +2925,7 @@ function App() {
       const document = await run(
         () =>
           createDocument({
-            title: input.title || "New document",
+            title: input.title ?? "",
             projectIds: [projectId],
           }),
         "Could not create document",
@@ -3961,6 +3991,11 @@ function App() {
       else navigateTo(to, options);
     };
     if (!routeBelongsToWorkspace(route, workspace)) return;
+    // There is no workspace-wide Documents list: old links land on a team's Documents tab.
+    if (route.kind === "documents") {
+      navigateTo(documentsRedirectPath(data), { replace: true });
+      return;
+    }
     if (
       route.kind === "dashboards" &&
       data.workspaceSettings.featureFlags.dashboards === false
@@ -4928,17 +4963,6 @@ function App() {
             users={data.users}
           />
         )}
-        {page === "documents" && route.kind === "documents" && (
-          <DocumentsIndexPage
-            data={data}
-            search={location.search}
-            onFiltersChange={search => navigateTo(`${documentsPath(data.workspace.urlKey)}${search ? `?${search}` : ''}`, { replace: true })}
-            onNavigate={navigateTo}
-            onReload={async () => {
-              await reloadWorkspaceMetadata(data.workspace.urlKey);
-            }}
-          />
-        )}
         {page === "team-overview" &&
           (route.kind === "team-overview" ||
             route.kind === "team-documents" ||
@@ -5235,31 +5259,35 @@ function App() {
               }}
             />
           )}
-        {page === "document-detail" && selectedDocument && (
+        {page === "document-detail" && pageDocument && (
           <DocumentPage
+            key={pageDocument.id}
             data={data}
+            deletedEntry={trashedDocument?.entry}
+            onOpenSidebar={() => setMobileSidebarOpen(true)}
+            onNavigate={(path) => navigateTo(path)}
             origin={navigationLabel(navigationReturnPath(location.state, data.workspace.urlKey, ''), data)}
-            document={selectedDocument}
+            document={pageDocument}
             openHistoryRequest={new URLSearchParams(location.search).has("history")}
             onHistoryRequestHandled={() => navigateTo({ pathname: location.pathname, search: "" }, { replace: true, state: location.state })}
             onReload={async () => {
               // Document comments are content records the metadata
               // projection omits; refresh just this document's thread.
-              const workspaceKey = data.workspace.urlKey, documentId = selectedDocument.id;
-              const [, comments] = await Promise.all([reloadWorkspaceMetadata(workspaceKey), listDocumentComments(documentId)]);
-              setData(current => current?.workspace.urlKey === workspaceKey ? { ...current, comments: { ...current.comments, [documentId]: comments } } : current);
+              const workspaceKey = data.workspace.urlKey, documentId = pageDocument.id;
+              const [, comments] = await Promise.all([reloadWorkspaceMetadata(workspaceKey), listDocumentComments(documentId).catch(() => undefined)]);
+              if (comments) setData(current => current?.workspace.urlKey === workspaceKey ? { ...current, comments: { ...current.comments, [documentId]: comments } } : current);
             }}
             onBack={() => {
               const source = navigationReturnPath(location.state, data.workspace.urlKey, '');
               if (source) { navigateTo(source); return; }
               const issue = data.issues.find(
-                (item) => item.id === selectedDocument.issueId,
+                (item) => item.id === pageDocument.issueId,
               );
               const project = data.projects.find((item) =>
-                selectedDocument.projectIds.includes(item.id),
+                pageDocument.projectIds.includes(item.id),
               );
               const team = data.teams.find((item) =>
-                selectedDocument.teamIds.includes(item.id),
+                pageDocument.teamIds.includes(item.id),
               );
               navigateTo(
                 issue
@@ -5268,7 +5296,7 @@ function App() {
                     ? projectPath(data.workspace.urlKey, project)
                     : team
                       ? teamDocumentsPath(data.workspace.urlKey, team.key)
-                      : documentsPath(data.workspace.urlKey),
+                      : documentsRedirectPath(data),
               );
             }}
           />
@@ -5601,6 +5629,10 @@ function App() {
               onOpenInitiative={openInitiative}
               initiative={selectedInitiative}
               initiatives={data.initiatives}
+              data={data}
+              onReloadWorkspace={async () => {
+                await reloadWorkspaceMetadata(data.workspace.urlKey);
+              }}
               documents={data.documents}
               initiativeUpdates={
                 data.initiativeUpdates[selectedInitiative.id] ?? []
@@ -6680,18 +6712,11 @@ function App() {
         {commandOpen && (
           <CommandMenu
             open={commandOpen}
-            onOpenChange={open => { setCommandOpen(open); if (!open) setCommandCustomerPicker(false); }}
+            onOpenChange={open => { setCommandOpen(open); if (!open) { setCommandCustomerPicker(false); setCommandDocumentPicker(false); } }}
             initialCustomerPicker={commandCustomerPicker}
+            initialDocumentPicker={commandDocumentPicker}
+            documentHost={{ reload: async () => { await reloadWorkspaceMetadata(data.workspace.urlKey); }, navigate: navigateTo }}
             onCreateIssue={() => openCreateIssue()}
-            onCreateDocument={() =>
-              void run(
-                () => createDocument({ title: "Untitled document" }),
-                "Could not create document",
-              ).then(async (document) => {
-                await reloadWorkspaceMetadata(data.workspace.urlKey);
-                navigateTo(documentPath(data.workspace.urlKey, document));
-              })
-            }
             onCreateIssueTemplate={() =>
               navigateTo(newIssueTemplatePath(data.workspace.urlKey))
             }
@@ -6729,6 +6754,9 @@ function App() {
             onGoToCustomers={data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "customer-requests") ? () => navigateTo(customersPath(data.workspace.urlKey)) : undefined}
             onOpenCustomer={(customer) => navigateTo(customerPath(data.workspace.urlKey, customer))}
             onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
+            onAskAgent={() => { if (route.kind !== "agent") setFloatingAgentOpen(true) }}
+            agentSessions={data.agentSessions}
+            onOpenAgentSession={(session) => navigateTo(agentPath(data.workspace.urlKey, session.slugId))}
             onNavigateReviews={() => navigateTo(reviewsPath(data.workspace.urlKey))}
             onNavigatePulse={data.viewerRole !== "guest" && workspaceFeatureEnabled(data.workspaceSettings.featureFlags, "pulse") ? () => navigateTo(pulseSidebarPath(data.workspace.urlKey, pulseUnread.state.count)) : undefined}
             pulseToggle={data.viewerRole === "admin" || data.viewerRole === "owner" ? {
@@ -6879,7 +6907,7 @@ function App() {
           onClick={() => setFloatingAgentOpen((value) => !value)}
           type="button"
         >
-          <Bot />
+          <AgentCursorGlyph size={14} />
           <span>Agent</span>
         </button>
         <button
@@ -6889,7 +6917,7 @@ function App() {
           }
           type="button"
         >
-          <History />
+          <AgentHistoryGlyph size={14} />
         </button>
       </div>
     </div></ActiveTeamProvider></PeopleProvider>

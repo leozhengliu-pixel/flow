@@ -518,7 +518,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	}
 	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, data.Issues, nil)}, {Role: "user", Content: prompt}}
 	if task.ResourceType == "document" && len(data.Documents) == 1 {
-		messages[1].Content += "\nDocument: " + data.Documents[0].Title + "\n" + data.Documents[0].Content
+		messages[1].Content += "\nDocument: " + documentDisplayTitle(data.Documents[0].Title) + "\n" + data.Documents[0].Content
 	}
 	if task.ResourceType == "project" && len(data.Projects) == 1 {
 		messages[1].Content += "\nProject: " + data.Projects[0].Name + "\n" + data.Projects[0].Description

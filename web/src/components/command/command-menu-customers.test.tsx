@@ -19,7 +19,7 @@ function setup(props: { customers?: boolean; initialCustomerPicker?: boolean } =
   const handlers = { onNavigateCustomers: vi.fn(), onGoToCustomers: vi.fn(), onOpenCustomer: vi.fn(), onOpenChange: vi.fn() }
   const noop = vi.fn()
   render(<MemoryRouter><I18nProvider><CommandMenu open data={data} initialCustomerPicker={props.initialCustomerPicker} onOpenChange={handlers.onOpenChange}
-    onCreateIssue={noop} onCreateDocument={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
+    onCreateIssue={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
     onNavigateInbox={noop} onNavigateMyIssues={noop} onNavigateProjects={noop} onNavigateInitiatives={noop} onNavigateViews={noop} onNavigateMembers={noop}
     onNavigateCustomers={handlers.onNavigateCustomers} onGoToCustomers={props.customers === false ? undefined : handlers.onGoToCustomers}
     onOpenCustomer={handlers.onOpenCustomer} onNavigateAgent={noop} onOpenResult={noop}/></I18nProvider></MemoryRouter>)

@@ -1,10 +1,18 @@
-import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { Children, useEffect, useMemo, useRef, useState, type ComponentProps, type ComponentType, type ReactNode } from "react";
 import { ApplicationMembers } from '@/components/agent/application-members'
 import {
   ArrowUpRight,
-  Bot, Check, ChevronDown, ChevronRight, Code2, FileText,
-  Inbox, MessageSquare, Plus, Radio, Rocket,
-  Search, Smile, Sparkles, Tag,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  MessageSquare,
+  Plus,
+  Rocket,
+  Search,
+  Smile,
+  Sparkles,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +32,7 @@ import { countLabelsByResource } from '@/lib/resource-counts';
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
+import { DocumentTemplateEditor } from "@/components/documents/document-template-editor";
 import {
   createCustomEmoji, createDocumentTemplate, restoreTrashEntry,
   deleteDocumentTemplate, updateCustomEmoji, updateDocumentTemplate,
@@ -48,6 +57,9 @@ import { AsksSettingsPage } from "./asks-settings";
 import { AgentTrustedSourcesSettings } from "./agent-trusted-sources-settings";
 import { CodingAgentSettingsPage } from "./coding-agent-settings";
 import { CustomerRequestsSettings } from "./customer-requests-settings";
+import { AgentCodingGlyph, AgentCursorGlyph } from '@/components/ui/agent-glyph'
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
+import { LoopsGlyph } from '@/components/ui/agent-glyph'
 
 type FeaturePageId = Extract<SettingsPageId, "ai"|"loops"|"coding-sessions"|"coding-environments"|"initiatives"|"documents"|"customer-requests"|"releases"|"pulse"|"asks"|"emojis"|"integrations">;
 type Props = { page: FeaturePageId; data: BootstrapData; onCreateReleasePipeline: () => void; onOpenReleasePipeline: (pipeline:ReleasePipeline) => void; onOpenIntegration:(provider:IntegrationProvider|string)=>void; onReload: () => Promise<void>; onNavigateSettings?: (page: SettingsPageId) => void; onOpenAsksSlack?: (integrationId: string) => void; onOpenAsksEmailIntake?: (addressId?: string) => void };
@@ -174,8 +186,8 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
   useEffect(()=>setGuidance(settings.agentInstructions??''),[settings.agentInstructions]);
   const canEdit=['owner','admin'].includes(data.viewerRole)||settings.agentGuidancePermission==='members';
   const cards = [
-    ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", Bot],
-    ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", Radio],
+    ["ai-agent", "Flow Agent", "Create issues and answer questions about your workspace", AgentCursorGlyph],
+    ["loops", "Loops", "Automated agent workflows triggered by schedules or issue updates", LoopsGlyph],
   ] as const;
   const repositoryAccess: RepositoryAccessSettings = {
     ...DEFAULT_REPOSITORY_ACCESS,
@@ -197,7 +209,7 @@ function AIPage({data,onReload,settings,busy,setEnabled,setFeature,onOpenIntegra
   return <FeatureShell title="AI & Agents" description="Automate your product development processes and operations with AI">
     <FeatureSection title="Flow Agent" description="Create issues and answer questions about your workspace.">
       <FeatureCard>{cards.slice(0,1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} businessTitle={id==="ai-agent"} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
-        <FeatureLinkRow icon={Code2} title="Coding sessions" description="Assign or ask Flow to make code changes" detail={(settings.featureFlags["coding-sessions"]??true)?"Enabled":"Disabled"} onClick={()=>onNavigateSettings?.("coding-sessions")}/>
+        <FeatureLinkRow icon={AgentCodingGlyph} title="Coding sessions" description="Assign or ask Flow to make code changes" detail={(settings.featureFlags["coding-sessions"]??true)?"Enabled":"Disabled"} onClick={()=>onNavigateSettings?.("coding-sessions")}/>
         {cards.slice(1).map(([id,title,description,Icon])=><FeatureRow key={id} icon={Icon} title={title} description={description}><Toggle checked={settings.featureFlags[id]??true} disabled={busy} label={title} onChange={value=>setEnabled(id,value)}/></FeatureRow>)}
         {/* Like Linear, "Require signed commits" lives on the Coding sessions page (and Account → Code & reviews), not here. */}
       </FeatureCard>
@@ -239,7 +251,7 @@ function TriageIntelligenceFeatureSettings({settings,busy,setEnabled,setFeature}
     ["relatedAction","Related issue is suggested","Surface adjacent implementation work"],
   ];
   return <FeatureSection title="Triage Intelligence" description="Use workspace context to infer teams, projects, labels, assignees, duplicates, and related work.">
-    <FeatureCard><FeatureRow icon={Inbox} title="Enable Triage Intelligence" description="Generate suggestions when issues enter triage"><Toggle checked={enabled} disabled={busy} label="Enable Triage Intelligence" onChange={value=>setEnabled("triage-intelligence",value)}/></FeatureRow></FeatureCard>
+    <FeatureCard><FeatureRow icon={TriageIntelligenceGlyph} title="Enable Triage Intelligence" description="Generate suggestions when issues enter triage"><Toggle checked={enabled} disabled={busy} label="Enable Triage Intelligence" onChange={value=>setEnabled("triage-intelligence",value)}/></FeatureRow></FeatureCard>
     <div className={`feature-subsection${enabled ? "" : " is-disabled"}`} aria-disabled={!enabled}>
       <header><h3>{t("Behavior")}</h3><p>{t("Define whether each suggestion is shown, applied automatically, or hidden.")}</p></header>
       <FeatureCard>{rows.map(([key,title,description])=><FeatureRow key={key} title={title} description={description}><FeatureSelect label={title} value={config[key] as string} options={actionOptions} disabled={busy||!enabled} onChange={value=>update(key,value as never)}/></FeatureRow>)}</FeatureCard>
@@ -321,26 +333,22 @@ function InitiativesFeatureSettings({data,settings,busy,setEnabled,onScheduleCha
 
 function DocumentsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
   const { t } = useI18n();
-  const [editing,setEditing]=useState<DocumentTemplate|null|undefined>();
-  // Workspace templates have no team; team templates live in each team's settings.
+  // `undefined` = list, `null` = a new template, a template = editing it. ⌘K's "Create new document template…" opens with ?newTemplate=1.
+  const [editing,setEditing]=useState<DocumentTemplate|null|undefined>(()=>new URLSearchParams(window.location.search).has("newTemplate")?null:undefined);
+  // Workspace templates apply to every team; team templates are listed under their team (and also managed in team settings).
   const templates=data.documentTemplates.filter(item=>!item.teamId);
+  const teamGroups=data.teams.filter(team=>!team.archivedAt).map(team=>({team,items:data.documentTemplates.filter(item=>item.teamId===team.id)})).filter(group=>group.items.length>0);
+  const row=(item:DocumentTemplate)=><FeatureRow key={item.id} icon={FileText} title={item.name} businessTitle description={item.description||"Document template"}><FeatureButton aria-label={`${t("Edit")}: ${item.name}`} onClick={()=>setEditing(item)}>Edit</FeatureButton></FeatureRow>;
+  if (editing!==undefined) return <FeatureShell title="Documents"><DocumentTemplateEditor data={data} teamId={editing?.teamId??""} template={editing} onClose={()=>setEditing(undefined)} onSaved={onReload}/></FeatureShell>;
   return <FeatureShell title="Documents"><FeatureSection title="Templates" description="These templates are available when creating documents for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.">
     {templates.length ? (
-      <FeatureCard>{templates.map(item => <FeatureRow key={item.id} icon={FileText} title={item.name} businessTitle description={item.description||"Document template"}><FeatureButton aria-label={`${t("Edit")}: ${item.name}`} onClick={()=>setEditing(item)}>Edit</FeatureButton></FeatureRow>)}</FeatureCard>
+      <FeatureCard>{templates.map(row)}</FeatureCard>
     ) : (
       <FeatureEmpty icon={FileText} title="No document templates" action={<FeatureButton onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton>}/>
     )}
     {templates.length>0&&<div className="feature-section-action"><FeatureButton onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton></div>}
-    {editing!==undefined&&<DocumentTemplateDialog data={data} template={editing} onClose={()=>setEditing(undefined)} onReload={onReload}/>}
-  </FeatureSection></FeatureShell>;
-}
-
-function DocumentTemplateDialog({data,template,onClose,onReload}:{data:BootstrapData;template:DocumentTemplate|null;onClose:()=>void;onReload:()=>Promise<void>}) {
-  const { t } = useI18n();
-  const [name,setName]=useState(template?.name??""); const [content,setContent]=useState(template?.content??""); const [busy,setBusy]=useState(false);
-  const save=async()=>{setBusy(true);try{if(template)await updateDocumentTemplate(template.id,{name,content});else await createDocumentTemplate({teamId:"",name,content});await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};
-  const remove=async()=>{if(!template)return;setBusy(true);try{await deleteDocumentTemplate(template.id);await onReload();onClose()}catch(error){toast.error(message(error))}finally{setBusy(false)}};
-  return <FeatureDialog open onClose={onClose} title={template?"Edit document template":"New document template"}><label>{t("Template name")}<input autoFocus aria-label={t("Template name")} value={name} onChange={event=>setName(event.target.value)}/></label><div className="feature-field"><span>{t("Document template content")}</span><MentionTextField className="feature-mention-field" ariaLabel={t("Document template content")} placeholder={t("Click here to start writing…")} value={content} users={data.users} onChange={setContent} onSubmit={()=>{if(!busy&&name.trim())void save()}}/></div><FeatureDialogFooter>{template&&<FeatureButton danger disabled={busy} onClick={()=>void remove()}>Delete</FeatureButton>}<span/><FeatureButton disabled={busy} onClick={onClose}>Cancel</FeatureButton><FeatureButton primary disabled={busy||!name.trim()} onClick={()=>void save()}>{template?"Save":"Create"}</FeatureButton></FeatureDialogFooter></FeatureDialog>;
+  </FeatureSection>
+  {teamGroups.map(group=><FeatureSection key={group.team.id} title={group.team.name}><FeatureCard>{group.items.map(row)}</FeatureCard></FeatureSection>)}</FeatureShell>;
 }
 
 function CustomerRequestsPage(props:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void|Promise<void>;onReload:()=>Promise<void>}) {
@@ -450,8 +458,12 @@ function FeatureShell({className,title,description,children}:{className?:string;
 function FeatureSection({title,description,disabled,children}:{title:string;description?:string;disabled?:boolean;children:ReactNode}) { const {t}=useI18n();return <section className={`feature-section${disabled?" is-disabled":""}`} aria-disabled={disabled||undefined}><header><h2>{t(title)}</h2>{description&&<p>{t(description)}</p>}</header>{children}</section> }
 function FeatureCard({children}:{children:ReactNode}) {return <div className="feature-card">{children}</div>}
 function Toggle(props:ComponentProps<typeof BaseSettingsToggle>) {const {t}=useI18n();return <BaseSettingsToggle {...props} label={t(props.label)}/>}
-function FeatureRow({title,description,icon:Icon,badge,businessTitle,children}:{title:string;description?:string;icon?:LucideIcon;badge?:string;businessTitle?:boolean;children?:ReactNode}) { const {t}=useI18n();return <div className="feature-row">{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong data-i18n-ignore={businessTitle||undefined}>{businessTitle?title:t(title)}{badge&&<small>{t(badge)}</small>}</strong>{description&&<span>{t(description)}</span>}</div>{children&&<aside>{children}</aside>}</div> }
-function FeatureLinkRow({title,description,icon:Icon,detail,onClick}:{title:string;description?:string;icon?:LucideIcon;detail?:string;onClick:()=>void}) { const {t}=useI18n();return <button type="button" className="feature-row feature-row-link" onClick={onClick}>{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong>{t(title)}</strong>{description&&<span>{t(description)}</span>}</div><aside>{detail&&<span className="feature-state">{t(detail)}</span>}<ChevronRight size={15}/></aside></button> }
+/** The Triage Intelligence tile glyph (Linear's triage mark). */
+function TriageIntelligenceGlyph({ size = 16 }: { size?: number | string }) { return <LinearGlyph name="triage" size={Number(size) || 16} /> }
+/** A settings row icon: a lucide icon or an agent glyph. */
+type FeatureIcon = ComponentType<{ size?: number | string }>
+function FeatureRow({title,description,icon:Icon,badge,businessTitle,children}:{title:string;description?:string;icon?:FeatureIcon;badge?:string;businessTitle?:boolean;children?:ReactNode}) { const {t}=useI18n();return <div className="feature-row">{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong data-i18n-ignore={businessTitle||undefined}>{businessTitle?title:t(title)}{badge&&<small>{t(badge)}</small>}</strong>{description&&<span>{t(description)}</span>}</div>{children&&<aside>{children}</aside>}</div> }
+function FeatureLinkRow({title,description,icon:Icon,detail,onClick}:{title:string;description?:string;icon?:FeatureIcon;detail?:string;onClick:()=>void}) { const {t}=useI18n();return <button type="button" className="feature-row feature-row-link" onClick={onClick}>{Icon&&<span className="feature-row-icon"><Icon size={18}/></span>}<div><strong>{t(title)}</strong>{description&&<span>{t(description)}</span>}</div><aside>{detail&&<span className="feature-state">{t(detail)}</span>}<ChevronRight size={15}/></aside></button> }
 function FeatureButton({children,primary,danger,...props}:React.ButtonHTMLAttributes<HTMLButtonElement>&{primary?:boolean;danger?:boolean}) {const {t}=useI18n();return <button {...props} className={`feature-button${primary?" primary":""}${danger?" danger":""}`}>{Children.map(children,child=>typeof child==="string"?t(child):child)}</button>}
 function FeatureSelect({label,value,options,onChange,disabled}:{label:string;value:string;options:{value:string;label:string;translate?:boolean}[];onChange:(value:string)=>void;disabled?:boolean}) {const {t}=useI18n();const selected=options.find(item=>item.value===value)??{value,label:value};const text=(item:{label:string;translate?:boolean})=>item.translate===false?item.label:t(item.label);return <DropdownMenu><DropdownMenuTrigger asChild><button type="button" role="combobox" aria-label={t(label)} disabled={disabled} className="feature-select"><span data-i18n-ignore={selected.translate===false?true:undefined}>{text(selected)}</span><ChevronDown size={13}/></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="feature-select-menu">{options.map(item=><DropdownMenuItem key={item.value} data-i18n-ignore={item.translate===false?true:undefined} onSelect={()=>onChange(item.value)}>{text(item)}{item.value===value&&<Check size={13}/>}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}
 function FeatureEmpty({icon:Icon,title,action}:{icon:LucideIcon;title:string;action?:ReactNode}) {const {t}=useI18n();return <div className="feature-empty"><Icon size={24}/><h3>{t(title)}</h3>{action}</div>}

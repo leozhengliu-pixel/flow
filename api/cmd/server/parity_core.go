@@ -4,6 +4,7 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 	"fmt"
+	"log"
 	"net/http"
 	"slices"
 	"sort"
@@ -349,6 +350,8 @@ func (s *server) updateDocumentDraft(w http.ResponseWriter, r *http.Request) {
 }
 func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 	var result domain.Document
+	var replacedCollaborationID string
+	workspace := workspaceKey(r)
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "document.draft_published", r.PathValue("draftId"), nil, func(data *domain.Bootstrap) error {
 		document, docErr := documentByID(data, r.PathValue("id"))
 		if docErr != nil {
@@ -368,15 +371,27 @@ func (s *server) publishDocumentDraft(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		draft := data.DocumentContentDrafts[index]
-		saveDocumentRevision(document, data.Viewer)
+		now := time.Now().UTC()
+		workspace = data.Workspace.URLKey
+		// Publishing replaces the body like restoring a version: editors on
+		// the previous collaboration generation reload.
+		replacedCollaborationID = startCollaborationGeneration(document)
 		document.Content = draft.Content
 		document.ContentState = draft.ContentState
 		document.ContentData = draft.ContentData
-		document.UpdatedAt = time.Now().UTC()
+		document.Version++
+		document.UpdatedAt = now
+		recordDocumentRevision(document, data.Viewer, now, true)
 		data.DocumentContentDrafts = slices.Delete(data.DocumentContentDrafts, index, index+1)
 		result = *document
 		return nil
 	})
+	if err == nil {
+		s.realtime.broadcastDocumentConflict(workspace, replacedCollaborationID)
+		if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, replacedCollaborationID); deleteErr != nil {
+			log.Printf("clear replaced collaboration document=%s: %v", replacedCollaborationID, deleteErr)
+		}
+	}
 	respondMutation(w, err, http.StatusOK, result)
 }
 func (s *server) deleteDocumentDraft(w http.ResponseWriter, r *http.Request) {
@@ -617,6 +632,13 @@ func (s *server) createTeamPinnedResource(w http.ResponseWriter, r *http.Request
 		input.Title = resourceLinkName(input.URL)
 	}
 	err := s.store.MutateWorkspace(withIssueScope(r.Context(), pinnedIssue), workspaceKey(r), "team.resource_pinned", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
+		input.Title = strings.TrimSpace(input.Title)
+		if input.Title == "" && input.ResourceType == "document" && input.ResourceID != "" {
+			// Untitled documents pin under their live title or the placeholder.
+			if document, err := documentByID(data, input.ResourceID); err == nil {
+				input.Title = documentDisplayTitle(document.Title)
+			}
+		}
 		if input.Title == "" || input.ResourceType == "" {
 			return errInvalid
 		}

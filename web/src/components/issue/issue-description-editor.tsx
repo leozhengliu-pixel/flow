@@ -1,12 +1,17 @@
-import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Pilcrow, Quote, Table2, Workflow } from 'lucide-react'
+import { ChevronsDownUp, Code2, Heading1, Heading2, Heading3, Heading4, Image as ImageIcon, Lightbulb, List, ListOrdered, ListTodo, Minus, Paperclip, Quote, Table2, Workflow } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import StarterKit from '@tiptap/starter-kit'
 import { TableKit } from '@tiptap/extension-table'
+import { flowTableKit, insertDefaultTable, tableSlashCommands } from '@/components/editor/table'
+import { FlowCodeBlock, FlowCodeBlockSchema } from '@/components/editor/code-block/code-block-extension'
+import { MarkdownPaste } from '@/components/editor/markdown-paste'
+import { OutlineMinimap } from '@/components/editor/outline/outline-minimap'
 import { Markdown } from '@tiptap/markdown'
 import { Editor as CoreEditor, getSchema } from '@tiptap/core'
 import type { EditorState } from '@tiptap/pm/state'
+import type { EditorView } from '@tiptap/pm/view'
 import { handleEmoticonInput } from '@/components/editor/emoticon-input'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
@@ -18,9 +23,10 @@ import { getSlashCommandState, SlashCommandExtension, type SlashCommandState } f
 import { SlashCommandMenu, type EditorCommand } from './editor/slash-command-menu'
 import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
+import { showsSelectionToolbar } from './editor/selection-toolbar-visibility'
 import { structuredBlocks, type DescriptionSelectionActions } from './editor/structured-blocks'
 import { DescriptionImage, insertImageFiles, type DescriptionImageUpload } from './editor/image-extension'
-import { DescriptionCallout } from './editor/callout-extension'
+import { DescriptionCallout, DescriptionCalloutSchema } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
 import { DescriptionFile, DescriptionVideo, insertEmbedFiles } from './editor/file-extension'
 import { MentionExtension } from './editor/mention-extension'
@@ -35,7 +41,9 @@ import { InlineCommentMark } from './editor/inline-comment-mark'
 import { MentionMenu } from './editor/mention-menu'
 import { HeadingActions } from './editor/heading-actions'
 import { useI18n } from '@/i18n/i18n'
-import { handleEditorSubmit } from './editor/editor-keyboard'
+import { handleBlockShortcut, handleEditorSubmit } from './editor/editor-keyboard'
+import { EmptyLineHint } from './editor/empty-line-hint'
+import { TrailingParagraph } from './editor/trailing-paragraph'
 import { CollabEditing } from '@/components/editor/collab-editing'
 import { IssueCollaborationProvider } from '@/lib/issue-collaboration'
 import type { User } from '@/types/flow'
@@ -43,6 +51,8 @@ import { clearDescriptionRecovery, descriptionRecoveryKey, downloadDescriptionRe
 import './issue-description-editor.css'
 
 interface DescriptionEditorProps {
+  /** Renders the content without editing (deleted documents). */
+  readOnly?: boolean
   selectionActions?: DescriptionSelectionActions
   value: string
   loading?: boolean
@@ -56,6 +66,8 @@ interface DescriptionEditorProps {
   ariaLabel?: string
   users?: User[]
   onInsertImage?: DescriptionImageUpload
+  /** Shows the floating heading outline in the left gutter (documents). */
+  outline?: boolean
   collaboration?: {
     workspaceKey: string
     issueId?: string
@@ -78,8 +90,12 @@ export function IssueDescriptionEditor(props: DescriptionEditorProps) {
   return <DescriptionEditorSession key={sessionKey} {...props}/>
 }
 
-function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage }: DescriptionEditorProps) {
+function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, editorRef, className, collaboration, selectionActions, placeholder = 'Add description...', ariaLabel, users = [], onInsertImage, outline = false, readOnly = false }: DescriptionEditorProps) {
   const { t } = useI18n()
+  const placeholderRef = useRef(placeholder)
+  placeholderRef.current = t(placeholder)
+  const hintRef = useRef('Type / for commands…')
+  hintRef.current = t('Type / for commands…')
   const descriptionLabel = ariaLabel ?? t('Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
   const rootRef = useRef<HTMLDivElement>(null)
@@ -106,7 +122,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   presenceRef.current = collaboration?.onPresence
   const [slash, setSlash] = useState<SlashCommandState>(closedSlash)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [menuPosition, setMenuPosition] = useState({ left: 14, top: 44 })
+  const [menuPosition, setMenuPosition] = useState<{ left: number; top: number; caretTop?: number }>({ left: 14, top: 44 })
   const [mention, setMention] = useState<MentionState>(closedMention)
   const [mentionIndex, setMentionIndex] = useState(0)
   const [mentionAnchor, setMentionAnchor] = useState({ left: 14, top: 44, bottom: 44 })
@@ -158,14 +174,19 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   mentionOptionsRef.current = mentionOptionList
   const editor = useEditor({
     immediatelyRender: false,
+    editable: !readOnly,
     extensions: [
       // TrailingNode appends a random-client paragraph even on selection-only
       // transactions. In a CRDT that would accumulate one paragraph per reader.
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
-      TableKit.configure({ table: { resizable: true } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: collaborationSession ? false : undefined, trailingNode: collaborationSession ? false : undefined }),
+      FlowCodeBlock,
+      ...flowTableKit,
       ...structuredBlocks,
-      Placeholder.configure({ placeholder }),
+      // The editor's own placeholder only shows while the whole document is empty; later empty lines get the "Type / for commands…" hint.
+      Placeholder.configure({ placeholder: ({ editor: current }) => current.isEmpty ? placeholderRef.current : '' }),
+      EmptyLineHint.configure({ getText: () => hintRef.current }),
       Markdown,
+      MarkdownPaste,
       DescriptionImage,
       DescriptionVideo,
       DescriptionFile,
@@ -180,6 +201,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         Collaboration.configure({ document: collaborationSession.document, field: 'prosemirror' }),
         CollaborationCaret.configure({ provider: collaborationSession.provider, user: collaboration?.viewer ? { ...collaboration.viewer, name: collaboration.viewer.displayName, color: collaborationColor(collaboration.viewer.id) } : undefined }),
         CollabEditing,
+        TrailingParagraph,
       ] : []),
     ],
     content: collaborationSession ? undefined : initial.content,
@@ -191,33 +213,18 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
         role: 'textbox',
         'aria-label': descriptionLabel,
         'aria-multiline': 'true',
-        'aria-readonly': 'false',
+        'aria-readonly': readOnly ? 'true' : 'false',
         spellcheck: 'true',
         translate: 'no',
       },
       handleKeyDown: (view, event) => {
         if (handleEditorSubmit(event, submitRef.current)) return true
-        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'u') {
+        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyU') {
           event.preventDefault()
-          pickDescriptionFiles(files => insertEmbedFiles(view, files, uploadImageRef.current))
+          pickDescriptionFiles(files => insertPickedFiles(view, files, uploadImageRef.current))
           return true
         }
-        const currentEditor = liveEditorRef.current
-        if ((event.metaKey || event.ctrlKey) && event.altKey && ['1', '2', '3'].includes(event.key) && currentEditor) {
-          event.preventDefault()
-          currentEditor.chain().focus().toggleHeading({ level: Number(event.key) as 1 | 2 | 3 }).run()
-          return true
-        }
-        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === '7' && currentEditor) {
-          event.preventDefault()
-          currentEditor.chain().focus().toggleTaskList().run()
-          return true
-        }
-        if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key === '6' && currentEditor) {
-          event.preventDefault()
-          currentEditor.chain().focus().setDetails().run()
-          return true
-        }
+        if (handleBlockShortcut(event, liveEditorRef.current)) return true
         const current = getSlashCommandState(view.state)
         const currentMention = getMentionState(view.state)
         if (currentMention.active && currentMention.range?.from !== dismissedMentionRef.current) {
@@ -351,33 +358,31 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       dismissedRef.current = null
       setSlash(closedSlash)
     }
-    return [
-      { id: 'heading-1', group: 'Basic blocks', label: 'Heading 1', description: 'Large section heading', keywords: 'h1 title', shortcut: '⌘⌥1', icon: Heading1, run: execute(() => editor.chain().focus().toggleHeading({ level: 1 }).run()) },
-      { id: 'heading-2', group: 'Basic blocks', label: 'Heading 2', description: 'Medium section heading', keywords: 'h2 title', shortcut: '⌘⌥2', icon: Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
-      { id: 'heading-3', group: 'Basic blocks', label: 'Heading 3', description: 'Small section heading', keywords: 'h3 subtitle', shortcut: '⌘⌥3', icon: Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
-      { id: 'bullet-list', group: 'Basic blocks', label: 'Bulleted list', description: 'Create a simple bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
-      { id: 'number-list', group: 'Basic blocks', label: 'Numbered list', description: 'Create a list with numbering', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
-      { id: 'checklist', group: 'Basic blocks', label: 'Checklist', description: 'Track tasks with checkboxes', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
-      { id: 'media', group: 'Basic blocks', label: 'Insert media…', description: 'Upload images or videos', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => {
-        const images = files.filter(file => file.type.startsWith('image/'))
-        const rest = files.filter(file => !file.type.startsWith('image/'))
-        if (images.length) insertImageFiles(editor.view, images, uploadImageRef.current)
-        if (rest.length) insertEmbedFiles(editor.view, rest, uploadImageRef.current)
-      }, 'image/*,video/*')) },
-      { id: 'file', group: 'Basic blocks', label: 'Attach files…', description: 'Embed a file card in the issue body', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertEmbedFiles(editor.view, files, uploadImageRef.current))) },
-      { id: 'code-block', group: 'Basic blocks', label: 'Code block', description: 'Add a formatted code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
-      { id: 'diagram', group: 'Basic blocks', label: 'Diagram', description: 'Insert a Mermaid diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => editor.chain().focus().insertContent({ type: 'diagram' }).run()) },
-      { id: 'collapse', group: 'Basic blocks', label: 'Collapsible section', description: 'Hide and reveal nested content', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
-      { id: 'quote', group: 'Basic blocks', label: 'Blockquote', description: 'Capture a quote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
-      { id: 'callout', group: 'Basic blocks', label: 'Callout', description: 'Highlight a note with color', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
+    const tableAction = (command: { id: string; label: string; keywords?: string; icon: EditorCommand['icon']; run: () => void }): EditorCommand => ({ id: `table-${command.id}`, group: 'table', label: command.label, keywords: command.keywords, icon: command.icon, run: execute(command.run) })
+    const base: EditorCommand[] = [
+      { id: 'heading-1', group: 'headings', label: 'Heading 1', keywords: 'h1 title', shortcut: '⌘⌥1', icon: Heading1, run: execute(() => editor.chain().focus().toggleHeading({ level: 1 }).run()) },
+      { id: 'heading-2', group: 'headings', label: 'Heading 2', keywords: 'h2 title', shortcut: '⌘⌥2', icon: Heading2, run: execute(() => editor.chain().focus().toggleHeading({ level: 2 }).run()) },
+      { id: 'heading-3', group: 'headings', label: 'Heading 3', keywords: 'h3 subtitle', shortcut: '⌘⌥3', icon: Heading3, run: execute(() => editor.chain().focus().toggleHeading({ level: 3 }).run()) },
+      { id: 'heading-4', group: 'headings', label: 'Heading 4', keywords: 'h4 subheading', shortcut: '⌘⌥4', icon: Heading4, run: execute(() => editor.chain().focus().toggleHeading({ level: 4 }).run()) },
+      { id: 'bullet-list', group: 'lists', label: 'Bulleted list', keywords: 'unordered bullets', shortcut: '⌘⇧8', icon: List, run: execute(() => editor.chain().focus().toggleBulletList().run()) },
+      { id: 'number-list', group: 'lists', label: 'Numbered list', keywords: 'ordered numbers', shortcut: '⌘⇧9', icon: ListOrdered, run: execute(() => editor.chain().focus().toggleOrderedList().run()) },
+      { id: 'checklist', group: 'lists', label: 'Checklist', keywords: 'todo task checkbox', shortcut: '⌘⇧7', icon: ListTodo, run: execute(() => editor.chain().focus().toggleTaskList().run()) },
+      { id: 'media', group: 'media', label: 'Insert media…', keywords: 'image picture photo video screenshot', icon: ImageIcon, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, uploadImageRef.current), 'image/*,video/*')) },
+      { id: 'file', group: 'media', label: 'Attach files…', keywords: 'attachment upload pdf', shortcut: '⌘⇧U', icon: Paperclip, run: execute(() => pickDescriptionFiles(files => insertPickedFiles(editor.view, files, uploadImageRef.current))) },
+      { id: 'code-block', group: 'blocks', label: 'Code block', keywords: 'source snippet', shortcut: '⌘⇧\\', icon: Code2, run: execute(() => editor.chain().focus().toggleCodeBlock().run()) },
+      { id: 'diagram', group: 'blocks', label: 'Diagram', keywords: 'mermaid flowchart sequence', icon: Workflow, run: execute(() => editor.chain().focus().insertContent({ type: 'diagram' }).run()) },
+      { id: 'collapse', group: 'blocks', label: 'Collapsible section', keywords: 'details toggle fold', shortcut: '⌘⇧6', icon: ChevronsDownUp, run: execute(() => editor.chain().focus().setDetails().run()) },
+      { id: 'quote', group: 'blocks', label: 'Blockquote', keywords: 'blockquote citation', shortcut: '⌥⇧.', icon: Quote, run: execute(() => editor.chain().focus().toggleBlockquote().run()) },
+      { id: 'callout', group: 'blocks', label: 'Callout', keywords: 'aside note warning info', icon: Lightbulb, run: execute(() => {
         if (editor.can().wrapIn('callout')) editor.chain().focus().wrapIn('callout').run()
         else editor.chain().focus().insertContent({ type: 'callout', content: [{ type: 'paragraph' }] }).run()
       }) },
-      { id: 'text', group: 'Basic blocks', label: 'Text', description: 'Start writing with plain text', keywords: 'paragraph regular', shortcut: '⌘⌥0', icon: Pilcrow, run: execute(() => editor.chain().focus().setParagraph().run()) },
-      { id: 'divider', group: 'Basic blocks', label: 'Divider', description: 'Separate sections visually', keywords: 'horizontal rule separator', shortcut: '---', icon: Minus, run: execute(() => editor.chain().focus().setHorizontalRule().run()) },
-      { id: 'table', group: 'Basic blocks', label: 'Table', description: 'Insert a 3 by 3 table', keywords: 'grid cells spreadsheet', shortcut: 'table', icon: Table2, run: execute(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()) },
+      { id: 'table', group: 'blocks', searchOnly: true, label: 'Table', keywords: 'grid cells spreadsheet', icon: Table2, run: execute(() => insertDefaultTable(editor)) },
+      { id: 'divider', group: 'blocks', searchOnly: true, label: 'Divider', keywords: 'horizontal rule separator', icon: Minus, run: execute(() => editor.chain().focus().setHorizontalRule().run()) },
     ]
-  }, [editor])
+    // Row/column commands only exist while the caret is in a table (Linear lists them first).
+    return slash.active ? [...tableSlashCommands(editor).map(tableAction), ...base] : base
+  }, [editor, slash.active])
   commandsRef.current = commands
   const filteredCommands = filterEditorCommands(commands, slash.query)
 
@@ -438,6 +443,10 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     editorRef?.(editor)
     return () => editorRef?.(null)
   }, [editor, editorRef])
+  // Access can change while the document is open (e.g. a grant is removed).
+  useEffect(() => {
+    if (editor && !editor.isDestroyed && editor.isEditable === readOnly) editor.setEditable(!readOnly)
+  }, [editor, readOnly])
   // Markdown / older JSON content: its references show as mentions (display only; collaborative documents keep their stored nodes).
   useMentionConversion(editor, `${value}\n${state ?? ''}`, !collaborationSession, !state)
   useEffect(() => {
@@ -469,11 +478,12 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       const live = getSlashCommandState(current.state)
       if (!root || current.isDestroyed || !next.range || !live.active || live.range?.to !== next.range.to || next.range.to > current.state.doc.content.size) return
       const caret = current.view.coordsAtPos(next.range.to)
-      const bounds = root.getBoundingClientRect()
       const width = 227
-      const left = Math.max(0, Math.min(caret.left - bounds.left, bounds.width - width))
-      const top = caret.bottom - bounds.top + 6
-      setMenuPosition(position => position.left === left && position.top === top ? position : { left, top })
+      const trigger = current.view.coordsAtPos(next.range.from)
+      const left = Math.max(8, Math.min(trigger.left - 3, window.innerWidth - width - 8))
+      const top = caret.bottom + 6
+      const caretTop = caret.top
+      setMenuPosition(position => position.left === left && position.top === top && position.caretTop === caretTop ? position : { left, top, caretTop })
     })
   }
 
@@ -515,13 +525,15 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     </div>}
     <EditorContent editor={editor}/>
     {editor.isEditable && <HeadingActions editor={editor} rootRef={rootRef}/>}
-    <BubbleMenu editor={editor} options={{placement:'top',offset:6,shift:{padding:12},flip:true}} shouldShow={({ from, to, editor: current }) => from !== to && !current.isActive('codeBlock')}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>
+    {outline && <OutlineMinimap editor={editor} rootRef={rootRef}/>}
+    <BubbleMenu editor={editor} options={{placement:'top',offset:6,shift:{padding:12},flip:true}} shouldShow={showsSelectionToolbar}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>
     {slash.active && <SlashCommandMenu
       commands={filteredCommands}
       selectedIndex={selectedIndex}
       position={menuPosition}
       query={slash.query}
       onSelect={command => command.run()}
+      onDismiss={() => { dismissedRef.current = slash.range?.from ?? null; slashRef.current = closedSlash; setSlash(closedSlash); editor.commands.focus() }}
     />}
     {mention.active && <MentionMenu options={mentionOptionList} selectedIndex={mentionIndex} anchor={mentionAnchor} query={mention.query} onSelect={option => insertMentionOption(editor.view, mention.range, option)}/>}
   </div>
@@ -529,20 +541,30 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
 
 function schemaExtensions() {
   return [
-    StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
+    StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, codeBlock: false, link: { openOnClick: false, autolink: true, linkOnPaste: true }, undoRedo: false, trailingNode: false }),
+    FlowCodeBlockSchema,
     TableKit.configure({ table: { resizable: true } }),
     ...structuredBlocks,
     Markdown,
     DescriptionImage,
     DescriptionVideo,
     DescriptionFile,
-    DescriptionCallout,
+    DescriptionCalloutSchema,
     DescriptionDiagram,
     MentionExtension,
     EmbedSchema,
     InlineCommentMark,
     SlashCommandExtension,
   ]
+}
+
+/** Routes picked files to the right block: images become image nodes, everything else a video or file card (all uploaded). */
+function insertPickedFiles(view: EditorView, files: File[], upload?: DescriptionImageUpload) {
+  const images = files.filter(file => file.type.startsWith('image/'))
+  const rest = files.filter(file => !file.type.startsWith('image/'))
+  const insertedImages = images.length ? insertImageFiles(view, images, upload) : false
+  const insertedRest = rest.length ? insertEmbedFiles(view, rest, upload) : false
+  return insertedImages || insertedRest
 }
 
 function pickDescriptionFiles(onFiles: (files: File[]) => void, accept?: string) {

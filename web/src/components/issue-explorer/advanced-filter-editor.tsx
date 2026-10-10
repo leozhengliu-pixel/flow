@@ -23,8 +23,10 @@ type OptionsFor = (field: MyIssuesFilterKey) => MyIssuesFilterOption[] | undefin
  * Linear's advanced-filter chip: empty it reads "Advanced filter"; otherwise one segment summarising the
  * tree ("Status is Triage or Priority is Urgent", "… and 2 more conditions"). It opens the editor popover.
  */
-export function AdvancedFilterChip({ defaultOpen = false, filter, filterOptions, onChange, onOpenChange, onRemove }: {
+export function AdvancedFilterChip({ defaultOpen = false, filter, filterOptions, layout, onChange, onOpenChange, onRemove }: {
   defaultOpen?: boolean
+  /** Field menu layout of the editor's "+ Filter" button (Documents offers fewer fields). */
+  layout?: 'issues' | 'documents'
   filter: MyIssuesAppliedFilter
   filterOptions: OptionsFor
   onChange: (tree: AdvancedFilterGroup) => void
@@ -62,7 +64,7 @@ export function AdvancedFilterChip({ defaultOpen = false, filter, filterOptions,
     </div>
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" className={styles.editor} align="start" side="bottom" sideOffset={4} collisionPadding={8} aria-label={t('Advanced filter')} onOpenAutoFocus={event => event.preventDefault()}>
-        <AdvancedFilterEditor tree={tree} filterOptions={filterOptions} onChange={onChange}/>
+        <AdvancedFilterEditor tree={tree} filterOptions={filterOptions} layout={layout} onChange={onChange}/>
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>
@@ -75,13 +77,13 @@ function SummaryValue({ condition, options }: { condition: AdvancedFilterConditi
 }
 
 /** The editor body: rows joined by the group's and/or toggle, nested groups, "+ Filter". */
-export function AdvancedFilterEditor({ filterOptions, onChange, tree }: { filterOptions: OptionsFor; onChange: (tree: AdvancedFilterGroup) => void; tree: AdvancedFilterGroup }) {
+export function AdvancedFilterEditor({ filterOptions, layout, onChange, tree }: { filterOptions: OptionsFor; layout?: 'issues' | 'documents'; onChange: (tree: AdvancedFilterGroup) => void; tree: AdvancedFilterGroup }) {
   return <div className={styles.body} data-depth={0}>
-    <GroupRows depth={0} group={tree} tree={tree} filterOptions={filterOptions} onChange={onChange}/>
+    <GroupRows depth={0} group={tree} tree={tree} filterOptions={filterOptions} layout={layout} onChange={onChange}/>
   </div>
 }
 
-function GroupRows({ depth, filterOptions, group, onChange, tree }: { depth: number; filterOptions: OptionsFor; group: AdvancedFilterGroup; onChange: (tree: AdvancedFilterGroup) => void; tree: AdvancedFilterGroup }) {
+function GroupRows({ depth, filterOptions, group, layout, onChange, tree }: { depth: number; filterOptions: OptionsFor; layout?: 'issues' | 'documents'; group: AdvancedFilterGroup; onChange: (tree: AdvancedFilterGroup) => void; tree: AdvancedFilterGroup }) {
   const { t } = useI18n()
   const toggle = () => onChange(toggleGroupConjunction(tree, group.id))
   // Slot 0: no prefix; slot 1: the and/or toggle; later slots: the conjunction as text (Linear).
@@ -94,13 +96,13 @@ function GroupRows({ depth, filterOptions, group, onChange, tree }: { depth: num
       {isAdvancedGroup(item)
         ? <div className={styles.group} data-depth={depth + 1}>
             <ScopedFlowTooltip label={t('Delete group')}><button type="button" className={styles.deleteGroup} aria-label={t('Delete group')} onClick={() => onChange(removeNode(tree, item.id))}><X size={13}/></button></ScopedFlowTooltip>
-            <GroupRows depth={depth + 1} group={item} tree={tree} filterOptions={filterOptions} onChange={onChange}/>
+            <GroupRows depth={depth + 1} group={item} tree={tree} filterOptions={filterOptions} layout={layout} onChange={onChange}/>
           </div>
         : <ConditionRow condition={item} options={filterOptions(item.field)} onChange={onChange} tree={tree}/>}
     </div>)}
     <div className={styles.row}>
       {group.items.length > 0 && <div className={styles.conjunction}>{prefix(group.items.length)}</div>}
-      <AddFilterButton depth={depth} filterOptions={filterOptions} onAddCondition={condition => onChange(addConditionToGroup(tree, group.id, condition))} onAddGroup={depth + 1 < ADVANCED_FILTER_MAX_DEPTH ? () => onChange(addGroupToGroup(tree, group.id).tree) : undefined}/>
+      <AddFilterButton depth={depth} filterOptions={filterOptions} layout={layout} onAddCondition={condition => onChange(addConditionToGroup(tree, group.id, condition))} onAddGroup={depth + 1 < ADVANCED_FILTER_MAX_DEPTH ? () => onChange(addGroupToGroup(tree, group.id).tree) : undefined}/>
     </div>
   </>
 }
@@ -121,11 +123,12 @@ function ConditionRow({ condition, onChange, options, tree }: { condition: Advan
   </div>
 }
 
-function AddFilterButton({ depth, filterOptions, onAddCondition, onAddGroup }: { depth: number; filterOptions: OptionsFor; onAddCondition: (condition: AdvancedFilterCondition) => void; onAddGroup?: () => void }) {
+function AddFilterButton({ depth, filterOptions, layout, onAddCondition, onAddGroup }: { depth: number; filterOptions: OptionsFor; layout?: 'issues' | 'documents'; onAddCondition: (condition: AdvancedFilterCondition) => void; onAddGroup?: () => void }) {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   return <MyIssuesFilterMenu
     variant="advanced"
+    layout={layout}
     align="start"
     open={open}
     onOpenChange={setOpen}

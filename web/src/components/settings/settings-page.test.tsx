@@ -68,6 +68,19 @@ it("localizes settings navigation and keeps the active route announced", () => {
   expect(screen.getByPlaceholderText("搜索…")).toBeVisible();
 });
 
+it("draws the agent settings entries with the agent glyphs (cursor, AI burst), not lucide icons", () => {
+  const { container } = render(
+    <I18nProvider>
+      <SettingsPage {...props()} />
+    </I18nProvider>,
+  );
+
+  const glyph = (name: string) => [...container.querySelectorAll("button")].find((button) => button.textContent?.includes(name))?.querySelector("svg");
+  expect(glyph("Agent 个性化")).toHaveAttribute("data-agent-glyph", "agentPointer");
+  expect(glyph("AI 与 Agent")).toHaveAttribute("data-agent-glyph", "aiBurst");
+  expect(container.querySelector(".lucide-bot, .lucide-sparkles")).toBeNull();
+});
+
 it('does not advertise the retired shortcuts settings page', () => {
   const input = { ...props(), page: 'shortcuts' as const };
   render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);

@@ -78,3 +78,24 @@ html:root body .command-dialog .command-estimate {
   font-size: 11px;
   text-align: center;
 }
+
+/* "Open past agent chat…": an unread dot, the chat title and its short age (Linear's chat list). */
+html:root body .command-dialog .command-chat-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin: 0 5px;
+  border-radius: 50%;
+  background: transparent;
+}
+html:root body .command-dialog .command-chat-dot[data-unread] {
+  background: var(--accent-primary);
+}
+html:root body .command-dialog .command-chat-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--pk-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

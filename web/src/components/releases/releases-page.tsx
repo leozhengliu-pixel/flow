@@ -3,7 +3,7 @@ import { toggleFavoriteFor } from '@/lib/favorites'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'
-import { Archive, ArchiveRestore, ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronRight, Copy, FileClock, FileText, Link2, Menu, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Settings2, Sparkles, Star, Trash2, X } from 'lucide-react'
+import { Archive, ArchiveRestore, ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown, ChevronRight, Copy, FileClock, FileText, Link2, Menu, MoreHorizontal, PanelRightClose, PanelRightOpen, Pencil, Plus, Search, Settings2, Star, Trash2, X } from 'lucide-react'
 import { forwardRef, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
@@ -31,6 +31,7 @@ import { MentionTextField } from '@/components/editor/mention-text-field'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import './releases.css'
+import { AgentWriteGlyph } from '@/components/ui/agent-glyph'
 
 type Props = {
   data: BootstrapData
@@ -234,7 +235,7 @@ function ReleaseChangelog({data,pipeline,releases,onOpen,onNavigate}:{data:Boots
         : <><label className="flow-release-notes-picker"><span>{t('Select starting release')}</span><select aria-label={t('Select starting release')} value={startId} onChange={event=>setStartId(event.target.value)}>{ordered.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <label className="flow-release-notes-picker"><span>{t('Select ending release')}</span><select aria-label={t('Select ending release')} value={endId} onChange={event=>setEndId(event.target.value)}>{ordered.map(item=><option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
           <button type="button" className="flow-release-notes-since" onClick={()=>{const covered=ordered.filter(item=>(item.releaseNotes||'').trim());const last=covered.at(-1);if(last){setStartId(last.id);setEndId(ordered.at(-1)?.id??last.id)}}}>{t('From last covered release')}</button></>}
-      <button type="button" className="flow-release-notes-agent" disabled={agentDisabled} aria-disabled="true" title={t('Flow AI is not configured for this workspace')}><Sparkles size={13}/>{t('Write with Agent')}</button>
+      <button type="button" className="flow-release-notes-agent" disabled={agentDisabled} aria-disabled="true" title={t('Flow AI is not configured for this workspace')}><AgentWriteGlyph size={14}/>{t('Write with Agent')}</button>
       {pipeline.autoGenerateReleaseNotes && <span className="flow-release-notes-auto">{t('Auto-generation enabled')}</span>}
       <button type="button" className="flow-release-notes-settings" onClick={()=>onNavigate(releasePipelineSettingsPath(data.workspace.urlKey,pipeline.slugId))}>{t('Pipeline settings')}</button>
     </div>

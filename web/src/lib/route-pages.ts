@@ -83,10 +83,6 @@ export const DocumentPage = lazyPage(
   () => import("@/components/documents/document-page"),
   "DocumentPage",
 );
-export const DocumentsIndexPage = lazyPage(
-  () => import("@/components/documents/documents-index-page"),
-  "DocumentsIndexPage",
-);
 export const WorkspaceSecondaryPage = lazyPage(
   () => import("@/components/workspace/workspace-secondary-page"),
   "WorkspaceSecondaryPage",

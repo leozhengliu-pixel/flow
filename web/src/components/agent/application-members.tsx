@@ -1,11 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { Bot, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import type { BootstrapData } from '@/types/flow'
 import { listApplications, saveApplication, type ApplicationInstallation } from '@/lib/application-agents'
 import { useI18n } from '@/i18n/i18n'
 import './application-agents.css'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export function ApplicationMembers({data,onReload}:{data:BootstrapData;onReload:()=>Promise<void>}) {
   const {t}=useI18n()
@@ -18,8 +19,8 @@ export function ApplicationMembers({data,onReload}:{data:BootstrapData;onReload:
     try{const result=await saveApplication(data.workspace.urlKey,{...editing,clientId,builtin,webhookUrl:webhook,teamIds,scopes,active});setEditing(result.application);setSecret(result.webhookSecret);setItems(await listApplications(data.workspace.urlKey));await onReload();toast.success(t(active?'Application saved':'Application suspended'))}catch(error){setError(String(error instanceof Error?error.message:error))}finally{setBusy(false)}
   }
   if(data.viewerRole!=='admin'&&data.viewerRole!=='owner')return null
-  return <Dialog.Root open={open} onOpenChange={value=>{setOpen(value);if(!value)setSecret('')}}><Dialog.Trigger asChild><button className="application-members-trigger" type="button"><Bot size={14}/>{t('Applications')}</button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="application-members-overlay" data-flow-motion="backdrop"/><Dialog.Content className="application-members-dialog" data-flow-motion="dialog" aria-describedby={undefined}><header><Dialog.Title>{t('Application members')}</Dialog.Title><Dialog.Close asChild><button type="button" aria-label={t('Close')}><X size={16}/></button></Dialog.Close></header>
-    <div className="application-members-list">{items.map(item=><button type="button" key={item.id} onClick={()=>edit(item)} aria-pressed={editing?.id===item.id}><Bot size={16}/><span>{item.name}</span><small>{t(item.active?'Active':'Suspended')}</small></button>)}<button type="button" onClick={()=>edit()}>{t('Add application')}</button></div>
+  return <Dialog.Root open={open} onOpenChange={value=>{setOpen(value);if(!value)setSecret('')}}><Dialog.Trigger asChild><button className="application-members-trigger" type="button"><AgentCursorGlyph size={14}/>{t('Applications')}</button></Dialog.Trigger><Dialog.Portal><Dialog.Overlay className="application-members-overlay" data-flow-motion="backdrop"/><Dialog.Content className="application-members-dialog" data-flow-motion="dialog" aria-describedby={undefined}><header><Dialog.Title>{t('Application members')}</Dialog.Title><Dialog.Close asChild><button type="button" aria-label={t('Close')}><X size={16}/></button></Dialog.Close></header>
+    <div className="application-members-list">{items.map(item=><button type="button" key={item.id} onClick={()=>edit(item)} aria-pressed={editing?.id===item.id}><AgentCursorGlyph size={16}/><span>{item.name}</span><small>{t(item.active?'Active':'Suspended')}</small></button>)}<button type="button" onClick={()=>edit()}>{t('Add application')}</button></div>
     <form onSubmit={event=>{event.preventDefault();void save()}}>
       {!editing&&<label>{t('Application type')}<select value={builtin?'builtin':'external'} onChange={event=>setBuiltin(event.target.value==='builtin')}><option value="builtin">Flow</option><option value="external">{t('OAuth application')}</option></select></label>}
       {!builtin&&<><label>{t('OAuth client ID')}<input required disabled={Boolean(editing)} value={clientId} onChange={event=>setClientId(event.target.value)}/></label><label>{t('Webhook URL')}<input type="url" placeholder="https://" value={webhook} onChange={event=>setWebhook(event.target.value)}/></label><fieldset><legend>{t('Permissions')}</legend>{['read','write','app:mentionable','app:assignable'].map(scope=><label key={scope}><input type="checkbox" checked={scopes.includes(scope)} disabled={scope==='read'} onChange={event=>setScopes(current=>event.target.checked?[...current,scope]:current.filter(value=>value!==scope))}/>{t(({read:'Read workspace data',write:'Modify workspace data','app:mentionable':'Allow mentions','app:assignable':'Allow issue delegation'} as Record<string,string>)[scope])}</label>)}</fieldset></>}

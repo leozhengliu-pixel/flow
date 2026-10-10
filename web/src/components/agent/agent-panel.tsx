@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Maximize2, Minimize2, Minus, PanelLeft, PanelRight, Plus, X } from 'lucide-react'
+import { Minimize2, PanelLeft, PanelRight, Plus } from 'lucide-react'
 import { useI18n } from '@/i18n/i18n'
 import { AgentPanelLayout } from './agent-panel-layout'
 import styles from './agent-panel.module.css'
 import { GridLoader } from '@/components/ui/grid-loader'
+import { AgentCloseGlyph, AgentCursorGlyph, AgentFullPageGlyph, AgentMinimizeGlyph } from '@/components/ui/agent-glyph'
 
 export type AgentPanelDock = 'left' | 'right'
 export type AgentPanelVariant = 'floating' | 'sidebar'
@@ -215,7 +216,7 @@ export function AgentPanel({
               onClick={() => setMinimized(!minimized)}
               type="button"
             >
-              {minimized ? <Minimize2 /> : <Minus />}
+              {minimized ? <Minimize2 /> : <AgentMinimizeGlyph size={14} />}
             </button>
           )}
           {(variant === 'floating' || onOpenFullPage) && (
@@ -230,11 +231,11 @@ export function AgentPanel({
               }}
               type="button"
             >
-              {fullscreen && !onOpenFullPage ? <Minimize2 /> : <Maximize2 />}
+              {fullscreen && !onOpenFullPage ? <Minimize2 /> : <AgentFullPageGlyph size={14} />}
             </button>
           )}
           <button aria-label={t('Close chat')} onClick={onRequestClose} type="button">
-            <X />
+            <AgentCloseGlyph size={14} />
           </button>
         </header>
         {!minimized && (
@@ -276,7 +277,7 @@ export function AgentPanelToggleButton({
       title={t(open ? 'Close chat' : 'Open chat')}
       type="button"
     >
-      {working ? <GridLoader variant="agent" size={14} /> : open ? <PanelRight size={15} /> : <PanelRight size={15} />}
+      {working ? <GridLoader variant="agent" size={14} /> : <AgentCursorGlyph size={14} />}
       <span>{t('Chat')}</span>
     </button>
   )

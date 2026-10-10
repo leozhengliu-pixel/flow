@@ -158,7 +158,7 @@ func (s *server) createCycleResource(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return errInvalid
 			}
-			input.Title, input.URL = document.Title, documentPathForResource(data.Workspace.URLKey, document.SlugID)
+			input.Title, input.URL = documentDisplayTitle(document.Title), documentPathForResource(data.Workspace.URLKey, document.SlugID)
 		}
 		now := time.Now().UTC()
 		resource = domain.CycleResource{ID: fmt.Sprintf("cycle_resource_%d", now.UnixNano()), Type: input.Type, Title: input.Title, URL: input.URL, DocumentID: input.DocumentID, CreatedAt: now}

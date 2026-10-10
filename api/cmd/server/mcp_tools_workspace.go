@@ -1235,7 +1235,7 @@ func (s *server) saveMCPSubscription(ctx context.Context, actor mcpActor, data d
 		if err != nil {
 			return nil, err
 		}
-		kind, id, name = "document", item.ID, item.Title
+		kind, id, name = "document", item.ID, documentDisplayTitle(item.Title)
 	case "viewId":
 		item, err := mcpFindView(data, query)
 		if err != nil {

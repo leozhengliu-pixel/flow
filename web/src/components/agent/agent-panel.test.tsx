@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
-import { AgentPanel } from './agent-panel'
+import { AgentPanel, AgentPanelToggleButton } from './agent-panel'
 import { AgentPanelLayout } from './agent-panel-layout'
 
 describe('AgentPanel chrome', () => {
@@ -23,6 +23,22 @@ describe('AgentPanel chrome', () => {
     expect(onNew).toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Close chat' }))
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('draws the header controls and the Chat toggle with the agent glyphs of Linear\'s chat panel', () => {
+    render(
+      <I18nProvider>
+        <AgentPanel open title="New chat" onRequestClose={vi.fn()} onNewChat={vi.fn()} onOpenFullPage={vi.fn()} variant="floating">
+          <div>Thread</div>
+        </AgentPanel>
+        <AgentPanelToggleButton open={false} onToggle={vi.fn()}/>
+      </I18nProvider>,
+    )
+    const glyph = (name: string) => screen.getByRole('button', { name }).querySelector('svg')
+    expect(glyph('Close chat')).toHaveAttribute('data-agent-glyph', 'closeChat')
+    expect(glyph('Open full page')).toHaveAttribute('data-agent-glyph', 'openFullPage')
+    expect(glyph('Minimize chat')).toHaveAttribute('data-agent-glyph', 'chatMinimize')
+    expect(glyph('Open chat')).toHaveAttribute('data-agent-glyph', 'agentPointer')
   })
 
   it('shows error boundary fallback', async () => {

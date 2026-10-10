@@ -10,3 +10,6 @@
 .collaborative-editor__presence-popover span{display:block;color:var(--theme-text-tertiary);font-size:12px}
 :root[data-theme="light"] .collaborative-editor__presence-popover{border-color:var(--border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog)}
 :root[data-theme="light"] .collaborative-editor__presence-more,:root[data-theme="light"] .collaborative-editor__presence-popover span{color:var(--faint)}
+
+/* The document body sits flush with the title column (issue descriptions keep their 14px inset for the focus background). */
+.collaborative-editor .issue-description-root.document-editor{width:100%;margin-left:0}

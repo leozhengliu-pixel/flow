@@ -1,6 +1,6 @@
 import { WelcomeMessageSettingsPage } from "./welcome-message-settings-page";
 import { CodingToolsSettingsPage } from "./coding-tools-settings-page";
-import {
+import { type ComponentType,
   Suspense,
   useCallback,
   useEffect,
@@ -25,7 +25,6 @@ import {
   ArrowLeft,
   ArrowUp,
   Bell,
-  Bot,
   Braces,
   Building2,
   Check,
@@ -36,8 +35,6 @@ import {
   Command,
   FileText,
   Flame,
-  Repeat2,
-  History,
   Import,
   Upload,
   KeyRound,
@@ -56,14 +53,12 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Smile,
-  Sparkles,
   Tag,
   Trash2,
   UserRound,
   UsersRound,
   X,
   Zap,
-  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/i18n";
@@ -115,6 +110,7 @@ import {
   rotateWorkspaceInviteLink,
 } from "@/lib/api";
 import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
+import { AgentCursorGlyph, AgentHistoryGlyph, AiBurstGlyph, LoopsGlyph } from '@/components/ui/agent-glyph'
 import {
   apiKeysSettingsPath,
   applicationEditPath,
@@ -367,7 +363,7 @@ type SettingsPageProps = {
   onReload: () => Promise<void>;
 };
 
-type NavItem = { id: SettingsPageId; label: string; icon: LucideIcon };
+type NavItem = { id: SettingsPageId; label: string; icon: ComponentType<{ size?: number | string }> };
 const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: "Personal",
@@ -378,7 +374,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "code-and-reviews", label: "Code & reviews", icon: Code2 },
       { id: "account-security", label: "Security & access", icon: KeyRound },
       { id: "connections", label: "Connected accounts", icon: Link2 },
-      { id: "agents", label: "Agent personalization", icon: Bot },
+      { id: "agents", label: "Agent personalization", icon: AgentCursorGlyph },
     ],
   },
   {
@@ -401,8 +397,8 @@ const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: "Features",
     items: [
-      { id: "ai", label: "AI & Agents", icon: Sparkles },
-      { id: "loops", label: "Loops", icon: Repeat2 },
+      { id: "ai", label: "AI & Agents", icon: AiBurstGlyph },
+      { id: "loops", label: "Loops", icon: LoopsGlyph },
       { id: "initiatives", label: "Initiatives", icon: Zap },
       { id: "documents", label: "Documents", icon: FileText },
       { id: "customer-requests", label: "Customer requests", icon: UsersRound },
@@ -774,13 +770,13 @@ export function SettingsPage(props: SettingsPageProps) {
         <div className="bottom-agent settings-bottom-agent">
           {props.onNavigateAgent && (
             <button type="button" aria-label="Agent" onClick={props.onNavigateAgent}>
-              <Bot />
+              <AgentCursorGlyph size={14} />
               <span>Agent</span>
             </button>
           )}
           {props.onOpenAgentHistory && (
             <button type="button" aria-label="Chat history" onClick={props.onOpenAgentHistory}>
-              <History />
+              <AgentHistoryGlyph size={14} />
             </button>
           )}
         </div>

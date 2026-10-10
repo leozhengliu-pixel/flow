@@ -53,3 +53,10 @@
 .propertyGrid:not(#_) button{background:var(--pk-control);box-shadow:var(--pk-control-ring);color:var(--pk-muted);font-size:12px;font-weight:500}
 .propertyGrid:not(#_) button[data-active=true]{background:var(--pk-chip-on);box-shadow:var(--pk-chip-on-ring);color:var(--pk-text-strong)}
 .footer:not(#_){background:var(--pk-surface);border-top:.5px solid var(--pk-divider)}
+/* The list popover has no leading "List options" label: its single section label reads as a muted caption. */
+.popover[data-list-display]:not(#_) .section>.sectionLabel:first-child{color:var(--pk-muted)}
+/* Linear's list popover: no top inset, selects hug their value, label 8px below the divider and 12px above the chips. */
+.popover[data-list-display]:not(#_){padding-top:0}
+.popover[data-list-display]:not(#_) .selectTrigger{min-width:0}
+.popover[data-list-display]:not(#_) .sectionLabel{padding:8px 0 12px;line-height:14px}
+.popover[data-list-display]:not(#_) .propertyGrid{padding-bottom:4px}

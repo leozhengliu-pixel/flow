@@ -3690,12 +3690,70 @@
         },
         "x-flow-source": "main.go"
       },
+      "get": {
+        "operationId": "get_documents_id",
+        "tags": [
+          "documents"
+        ],
+        "summary": "GET /api/documents/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
       "patch": {
         "operationId": "patch_documents_id",
         "tags": [
           "documents"
         ],
         "summary": "PATCH /api/documents/{id}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/documents/{id}/attachments": {
+      "post": {
+        "operationId": "post_documents_id_attachments",
+        "tags": [
+          "documents"
+        ],
+        "summary": "POST /api/documents/{id}/attachments",
         "parameters": [
           {
             "name": "id",
@@ -3858,6 +3916,80 @@
           "documents"
         ],
         "summary": "POST /api/documents/{id}/comments/{commentId}/reactions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/documents/{id}/comments/{commentId}/subscription": {
+      "delete": {
+        "operationId": "delete_documents_id_comments_commentId_subscription",
+        "tags": [
+          "documents"
+        ],
+        "summary": "DELETE /api/documents/{id}/comments/{commentId}/subscription",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_documents_id_comments_commentId_subscription",
+        "tags": [
+          "documents"
+        ],
+        "summary": "PUT /api/documents/{id}/comments/{commentId}/subscription",
         "parameters": [
           {
             "name": "id",
@@ -4251,6 +4383,36 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/documents/{id}/restore": {
+      "post": {
+        "operationId": "post_documents_id_restore",
+        "tags": [
+          "documents"
+        ],
+        "summary": "POST /api/documents/{id}/restore",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/documents/{id}/restore/{revisionId}": {
       "post": {
         "operationId": "post_documents_id_restore_revisionId",
@@ -4269,6 +4431,102 @@
           },
           {
             "name": "revisionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/documents/{id}/subscribers": {
+      "get": {
+        "operationId": "get_documents_id_subscribers",
+        "tags": [
+          "documents"
+        ],
+        "summary": "GET /api/documents/{id}/subscribers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      },
+      "post": {
+        "operationId": "post_documents_id_subscribers",
+        "tags": [
+          "documents"
+        ],
+        "summary": "POST /api/documents/{id}/subscribers",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/documents/{id}/subscribers/{userId}": {
+      "delete": {
+        "operationId": "delete_documents_id_subscribers_userId",
+        "tags": [
+          "documents"
+        ],
+        "summary": "DELETE /api/documents/{id}/subscribers/{userId}",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
             "in": "path",
             "required": true,
             "schema": {
@@ -6489,6 +6747,26 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/integrations/file-preview": {
+      "get": {
+        "operationId": "get_integrations_file_preview",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/file-preview",
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/integrations/gitlab/{id}/token": {
       "post": {
         "operationId": "post_integrations_gitlab_id_token",
@@ -6566,6 +6844,26 @@
             }
           }
         ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/integrations/link-preview": {
+      "get": {
+        "operationId": "get_integrations_link_preview",
+        "tags": [
+          "integrations"
+        ],
+        "summary": "GET /api/integrations/link-preview",
         "responses": {
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",

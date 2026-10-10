@@ -72,10 +72,21 @@ func TestDocumentPermissionRoles(t *testing.T) {
 
 	editor := users[1].client
 	secondComment := authRequest[domain.Comment](t, editor, http.MethodPost, server.URL+"/api/documents/"+document.ID+"/comments", map[string]string{"body": "editor comment"}, "test-workspace", http.StatusCreated)
-	authRequest[domain.Comment](t, editor, http.MethodPatch, server.URL+"/api/documents/"+document.ID+"/comments/"+comment.ID, map[string]string{"body": "moderated by editor"}, "test-workspace", http.StatusOK)
+	// A comment's text belongs to its author: editors cannot edit or delete
+	// other people's comments, workspace admins can moderate any comment,
+	// and anyone who can comment may resolve a thread.
+	authRequest[any](t, editor, http.MethodPatch, server.URL+"/api/documents/"+document.ID+"/comments/"+comment.ID, map[string]string{"body": "moderated by editor"}, "test-workspace", http.StatusForbidden)
+	authRequest[any](t, editor, http.MethodDelete, server.URL+"/api/documents/"+document.ID+"/comments/"+comment.ID, nil, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, commenter, http.MethodPatch, server.URL+"/api/documents/"+document.ID+"/comments/"+secondComment.ID, map[string]string{"body": "commenter cannot edit editor"}, "test-workspace", http.StatusForbidden)
 	authRequest[any](t, commenter, http.MethodDelete, server.URL+"/api/documents/"+document.ID+"/comments/"+secondComment.ID, nil, "test-workspace", http.StatusForbidden)
-	authRequest[any](t, editor, http.MethodDelete, server.URL+"/api/documents/"+document.ID+"/comments/"+comment.ID, nil, "test-workspace", http.StatusNoContent)
+	resolved := authRequest[domain.Comment](t, commenter, http.MethodPatch, server.URL+"/api/documents/"+document.ID+"/comments/"+secondComment.ID, map[string]any{"resolved": true}, "test-workspace", http.StatusOK)
+	if !resolved.Resolved {
+		t.Fatal("a commenter could not resolve another member's thread")
+	}
+	authRequest[any](t, viewer, http.MethodPatch, server.URL+"/api/documents/"+document.ID+"/comments/"+secondComment.ID, map[string]any{"resolved": false}, "test-workspace", http.StatusForbidden)
+	authRequest[domain.Comment](t, workspaceAdmin, http.MethodPatch, server.URL+"/api/documents/"+document.ID+"/comments/"+comment.ID, map[string]string{"body": "moderated by admin"}, "test-workspace", http.StatusOK)
+	authRequest[any](t, commenter, http.MethodDelete, server.URL+"/api/documents/"+document.ID+"/comments/"+comment.ID, nil, "test-workspace", http.StatusNoContent)
+	authRequest[any](t, workspaceAdmin, http.MethodDelete, server.URL+"/api/documents/"+document.ID+"/comments/"+secondComment.ID, nil, "test-workspace", http.StatusNoContent)
 	authRequest[domain.Document](t, editor, http.MethodPatch, server.URL+"/api/documents/"+document.ID, map[string]string{"content": "editor edit"}, "test-workspace", http.StatusOK)
 	authRequest[domain.Document](t, workspaceAdmin, http.MethodPatch, server.URL+"/api/documents/"+document.ID, map[string]string{"content": "admin edit"}, "test-workspace", http.StatusOK)
 

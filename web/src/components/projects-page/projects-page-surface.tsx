@@ -4,7 +4,7 @@ import { CustomerGlyph } from '@/components/customer/customer-filter-glyphs'
 import { ProjectCustomerFilterValues } from './project-customer-filter'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { AlignLeft, BarChart3, CalendarDays, ChevronRight, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Sparkles, Tags, UserRound, Users } from 'lucide-react'
+import { AlignLeft, BarChart3, CalendarDays, ChevronRight, CircleDot, FileText, Flag, GitBranch, HeartPulse, Link2, Network, Tags, UserRound, Users } from 'lucide-react'
 import {
   AddViewIcon,
   CheckIcon,
@@ -27,6 +27,7 @@ import { isPeopleProperty } from '@/lib/people'
 import { PersonPicker } from '@/components/issue/core-property-pickers'
 import { usePeopleDirectory } from '@/components/property/people-context'
 import { directoryPerson } from '@/lib/people'
+import { LinearGlyph } from '@/components/ui/menu-glyphs'
 
 export type ProjectsView = {
   id: string
@@ -317,7 +318,7 @@ const PROJECT_FILTER_FIELD_IDS: Record<string, string> = {
 function ProjectFilterIcon({ field }: { field: string }) {
   const props = { size: 14, 'aria-hidden': true as const }
   switch (field) {
-    case 'AI filter': return <Sparkles {...props}/>
+    case 'AI filter': return <LinearGlyph name="aiFilter" size={16} aria-hidden/>
     case 'Advanced filter': return <SlidersIcon/>
     case 'Status': return <CircleDot {...props}/>
     case 'Priority': return <BarChart3 {...props}/>

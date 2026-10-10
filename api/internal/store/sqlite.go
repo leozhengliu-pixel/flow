@@ -50,6 +50,10 @@ type SQLiteStore struct {
 	apiKeyUseWorkers sync.WaitGroup
 	apiKeyUseClosed  bool
 	teamMembershipMu sync.Mutex
+	// startupCacheDrops lists workspaces whose metadata records a startup
+	// data migration rewrote. The store opens before its coordinator is
+	// attached, so their shared (Redis) metadata cache is dropped then.
+	startupCacheDrops []string
 }
 
 // lockWorkspaceWrites serializes the caller with other writers and excludes
@@ -208,7 +212,19 @@ func (s *SQLiteStore) realtime() func(string, domain.RealtimeEvent) {
 func (s *SQLiteStore) SetWorkspaceCoordinator(coordinator WorkspaceCoordinator) {
 	s.mu.Lock()
 	s.coordinator = coordinator
+	drops := s.startupCacheDrops
+	if coordinator != nil {
+		s.startupCacheDrops = nil
+	}
 	s.mu.Unlock()
+	if coordinator == nil {
+		return
+	}
+	// A cache filled before this instance's startup migrations still holds
+	// the records they replaced; a reload must read the database instead.
+	for _, workspace := range drops {
+		s.dropMetadataCache(context.Background(), workspace)
+	}
 }
 
 func (s *SQLiteStore) ReloadWorkspace(ctx context.Context, workspaceKey string) error {
@@ -335,6 +351,8 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 4, name: "session authentication policy context", apply: s.createSessionSecuritySchema},
 		{version: 5, name: "encrypted connector credentials", apply: s.createConnectorSecretsSchema},
 		{version: 6, name: "team membership role index", apply: s.createTeamMembershipRoleIndex},
+		// Versions from 1000 up are data migrations (runDataMigrations),
+		// which run after the workspaces are loaded.
 	}
 	for _, migration := range migrations {
 		if applied[migration.version] {

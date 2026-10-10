@@ -1,5 +1,4 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Popover from "@radix-ui/react-popover";
 import { toggleFavoriteFor } from '@/lib/favorites';
 import { teamHierarchy } from '@/lib/team-hierarchy';
 import { TeamIcon } from '@/components/issue/issue-icons';
@@ -7,14 +6,10 @@ import { newTeamPath } from '@/lib/app-routes';
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
-  ArrowDownWideNarrow,
   ArrowUp,
-  ArrowUpNarrowWide,
-  CalendarDays,
   Check,
   ChevronRight,
   FileText,
-  FolderKanban,
   Link2,
   Menu,
   Plus,
@@ -22,10 +17,9 @@ import {
   Pencil,
   Search,
   Trash2,
-  UserRound,
-  X,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -65,22 +59,17 @@ import {
   teamLoopsPath,
   teamMembersPath,
   teamViewsPath,
-  projectPath,
 } from "@/lib/app-routes";
-import { DisplayIcon } from "@/components/ui/view-action-icons";
 import { VirtualColumnList } from "@/components/ui/virtual-column-list";
-import {
-  DirectoryDisplayMenu,
-  DirectoryFilterMenu,
-  type DirectoryFilterGroup,
-} from "@/components/workspace-directory/directory-menus";
+import { DirectoryDisplayMenu } from "@/components/workspace-directory/directory-menus";
 import { personUsername } from "@/lib/people";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { ProjectIcon, SlackIcon } from "@/components/issue/issue-icons";
 import { ViewGlyph, ViewIconPicker } from "@/components/views/view-icon-picker";
 import { DocumentGlyph } from "@/components/documents/document-icon";
-import { DocumentsEmptyIllustration } from '@/components/documents/documents-empty-illustration';
-import { PersonHover } from '@/components/property/person-info';
+import { documentDisplayTitle, type DocumentActionContext } from "@/components/documents/document-actions";
+import { DocumentMenuItems, DocumentRowMenu } from "@/components/documents/document-menu";
+import { LinearDropdownMenuContent, LinearMenuOptions, LinearMenuSeparator, LinearSubmenu } from "@/components/ui/row-context-menu";
 import { LoopsDirectory } from "@/components/loops/loops-page";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
 import { canManageTeamSettings, viewerOwnsTeam } from "@/lib/settings-permissions";
@@ -95,7 +84,7 @@ import type {
 
 import { resourceDisplayTitle, resourceLinkName } from "@/components/project-detail/project-resource-link-name";
 import "./team-overview-page.css";
-import './team-documents.css';
+import { TeamDocuments } from './team-documents';
 
 type View = "overview" | "documents" | "loops" | "members";
 
@@ -220,8 +209,9 @@ export function TeamOverviewPage({
     creatingDocument.current = true;
     setDocumentCreating(true);
     try {
+      // New documents start untitled; lists show "Untitled" and the page a placeholder.
       const document = await createDocument({
-        title: "New document",
+        title: "",
         teamIds: [team.id],
       });
       await onReload();
@@ -237,15 +227,17 @@ export function TeamOverviewPage({
   };
   const newPinnedDocument = async (sectionId = '') => {
     try {
+      // Untitled like every new document; the pinned row shows the live title or "Untitled".
       const document = await createDocument({
-        title: "New document",
+        title: "",
         teamIds: [team.id],
       });
       await pinTeamResource(team.id, {
         sectionId,
         resourceType: "document",
         resourceId: document.id,
-        title: document.title,
+        // The team resources endpoint requires a non-empty title; rows show the document's live title.
+        title: document.title || t("Untitled"),
       });
       await Promise.all([reloadResources(), onReload()]);
       onNavigate(documentPath(data.workspace.urlKey, document));
@@ -478,6 +470,7 @@ export function TeamOverviewPage({
                         key={section.id || "unsectioned"}
                         onNavigate={onNavigate}
                         onReload={reloadResources}
+                        onReloadWorkspace={onReload}
                         sections={sections}
                         section={section.id ? section : undefined}
                         team={team}
@@ -612,6 +605,7 @@ export function TeamOverviewPage({
           documents={documents}
           onNavigate={onNavigate}
           onNew={() => void newDocument()}
+          onReload={onReload}
           onReloadResources={load}
           resources={resources}
           team={team}
@@ -854,6 +848,7 @@ function ResourceSection({
   items,
   onNavigate,
   onReload,
+  onReloadWorkspace,
   sections,
   section,
   team,
@@ -868,6 +863,8 @@ function ResourceSection({
   items: TeamPinnedResource[];
   onNavigate: (path: string) => void;
   onReload: () => Promise<void>;
+  /** Refreshes workspace metadata (documents) after a document action. */
+  onReloadWorkspace: () => Promise<void>;
   sections: TeamResourceSection[];
   section?: TeamResourceSection;
   team: Team;
@@ -876,6 +873,17 @@ function ResourceSection({
     [name, setName] = useState(section?.name ?? "");
   const [menuOpen, setMenuOpen] = useState(false);
   const { t } = useI18n();
+  // Pinned state comes from the team resources endpoint, which can be fresher than the bootstrap data.
+  const actionData = useMemo<BootstrapData>(() => ({
+    ...data,
+    teamPinnedResources: [...(data.teamPinnedResources ?? []).filter(item => item.teamId !== team.id), ...resources.map(item => ({ ...item, teamId: team.id }))],
+  }), [data, resources, team.id]);
+  const documentCtx = useMemo<DocumentActionContext>(() => ({
+    data: actionData,
+    reload: async () => { await Promise.all([onReloadWorkspace(), onReload()]); },
+    navigate: onNavigate,
+    t,
+  }), [actionData, onNavigate, onReload, onReloadWorkspace, t]);
   const saving = useRef(false), cancelled = useRef(false);
   const beginRename = () => { cancelled.current = false; setName(section?.name ?? ''); setEditing(true); };
   const save = async () => {
@@ -963,8 +971,23 @@ function ResourceSection({
         const resourceDocument = item.resourceType === "document"
           ? data.documents.find((value) => value.id === item.resourceId)
           : undefined;
-        return (
-        <div className="team-resource-row" key={item.id} draggable onDragStart={event => { event.stopPropagation(); event.dataTransfer.setData('application/x-flow-team-resource', item.id); event.dataTransfer.effectAllowed = 'move'; }}>
+        // Documents show their live title (a renamed or untitled document never keeps a stale pinned title).
+        const rowTitle = item.resourceType === "document"
+          ? (resourceDocument ? documentDisplayTitle(resourceDocument, t) : resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' }) || t("Untitled"))
+          : resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' });
+        const sectionMoveMenu = sections.length > 0 && <>
+          <LinearMenuSeparator />
+          <LinearSubmenu label="Move to section">
+            <LinearMenuOptions
+              options={[{ id: '', label: 'Team resources' }, ...sections.map(value => ({ id: value.id, label: value.name, translate: false }))]}
+              selected={new Set([item.sectionId ?? ''])}
+              keepOpen={false}
+              onChoose={id => void updateTeamResource(team.id, item.id, { sectionId: id }).then(onReload)}
+            />
+          </LinearSubmenu>
+        </>;
+        const row = (
+        <div className="team-resource-row" draggable onDragStart={event => { event.stopPropagation(); event.dataTransfer.setData('application/x-flow-team-resource', item.id); event.dataTransfer.effectAllowed = 'move'; }}>
           {resourceDocument ? <DocumentGlyph document={resourceDocument} /> : item.resourceType === "document" ? <FileText /> : <Link2 />}
           <button
             data-i18n-ignore
@@ -977,15 +1000,21 @@ function ResourceSection({
               else if (item.url) window.open(item.url, "_blank", "noopener");
             }}
           >
-            {resourceDisplayTitle({ type: item.resourceType, title: item.title, url: item.url ?? '' })}
+            {rowTitle}
           </button>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button aria-label={`Open menu ${item.title}`}>
+              <button aria-label={`Open menu ${rowTitle}`}>
                 <TeamMoreIcon />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
+              {resourceDocument ? (
+                <LinearDropdownMenuContent label={t('Document actions')} align="end">
+                  <DocumentMenuItems ctx={documentCtx} document={resourceDocument} variant="row" team={team} />
+                  {sectionMoveMenu}
+                </LinearDropdownMenuContent>
+              ) : (
               <DropdownMenu.Content data-flow-motion="floating" className="team-home-menu" align="end">
                 <DropdownMenu.Sub>
                   <DropdownMenu.SubTrigger>
@@ -1033,10 +1062,15 @@ function ResourceSection({
                   Remove
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
+              )}
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
         </div>
-      )})}
+        );
+        return resourceDocument
+          ? <DocumentRowMenu key={item.id} ctx={documentCtx} document={resourceDocument} team={team} extra={sectionMoveMenu}>{row}</DocumentRowMenu>
+          : <Fragment key={item.id}>{row}</Fragment>;
+      })}
       </AnimatedCollapse>
     </div>
   );
@@ -1075,7 +1109,7 @@ function ResourceCommandMenu({
       const item = pinned(document);
       if (item && selected(document)) await deleteTeamResource(team.id, item.id);
       else if (item) await updateTeamResource(team.id, item.id, { sectionId: sectionId ?? '' });
-      else await pinTeamResource(team.id, { resourceType: 'document', resourceId: document.id, title: document.title, sectionId: sectionId ?? '' });
+      else await pinTeamResource(team.id, { resourceType: 'document', resourceId: document.id, title: document.title || t('Untitled'), sectionId: sectionId ?? '' });
       await onSaved();
     } catch (error) { toast.error(error instanceof Error ? error.message : t('Could not update resource')); }
     finally { pending.current = false; setSaving(false); }
@@ -1091,7 +1125,7 @@ function ResourceCommandMenu({
             {[...groups].map(([label, items]) => <DropdownMenu.Group key={label}>
               <DropdownMenu.Label className="team-resource-date-group">{t(label)}</DropdownMenu.Label>
               {items.map(document => <DropdownMenu.CheckboxItem checked={selected(document)} disabled={saving} key={document.id} onSelect={event => { event.preventDefault(); void toggle(document); }}>
-                <span className="team-resource-checkbox">{selected(document) && <Check/>}</span><DocumentGlyph document={document}/><span data-i18n-ignore>{document.title || t('Untitled document')}</span>
+                <span className="team-resource-checkbox">{selected(document) && <Check/>}</span><DocumentGlyph document={document}/><span data-i18n-ignore>{documentDisplayTitle(document, t)}</span>
               </DropdownMenu.CheckboxItem>)}
             </DropdownMenu.Group>)}
             {!visible.length && <p>{t('No matching documents')}</p>}
@@ -1601,233 +1635,4 @@ function teamMemberRoleRank(entry: TeamMemberDirectoryEntry) {
   return ["Workspace owner", "Workspace admin", "Team owner", "Member", "Guest", "Application", "Invited"].indexOf(teamMemberRoleBadge(entry).label);
 }
 
-function TeamDocuments({
-  creating,
-  data,
-  documents,
-  onNavigate,
-  onNew,
-  onReloadResources,
-  resources,
-  team,
-}: {
-  creating: boolean;
-  data: BootstrapData;
-  documents: FlowDocument[];
-  onNavigate: (path: string) => void;
-  onNew: () => void;
-  onReloadResources: () => Promise<void>;
-  resources: TeamPinnedResource[];
-  team: Team;
-}) {
-  const { t } = useI18n();
-  const initial = useMemo(() => readDocumentDirectoryState(), []);
-  const [search, setSearch] = useState(initial.search);
-  const [searchOpen, setSearchOpen] = useState(Boolean(initial.search));
-  const searchRef = useRef<HTMLInputElement>(null);
-  const [filters, setFilters] = useState<Record<DocumentFilterField, Set<string>>>(initial.filters);
-  const [match, setMatch] = useState<"all" | "any">(initial.match);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [grouping, setGrouping] = useState<DocumentGrouping>(initial.grouping);
-  const [ordering, setOrdering] = useState<DocumentOrdering>(initial.ordering);
-  const [descending, setDescending] = useState(initial.descending);
-  const [showInactive, setShowInactive] = useState(initial.showInactive);
-  const [onlyMyProjects, setOnlyMyProjects] = useState(initial.onlyMyProjects);
-  const [properties, setProperties] = useState<Set<DocumentProperty>>(initial.properties);
-  const [selected, setSelected] = useState<string[]>([]);
-  const collapseKey = `flow:${data.workspace.id}:${data.viewer.id}:team-documents:${team.id}:collapsed`;
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    try { const value: unknown = JSON.parse(localStorage.getItem(collapseKey) ?? '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([, value]) => typeof value === 'boolean')) : {}; } catch { return {}; }
-  });
-  const [pinBusy, setPinBusy] = useState("");
-  const userById = useMemo(() => new Map(data.users.map(user => [user.id, user])), [data.users]);
-  const projectById = useMemo(() => new Map(data.projects.map(project => [project.id, project])), [data.projects]);
-  const ownerFor = useCallback((document: FlowDocument) => {
-    const ownerId = document.permissions?.find(permission => permission.role === "owner" && permission.subjectType === "user")?.subjectId;
-    return (ownerId ? userById.get(ownerId) : undefined) ?? document.creator;
-  }, [userById]);
-  const activeGroups = (Object.keys(filters) as DocumentFilterField[]).filter(field => filters[field].size);
-  const matches = useCallback((document: FlowDocument) => {
-    const checks = activeGroups.map(field => {
-      const values = filters[field];
-      if (field === "creator") return values.has(document.creator.id);
-      if (field === "owner") return values.has(ownerFor(document).id);
-      if (field === "project") return document.projectIds.some(id => values.has(id));
-      if (field === "cycle") return data.cycles.some(cycle => values.has(cycle.id) && cycle.resources.some(resource => resource.documentId === document.id));
-      return [...values].some(value => documentMatchesDate(document, value));
-    });
-    return !checks.length || (match === "all" ? checks.every(Boolean) : checks.some(Boolean));
-  }, [activeGroups, data.cycles, filters, match, ownerFor]);
-  const visible = useMemo(() => documents.filter(document => {
-    if (document.archivedAt || search.trim() && !document.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) return false;
-    if (!matches(document)) return false;
-    const projects = document.projectIds.map(id => projectById.get(id)).filter(Boolean);
-    if (!showInactive && projects.length && !projects.some(project => !project!.archivedAt && !["completed", "canceled", "cancelled"].includes(project!.status.type))) return false;
-    if (onlyMyProjects && projects.length && !projects.some(project => project!.lead?.id === data.viewer.id || project!.memberIds.includes(data.viewer.id))) return false;
-    return true;
-  }).sort((a, b) => {
-    const left = documentOrderValue(a, ordering, ownerFor, projectById);
-    const right = documentOrderValue(b, ordering, ownerFor, projectById);
-    const result = typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
-    const stable = result || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
-    return descending ? -stable : stable;
-  }), [data.viewer.id, descending, documents, matches, onlyMyProjects, ordering, ownerFor, projectById, showInactive, search]);
-  const grouped = useMemo(() => groupDocuments(visible, grouping, data, ownerFor), [data, grouping, ownerFor, visible]);
-  const filterGroups = useMemo<DirectoryFilterGroup[]>(() => [
-    { id: "creator", label: t("Creator"), icon: <UserRound/>, choices: uniqueUsers(documents.map(document => document.creator)).map(user => ({ id: user.id, label: user.displayName, meta: user.email, person: user })) },
-    { id: "owner", label: t("Owner"), icon: <UserRound/>, choices: uniqueUsers(documents.map(ownerFor)).map(user => ({ id: user.id, label: user.displayName, meta: user.email, person: user })) },
-    { id: "project", label: t("Project"), icon: <FolderKanban/>, choices: data.projects.filter(project => documents.some(document => document.projectIds.includes(project.id))).map(project => ({ id: project.id, label: project.name, icon: <ProjectIcon style={{ color: project.color }}/> })) },
-    { id: "cycle", label: t("Cycle"), icon: <CalendarDays/>, choices: data.cycles.filter(cycle => cycle.resources.some(resource => resource.documentId && documents.some(document => document.id === resource.documentId))).map(cycle => ({ id: cycle.id, label: cycle.name })) },
-    { id: "dates", label: t("Dates"), icon: <CalendarDays/>, selectionMode: "single", choices: [{ id: "today", label: t("Edited today") }, { id: "week", label: t("Edited this week") }, { id: "month", label: t("Edited this month") }, { id: "older", label: t("Older") }] },
-  ], [data.cycles, data.projects, documents, ownerFor, t]);
-  useEffect(() => persistDocumentDirectoryState({ filters, match, grouping, ordering, descending, showInactive, onlyMyProjects, properties, search }), [descending, filters, grouping, match, onlyMyProjects, ordering, properties, showInactive, search]);
-  useEffect(() => {
-    const find = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f' && !(event.target instanceof Element && event.target.closest('[role="dialog"],input,textarea,[contenteditable="true"]'))) { event.preventDefault(); setSearchOpen(true); requestAnimationFrame(() => searchRef.current?.focus()); }
-    };
-    window.addEventListener('keydown', find); return () => window.removeEventListener('keydown', find);
-  }, []);
-  useEffect(() => {
-    const restore = () => { const value = readDocumentDirectoryState(); setFilters(value.filters); setSearch(value.search); setSearchOpen(Boolean(value.search)); setGrouping(value.grouping); setOrdering(value.ordering); setDescending(value.descending); setProperties(value.properties); setMatch(value.match); setOnlyMyProjects(value.onlyMyProjects); setShowInactive(value.showInactive); };
-    window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore);
-  }, []);
-  const visibleIDs = useMemo(() => new Set(visible.map(document => document.id)), [visible]);
-  const selectedVisible = selected.filter(id => visibleIDs.has(id));
-  const isCollapsed = (id: string, project: boolean) => collapsed[`${grouping}:${id}`] ?? (grouping === 'project' && project);
-  const toggleGroup = (id: string, project: boolean) => {
-    const next = { ...collapsed, [`${grouping}:${id}`]: !isCollapsed(id, project) };
-    setCollapsed(next);
-    try { localStorage.setItem(collapseKey, JSON.stringify(next)); } catch { /* Optional local preference. */ }
-  };
-  const changeFilter = (field: string, value: string, checked: boolean) => setFilters(current => ({ ...current, [field]: new Set(checked ? [...current[field as DocumentFilterField], value] : [...current[field as DocumentFilterField]].filter(item => item !== value)) }));
-  const changeOrder = (next: DocumentOrdering) => { if (next === ordering) setDescending(value => !value); else { setOrdering(next); setDescending(next === "created" || next === "updated"); } };
-  const togglePin = async (document: FlowDocument) => {
-    const existing = resources.find(resource => resource.resourceType === "document" && resource.resourceId === document.id);
-    setPinBusy(document.id);
-    try {
-      if (existing) await deleteTeamResource(team.id, existing.id);
-      else await pinTeamResource(team.id, { resourceType: "document", resourceId: document.id, title: document.title });
-      await onReloadResources();
-      toast.success(t(existing ? "Removed from team overview" : "Pinned to team overview"));
-    } catch (error) { toast.error(error instanceof Error ? error.message : t("Could not update team overview")); }
-    finally { setPinBusy(""); }
-  };
-  const visibleProperties = new Set(properties);
-  if (grouping === "project") visibleProperties.delete("project");
-  if (grouping === 'owner') visibleProperties.delete('owner');
-  const gridStyle = documentGridStyle(visibleProperties);
-  type DocumentEntry = { kind: 'group'; group: (typeof grouped)[number] } | { kind: 'document'; document: FlowDocument; groupId: string };
-  const entries: DocumentEntry[] = grouped.flatMap(group => [
-    ...(grouping === 'none' ? [] : [{ kind: 'group' as const, group }]),
-    ...(isCollapsed(group.id, Boolean(group.project)) && grouping !== 'none' ? [] : group.items.map(document => ({ kind: 'document' as const, document, groupId: group.id }))),
-  ]);
-  const copySelected = async () => { try { await navigator.clipboard.writeText(documents.filter(document => selectedVisible.includes(document.id)).map(document => `${location.origin}${documentPath(data.workspace.urlKey, document)}`).join('\n')); toast.success(t('Copied document links')); } catch { toast.error(t('Could not copy document link')); } };
-  const header = <header className="team-documents-column-header" style={gridStyle}>
-    <span/><button className="team-documents-name-heading" aria-label={ordering === 'name' ? descending ? 'Z-A' : 'A-Z' : t('Order by Name')} onClick={() => changeOrder('name')} type="button">{t('Name')}{ordering === 'name' && (descending ? <ArrowDownWideNarrow size={12}/> : <ArrowUpNarrowWide size={12}/>)}</button>
-    {visibleProperties.has('project') && <button className="team-documents-project-column" onClick={() => changeOrder('project')} type="button">{t('Projects')}</button>}
-    {visibleProperties.has('created') && <button className="team-documents-date-column" onClick={() => changeOrder('created')} type="button">{t('Created')}</button>}
-    {visibleProperties.has('updated') && <button className="team-documents-date-column" onClick={() => changeOrder('updated')} type="button">{t('Last edited')}</button>}
-    {visibleProperties.has('owner') && <button className="team-documents-owner-column" onClick={() => changeOrder('owner')} type="button">{t('Owner')}</button>}<span/>
-  </header>;
-  const renderEntry = (_: number, entry: DocumentEntry) => {
-    if (entry.kind === 'group') { const { group } = entry; return <div className="team-documents-group-header"><button aria-expanded={!isCollapsed(group.id, Boolean(group.project))} aria-label={t(isCollapsed(group.id, Boolean(group.project)) ? 'Expand group' : 'Collapse group')} onClick={() => toggleGroup(group.id, Boolean(group.project))} type="button"><ChevronRight/></button>{group.project ? <a data-i18n-ignore href={projectPath(data.workspace.urlKey,group.project)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onNavigate(projectPath(data.workspace.urlKey,group.project!)); }}>{group.name}</a> : <span data-i18n-ignore={grouping === 'owner' || grouping === 'cycle' || undefined}>{t(group.name)}</span>}<small>{group.items.length}</small></div>; }
-    const document = entry.document, owner = ownerFor(document), project = document.projectIds.map(id => projectById.get(id)).find(Boolean);
-    const pinned = resources.some(resource => resource.resourceType === 'document' && resource.resourceId === document.id);
-    return <a className="team-document-row" style={gridStyle} data-selected={selected.includes(document.id)} href={documentPath(data.workspace.urlKey, document)} onClick={event => {
-      if ((event.target as HTMLElement).closest('button,input,label')) { event.preventDefault(); return; }
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      event.preventDefault(); onNavigate(documentPath(data.workspace.urlKey, document));
-    }}>
-      <label onClick={event => event.stopPropagation()}><input aria-label={t('Select document')} checked={selected.includes(document.id)} onChange={event => setSelected(current => event.target.checked ? [...new Set([...current, document.id])] : current.filter(id => id !== document.id))} type="checkbox"/><span aria-hidden="true"><Check size={10}/></span></label>
-      <span className="team-document-title"><DocumentGlyph document={document}/><strong data-i18n-ignore>{document.title || t('Untitled')}</strong>{pinned && <Pin aria-label={t('Pinned to team overview')}/>}</span>
-      {visibleProperties.has('project') && <button className="team-document-project team-documents-project-column" disabled={!project} onClick={() => { if(project)onNavigate(projectPath(data.workspace.urlKey,project)); }} type="button"><span data-i18n-ignore>{project?.name ?? '—'}</span></button>}
-      {visibleProperties.has('created') && <time className="team-documents-date-column" dateTime={document.createdAt} title={new Date(document.createdAt).toLocaleString()}>{t(relativeDocumentDate(document.createdAt))}</time>}
-      {visibleProperties.has('updated') && <time className="team-documents-date-column" dateTime={document.updatedAt} title={new Date(document.updatedAt).toLocaleString()}>{t(relativeDocumentDate(document.updatedAt))}</time>}
-      {visibleProperties.has('owner') && <span className="team-documents-owner-column"><PersonHover person={owner}><button className="team-document-owner" onClick={() => onNavigate(`/${data.workspace.urlKey}/member/${encodeURIComponent(owner.name)}/assigned`)} type="button"><UserAvatar avatarUrl={owner.avatarUrl} name={owner.displayName}/><i data-i18n-ignore>{owner.displayName}</i></button></PersonHover></span>}
-      <DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label={t('Open menu')} className="team-document-more" type="button"><TeamMoreIcon/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" className="team-home-menu"><DropdownMenu.Item onSelect={() => onNavigate(documentPath(data.workspace.urlKey, document))}>{t('Open document')}</DropdownMenu.Item><DropdownMenu.Item onSelect={() => { void navigator.clipboard.writeText(`${location.origin}${documentPath(data.workspace.urlKey, document)}`).catch(() => toast.error(t('Could not copy document link'))); }}>{t('Copy link')}</DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item disabled={pinBusy === document.id} onSelect={() => void togglePin(document)}>{t(pinned ? 'Remove from team overview' : 'Pin to team overview')}</DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
-    </a>;
-  };
-  return (
-    <div className="team-documents" data-created={visibleProperties.has('created')} data-updated={visibleProperties.has('updated')} data-owner={visibleProperties.has('owner')} data-project={visibleProperties.has('project')}>
-      <div className="team-documents-toolbar">
-        <button aria-label={t("New document")} disabled={creating} aria-busy={creating || undefined} className="team-documents-new" onClick={onNew} type="button"><PlusIcon/>{t("New document")}</button>
-        <DirectoryFilterMenu groups={filterGroups} menuClassName="team-documents-filter-menu" onAdvanced={() => setAdvancedOpen(true)} onChoice={changeFilter} selected={filters} triggerClassName="team-documents-icon-button"/>
-        <TeamDocumentsDisplayMenu descending={descending} grouping={grouping} onDirection={() => setDescending(value => !value)} onGrouping={setGrouping} onOnlyMyProjects={setOnlyMyProjects} onOrdering={next => { setOrdering(next); setDescending(next === 'created' || next === 'updated'); }} onProperty={(property) => setProperties(current => { const next = new Set(current); if (next.has(property)) next.delete(property); else next.add(property); return next; })} onShowInactive={setShowInactive} onlyMyProjects={onlyMyProjects} ordering={ordering} properties={properties} showInactive={showInactive}/>
-      </div>
-      {searchOpen && <div className="team-documents-search"><Search size={14}/><input ref={searchRef} autoFocus aria-label={t('Find documents')} placeholder={t('Find documents…')} value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if(event.key === 'Escape'){setSearch('');setSearchOpen(false);} }}/><button type="button" aria-label={t('Close search')} onClick={() => {setSearch('');setSearchOpen(false);}}><X size={14}/></button></div>}
-      {activeGroups.length > 0 && <div className="team-documents-active-filters">{activeGroups.map(field => <button key={field} onClick={() => setFilters(current => ({ ...current, [field]: new Set() }))} type="button">{t(documentFilterLabel(field))} <span>{filters[field].size}</span><X/></button>)}<button className="is-clear" onClick={() => setFilters(emptyDocumentFilters())}>{t("Clear")}</button></div>}
-      {visible.length > 0 ? <VirtualColumnList header={header} increaseViewportBy={200} ariaLabel={t('Documents')} className="team-documents-list" data={entries} computeItemKey={(_, entry) => entry.kind === 'group' ? `group:${entry.group.id}` : `${entry.groupId}:${entry.document.id}`} itemContent={renderEntry} virtualize={entries.length > 80}/> : <>
-        <div className="team-documents-empty" data-filtered={documents.some(document => !document.archivedAt)} role="status">
-          <div><DocumentsEmptyIllustration/><section><h3>{t(documents.some(document => !document.archivedAt) ? activeGroups.length ? 'No documents matching your filters' : search.trim() ? 'No documents matching your search' : 'No documents to show' : 'Team documents')}</h3>
-          {!documents.some(document => !document.archivedAt) && <><p>{t('Create documents to share notes, decisions, and plans with your team.')}</p><button type="button" disabled={creating} aria-busy={creating || undefined} onClick={onNew}>{t('Create document')}</button></>}
-          </section></div>
-        </div>
-      </>}
-      {selectedVisible.length > 0 && <div className="team-documents-selection" role="toolbar" aria-label={t('Selected documents')}><span>{selectedVisible.length} {t('selected')}</span><button type="button" onClick={() => void copySelected()}>{t('Copy links')}</button><button type="button" onClick={() => setSelected([])} aria-label={t('Clear selection')}><X size={14}/></button></div>}
-      <Dialog.Root open={advancedOpen} onOpenChange={setAdvancedOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className="team-documents-advanced-overlay"/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className="team-documents-advanced"><Dialog.Title>{t("Advanced filter")}</Dialog.Title><Dialog.Close asChild><button aria-label={t("Close advanced filter")}><X/></button></Dialog.Close><span>{t("Match")}</span><div><button aria-pressed={match === "all"} onClick={() => setMatch("all")}>{t("All filters")}</button><button aria-pressed={match === "any"} onClick={() => setMatch("any")}>{t("Any filter")}</button></div><footer><button onClick={() => setFilters(emptyDocumentFilters())}>{t("Clear all")}</button><Dialog.Close asChild><button className="is-primary">{t("Done")}</button></Dialog.Close></footer></Dialog.Content></Dialog.Portal></Dialog.Root>
-    </div>
-  );
-}
-
-function relativeDocumentDate(value: string) { const days = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000)); return days < 1 ? "today" : `${days}d ago` }
-
-type DocumentFilterField = "creator" | "owner" | "project" | "cycle" | "dates";
-type DocumentGrouping = "project" | "owner" | "cycle" | "recency" | "none";
-type DocumentOrdering = "name" | "created" | "updated" | "owner" | "project";
-type DocumentProperty = "created" | "updated" | "owner" | "project";
-
-function emptyDocumentFilters(): Record<DocumentFilterField, Set<string>> { return { creator: new Set(), owner: new Set(), project: new Set(), cycle: new Set(), dates: new Set() }; }
-function documentFilterLabel(field: DocumentFilterField) { return ({ creator: "Creator", owner: "Owner", project: "Project", cycle: "Cycle", dates: "Dates" })[field]; }
-function uniqueUsers(users: BootstrapData["users"]) { return [...new Map(users.map(user => [user.id, user])).values()]; }
-function documentMatchesDate(document: FlowDocument, value: string) { const date = new Date(document.updatedAt); if (value === "today") return isToday(date); if (value === "week") return isThisWeek(date); if (value === "month") return isThisMonth(date); return !isThisMonth(date); }
-function documentOrderValue(document: FlowDocument, ordering: DocumentOrdering, ownerFor: (document: FlowDocument) => BootstrapData["viewer"], projectById: Map<string, BootstrapData["projects"][number]>) { if (ordering === "name") return document.title; if (ordering === "owner") return ownerFor(document).displayName; if (ordering === "project") return document.projectIds.map(id => projectById.get(id)).find(Boolean)?.name ?? ""; return new Date(ordering === "created" ? document.createdAt : document.updatedAt).getTime(); }
-function documentGridStyle(properties: Set<DocumentProperty>) { return { gridTemplateColumns: `22px minmax(0,1fr) ${properties.has("project") ? "150px " : ""}${properties.has("created") ? "120px " : ""}${properties.has("updated") ? "120px " : ""}${properties.has("owner") ? "140px " : ""}40px` } as CSSProperties; }
-function groupDocuments(documents: FlowDocument[], grouping: DocumentGrouping, data: BootstrapData, ownerFor: (document: FlowDocument) => BootstrapData["viewer"]) {
-  if (grouping === "none") return [{ id: "all", name: "Documents", project: undefined, items: documents }];
-  if (grouping === "owner") {
-    const groups = new Map<string, { id: string; name: string; project: undefined; items: FlowDocument[] }>();
-    for (const document of documents) { const owner = ownerFor(document), group = groups.get(owner.id) ?? { id: `owner:${owner.id}`, name: owner.displayName, project: undefined, items: [] }; group.items.push(document); groups.set(owner.id, group); }
-    return [...groups.values()].sort((a,b) => a.name.localeCompare(b.name));
-  }
-  if (grouping === "cycle") { const cycleGroups = data.cycles.filter(cycle => documents.some(document => cycle.resources.some(resource => resource.documentId === document.id))).map(cycle => ({ id: `cycle:${cycle.id}`, name: cycle.name, project: undefined, items: documents.filter(document => cycle.resources.some(resource => resource.documentId === document.id)) })); const assigned = new Set(cycleGroups.flatMap(group => group.items.map(item => item.id))); return [...cycleGroups, { id: "no-cycle", name: "No cycle", project: undefined, items: documents.filter(document => !assigned.has(document.id)) }].filter(group => group.items.length); }
-  if (grouping === 'recency') {
-    const buckets = [{ id:'today', name:'Today', items:[] as FlowDocument[] },{ id:'week', name:'This week',items:[] as FlowDocument[] },{id:'month',name:'This month',items:[] as FlowDocument[]},{id:'older',name:'Older',items:[] as FlowDocument[]}];
-    for(const document of documents){const date=new Date(document.updatedAt);buckets[isToday(date)?0:isThisWeek(date)?1:isThisMonth(date)?2:3].items.push(document);}
-    return buckets.filter(bucket=>bucket.items.length).map(bucket=>({...bucket,project:undefined}));
-  }
-  const knownProjects = new Set(data.projects.map(project => project.id));
-  return [{ id: "team", name: "Team documents", project: undefined, items: documents.filter(document => !document.projectIds.some(id => knownProjects.has(id))) }, ...data.projects.filter(project => documents.some(document => document.projectIds.includes(project.id))).sort((a,b) => a.name.localeCompare(b.name)).map(project => ({ id: project.id, name: project.name, project, items: documents.filter(document => document.projectIds.includes(project.id)) }))].filter(group => group.items.length);
-}
-
-function TeamDocumentsDisplayMenu({ descending, grouping, onDirection, onGrouping, onOnlyMyProjects, onOrdering, onProperty, onShowInactive, onlyMyProjects, ordering, properties, showInactive }: { descending: boolean; grouping: DocumentGrouping; onDirection: () => void; onGrouping: (value: DocumentGrouping) => void; onOnlyMyProjects: (value: boolean) => void; onOrdering: (value: DocumentOrdering) => void; onProperty: (value: DocumentProperty) => void; onShowInactive: (value: boolean) => void; onlyMyProjects: boolean; ordering: DocumentOrdering; properties: Set<DocumentProperty>; showInactive: boolean }) {
-  const { t } = useI18n();
-  const groupLabels: Record<DocumentGrouping, string> = { none: t("None"), owner: t("Owner"), cycle: t("Cycle"), project: t("Project"), recency: t("Recency") };
-  const orderLabels: Record<DocumentOrdering, string> = { name: t("Name"), created: t("Created"), updated: t("Last edited"), owner: t("Owner"), project: t("Project") };
-  return <Popover.Root><Popover.Trigger asChild><button aria-label={t("Display options")} className="team-documents-icon-button" type="button"><DisplayIcon/></button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" align="end" className="team-directory-display-menu team-documents-display-menu" sideOffset={4}>
-    <div className="team-directory-order-row"><span>{t("Grouping")}</span><div><select aria-label={t("Grouping")} onChange={event => onGrouping(event.target.value as DocumentGrouping)} value={grouping}>{(Object.keys(groupLabels) as DocumentGrouping[]).map(value => <option key={value} value={value}>{groupLabels[value]}</option>)}</select></div></div>
-    <div className="team-directory-order-row"><span>{t("Ordering")}</span><div><select aria-label={t("Ordering")} onChange={event => onOrdering(event.target.value as DocumentOrdering)} value={ordering}>{(Object.keys(orderLabels) as DocumentOrdering[]).map(value => <option key={value} value={value}>{orderLabels[value]}</option>)}</select><button aria-label={t("Direction")} onClick={onDirection} title={t(descending ? "Descending" : "Ascending")} type="button">{descending ? <ArrowDownWideNarrow/> : <ArrowUpNarrowWide/>}</button></div></div>
-    <div className="team-directory-visibility">{[[t("Show inactive projects"), showInactive, onShowInactive], [t("Show only my projects"), onlyMyProjects, onOnlyMyProjects]].map(([label, checked, update]) => <label key={label as string}><span>{label as string}</span><button aria-checked={checked as boolean} onClick={() => (update as (value: boolean) => void)(!(checked as boolean))} role="switch" type="button"><i/></button></label>)}</div>
-    <div className="team-directory-properties"><span>{t("Display properties")}</span><div>{(["project", "owner", "updated", "created"] as DocumentProperty[]).filter(value => value !== "project" || grouping !== "project").map(value => <button aria-pressed={properties.has(value)} key={value} onClick={() => onProperty(value)} type="button">{orderLabels[value]}</button>)}</div></div>
-  </Popover.Content></Popover.Portal></Popover.Root>;
-}
-
-function readDocumentDirectoryState() {
-  const params = new URLSearchParams(typeof location === "undefined" ? "" : location.search);
-  const filters = emptyDocumentFilters();
-  (Object.keys(filters) as DocumentFilterField[]).forEach(field => params.getAll(`doc-${field}`).forEach(value => filters[field].add(value)));
-  const grouping = (params.get('doc-group') === 'created' ? 'recency' : ["project", "owner", "cycle", "recency", "none"].includes(params.get("doc-group") ?? "") ? params.get("doc-group") : "project") as DocumentGrouping;
-  const ordering = (["name", "created", "updated", "owner", "project"].includes(params.get("doc-order") ?? "") ? params.get("doc-order") : "name") as DocumentOrdering;
-  const properties = new Set<DocumentProperty>((params.get("doc-columns") ?? "created,updated,owner,project").split(",").filter(value => ["created", "updated", "owner", "project"].includes(value)) as DocumentProperty[]);
-  return { filters, search: params.get('doc-search') ?? '', match: params.get("doc-match") === "any" ? "any" as const : "all" as const, grouping, ordering, descending: params.get("doc-direction") === "desc", showInactive: params.get("doc-inactive") === "1", onlyMyProjects: params.get("doc-mine") === "1", properties };
-}
-function persistDocumentDirectoryState(state: ReturnType<typeof readDocumentDirectoryState>) {
-  if (typeof history === "undefined" || typeof location === "undefined") return;
-  const params = new URLSearchParams(location.search);
-  (Object.keys(state.filters) as DocumentFilterField[]).forEach(field => { params.delete(`doc-${field}`); state.filters[field].forEach(value => params.append(`doc-${field}`, value)); });
-  const setOptional = (key: string, value: string, keep: boolean) => { if (keep) params.set(key, value); else params.delete(key); };
-  setOptional('doc-search', state.search, Boolean(state.search));
-  setOptional("doc-match", state.match, state.match !== "all"); setOptional("doc-group", state.grouping, state.grouping !== "project"); setOptional("doc-order", state.ordering, state.ordering !== "name"); setOptional("doc-direction", "desc", state.descending); setOptional("doc-inactive", "1", state.showInactive); setOptional("doc-mine", "1", state.onlyMyProjects);
-  const columnValue = [...state.properties].sort().join(","); setOptional("doc-columns", columnValue, columnValue !== "created,owner,project,updated");
-  const query = params.toString(); history.replaceState(history.state, "", `${location.pathname}${query ? `?${query}` : ""}${location.hash}`);
-}
 import { AnimatedCollapse } from '@/components/ui/motion';

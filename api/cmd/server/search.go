@@ -240,7 +240,7 @@ func buildSearchResultsLimited(data domain.Bootstrap, query string, types map[st
 					subtitle = data.Projects[index].Name
 				}
 			}
-			add(domain.SearchResult{ID: document.ID, Type: "document", Title: document.Title, Subtitle: subtitle, Icon: document.Icon, Color: document.Color, UpdatedAt: document.UpdatedAt}, document.Title, document.Content, subtitle)
+			add(domain.SearchResult{ID: document.ID, Type: "document", Title: documentDisplayTitle(document.Title), Subtitle: subtitle, Icon: document.Icon, Color: document.Color, UpdatedAt: document.UpdatedAt}, document.Title, document.Content, subtitle)
 			indexed[document.ID] = true
 		}
 		for _, project := range data.Projects {

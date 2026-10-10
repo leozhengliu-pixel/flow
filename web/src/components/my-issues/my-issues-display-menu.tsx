@@ -227,3 +227,62 @@ function SwitchRow({ checked, label, onChange }: { checked: boolean; label: stri
     <Toggle checked={checked} label={t(label)} onChange={onChange}/>
   </div>
 }
+
+export interface ListDisplayMenuOption<T extends string = string> { value: T; label: string }
+
+export interface ListDisplayMenuProps<G extends string = string, O extends string = string, P extends string = string> {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  grouping: { value: G; options: ListDisplayMenuOption<G>[]; onChange: (value: G) => void }
+  ordering: { value: O; options: ListDisplayMenuOption<O>[]; onChange: (value: O) => void; descending: boolean; onDirection: () => void }
+  /** On/off rows between the ordering and the properties (Documents: "Show inactive projects"). */
+  toggles?: { id: string; label: string; checked: boolean; onChange: (checked: boolean) => void }[]
+  properties: { options: ListDisplayMenuOption<P>[]; active: ReadonlySet<P>; onToggle: (value: P) => void }
+}
+
+/**
+ * Linear's compact display popover (Documents, and other flat lists): Grouping and Ordering selects with
+ * the direction button, view toggles, then the display-property chips. Same surface as the issue popover.
+ */
+export function ListDisplayMenu<G extends string, O extends string, P extends string>({ grouping, onOpenChange, open, ordering, properties, toggles = [] }: ListDisplayMenuProps<G, O, P>) {
+  const { t } = useI18n()
+  return <Popover.Root open={open} onOpenChange={onOpenChange}>
+    <Popover.Trigger asChild>
+      <button type="button" className={`${styles.trigger} ui-pill`} aria-label={t('Display options')} aria-pressed={open}>
+        <DisplayIcon />
+      </button>
+    </Popover.Trigger>
+    <Popover.Portal>
+      <Popover.Content data-flow-motion="floating" className={styles.popover} data-list-display="" side="bottom" align="end" sideOffset={3} collisionPadding={11} aria-label={t('Display options')}>
+        <section className={styles.section} aria-label={t('Grouping options')}>
+          <div className={styles.groupingControl}>
+            <span className={styles.rowLabel}>{t('Grouping')}</span>
+            <div className={styles.groupingActions}><SelectControl ariaLabel="Grouping" value={grouping.value} options={grouping.options} onChange={grouping.onChange} /></div>
+          </div>
+          <div className={styles.groupingControl}>
+            <span className={styles.rowLabel}>{t('Ordering')}</span>
+            <div className={styles.groupingActions}>
+              <button type="button" className={styles.orderButton} aria-label={t(ordering.descending ? 'Descending' : 'Ascending')} title={t('Direction')} data-order={ordering.descending ? 'desc' : 'asc'} data-sort-direction="" onClick={ordering.onDirection}><SortDirectionIcon /></button>
+              <SelectControl ariaLabel="Ordering" value={ordering.value} options={ordering.options} onChange={ordering.onChange} />
+            </div>
+          </div>
+          {toggles.map(toggle => <SwitchRow key={toggle.id} label={toggle.label} checked={toggle.checked} onChange={toggle.onChange} />)}
+        </section>
+        <section className={styles.section} aria-label={t('Display properties')}>
+          <span className={styles.sectionLabel}>{t('Display properties')}</span>
+          <div className={styles.propertyGrid}>
+            {properties.options.map(property => {
+              const active = properties.active.has(property.value)
+              return <button key={property.value} type="button" data-active={active} aria-pressed={active} onClick={() => properties.onToggle(property.value)}><span>{t(property.label)}</span></button>
+            })}
+          </div>
+        </section>
+      </Popover.Content>
+    </Popover.Portal>
+  </Popover.Root>
+}
+
+/** Linear's sort-direction glyph: arrow plus three bars; `data-order="desc"` mirrors it vertically. */
+function SortDirectionIcon() {
+  return <svg aria-hidden="true" focusable="false" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path fillRule="evenodd" d="M8.23 12.326a.75.75 0 1 0-.96-1.152L5.5 12.649V1.75a.75.75 0 0 0-1.5 0v10.899l-1.77-1.475a.75.75 0 1 0-.96 1.152l3 2.5a.75.75 0 0 0 .96 0z"/><path fillRule="evenodd" d="M7 8.75c0 .414.336.75.75.75h6.5a.75.75 0 0 0 0-1.5h-6.5a.75.75 0 0 0-.75.75M7 5.75c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-4.5a.75.75 0 0 0-.75.75M7 2.75c0 .414.336.75.75.75h1.5a.75.75 0 1 0 0-1.5h-1.5a.75.75 0 0 0-.75.75"/></svg>
+}

@@ -132,7 +132,7 @@ function LoopInstructionsEditorBody({
     immediatelyRender: false,
     editable: !readOnly,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: false, autolink: true } }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true } }),
       Markdown,
       LoopEntityNode,
       MentionLinksExtension.configure({ getData: () => entityDataRef.current }),

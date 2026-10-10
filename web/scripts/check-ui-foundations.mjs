@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const [font, foundations, tokens, cycles, projects, teamOverview, documents, documentIcon, documentPage, teamOverviewPage, documentIndex, detailPane, projectOverview, initiativeResources, releases, workspaceSearch, commandMenu, sidebar, inbox, inboxFilter] = await Promise.all([
+const [font, foundations, tokens, cycles, projects, teamOverview, documents, documentIcon, documentPage, teamOverviewPage, teamDocuments, teamDocumentsCss, detailPane, projectOverview, initiativeResources, releases, workspaceSearch, commandMenu, sidebar, inbox, inboxFilter] = await Promise.all([
   readFile(`${root}/public/fonts/InterVariable.woff2`),
   readFile(`${root}/src/styles/foundations.css`, 'utf8'),
   readFile(`${root}/src/styles/tokens.css`, 'utf8'),
@@ -14,7 +14,8 @@ const [font, foundations, tokens, cycles, projects, teamOverview, documents, doc
   readFile(`${root}/src/components/documents/document-icon.tsx`, 'utf8'),
   readFile(`${root}/src/components/documents/document-page.tsx`, 'utf8'),
   readFile(`${root}/src/components/team-overview/team-overview-page.tsx`, 'utf8'),
-  readFile(`${root}/src/components/documents/documents-index-page.tsx`, 'utf8'),
+  readFile(`${root}/src/components/team-overview/team-documents.tsx`, 'utf8'),
+  readFile(`${root}/src/components/team-overview/team-documents.css`, 'utf8'),
   readFile(`${root}/src/components/detail/detail-pane.tsx`, 'utf8'),
   readFile(`${root}/src/components/project-detail/project-overview.tsx`, 'utf8'),
   readFile(`${root}/src/components/initiatives/initiative-resources.tsx`, 'utf8'),
@@ -58,7 +59,7 @@ if (!projects.includes('.lp-project-row__name strong { flex: none; font-size: 13
 if (!teamOverview.includes('isolation: isolate;') || !teamOverview.includes('z-index: -1;')) {
   throw new Error('Team resource menu hover layers must remain behind direct text nodes')
 }
-if (!teamOverview.includes('grid-template-columns:20px 16px') || !teamOverview.includes('position:absolute!important;left:4px;top:5px')) {
+if (!teamDocumentsCss.includes('.team-docs-check { position: relative; display: block; flex: 0 0 12px; width: 12px; height: 12px;') || !teamDocumentsCss.includes('  height: 48px;\n  margin: 0 8px;')) {
   throw new Error('Team document checkbox and title columns must retain their measured alignment')
 }
 if (!teamOverview.includes('.team-home-page {\n  position: relative;') || !teamOverview.includes('.team-documents-toolbar{position:absolute;z-index:22;top:44px;') || !teamOverview.includes('.team-documents-toolbar>*{pointer-events:auto}') || !teamOverview.includes('.team-members-toolbar{position:absolute;z-index:22;top:44px;')) {
@@ -76,7 +77,7 @@ if (!documentIcon.includes("DEFAULT_DOCUMENT_ICON = 'Page'") || !documentIcon.in
 if (!documentPage.includes('<DocumentGlyph document={document}/>') || !documentPage.includes('<DocumentIconPicker document={document}')) {
   throw new Error('Document routes and the document picker must render the persisted document visual')
 }
-for (const [surface, source] of Object.entries({ teamOverviewPage, documentIndex, detailPane, projectOverview, initiativeResources, releases, workspaceSearch, commandMenu, sidebar })) {
+for (const [surface, source] of Object.entries({ teamOverviewPage, teamDocuments, detailPane, projectOverview, initiativeResources, releases, workspaceSearch, commandMenu, sidebar })) {
   if (!source.includes('DocumentGlyph')) throw new Error(`${surface} must render persisted document icons instead of a generic file icon`)
 }
 for (const token of [

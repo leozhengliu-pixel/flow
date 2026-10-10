@@ -3,6 +3,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import { insertEmbedFiles } from './file-extension'
 import { openLightbox } from '@/components/editor/lightbox-bridge'
+import { importTextFile, isTextImportFile } from '@/components/editor/markdown-paste'
 
 export type DescriptionImageUpload = (file: File) => Promise<string>
 export type DescriptionImageComment = (selection: { text: string; from: number; to: number; src: string }) => void
@@ -129,8 +130,16 @@ export const DescriptionImage = Node.create({
       key: imageKey,
       props: {
         handlePaste(_view, event) {
-          const files = [...(event.clipboardData?.files ?? [])]
-          if (!files.length) return false
+          const all = [...(event.clipboardData?.files ?? [])]
+          if (!all.length) return false
+          // Markdown / text files become document content instead of file cards (Linear imports them).
+          const texts = all.filter(isTextImportFile)
+          const files = all.filter(file => !isTextImportFile(file))
+          if (texts.length) {
+            event.preventDefault()
+            for (const file of texts) void importTextFile(editor, file)
+            if (!files.length) return true
+          }
           const images = files.filter(file => file.type.startsWith('image/'))
           const rest = files.filter(file => !file.type.startsWith('image/'))
           if (!images.length && !rest.length) return false
@@ -140,8 +149,16 @@ export const DescriptionImage = Node.create({
         },
         handleDrop(view, event, _slice, moved) {
           if (moved) return false
-          const files = [...(event.dataTransfer?.files ?? [])]
-          if (!files.length) return false
+          const all = [...(event.dataTransfer?.files ?? [])]
+          if (!all.length) return false
+          const texts = all.filter(isTextImportFile)
+          const files = all.filter(file => !isTextImportFile(file))
+          const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos
+          if (texts.length) {
+            event.preventDefault()
+            for (const file of texts) void importTextFile(editor, file, dropPos)
+            if (!files.length) return true
+          }
           const images = files.filter(file => file.type.startsWith('image/'))
           const rest = files.filter(file => !file.type.startsWith('image/'))
           if (!images.length && !rest.length) return false

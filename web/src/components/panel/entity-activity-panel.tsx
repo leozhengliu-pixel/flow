@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
-import { MessageSquare, Sparkles, X } from 'lucide-react'
+import { MessageSquare, X } from 'lucide-react'
 import './entity-activity-panel.css'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export type EntityActivityPanelEntityType = 'issue' | 'project' | 'initiative' | 'document'
 export type EntityActivityPanelMode = 'activity' | 'agent'
@@ -83,7 +84,7 @@ export function EntityActivityPanel({
               onClick={() => setMode('agent')}
               type="button"
             >
-              <Sparkles size={14} />
+              <AgentCursorGlyph size={14} />
               <span>Agent</span>
             </button>
           )}
