@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { I18nProvider, translateToChinese } from '@/i18n/i18n'
+import { I18nProvider } from '@/i18n/i18n'
+import { translateToChinese } from '@/i18n/translate'
 import type { BootstrapData, PulseItem, PulseReason } from '@/types/flow'
 import { primaryPulseReason, pulseReasonCopy } from './pulse-why-copy'
 import { PulseWhyDialog } from './pulse-why-dialog'

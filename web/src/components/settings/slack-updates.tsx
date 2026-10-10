@@ -12,35 +12,11 @@ import {
   authorizeIntegration,
   disconnectIntegrationConnection,
 } from "@/lib/api";
-import type { BootstrapData, IntegrationConnection } from "@/types/flow";
+import type { BootstrapData } from "@/types/flow";
 
 import "./slack-updates.css";
 
-export type SlackUpdatesKind = "project" | "initiative";
-
-const SCOPE_BY_KIND: Record<SlackUpdatesKind, string> = {
-  project: "orgProjectUpdates",
-  initiative: "initiative-updates",
-};
-
-export function findSlackUpdatesConnection(
-  data: BootstrapData,
-  kind: SlackUpdatesKind,
-): IntegrationConnection | undefined {
-  const scope = SCOPE_BY_KIND[kind];
-  return (data.integrationConnections ?? []).find((item) => {
-    if (item.provider !== "slack") return false;
-    const config = item.config ?? {};
-    if (kind === "project") {
-      return (
-        config.scope === scope ||
-        config.source === "project-updates" ||
-        config.scope === "project-updates"
-      );
-    }
-    return config.scope === scope;
-  });
-}
+import { findSlackUpdatesConnection, SCOPE_BY_KIND, type SlackUpdatesKind } from "./slack-updates-model";
 
 export function SlackUpdates({
   data,

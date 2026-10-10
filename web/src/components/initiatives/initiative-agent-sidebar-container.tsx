@@ -56,5 +56,3 @@ export function InitiativeAgentSidebarContainer({
     </aside>
   )
 }
-
-export { usePageAgentSidebarOpen }

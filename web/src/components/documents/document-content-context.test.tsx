@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { DocumentContentProvider, useDocumentContent } from './document-content-context'
+import { DocumentContentProvider } from './document-content-context'
+import { useDocumentContent } from './document-content-context-value'
 
 function Probe() {
   const value = useDocumentContent()

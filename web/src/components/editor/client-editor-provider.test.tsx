@@ -1,7 +1,8 @@
 import { renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
-import { ClientEditorProvider, useClientEditor } from './client-editor-provider'
+import { ClientEditorProvider } from './client-editor-provider'
+import { useClientEditor } from './client-editor-context'
 
 function wrap(issueId?: string) {
   return ({ children }: { children: ReactNode }) => (

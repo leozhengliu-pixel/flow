@@ -9,35 +9,6 @@ import type { BootstrapData, Team } from "@/types/flow";
 
 import "./team-pages-layout.css";
 
-const TEAM_PAGE_KINDS = new Set([
-  "team-overview",
-  "team-documents",
-  "team-loops",
-  "team-members",
-  "team-board",
-  "team-triage",
-  "team-updates",
-  "team-update",
-  "team-resources",
-  "team-links",
-  "team-archive",
-  "team-cycles",
-  "cycle",
-  "cycle-upcoming",
-  "team-initiatives",
-  "team-issues",
-  "team-saved-view",
-  "team-views",
-  "team-views-new",
-  "team-projects",
-  "team-projects-new-view",
-  "team-projects-saved-view",
-]);
-
-export function isTeamPagesRoute(kind: string) {
-  return TEAM_PAGE_KINDS.has(kind);
-}
-
 function isPrivateTeam(data: BootstrapData, team: Team) {
   if (team.private) return true;
   const access = data.teamSettings?.[team.id]?.access;
@@ -126,15 +97,16 @@ export function TeamPagesLayout({
     team && isPrivateTeam(data, team) && !viewerCanAccessTeam(data, team),
   );
 
+  const teamId = team?.id;
   useEffect(() => {
-    if (!team || blocked) return;
+    if (teamId === undefined || blocked) return;
     // Progressive preload OK — warm common team surfaces after paint.
     const path = typeof window !== "undefined" ? window.location.pathname : "";
     const handle = globalThis.setTimeout(() => {
       void preloadRoute(path).catch(() => undefined);
     }, 120);
     return () => globalThis.clearTimeout(handle);
-  }, [team?.id, blocked]);
+  }, [teamId, blocked]);
 
   return (
     <>

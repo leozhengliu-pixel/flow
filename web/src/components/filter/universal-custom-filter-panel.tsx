@@ -24,7 +24,7 @@ import type {
   FilterValidationContext,
 } from './filter-block-types'
 import { getRegisteredFilterBlocks, hasRegisteredFilterValues } from './register-filter-values'
-import { ensureFilterValuesRegistered } from './register-filter-values-lazy'
+import { ensureFilterValuesRegistered } from './ensure-filter-values-registered'
 import { useFilterValidation } from './use-filter-validation'
 import styles from './universal-custom-filter-panel.module.css'
 
@@ -370,5 +370,3 @@ function emptyCopyFor(entityType: FilterEntityType): string {
     default: return 'Filter by…'
   }
 }
-
-export { groupsToFilter, groupsFromFilter }

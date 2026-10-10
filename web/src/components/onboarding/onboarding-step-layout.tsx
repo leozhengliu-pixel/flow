@@ -1,23 +1,10 @@
+import { useCallback, useMemo, type ReactNode } from "react";
 import {
-  createContext,
-  useCallback,
-  useContext,
-  useMemo,
-  type ReactNode,
-} from "react";
+  OnboardingNavigationContext,
+  useOnboardingNavigation,
+  type OnboardingNavigationValue,
+} from "./onboarding-navigation";
 import "./onboarding-step-layout.css";
-
-export type OnboardingNavigationValue = {
-  step: number;
-  count: number;
-  stepLabels: string[];
-  goToStep: (step: number) => void;
-  nextStep: () => void;
-  skipStep: () => void;
-};
-
-const OnboardingNavigationContext =
-  createContext<OnboardingNavigationValue | null>(null);
 
 export function OnboardingNavigationProvider({
   step,
@@ -37,16 +24,6 @@ export function OnboardingNavigationProvider({
       {children}
     </OnboardingNavigationContext.Provider>
   );
-}
-
-export function useOnboardingNavigation(): OnboardingNavigationValue {
-  const value = useContext(OnboardingNavigationContext);
-  if (!value) {
-    throw new Error(
-      "useOnboardingNavigation must be used within OnboardingNavigationProvider",
-    );
-  }
-  return value;
 }
 
 type StepLayoutProps = {

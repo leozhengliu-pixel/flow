@@ -365,15 +365,6 @@ func migrationErrorSummary(job *domain.MigrationJob, err error) {
 	job.UpdatedAt = time.Now().UTC()
 }
 
-func mappingTarget(job *domain.MigrationJob, entityType, sourceID string) string {
-	index := slices.IndexFunc(job.Mappings, func(item domain.MigrationEntityMapping) bool {
-		return item.EntityType == entityType && item.SourceID == sourceID
-	})
-	if index < 0 {
-		return ""
-	}
-	return job.Mappings[index].TargetID
-}
 func completeMapping(job *domain.MigrationJob, entityType, sourceID, targetID, targetName string) {
 	index := slices.IndexFunc(job.Mappings, func(item domain.MigrationEntityMapping) bool {
 		return item.EntityType == entityType && item.SourceID == sourceID
@@ -803,14 +794,6 @@ func mapIDs(ids []string, mapping map[string]string, fallback string) []string {
 		}
 	}
 	return result
-}
-func bundleTeamSourceID(bundle domain.MigrationBundle, name string) string {
-	for _, item := range bundle.Teams {
-		if item.Name == name {
-			return item.ID
-		}
-	}
-	return name
 }
 func teamForMigration(data *domain.Bootstrap, id string) domain.Team {
 	for _, item := range data.Teams {

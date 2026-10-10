@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Issue } from '@/types/flow'
-import { similarIssues } from './similar-issues'
+import { similarIssues } from './similar-issues-model'
 
 const issue = (id: string, extra: Partial<Issue> = {}) => ({ id, identifier: id.toUpperCase(), title: 'Recurring test: daily standup notes', team: { id: 't' }, state: { type: 'unstarted' }, relations: [], subIssueIds: [], ...extra }) as unknown as Issue
 

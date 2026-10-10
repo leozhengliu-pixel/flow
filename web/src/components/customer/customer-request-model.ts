@@ -197,3 +197,12 @@ export function customerPickOptions(customers: readonly Customer[], query: strin
   }
   return options
 }
+
+/** Map Important ↔ REST priority (1 = important). */
+export function importantFromPriority(priority?: number) {
+  return (priority ?? 0) >= IMPORTANT_PRIORITY
+}
+
+export function priorityFromImportant(important: boolean) {
+  return important ? IMPORTANT_PRIORITY : undefined
+}

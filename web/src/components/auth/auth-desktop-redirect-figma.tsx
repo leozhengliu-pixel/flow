@@ -4,7 +4,6 @@ import { Link, useLocation } from 'react-router-dom'
 import { startIntegrationOAuth } from '@/lib/api'
 import {
   FIGMA_OAUTH_STATE_KEY,
-  figmaAuthUrl,
   writeFigmaOAuthState,
 } from '@/lib/figma-auth'
 import { OAuthCompleteShell } from './complete-oauth-view'
@@ -83,10 +82,4 @@ export function AuthDesktopRedirectFigma() {
       </div>
     </OAuthCompleteShell>
   )
-}
-
-/** Exported for tests — builds a local Figma authorize URL when client id is known. */
-export function buildBrowserFigmaAuthorizeURL(clientId: string, redirectUri: string, urlKey: string, key: string) {
-  writeFigmaOAuthState({ key, urlKey })
-  return figmaAuthUrl({ clientId, redirectUri, state: { key, urlKey } })
 }

@@ -2,7 +2,7 @@
  * LS-0141 ContentViewHeaderFilterPanel — mounts UniversalCustomFilterPanel under
  * ContentView headers (OR / multi-value / within→in via FilterBlock platform).
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   IssueUniversalCustomFilterPanelShouldBeLazyLoaded,
   UniversalCustomFilterPanelShouldBeLazyLoaded,
@@ -43,10 +43,13 @@ export function ContentViewHeaderFilterPanel({
     onOpenChange?.(next)
   }
 
+  const setOpenRef = useRef(setOpen)
+  useEffect(() => { setOpenRef.current = setOpen })
+
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') setOpenRef.current(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

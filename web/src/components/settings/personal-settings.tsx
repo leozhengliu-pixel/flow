@@ -34,7 +34,8 @@ import { NotificationChannelSettings } from './notification-channel-settings';
 import { ApplicationPolicySettings } from './application-policy-settings';
 import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';
 import { roleSatisfiesSecurityPermission } from '@/lib/security-setting'
-import { MATCH_INTERFACE_CODE_THEME, ReviewCode } from '@/components/reviews/review-code';
+import { ReviewCode } from '@/components/reviews/review-code';
+import { MATCH_INTERFACE_CODE_THEME } from '@/components/reviews/review-code-theme';
 import { NavLink } from "react-router-dom";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -74,7 +75,8 @@ import type {
   OAuthAuthorization,
   Passkey,
 } from "@/types/flow";
-import { translateToChinese, useI18n } from "@/i18n/i18n";
+import { useI18n } from "@/i18n/i18n";
+import { translateToChinese } from "@/i18n/translate";
 import { resolveFirstDay } from "@/lib/runtime-preferences";
 import { TeamIcon } from "@/components/issue/issue-icons";
 import { GridLoader } from '@/components/ui/grid-loader'

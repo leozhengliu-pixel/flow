@@ -65,21 +65,6 @@ func (s *server) pulseAudioAllowed(settings domain.WorkspaceSettings, role strin
 	return s.tts.Enabled && agentWorkspacePolicy(settings, role) == nil
 }
 
-// pulseEnabledFor rejects requests while Pulse is off for the workspace. The
-// middleware gates keyed requests; this also covers development requests.
-func (s *server) pulseEnabledFor(w http.ResponseWriter, r *http.Request) bool {
-	snapshot, ok := s.store.PulseFeed(workspaceKey(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
-		return false
-	}
-	if !workspaceFeatureEnabled(snapshot.WorkspaceSettings, "pulse") {
-		writeError(w, http.StatusForbidden, "This workspace feature is disabled")
-		return false
-	}
-	return true
-}
-
 func (s *server) getPulseCapabilities(w http.ResponseWriter, r *http.Request) {
 	snapshot, _, viewer, ok := s.pulseRequestContext(w, r)
 	if !ok {

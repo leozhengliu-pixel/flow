@@ -1,7 +1,8 @@
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import { LoopIcon, loopIconColor } from './loop-glyph'
+import { LoopIcon } from './loop-glyph'
+import { loopIconColor } from './loop-template-visuals'
 
 describe('LoopIcon', () => {
   it.each([

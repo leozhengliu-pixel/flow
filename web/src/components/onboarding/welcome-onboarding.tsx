@@ -11,16 +11,8 @@ import {
   OnboardingNavigationProvider,
   OnboardingStepLayout,
 } from "./onboarding-step-layout";
+import { WELCOME_STEPS, type WelcomeStepId } from "./welcome-steps";
 import "./welcome-onboarding.css";
-
-export const WELCOME_STEPS = [
-  "profile",
-  "invite",
-  "github",
-  "slack",
-] as const;
-
-export type WelcomeStepId = (typeof WELCOME_STEPS)[number];
 
 const STEP_LABELS = ["Profile", "Invite", "GitHub", "Slack"];
 

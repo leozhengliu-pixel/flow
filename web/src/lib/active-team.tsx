@@ -1,21 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { Team } from "@/types/flow";
-
-type ActiveTeamContextValue = {
-  activeTeam: Team | undefined;
-  setActiveTeam: (team: Team | undefined) => void;
-};
-
-const ActiveTeamContext = createContext<ActiveTeamContextValue | null>(null);
+import { ActiveTeamContext, useActiveTeam } from "./active-team-context";
 
 /** LS-0545 — global active team store (Linear SetActiveTeam parity). */
 export function ActiveTeamProvider({ children }: { children: ReactNode }) {
@@ -35,18 +21,6 @@ export function ActiveTeamProvider({ children }: { children: ReactNode }) {
       {children}
     </ActiveTeamContext.Provider>
   );
-}
-
-export function useActiveTeam() {
-  const context = useContext(ActiveTeamContext);
-  if (!context) {
-    throw new Error("useActiveTeam must be used within ActiveTeamProvider");
-  }
-  return context;
-}
-
-export function useOptionalActiveTeam() {
-  return useContext(ActiveTeamContext);
 }
 
 /**

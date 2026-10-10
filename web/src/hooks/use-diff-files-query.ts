@@ -76,6 +76,8 @@ export function useDiffFilesQuery(
 
   const files = useMemo<DiffFileEntry[]>(() => {
     if (!review) return [];
+    // The processor is mutable; `revision` changes whenever its computed diffs change and invalidates this memo.
+    void revision;
     return review.files.map((file) => {
       const kind = classifyDiffFile(file);
       const parsed = parseDiffFile(file.path, file.patch);

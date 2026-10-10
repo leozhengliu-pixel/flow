@@ -7,10 +7,8 @@ import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { useI18n } from '@/i18n/i18n'
 import { AgentPanel, type AgentPanelDock } from './agent-panel'
-import {
-  clearEntityThreadDraft,
-  EntityAgentThread,
-} from './entity-agent-thread'
+import { EntityAgentThread } from './entity-agent-thread'
+import { clearEntityThreadDraft } from './entity-thread-draft'
 import { conversationDraftKeyFor } from './agent-drafts'
 import { useMarkAgentSessionRead } from './agent-read-state'
 import styles from './entity-agent-panel.module.css'

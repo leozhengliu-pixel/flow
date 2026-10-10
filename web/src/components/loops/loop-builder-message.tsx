@@ -7,7 +7,8 @@ import { TeamIcon } from "@/components/issue/issue-icons";
 import { useI18n } from "@/i18n/i18n";
 import type { AgentMessage, AgentMessagePart, AgentToolCall, BootstrapData, Team } from "@/types/flow";
 import { isPublishCall, loopToolResult, splitBuilderReply, type LoopToolResult } from "./loop-data";
-import { LoopIcon, loopIconColor } from "./loop-glyph";
+import { LoopIcon } from "./loop-glyph";
+import { loopIconColor } from "./loop-template-visuals";
 
 export type LoopVisual = { templateId?: string; icon?: string; color?: string };
 

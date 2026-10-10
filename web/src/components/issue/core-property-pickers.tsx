@@ -12,6 +12,7 @@ import { personDisplayName, personSearchText } from '@/lib/people'
 import { displayUserName, useUserPreferences } from '@/lib/runtime-preferences'
 import { AgentLabel } from '@/components/agent/agent-badge'
 import { AGENT_OPTION_GROUP, assigneeCandidates } from '@/lib/agent-members'
+import { avatarColor } from '@/components/issue/avatar-color'
 
 /** `triage` shows Linear's orange "Triage" status for an issue still in the team's triage queue. */
 export function StatusPicker({ value, states, onChange, hoverHistory, triage = false }: { value: WorkflowState; states: WorkflowState[]; onChange: (id: string) => void | Promise<void>; hoverHistory?: { activities: ActivityEvent[]; issueCreatedAt: string; triagedAt?: string | null }; triage?: boolean }) {
@@ -193,11 +194,6 @@ export function PersonPicker({ ariaLabel, closeOnSelect, emptyOptionLabel, empty
 function PersonAvatar({ person }: { person: PersonPickerOption }) {
   const invited = person.invited || person.end === 'Invited'
   return <UserAvatar avatarUrl={person.avatarUrl} className={`avatar core-person-picker-avatar${invited ? ' is-invited' : ''}`} color={person.color ?? avatarColor(person.id)} name={person.label}/>
-}
-
-export function avatarColor(value: string) {
-  const colors = ['#d15f5f', '#5e6ad2', '#4c9a67', '#d09b42']
-  return colors[[...value].reduce((sum, character) => sum + character.charCodeAt(0), 0) % colors.length]
 }
 
 /**

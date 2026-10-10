@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 
-import { CustomerStatusIcon, findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-icon'
+import { CustomerStatusIcon } from '@/components/customer/customer-status-icon'
+import { findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-lookup'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
 import { customerRevenueLabel } from '@/lib/customer-settings'

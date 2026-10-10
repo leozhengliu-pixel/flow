@@ -1,8 +1,7 @@
 /**
  * LS-0618 UniversalCustomFilterPanelShouldBeLazyLoaded — lazy entry + EmptyAdd* catalog.
  */
-import { lazy, Suspense, type ComponentType } from 'react'
-import type { FilterEntityType } from './filter-block-types'
+import { lazy, Suspense } from 'react'
 import type { UniversalCustomFilterPanelProps } from './universal-custom-filter-panel'
 import { RegisterFilterValuesShouldBeLazyLoaded } from './register-filter-values-lazy'
 import styles from './universal-custom-filter-panel.module.css'
@@ -32,24 +31,44 @@ export function UniversalCustomFilterPanelShouldBeLazyLoaded({
 }
 
 /** Per-entity lazy panel aliases (Linear *UniversalCustomFilterPanelShouldBeLazyLoaded). */
-function entityPanel(entityType: FilterEntityType): ComponentType<Omit<UniversalCustomFilterPanelProps, 'entityType'>> {
-  return function EntityUniversalCustomFilterPanel(props) {
-    return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType={entityType} />
-  }
-}
+type EntityPanelProps = Omit<UniversalCustomFilterPanelProps, 'entityType'>
 
-export const IssueUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('issue')
-export const ProjectUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('project')
-export const InitiativeUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('initiative')
-export const TeamUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('team')
-export const PullRequestUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('pullRequest')
-export const NotificationUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('notification')
-export const CustomerUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('customer')
-export const DocumentUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('document')
-export const MemberUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('member')
-export const FeedItemUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('feedItem')
-export const SearchResultUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('searchResult')
-export const WorkflowDefinitionUniversalCustomFilterPanelShouldBeLazyLoaded = entityPanel('workflowDefinition')
+export function IssueUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="issue" />
+}
+export function ProjectUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="project" />
+}
+export function InitiativeUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="initiative" />
+}
+export function TeamUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="team" />
+}
+export function PullRequestUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="pullRequest" />
+}
+export function NotificationUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="notification" />
+}
+export function CustomerUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="customer" />
+}
+export function DocumentUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="document" />
+}
+export function MemberUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="member" />
+}
+export function FeedItemUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="feedItem" />
+}
+export function SearchResultUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="searchResult" />
+}
+export function WorkflowDefinitionUniversalCustomFilterPanelShouldBeLazyLoaded(props: EntityPanelProps) {
+  return <UniversalCustomFilterPanelShouldBeLazyLoaded {...props} entityType="workflowDefinition" />
+}
 
 /** EmptyAdd* lazy buttons — thin wrappers that open the panel empty state. */
 export {

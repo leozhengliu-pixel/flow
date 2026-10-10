@@ -15,7 +15,7 @@ vi.mock('@/lib/agent-stream', () => streams)
 
 import { AgentPage } from './agent-page'
 import { agentSessionUnread, formatAgentHistoryTime } from './agent-read-state'
-import { translateToChinese } from '@/i18n/i18n'
+import { translateToChinese } from '@/i18n/translate'
 
 const HOUR = 3_600_000, DAY = 24 * HOUR
 

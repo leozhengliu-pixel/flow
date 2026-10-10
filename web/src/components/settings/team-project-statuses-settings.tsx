@@ -7,7 +7,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { CircleDot } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateStructuredTeamSettings } from '@/lib/api'
-import type { BootstrapData, Team, TeamSettings } from '@/types/flow'
+import type { BootstrapData, Team } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
 import { SettingsRow, SettingsToggle, TeamSettingsCrumb } from './settings-primitives'
 import { ProjectStatusesSection } from './issues-projects-settings'
@@ -15,21 +15,7 @@ import './issues-projects-settings.css'
 import './feature-settings.css'
 import './issue-template-settings.css'
 
-export type ProjectStatusInheritanceSource = 'parent' | 'workspace'
-
-export function projectStatusInheritanceSource(
-  settings: TeamSettings | undefined,
-): ProjectStatusInheritanceSource {
-  return settings?.parentTeamId ? 'parent' : 'workspace'
-}
-
-/** Flow project statuses are workspace-scoped; conflicts arise only if mapped overrides are incomplete. */
-export function getProjectStatusInheritanceConflicts(
-  _data: BootstrapData,
-  overrides: Record<string, string> = {},
-): { mismatchStatusCount: number; statuses: Record<string, string> } {
-  return { mismatchStatusCount: Object.keys(overrides).length ? 0 : 0, statuses: { ...overrides } }
-}
+import { projectStatusInheritanceSource } from './team-project-statuses-model'
 
 export function TeamProjectStatusesSettingsPage({
   data,

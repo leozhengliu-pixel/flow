@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, Check, Copy, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
-import { AgentElicitationResponseQueue, summarizeElicitationQueue } from './agent-elicitation-response-queue'
+import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue'
+import { summarizeElicitationQueue } from './agent-elicitation-queue-model'
 import { AgentRichText } from './agent-rich-text'
 import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from './agent-answer'
 import { parseAgentAnswer } from './agent-answer-content'
@@ -11,7 +12,8 @@ import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
 import type { AgentMessage, AgentMessagePart, BootstrapData } from '@/types/flow'
-import { AgentMentionInput, mentionIcon, type AgentMention } from './agent-mention-input'
+import { AgentMentionInput, type AgentMention } from './agent-mention-input'
+import { mentionIcon } from './agent-mention-icon'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import {
   agentDraftStorageKey,
@@ -388,10 +390,6 @@ function MessageFeedback({ content }: { content: string }) {
       </button>
     </>
   )
-}
-
-export function clearEntityThreadDraft(conversationDraftKey: string) {
-  clearAgentDraft(agentDraftStorageKey(conversationDraftKey))
 }
 
 /** A sent message with its @-mentions shown as chips (stored mentions, or issue identifiers). */

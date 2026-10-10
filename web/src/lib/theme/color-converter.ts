@@ -5,13 +5,7 @@
  */
 
 
-function n_1(fn) {
-  let ran = false;
-  const run = () => { if (!ran) { ran = true; f } };
-  return run;
-}
-
-!(() => {
+(() => {
   try {
     const e =
       typeof window !== "undefined"
@@ -28,7 +22,7 @@ function n_1(fn) {
       e._sentryDebugIds = e._sentryDebugIds || {};
       e._sentryDebugIds[n] = "2d763f61-e913-556d-929c-59eb7510aac0";
     }
-  } catch (e) {}
+  } catch {}
 })();
 function t(e, t, n) {
   return Math.max(t, Math.min(n, e));
@@ -56,10 +50,10 @@ function initColorConverter() {
     let c = (e.HEX_REGEX_SMALL = RegExp(`^${s.source}$`, `i`));
     let l = (e.HEX_REGEX_STRICT = /^#([a-f\d]{6}|[a-f\d]{3})$/i);
     let u = (e.LCH_REGEX_LOOSE =
-      /lch\((\d{1,3}(?:\.\d+)?)\% (\d{1,3}(?:\.\d+)?) (\d{1,3}(?:\.\d+)?)(?: \/ ([1|0](?:\.\d+)?)?)?\)/i);
+      /lch\((\d{1,3}(?:\.\d+)?)% (\d{1,3}(?:\.\d+)?) (\d{1,3}(?:\.\d+)?)(?: \/ ([1|0](?:\.\d+)?)?)?\)/i);
     let d = (e.LCH_REGEX = RegExp(`^${u.source}$`, `i`));
     let f = (e.P3_REGEX_LOOSE =
-      /color\(display-p3 (\d{1,3}(?:\.\d+)?)\ (\d{1,3}(?:\.\d+)?) (\d{1,3}(?:\.\d+)?)(?: \/ ([1|0](?:\.\d+)?)?)?\)/i);
+      /color\(display-p3 (\d{1,3}(?:\.\d+)?) (\d{1,3}(?:\.\d+)?) (\d{1,3}(?:\.\d+)?)(?: \/ ([1|0](?:\.\d+)?)?)?\)/i);
     let p = (e.P3_REGEX = RegExp(`^${f.source}$`, `i`));
     let m = (e.ANY_COLOR_REGEX_LOOSE = RegExp(
       `(?:${n.source})|(?:${u.source})|(?:${f.source})`,
@@ -95,9 +89,14 @@ function initColorConverter() {
     e.toCss = y;
     function b(e) {
       let t = o.exec(e);
-      t ??
-        ((t = c.exec(e)),
-        t && ((t[1] += t[1]), (t[2] += t[2]), (t[3] += t[3])));
+      if (t == null) {
+        t = c.exec(e);
+        if (t) {
+          t[1] += t[1];
+          t[2] += t[2];
+          t[3] += t[3];
+        }
+      }
       if (t) {
         let e = a.rgbToLch([
           parseInt(t[1], 16),

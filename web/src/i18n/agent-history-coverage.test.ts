@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 
 describe('agent history strings', () => {
   it('translates the empty Agent page history, its row menu and short ages', () => {

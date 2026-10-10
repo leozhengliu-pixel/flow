@@ -3,7 +3,8 @@ import { Editor, type JSONContent } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { createRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { OutlineMinimap, collectHeadings } from './outline-minimap'
+import { OutlineMinimap } from './outline-minimap'
+import { collectHeadings } from './outline-headings'
 
 vi.mock('@/i18n/i18n', () => ({ useI18n: () => ({ t: (value: string) => value }) }))
 

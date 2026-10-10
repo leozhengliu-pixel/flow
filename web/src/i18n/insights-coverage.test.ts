@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 
 describe('insights panel and fullscreen strings', () => {
   it('translates every Insights control, menu item, state and sentence template', () => {

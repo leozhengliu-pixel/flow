@@ -14,10 +14,8 @@ vi.mock("@/lib/api", async (importOriginal) => ({
   ...api,
 }));
 
-import {
-  findSlackUpdatesConnection,
-  SlackUpdates,
-} from "./slack-updates";
+import { SlackUpdates } from "./slack-updates";
+import { findSlackUpdatesConnection } from "./slack-updates-model";
 
 it("finds project and initiative Slack update connections (LS-0557)", () => {
   const data = makeBootstrap({

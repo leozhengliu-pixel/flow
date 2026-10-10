@@ -5,7 +5,7 @@ import {
   formatOriginDescription,
   groupDashboardsForCopy,
   insightDefaultTitle,
-} from './widget-actions'
+} from './widget-actions-model'
 
 describe('WidgetActions helpers (LS-0653)', () => {
   it('names insights from measure/slice/segment', () => {

@@ -1,10 +1,8 @@
 /** @vitest-environment jsdom */
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  SubIssueSharingIndicator,
-  resolveSubIssueSharingState,
-} from './sub-issue-sharing-indicator'
+import { SubIssueSharingIndicator } from './sub-issue-sharing-indicator'
+import { resolveSubIssueSharingState } from './sub-issue-sharing-state'
 
 describe('SubIssueSharingIndicator (LS-0566)', () => {
   it('resolves inherited share state', () => {

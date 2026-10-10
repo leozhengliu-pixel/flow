@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 import { zhCN } from './translations'
 
 // Settings copy is translated through t()/p() or the DOM translator, both of which read zhCN.

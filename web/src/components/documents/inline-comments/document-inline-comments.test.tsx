@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Editor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -253,7 +253,7 @@ describe('resolved comments', () => {
     expect(within(panel).getByText('Fixed it')).toBeTruthy()
     expect(within(panel).getByRole('button', { name: /🎉/ })).toBeTruthy()
     await userEvent.click(within(panel).getByRole('button', { name: 'Comment options' }))
-    await act(async () => { await userEvent.click(await screen.findByRole('menuitem', { name: /Reopen thread/ })) })
+    await userEvent.click(await screen.findByRole('menuitem', { name: /Reopen thread/ }))
     await waitFor(() => expect(api.resolveDocumentComment).toHaveBeenCalledWith('document-1', 'done', false, 1))
   })
 })

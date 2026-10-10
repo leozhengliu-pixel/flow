@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { chipParts } from '@/components/agent/agent-entity-chip'
+import { chipParts } from '@/components/agent/agent-entity-chip-parts'
 import { PersonHover } from '@/components/property/person-info'
 import { type MentionOption } from '@/components/editor/mentions/mention-options'
 import { personDisplayName, personIdentifier } from '@/lib/people'

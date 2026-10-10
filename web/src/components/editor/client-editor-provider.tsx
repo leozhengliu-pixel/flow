@@ -1,33 +1,10 @@
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from 'react'
-import { activityTargetFromHash, type ActivityHighlightTarget } from '@/components/activity/activity-highlight'
+import { useCallback, useMemo, type ReactNode } from 'react'
+import { activityTargetFromHash } from '@/components/activity/activity-highlight'
 import { findAttachmentsByURL, uploadAttachment, uploadAttachmentFromURL } from '@/lib/api'
 import type { Attachment } from '@/types/flow'
+import { ClientEditorContext, type ClientEditorProviderValue } from './client-editor-context'
 
 const DEFAULT_MAX_UPLOAD_BYTES = 20 << 20
-
-export type ClientEditorUploadResult = {
-  url: string
-  attachment?: Attachment
-}
-
-export type ClientEditorProviderValue = {
-  maxUploadBytes: number
-  checkUploadSize: (file: File) => { ok: boolean; message?: string }
-  uploadFile: (file: File, options?: { embed?: boolean; signal?: AbortSignal }) => Promise<ClientEditorUploadResult>
-  imageUploadFromUrl: (url: string, options?: { title?: string; embed?: boolean }) => Promise<ClientEditorUploadResult>
-  copyTextToClipboard: (text: string) => Promise<void>
-  copyImageToClipboard: (blob: Blob) => Promise<void>
-  fetchCommentByHash: (hash: string) => ActivityHighlightTarget | undefined
-  fetchProjectUpdateByHash: (hash: string) => { kind: 'project-update'; id: string } | undefined
-  fetchInitiativeUpdateByHash: (hash: string) => { kind: 'initiative-update'; id: string } | undefined
-  fetchPullRequestCommentById: (id: string) => { kind: 'pull-request-comment'; id: string }
-  fetchCustomerNeedByHash: (hash: string) => { kind: 'customer-need'; id: string } | undefined
-  isAnyCommentInHash: (hash?: string) => boolean
-  targetCommentHash: (commentId: string) => string
-  getAnchoredCommentRedirectPath: (pathname: string, commentId: string) => string
-}
-
-const ClientEditorContext = createContext<ClientEditorProviderValue | null>(null)
 
 export type ClientEditorProviderProps = {
   children: ReactNode
@@ -130,14 +107,4 @@ export function ClientEditorProvider({
   }), [maxUploadBytes, checkUploadSize, uploadFile, imageUploadFromUrl, copyTextToClipboard, copyImageToClipboard])
 
   return <ClientEditorContext.Provider value={value}>{children}</ClientEditorContext.Provider>
-}
-
-export function useClientEditor(): ClientEditorProviderValue {
-  const value = useContext(ClientEditorContext)
-  if (!value) throw new Error('useClientEditor must be used within ClientEditorProvider')
-  return value
-}
-
-export function useOptionalClientEditor() {
-  return useContext(ClientEditorContext)
 }

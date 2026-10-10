@@ -5867,22 +5867,6 @@ func issueByID(data *domain.Bootstrap, id string) (*domain.Issue, error) {
 	}
 	return nil, errNotFound
 }
-func notificationByID(data *domain.Bootstrap, id string) (*domain.Notification, error) {
-	for i := range data.Notifications {
-		if data.Notifications[i].ID == id {
-			return &data.Notifications[i], nil
-		}
-	}
-	return nil, errNotFound
-}
-func stateByID(data *domain.Bootstrap, id string) *domain.WorkflowState {
-	for i := range data.States {
-		if data.States[i].ID == id {
-			return &data.States[i]
-		}
-	}
-	return nil
-}
 func userByID(data *domain.Bootstrap, id string) *domain.User {
 	if id == "" {
 		return nil

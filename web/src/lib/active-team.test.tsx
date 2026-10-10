@@ -1,11 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
-import {
-  ActiveTeamProvider,
-  SetActiveTeam,
-  useActiveTeam,
-} from './active-team'
+import { ActiveTeamProvider, SetActiveTeam } from './active-team'
+import { useActiveTeam } from './active-team-context'
 import { makeBootstrap } from '@/test/fixtures'
 
 function Probe() {

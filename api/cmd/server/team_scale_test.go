@@ -628,9 +628,7 @@ func seedTeamScaleFixture(t *testing.T, db scaleDB, issueCount, metadataCount in
 		t.Fatal(err)
 	}
 	quoted := make([]string, len(columns))
-	for i, column := range columns {
-		quoted[i] = column
-	}
+	copy(quoted, columns)
 	issueSQL := &scaleInserter{t: t, db: db, prefix: `INSERT INTO issue_records(` + strings.Join(quoted, ",") + `)`, columns: len(columns)}
 	contentSQL := &scaleInserter{t: t, db: db, prefix: `INSERT INTO workspace_content_records(workspace_key,kind,resource_id,id,created_at,data)`, columns: 6}
 	teamTemplate, _ := issueTemplate["team"].(map[string]any)

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { LinearContextMenuPortal, LinearContextMenuRoot, LinearContextMenuTrigger, LinearMenuContent, LinearMenuItem, LinearMenuShortcut, LinearSubmenu } from './row-context-menu'
@@ -63,13 +63,13 @@ describe('Linear row context menu', () => {
     expect(hint.textContent).toBe('NthenC')
   })
 
-  it('runs a hint pressed over a focused row: opens the menu and selects the item', () => {
+  it('runs a hint pressed over a focused row: opens the menu and selects the item', async () => {
     const onSelect = vi.fn()
     render(<I18nProvider><Row onSelect={onSelect}/></I18nProvider>)
     const row = screen.getByRole('row', { name: 'Row' })
     row.focus()
     fireEvent.keyDown(row, { key: 'ƒ', code: 'KeyF', altKey: true })
-    expect(onSelect).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1))
   })
 
   it('opens the hinted submenu when its key is pressed over the row', async () => {

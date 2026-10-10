@@ -80,7 +80,7 @@ describe("routeInfo", () => {
 
 describe("routeInfo titles", () => {
   it("names settings and workspace pages in the viewer's language", async () => {
-    const { translateToChinese } = await import("@/i18n/i18n");
+    const { translateToChinese } = await import("@/i18n/translate");
     const zh = (route: Parameters<typeof routeInfo>[0]) => routeInfo(route, data, translateToChinese).title;
     expect(zh({ kind: "settings", workspaceSlug: "acme", page: "coding-sessions" })).toBe("编码会话");
     expect(zh({ kind: "settings", workspaceSlug: "acme", page: "account-security" })).toBe(translateToChinese("Security & access"));

@@ -3,7 +3,7 @@ import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/s
 import type { EditorView } from '@tiptap/pm/view'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { EmbedView } from './embed-node-view'
-import { translateToChinese } from '@/i18n/i18n'
+import { translateToChinese } from '@/i18n/translate'
 import { embedSourceForUrl, type EmbedSource } from './embed-providers'
 import styles from './embed.module.css'
 

@@ -33,9 +33,15 @@ export function useMentionConversion(editor: Editor | null, contentKey: string, 
   const records = useAgentRecordVersion(waiting)
   useEffect(() => {
     if (!editor || !data || !enabled || editor.isDestroyed || editor.isFocused) return
-    const unresolved = convertEditorMentions(editor, data, anyText)
-    const fetchable = unresolved.filter(target => target.kind === 'issue' || target.kind === 'project')
-    for (const target of fetchable) loadAgentRecord(data.workspace.urlKey, target.kind as 'issue' | 'project', target.id)
-    setWaiting(fetchable.length > 0)
+    let cancelled = false
+    // Mention node views render with flushSync, which React rejects inside an effect, so convert right after this one.
+    queueMicrotask(() => {
+      if (cancelled || editor.isDestroyed || editor.isFocused) return
+      const unresolved = convertEditorMentions(editor, data, anyText)
+      const fetchable = unresolved.filter(target => target.kind === 'issue' || target.kind === 'project')
+      for (const target of fetchable) loadAgentRecord(data.workspace.urlKey, target.kind as 'issue' | 'project', target.id)
+      setWaiting(fetchable.length > 0)
+    })
+    return () => { cancelled = true }
   }, [anyText, contentKey, data, editor, enabled, records])
 }

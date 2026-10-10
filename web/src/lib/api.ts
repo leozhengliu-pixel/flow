@@ -89,7 +89,6 @@ import type {
   User,
   UserSettings,
   Webhook,
-  WebhookSecretPayload,
   WorkflowState,
   Workspace,
   WorkspaceMember,

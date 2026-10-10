@@ -1,5 +1,5 @@
 import { useContext } from 'react'
-import { EntityStoreContext } from './application-store-context'
+import { EntityStoreContext } from './application-store-contexts'
 import type { WorkspaceStore } from './workspace-store'
 
 /**

@@ -57,7 +57,8 @@ function useShortcutKeys(registry: Set<ShortcutEntry>) {
 function useQueuedShortcut(registry: Set<ShortcutEntry>) {
   useEffect(() => {
     const shortcut = takeQueuedShortcut()
-    if (shortcut) [...registry].find(entry => entry.shortcut === shortcut)?.run()
+    // The shortcut clicks a menu item, and Radix selects it with flushSync, which React rejects inside an effect.
+    if (shortcut) queueMicrotask(() => [...registry].find(entry => entry.shortcut === shortcut)?.run())
   }, [registry])
 }
 

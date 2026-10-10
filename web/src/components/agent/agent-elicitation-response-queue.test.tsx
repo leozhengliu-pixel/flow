@@ -1,9 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  AgentElicitationResponseQueue,
-  summarizeElicitationQueue,
-} from "./agent-elicitation-response-queue";
+import { AgentElicitationResponseQueue } from "./agent-elicitation-response-queue";
+import { summarizeElicitationQueue } from "./agent-elicitation-queue-model";
 
 describe("AgentElicitationResponseQueue", () => {
   it("hides for a single pending elicitation", () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-icon'
+import { findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-lookup'
 import type { Customer, CustomerRequest, CustomerStatus, CustomerTier } from '@/types/flow'
 
 /** Linear's customers list: ordering keys (Display options › Ordering, in its order). */

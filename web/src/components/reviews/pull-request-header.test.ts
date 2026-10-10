@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolvePreferredMergeMethod } from "./pull-request-header";
+import { resolvePreferredMergeMethod } from "./pull-request-merge-method";
 
 describe("PullRequestHeader merge methods (LS-0505)", () => {
   it("maps personal merge strategy preference", () => {

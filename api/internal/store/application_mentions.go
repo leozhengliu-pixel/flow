@@ -57,7 +57,7 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 	var issueRaw []byte
 	err := tx.QueryRowContext(ctx, `SELECT list_data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, resource).Scan(&issueRaw)
 	resourceType := "issue"
-	teamIDs := []string{}
+	var teamIDs []string
 	if errors.Is(err, sql.ErrNoRows) {
 		var field string
 		err = tx.QueryRowContext(ctx, `SELECT field,data FROM workspace_metadata_records WHERE workspace_key=? AND record_key=? AND field IN ('documents','projects')`, workspace, resource).Scan(&field, &issueRaw)

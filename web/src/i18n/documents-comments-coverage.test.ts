@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { translateToChinese } from './i18n'
+import { translateToChinese } from './translate'
 import { zhCN } from './translations'
 
 // Inline comments and document notifications: every t() string and every
@@ -10,6 +10,7 @@ const sources = import.meta.glob(
     '../components/documents/inline-comments/*.tsx',
     '!../components/documents/inline-comments/*.test.tsx',
     '../components/inbox/hosts/document-inbox-view.tsx',
+    '../components/inbox/hosts/document-inbox-model.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>

@@ -12,7 +12,7 @@
  */
 import type { Editor } from '@tiptap/react'
 import { MessageSquareText, X } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Composer } from '@/components/editor/composer'
@@ -22,21 +22,15 @@ import { useI18n } from '@/i18n/i18n'
 import { documentPath } from '@/lib/app-routes'
 import { createDocumentComment, deleteDocumentComment, resolveDocumentComment, setDocumentThreadSubscription, toggleDocumentCommentReaction, updateDocumentComment } from '@/lib/api'
 import type { BootstrapData, Comment, FlowDocument } from '@/types/flow'
-import { buildThreads, findMarkRanges, findQuoteRange, INLINE_COMMENT_MARK, layoutGutter, type AnchorRange, type InlineThread } from './inline-comments-model'
+import { findMarkRanges, findQuoteRange, INLINE_COMMENT_MARK, layoutGutter, type AnchorRange, type InlineThread } from './inline-comments-model'
 import { createInlineCommentsPlugin, inlineCommentsPluginKey, type InlineCommentsMeta, type InlineCommentsPluginState } from './inline-comments-plugin'
 import { InlineThreadCard, type ThreadActions } from './inline-thread-card'
+import { useInlineThreads } from './use-inline-threads'
 import './document-inline-comments.css'
 
 export interface CommentDraft { from: number; to: number; text: string }
 
 const MAX_QUOTE = 4000
-
-export function useInlineThreads(comments: Comment[]) {
-  return useMemo(() => {
-    const threads = buildThreads(comments)
-    return { threads, open: threads.filter(thread => !thread.root.resolved), resolved: threads.filter(thread => thread.root.resolved) }
-  }, [comments])
-}
 
 function sameRanges(left: Map<string, AnchorRange>, right: Map<string, AnchorRange>) {
   if (left.size !== right.size) return false

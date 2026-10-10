@@ -4,7 +4,7 @@ import { ProjectGlyph } from '@/components/views/project-glyph'
 import { useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as ContextMenu from '@radix-ui/react-context-menu'
-import { Clock3, Ellipsis, GitPullRequest, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
+import { Clock3, Ellipsis, Link2, Minus, PackageOpen, Plus } from 'lucide-react'
 import { Virtuoso } from 'react-virtuoso'
 import { toast } from 'sonner'
 import { DelegateAvatar, IssueContextMenu, IssueParentTrail, RowCommandPicker, SubIssueProgress, type MyIssuesEditableProperty, type MyIssuesGroupData, type MyIssuesRowData, type MyIssuesRowPropertyOptions } from '@/components/my-issues/my-issues-list'
@@ -16,6 +16,7 @@ import { useI18n } from '@/i18n/i18n'
 import styles from './issue-board.module.css'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { toggleGroupedLabelIds } from '@/lib/labels'
+import { boardDropRejectReason } from './issue-board-drop'
 
 const EMPTY_OPTIONS: MyIssuesRowPropertyOptions = { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [], cycle: [] }
 const COLUMN_VIRTUALIZATION_THRESHOLD = 6
@@ -23,20 +24,6 @@ const CARD_VIRTUALIZATION_THRESHOLD = 24
 const COLUMN_OVERSCAN = 360
 const CARD_OVERSCAN = 240
 const CARD_ESTIMATED_SIZE = 120
-function isTriageGroup(group?: MyIssuesGroupData) {
-  if (!group) return false
-  const needle = `${group.id} ${group.label}`.toLowerCase()
-  return needle.includes('triage')
-}
-
-/** Cheap canDrop gate — triage leave / priority required. Returns reject reason or null. */
-export function boardDropRejectReason(issue: MyIssuesRowData, sourceGroup: MyIssuesGroupData | undefined, targetGroup: MyIssuesGroupData | undefined): string | null {
-  if (!sourceGroup || !targetGroup) return null
-  if (isTriageGroup(sourceGroup) && !isTriageGroup(targetGroup) && issue.priority === 0) {
-    return "Can't move out of triage without a priority"
-  }
-  return null
-}
 
 type IssueBoardProps = Parameters<typeof IssueBoardColumns>[0]
 

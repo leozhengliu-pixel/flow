@@ -16,16 +16,16 @@ export type { SplitIssueViewProps } from './split-issue-view'
 export { IssueDetailsPaneSidebar } from './issue-details-pane-sidebar'
 export type { IssueDetailsPaneSidebarProps } from './issue-details-pane-sidebar'
 
+export { IssueWidgetAdornments } from './issue-widget-adornments'
 export {
-  IssueWidgetAdornments,
   buildIssueWidgetAdornments,
   resolvePullRequestLifecycle,
   countRelationTypes,
-} from './issue-widget-adornments'
+} from './issue-widget-adornments.model'
 export type {
   IssueWidgetAdornmentsModel,
   PullRequestLifecycle,
-} from './issue-widget-adornments'
+} from './issue-widget-adornments.model'
 
 export { IssuesSplitLayout } from './issues-split-layout'
 export type { IssuesSplitLayoutProps } from './issues-split-layout'

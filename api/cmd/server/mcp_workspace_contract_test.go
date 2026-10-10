@@ -482,13 +482,11 @@ func TestMCPUpdateNotification(t *testing.T) {
 	now := time.Now().UTC()
 	issue := f.data.Issues[0]
 	if err := f.repository.MutateWorkspace(t.Context(), f.data.Workspace.URLKey, "test.notifications", issue.ID, nil, func(next *domain.Bootstrap) error {
-		for _, item := range []domain.Notification{
+		next.Notifications = append(next.Notifications, []domain.Notification{
 			{ID: "inbox-one", RecipientID: "usr_admin", Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: next.Viewer, CreatedAt: now, UpdatedAt: now},
 			{ID: "inbox-two", RecipientID: "usr_admin", Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: next.Viewer, CreatedAt: now, UpdatedAt: now},
 			{ID: "inbox-other", RecipientID: "usr_member", Type: "issueComment", SourceType: "issue", SourceID: issue.ID, IssueID: issue.ID, Actor: next.Viewer, CreatedAt: now, UpdatedAt: now},
-		} {
-			next.Notifications = append(next.Notifications, item)
-		}
+		}...)
 		return nil
 	}); err != nil {
 		t.Fatal(err)

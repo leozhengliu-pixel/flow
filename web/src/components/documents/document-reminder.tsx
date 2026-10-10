@@ -1,33 +1,11 @@
 import { useRef, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronRight, Clock3 } from 'lucide-react'
-import { toast } from 'sonner'
 import { ReminderChoices } from '@/components/issue/issue-options-menu'
 import { ProjectSubmenu } from '@/components/project-detail/project-menu-primitives'
 import { DateTimeControl } from '@/components/ui/date-time-control'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
-import { createDocumentReminder } from '@/lib/api'
-
-/**
- * State for a document's "Remind me" (⇧H) menu: the quick choices set the
- * reminder directly, "Custom…" opens a date-and-time dialog.
- */
-export function useDocumentReminder(documentId: string) {
-  const { t } = useI18n()
-  const [customOpen, setCustomOpen] = useState(false)
-  const remind = async (remindAt: string) => {
-    try {
-      await createDocumentReminder(documentId, remindAt)
-      toast.success(t('Reminder set'))
-      return true
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('Could not set reminder'))
-      return false
-    }
-  }
-  return { customOpen, remind, setCustomOpen }
-}
 
 /** Linear's searchable Remind me submenu (An hour from now … Custom…). */
 export function DocumentReminderSubmenu({ onCustom, onRemind }: { onCustom: () => void; onRemind: (remindAt: string) => void }) {
