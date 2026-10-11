@@ -100,7 +100,10 @@ describe('callout view', () => {
     expect(screen.getByRole('tab', { name: 'Icons' })).toBeVisible()
     expect(screen.getByRole('tab', { name: 'Emojis' })).toBeVisible()
 
-    await user.click(screen.getByRole('button', { name: /^Color #5e6ad2$/ }))
+    // Cyan (#24b4c7) is not one of the reference app's swatches, so the picker opens on the custom colour.
+    expect(screen.getByRole('textbox', { name: 'HEX color' })).toHaveValue('#24b4c7')
+    await user.click(screen.getByRole('button', { name: 'Select default color' }))
+    await user.click(screen.getByRole('radio', { name: 'Purple' }))
     await waitFor(() => expect(editor().getJSON().content?.[0]?.attrs).toMatchObject({ color: '#5e6ad2', icon: '' }))
 
     await user.click(screen.getByRole('button', { name: 'Automation' }))

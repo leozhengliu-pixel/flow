@@ -6,7 +6,7 @@ import { toast } from '@/lib/toast'
 import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
-import { FLOW_COLOR_PALETTE } from '@/components/ui/color-palette'
+import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker'
 import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
 
 import { ReleasesIcon, ReleaseStatusIcon } from './release-icons'
@@ -191,16 +191,12 @@ function StageEditRow({ edit, isNew = false, taken, onChange, onCancel, onSubmit
 
 function StageColorPicker({ color, onChange }: { color: string; onChange: (color: string) => void }) {
   const { t } = useI18n()
-  const customColorRef = useRef<HTMLInputElement>(null)
-  const normalized = color.toLowerCase()
-  const preset = FLOW_COLOR_PALETTE.some(option => option.value === normalized)
-  return <Popover.Root>
+  const [open, setOpen] = useState(false)
+  return <Popover.Root open={open} onOpenChange={setOpen}>
     <Popover.Trigger asChild><button type="button" className="flow-pipeline-stage-swatch" aria-label={t('Stage color')}><ReleaseStatusIcon status="inProgress" color={color}/></button></Popover.Trigger>
     <Popover.Portal>
-      <Popover.Content data-flow-motion="floating" data-i18n-ignore className="domain-label-color-popover" align="center" side="bottom" sideOffset={4} collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()}>
-        <div className="domain-label-color-presets">{FLOW_COLOR_PALETTE.map(option => <Popover.Close asChild key={option.value}><button aria-label={t(option.name)} data-selected={normalized === option.value} onClick={() => onChange(option.value)} style={{ color: option.value }} type="button"><span style={{ background: option.value }}/></button></Popover.Close>)}</div>
-        <button aria-label={t('Set custom color')} className="domain-label-custom-color" data-selected={!preset} onClick={() => customColorRef.current?.click()} type="button"><span/>{!preset && <i/>}</button>
-        <input aria-hidden="true" className="domain-label-native-color" tabIndex={-1} type="color" ref={customColorRef} value={/^#[0-9a-f]{6}$/i.test(color) ? color : DEFAULT_STARTED_STAGE_COLOR} onChange={event => onChange(event.target.value.toLowerCase())}/>
+      <Popover.Content data-flow-motion="floating" data-i18n-ignore className="csp-popover" align="center" side="bottom" sideOffset={2} collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()}>
+        <ColorSwatchPicker color={color} framed onChange={(next, source) => { onChange(next); if (source === 'swatch') setOpen(false) }}/>
       </Popover.Content>
     </Popover.Portal>
   </Popover.Root>

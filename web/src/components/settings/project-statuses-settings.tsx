@@ -6,9 +6,7 @@
  */
 import * as Popover from "@radix-ui/react-popover";
 import {
-  useEffect,
   useMemo,
-  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -22,12 +20,13 @@ import {
 } from "@/lib/api";
 import {
   PROJECT_STATUS_DEFAULT_COLORS,
-  PROJECT_STATUS_SWATCHES,
   hexToLch,
   normalizeHexColor,
   projectStatusStrokeColor,
 } from "@/lib/project-status-color";
-import { getResolvedTheme, THEME_CHANGE_EVENT, type ResolvedTheme } from "@/lib/theme";
+import type { ResolvedTheme } from "@/lib/theme";
+import { useResolvedTheme } from "@/hooks/use-resolved-theme";
+import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { useI18n } from "@/i18n/i18n";
 import { ProjectStatusIcon } from "@/components/issue/issue-icons";
 import { FlowGlyph } from "@/components/ui/menu-glyphs";
@@ -45,16 +44,6 @@ const STATUS_SECTIONS: Array<{ type: StatusType; label: string }> = [
   { type: "completed", label: "Completed" },
   { type: "canceled", label: "Canceled" },
 ];
-
-function useResolvedTheme(): ResolvedTheme {
-  const [theme, setTheme] = useState<ResolvedTheme>(getResolvedTheme);
-  useEffect(() => {
-    const update = () => setTheme(getResolvedTheme());
-    window.addEventListener(THEME_CHANGE_EVENT, update);
-    return () => window.removeEventListener(THEME_CHANGE_EVENT, update);
-  }, []);
-  return theme;
-}
 
 /** Fraction of the progress ring an In Progress status shows: spread across the group, ½ when alone. */
 function startedProgress(index: number, count: number) {
@@ -497,16 +486,10 @@ function StatusColorPicker({
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const isSwatch = PROJECT_STATUS_SWATCHES.some((swatch) => swatch.color === normalizeHexColor(color));
-  const [custom, setCustom] = useState(false);
+  const hex = normalizeHexColor(color) ?? lchToHexFallback(color);
+  const adjusted = projectStatusStrokeColor(hex, theme) !== hex;
   return (
-    <Popover.Root
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next) setCustom(false);
-      }}
-    >
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button type="button" className="pst-color-trigger" aria-label={t("Color")} data-color={color}>
           <StatusMark color={color} type={type} theme={theme} framed={false} progress={type === "started" ? 0.5 : undefined} />
@@ -515,8 +498,7 @@ function StatusColorPicker({
       <Popover.Portal>
         <Popover.Content
           data-flow-motion="floating"
-          className="pst-color-menu"
-          data-mode={custom ? "custom" : "swatches"}
+          className="csp-popover pst-color-menu"
           align="center"
           sideOffset={2}
           collisionPadding={8}
@@ -530,168 +512,20 @@ function StatusColorPicker({
             }
           }}
         >
-          {custom ? (
-            <CustomColorPanel color={color} theme={theme} onChange={onChange} />
-          ) : (
-            <div className="pst-swatches" role="radiogroup" aria-label={t("Color")}>
-              {PROJECT_STATUS_SWATCHES.map((swatch) => {
-                const selected = normalizeHexColor(color) === swatch.color;
-                return (
-                  <button
-                    key={swatch.color}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    aria-label={t(swatch.name)}
-                    className="pst-swatch"
-                    data-color={swatch.color}
-                    style={{ "--palette-color": projectStatusStrokeColor(swatch.color, theme) } as CSSProperties}
-                    onClick={() => {
-                      onChange(swatch.color);
-                      setOpen(false);
-                    }}
-                  >
-                    {selected && <FlowGlyph name="swatchCheck" width={10} height={9} />}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          <div className="pst-custom-toggle-wrap" data-separated={!custom || undefined}>
-            <button
-              type="button"
-              className="pst-custom-toggle"
-              aria-label={t(custom ? "Select default color" : "Set custom color")}
-              aria-pressed={custom}
-              title={t(custom ? "Select default color" : "Set custom color")}
-              data-custom-color={!isSwatch || undefined}
-              onClick={() => setCustom((value) => !value)}
-            >
-              <span aria-hidden="true" />
-            </button>
-          </div>
+          <ColorSwatchPicker
+            color={hex}
+            framed
+            note={adjusted ? t("Contrast has been adjusted") : undefined}
+            surface="elevated"
+            onChange={(next, source) => {
+              if (next !== hex) onChange(next);
+              if (source === "swatch") setOpen(false);
+            }}
+          />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
   );
-}
-
-function CustomColorPanel({
-  color,
-  theme,
-  onChange,
-}: {
-  color: string;
-  theme: ResolvedTheme;
-  onChange: (color: string) => void;
-}) {
-  const { t } = useI18n();
-  const saturationRef = useRef<HTMLDivElement>(null);
-  const hueRef = useRef<HTMLDivElement>(null);
-  const hex = normalizeHexColor(color) ?? lchToHexFallback(color);
-  const hsv = hexToHsv(hex);
-  const [draft, setDraft] = useState(hex);
-  const [syncedHex, setSyncedHex] = useState(hex);
-  if (syncedHex !== hex) {
-    setSyncedHex(hex);
-    setDraft(hex);
-  }
-  const commit = (next: string) => {
-    const normalized = normalizeHexColor(next);
-    if (normalized && normalized !== hex) onChange(normalized);
-  };
-  const pickSaturation = (clientX: number, clientY: number) => {
-    const rect = saturationRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    commit(hsvToHex(hsv.h, clamp((clientX - rect.left) / rect.width), clamp(1 - (clientY - rect.top) / rect.height)));
-  };
-  const pickHue = (clientY: number) => {
-    const rect = hueRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    commit(hsvToHex(clamp((clientY - rect.top) / rect.height) * 359.999, hsv.s, hsv.v));
-  };
-  const adjusted = projectStatusStrokeColor(hex, theme) !== hex;
-  return (
-    <div className="pst-custom">
-      <div className="pst-custom-value">
-        <span className="pst-custom-current" aria-hidden="true" style={{ "--palette-color": hex } as CSSProperties} />
-        <label>
-          <span>HEX</span>
-          <input
-            aria-label="HEX"
-            spellCheck={false}
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={() => (normalizeHexColor(draft) ? commit(draft) : setDraft(hex))}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commit(draft);
-              }
-            }}
-          />
-        </label>
-        {adjusted && <span className="pst-custom-note">{t("Contrast has been adjusted")}</span>}
-      </div>
-      <div className="pst-custom-controls">
-        <div
-          ref={saturationRef}
-          className="pst-saturation"
-          role="slider"
-          tabIndex={0}
-          aria-label={t("Saturation and brightness")}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(hsv.s * 100)}
-          style={{ "--picker-hue": hsvToHex(hsv.h, 1, 1) } as CSSProperties}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            pickSaturation(event.clientX, event.clientY);
-          }}
-          onPointerMove={(event) => {
-            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) pickSaturation(event.clientX, event.clientY);
-          }}
-          onKeyDown={(event) => {
-            const step = { ArrowLeft: [-0.01, 0], ArrowRight: [0.01, 0], ArrowDown: [0, -0.01], ArrowUp: [0, 0.01] }[event.key];
-            if (!step) return;
-            event.preventDefault();
-            commit(hsvToHex(hsv.h, clamp(hsv.s + step[0]), clamp(hsv.v + step[1])));
-          }}
-        >
-          <i style={{ left: `${hsv.s * 100}%`, top: `${(1 - hsv.v) * 100}%`, background: hex }} />
-        </div>
-        <div
-          ref={hueRef}
-          className="pst-hue"
-          role="slider"
-          tabIndex={0}
-          aria-label={t("Hue")}
-          aria-valuemin={0}
-          aria-valuemax={360}
-          aria-valuenow={Math.round(hsv.h)}
-          onPointerDown={(event) => {
-            event.currentTarget.setPointerCapture?.(event.pointerId);
-            pickHue(event.clientY);
-          }}
-          onPointerMove={(event) => {
-            if (event.currentTarget.hasPointerCapture?.(event.pointerId)) pickHue(event.clientY);
-          }}
-          onKeyDown={(event) => {
-            const delta = event.key === "ArrowUp" ? -2 : event.key === "ArrowDown" ? 2 : 0;
-            if (!delta) return;
-            event.preventDefault();
-            commit(hsvToHex((hsv.h + delta + 360) % 360, hsv.s, hsv.v));
-          }}
-        >
-          <i style={{ top: `${(hsv.h / 360) * 100}%` }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function clamp(value: number) {
-  return Math.min(1, Math.max(0, value));
 }
 
 /** Statuses written in LCH (no hex) start the custom picker from their closest sRGB hex. */
@@ -715,27 +549,3 @@ function lchToHexFallback(value: string) {
   return best;
 }
 
-function hexToHsv(value: string) {
-  const number = Number.parseInt((normalizeHexColor(value) ?? "#8a8f98").slice(1), 16);
-  const r = ((number >> 16) & 255) / 255;
-  const g = ((number >> 8) & 255) / 255;
-  const b = (number & 255) / 255;
-  const max = Math.max(r, g, b);
-  const delta = max - Math.min(r, g, b);
-  let h = 0;
-  if (delta) {
-    if (max === r) h = 60 * (((g - b) / delta) % 6);
-    else if (max === g) h = 60 * ((b - r) / delta + 2);
-    else h = 60 * ((r - g) / delta + 4);
-  }
-  return { h: h < 0 ? h + 360 : h, s: max === 0 ? 0 : delta / max, v: max };
-}
-
-function hsvToHex(h: number, s: number, v: number) {
-  const c = v * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = v - c;
-  const [r, g, b] =
-    h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
-  return `#${[r, g, b].map((part) => Math.round((part + m) * 255).toString(16).padStart(2, "0")).join("")}`;
-}

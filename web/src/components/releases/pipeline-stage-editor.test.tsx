@@ -54,7 +54,7 @@ describe('PipelineStageEditor', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     expect(screen.getByRole('button', { name: 'Submit' })).toHaveTextContent('Save')
     await user.click(screen.getByRole('button', { name: 'Stage color' }))
-    await user.click(await screen.findByRole('button', { name: 'Teal' }))
+    await user.click(await screen.findByRole('radio', { name: 'Teal' }))
     await user.clear(screen.getByRole('textbox', { name: 'Name' }))
     await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Testing')
     await user.click(screen.getByRole('button', { name: 'Submit' }))

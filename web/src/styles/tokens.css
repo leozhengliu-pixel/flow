@@ -797,19 +797,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --project-status-primary-bg: lch(47.918% 59.303 288.421);
   --project-status-primary-fg: lch(100% 5 288.421);
   --project-status-primary-shadow: lch(0% 0 0 / .3) 0 .5px 1px 1px;
-  --project-status-picker-bg: lch(20.145% 1.75 272);
-  --project-status-picker-border: lch(30.945% 2.83 272);
-  --project-status-swatch-ring: lch(2.595% .4 272);
-  --project-status-swatch-check: lch(100% 0 282);
-  --project-status-hex-label: lch(46.731% 1.875 272);
-  --project-status-hex-text: lch(67.716% 1.875 272);
-  --project-status-picker-thumb: lch(100% 0 282);
-  --project-status-picker-thumb-shadow: rgb(0 0 0 / .5);
-  --project-status-hue-thumb: rgb(255 255 255 / .7);
-  --project-status-custom-gradient: conic-gradient(rgb(235 87 87), rgb(242 201 76), rgb(76 183 130), rgb(78 167 252), rgb(250 96 122));
-  --project-status-hue-gradient: linear-gradient(to bottom, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
-  --project-status-saturation-black: #000;
-  --project-status-saturation-white: #fff;
 }
 :root[data-theme="light"] {
   --project-status-title: lch(9.794% 0 282);
@@ -844,11 +831,6 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
   --project-status-primary-bg: lch(53% 52.26 286.91);
   --project-status-primary-fg: lch(100% 5 286.91);
   --project-status-primary-shadow: lch(0% 0 0 / .02) 0 3px 6px -2px, lch(0% 0 0 / .04) 0 1px 1px 0;
-  --project-status-picker-bg: lch(100% 0 282);
-  --project-status-picker-border: lch(86.5% 0 282);
-  --project-status-swatch-ring: lch(94.44% .5 282);
-  --project-status-hex-label: lch(66% 1 282);
-  --project-status-hex-text: lch(40% 1 282);
 }
 /* Issue & document templates (settings lists, template editors, type chooser) — values measured from the reference app. */
 :root{--tpl-text:#fff;--tpl-text-2:#959597;--tpl-control-fg:#98999c;--tpl-button-fg:#e3e4e6;--tpl-secondary-fg:#e3e4e6;--tpl-set-fg:#e4e5e7;--tpl-placeholder:#565759;--tpl-issue-placeholder:#5c5d5f;--tpl-body:#e4e5e7;--tpl-desc-text:#e3e4e6;--tpl-card-bg:#1a1a1b;--tpl-card-shadow:0 0 0 .5px lch(100 0 0/.08),0 .5px 1px 1px lch(0 0 0/.3);--tpl-hover-bg:#2b2b2d;--tpl-pill-hover-bg:lch(17.718% 1.043 272);--tpl-secondary-bg:#1b1c1d;--tpl-secondary-hover-bg:#232325;--tpl-primary-bg:#5e6ad2;--tpl-primary-hover-bg:#6c78e6;--tpl-primary-fg:#fffeff;--tpl-primary-shadow:0 .5px 1px 1px lch(0 0 0/.3);--tpl-set-bg:#232325;--tpl-set-ring:0 0 0 .5px lch(100 0 0/.083),0 .5px 1px 1px lch(0 0 0/.3);--tpl-icon-tint:18%;--tpl-icon-alpha:.175;--tpl-secondary-ring:0 0 0 .5px lch(100 0 0/.08),0 .5px 1px 1px lch(0 0 0/.3);--tpl-more-fg:#e4e5e7;--tpl-danger-bg:#f34e52;--tpl-danger-fg:#fffeff;--tpl-confirm-cancel-bg:#232325;--tpl-confirm-cancel-fg:#e4e5e7;--tpl-confirm-desc:#98999c;--tpl-icon-hover-l:8;--tpl-icon-hover-c:5;--tpl-dialog-bg:#1a1a1b;--tpl-dialog-border:#343538;--tpl-dialog-overlay:lch(0 0 0/.5);--tpl-option-bg:#1d1e1f;--tpl-option-hover-bg:#1f1f22;--tpl-option-title:#e4e5e7;--tpl-option-title-hover:#fff;--tpl-option-desc:#98999c;--tpl-option-desc-hover:#e4e5e7;--tpl-preview-bg:#1a1a1b;--tpl-preview-border:#29292c;--tpl-preview-field-border:#343538;--tpl-preview-field-shadow:0 .5px 1px 1px lch(0 0 0/.3);--tpl-field-border:#2c2d2f;--tpl-field-body-bg:#1a1a1b;--tpl-field-body-border:#343538;--tpl-field-input-border:#48494c;--tpl-checkbox-border:#737476;--tpl-divider:#232426;--tpl-composer-bg:lch(10.149% .593 272);--tpl-composer-border:#2c2d2f;--tpl-row-hover-bg:#1d1e1f;--tpl-icon-fill:#bec2c8;--tpl-checkbox-check:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 12 12%27%3E%3Cpath d=%27M2.5 6.2 4.9 8.5 9.5 3.6%27 fill=%27none%27 stroke=%27white%27 stroke-width=%271.6%27 stroke-linecap=%27round%27 stroke-linejoin=%27round%27/%3E%3C/svg%3E");--tpl-doc-divider:#232426;--tpl-doc-frame-border:lch(16.32% 1.48 272);--tpl-doc-frame-bg:lch(7.32% .85 272)}
@@ -885,3 +867,11 @@ input[type=checkbox]:not([data-control=toggle]){position:relative;box-sizing:bor
 }
 /* Template icon tiles: the reference app tints the icon's own colour (lch, alpha per theme); hover shifts lightness and chroma. */
 .tpl-icon-tint{--tpl-icon-bg:lch(from var(--view-color,var(--tpl-icon-fill)) l c h / var(--tpl-icon-alpha));--tpl-icon-hover-bg:lch(from var(--view-color,var(--tpl-icon-fill)) calc(l + var(--tpl-icon-hover-l)) calc(c + var(--tpl-icon-hover-c)) h / var(--tpl-icon-alpha))}
+/* Colour picker (components/ui/color-swatch-picker): the reference app tints it by elevation — popover over the page, popover over a settings card, and the icon picker surface. On light surfaces it darkens bright swatches to L 67.969 over a page and L 70.313 over a settings card (--color-swatch-card-*). */
+:root{--color-picker-surface:lch(12.72% .85 272);--color-picker-border:lch(23.52% 1.93 272);--color-picker-hex-label:lch(41.778% 1.425 272);--color-picker-hex-text:lch(64.714% 1.425 272);--color-picker-hue-thumb-border:lch(34.32% 1.93 272);--color-picker-elevated-surface:lch(20.145% 1.75 272);--color-picker-elevated-border:lch(30.945% 2.83 272);--color-picker-elevated-hex-label:lch(46.731% 1.875 272);--color-picker-elevated-hex-text:lch(67.716% 1.875 272);--color-picker-elevated-hue-thumb-border:lch(41.745% 2.83 272);--color-picker-icon-surface:lch(16.433% 1.3 272);--color-picker-icon-border:lch(27.233% 2.38 272);--color-picker-icon-hex-label:lch(44.255% 1.65 272);--color-picker-icon-hex-text:lch(66.215% 1.65 272);--color-picker-icon-hue-thumb-border:lch(38.032% 2.38 272);--color-picker-swatch-ring:lch(2.595% .4 272);--color-picker-toggle-ring:lch(47.918% 59.303 288.421);--color-picker-thumb:#fff;--color-picker-thumb-shadow:rgb(0 0 0 / .5);--color-picker-hue-thumb:rgb(255 255 255 / .7);--color-picker-custom-gradient:conic-gradient(rgb(235 87 87),rgb(242 201 76),rgb(76 183 130),rgb(78 167 252),rgb(250 96 122));--color-swatch-grey:#bec2c8;--color-swatch-dark-grey:#95a2b3;--color-swatch-purple:lch(48% 59.31 288.43);--color-swatch-teal:#26b5ce;--color-swatch-green:#4cb782;--color-swatch-yellow:lch(80% 90 85);--color-swatch-orange:#f2994a;--color-swatch-pink:#f7c8c1;--color-swatch-red:#eb5757;--color-swatch-card-grey:#bec2c8;--color-swatch-card-orange:#f2994a;--color-swatch-card-pink:#f7c8c1}
+:root[data-theme="light"]{--color-picker-surface:lch(100% 0 282);--color-picker-border:lch(86.5% 0 282);--color-picker-hex-label:lch(66% 1 282);--color-picker-hex-text:lch(40% 1 282);--color-picker-hue-thumb-border:lch(86.5% 0 282);--color-picker-elevated-surface:lch(100% 0 282);--color-picker-elevated-border:lch(86.5% 0 282);--color-picker-elevated-hex-label:lch(66% 1 282);--color-picker-elevated-hex-text:lch(40% 1 282);--color-picker-elevated-hue-thumb-border:lch(86.5% 0 282);--color-picker-icon-surface:lch(100% 0 282);--color-picker-icon-border:lch(86.5% 0 282);--color-picker-icon-hex-label:lch(66% 1 282);--color-picker-icon-hex-text:lch(40% 1 282);--color-picker-icon-hue-thumb-border:lch(86.5% 0 282);--color-picker-swatch-ring:lch(94.44% .5 282);--color-picker-toggle-ring:lch(53% 52.26 286.91);--color-swatch-grey:lch(67.969% 3.577 260.65);--color-swatch-orange:lch(67.969% 62.082 61.651);--color-swatch-pink:lch(67.969% 19.321 31.72);--color-swatch-card-grey:lch(70.313% 3.577 260.65);--color-swatch-card-orange:lch(70.313% 62.082 61.651);--color-swatch-card-pink:lch(70.313% 19.321 31.72)}
+/* Icon picker (components/views/view-icon-picker) tabs and the separators around its search field. */
+:root{--icon-picker-tab-border:lch(25.073% 2.38 272);--icon-picker-separator:lch(20.753% 2.38 272);--icon-picker-tab-fg:lch(66.215% 1.65 272);--icon-picker-tab-active-fg:lch(91.554% 1.65 272);--icon-picker-tab-accent:lch(52.418% 61.103 288.421)}
+:root[data-theme="light"]{--icon-picker-tab-border:lch(90.55% 0 282);--icon-picker-separator:lch(97.3% 0 282);--icon-picker-tab-fg:lch(40% 1 282);--icon-picker-tab-active-fg:lch(20% 1 282);--icon-picker-tab-accent:lch(47% 50.26 286.91);--icon-picker-search-fg:lch(20% 1 282)}
+:root{--icon-picker-page-surface:lch(12.72% .85 272);--icon-picker-page-border:lch(25.68% 1.93 272);--icon-picker-page-text:lch(91.178% 1.425 272);--icon-picker-page-tab-border:lch(21.36% 1.93 272);--icon-picker-page-separator:lch(17.04% 1.93 272);--icon-picker-page-tab-fg:lch(64.714% 1.425 272);--icon-picker-page-tab-active-fg:lch(91.178% 1.425 272)}
+:root[data-theme="light"]{--icon-picker-page-surface:lch(100% 0 282);--icon-picker-page-border:lch(91.9% 0 282);--icon-picker-page-text:lch(20% 1 282);--icon-picker-page-tab-border:lch(90.55% 0 282);--icon-picker-page-separator:lch(97.3% 0 282);--icon-picker-page-tab-fg:lch(40% 1 282);--icon-picker-page-tab-active-fg:lch(20% 1 282)}

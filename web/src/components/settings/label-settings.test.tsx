@@ -16,6 +16,30 @@ function page(resourceType: LabelResourceType, overrides: Partial<BootstrapData>
   return render(<I18nProvider><DomainLabelsSettings resourceType={resourceType} onReload={onReload} data={makeBootstrap({ labels: [], labelGroups: [], initiatives: [], ...overrides } as never)}/></I18nProvider>)
 }
 
+describe('label colour picker', () => {
+  it('picks from the reference app\'s fixed swatches, saves at once and moves the ✓', async () => {
+    const user = userEvent.setup()
+    vi.mocked(updateWorkspaceLabel).mockResolvedValue({ id: 'l1', name: 'Bug', color: '#26b5ce' })
+    page('issue', { labels: [{ id: 'l1', name: 'Bug', color: '#eb5757', resourceType: 'issue' }] } as never)
+    await user.click(screen.getByRole('button', { name: 'Choose Bug color' }))
+    expect(screen.getAllByRole('radio').map(swatch => swatch.getAttribute('aria-label'))).toEqual(['Grey', 'Dark Grey', 'Purple', 'Teal', 'Green', 'Yellow', 'Orange', 'Pink', 'Red'])
+    expect(screen.getByRole('radio', { name: 'Red' })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('radio', { name: 'Teal' }))
+    await waitFor(() => expect(updateWorkspaceLabel).toHaveBeenCalledWith('l1', { color: '#26b5ce' }))
+  })
+
+  it('opens a label with a custom colour on the custom panel', async () => {
+    const user = userEvent.setup()
+    page('issue', { labels: [{ id: 'l2', name: 'Feature', color: '#bb87fc', resourceType: 'issue' }] } as never)
+    await user.click(screen.getByRole('button', { name: 'Choose Feature color' }))
+    expect(screen.getByRole('textbox', { name: 'HEX color' })).toHaveValue('#bb87fc')
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Select default color' }))
+    expect(screen.getAllByRole('radio').filter(swatch => swatch.getAttribute('aria-checked') === 'true')).toHaveLength(0)
+    expect(updateWorkspaceLabel).not.toHaveBeenCalled()
+  })
+})
+
 describe('label settings structure', () => {
   it('shows the reference app\'s toolbar and empty state on initiative labels without a scope selector', () => {
     page('initiative')

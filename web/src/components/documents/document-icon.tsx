@@ -27,7 +27,7 @@ export function DocumentIconPicker({ document, ...props }: {
   onChange: (visual: ViewVisual) => void
 } & Omit<ComponentProps<typeof ViewIconPicker>, 'color' | 'icon'>) {
   const { t } = useI18n()
-  return <ViewIconPicker
+  return <ViewIconPicker surface="page"
     {...props}
     ariaLabel={props.ariaLabel ?? t('Document icon')}
     color={document.color || DEFAULT_DOCUMENT_COLOR}

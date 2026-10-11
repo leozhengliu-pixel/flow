@@ -2652,6 +2652,7 @@ function IssueStateEditor({
     >
       <StatusDragHandle />
       <StatusColorPicker
+        adjustContrast
         color={color}
         type={stateType}
         preview={<StatusIcon state={preview} size={16} />}

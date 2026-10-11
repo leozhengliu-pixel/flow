@@ -393,6 +393,7 @@ export function TeamOverviewPage({
           <div className="team-home-overview-main">
             <section className="team-home-intro">
               <ViewIconPicker
+                surface="page"
                 ariaLabel={t("Choose team icon")}
                 color={team.color}
                 icon={team.icon || "Team"}

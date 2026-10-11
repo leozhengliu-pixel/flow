@@ -65,11 +65,11 @@ describe('NewProjectDialog', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Choose icon' }))
-    await user.click(screen.getByRole('button', { name: 'Color #24b4c7' }))
+    await user.click(screen.getByRole('radio', { name: 'Teal' }))
     await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'Cyan project')
 
     expect(screen.getByRole('button', { name: 'Choose icon' })).toHaveStyle({
-      '--view-color': '#24b4c7',
+      '--view-color': '#26b5ce',
     })
     await user.keyboard('{Escape}')
   })
