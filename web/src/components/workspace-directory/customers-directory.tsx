@@ -2,6 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { matchesSearch } from '@/lib/search-match'
 import { Plus, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
+import { ensureViewIconSprite } from '@/components/views/view-icon-sprite'
 import { toast } from '@/lib/toast'
 
 import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
@@ -434,7 +435,8 @@ function formatCurrency(value: number, currency = 'USD') {
 }
 
 function SpriteGlyph({ id }: { id: string }) {
-  return <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 16 16" width="16"><use href={`/flow-view-icons.svg#${id}`}/></svg>
+  useEffect(() => { void ensureViewIconSprite() }, [])
+  return <svg aria-hidden="true" fill="currentColor" height="16" viewBox="0 0 16 16" width="16"><use href={`#${id}`}/></svg>
 }
 
 /** The reference app's merge glyph (two overlapping cards). */
