@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { MoreVertical } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { TeamIcon } from '@/components/issue/issue-icons'
 import { DocumentMenuItems } from '@/components/documents/document-menu'
 import type { DocumentActionContext, DocumentUiAction } from '@/components/documents/document-actions'

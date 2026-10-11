@@ -1,6 +1,7 @@
 import * as Select from '@radix-ui/react-select'
-import { ArrowDown, ArrowDownWideNarrow, ArrowUp, ArrowUpNarrowWide, Check, ChevronDown } from 'lucide-react'
+import { ArrowDownWideNarrow, ArrowUpNarrowWide, Check, ChevronDown } from 'lucide-react'
 
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
 
 type Option<T extends string> = readonly [T, string]
@@ -43,6 +44,6 @@ export function DisplayOptionsBody<G extends string, O extends string>({ groupin
 export function SortHeader({ label, active, direction, ariaLabel, onClick }: { label: string; active: boolean; direction: 'asc' | 'desc'; ariaLabel?: string; onClick: () => void }) {
   const { t } = useI18n()
   return <button className="flow-releases-sort" aria-label={ariaLabel ?? `${t('Order by')} ${t(label)}`} data-active={active || undefined} onClick={onClick} type="button">
-    <span>{t(label)}</span>{active && (direction === 'asc' ? <ArrowDown aria-hidden="true"/> : <ArrowUp aria-hidden="true"/>)}
+    <span>{t(label)}</span><span className="flow-releases-sort__icon" data-direction={direction} aria-hidden="true"><FlowGlyph name="sortArrow" size={12}/></span>
   </button>
 }

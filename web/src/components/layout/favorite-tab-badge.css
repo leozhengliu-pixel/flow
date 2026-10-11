@@ -1,0 +1,5 @@
+/* A tab favorite's icon: the resource icon (14×14) with a round tab badge overlapping its bottom-right corner. */
+.favorite-tab-icon { position: relative; width: 14px; height: 14px; display: grid; place-items: center; }
+.favorite-tab-badge { position: absolute; right: -5px; bottom: -5px; box-sizing: border-box; width: 14px; height: 14px; display: grid; place-items: center; padding: 2px; border-radius: 50%; background: var(--bg-sidebar); color: inherit; }
+.sidebar-favorite-icon .favorite-tab-badge svg { width: 10px; height: 10px; }
+.sidebar.is-floating .favorite-tab-badge { background: var(--bg-panel); }

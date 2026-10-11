@@ -60,6 +60,7 @@ export const releasePipelinesZhCN: Record<string, string> = {
     "定义生成发布说明时使用的模板。写入需要的章节；{{issues}} 所在行会替换为已完成事项列表。",
   "Release API": "发布 API",
   "GitHub Actions": "GitHub Actions",
+  "Stage options": "阶段选项",
 
   // Access key
   "Allows external integrations to interact with this pipeline.": "允许外部集成与此管线交互。",

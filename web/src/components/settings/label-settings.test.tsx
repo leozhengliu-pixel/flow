@@ -9,7 +9,7 @@ import { DomainLabelsSettings } from './domain-settings'
 import { canMergeLabels, matchesLabelFilters, mergeTarget, visibleLabelColumns } from './label-settings-model'
 
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), mergeLabels: vi.fn(), updateWorkspaceLabel: vi.fn() }))
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); localStorage.setItem('flow:locale', 'en-US') })
 
 function page(resourceType: LabelResourceType, overrides: Partial<BootstrapData> = {}, onReload = vi.fn().mockResolvedValue(undefined)) {

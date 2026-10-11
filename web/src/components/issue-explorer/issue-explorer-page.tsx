@@ -17,7 +17,7 @@ import { issueFiltersToQueryAst, toggleFilterOption, updateFilterOperator, updat
 import { PagedIssueList } from './paged-issue-list'
 import { orderingCommandLabel, useRegisterDisplayCommands } from '@/components/command/display-commands'
 import { fetchIssueRecord, listIssueRecords, updateStructuredTeamSettings } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { IssueExplorerSurface } from './issue-explorer-surface'
 import { IssueBoard } from './issue-board'
 import { SavedViewEditor, SavedViewMenu, type SavedViewDraft, type SavedViewTarget } from './saved-view-editor'

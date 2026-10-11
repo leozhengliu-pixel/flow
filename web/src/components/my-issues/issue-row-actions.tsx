@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { createIssue, createIssueLink, createIssueReminder, createRelation, deleteRelation } from '@/lib/api'
 import { settingsPath } from '@/lib/app-routes'
 import { enabledCodingTools, renderCodingPrompt } from '@/lib/coding-tools'

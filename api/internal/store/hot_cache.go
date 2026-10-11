@@ -460,6 +460,9 @@ func hotCacheTouch(eventType string) (issueEntity, issueQuery, projectQuery, met
 		return true, true, false, false
 	case eventType == "team.deleted":
 		return false, false, false, false
+	case strings.HasPrefix(eventType, "release.") && !strings.HasPrefix(eventType, "release.note_"), eventType == "release_pipeline.deleted":
+		// Release membership and dates feed issue filters (release_issue_filter_records).
+		return false, true, false, false
 	case strings.HasPrefix(eventType, "project."), strings.HasPrefix(eventType, "label."), eventType == "alm.projects_imported":
 		return false, true, true, true
 	case strings.HasPrefix(eventType, "team."), eventType == "alm.org_teams_imported", eventType == "alm.users_imported":

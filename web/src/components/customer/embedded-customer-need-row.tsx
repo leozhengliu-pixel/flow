@@ -1,6 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'

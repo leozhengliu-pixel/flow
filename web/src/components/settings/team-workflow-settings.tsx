@@ -18,7 +18,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { RecurringIssuesSettingsPage } from "./recurring-issues-settings";
 import { ParentTeamPicker } from '@/components/property/parent-team-picker';
 import { RetireTeamForm } from '@/components/team/retire-team-form';

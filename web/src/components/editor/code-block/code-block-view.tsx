@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { Check, ChevronDown, ChevronUp, Copy, SlidersHorizontal } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { NodeViewContent, NodeViewWrapper, useEditorState, type ReactNodeViewProps } from '@tiptap/react'
 import { TextSelection } from '@tiptap/pm/state'
 import { Toggle } from '@/components/ui/toggle'

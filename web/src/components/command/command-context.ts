@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useSyncExternalStore } from 'react'
 import type { FlowDocument, Issue, IssueRelationType, IssueUpdateInput, Project } from '@/types/flow'
 import type { ProjectMutationInput } from '@/components/projects-page/projects-page'
+import type { CommandPage, ContextAction, PageOption } from './context-commands'
 
 /** A context issue: the full record when the surface has one, otherwise the row it shows. */
 export type CommandIssueRef = Pick<Issue, 'id' | 'identifier' | 'title'> & Partial<Issue>
@@ -34,11 +35,22 @@ export interface DocumentCommandContext {
   documents?: FlowDocument[]
 }
 
-export type CommandContext = IssueCommandContext | ProjectCommandContext | DocumentCommandContext
+/** A selected release (pipeline list): the surface supplies its row actions, as the reference app's "Release · v1.2.0" palette. */
+export interface ReleaseCommandContext {
+  kind: 'release'
+  ids: string[]
+  /** The release name or version shown in the context chip. */
+  label: string
+  actions: ContextAction[]
+  /** Options of a nested page an action opened (e.g. "Change release date…"). */
+  pageOptions?: (page: CommandPage, query: string) => PageOption[]
+}
+
+export type CommandContext = IssueCommandContext | ProjectCommandContext | DocumentCommandContext | ReleaseCommandContext
 
 type Entry = { key: string; order: number; read: () => CommandContext }
 
-const PRIORITY: Record<string, number> = { selection: 3, detail: 2, project: 1, document: 1 }
+const PRIORITY: Record<string, number> = { selection: 3, detail: 2, project: 1, document: 1, release: 1 }
 const entries = new Map<string, Entry>()
 const listeners = new Set<() => void>()
 let sequence = 0
@@ -77,6 +89,7 @@ function identity(context: CommandContext | undefined) {
   if (!context) return ''
   if (context.kind === 'issues') return `issues:${context.source}:${context.issues.map(issue => issue.id).join(',')}`
   if (context.kind === 'project') return `project:${context.project.id}`
+  if (context.kind === 'release') return `release:${context.ids.join(',')}`
   return `document:${(context.documents ?? [context.document]).map(item => item.id).join(',')}`
 }
 

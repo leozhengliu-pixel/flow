@@ -1,7 +1,7 @@
 import * as Popover from '@radix-ui/react-popover'
 import { Plus } from 'lucide-react'
 import { useEffect, useMemo, useState, type KeyboardEvent, type RefObject, type SetStateAction } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { AgentEntityHover } from '@/components/agent/agent-entity-hover'

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { CustomerStatusIcon } from '@/components/customer/customer-status-icon'
 import { TeamIcon } from '@/components/issue/issue-icons'

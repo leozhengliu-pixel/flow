@@ -1,4 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { matchesSearch } from '@/lib/search-match'
 import { PeopleMenuItems } from '@/components/property/people-menu-items'
 import { projectHasUpdates } from '@/lib/project-has-updates'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
@@ -324,11 +325,12 @@ function InitiativeDisplayMenu({ hideTeamToggle, showNested, showParents, onShow
 }
 
 export function InitiativeFilterMenu({ filters, initiatives, users, teams, labels, onChange, onCreateLabel, onAdvanced }: { filters: FilterState; initiatives: Initiative[]; users: User[]; teams: Team[]; labels: IssueLabel[]; onChange: (filters: FilterState) => void; onCreateLabel?: (name: string) => Promise<IssueLabel>; onAdvanced: () => void }) {
+  const { t } = useI18n()
   const [query, setQuery] = useState('')
   const entries = [
     { id: 'status', label: 'Status' }, { id: 'priority', label: 'Priority' }, { id: 'ownerId', label: 'Owner' }, { id: 'creatorId', label: 'Creator' },
     { id: 'leadTeamId', label: 'Lead team' }, { id: 'teamId', label: 'Contributing teams' }, { id: 'labelId', label: 'Labels' }, { id: 'health', label: 'Health' }, { id: 'date', label: 'Dates' },
-  ].filter(item => item.label.toLowerCase().includes(query.toLowerCase()))
+  ].filter(item => matchesSearch(query, [item.label], t))
   return <DropdownMenu.Root onOpenChange={open => { if (!open) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="li-icon-button ui-pill" type="button"><Filter size={14}/>{Object.keys(filters).length > 0 && <i/>}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="li-menu li-filter-menu" sideOffset={4} collisionPadding={8}>
     <div className="li-menu-search"><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event => setQuery(event.target.value)}/><kbd>F</kbd></div>
     {!query && <><DropdownMenu.Item disabled title="Requires the Flow AI integration"><FlowGlyph name="aiFilter" size={16} aria-hidden/><span>AI filter</span></DropdownMenu.Item><DropdownMenu.Separator/><DropdownMenu.Item onSelect={onAdvanced}><ListFilter size={14} aria-hidden/><span>Advanced filter</span></DropdownMenu.Item><DropdownMenu.Separator/></>}

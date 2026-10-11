@@ -16,7 +16,7 @@ export function fetchResourcePreferences(workspaceKey: string) {
 
 export function mergeResourcePreferences(data: BootstrapData, preferences: ResourcePreferences): BootstrapData {
   const { documentSubscriptions, ...collections } = preferences
-  const favorites = new Set(preferences.favorites.filter(item => item.userId === data.viewer.id).map(item => `${item.resourceType}:${item.resourceId}`))
+  const favorites = new Set(preferences.favorites.filter(item => item.userId === data.viewer.id && !item.tab).map(item => `${item.resourceType}:${item.resourceId}`))
   const subscriptions = new Set(preferences.subscriptions.filter(item => item.userId === data.viewer.id && isActiveSubscription(item)).map(item => `${item.resourceType}:${item.resourceId}`))
   return {
     ...data, ...collections,

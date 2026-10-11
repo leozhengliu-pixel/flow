@@ -114,7 +114,10 @@ export function sortReleases(releases: Release[], pipeline: ReleasePipeline, ord
 
 /** Releases in a planned or started stage (the reference app's "Active releases" column). */
 export function activeReleases(data: BootstrapData, pipeline: ReleasePipeline) {
-  return releasesForPipeline(data, pipeline).filter(item => item.status === 'planned' || item.status === 'inProgress')
+  const stageIndex = (release: Release) => release.stage ? pipeline.stages.indexOf(release.stage) : -1
+  return releasesForPipeline(data, pipeline)
+    .filter(item => item.status === 'planned' || item.status === 'inProgress')
+    .sort((left, right) => stageIndex(right) - stageIndex(left) || right.createdAt.localeCompare(left.createdAt))
 }
 
 /** The pipeline's most recently completed release. */
@@ -208,4 +211,13 @@ export function parseReleaseDateQuery(input: string, now = new Date()): string |
 /** Day-only values ("2026-03-01") are local calendar days. */
 export function dayValue(value: string) {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T12:00:00` : value
+}
+
+/** The reference app's target-date tone: overdue before today, due soon within a week, otherwise plain. */
+export function releaseDateTone(targetDate: string, now = new Date()): 'set' | 'soon' | 'overdue' {
+  const target = new Date(dayValue(targetDate))
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const day = new Date(target.getFullYear(), target.getMonth(), target.getDate())
+  const days = Math.round((day.getTime() - today.getTime()) / 86_400_000)
+  return days < 0 ? 'overdue' : days <= 7 ? 'soon' : 'set'
 }

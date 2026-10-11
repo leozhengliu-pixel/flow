@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 export function useCommentComposer(onSubmit: (body: string) => Promise<unknown>, errorMessage = 'Could not post comment') {
   const [comment,setComment]=useState(''),[posting,setPosting]=useState(false)

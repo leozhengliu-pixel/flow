@@ -7,6 +7,7 @@ import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, Prio
 import type { MyIssuesAppliedFilter } from './my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { usePropertyCommand } from '@/components/property/use-property-command'
+import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { useI18n } from '@/i18n/i18n'
 import { AgentBadge } from '@/components/agent/agent-badge'
 import styles from './my-issues-filter-menu.module.css'
@@ -21,6 +22,8 @@ import { CustomerLogoPile } from '@/components/customer/customer-logo-pile'
 import { CUSTOMER_NUMBER_COMPARISONS, parseCustomerNumberInput } from '@/components/issue-explorer/customer-filter'
 import { AgentAvatarMark } from '@/components/ui/agent-glyph'
 import { isBuiltinAgentAvatarUrl } from '@/components/ui/agent-avatar-url'
+import { ReleasePipelineIcon } from '@/components/releases/release-icons'
+import { durationFilterOptions } from '@/components/issue-explorer/issue-date-filter'
 
 export type IssueFilterScope = 'issues' | 'project'
 
@@ -109,14 +112,14 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
   })).filter(group => group.length)
   // The reference app's deep search: "Priority › Urgent", "Labels › Bug  1 issue", "Project properties › Project priority › Urgent".
   const deepMatches = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase()
+    const needle = query.trim()
     if (!needle || !open) return []
     const matches: { field: MyIssuesFilterKey; option: MyIssuesFilterOption; path: string[] }[] = []
     const walk = (field: MyIssuesFilterKey, items: MyIssuesFilterOption[], path: string[], depth: number) => {
       for (const option of items) {
         if (option.children?.length) { if (depth < 2) walk(field, option.children, [...path, option.label], depth + 1); continue }
         if (option.textConditionPrefix || option.numberInput || option.id === 'content-prompt') continue
-        if (option.label.toLocaleLowerCase().includes(needle)) matches.push({ field, option, path: [...path, option.label] })
+        if (matchesSearch(needle, [option.label], t)) matches.push({ field, option, path: [...path, option.label] })
       }
     }
     for (const item of visibleGroups.flat()) {
@@ -126,7 +129,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
       if (matches.length > 40) break
     }
     return matches.slice(0, 40)
-  }, [open, options, query, visibleGroups])
+  }, [open, options, query, t, visibleGroups])
   const aiAvailable = variant === 'root' && visibleGroups.some(group => group.some(item => item.id === 'ai'))
   const runAIQuery = (text: string) => {
     const normalized = text.trim()
@@ -161,7 +164,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
           </div>
           <Command.List className={styles.rootList}>
             <Command.Empty className={styles.empty}>{t('No filters found')}</Command.Empty>
-            {onAddGroup && <><Command.Group className={styles.rootGroup}><Command.Item className={styles.rootItem} data-add-group="" value="Add filter group" onMouseMove={() => setActiveField(undefined)} onSelect={() => { onAddGroup(); close(false) }}><span className={styles.rootIcon} aria-hidden="true"><FlowGlyph name="filterGroup"/></span><span>{t('Add filter group')}</span></Command.Item></Command.Group><Command.Separator className={styles.rootSeparator}/></>}
+            {onAddGroup && <><Command.Group className={styles.rootGroup}><Command.Item className={styles.rootItem} data-add-group="" value="Add filter group" keywords={translatedKeywords(['Add filter group'], t)} onMouseMove={() => setActiveField(undefined)} onSelect={() => { onAddGroup(); close(false) }}><span className={styles.rootIcon} aria-hidden="true"><FlowGlyph name="filterGroup"/></span><span>{t('Add filter group')}</span></Command.Item></Command.Group><Command.Separator className={styles.rootSeparator}/></>}
             {visibleGroups.map((visibleItems, groupIndex) => {
               return <Fragment key={groupIndex}>{groupIndex > 0 && <Command.Separator className={styles.rootSeparator}/>}<Command.Group className={styles.rootGroup}>
               {visibleItems.map(item => {
@@ -174,6 +177,7 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
                     <Command.Item
                       className={styles.rootItem}
                       value={item.label}
+                      keywords={translatedKeywords([item.label], t)}
                       aria-disabled={!hasValues}
                       data-unavailable={!hasValues ? '' : undefined}
                       disabled={!hasValues}
@@ -189,9 +193,9 @@ export function MyIssuesFilterMenu({ align = 'center', availableFields, layout =
               })}
             </Command.Group></Fragment>})}
             {deepMatches.length > 0 && <><Command.Separator className={styles.rootSeparator}/><Command.Group className={styles.rootGroup}>
-              {deepMatches.map(match => <Command.Item key={`${match.field}:${match.path.join('/')}:${match.option.id}`} className={`${styles.rootItem} ${styles.deepItem}`} value={`${match.path.join(' › ')} ${match.field}:${match.option.id}`} onSelect={() => choose(match.field, match.option)}>
+              {deepMatches.map(match => <Command.Item key={`${match.field}:${match.path.join('/')}:${match.option.id}`} className={`${styles.rootItem} ${styles.deepItem}`} value={`${match.path.join(' › ')} ${match.field}:${match.option.id}`} keywords={translatedKeywords(match.path, t)} onSelect={() => choose(match.field, match.option)}>
                 <span className={styles.rootIcon}><OptionMark field={match.field} option={match.option}/></span>
-                <span className={styles.deepPath} data-i18n-ignore>{match.path.slice(0, -1).map(part => `${t(part)} › `).join('')}<b>{match.option.label}</b></span>
+                <span className={styles.deepPath} data-i18n-ignore>{match.path.slice(0, -1).map(part => `${t(part)} › `).join('')}<b>{isSystemOption(match.field, match.option) ? t(match.option.label) : match.option.label}</b></span>
                 {(optionCount(match.option) ?? 0) > 0 && <span className={styles.count}>{optionCount(match.option)} {t(optionCount(match.option) === 1 ? 'issue' : 'issues')}</span>}
               </Command.Item>)}
             </Command.Group></>}
@@ -259,7 +263,7 @@ function valueRowKind(field: MyIssuesFilterKey, option: MyIssuesFilterOption): V
   if (option.textConditionPrefix || option.kind === 'dueDate' || option.kind === 'dateCustom' || option.kind === 'textCondition') return 'plain'
   // A category stays a category while empty (Customer tier with no tiers yet): it opens "No results".
   if (option.children || option.numberInput) return categoryGlyph(field, option) === undefined && !option.kind ? 'plain' : 'icon'
-  if (field === 'relations' || (field === 'triageIntelligence' && (option.id === 'related' || option.id === 'duplicate'))) return 'icon'
+  if (field === 'relations' || (field === 'triageIntelligence' && (option.id === 'related' || option.id === 'duplicate')) || (field === 'releases' && option.id === 'no-releases')) return 'icon'
   return 'check'
 }
 /** Category menus (Dates, Relations, Project properties, Triage Intelligence) show no search band. */
@@ -268,7 +272,7 @@ function isCategoryList(field: MyIssuesFilterKey, options: MyIssuesFilterOption[
 }
 /** Labels Flow defines (presets, "No …", categories) are translated; names users typed are not. */
 function isSystemOption(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
-  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || Boolean(option.numberInput) || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || valueRowKind(field, option) !== 'check'
+  return !option.id || option.id === '*' || option.id.endsWith(':*') || option.id.endsWith(':') || Boolean(option.children?.length) || Boolean(option.numberInput) || option.kind === 'priority' || option.kind === 'projectPriority' || option.label === 'Current user' || field === 'relations' || field === 'dates' || field === 'agentSession' || valueRowKind(field, option) !== 'check'
 }
 
 function FilterValueItems({ activeId, field, isSelected = () => false, layer, onActive = () => {}, onChoose, options }: { activeId?: string; field: MyIssuesFilterKey; isSelected?: (id: string) => boolean; layer: number; onActive?: (id: string) => void; onChoose: (option: MyIssuesFilterOption) => void; options: MyIssuesFilterOption[] }) {
@@ -286,17 +290,20 @@ function FilterValueItem({ field, layer, option, active, selected, nestedOpen, o
   // The reference app shows counts on selectable values only (not on categories or one-click relation rows).
   const count = (optionCount(option)??0)>0 && kind === 'check' ? <span className={styles.count}>{optionCount(option)} {t(optionCount(option)===1?'issue':'issues')}</span> : null
   if(option.numberInput)return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NumberValueMenu field={field} layer={layer} option={option} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
-  if(option.children&&(option.children.length||field==='customers'))return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
+  if(option.children&&(option.children.length||field==='customers'))return <Popover.Root open={nestedOpen} onOpenChange={onNestedOpen}><Popover.Trigger asChild><button type="button" role="option" aria-selected={active} aria-expanded={nestedOpen} aria-haspopup="listbox" className={styles.valueItem} data-row-kind={kind} onMouseMove={()=>{onActive();onNestedOpen(true)}}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span><span className={styles.submenuMarker} aria-hidden="true">▶</span></button></Popover.Trigger><Popover.Portal><NestedValueMenu category={option} field={field} label={option.label} layer={layer} options={option.children} onChoose={onChoose} onClose={()=>onNestedOpen(false)}/></Popover.Portal></Popover.Root>
   if(kind!=='check')return <button type="button" role="option" aria-selected={active} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{count}</button>
   return <PersonHover userId={isPeopleProperty(option.kind ?? field) ? option.id : undefined}><button type="button" role="option" aria-selected={active} aria-checked={selected} className={styles.valueItem} data-row-kind={kind} onMouseMove={onActive} onClick={()=>onChoose(option)}><span className={styles.checkbox} role="checkbox" aria-checked={selected}>{selected&&<CheckboxMark/>}</span>{mark}<span className={styles.valueLabel} data-i18n-ignore>{label}</span>{option.agent&&<AgentBadge/>}{count}</button></PersonHover>
 }
 
-function NestedValueMenu({ field, label, layer, onChoose, onClose, options }: { field: MyIssuesFilterKey; label: string; layer: number; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
+function NestedValueMenu({ category, field, label, layer, onChoose, onClose, options }: { category?: MyIssuesFilterOption; field: MyIssuesFilterKey; label: string; layer: number; onChoose: (option: MyIssuesFilterOption) => void; onClose: () => void; options: MyIssuesFilterOption[] }) {
   const { t } = useI18n()
-  const command = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options })
+  // The reference app's Time in current status also offers what the search reads as a duration ("2 days", "3w").
+  const [typed, setTyped] = useState('')
+  const typedOptions = useMemo(() => category?.durationSearch ? durationFilterOptions(category.durationSearch, typed, category.label).filter(option => !options.some(existing => existing.id === option.id)) : [], [category, options, typed])
+  const command = usePropertyCommand({ personOptions: isPeopleProperty(field), autoFocus: false, closeOnSelect: false, onOpenChange: open => { if (!open) onClose() }, onSelect: onChoose, open: true, options: typedOptions.length ? [...options, ...typedOptions] : options })
   const hideSearch = isCategoryList(field, options)
   return <Popover.Content data-flow-motion="floating" className={`${styles.valueMenu} ${styles.nestedValueMenu}`} data-level={2} style={{ zIndex: layer }} side="left" align="start" alignOffset={submenuAlignOffset(hideSearch)} sideOffset={SUBMENU_SIDE_OFFSET} collisionPadding={11} onOpenAutoFocus={event=>event.preventDefault()} onCloseAutoFocus={event=>event.preventDefault()} onEscapeKeyDown={event=>{event.preventDefault();onClose()}} onKeyDown={command.onKeyDown}>
-    <div className={styles.valueSearch} data-hidden={hideSearch || undefined}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t('Filter…')} value={command.query} onChange={event=>command.onQueryChange(event.target.value)}/></div>
+    <div className={styles.valueSearch} data-hidden={hideSearch || undefined}><input ref={command.inputRef} role="searchbox" aria-label={`${t('Filter')} ${t(label)}`} placeholder={t(category?.searchPlaceholder ?? 'Filter…')} value={command.query} onChange={event=>{command.onQueryChange(event.target.value);setTyped(event.target.value)}}/></div>
     <div className={styles.valueList} role="listbox" aria-label={t(label)}><FilterValueItems field={field} layer={layer + 1} options={command.filteredOptions} activeId={command.activeId} onActive={command.setActiveId} onChoose={command.choose}/>{!command.filteredOptions.length&&<div className={styles.empty}>{t('No results')}</div>}</div>
   </Popover.Content>
 }
@@ -438,12 +445,19 @@ export function FilterFieldIcon({field}:{field:MyIssuesFilterKey}){
   return <Link2 size={16}/>
 }
 
-const DATE_CATEGORY_GLYPHS: Record<string, FlowGlyphName> = { 'due-date': 'dates', 'created-date': 'createdDate', 'started-date': 'dates', 'updated-date': 'updatedDate', 'completed-date': 'updatedDate', 'auto-closed-date': 'autoClosed', 'triaged-date': 'triagedDate' }
+const DATE_CATEGORY_GLYPHS: Record<string, FlowGlyphName> = { 'due-date': 'dates', 'created-date': 'createdDate', 'started-date': 'dates', 'updated-date': 'updatedDate', 'completed-date': 'updatedDate', 'auto-closed-date': 'autoClosed', 'released-date': 'dates', 'triaged-date': 'triagedDate' }
+/** The reference app's Releases submenu rows: release glyph, the pipeline glyph, and the Dates glyph for Released date. */
+const RELEASE_CATEGORY_IDS = new Set(['release', 'release-pipeline', 'release-stage', 'release-stage-type', 'released-date', 'no-releases'])
 const RELATION_GLYPHS: Record<string, FlowGlyphName> = { sub_issue_of: 'subIssues', recurring: 'dates', 'recurring-any': 'dates', 'recurring-none': 'dates', 'has-relations': 'relations', duplicate: 'duplicates' }
 const RELATION_ACTION_GLYPHS: Record<string, string> = { parent_of: 'Parent issue…', blocked_by: 'Blocked issue…', blocks: 'Blocking issue…' }
 const TRIAGE_GLYPHS: Record<string, FlowGlyphName> = { 'triage-label': 'labels', 'triage-team': 'moveTo', related: 'relations', duplicate: 'duplicates' }
 /** Icons for the reference app's category rows (Dates ▸ Due date…, Relations, Triage Intelligence ▸ Suggested …). */
 function categoryGlyph(field: MyIssuesFilterKey, option: MyIssuesFilterOption) {
+  if (field === 'releases' && RELEASE_CATEGORY_IDS.has(option.id)) {
+    if (option.id === 'released-date') return <FlowGlyph name="dates"/>
+    if (option.id === 'release-pipeline') return <ReleasePipelineIcon size={16}/>
+    return <FilterFieldIcon field="releases"/>
+  }
   if (field === 'dates') {
     if (option.id === 'time-current-status') return <ViewGlyph icon="Stopwatch" color="currentColor" style={{ width: 16, height: 16 }}/>
     const name = DATE_CATEGORY_GLYPHS[option.id]

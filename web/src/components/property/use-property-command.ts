@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { directoryPerson, isPeopleProperty, personMatchesQuery, type PersonIdentity } from '@/lib/people'
+import { matchesSearch } from '@/lib/search-match'
+import { useOptionalTranslate } from '@/i18n/i18n'
 import { usePeopleDirectory } from './people-context'
 
 export interface PropertyCommandOption {
@@ -26,10 +28,13 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
   personOptions?: boolean
 }) {
   const directory = usePeopleDirectory()
+  const t = useOptionalTranslate()
+  // Rows show `t(label)` for system options, so a query matches the English and the displayed text.
   const matchesOption = useCallback((option: T, query: string) => {
     const person = option.person ?? (personOptions || isPeopleProperty(option.kind ?? '') ? directoryPerson(directory.users, option.id) : undefined)
-    return person ? personMatchesQuery({ ...person, ...directoryPerson(directory.users, person.id), label: option.label }, query) : matchesQuery(`${option.label} ${option.keywords ?? ''}`, query)
-  }, [directory.users, personOptions])
+    if (person) return personMatchesQuery({ ...person, ...directoryPerson(directory.users, person.id), label: option.label }, query) || matchesSearch(query, [t(option.label)])
+    return matchesSearch(query, [option.label, option.keywords], t, { fuzzy: true })
+  }, [directory.users, personOptions, t])
   const [query, setQuery] = useState('')
   const [activeId, setActiveId] = useState<string>()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -118,17 +123,4 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
     query,
     setActiveId,
   }
-}
-
-function matchesQuery(value: string, query: string) {
-  if (!query) return true
-  const normalized = value.toLocaleLowerCase()
-  if (normalized.includes(query)) return true
-  let offset = 0
-  for (const character of query) {
-    offset = normalized.indexOf(character, offset)
-    if (offset < 0) return false
-    offset += 1
-  }
-  return true
 }

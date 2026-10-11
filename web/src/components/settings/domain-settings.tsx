@@ -3,7 +3,7 @@ import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { Archive, ChevronDown, ChevronRight, Merge, MoreHorizontal, RotateCcw, Search, Star, Trash2, X } from 'lucide-react'
 import * as Popover from '@radix-ui/react-popover'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import {
   createLabelGroup, createTeamLabel, createWorkspaceLabel, deleteLabelGroup, deleteTeamLabel, deleteTeamLabelGroup,

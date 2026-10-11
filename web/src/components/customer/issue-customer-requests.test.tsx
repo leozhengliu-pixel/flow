@@ -23,7 +23,7 @@ vi.mock('@/lib/api', () => ({
   listIssueRecords: vi.fn().mockResolvedValue({ items: [] }),
 }))
 vi.mock('@/components/ui/action-dialog-service', () => ({ confirmAction: (...args: unknown[]) => confirmAction(...args) }))
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 // cmdk measures its list.
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver

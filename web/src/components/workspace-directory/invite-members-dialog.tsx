@@ -1,6 +1,6 @@
 import * as Select from "@radix-ui/react-select";
 import { useEffect, useId, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { SelectControl } from "@/components/ui/select-control";

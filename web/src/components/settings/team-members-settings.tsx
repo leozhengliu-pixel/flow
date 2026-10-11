@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { MoreHorizontal, Search } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import {
   DropdownMenu,

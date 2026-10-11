@@ -101,6 +101,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
   const rootRef = useRef<HTMLDivElement>(null)
   const commandsRef = useRef<EditorCommand[]>([])
+  const translateRef = useRef(t)
+  translateRef.current = t
   const slashRef = useRef<SlashCommandState>(closedSlash)
   const selectedRef = useRef(0)
   const dismissedRef = useRef<number | null>(null)
@@ -253,7 +255,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
           }
         }
         if (!current.active || current.range?.from === dismissedRef.current) return false
-        const filtered = filterEditorCommands(commandsRef.current, current.query)
+        const filtered = filterEditorCommands(commandsRef.current, current.query, translateRef.current)
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault()
           if (!filtered.length) return true
@@ -385,7 +387,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
     return slash.active ? [...tableSlashCommands(editor).map(tableAction), ...base] : base
   }, [editor, slash.active])
   commandsRef.current = commands
-  const filteredCommands = filterEditorCommands(commands, slash.query)
+  const filteredCommands = filterEditorCommands(commands, slash.query, t)
 
   useEffect(() => {
     if (!editor) return

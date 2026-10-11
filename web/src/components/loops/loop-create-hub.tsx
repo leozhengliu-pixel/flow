@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ArrowRight, ArrowUp, FileText, Paperclip } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
 import { createLoop, uploadLoopAttachment } from "@/lib/api";

@@ -6,7 +6,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ArrowUp, Bell, BellOff, Check, CircleDot, Copy, FilePlus2, Link2, MoreHorizontal, Pencil, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import { forwardRef, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { RichComment } from '@/components/activity/rich-comment'
 import { Composer } from '@/components/editor/composer'

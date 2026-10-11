@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ChevronRight, History, Link2, MoreHorizontal, Pencil, Play, Settings2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Toggle } from "@/components/ui/toggle";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UserAvatar } from "@/components/ui/user-avatar";

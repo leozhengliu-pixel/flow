@@ -7,9 +7,9 @@ vi.mock('./api', async (original) => ({
   cancelWorkspaceDeletion: vi.fn(),
 }))
 
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 beforeEach(() => {
   vi.mocked(cancelWorkspaceDeletion).mockReset()

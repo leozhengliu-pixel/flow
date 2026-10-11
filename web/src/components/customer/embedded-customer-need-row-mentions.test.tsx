@@ -13,7 +13,7 @@ import { EmbeddedCustomerNeedRow } from './embedded-customer-need-row'
 
 const api = vi.hoisted(() => ({ fetchIssueRecord: vi.fn(), listProjectRecords: vi.fn(), listIssueRecords: vi.fn().mockResolvedValue({ items: [] }), createCustomerRequest: vi.fn(), updateCustomerRequest: vi.fn(), deleteCustomerRequest: vi.fn(), uploadCustomerRequestAttachment: vi.fn(), createIssue: vi.fn() }))
 vi.mock('@/lib/api', () => api)
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
 
 const customer = { id: 'customer-1234567890ab', name: 'Acme Corp', status: 'active', domains: [], createdAt: '', updatedAt: '' } as unknown as Customer

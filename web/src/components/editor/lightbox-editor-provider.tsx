@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { Clipboard, Download, Link2, X } from 'lucide-react'
 import { createPortal } from 'react-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { CommentPopover, type LightboxComment } from './comment-popover'
 import { registerLightboxOpener, type LightboxItem } from './lightbox-bridge'

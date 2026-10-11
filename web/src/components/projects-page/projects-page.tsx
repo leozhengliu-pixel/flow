@@ -1,5 +1,5 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import { teamHierarchy, type TeamHierarchySettings } from '@/lib/team-hierarchy'
 import type { BootstrapData, Customer, Initiative, Invitation, Issue, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectDependencyRelationInput, ProjectMilestone, ProjectRelation, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Subscription, Team, User } from '@/types/flow'

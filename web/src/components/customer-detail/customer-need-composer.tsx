@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { ChevronDown, Paperclip, X, Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { MentionTextField } from '@/components/editor/mention-text-field'
 import { StatusIcon } from '@/components/issue/issue-icons'

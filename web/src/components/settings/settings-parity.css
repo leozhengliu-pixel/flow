@@ -222,14 +222,15 @@ html:root .settings-app .settings-main .settings-crumb {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px 0 6px;
-  border: 0;
+  padding: 0 8px;
+  border: .5px solid transparent;
   border-radius: 9999px;
   background: transparent;
-  color: var(--set-nav);
-  font: 500 13px/28px var(--font);
+  color: var(--set-group-desc);
+  font: 500 13px/normal var(--font);
   white-space: nowrap;
 }
+html:root .settings-app .settings-main .settings-crumb > svg[data-flow-glyph] { flex: none; fill: currentColor; }
 /* A pinned crumb stays in the panel corner while the page scrolls. */
 @media (min-width: 761px) {
   html:root .settings-app .settings-main .settings-crumb.is-pinned { position: fixed; top: 18px; left: 252px; }

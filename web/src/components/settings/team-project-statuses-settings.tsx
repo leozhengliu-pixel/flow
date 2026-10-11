@@ -5,7 +5,7 @@
 import { useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { CircleDot } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { updateStructuredTeamSettings } from '@/lib/api'
 import type { BootstrapData, Team } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'

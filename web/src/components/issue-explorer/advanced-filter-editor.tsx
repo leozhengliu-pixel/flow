@@ -6,7 +6,7 @@ import { FilterConditionChip } from '@/components/filter/applied-filter-bar'
 import { MyIssuesFilterMenu, OptionMark } from '@/components/my-issues/my-issues-filter-menu'
 import { FilterFieldGlyph } from '@/components/my-issues/my-issues-filter-bar'
 import { chipValueOptions, filterChipItem } from '@/components/my-issues/my-issues-filter-chips'
-import { ADVANCED_FILTER_MAX_DEPTH, defaultDateOperator, isComparableDateValue, type AdvancedFilterCondition, type AdvancedFilterGroup, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from '@/components/my-issues/my-issues-filter-types'
+import { ADVANCED_FILTER_MAX_DEPTH, defaultDateOperator, isDateComparison, type AdvancedFilterCondition, type AdvancedFilterGroup, type MyIssuesAppliedFilter, type MyIssuesFilterOperator } from '@/components/my-issues/my-issues-filter-types'
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-issues/my-issues-surface'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
@@ -134,7 +134,7 @@ function AddFilterButton({ depth, filterOptions, layout, onAddCondition, onAddGr
     onOpenChange={setOpen}
     options={filterOptions}
     onAddGroup={onAddGroup}
-    onToggle={(field, option) => onAddCondition(createCondition(field, option.filterLabel ?? ISSUE_FILTER_LABELS[field] ?? field, { value: option.id, valueLabel: option.label, color: option.color }, option.comparison ?? (field === 'dates' && isComparableDateValue(option.id) ? defaultDateOperator(option.id) : 'is')))}
+    onToggle={(field, option) => onAddCondition(createCondition(field, option.filterLabel ?? ISSUE_FILTER_LABELS[field] ?? field, { value: option.id, valueLabel: option.label, color: option.color }, option.comparison ?? (isDateComparison(field, [option.id]) ? defaultDateOperator(option.id) : 'is')))}
     trigger={<button type="button" className={styles.addFilter} data-depth={depth} aria-label={t('Add filter')}><PlusIcon aria-hidden/><span>{t('Filter')}</span></button>}
   />
 }

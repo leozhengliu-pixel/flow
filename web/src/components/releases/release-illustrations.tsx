@@ -1,6 +1,6 @@
 /**
  * Empty-state art for the in-app Releases views, drawn for Flow at the sizes the reference app uses
- * (issues 86×80, releases 229×110, changelog 104×90). Strokes and fills come from
+ * (issues 86×80, releases 229×110, changelog 160×122 at 110px). Strokes and fills come from
  * `releases.css` tokens so both themes work.
  */
 
@@ -52,13 +52,13 @@ export function ReleasesIllustration() {
   </svg>
 }
 
-/** A dashed release-notes page — the Changelog before any notes exist. */
+/** A tilted, dashed release-notes folder — the Changelog before any notes exist (the reference app's 160×122 art box at 110px). */
 export function ChangelogIllustration() {
-  return <svg className="flow-release-art" aria-hidden="true" width="104" height="90" viewBox="0 0 104 90" fill="none">
-    <path className="flow-release-art__faint" d="M10 12.5c0-3 2.4-5.5 5.5-5.5H40l7 7h41.5c3 0 5.5 2.5 5.5 5.5V77c0 3-2.5 5.5-5.5 5.5h-73C12.5 82.5 10 80 10 77Z" strokeWidth="1.25" strokeDasharray="3.5 3"/>
-    <path className="flow-release-art__base" d="M17 9.5c0-2 1.6-3.5 3.5-3.5H38l6 6h37.5c2 0 3.5 1.6 3.5 3.5V70c0 2-1.6 3.5-3.5 3.5h-61C18.6 73.5 17 72 17 70Z" strokeWidth="1.25" strokeDasharray="3.5 3"/>
-    <rect className="flow-release-art__base" x="25" y="20" width="12" height="12" rx="3.5" strokeWidth="1.25"/>
-    <path className="flow-release-art__fill-base" d="M31 23.2l2.6 4.3h-5.2Z"/>
-    {[38, 45, 52, 59].map((y, index) => <path key={y} className="flow-release-art__muted" d={`M${25 + index * 2} ${y}H${index === 3 ? 52 : 75 - index * 4}`} strokeWidth="1.25" strokeDasharray="2.5 2.5" strokeLinecap="round"/>)}
+  return <svg className="flow-release-art is-tall" aria-hidden="true" width="160" height="122" viewBox="0 0 160 122" fill="none">
+    <path className="flow-release-art__faint" d="M4.5 31 22.5 113.5" strokeWidth="1.5" strokeDasharray="4 3" strokeLinecap="round"/>
+    <path className="flow-release-art__base" d="M10 25h24c2 0 3.6.9 4.8 2.3l5.6 6.6c1 1.2 2.6 1.9 4.2 1.9H86c3.4 0 6.3 2.3 7.1 5.6l18.6 66.4c.9 3.3-1.4 6.6-4.8 6.9l-71.8 5.1c-2.9.2-5.6-1.8-6.2-4.7L5.2 31.6C4.5 28.2 6.6 25 10 25Z" strokeWidth="1.5" strokeDasharray="4 3" strokeLinejoin="round"/>
+    <path className="flow-release-art__surface flow-release-art__muted" d="M26.4 48.6c-.3-1.6.8-3.1 2.4-3.4l8.3-1.4c1.6-.3 3.1.8 3.4 2.4l1.4 8.3c.3 1.6-.8 3.1-2.4 3.4l-8.3 1.4c-1.6.3-3.1-.8-3.4-2.4Z" strokeWidth="1.5"/>
+    <path className="flow-release-art__fill-base" d="m33.2 48.5 3.6 5.6-6.6 1.1Z"/>
+    {[[30, 70, 86, 69], [32, 78, 73, 77], [33, 86, 76, 85], [35, 94, 78, 93], [36, 102, 67, 101]].map(([x1, y1, x2, y2]) => <path key={y1} className="flow-release-art__base" d={`M${x1} ${y1}L${x2} ${y2}`} strokeWidth="1.5" strokeDasharray="3.5 3" strokeLinecap="round"/>)}
   </svg>
 }

@@ -43,6 +43,8 @@ import { MentionShell, pasteText, stubEditorEnvironment } from '@/test/mention-h
 import { mentionFixture, mentionUrls } from '@/components/editor/mentions/mention-fixtures'
 import type { Release, ReleasePipeline } from '@/types/flow'
 
+import { getCommandContext, resetCommandContext } from '@/components/command/command-context'
+
 import { ReleasesPage } from './releases-page'
 
 function pipeline(overrides: Partial<ReleasePipeline> = {}): ReleasePipeline {
@@ -204,6 +206,40 @@ describe('ReleasesPage icons', () => {
     const headers = [...container.querySelectorAll('.flow-releases-group-header')]
     expect(headers.map(header => header.querySelector('strong')?.textContent)).toEqual(['In progress', 'Planning', 'Released', 'Canceled'])
     expect(headers.every(header => !header.querySelector('[data-icon="release-status"]'))).toBe(true)
+  })
+
+  it('shows the reference app\'s selection bar and puts the selected release on ⌘K as "Release ⋅ name"', async () => {
+    const user = userEvent.setup()
+    resetCommandContext()
+    renderPage(
+      <ReleasesPage
+        data={pageData({ releasePipelines: [pipeline()], releases: [release()] })}
+        pipelineSlug="app"
+        onNavigate={vi.fn()}
+        onOpenSidebar={vi.fn()}
+        onReload={vi.fn().mockResolvedValue(undefined)}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Select release' }))
+    const bar = screen.getByRole('toolbar', { name: 'Selected releases' })
+    expect(bar).toHaveTextContent('1 selected')
+    expect(within(bar).getByRole('button', { name: 'Actions' })).toBeVisible()
+    expect(within(bar).getByRole('button', { name: 'Ask agent' })).toBeVisible()
+
+    const context = getCommandContext()
+    expect(context?.kind).toBe('release')
+    if (context?.kind !== 'release') throw new Error('expected a release context')
+    expect(context.label).toBe('1.0 Planned')
+    expect(context.actions.map(action => action.label)).toEqual([
+      'Edit release…', 'Add issues to release…', 'Change release stage…', 'Change target date…', 'Add a link…',
+      'Create new document…', 'Favorite release', 'Copy release URL', 'Copy release version', 'Delete release',
+    ])
+    expect(context.pageOptions?.({ id: 'releaseStage', label: 'Change release stage…' }, '').map(option => option.label)).toEqual(['Planning', 'In progress', 'Released', 'Canceled'])
+
+    await user.click(within(bar).getByRole('button', { name: 'Clear selection' }))
+    expect(screen.queryByRole('toolbar', { name: 'Selected releases' })).toBeNull()
+    expect(getCommandContext()).toBeUndefined()
   })
 
   it('uses the current stage status on the detail sidebar and stage menu', async () => {

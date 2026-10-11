@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { matchesSearch } from '@/lib/search-match'
 import { Command } from 'cmdk'
 import { AlarmClockOff, CircleCheck, CircleX, Clock3, Copy, CornerDownLeft } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { createComment, createRelation, updateIssue } from '@/lib/api'
 import { MentionTextField } from '@/components/editor/mention-text-field'
 import { PriorityPicker, StatusPicker } from '@/components/issue/core-property-pickers'
@@ -199,10 +200,10 @@ function DuplicateDialog({ issue, data, work, onOpenChange }: { issue: Issue; da
   const pick = (target: Issue) => { if (!work.busy) void work.markDuplicate(target) }
   // ⌥↵ on a result: what else to do with that issue (the reference app's "More actions").
   const moreActions = more ? [
-    { id: 'duplicate', label: t('Mark as duplicate'), icon: <Copy/>, disabled: !work.duplicate || work.busy, run: () => pick(more) },
-    { id: 'related', label: t('Mark as related'), icon: <StatusIcon state={more.state}/>, disabled: work.busy, run: () => void work.relate('related', more) },
-    { id: 'blocked', label: t('Mark as blocked by'), icon: <StatusIcon state={more.state}/>, disabled: work.busy, run: () => void work.relate('blocked_by', more) },
-  ].filter(action => action.label.toLowerCase().includes(moreQuery.trim().toLowerCase())) : []
+    { id: 'duplicate', source: 'Mark as duplicate', label: t('Mark as duplicate'), icon: <Copy/>, disabled: !work.duplicate || work.busy, run: () => pick(more) },
+    { id: 'related', source: 'Mark as related', label: t('Mark as related'), icon: <StatusIcon state={more.state}/>, disabled: work.busy, run: () => void work.relate('related', more) },
+    { id: 'blocked', source: 'Mark as blocked by', label: t('Mark as blocked by'), icon: <StatusIcon state={more.state}/>, disabled: work.busy, run: () => void work.relate('blocked_by', more) },
+  ].filter(action => matchesSearch(moreQuery, [action.source], t)) : []
   return <Dialog open onOpenChange={value => { if (!value && more) { setMore(undefined); return } onOpenChange(value) }}>
     <DialogContent aria-describedby={undefined} className="command-dialog triage-command-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (more) { event.preventDefault(); setMore(undefined) } }}>
       <DialogTitle className="sr-only">{t('Mark issue as duplicate of')}</DialogTitle>
@@ -249,7 +250,7 @@ function SnoozeDialog({ issue, work, onOpenChange }: { issue: Issue; work: Triag
   const text = query.trim().toLowerCase()
   const options = parsed
     ? [{ id: 'parsed', label: t('Snooze until'), until: parsed }]
-    : presets.map(preset => ({ ...preset, label: t(preset.label) })).filter(preset => !text || preset.label.toLowerCase().includes(text))
+    : presets.filter(preset => matchesSearch(text, [preset.label], t)).map(preset => ({ ...preset, label: t(preset.label) }))
   const snooze = (until: Date) => { if (!work.busy) void work.snooze(until) }
   return <Dialog open onOpenChange={value => { if (!value && custom) { setCustom(false); return } onOpenChange(value) }}>
     <DialogContent aria-describedby={undefined} className="command-dialog triage-command-dialog triage-snooze-dialog" overlayClassName="command-overlay" onOpenAutoFocus={event => event.preventDefault()} onEscapeKeyDown={event => { if (custom) { event.preventDefault(); setCustom(false) } }}>
@@ -269,7 +270,7 @@ function SnoozeDialog({ issue, work, onOpenChange }: { issue: Issue; work: Triag
             <span className="command-option-label">{option.label}</span>
             <span className="triage-snooze-date">{formatSnoozeDate(option.until)}</span>
           </Command.Item>)}
-          {!parsed && (!text || t('Custom…').toLowerCase().includes(text) || 'custom'.includes(text)) ? <Command.Item value="custom" onSelect={() => setCustom(true)}><span className="command-option-label">{t('Custom…')}</span></Command.Item> : null}
+          {!parsed && (!text || matchesSearch(text, ['Custom…', 'custom'], t)) ? <Command.Item value="custom" onSelect={() => setCustom(true)}><span className="command-option-label">{t('Custom…')}</span></Command.Item> : null}
           <Command.Empty>{t('No matching time. Try "4 pm" or "in 2 days".')}</Command.Empty>
         </Command.List>
         <CommandFooter/>

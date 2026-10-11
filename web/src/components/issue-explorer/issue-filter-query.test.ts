@@ -14,8 +14,28 @@ const filter = (field: MyIssuesAppliedFilter['field'], values: string[], operato
 describe('filter → server query translation', () => {
   it('resolves workspace-dependent fields to ids', () => {
     expect(filterToQueryNode(filter('initiative', ['i1']), { data })).toEqual({ field: 'project', operator: 'in', values: ['p1'] })
-    expect(filterToQueryNode(filter('releases', ['released-any']), { data })).toEqual({ field: 'id', operator: 'in', values: ['a', 'b'] })
-    expect(filterToQueryNode(filter('releases', ['no-releases']), { data })).toEqual({ not: { field: 'id', operator: 'in', values: ['a', 'b', 'c'] } })
+  })
+
+  it('sends release filters as indexed release fields, never issue id lists', () => {
+    expect(filterToQueryNode(filter('releases', ['released-any']), { data })).toEqual({ field: 'releasedAt', operator: 'isNotEmpty' })
+    expect(filterToQueryNode(filter('releases', ['no-releases']), { data })).toEqual({ field: 'release', operator: 'isEmpty' })
+    expect(filterToQueryNode(filter('releases', ['release:r1', 'release-pipeline:p9']), { data })).toEqual({ or: [{ field: 'release', operator: 'in', values: ['r1'] }, { field: 'releasePipeline', operator: 'in', values: ['p9'] }] })
+    expect(filterToQueryNode(filter('releases', ['release-stage:QA', 'release-stage-type:released']), { data })).toEqual({ or: [{ field: 'releaseStage', operator: 'in', values: ['QA'] }, { field: 'releaseStatus', operator: 'in', values: ['released'] }] })
+  })
+
+  it('compares Released date presets, custom days and "No released date" (Releases and Dates menus)', () => {
+    const now = Date.parse('2026-10-10T12:00:00Z')
+    expect(filterToQueryNode(filter('releases', ['released:-1w'], 'after'), { data, now })).toEqual({ field: 'releasedAt', operator: 'after', values: ['2026-10-03T12:00:00.000Z'] })
+    expect(filterToQueryNode(filter('releases', ['released:-3d'], 'before'), { data, now })).toEqual({ field: 'releasedAt', operator: 'before', values: ['2026-10-07T12:00:00.000Z'] })
+    // A chip whose operator is still "is" reads the preset's default (past presets: after).
+    expect(filterToQueryNode(filter('releases', ['released:-1m']), { data, now })).toEqual({ field: 'releasedAt', operator: 'after', values: ['2026-09-10T12:00:00.000Z'] })
+    // Custom days start at local midnight.
+    expect(filterToQueryNode(filter('dates', ['released:2026-10-01'], 'before'), { data, now })).toEqual({ field: 'releasedAt', operator: 'before', values: [new Date('2026-10-01T00:00:00').toISOString()] })
+    expect(filterToQueryNode(filter('releases', ['no-released-date']), { data, now })).toEqual({ field: 'releasedAt', operator: 'isEmpty' })
+    expect(filterToQueryNode(filter('dates', ['no-released-date'], 'isNot'), { data, now })).toEqual({ not: { field: 'releasedAt', operator: 'isEmpty' } })
+    expect(filterToQueryNode(filter('dates', ['autoClosed:-1w'], 'after'), { data, now })).toEqual({ field: 'autoClosedAt', operator: 'after', values: ['2026-10-03T12:00:00.000Z'] })
+    expect(filterToQueryNode(filter('dates', ['no-completed-date']), { data, now })).toEqual({ field: 'completedAt', operator: 'isEmpty' })
+    expect(filterToQueryNode(filter('dates', ['status:-10d'], 'before'), { data, now })).toEqual({ field: 'statusChangedAt', operator: 'before', values: ['2026-09-30T12:00:00.000Z'] })
   })
 
   it('maps multi-valued properties to indexed attributes and negates compound filters', () => {

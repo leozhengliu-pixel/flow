@@ -7,7 +7,7 @@ import type { BootstrapData, FlowDocument, InitiativeResource } from '@/types/fl
 
 const api = vi.hoisted(() => ({ createDocument: vi.fn(), createInitiativeResource: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), ...api }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 const route = vi.hoisted(() => ({ assign: vi.fn() }))
 
 import { InitiativeResources } from './initiative-resources'

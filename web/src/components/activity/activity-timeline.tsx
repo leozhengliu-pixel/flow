@@ -4,7 +4,7 @@ import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionStat
 import { Avatar } from '@/components/issue/issue-row'
 import { Composer } from '@/components/editor/composer'
 import { useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { useActivityHighlight, useActivityHighlightTarget, type ActivityHighlightTarget } from './activity-highlight'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { RichComment } from './rich-comment'

@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { SelectControl } from '@/components/ui/select-control'
 import { useI18n } from '@/i18n/i18n'
 import type { Project, ProjectUpdateSchedule } from '@/types/flow'

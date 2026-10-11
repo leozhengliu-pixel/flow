@@ -5,7 +5,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Copy, Filter, LayoutDashboard, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'

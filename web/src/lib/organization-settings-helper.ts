@@ -1,4 +1,4 @@
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { cancelWorkspaceDeletion } from "@/lib/api";
 import type { Workspace } from "@/types/flow";
 

@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { ActionDialogHost } from '@/components/ui/action-dialogs'
 import { I18nProvider } from '@/i18n/i18n'
@@ -20,7 +20,7 @@ vi.mock('@/lib/customer-settings', async original => ({
   archiveCustomerTaxonomyItem: vi.fn(),
   restoreCustomerTaxonomyItem: vi.fn(),
 }))
-vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
+vi.mock('@/lib/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 
 const now = '2026-10-01T00:00:00Z'
 const statuses: CustomerStatus[] = [

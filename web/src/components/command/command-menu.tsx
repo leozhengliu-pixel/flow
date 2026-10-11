@@ -26,6 +26,7 @@ import { sortActionGroups } from '@/lib/action-groups'
 import { useSelectedModels } from '@/lib/selected-models-store'
 import { useAllowedActionGroups } from '@/hooks/use-action-groups-for-selection'
 import { useI18n } from '@/i18n/i18n'
+import { translatedKeywords } from '@/lib/search-match'
 import type { AgentSession, BootstrapData, Customer, SearchResult } from '@/types/flow'
 import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory } from '@/components/agent/agent-read-state'
 import { CustomerLogo } from '@/components/customer/customer-logo'
@@ -154,9 +155,9 @@ export function CommandMenu({
   const releases = releaseCommands({ data: releaseHost ? data : undefined, pathname: location.pathname, page, host: releaseHost ?? { navigate: () => undefined, createRelease: () => undefined }, close: () => onOpenChange(false) })
   const releasePage = Boolean(page && GLOBAL_RELEASE_PAGES.has(page.id))
   const contextCommands = {
-    heading: context?.kind === 'document' ? 'Document' : issueCommands.heading,
-    actions: context?.kind === 'document' ? documents.actions : issueCommands.actions,
-    options: documents.options.length ? documents.options : releasePage ? releases.options : issueCommands.options,
+    heading: context?.kind === 'document' ? 'Document' : context?.kind === 'release' ? '' : issueCommands.heading,
+    actions: context?.kind === 'document' ? documents.actions : context?.kind === 'release' ? context.actions : issueCommands.actions,
+    options: documents.options.length ? documents.options : releasePage ? releases.options : context?.kind === 'release' ? (page && context.pageOptions?.(page, query)) || [] : issueCommands.options,
   }
   const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
   const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
@@ -252,7 +253,9 @@ export function CommandMenu({
       <DialogTitle className="sr-only">Command menu</DialogTitle>
       <Command shouldFilter loop>
         {(chip || page) && <div className="command-context" aria-label={t('Command context')}>
-          {chip && <span className="command-context-chip" data-i18n-ignore={chip.entity || undefined} title={chip.label}>{chip.label}</span>}
+          {chip && (chip.type
+            ? <span className="command-context-chip is-typed" title={`${chip.type} ⋅ ${chip.label}`}><span className="command-context-chip__type">{chip.type} ⋅</span> <span data-i18n-ignore={chip.entity || undefined}>{chip.label}</span></span>
+            : <span className="command-context-chip" data-i18n-ignore={chip.entity || undefined} title={chip.label}>{chip.label}</span>)}
           {pages.map((item, index) => <span key={`${item.id}-${index}`} className="command-context-page"><ChevronRight aria-hidden="true" size={12}/><span>{t(item.label)}</span></span>)}
         </div>}
         <div className="command-input">
@@ -280,7 +283,7 @@ export function CommandMenu({
           <Command.Empty>{t('No results found.')}</Command.Empty>
         </Command.List> : page ? <Command.List>
           {optionGroups.map(group => <Command.Group key={group.heading ?? page.label} heading={t(group.heading ?? page.label)}>
-            {group.options.map(option => <Command.Item key={option.id || 'none'} value={`${option.label} ${option.keywords ?? ''}`} forceMount={option.forceMount} onSelect={() => selectOption(option)}>
+            {group.options.map(option => <Command.Item key={option.id || 'none'} value={`${option.label} ${option.keywords ?? ''}`} keywords={option.entity ? undefined : translatedKeywords([option.label], t)} forceMount={option.forceMount} onSelect={() => selectOption(option)}>
               {option.checked !== undefined && <span className="command-checkbox" data-checked={option.checked === true ? 'true' : option.checked === 'mixed' ? 'mixed' : 'false'} aria-hidden="true">{option.checked === true ? <Check size={11}/> : option.checked === 'mixed' ? <Minus size={11}/> : null}</span>}
               {option.icon && <span className="command-item-icon">{option.icon}</span>}
               <span className="command-option-label" data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>
@@ -292,17 +295,18 @@ export function CommandMenu({
           <Command.Empty>{t('No results found.')}</Command.Empty>
         </Command.List> : <Command.List>
           {loading && <div className="command-loading">Searching...</div>}
-          {contextCommands.actions.length > 0 && <Command.Group heading={t(contextCommands.heading)}>
-            {contextCommands.actions.map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
+          {contextCommands.actions.length > 0 && <Command.Group heading={contextCommands.heading ? t(contextCommands.heading) : undefined}>
+            {contextCommands.actions.map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} keywords={translatedKeywords([action.label], t)} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
               <span>{t(action.label)}</span>
+              {action.detail && <span className="command-option-detail" data-i18n-ignore>{action.detail}</span>}
               {action.shortcut && <span className="command-shortcut">{action.shortcut.map((part, index) => <kbd key={index}>{part}</kbd>)}</span>}
               {action.checked && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
             </Command.Item>)}
           </Command.Group>}
           {searchResults}
           {groups.map(group => <Command.Group key={group} heading={group}>
-            {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
+            {actions.filter(action => action.group === group).map(action => <Command.Item key={action.id} value={`${action.label} ${action.keywords ?? ''}`} keywords={translatedKeywords(action.path ?? [action.label], t)} onSelect={() => void registry.execute(action.id, { source: 'command-menu' })}>
               <span className="command-item-icon">{action.icon}</span>
               {action.path ? <span className="command-path">{action.path.map((part, index) => <span key={index}>{index > 0 && <ChevronRight aria-hidden="true" size={12}/>}{t(part)}</span>)}</span> : <span>{action.label}</span>}
               {action.shortcut && <span className="command-shortcut">{action.shortcut.map((part, index) => part === 'then' ? <small key={index}>then</small> : <kbd key={index}>{part}</kbd>)}</span>}

@@ -1,0 +1,132 @@
+/*
+ * Notifications. sonner supplies stacking, hover-to-pause, swipe and re-flow; this file is the card.
+ * Geometry follows the reference app: 384px card, 12px radius, 12px padding, 8px gaps, 16px icon, 24px dismiss.
+ */
+/* The stack: newest at the bottom, older cards above, always laid out as a list. */
+.flow-toaster[data-sonner-toaster] { --gap: 8px; }
+[data-sonner-toast]:has(.flow-toast) { width: var(--toast-width); outline: none; }
+[data-sonner-toast]:has(.flow-toast):focus-visible { box-shadow: none; }
+[data-sonner-toast]:has(.flow-toast):focus-visible .flow-toast::after { box-shadow: 0 0 0 2px var(--focus-ring); }
+
+.flow-toast {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border: .5px solid transparent;
+  border-radius: 12px;
+  background: var(--toast-bg);
+  color: var(--toast-title);
+  font: 500 13px/16px var(--font);
+  letter-spacing: 0;
+  text-align: left;
+  pointer-events: auto;
+}
+.flow-toast::after {
+  content: "";
+  position: absolute;
+  inset: -.5px;
+  border-radius: inherit;
+  box-shadow: var(--toast-shadow);
+  pointer-events: none;
+}
+
+.flow-toast__icon { flex: none; display: flex; width: 16px; height: 16px; color: var(--toast-muted); }
+.flow-toast[data-kind="success"] .flow-toast__icon { color: var(--toast-success); }
+.flow-toast[data-kind="error"] .flow-toast__icon { color: var(--toast-error); }
+.flow-toast[data-kind="warning"] .flow-toast__icon { color: var(--toast-warning); }
+
+.flow-toast__body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.flow-toast__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  padding-right: 20px;
+}
+.flow-toast__description {
+  margin-top: 6px;
+  padding-right: 20px;
+  color: var(--toast-muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.flow-toast__close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--toast-muted);
+  cursor: default;
+  transition: color .15s, background-color .15s;
+}
+.flow-toast__close:hover,
+.flow-toast__close:focus-visible { background: var(--toast-hover-bg); color: var(--toast-hover-fg); }
+.flow-toast__close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+
+/* Entity chips: icon + title; a pill appears behind the one under the pointer. */
+.flow-toast__entities { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 0 -6px; }
+.flow-toast__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--toast-title);
+  font: 500 13px/16px var(--font);
+  text-align: left;
+  cursor: default;
+  transition: background-color .15s;
+}
+.flow-toast__chip[data-static] { padding-left: 6px; }
+button.flow-toast__chip:hover,
+button.flow-toast__chip:focus-visible { background: var(--toast-hover-bg); }
+button.flow-toast__chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.flow-toast__chip-icon { flex: none; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.flow-toast__chip-icon > svg { max-width: 16px; max-height: 16px; }
+.flow-toast__chip-id { flex: none; color: var(--toast-muted); font-weight: 400; }
+.flow-toast__chip-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.flow-toast__links { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
+.flow-toast__link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--toast-link);
+  font: 500 13px/16px var(--font);
+  cursor: default;
+  transition: opacity .15s;
+}
+.flow-toast__link:hover { opacity: .8; }
+.flow-toast__link:focus-visible { border-radius: 4px; outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+.flow-toast__spinner { animation: flow-toast-spin .9s linear infinite; }
+@keyframes flow-toast-spin { to { transform: rotate(360deg); } }
+
+.flow-toast-tooltip { z-index: 2147483647; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toaster],
+  [data-sonner-toast] { transition: opacity .15s linear !important; animation: none !important; }
+  .flow-toast__spinner { animation-duration: 2.4s; }
+  .flow-toast__close,
+  .flow-toast__chip,
+  .flow-toast__link { transition: none; }
+}

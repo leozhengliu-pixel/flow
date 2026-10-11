@@ -8,7 +8,7 @@ import { headingLink, headingSlug, makeHeadingCollapsible } from './heading-link
 
 vi.mock('@/i18n/i18n', () => ({ useI18n: () => ({ t: (value: string) => value }) }))
 vi.mock('@/lib/api', () => ({ realtimeClientId: () => 'editor-test' }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 describe('description heading actions', () => {
   beforeEach(() => {

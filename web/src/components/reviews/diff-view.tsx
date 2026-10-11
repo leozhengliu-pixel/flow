@@ -3,7 +3,7 @@
  */
 import { FileCode2 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { DiffContentRows, type DiffCommentTarget } from "@/components/reviews/diff-content";
 import { useDiffFilesQuery } from "@/hooks/use-diff-files-query";

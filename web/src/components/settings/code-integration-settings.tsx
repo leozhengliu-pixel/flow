@@ -13,7 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Toggle } from "@/components/ui/toggle";

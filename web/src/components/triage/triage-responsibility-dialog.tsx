@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { updateStructuredTeamSettings } from '@/lib/api'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'

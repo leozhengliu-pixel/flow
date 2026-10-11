@@ -4,7 +4,7 @@
  */
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import {

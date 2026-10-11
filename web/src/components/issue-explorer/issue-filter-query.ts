@@ -107,19 +107,19 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
       ]
       return any(nodes.length ? nodes : [none])
     }
-    case 'releases': {
-      const releases = data.releases ?? []
-      const ids = (predicate: (release: (typeof releases)[number]) => boolean) => [...new Set(releases.filter(predicate).flatMap(release => release.issueIds ?? []))]
-      return any(values.map(value => {
-        if (value === 'no-releases') return { not: { field: 'id', operator: 'in', values: ids(() => true) } }
-        if (value === 'released-any') return { field: 'id', operator: 'in', values: ids(release => Boolean(release.releasedAt)) }
-        if (value.startsWith('release:')) return { field: 'id', operator: 'in', values: ids(release => release.id === value.slice(8)) }
-        if (value.startsWith('release-pipeline:')) return { field: 'id', operator: 'in', values: ids(release => release.pipelineId === value.slice(17)) }
-        if (value.startsWith('release-stage:')) return { field: 'id', operator: 'in', values: ids(release => release.stage === value.slice(14)) }
-        if (value.startsWith('release-stage-type:')) return { field: 'id', operator: 'in', values: ids(release => release.status === value.slice(19)) }
-        return none
-      }))
-    }
+    case 'releases': return any(values.map(value => {
+      // Release membership and dates are indexed server-side (release_issue_filter_records): no issue id lists.
+      if (value === 'no-releases') return { field: 'release', operator: 'isEmpty' }
+      if (value === 'released-any') return { field: 'releasedAt', operator: 'isNotEmpty' }
+      if (value === 'no-released-date') return { field: 'releasedAt', operator: 'isEmpty' }
+      const parsed = parseDateFilterValue(value)
+      if (parsed?.kind === 'released') return { field: 'releasedAt', operator: comparison ?? defaultDateOperator(value), values: [dateFilterThreshold(parsed, now)] }
+      if (value.startsWith('release:')) return { field: 'release', operator: 'in', values: [value.slice(8)] }
+      if (value.startsWith('release-pipeline:')) return { field: 'releasePipeline', operator: 'in', values: [value.slice(17)] }
+      if (value.startsWith('release-stage:')) return { field: 'releaseStage', operator: 'in', values: [value.slice(14)] }
+      if (value.startsWith('release-stage-type:')) return { field: 'releaseStatus', operator: 'in', values: [value.slice(19)] }
+      return none
+    }))
     case 'dates': return any(values.map(value => {
       const parsed = parseDateFilterValue(value)
       if (parsed && isComparableDateValue(value)) return { field: DATE_FILTER_FIELDS[parsed.kind], operator: comparison ?? defaultDateOperator(value), values: [dateFilterThreshold(parsed, now)] }
@@ -128,6 +128,8 @@ function positiveNode(field: MyIssuesAppliedFilter['field'], values: string[], {
       if (value.startsWith('updated-past-')) return { field: 'updatedAt', operator: 'after', values: [since(window)] }
       if (value === 'started-any') return { field: 'startedAt', operator: 'isNotEmpty' }
       if (value === 'completed-any') return { field: 'completedAt', operator: 'isNotEmpty' }
+      if (value === 'no-completed-date') return { field: 'completedAt', operator: 'isEmpty' }
+      if (value === 'no-released-date') return { field: 'releasedAt', operator: 'isEmpty' }
       if (value === 'auto-closed-any') return { field: 'autoClosed', operator: 'isNotEmpty' }
       if (value === 'triaged-any') return { field: 'triagedAt', operator: 'isNotEmpty' }
       if (value === 'status-over-week') return { field: 'statusChangedAt', operator: 'before', values: [since(7)] }

@@ -171,7 +171,7 @@ describe('project header menu', () => {
   it('rolls back the Pulse checkbox in the notification popover when saving fails', async () => {
     const user = userEvent.setup()
     pulseMocks.setPulseSubscription.mockRejectedValue(new Error('Offline'))
-    const toastError = vi.spyOn((await import('sonner')).toast, 'error')
+    const toastError = vi.spyOn((await import('@/lib/toast')).toast, 'error')
     render(<I18nProvider><TooltipProvider><ProjectNotificationMenu open onOpenChange={vi.fn()} project={project} subscription={{events:['pulse']} as Subscription} onSetEvents={vi.fn()} onUpdate={vi.fn()}/></TooltipProvider></I18nProvider>)
     const pulse = screen.getByRole('checkbox',{name:'Subscribe to project updates'})
     expect(pulse).toBeChecked()

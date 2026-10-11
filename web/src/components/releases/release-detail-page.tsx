@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { MoreHorizontal, Plus, Star, X } from 'lucide-react'
+import { Star, X } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { MentionTextField } from '@/components/editor/mention-text-field'
@@ -24,17 +24,18 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { AgentChatPanel } from '@/lib/route-pages'
 import { canCreateReleasePipeline } from '@/lib/settings-access'
 import { createDocument, createReleaseNote, listIssueRecords, recordRecentResource, updateIssue, updateRelease, updateReleaseNote } from '@/lib/api'
-import { documentPath, releasePath, releasePipelinePath, releasePipelinesPath, type ReleaseRouteTab } from '@/lib/app-routes'
+import { documentPath, releasePath, releasePipelinePath, type ReleaseRouteTab } from '@/lib/app-routes'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, Issue, Release, ReleasePipeline, ReleaseResource } from '@/types/flow'
 
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ReleaseIssuesIllustration } from './release-illustrations'
-import { DetailsPanelIcon, ReleaseStatusIcon } from './release-icons'
+import { CommitIcon, DetailsPanelIcon, ReleaseStatusIcon } from './release-icons'
 import { ReleaseActionsDropdown, ReleaseStageOptions } from './release-menus'
 import { HeaderIconButton, ReleaseBasicDialog, ReleaseBreadcrumbs, ReleaseEmptyState, ReleasesHeader, ToolbarPillButton } from './release-page-chrome'
 import { ReleaseDateCell } from './release-pipeline-view'
-import { releaseIssueQuery, releaseStatusForStage } from './release-view-model'
-import { isFavorite } from './release-actions-model'
+import { dayValue, releaseIssueQuery, releaseStatusForStage } from './release-view-model'
+import { copyToClipboard, isFavorite } from './release-actions-model'
 import { useReleaseActions } from './use-release-actions'
 
 type Props = { data: BootstrapData; pipeline: ReleasePipeline; release: Release; tab: ReleaseRouteTab; onNavigate: (path: string) => void; onOpenSidebar: () => void; onReload: () => Promise<void> }
@@ -58,8 +59,8 @@ export function ReleaseDetailPage({ data, pipeline, release, tab, onNavigate, on
     '2': () => route('release-notes'),
   })
   const stageStatus = releaseStatusForStage(pipeline, release.stage ?? '', release.status)
-  const crumbs = [
-    { label: t('Releases'), translate: true, href: releasePipelinesPath(workspace), onClick: () => onNavigate(releasePipelinesPath(workspace)) },
+  // The reference app's Release notes tab of a shipped release shows only the release crumb; otherwise the pipeline leads.
+  const crumbs = tab === 'release-notes' && stageStatus === 'released' ? [{ label: release.name, icon: <ReleaseStatusIcon status={stageStatus}/> }] : [
     { label: pipeline.name, href: releasePipelinePath(workspace, pipeline.slugId), onClick: () => onNavigate(releasePipelinePath(workspace, pipeline.slugId)) },
     { label: release.name, icon: <ReleaseStatusIcon status={stageStatus}/> },
   ]
@@ -77,8 +78,8 @@ export function ReleaseDetailPage({ data, pipeline, release, tab, onNavigate, on
   return <main className="main-panel flow-releases-page flow-release-page" aria-label={`${pipeline.name} ${release.name}`}>
     <ReleasesHeader onOpenSidebar={onOpenSidebar}>
       <ReleaseBreadcrumbs crumbs={crumbs}/>
-      <HeaderIconButton aria-pressed={favorite} className="flow-releases-favorite" label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} onClick={actions.onToggleFavorite}><Star fill={favorite ? 'currentColor' : 'none'}/></HeaderIconButton>
-      <ReleaseActionsDropdown pipeline={pipeline} release={release} favorite={favorite} actions={actions} trigger={<HeaderIconButton label={t('Release options')} tooltip=""><MoreHorizontal/></HeaderIconButton>}/>
+      <HeaderIconButton aria-pressed={favorite} className="flow-releases-favorite" label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} onClick={actions.onToggleFavorite}>{favorite ? <Star fill="currentColor"/> : <FlowGlyph name="favorite"/>}</HeaderIconButton>
+      <ReleaseActionsDropdown pipeline={pipeline} release={release} favorite={favorite} actions={actions} trigger={<HeaderIconButton label={t('Release options')} tooltip=""><FlowGlyph name="ellipsis"/></HeaderIconButton>}/>
     </ReleasesHeader>
     <div className="flow-releases-subheader">
       <nav className="flow-releases-tabs" role="tablist" aria-label={t('Release views')}>{tabLink('issues', 'Issues', '1')}{tabLink('release-notes', 'Release notes', '2')}</nav>
@@ -159,7 +160,7 @@ function ReleaseIssuesTab({ data, release, pipeline, state, filters, setFilters,
 }
 
 function ReleaseNotesTab({ data, pipeline, release, issues, onReload }: { data: BootstrapData; pipeline: ReleasePipeline; release: Release; issues: Issue[]; onReload: () => Promise<void> }) {
-  const { t } = useI18n()
+  const { t, formatDate } = useI18n()
   const note = data.releaseNotes?.find(item => item.releaseId === release.id)
   const canManage = canCreateReleasePipeline(data)
   const initial = note?.body ?? release.releaseNotes ?? ''
@@ -192,15 +193,20 @@ function ReleaseNotesTab({ data, pipeline, release, issues, onReload }: { data: 
   const empty = !issues.length && !release.issueIds.length
   return <div className="flow-release-notes">
     <div className="flow-release-notes__column">
-      <input aria-label={t('Release notes title')} className="flow-release-notes__title" readOnly={!canManage} value={title} onChange={event => setTitle(event.target.value)} data-i18n-ignore/>
-      <div className="flow-release-notes__meta">
-        <span className="flow-release-notes__release">
-          {release.version && <span className="flow-release-version is-chip" data-i18n-ignore>{release.version}</span>}
-          {stage && <span className="flow-release-notes__stage"><ReleaseStatusIcon status={releaseStatusForStage(pipeline, stage, release.status)}/><span data-i18n-ignore>{stage}</span></span>}
-        </span>
-        {canManage && !notes.trim() && <ScopedFlowTooltip label={empty ? t('Add issues to this release to write release notes') : undefined}><span><button className="flow-releases-secondary is-small" disabled={empty} onClick={() => setAgentOpen(true)} type="button"><AgentWriteGlyph size={14}/>{t('Write with Agent')}</button></span></ScopedFlowTooltip>}
+      <div className="flow-release-notes__header">
+        <input aria-label={t('Release notes title')} className="flow-release-notes__title" readOnly={!canManage} value={title} onChange={event => setTitle(event.target.value)} data-i18n-ignore/>
+        <div className="flow-release-notes__meta">
+          <div className="flow-release-notes__release">
+            {release.version && <div className="flow-release-notes__slot"><span className="flow-release-changelog__version" data-i18n-ignore>{release.version}</span></div>}
+            {stage && <div className="flow-release-notes__stage"><ReleaseStatusIcon status={releaseStatusForStage(pipeline, stage, release.status)}/>{releaseStatusForStage(pipeline, stage, release.status) === 'released' && release.releasedAt
+              ? <span>{t('Released {date}').replace('{date}', formatDate(release.releasedAt, { month: 'short', day: 'numeric' }))}</span>
+              : <span data-i18n-ignore>{stage}</span>}</div>}
+            {release.status !== 'released' && release.targetDate && <div className="flow-release-notes__date"><span>{formatDate(dayValue(release.targetDate), { month: 'short', day: 'numeric' })}</span></div>}
+          </div>
+          {canManage && !notes.trim() && <ScopedFlowTooltip label={empty ? t('Add issues to this release to write release notes') : undefined}><div className="flow-release-notes__agent"><button className="flow-releases-secondary is-small" disabled={empty} onClick={() => setAgentOpen(true)} type="button"><span className="flow-release-button-icon"><AgentWriteGlyph size={14}/></span>{t('Write with Agent')}</button></div></ScopedFlowTooltip>}
+        </div>
       </div>
-      <MentionTextField ariaLabel={t('Release notes')} autoFocus={!initial} className="flow-release-notes__editor" onChange={setNotes} onBlur={() => void save(notes, title)} onSubmit={() => void save(notes, title)} placeholder={t(canManage ? 'Write release notes…' : 'Release notes are read-only')} value={notes}/>
+      <MentionTextField ariaLabel={t('Release notes')} className="flow-release-notes__editor" onChange={setNotes} onBlur={() => void save(notes, title)} onSubmit={() => void save(notes, title)} placeholder={t(canManage ? 'Write release notes…' : 'Release notes are read-only')} value={notes}/>
     </div>
     {agentOpen && <Suspense fallback={null}><AgentChatPanel autoSubmit data={data} initialPrompt={t('Write these release notes')} issues={[]} open onClose={() => setAgentOpen(false)} onUseResponse={content => { setNotes(content); setAgentOpen(false) }} useResponseLabel={t('Use as release notes')}/></Suspense>}
   </div>
@@ -237,8 +243,8 @@ function ReleaseDetailsPanel({ data, pipeline, release, favorite, actions, issue
       <div className="flow-release-details__title-row">
         <strong className="flow-release-details__title" data-i18n-ignore>{release.name}</strong>
         <span className="flow-release-details__title-actions">
-          <HeaderIconButton aria-pressed={favorite} className="flow-releases-favorite" label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} onClick={actions.onToggleFavorite}><Star fill={favorite ? 'currentColor' : 'none'}/></HeaderIconButton>
-          <ReleaseActionsDropdown align="end" label={t('Open menu')} pipeline={pipeline} release={release} favorite={favorite} actions={actions} trigger={<HeaderIconButton className="is-small" label={t('Open menu')} tooltip=""><MoreHorizontal/></HeaderIconButton>}/>
+          <HeaderIconButton aria-pressed={favorite} className="flow-releases-favorite" label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} onClick={actions.onToggleFavorite}>{favorite ? <Star fill="currentColor"/> : <FlowGlyph name="favorite"/>}</HeaderIconButton>
+          <ReleaseActionsDropdown align="end" label={t('Open menu')} pipeline={pipeline} release={release} favorite={favorite} actions={actions} trigger={<HeaderIconButton className="is-small" label={t('Open menu')} tooltip=""><FlowGlyph name="ellipsis"/></HeaderIconButton>}/>
         </span>
       </div>
       <div className="flow-release-details__properties">
@@ -249,6 +255,7 @@ function ReleaseDetailsPanel({ data, pipeline, release, favorite, actions, issue
           </DropdownMenu.Root>
           : stage && <span className="flow-release-property is-static"><ReleaseStatusIcon status={status}/><span data-i18n-ignore>{stage}</span></span>}
         {(scheduled || release.releasedAt) && <span className="flow-release-details__date"><ReleaseDateCell release={release} scheduled={scheduled} canManage={canManage} onReload={onReload} long/></span>}
+        {release.commitSha && <span className="flow-release-commit-property"><span className="flow-release-property is-static" title={release.commitSha}><CommitIcon/><span className="flow-release-commit" data-i18n-ignore>{release.commitSha.slice(0, 7)}</span></span><ScopedFlowTooltip label={t('Copy commit SHA')}><button aria-label={t('Copy commit SHA')} className="flow-releases-header-button flow-release-commit-copy" onClick={() => void copyToClipboard(release.commitSha ?? '', t('Commit SHA copied to clipboard'), t('Could not copy to clipboard'))} type="button"><FlowGlyph name="copyStack" width={14} height={14}/></button></ScopedFlowTooltip></span>}
       </div>
       {release.description && <MentionBody className="flow-release-details__description" body={release.description}/>}
       <div className="flow-release-resources">
@@ -264,7 +271,7 @@ function ReleaseDetailsPanel({ data, pipeline, release, favorite, actions, issue
           </div>
         })}
         {canManage && <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild><button className="flow-release-resource-add" type="button"><Plus/><span>{t('Add document or link…')}</span></button></DropdownMenu.Trigger>
+          <DropdownMenu.Trigger asChild><button className="flow-release-resource-add" type="button"><FlowGlyph name="plus"/><span>{t('Add document or link…')}</span></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal><FlowDropdownMenuContent label={t('Add document or link…')} className="flow-release-actions-menu">
             <FlowMenuItem icon={<ViewGlyph icon="Page" color="currentColor"/>} label="Create new document…" onSelect={() => void createDocumentResource()}/>
             <FlowMenuItem icon={<IssueActionGlyph label="Copy link" fallback={null}/>} label="Add a link…" shortcut="Ctrl L" onSelect={onAddLink}/>

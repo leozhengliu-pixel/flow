@@ -135,7 +135,9 @@ func (s *SQLiteStore) mergeTeamDefaultFavorites(ctx context.Context, data *domai
 	orows.Close()
 	seen := map[string]bool{}
 	for _, f := range data.Favorites {
-		if f.UserID == userID {
+		// Only a root favorite stands in for a team default; a tab favorite
+		// of the same resource is a separate sidebar row.
+		if f.UserID == userID && f.Tab == "" {
 			seen[f.ResourceType+":"+f.ResourceID] = true
 		}
 	}

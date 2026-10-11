@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRightLeft, Check, Copy, GitCommitVertical, History, Link2, Lock, Pencil, Play, Power, PowerOff, SquareUserRound, Star, Trash2, UserRound, UserRoundPen, UserStar } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,

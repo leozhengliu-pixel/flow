@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { fetchIssueRecord, updateIssue } from '@/lib/api'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import { StatusIcon } from '@/components/issue/issue-icons'

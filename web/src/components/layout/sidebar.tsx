@@ -43,8 +43,9 @@ import { useSidebarLayout } from './use-sidebar-layout';
 import { NavLink, useLocation } from "react-router-dom";
 import { parseAppRoute } from '@/lib/app-routes';
 import { sidebarRoutePath } from '@/lib/sidebar-route';
-import { toast } from "sonner";
-import { favoriteResourceKey, patchFavorite, toggleFavoriteFor } from "@/lib/favorites";
+import { toast } from "@/lib/toast";
+import { favoriteResourceKey, patchFavorite, toggleFavoriteFor, toggleTabFavoriteFor } from "@/lib/favorites";
+import { FavoriteTabIcon } from "./favorite-tab-badge";
 import {
   createFavoriteFolder,
   deleteFavoriteFolder,
@@ -211,7 +212,7 @@ export function Sidebar({
   if (seededFavoriteWorkspace.current !== data.workspace.id) {
     seededFavoriteWorkspace.current = data.workspace.id;
     seenFavoriteKeys.current = new Set(
-      favorites.map((item) => favoriteResourceKey(item.resourceType, item.resourceId)),
+      favorites.map((item) => favoriteResourceKey(item.resourceType, item.resourceId, item.tab)),
     );
   }
   const [favoriteFolders, setFavoriteFolders] = useState<FavoriteFolder[]>(() =>
@@ -348,8 +349,9 @@ export function Sidebar({
   const toggleSidebarFavorite = (
     resourceType: string,
     resourceId: string,
+    tab?: string,
   ) => {
-    void toggleFavoriteFor(data, resourceType, resourceId).catch(() => undefined);
+    void (tab ? toggleTabFavoriteFor(data, resourceType, resourceId, tab) : toggleFavoriteFor(data, resourceType, resourceId)).catch(() => undefined);
   };
   const moveSidebarFavorite = async (
     favorite: Favorite,
@@ -373,11 +375,10 @@ export function Sidebar({
     };
     patchFavorite(data.workspace.urlKey, next);
     try {
-      const updated = await updateFavorite(
-        favorite.resourceType,
-        favorite.resourceId,
-        { folderId, position: targetPosition },
-      );
+      const input = { folderId, position: targetPosition };
+      const updated = favorite.tab
+        ? await updateFavorite(favorite.resourceType, favorite.resourceId, input, favorite.tab)
+        : await updateFavorite(favorite.resourceType, favorite.resourceId, input);
       patchFavorite(data.workspace.urlKey, updated);
     } catch (error) {
       patchFavorite(data.workspace.urlKey, favorite);
@@ -715,6 +716,7 @@ export function Sidebar({
                 void toggleSidebarFavorite(
                   favorite.resourceType,
                   favorite.resourceId,
+                  favorite.tab,
                 )
               }
               onRenameFolder={renameSidebarFolder}
@@ -843,7 +845,7 @@ export function Sidebar({
 }
 
 function favoriteItemKey(item: FavoriteDescriptor) {
-  return favoriteResourceKey(item.favorite.resourceType, item.favorite.resourceId);
+  return favoriteResourceKey(item.favorite.resourceType, item.favorite.resourceId, item.favorite.tab);
 }
 
 export function FavoritesSection({
@@ -930,7 +932,7 @@ export function FavoritesSection({
   ) => {
     event.preventDefault();
     const id = event.dataTransfer.getData("application/x-flow-favorite");
-    const favorite = favorites.find((item) => item.id === id || favoriteResourceKey(item.resourceType, item.resourceId) === id);
+    const favorite = favorites.find((item) => item.id === id || favoriteResourceKey(item.resourceType, item.resourceId, item.tab) === id);
     if (!favorite) return;
     const siblings = favorites.filter(
       (item) => (item.folderId ?? "") === folderId && item.id !== favorite.id,
@@ -1316,11 +1318,14 @@ function favoriteDescriptor(
     const pipeline = data.releasePipelines.find(
       (item) => item.id === favorite.resourceId,
     );
-    if (pipeline)
+    // A tab favorite (Releases / Changelog) keeps the pipeline's name and
+    // icon, adds the tab badge, and opens that tab.
+    const tab = favorite.tab === "releases" || favorite.tab === "changelog" ? favorite.tab : undefined;
+    if (pipeline && (tab || !favorite.tab))
       return {
         favorite,
-        href: releasePipelinePath(workspaceSlug, pipeline.slugId),
-        icon: <ReleasePipelineIcon />,
+        href: releasePipelinePath(workspaceSlug, pipeline.slugId, tab),
+        icon: tab ? <FavoriteTabIcon icon={<ReleasePipelineIcon />} resourceType="release_pipeline" tab={tab} /> : <ReleasePipelineIcon />,
         title: pipeline.name,
       };
   }
@@ -1382,7 +1387,7 @@ function FavoriteLink({
         event.dataTransfer.effectAllowed = "move";
         event.dataTransfer.setData(
           "application/x-flow-favorite",
-          favoriteResourceKey(item.favorite.resourceType, item.favorite.resourceId),
+          favoriteResourceKey(item.favorite.resourceType, item.favorite.resourceId, item.favorite.tab),
         );
       }}
       to={item.href}

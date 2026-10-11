@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import type { BootstrapData } from '@/types/flow'
 
@@ -12,5 +12,5 @@ export async function copyToClipboard(value: string, message: string, failure: s
 }
 
 export function isFavorite(data: BootstrapData, resourceType: 'release' | 'release_pipeline', id: string) {
-  return data.favorites.some(item => item.resourceType === resourceType && item.resourceId === id)
+  return data.favorites.some(item => item.resourceType === resourceType && item.resourceId === id && !item.tab)
 }

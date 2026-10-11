@@ -29,7 +29,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { confirmAction } from '@/components/ui/action-dialog-service';
 import { TeamSettingsIcon, TeamArchiveIcon as ArchiveIcon } from '@/components/layout/team-menu-icons';
 import { isToday, isYesterday, isThisWeek, isSameWeek, subWeeks, isThisMonth, isSameMonth, subMonths, format } from 'date-fns';

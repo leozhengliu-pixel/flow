@@ -2,7 +2,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { CustomerStatusIcon, CustomerTierIcon } from '@/components/customer/customer-status-icon'
 import { findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-lookup'

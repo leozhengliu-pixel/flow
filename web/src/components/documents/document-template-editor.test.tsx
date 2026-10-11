@@ -10,7 +10,7 @@ import { DocumentTemplateEditor } from './document-template-editor'
 
 const api = vi.hoisted(() => ({ createDocumentTemplate: vi.fn(), updateDocumentTemplate: vi.fn(), deleteDocumentTemplate: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), ...api, realtimeClientId: () => 'template-editor-test' }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const data = makeBootstrap({ documents: [], documentTemplates: [] } as unknown as Partial<BootstrapData>)
 const saved = { id: 'tpl-1', teamId: 'team-1', name: 'Kickoff', description: 'For launches', title: 'Kickoff', icon: 'Page', content: 'Agenda', contentData: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Agenda' }] }] }, creator: viewer, createdAt: '', updatedAt: '' } as unknown as DocumentTemplate

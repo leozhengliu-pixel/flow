@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import { DocumentGlyph } from '@/components/documents/document-icon'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import {
   applyTemplateToDocument, changeDocumentOwner, copyDocumentMarkdown, copyDocumentTitle, copyDocumentTitleAsLink, copyDocumentUrl,

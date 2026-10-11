@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Fragment, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";

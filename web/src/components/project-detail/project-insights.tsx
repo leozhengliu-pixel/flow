@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Expand, MoreHorizontal, Shrink } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import type { Issue, IssueLabel, User } from '@/types/flow'
 import { DisplayIcon as Settings2 } from '@/components/ui/view-action-icons'
 

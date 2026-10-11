@@ -1,6 +1,6 @@
 import { Check, Copy, RotateCw, ShieldOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -84,7 +84,7 @@ export function PipelineAccessKeySection({ pipeline, disabled, onChanged }: { pi
   if (state === 'none' && !secret) return <Subsection title={title} description={description}>
     <div className="settings-card">
       <SettingsRow title={title} description={t('No access key has been generated yet.')}>
-        <button type="button" className="settings-action" disabled={disabled || busy} onClick={() => void generate()}>{t('Generate access key')}</button>
+        <button type="button" className="settings-action pipeline-settings-ghost-action" disabled={disabled || busy} onClick={() => void generate()}>{t('Generate access key')}</button>
       </SettingsRow>
     </div>
   </Subsection>
@@ -181,6 +181,6 @@ export function PipelinePathFilters({ pipeline, disabled, onSave }: { pipeline: 
     if (filters.join('\n') !== saved) onSave(filters)
   }
   return <Subsection title={t('Path filters')} description={t(hasKey ? 'Optionally filter releases to only include commits affecting specific paths. Useful for monorepos where multiple projects share one repository. Supports wildcards, one pattern per line.' : 'Filter releases to only include commits affecting specific paths. Generate an access key to configure path filters.')}>
-    <textarea className="pipeline-settings-textarea" aria-label={t('Path filters')} disabled={disabled || !hasKey} value={value} rows={Math.max(2, value.split('\n').length)} spellCheck={false} onChange={event => setValue(event.target.value)} onBlur={commit} placeholder={'frontend/**\npackages/api/**'}/>
+    <textarea className="pipeline-settings-textarea" aria-label={t('Path filters')} disabled={disabled} value={value} rows={Math.max(2, value.split('\n').length)} spellCheck={false} onChange={event => setValue(event.target.value)} onBlur={commit} placeholder={'frontend/**\npackages/api/**'}/>
   </Subsection>
 }

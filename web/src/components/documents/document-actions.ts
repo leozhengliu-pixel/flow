@@ -7,7 +7,7 @@
  * data model still stores teamIds/projectIds/issueId plus initiative resource
  * links, so "Move to" replaces all of them with the chosen parent.
  */
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { confirmAction, promptAction, promptDateAction } from '@/components/ui/action-dialog-service'
 import {

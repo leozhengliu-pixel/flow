@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { Layers2, Link2, Pencil, Star, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { fetchProjectIssueSummary, type IssueRecordSummary } from '@/lib/api';
 import { projectPulseSubscribed } from '@/lib/pulse-subscriptions';
 import { ViewGlyph } from "@/components/views/view-icon-picker";

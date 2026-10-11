@@ -1,6 +1,6 @@
 import { useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { NoAssigneeIcon, PriorityIcon } from '@/components/issue/issue-icons'
 import { ProjectDatePicker } from '@/components/projects-page/project-target-date-picker'

@@ -8,7 +8,7 @@ import type { TeamDefaultFavorite } from '@/types/flow'
 import { DefaultFavoritesSettings } from './team-default-favorites-settings'
 
 vi.mock('@/lib/api', () => ({ fetchTeamDefaultFavorites: vi.fn(), replaceTeamDefaultFavorites: vi.fn() }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn() } }))
 
 const data = makeBootstrap({ savedViews: [], documents: [] })
 const favorite = (resourceType = 'issue', resourceId = 'issue-1') => ({

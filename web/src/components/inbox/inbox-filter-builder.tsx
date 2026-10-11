@@ -36,6 +36,7 @@ export type {
   InboxFilterProperty,
   InboxFilterValue,
 } from './inbox-filter-types'
+import { matchesSearch } from '@/lib/search-match'
 
 export interface InboxFilterBuilderProps {
   /** Pass the existing compact Inbox toolbar button to retain exact shell geometry. */
@@ -305,7 +306,7 @@ function PropertyPicker({
   const [focusValuePicker, setFocusValuePicker] = useState(false)
   const hoverTimerRef = useRef<number | undefined>(undefined)
   const propertyRefs = useRef(new Map<string, HTMLButtonElement>())
-  const visibleProperties = availableProperties(options).filter(property => `${property.label} ${t(property.label)}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+  const visibleProperties = availableProperties(options).filter(property => matchesSearch(query, [property.label], t))
 
   useEffect(() => () => window.clearTimeout(hoverTimerRef.current), [])
 
@@ -680,7 +681,7 @@ function OperatorMenu({
   const contextualOperators = condition.values.length > 1
     ? operatorOptions.map(option => option.id === 'is' ? { ...option, label: 'is any of' } : option)
     : operatorOptions
-  const visibleOperators = contextualOperators.filter(option => option.label.includes(query.trim().toLocaleLowerCase()))
+  const visibleOperators = contextualOperators.filter(option => matchesSearch(query, [option.label], t))
 
   useEffect(() => {
     if (!open) return

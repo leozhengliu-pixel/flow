@@ -7,7 +7,7 @@ import type { MyIssuesFilterKey, MyIssuesFilterOption } from '@/components/my-is
 import type { MyIssuesDisplayOptions, MyIssuesGrouping } from '@/components/my-issues/my-issues-surface'
 import type { TeamIssuesRouteView } from '@/lib/app-routes'
 import { defaultDateOperator, filterValues, isComparableDateValue, type AdvancedFilterGroup } from '@/components/my-issues/my-issues-filter-types'
-import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue } from './issue-date-filter'
+import { compareDateFilter, DATE_FILTER_FIELDS, dateFilterMenu, parseDateFilterValue, releasedDateFilterCategory } from './issue-date-filter'
 import { advancedFilterTree, conditionAsFilter, isAdvancedGroup } from './advanced-filter'
 import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } from '@/lib/labels'
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
@@ -85,7 +85,7 @@ export function issueToExplorerRow(issue: Issue, workspaceSlug: string, issues: 
     rawMilestoneDate: fullProject?.milestones?.find(milestone => milestone.id === issue.projectMilestoneId)?.targetDate,
     ...issueCustomerFields(issue.id, index),
     customerRevenueSettings: data?.workspaceSettings?.featureSettings,
-    releaseIds:issueReleases.map(release=>release.id),releasePipelineIds:issueReleases.map(release=>release.pipelineId).filter((id):id is string=>Boolean(id)),releaseStages:issueReleases.map(release=>release.stage).filter((stage):stage is string=>Boolean(stage)),releaseStatuses:issueReleases.map(release=>release.status),hasReleasedRelease:issueReleases.some(release=>Boolean(release.releasedAt)),
+    releaseIds:issueReleases.map(release=>release.id),releasePipelineIds:issueReleases.map(release=>release.pipelineId).filter((id):id is string=>Boolean(id)),releaseStages:issueReleases.map(release=>release.stage).filter((stage):stage is string=>Boolean(stage)),releaseStatuses:issueReleases.map(release=>release.status),hasReleasedRelease:issueReleases.some(release=>Boolean(release.releasedAt)),releasedDates:issueReleases.flatMap(release=>release.releasedAt?[release.releasedAt]:[]),
     releaseCount: issueReleases.length,
     releases: issueReleases.map(release => ({ id: release.id, name: release.name, status: release.status, pipelineName: index?.pipelinesById.get(release.pipelineId ?? '')?.name })),
     sla: issueSla ? { ...issueSla, ruleName: slaRule?.name } : undefined,
@@ -295,7 +295,7 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
     agentSession:AGENT_SESSION_STATE_FILTERS.map(option=>({id:option.id,label:option.label,count:option.states.reduce((sum,state)=>sum+(agentSessionStateCounts.get(state)??0),0)})),
     triageIntelligence: triageIntelligenceFilterOptions(data, issueLabels, triageCounts),
     dueDate: explorerDueDateOptions().map(option => ({ ...option, kind: 'dueDate' as const })),
-    dates: dateFilterCategories(issues),
+    dates: dateFilterMenu({ releasedDate: (data.releasePipelines?.length ?? 0) > 0 }),
     labels: issueLabels.map(label => ({ id: label.id, label: label.name, color: label.color, description: label.description, issueCount: label.issueCount, scope: label.scope, resourceType: label.resourceType, groupId: label.groupId, groupLabel: label.groupId ? labelGroupNames.get(label.groupId) : undefined, count: labelCounts.get(label.id) ?? 0, kind: 'labels' as const })),
     project: [{ id: '', label: 'No project', count: noProject, kind: 'project' as const }, ...data.projects.map(project => ({ id: project.id, label: project.name, color: project.color, count: projectCounts.get(project.id) ?? 0, kind: 'project' as const }))],
     projectMilestone: projectMilestoneFilterOptions(data, issues),
@@ -449,7 +449,7 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   else if (filter.field === 'initiative') matched = values.includes('') ? !issue.initiativeIds?.length : Boolean(issue.initiativeIds?.some(id => values.includes(id)))
   else if (filter.field === 'cycle') matched = values.includes(issue.cycleId ?? '')
   else if (filter.field === 'addedToCycle') matched = values.includes(issue.addedToCycle ?? '')
-  else if (filter.field === 'releases') matched = matchesReleaseFilter(issue, values)
+  else if (filter.field === 'releases') matched = matchesReleaseFilter(issue, values, comparison, now)
   else if (filter.field === 'customers') {
     // Number filters compare with the chip's operator (Customer count ≥ 3).
     if (isCustomerNumberComparison(filter.operator)) return matchesCustomerNumberValues(issue, values, filter.operator)
@@ -479,17 +479,19 @@ export function matchesAdvancedGroup(issue: MyIssuesRowData, group: AdvancedFilt
 function matchesProjectProperties(issue: MyIssuesRowData, values: string[]) {
   return values.some(value => value.startsWith('project-status:') ? issue.projectStatusId === value.slice(15) : value.startsWith('project-status-type:') ? issue.projectStatusType === value.slice(20) : value.startsWith('project-priority:') ? String(issue.projectPriority) === value.slice(17) : value.startsWith('project-label:') ? issue.projectLabelIds?.includes(value.slice(14)) : value === 'project-lead:' ? !issue.projectLeadId : value.startsWith('project-lead:') ? issue.projectLeadId === value.slice(13) : value.startsWith('project-milestone-name-contains:') ? issue.projectMilestoneNames?.some(name => name.toLocaleLowerCase().includes(value.slice(32).toLocaleLowerCase())) : false)
 }
-function matchesReleaseFilter(issue: MyIssuesRowData, values: string[]) {
-  return values.some(value => value === 'no-releases' ? !issue.releaseIds?.length : value === 'released-any' ? Boolean(issue.hasReleasedRelease) : value.startsWith('release:') ? issue.releaseIds?.includes(value.slice(8)) : value.startsWith('release-pipeline:') ? issue.releasePipelineIds?.includes(value.slice(17)) : value.startsWith('release-stage:') ? issue.releaseStages?.includes(value.slice(14)) : value.startsWith('release-stage-type:') ? issue.releaseStatuses?.includes(value.slice(19)) : false)
+function matchesReleaseFilter(issue: MyIssuesRowData, values: string[], comparison?: 'before' | 'after', now = Date.now()) {
+  return values.some(value => value === 'no-releases' ? !issue.releaseIds?.length : value === 'released-any' ? Boolean(issue.hasReleasedRelease) : value === 'no-released-date' ? !issue.releasedDates?.length : value.startsWith('released:') ? matchesDateFilter(issue, value, comparison, now) : value.startsWith('release:') ? issue.releaseIds?.includes(value.slice(8)) : value.startsWith('release-pipeline:') ? issue.releasePipelineIds?.includes(value.slice(17)) : value.startsWith('release-stage:') ? issue.releaseStages?.includes(value.slice(14)) : value.startsWith('release-stage-type:') ? issue.releaseStatuses?.includes(value.slice(19)) : false)
 }
 function matchesDateFilter(issue: MyIssuesRowData, value: string, comparison?: 'before' | 'after', now = Date.now()) {
   const parsed = parseDateFilterValue(value)
-  if (parsed && isComparableDateValue(value)) return compareDateFilter(issue[DATE_FILTER_FIELDS[parsed.kind]], parsed, comparison ?? defaultDateOperator(value), now)
+  if (parsed && isComparableDateValue(value)) return compareDateFilter(parsed.kind === 'released' ? issue.releasedDates : issue[DATE_FILTER_FIELDS[parsed.kind] as Exclude<(typeof DATE_FILTER_FIELDS)[keyof typeof DATE_FILTER_FIELDS], 'releasedAt'>], parsed, comparison ?? defaultDateOperator(value), now)
   const age = (input: string | undefined, days: number) => Boolean(input && Date.parse(input) >= now - days * 86_400_000)
   if (value === 'created-past-day' || value === 'created-past-week' || value === 'created-past-month') return age(issue.createdAt, value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30)
   if (value === 'updated-past-day' || value === 'updated-past-week' || value === 'updated-past-month') return age(issue.updatedAt, value.endsWith('day') ? 1 : value.endsWith('week') ? 7 : 30)
   if (value === 'started-any') return Boolean(issue.startedAt)
   if (value === 'completed-any') return Boolean(issue.completedAt)
+  if (value === 'no-completed-date') return !issue.completedAt
+  if (value === 'no-released-date') return !issue.releasedDates?.length
   if (value === 'auto-closed-any') return Boolean(issue.autoClosed)
   if (value === 'triaged-any') return Boolean(issue.triagedAt)
   if (value === 'status-over-week') return Boolean(issue.statusChangedAt && Date.parse(issue.statusChangedAt) < now - 7 * 86_400_000)
@@ -525,13 +527,12 @@ export function explorerDueDateOptions(): MyIssuesBulkActionOption[] {
   return [{ id: '', label: 'No due date' }, { id: isoDate(date), label: 'Today' }, { id: isoDate(new Date(date.getTime() + day)), label: 'Tomorrow' }, { id: isoDate(new Date(date.getTime() + day * 7)), label: 'In one week' }]
 }
 
-function dateFilterCategories(_issues: Issue[]): MyIssuesFilterOption[] { return dateFilterMenu() }
 function releaseFilterCategories(data:BootstrapData,issues:Issue[]):MyIssuesFilterOption[]{const issueIds=new Set(issues.map(issue=>issue.id)),releaseCounts=new Map<string,number>(),pipelineIssues=new Map<string,Set<string>>(),stageIssues=new Map<string,Set<string>>(),statusIssues=new Map<string,Set<string>>(),releasedIssueIds=new Set<string>();for(const release of data.releases){for(const issueId of release.issueIds){if(!issueIds.has(issueId))continue;incrementCount(releaseCounts,release.id);releasedIssueIds.add(issueId);addToSetMap(pipelineIssues,release.pipelineId,issueId);addToSetMap(stageIssues,release.stage,issueId);addToSetMap(statusIssues,release.status,issueId)}}return[
   {id:'release',label:'Release',children:data.releases.map(release=>({id:`release:${release.id}`,label:release.name,count:releaseCounts.get(release.id)??0}))},
   {id:'release-pipeline',label:'Release pipeline',children:data.releasePipelines.map(pipeline=>({id:`release-pipeline:${pipeline.id}`,label:pipeline.name,count:pipelineIssues.get(pipeline.id)?.size??0}))},
   {id:'release-stage',label:'Release stage',children:uniqueStrings(data.releases.map(release=>release.stage)).map(stage=>({id:`release-stage:${stage}`,label:stage,count:stageIssues.get(stage)?.size??0}))},
   {id:'release-stage-type',label:'Release stage type',children:['planned','inProgress','released','canceled'].map(status=>({id:`release-stage-type:${status}`,label:status,count:statusIssues.get(status)?.size??0}))},
-  {id:'released-date',label:'Released date',children:[{id:'released-any',label:'Has released date'}]},
+  releasedDateFilterCategory(),
   {id:'no-releases',label:'No releases',count:issues.length-releasedIssueIds.size},
 ]}
 

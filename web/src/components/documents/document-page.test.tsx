@@ -18,7 +18,7 @@ const api = vi.hoisted(() => ({
   restoreTrashEntry: vi.fn(),
 }))
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
-vi.mock('sonner', () => ({ toast: toasts }))
+vi.mock('@/lib/toast', () => ({ toast: toasts }))
 vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: api.refreshResourcePreferences }))
 
 vi.mock('@/components/documents/collaborative-editor', () => ({

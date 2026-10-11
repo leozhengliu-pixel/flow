@@ -2367,10 +2367,40 @@ func removeResourcePreferences(data *domain.Bootstrap, kind, id string) {
 	})
 }
 
+// favoriteTabs lists the page tabs that can be favorited on their own, by
+// resource type (the reference app's Favorite.pipelineTab: "releases" | "releaseNotes",
+// which Flow routes as "changelog").
+var favoriteTabs = map[string][]string{
+	"release_pipeline": {"releases", "changelog"},
+}
+
+// favoriteTab reads the optional ?tab= of a favorite request. Empty is the
+// resource's root favorite; a tab must be one the resource type offers.
+func favoriteTab(r *http.Request, kind string) (string, error) {
+	tab := strings.TrimSpace(r.URL.Query().Get("tab"))
+	if tab == "" {
+		return "", nil
+	}
+	if !slices.Contains(favoriteTabs[kind], tab) {
+		return "", fmt.Errorf("%w: unsupported favorite tab %q for %s", errInvalid, tab, kind)
+	}
+	return tab, nil
+}
+
+func isViewerFavorite(data *domain.Bootstrap, kind, id, tab string) func(domain.Favorite) bool {
+	return func(item domain.Favorite) bool {
+		return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id && item.Tab == tab
+	}
+}
+
+// setFavoriteRecord toggles the viewer's root favorite of a resource; tab
+// favorites of the same resource are left alone.
 func setFavoriteRecord(data *domain.Bootstrap, kind, id string, favorite bool) {
-	index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
-		return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
-	})
+	setFavoriteTabRecord(data, kind, id, "", favorite)
+}
+
+func setFavoriteTabRecord(data *domain.Bootstrap, kind, id, tab string, favorite bool) {
+	index := slices.IndexFunc(data.Favorites, isViewerFavorite(data, kind, id, tab))
 	if !favorite {
 		if index >= 0 {
 			data.Favorites = append(data.Favorites[:index], data.Favorites[index+1:]...)
@@ -2387,17 +2417,29 @@ func setFavoriteRecord(data *domain.Bootstrap, kind, id string, favorite bool) {
 			position = item.Position - 1
 		}
 	}
-	data.Favorites = append(data.Favorites, domain.Favorite{ID: fmt.Sprintf("favorite_%d", now.UnixNano()), UserID: data.Viewer.ID, ResourceType: kind, ResourceID: id, Position: position, CreatedAt: now})
+	data.Favorites = append(data.Favorites, domain.Favorite{ID: fmt.Sprintf("favorite_%d", now.UnixNano()), UserID: data.Viewer.ID, ResourceType: kind, ResourceID: id, Tab: tab, Position: position, CreatedAt: now})
+}
+
+func favoriteMutationPayload(kind, tab string) map[string]string {
+	if tab == "" {
+		return map[string]string{"type": kind}
+	}
+	return map[string]string{"type": kind, "tab": tab}
 }
 
 func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
+	tab, err := favoriteTab(r, kind)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := s.checkPreferenceIssue(r); err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
 	var created domain.Favorite
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.added", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.added", id, favoriteMutationPayload(kind, tab), func(data *domain.Bootstrap) error {
 		if kind != "issue" && !resourceExists(data, kind, id) {
 			return errNotFound
 		}
@@ -2407,24 +2449,21 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 				return store.ErrAuthForbidden
 			}
 		}
-		setResourceFavoriteFlag(data, kind, id, true)
-		index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
-			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
-		})
-		if index >= 0 {
+		if tab == "" {
+			setResourceFavoriteFlag(data, kind, id, true)
+		}
+		matches := isViewerFavorite(data, kind, id, tab)
+		if index := slices.IndexFunc(data.Favorites, matches); index >= 0 {
 			created = data.Favorites[index]
 			return nil
 		}
-		setFavoriteRecord(data, kind, id, true)
-		index = slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
-			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
-		})
-		if index >= 0 {
+		setFavoriteTabRecord(data, kind, id, tab, true)
+		if index := slices.IndexFunc(data.Favorites, matches); index >= 0 {
 			created = data.Favorites[index]
 		}
 		return nil
 	})
-	if err == nil {
+	if err == nil && tab == "" {
 		if exists, checkErr := s.store.TeamDefaultFavoriteExists(r.Context(), workspaceKey(r), kind, id); checkErr == nil && exists {
 			_ = s.store.SetTeamDefaultFavoriteOverride(r.Context(), workspaceKey(r), requestActor(s, r).ID, kind, id, false)
 		}
@@ -2434,20 +2473,26 @@ func (s *server) addFavorite(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) removeFavorite(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.removed", id, map[string]string{"type": kind}, func(data *domain.Bootstrap) error {
+	tab, err := favoriteTab(r, kind)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.removed", id, favoriteMutationPayload(kind, tab), func(data *domain.Bootstrap) error {
 		if kind == "document" {
 			document, _ := documentByID(data, id)
 			if document == nil || documentRole(s, *data, *document) == "none" {
 				return store.ErrAuthForbidden
 			}
 		}
-		setResourceFavoriteFlag(data, kind, id, false)
-		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
-			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
-		})
+		// Without a tab only the root favorite goes; tab favorites stay.
+		if tab == "" {
+			setResourceFavoriteFlag(data, kind, id, false)
+		}
+		data.Favorites = slices.DeleteFunc(data.Favorites, isViewerFavorite(data, kind, id, tab))
 		return nil
 	})
-	if err == nil {
+	if err == nil && tab == "" {
 		if exists, checkErr := s.store.TeamDefaultFavoriteExists(r.Context(), workspaceKey(r), kind, id); checkErr == nil && exists {
 			_ = s.store.SetTeamDefaultFavoriteOverride(r.Context(), workspaceKey(r), requestActor(s, r).ID, kind, id, true)
 		}
@@ -2462,6 +2507,11 @@ type favoriteUpdateInput struct {
 
 func (s *server) updateFavorite(w http.ResponseWriter, r *http.Request) {
 	kind, id := r.PathValue("type"), r.PathValue("id")
+	tab, err := favoriteTab(r, kind)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	var input favoriteUpdateInput
 	if !decodeJSON(w, r, &input) {
 		return
@@ -2471,16 +2521,14 @@ func (s *server) updateFavorite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var updated domain.Favorite
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.updated", id, input, func(data *domain.Bootstrap) error {
+	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "favorite.updated", id, input, func(data *domain.Bootstrap) error {
 		if kind == "document" {
 			document, _ := documentByID(data, id)
 			if document == nil || documentRole(s, *data, *document) == "none" {
 				return store.ErrAuthForbidden
 			}
 		}
-		index := slices.IndexFunc(data.Favorites, func(item domain.Favorite) bool {
-			return item.UserID == data.Viewer.ID && item.ResourceType == kind && item.ResourceID == id
-		})
+		index := slices.IndexFunc(data.Favorites, isViewerFavorite(data, kind, id, tab))
 		if index < 0 {
 			return errNotFound
 		}

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useI18n } from '@/i18n/i18n'
+import { translatedKeywords } from '@/lib/search-match'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
@@ -32,6 +34,7 @@ export function ProjectsBulkActionBar({ projects, options, onAction, onAsk, onCl
   onAsk: () => void
   onClear: () => void
 }) {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [pending, setPending] = useState<ProjectBulkAction>()
   useEffect(() => { if (!projects.length) setOpen(false) }, [projects.length])
@@ -44,7 +47,7 @@ export function ProjectsBulkActionBar({ projects, options, onAction, onAsk, onCl
       <Dialog.Title className={styles.commandTitle}>{pending ? ACTIONS.find(action => action.id === pending)?.label : count === 1 ? `Project · ${projects[0].name}` : `${count} selected projects`}</Dialog.Title>
       {pending && <button aria-label="Back to project actions" className={styles.commandBack} onClick={() => setPending(undefined)} type="button"><ChevronLeft size={13} />Back</button>}
       <Dialog.Close aria-label="Close project command menu" className={styles.commandClose}><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>
-      <Command className={styles.command} loop><div className={styles.commandInput}><Command.Input aria-label={pending ? `Search ${pending}` : 'Project command menu'} autoFocus key={pending ?? 'actions'} placeholder="Type a command…" />{!pending && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div><Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pending ? options(pending)?.map(option => <Command.Item className={styles.commandItem} key={option.id || 'none'} onSelect={() => { onAction(pending, option.id); setOpen(false) }} value={option.label}><span className={styles.optionLabel}>{option.color && <i style={{ background: option.color }} />}<span>{option.label}</span></span></Command.Item>) : ACTIONS.map(action => <Command.Item className={styles.commandItem} key={action.id} onSelect={() => { const values = options(action.id); if (values?.length) setPending(action.id); else { onAction(action.id); setOpen(false) } }} value={action.label}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List></Command>
+      <Command className={styles.command} loop><div className={styles.commandInput}><Command.Input aria-label={pending ? `Search ${pending}` : 'Project command menu'} autoFocus key={pending ?? 'actions'} placeholder="Type a command…" />{!pending && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div><Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pending ? options(pending)?.map(option => <Command.Item className={styles.commandItem} key={option.id || 'none'} onSelect={() => { onAction(pending, option.id); setOpen(false) }} value={option.label} keywords={translatedKeywords([option.label], t)}><span className={styles.optionLabel}>{option.color && <i style={{ background: option.color }} />}<span>{option.label}</span></span></Command.Item>) : ACTIONS.map(action => <Command.Item className={styles.commandItem} key={action.id} onSelect={() => { const values = options(action.id); if (values?.length) setPending(action.id); else { onAction(action.id); setOpen(false) } }} value={action.label} keywords={translatedKeywords([action.label], t)}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List></Command>
     </Dialog.Content></Dialog.Portal></Dialog.Root>
   </>
 }

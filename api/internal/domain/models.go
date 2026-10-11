@@ -1768,11 +1768,16 @@ type Draft struct {
 	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
+// Favorite is one sidebar favorite. Tab names a specific page tab of the
+// resource (the reference app's pipelineTab, projectTab, initiativeTab); empty is the
+// resource's root favorite. A root favorite and each tab favorite are
+// separate records, unique per (user, resource type, resource id, tab).
 type Favorite struct {
 	ID           string    `json:"id"`
 	UserID       string    `json:"userId"`
 	ResourceType string    `json:"resourceType"`
 	ResourceID   string    `json:"resourceId"`
+	Tab          string    `json:"tab,omitempty"`
 	FolderID     string    `json:"folderId,omitempty"`
 	Position     float64   `json:"position"`
 	CreatedAt    time.Time `json:"createdAt"`

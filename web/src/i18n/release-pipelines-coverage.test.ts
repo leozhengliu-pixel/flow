@@ -36,7 +36,7 @@ describe('release pipeline settings translations', () => {
         seen.add(text)
         const zh = (zhCN as Record<string, string>)[text] ?? translateToChinese(text)
         // Product names, placeholders and code stay English.
-        if (/[A-Za-z]{3,}/.test(zh.replace(/\b(?:GitHub Actions|GitHub|API|CI|URL|cURL)\b|\{[a-z]+\}|\{\{issues\}\}/g, ''))) missing.push(`${path.split('/').pop()}: ${text} → ${zh}`)
+        if (/[A-Za-z]{3,}/.test(zh.replace(/\b(?:GitHub Actions?|GitHub|API|CI|URL|cURL)\b|\{[a-z]+\}|\{\{issues\}\}/g, ''))) missing.push(`${path.split('/').pop()}: ${text} → ${zh}`)
       }
     }
     expect(seen.size).toBeGreaterThan(60)

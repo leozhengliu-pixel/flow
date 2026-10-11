@@ -1,7 +1,7 @@
 import { Archive, ArchiveRestore, CircleDashed, FilePenLine, Menu, MoreHorizontal, Rocket, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import type { BootstrapData, FlowDocument, Team, TrashEntry } from '@/types/flow'
 import { purgeTrashEntry, restoreTrashEntry, updateCycle, updateIssue, updateProject } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'

@@ -26,7 +26,7 @@ vi.mock('@/lib/api', () => ({
   uploadCustomerRequestAttachment: (...args: unknown[]) => uploadCustomerRequestAttachment(...args),
 }))
 vi.mock('@/components/ui/action-dialog-service', () => ({ confirmAction: (...args: unknown[]) => confirmAction(...args) }))
-vi.mock('sonner', () => ({ toast: { error: (...args: unknown[]) => toastError(...args), success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: (...args: unknown[]) => toastError(...args), success: vi.fn() } }))
 
 const data = {
   customers: [

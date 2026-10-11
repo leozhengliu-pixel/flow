@@ -415,6 +415,9 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 	if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
 		return err
 	}
+	if err := writeReleaseIssueRecords(ctx, tx, workspace, key.field, key.key, value.data); err != nil {
+		return err
+	}
 	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data)
 }
 
@@ -428,6 +431,9 @@ func deleteMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, k
 		}
 	}
 	if err := writeCustomerFilterRecord(ctx, tx, workspace, key.field, key.key, nil); err != nil {
+		return err
+	}
+	if err := writeReleaseIssueRecords(ctx, tx, workspace, key.field, key.key, nil); err != nil {
 		return err
 	}
 	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, nil)

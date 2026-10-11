@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { updateWorkspacePreferences } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";
 import type {

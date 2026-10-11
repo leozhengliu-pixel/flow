@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { Avatar } from "@/components/issue/issue-row";
 import { usePropertyCommand } from "@/components/property/use-property-command";

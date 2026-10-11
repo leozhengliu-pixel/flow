@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { AutomationTrustedSourceEditor } from "@/components/automation/automation-trusted-source-editor";
 import { updateWorkspacePreferences } from "@/lib/api";
 import { useI18n } from "@/i18n/i18n";

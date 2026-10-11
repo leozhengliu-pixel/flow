@@ -28,6 +28,8 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
+import { useI18n } from '@/i18n/i18n';
+import { matchesSearch } from '@/lib/search-match';
 import { type ComponentType, useMemo, useState, type FormEvent } from "react";
 
 import { ViewIconPicker } from "@/components/views/view-icon-picker";
@@ -140,6 +142,7 @@ export function TeamCreatePage({
     timezone?: string;
   }) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [keyEdited, setKeyEdited] = useState(false);
@@ -195,7 +198,7 @@ export function TeamCreatePage({
         </label>
         {SETTINGS_SECTIONS.map((section) => {
           const items = section.items.filter(
-            (item) => !query || item.label.toLowerCase().includes(query),
+            (item) => matchesSearch(query, [item.label], t),
           );
           return items.length ? (
             <div className="workspace-settings-nav__group" key={section.title}>

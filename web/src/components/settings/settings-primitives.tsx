@@ -1,3 +1,4 @@
+import { FlowGlyph } from "@/components/ui/menu-glyphs";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { Fragment, useContext } from "react";
 import { createPortal } from "react-dom";
@@ -9,7 +10,6 @@ import type {
   ReactNode,
 } from "react";
 
-import { ChevronLeft } from "lucide-react";
 
 import { Toggle } from "@/components/ui/toggle";
 import { ViewGlyph } from "@/components/views/view-icon-picker";
@@ -298,7 +298,7 @@ export function SettingsCrumb({
   const readOnlySlot = useContext(SettingsReadOnlyCrumbSlot);
   const crumb = (
     <button className={`settings-crumb${pinned ? " is-pinned" : ""}`} type="button" onClick={onClick}>
-      <ChevronLeft size={14} aria-hidden />
+      <FlowGlyph name="chevronLeft" size={14} aria-hidden="true" />
       {icon && <span className="settings-crumb-icon">{icon}</span>}
       <span className="settings-crumb-label">{children}</span>
     </button>

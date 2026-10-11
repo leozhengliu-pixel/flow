@@ -27,6 +27,9 @@ import { documentsPageZhCN } from './translations-documents-page';
 import { documentsHistoryZhCN } from './translations-documents-history';
 import { documentsCommentsZhCN } from './translations-documents-comments';
 import { editorZhCN } from './translations-editor';
+import { favoriteTabsZhCN } from './translations-favorite-tabs';
+import { dateFiltersZhCN } from './translations-date-filters';
+import { toastsZhCN } from './translations-toasts';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -5793,3 +5796,8 @@ for (const group of [documentsListsZhCN, documentsCreateZhCN, documentsPageZhCN,
 Object.assign(zhCN, editorZhCN);
 // Document inline comments and document notifications fill gaps only.
 for (const [source, translation] of Object.entries(documentsCommentsZhCN)) zhCN[source] ??= translation;
+// Tab favorites (pipeline tab menu, sidebar tab badge) fill gaps only.
+for (const [source, translation] of Object.entries(favoriteTabsZhCN)) zhCN[source] ??= translation;
+// Date filter presets (Released date, No completed date, typed durations) fill gaps only.
+for (const [source, translation] of Object.entries(dateFiltersZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(toastsZhCN)) zhCN[source] ??= translation;

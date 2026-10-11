@@ -8,7 +8,7 @@ import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sideb
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { DocumentGlyph, DocumentIconPicker } from '@/components/documents/document-icon'
 import { CollaborativeEditor } from '@/components/documents/collaborative-editor'

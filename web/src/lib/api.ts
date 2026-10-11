@@ -1844,8 +1844,11 @@ export function deleteDraft(id: string): Promise<void> {
 export function deleteAllDrafts(): Promise<void> {
   return request("/api/drafts", { method: "DELETE" });
 }
-export function addFavorite(type: string, id: string): Promise<Favorite> {
-  return request(`/api/favorites/${type}/${id}`, { method: "PUT" });
+function favoriteURL(type: string, id: string, tab?: string) {
+  return `/api/favorites/${type}/${id}${tab ? `?tab=${encodeURIComponent(tab)}` : ""}`;
+}
+export function addFavorite(type: string, id: string, tab?: string): Promise<Favorite> {
+  return request(favoriteURL(type, id, tab), { method: "PUT" });
 }
 export function fetchTeamDefaultFavorites(teamId: string): Promise<{ items: TeamDefaultFavorite[] }> {
   return request(`/api/teams/${encodeURIComponent(teamId)}/default-favorites`)
@@ -1855,15 +1858,16 @@ export function replaceTeamDefaultFavorites(teamId: string, items: Array<Pick<Te
     items: items.map(({ resourceType, resourceId }) => ({ resourceType, resourceId })),
   }))
 }
-export function removeFavorite(type: string, id: string): Promise<void> {
-  return request(`/api/favorites/${type}/${id}`, { method: "DELETE" });
+export function removeFavorite(type: string, id: string, tab?: string): Promise<void> {
+  return request(favoriteURL(type, id, tab), { method: "DELETE" });
 }
 export function updateFavorite(
   type: string,
   id: string,
   input: { folderId?: string; position?: number },
+  tab?: string,
 ): Promise<Favorite> {
-  return request(`/api/favorites/${type}/${id}`, jsonRequest("PATCH", input));
+  return request(favoriteURL(type, id, tab), jsonRequest("PATCH", input));
 }
 export function createFavoriteFolder(
   name: string,

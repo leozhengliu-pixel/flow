@@ -22,7 +22,7 @@ vi.mock('@/lib/api', async original => ({
   fetchPulseCapabilities: vi.fn(),
   updateUserSettings: vi.fn(),
 }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/components/detail/detail-pane', () => ({ DetailPane: ({ issue }: { issue: { title: string; isSummary?: boolean } }) => <div data-testid="issue-detail">{issue.isSummary ? 'Loading issue' : issue.title}</div> }))
 
 const flowActor = { id: 'flow', name: 'Flow', displayName: 'Flow', email: '', active: true } as unknown as Notification['actor']

@@ -1,7 +1,7 @@
 import { Command } from 'cmdk'
 import { Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueSearch } from '@/components/issue/use-issue-search'

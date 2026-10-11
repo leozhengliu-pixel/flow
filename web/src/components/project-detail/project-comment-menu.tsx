@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Bell, BellOff, Check, Copy, Ellipsis, Link2, Pencil, SquarePen, Trash2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { useI18n } from '@/i18n/i18n'
 import './project-action-menu.css'

@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Paperclip } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { PriorityIcon, ProjectStatusIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { confirmAction, promptAction } from '@/components/ui/action-dialog-service'

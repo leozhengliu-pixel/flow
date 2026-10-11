@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, Circle, FileText, Hash, MoreHorizontal, Plus, RefreshCw, Star, X } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { PropertyMenu, type PropertyOption } from '@/components/property/property-menu'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'

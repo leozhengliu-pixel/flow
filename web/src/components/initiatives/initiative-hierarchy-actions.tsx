@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import type { FlowMenuOption } from '@/components/ui/row-context-menu'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import type { Initiative, InitiativeMutationInput } from '@/types/flow'

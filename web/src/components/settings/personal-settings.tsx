@@ -29,7 +29,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import * as Popover from "@radix-ui/react-popover";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { NotificationChannelSettings } from './notification-channel-settings';
 import { ApplicationPolicySettings } from './application-policy-settings';
 import { toCredentialCreationOptions, serializeCreationCredential } from '@/lib/webauthn';

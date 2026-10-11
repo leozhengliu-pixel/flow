@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import type { BootstrapData } from '@/types/flow'
 import { listApplications, saveApplication, type ApplicationInstallation } from '@/lib/application-agents'
 import { useI18n } from '@/i18n/i18n'

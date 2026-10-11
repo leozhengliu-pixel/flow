@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { CustomerStatusIcon } from '@/components/customer/customer-status-icon'
 import { findCustomerStatus, findCustomerTier } from '@/components/customer/customer-status-lookup'

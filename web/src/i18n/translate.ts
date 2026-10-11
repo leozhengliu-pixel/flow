@@ -31,6 +31,8 @@ export function translateToChinese(source: string): string {
 
   const patterns: Array<[RegExp, (...groups: string[]) => string]> = [
     [/^(\d+) issues?$/, count => `${count} 个事项`],
+    // Typed date filter durations ("10 days", "2 weeks ago", "3 months from now").
+    [/^(\d+) (day|week|month|year)s?( ago| from now)?$/, (count, unit, suffix) => { const amount = `${count} ${({ day: '天', week: '周', month: '个月', year: '年' } as Record<string, string>)[unit]}`; return suffix === ' ago' ? `${amount}前` : suffix ? `从现在起 ${amount}` : amount }],
     [/^New issue in triage from (.+)$/, actor => `${actor} 提交了新的分流事项`],
     [/^(\d+) upcoming cycles?$/, count => `${count} 个后续周期`],
     [/^(\d+) identity providers? configured$/, count => `已配置 ${count} 个身份提供商`],

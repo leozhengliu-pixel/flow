@@ -1772,6 +1772,8 @@ export interface Favorite {
   userId: UUID;
   resourceType: string;
   resourceId: UUID;
+  /** A specific page tab of the resource (e.g. a release pipeline's "changelog"); absent for the root favorite. */
+  tab?: string;
   folderId?: UUID;
   position: number;
   createdAt: string;
