@@ -252,6 +252,29 @@ it('blocks administration pages opened by URL for members', () => {
   expect(screen.getByRole('heading', { name: 'Admin access required' })).toBeVisible();
 });
 
+it('draws the Projects › Statuses nav item with the reference app\'s hexagon glyph', () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'project-statuses';
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const statuses = Array.from(document.querySelectorAll('aside nav button, .settings-sidebar nav button')).find(button => button.textContent?.trim() === 'Statuses');
+  const glyph = statuses?.querySelector('svg[data-settings-nav-glyph="project-statuses"]');
+  expect(glyph).not.toBeNull();
+  expect(glyph?.getAttribute('viewBox')).toBe('1 1 14 14');
+  expect(glyph?.querySelectorAll('path')).toHaveLength(2);
+});
+
+it('lets admins edit and delete every project status from its menu', async () => {
+  localStorage.setItem('flow:locale', 'en');
+  const input = props();
+  input.page = 'project-statuses';
+  render(<I18nProvider><SettingsPage {...input}/></I18nProvider>);
+  const rows = await screen.findAllByRole('listitem', {}, { timeout: 5000 });
+  const statusRows = rows.filter(row => row.classList.contains('pst-row'));
+  expect(statusRows.length).toBe(input.data.projectStatuses.length);
+  for (const row of statusRows) expect(row.querySelector('button[aria-label="Open menu"]')).not.toBeNull();
+});
+
 it('renders admin-only workspace configuration read-only for members with the reference app wording', async () => {
   localStorage.setItem('flow:locale', 'en');
   const input = props();

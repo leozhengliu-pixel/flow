@@ -960,20 +960,28 @@ func normalize(data *domain.Bootstrap) {
 		data.ProjectStatuses = canonicalProjectStatuses()
 	}
 	for index := range data.ProjectStatuses {
-		switch data.ProjectStatuses[index].ID {
-		case "ps_backlog":
-			data.ProjectStatuses[index].Color = "#E79D4F"
-		case "ps_planned":
-			data.ProjectStatuses[index].Color = "#A8A8AA"
-		case "ps_progress":
-			data.ProjectStatuses[index].Color = "#E2B714"
-		case "ps_completed":
-			data.ProjectStatuses[index].Color = "#5E6AD2"
-		case "ps_canceled":
-			data.ProjectStatuses[index].Color = "#8A8F98"
+		// Project statuses are editable: only fill a missing colour, and move the
+		// previous built-in defaults (which used to be re-applied on every load)
+		// to the current defaults. Colours a workspace chose are kept.
+		if fallback, ok := canonicalProjectStatusColors[data.ProjectStatuses[index].ID]; ok {
+			color := data.ProjectStatuses[index].Color
+			if color == "" || strings.EqualFold(color, fallback.legacy) {
+				data.ProjectStatuses[index].Color = fallback.color
+			}
 		}
 		if data.ProjectStatuses[index].Position == 0 && index > 0 {
 			data.ProjectStatuses[index].Position = float64(index)
+		}
+	}
+	// Projects embed their status; keep the copy in step with the edited status
+	// so a renamed or recoloured status shows the same everywhere.
+	statusByID := make(map[string]domain.ProjectStatus, len(data.ProjectStatuses))
+	for _, status := range data.ProjectStatuses {
+		statusByID[status.ID] = status
+	}
+	for index := range data.Projects {
+		if status, ok := statusByID[data.Projects[index].Status.ID]; ok {
+			data.Projects[index].Status = status
 		}
 	}
 	if data.SavedViews == nil {

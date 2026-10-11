@@ -1757,6 +1757,8 @@ type ProjectTemplateMutation = Partial<
     | "initiativeIds"
     | "issueIds"
     | "milestones"
+    | "issues"
+    | "dependencyRelations"
     | "visibility"
     | "visibilityTeamId"
   >

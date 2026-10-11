@@ -2886,16 +2886,19 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	if input.TemplateID != "" {
-		// Only the template's issues move into the new project.
+		// The template's legacy linked issues move into the new project and
+		// its template issues are created there.
 		ctx = projectTemplateScope(ctx, nil, input.TemplateID)
 	}
 	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.created", input, func(data *domain.Bootstrap) (string, error) {
+		var template *domain.ProjectTemplate
 		if input.TemplateID != "" {
 			index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID })
 			if index < 0 {
 				return "", errNotFound
 			}
-			template := data.ProjectTemplates[index]
+			found := data.ProjectTemplates[index]
+			template = &found
 			if input.Name == nil || strings.TrimSpace(*input.Name) == "" {
 				input.Name = &template.ProjectName
 				if strings.TrimSpace(*input.Name) == "" {
@@ -2933,7 +2936,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 				input.MemberIDs = slices.Clone(template.MemberIDs)
 			}
 			if len(input.DependencyIDs) == 0 && input.DependencyRelations == nil {
-				input.DependencyIDs = slices.Clone(template.DependencyIDs)
+				input.DependencyIDs, input.DependencyRelations = projectTemplateDependencyInput(data, *template)
 			}
 			if len(input.Initiatives) == 0 {
 				input.Initiatives = slices.Clone(template.InitiativeIDs)
@@ -2961,37 +2964,46 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
 		}
-		if input.TemplateID != "" {
-			if index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID }); index >= 0 {
-				for milestoneIndex, milestone := range data.ProjectTemplates[index].Milestones {
-					created.Milestones = append(created.Milestones, domain.ProjectMilestone{
-						ID: fmt.Sprintf("project_milestone_%d_%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
-						Name: milestone.Name, Description: milestone.Description, CreatedAt: now, UpdatedAt: now,
-					})
+		// Template milestone id -> new project milestone id, for template issues.
+		templateMilestones := map[string]string{}
+		if template != nil && input.MilestoneDetails == nil {
+			// Clients that send milestoneDetails list the template's milestones
+			// themselves; API callers get them appended.
+			for milestoneIndex, milestone := range template.Milestones {
+				item := domain.ProjectMilestone{
+					ID: fmt.Sprintf("project_milestone_%d_%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
+					Name: milestone.Name, Description: milestone.Description, CreatedAt: now, UpdatedAt: now,
 				}
+				templateMilestones[milestone.ID] = item.ID
+				created.Milestones = append(created.Milestones, item)
 			}
 		}
 		legacyMilestones := input.Milestones
 		if len(input.MilestoneDetails) > 0 {
 			legacyMilestones = nil
 		}
-		for _, name := range legacyMilestones {
+		for milestoneIndex, name := range legacyMilestones {
 			name = strings.TrimSpace(name)
 			if name == "" {
 				continue
 			}
 			created.Milestones = append(created.Milestones, domain.ProjectMilestone{
-				ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: created.ID,
+				ID: fmt.Sprintf("project_milestone_%d_l%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
 				Name: name, CreatedAt: now, UpdatedAt: now,
 			})
 		}
-		for _, milestone := range input.MilestoneDetails {
+		for milestoneIndex, milestone := range input.MilestoneDetails {
 			if milestone.Name == nil || strings.TrimSpace(*milestone.Name) == "" {
 				continue
 			}
 			item := domain.ProjectMilestone{
-				ID: fmt.Sprintf("project_milestone_%d", time.Now().UnixNano()), ProjectID: created.ID,
+				ID: fmt.Sprintf("project_milestone_%d_d%d", time.Now().UnixNano(), milestoneIndex), ProjectID: created.ID,
 				Name: strings.TrimSpace(*milestone.Name), CreatedAt: now, UpdatedAt: now,
+			}
+			if template != nil && milestone.TemplateMilestoneID != "" {
+				if _, mapped := templateMilestones[milestone.TemplateMilestoneID]; !mapped {
+					templateMilestones[milestone.TemplateMilestoneID] = item.ID
+				}
 			}
 			if milestone.Description != nil {
 				item.Description = strings.TrimSpace(*milestone.Description)
@@ -3002,13 +3014,14 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 			created.Milestones = append(created.Milestones, item)
 		}
 		data.Projects = append([]domain.Project{created}, data.Projects...)
-		if input.TemplateID != "" {
-			if index := slices.IndexFunc(data.ProjectTemplates, func(template domain.ProjectTemplate) bool { return template.ID == input.TemplateID }); index >= 0 {
-				for issueIndex := range data.Issues {
-					if slices.Contains(data.ProjectTemplates[index].IssueIDs, data.Issues[issueIndex].ID) {
-						data.Issues[issueIndex].Project = &domain.ProjectSummary{ID: created.ID, Name: created.Name, Icon: created.Icon, Color: created.Color}
-					}
+		if template != nil {
+			for issueIndex := range data.Issues {
+				if slices.Contains(template.IssueIDs, data.Issues[issueIndex].ID) {
+					data.Issues[issueIndex].Project = &domain.ProjectSummary{ID: created.ID, Name: created.Name, Icon: created.Icon, Color: created.Color}
 				}
+			}
+			if _, err := createProjectTemplateIssues(data, *template, created, templateMilestones); err != nil {
+				return "", err
 			}
 		}
 		return created.ID, nil

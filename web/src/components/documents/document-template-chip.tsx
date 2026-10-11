@@ -34,6 +34,6 @@ export function DocumentTemplateChip({ ctx, document, className }: DocumentTempl
     triggerClassName={`document-template-chip-trigger${className ? ` ${className}` : ''}`}
     triggerRole="button"
     closeOnSelect
-    onChange={id => { const template = byId.get(id); if (template) return applyTemplateToDocument(ctx, document, template) }}
+    onChange={id => { const template = byId.get(id); if (template) return applyTemplateToDocument(ctx, document, template).then(() => undefined) }}
   />
 }

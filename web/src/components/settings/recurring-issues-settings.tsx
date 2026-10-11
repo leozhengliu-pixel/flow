@@ -32,7 +32,7 @@ import {
 import { canManageTeamSettings } from "@/lib/settings-permissions";
 import type { BootstrapData, Issue, Team, TemplateSubIssue, WorkflowState } from "@/types/flow";
 
-import { SubIssueTemplateComposer, SubIssueTemplateRow } from "./issues-projects-settings";
+import { SubIssueTemplateComposer, SubIssueTemplateRow } from "./issue-template-settings";
 import { SettingsRow, SettingsSection, TeamSettingsCrumb, SettingsCrumb } from "./settings-primitives";
 import "./issue-template-settings.css";
 import "./recurring-issues-settings.css";
@@ -531,7 +531,7 @@ function NewRecurringIssuePage({ data, team, sourceId, onNavigateSubPath, onRelo
                   showTeam={false}
                   labelTeamId={team.id}
                   onCancel={() => setComposerOpen(false)}
-                  onAdd={(item) => { setSubIssues((current) => [...current, item]); setComposerOpen(false); }}
+                  onAdd={(item, more) => { setSubIssues((current) => [...current, item]); if (!more) setComposerOpen(false); }}
                 />
               )}
             </div>

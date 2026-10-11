@@ -141,3 +141,70 @@ func TestProjectStatusEditDeleteAndReorderRules(t *testing.T) {
 	}
 	requestJSON[any](t, handler, http.MethodDelete, "/api/project-statuses/"+custom.ID, nil, http.StatusNoContent)
 }
+
+func TestProjectStatusValidationAndPropagation(t *testing.T) {
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true})
+
+	for _, input := range []map[string]any{
+		{"name": "  ", "type": "planned"},
+		{"name": "Review", "type": "planned", "color": "red; background: url(x)"},
+		{"name": "Review", "type": "planned", "color": "#12345"},
+		{"name": "Review", "type": "unknown"},
+	} {
+		requestJSON[any](t, handler, http.MethodPost, "/api/project-statuses", input, http.StatusBadRequest)
+	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/project-statuses/ps_planned", map[string]any{"name": ""}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/project-statuses/ps_planned", map[string]any{"color": "blue"}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/project-statuses/ps_planned", map[string]any{"type": "started"}, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodPatch, "/api/project-statuses/missing", map[string]any{"name": "Missing"}, http.StatusNotFound)
+
+	lch := requestJSON[domain.ProjectStatus](t, handler, http.MethodPatch, "/api/project-statuses/ps_planned", map[string]any{"color": "lch(80% 90 85)"}, http.StatusOK)
+	if lch.Color != "lch(80% 90 85)" {
+		t.Fatalf("an lch() colour from the picker should be stored as-is: %#v", lch)
+	}
+
+	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	used := ""
+	for _, project := range bootstrap.Projects {
+		if project.Status.ID != "" {
+			used = project.Status.ID
+			break
+		}
+	}
+	if used == "" {
+		t.Skip("fixture has no project with a status")
+	}
+	renamed := requestJSON[domain.ProjectStatus](t, handler, http.MethodPatch, "/api/project-statuses/"+used, map[string]any{
+		"name": "  Shipping  ", "color": "#26b5ce", "description": "On its way",
+	}, http.StatusOK)
+	if renamed.Name != "Shipping" || renamed.Color != "#26b5ce" || renamed.Description != "On its way" {
+		t.Fatalf("project status edit was not saved: %#v", renamed)
+	}
+	bootstrap = requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
+	for _, project := range bootstrap.Projects {
+		if project.Status.ID == used && (project.Status.Name != "Shipping" || project.Status.Color != "#26b5ce") {
+			t.Fatalf("project %s still shows the old status: %#v", project.ID, project.Status)
+		}
+	}
+	for _, status := range bootstrap.ProjectStatuses {
+		if status.ID == used && status.Color != "#26b5ce" {
+			t.Fatalf("an edited built-in status colour must not be reset on load: %#v", status)
+		}
+	}
+
+	// A second status of the same type can be deleted only once no project uses it.
+	var usedType string
+	for _, status := range bootstrap.ProjectStatuses {
+		if status.ID == used {
+			usedType = status.Type
+		}
+	}
+	extra := requestJSON[domain.ProjectStatus](t, handler, http.MethodPost, "/api/project-statuses", map[string]any{"name": "Extra", "type": usedType, "color": "#f2c94c"}, http.StatusCreated)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/project-statuses/"+used, nil, http.StatusBadRequest)
+	requestJSON[any](t, handler, http.MethodDelete, "/api/project-statuses/"+extra.ID, nil, http.StatusNoContent)
+}

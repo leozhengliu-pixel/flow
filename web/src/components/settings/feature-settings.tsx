@@ -5,9 +5,7 @@ import {
   ArrowUpRight,
   Check,
   ChevronRight,
-  FileText,
   MessageSquare,
-  Plus,
   Search,
   Smile,
   Sparkles,
@@ -31,7 +29,8 @@ import { countLabelsByResource } from '@/lib/resource-counts';
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useI18n } from "@/i18n/i18n";
-import { DocumentTemplateEditor } from "@/components/documents/document-template-editor";
+import { DocumentTemplateEditor, DocumentTemplateRow } from "@/components/documents/document-template-editor";
+import { TemplateListCard } from "./issue-template-settings";
 import {
   createCustomEmoji,
   updateCustomEmoji,
@@ -335,20 +334,19 @@ function DocumentsPage({data,onReload}:{data:BootstrapData;onReload:()=>Promise<
   const { t } = useI18n();
   // `undefined` = list, `null` = a new template, a template = editing it. ⌘K's "Create new document template…" opens with ?newTemplate=1.
   const [editing,setEditing]=useState<DocumentTemplate|null|undefined>(()=>new URLSearchParams(window.location.search).has("newTemplate")?null:undefined);
-  // Workspace templates apply to every team; team templates are listed under their team (and also managed in team settings).
+  // Workspace templates apply to every team; team templates are managed in each team's settings.
   const templates=data.documentTemplates.filter(item=>!item.teamId);
-  const teamGroups=data.teams.filter(team=>!team.archivedAt).map(team=>({team,items:data.documentTemplates.filter(item=>item.teamId===team.id)})).filter(group=>group.items.length>0);
-  const row=(item:DocumentTemplate)=><FeatureRow key={item.id} icon={FileText} title={item.name} businessTitle description={item.description||"Document template"}><FeatureButton aria-label={`${t("Edit")}: ${item.name}`} onClick={()=>setEditing(item)}>Edit</FeatureButton></FeatureRow>;
-  if (editing!==undefined) return <FeatureShell title="Documents"><DocumentTemplateEditor data={data} teamId={editing?.teamId??""} template={editing} onClose={()=>setEditing(undefined)} onSaved={onReload}/></FeatureShell>;
-  return <FeatureShell title="Documents"><FeatureSection title="Templates" description="These templates are available when creating documents for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.">
-    {templates.length ? (
-      <FeatureCard>{templates.map(row)}</FeatureCard>
-    ) : (
-      <FeatureEmpty icon={FileText} title="No document templates" action={<FeatureButton onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton>}/>
-    )}
-    {templates.length>0&&<div className="feature-section-action"><FeatureButton onClick={()=>setEditing(null)}><Plus size={14}/>New template</FeatureButton></div>}
-  </FeatureSection>
-  {teamGroups.map(group=><FeatureSection key={group.team.id} title={group.team.name}><FeatureCard>{group.items.map(row)}</FeatureCard></FeatureSection>)}</FeatureShell>;
+  if (editing!==undefined) return <DocumentTemplateEditor data={data} teamId="" template={editing} backLabel="Documents" onClose={()=>setEditing(undefined)} onSaved={onReload}/>;
+  return <div className="tpl-page" data-i18n-ignore>
+    <header className="tpl-page-header"><h1>{t("Documents")}</h1></header>
+    <section className="tpl-section">
+      <h3>{t("Templates")}</h3>
+      <p className="tpl-section-description">{t("These templates are available when creating documents for any team in the workspace. To create templates that only apply to specific teams, add them as team templates.")}{" "}<a className="tpl-docs-link" href="https://flow.app/docs/documents" target="_blank" rel="noopener noreferrer">{t("Docs")}</a></p>
+      <TemplateListCard emptyLabel="No document templates" createLabel="Create new document template" onCreate={()=>setEditing(null)} count={templates.length} countLabel={t(templates.length===1?"1 document template":"{count} document templates").replace("{count}",String(templates.length))}>
+        {templates.map(item=><DocumentTemplateRow key={item.id} template={item} onOpen={()=>setEditing(item)} onChanged={onReload}/>)}
+      </TemplateListCard>
+    </section>
+  </div>;
 }
 
 function CustomerRequestsPage(props:{data:BootstrapData;settings:WorkspaceSettings;busy:boolean;setEnabled:(id:string,value:boolean)=>void;setFeature:<K extends keyof FeatureSettings>(key:K,value:FeatureSettings[K])=>void|Promise<void>;onReload:()=>Promise<void>}) {

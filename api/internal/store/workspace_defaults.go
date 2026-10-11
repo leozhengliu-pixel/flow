@@ -112,11 +112,21 @@ func localSQLiteFixture() domain.Bootstrap {
 
 func stringPointer(value string) *string { return &value }
 
+// canonicalProjectStatusColors are the built-in project status colours (the reference app's
+// defaults) and the colour each one had before statuses became editable.
+var canonicalProjectStatusColors = map[string]struct{ color, legacy string }{
+	"ps_backlog":   {color: "#F2994A", legacy: "#E79D4F"},
+	"ps_planned":   {color: "#D7D8DB", legacy: "#A8A8AA"},
+	"ps_progress":  {color: "#F2C94C", legacy: "#E2B714"},
+	"ps_completed": {color: "#5E6AD2", legacy: "#5E6AD2"},
+	"ps_canceled":  {color: "#8A8F98", legacy: "#8A8F98"},
+}
+
 func canonicalProjectStatuses() []domain.ProjectStatus {
 	return []domain.ProjectStatus{
-		{ID: "ps_backlog", Name: "Backlog", Color: "#E79D4F", Type: "backlog"},
-		{ID: "ps_planned", Name: "Planned", Color: "#A8A8AA", Type: "planned"},
-		{ID: "ps_progress", Name: "In Progress", Color: "#E2B714", Type: "started"},
+		{ID: "ps_backlog", Name: "Backlog", Color: "#F2994A", Type: "backlog"},
+		{ID: "ps_planned", Name: "Planned", Color: "#D7D8DB", Type: "planned"},
+		{ID: "ps_progress", Name: "In Progress", Color: "#F2C94C", Type: "started"},
 		{ID: "ps_completed", Name: "Completed", Color: "#5E6AD2", Type: "completed"},
 		{ID: "ps_canceled", Name: "Canceled", Color: "#8A8F98", Type: "canceled"},
 	}

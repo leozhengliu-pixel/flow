@@ -32,20 +32,30 @@ describe('Settings > Documents templates', () => {
   })
   afterEach(() => { vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
-  it('lists workspace templates and, under their team, the team templates', () => {
+  it('lists only the workspace templates (team templates live in team settings), in the reference app\'s card', () => {
     render(page(data([template({ id: 'a', name: 'Company kickoff' }), template({ id: 'b', name: 'Team retro', teamId: team.id })])))
+    expect(screen.getByRole('heading', { name: 'Documents' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Templates' })).toBeInTheDocument()
     expect(screen.getByText('Company kickoff')).toBeInTheDocument()
-    expect(screen.getByText('Team retro')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: team.name })).toBeInTheDocument()
+    expect(screen.queryByText('Team retro')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create new document template' })).toBeInTheDocument()
   })
 
-  it('edits a team template in the full editor and keeps its team on save', async () => {
+  it('shows the empty state with a New template button', async () => {
     const user = userEvent.setup()
-    render(page(data([template({ id: 'b', name: 'Team retro', teamId: team.id, icon: 'Page' })])))
-    await user.click(screen.getByRole('button', { name: 'Edit: Team retro' }))
-    expect(await screen.findByRole('textbox', { name: 'Document content' })).toBeInTheDocument()
+    render(page(data([])))
+    expect(screen.getByText('No document templates')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Create new document template' }))
+    expect(await screen.findByRole('heading', { name: 'New document template' })).toBeInTheDocument()
+  })
+
+  it('edits a workspace template in the full editor and saves it', async () => {
+    const user = userEvent.setup()
+    render(page(data([template({ id: 'a', name: 'Company kickoff', icon: 'Page' })])))
+    await user.click(screen.getByRole('button', { name: 'Company kickoff' }))
+    expect(await screen.findByRole('textbox', { name: 'Document template content' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(api.updateDocumentTemplate).toHaveBeenCalledWith('b', expect.objectContaining({ teamId: team.id, name: 'Team retro', icon: 'Page' })))
+    await waitFor(() => expect(api.updateDocumentTemplate).toHaveBeenCalledWith('a', expect.objectContaining({ teamId: '', name: 'Company kickoff', icon: 'Page' })))
   })
 
   it('opens a new template editor from ⌘K (?newTemplate=1)', async () => {

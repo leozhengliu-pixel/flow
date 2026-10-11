@@ -1,6 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
 import * as Tooltip from '@radix-ui/react-tooltip'
-import { Check, ChevronRight, Layers3, Plus } from 'lucide-react'
+import { ChevronRight, Layers3, Plus } from 'lucide-react'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import './virtual-property-options.css'
@@ -19,6 +19,7 @@ import { PersonInfo } from './person-info'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { displayUserName } from '@/lib/runtime-preferences'
 import { TooltipShortcut } from '@/components/ui/tooltip'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 
 export interface PropertyOption {
   searchOnly?: boolean
@@ -263,7 +264,7 @@ function LabelGroupOption({ group, open, selectedIds, listboxId, onOpenChange, o
 function CommandOption({ option, active, checked, icon, labelHover = false, listboxId, multi = false, showGroupLabel = false, onChoose, onActive }: { option: PropertyOption; active: boolean; checked: boolean; icon: ReactNode; labelHover?: boolean; listboxId: string; multi?: boolean; showGroupLabel?: boolean; onChoose: () => void; onActive: () => void }) {
   const { t } = useI18n()
   const row = <button aria-disabled={option.disabled || undefined} className={showGroupLabel && option.groupLabel ? 'is-grouped-label' : undefined} disabled={option.disabled} id={`${listboxId}-${option.id || 'none'}`} role="option" type="button" aria-selected={active} aria-checked={checked} onPointerMove={onActive} onFocus={onActive} onClick={onChoose}>
-    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><Check size={14}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
+    <span className="property-command-option-background"/>{multi && !option.action && <span className="property-command-checkbox">{checked && <CheckboxMark/>}</span>}<span className="property-command-icon">{option.icon ?? (option.color ? <i className="option-dot" style={{ background: option.color }}/> : icon)}</span><span className="property-command-label" data-i18n-ignore={option.i18nIgnore || undefined}>{option.labelContent ?? (option.i18nIgnore ? option.label : t(option.label))}</span>{showGroupLabel && option.groupLabel && <span className="property-command-option-group" data-i18n-ignore>{option.groupLabel}</span>}{!multi && checked && <span className="property-command-check"><FlowGlyph name="check" width={16} height={16}/></span>}{option.end && <span className="property-command-option-end">{t(option.end)}</span>}{option.shortcut && <kbd>{option.shortcut}</kbd>}
   </button>
   if (option.hoverContent) return <OptionHover className={option.hoverClassName} content={option.hoverContent}>{row}</OptionHover>
   return labelHover && option.color ? <LabelHoverPreview label={{ name: option.label, color: option.color, description: option.description, issueCount: option.issueCount, scope: option.scope, resourceType: option.resourceType }}>{row}</LabelHoverPreview> : row

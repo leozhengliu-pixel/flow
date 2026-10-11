@@ -22,6 +22,7 @@ import {
 } from '@/components/projects-page/projects-relevance'
 
 import './issue-project-picker.css'
+import { projectTemplateChoices } from '@/lib/project-template-choice'
 
 export function IssueProjectPicker({ data, issue, grouped = false, presence = [], onUpdate, onCreateProject, onCreateMilestone }: {
   data: BootstrapData
@@ -116,7 +117,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
       leads={peopleChoices}
       members={peopleChoices}
       statuses={data.projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color, icon: <ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
-      templates={data.projectTemplates.map(template => ({ id: template.id, label: template.name, name: template.name, description: template.description, summary: template.summary, icon: template.icon, color: template.color, status: data.projectStatuses.find(status => status.id === template.statusId)?.name, priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority', teamIds: template.teamIds, initiativeIds: template.initiativeIds, labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)), dependencyIds: template.dependencyIds }))}
+      templates={projectTemplateChoices(data.projectTemplates, { projectStatuses: data.projectStatuses, projectLabels, projects: data.projects })}
       onClose={() => setCreateOpen(false)}
       onCreate={async draft => { const created = onCreateProject ? await onCreateProject(draft) : await createDirectProject(draft, data); setCreatedProjects(current => [created, ...current.filter(item => item.id !== created.id)]); await onUpdate({ projectId: created.id, projectMilestoneId: '' }); setCreateOpen(false) }}
       open={createOpen}

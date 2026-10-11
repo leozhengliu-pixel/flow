@@ -223,10 +223,19 @@ export async function createTemplateFromDocument(ctx: DocumentActionContext, doc
  * open editor reloads from it (sending editor state would not reach an editor
  * that is already mounted on the old collaborative document).
  */
+/** Fired after a template was applied, so an open document page can show the new body right away. */
+export const DOCUMENT_TEMPLATE_APPLIED_EVENT = 'flow:document-template-applied'
+export type DocumentTemplateAppliedDetail = { documentId: string; template: DocumentTemplate }
+
 export async function applyTemplateToDocument(ctx: DocumentActionContext, document: FlowDocument, template: DocumentTemplate) {
-  return guarded(ctx, () => updateDocument(document.id, {
+  const applied = await guarded(ctx, () => updateDocument(document.id, {
     title: template.title ?? '', icon: template.icon ?? '', content: template.content ?? '',
+    // The template's editor state keeps rich content (mentions, tables) exactly; Markdown alone would flatten it.
+    ...(template.contentData ? { contentData: template.contentData } : {}),
+    ...(template.contentState ? { contentState: template.contentState } : {}),
   }), ctx.t('Template applied'), 'Could not apply template')
+  if (applied) window.dispatchEvent(new CustomEvent<DocumentTemplateAppliedDetail>(DOCUMENT_TEMPLATE_APPLIED_EVENT, { detail: { documentId: document.id, template } }))
+  return applied
 }
 
 export type DocumentMoveTarget = { type: 'team' | 'project' | 'initiative'; id: string }

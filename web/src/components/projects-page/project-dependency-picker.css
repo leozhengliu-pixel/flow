@@ -252,3 +252,5 @@
 :root[data-theme="light"] .project-dependency-picker__preview-progress-icon::after {
   background: var(--theme-surface-2);
 }
+/* "Blocked by…" / "Blocking…" glyphs use the dependency red, like the reference menu. */
+.project-dependency-picker__direction > svg.project-dependency-picker__direction-glyph { color: var(--project-dependency-icon); }

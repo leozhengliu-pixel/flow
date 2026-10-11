@@ -1187,6 +1187,18 @@ export interface TemplateMilestone {
   name: string;
   description?: string;
 }
+/** An issue a project template creates; milestoneId names one of the template's milestones, parentId another template issue. */
+export interface ProjectTemplateIssue {
+  id: UUID;
+  title: string;
+  description?: string;
+  teamId?: UUID;
+  priority: number;
+  assigneeId?: UUID;
+  labelIds: UUID[];
+  milestoneId?: UUID;
+  parentId?: UUID;
+}
 export interface ProjectTemplate {
   id: UUID;
   name: string;
@@ -1206,6 +1218,10 @@ export interface ProjectTemplate {
   initiativeIds?: UUID[];
   issueIds?: UUID[];
   milestones?: TemplateMilestone[];
+  /** Issues created in every project made from the template. */
+  issues?: ProjectTemplateIssue[];
+  /** Preset "blocked by" / "blocking" relations to existing projects. */
+  dependencyRelations?: Array<{ projectId: UUID; type: "blocked_by" | "blocks" }>;
   visibility?: "workspace" | "teams";
   visibilityTeamId?: UUID;
   creator: User;

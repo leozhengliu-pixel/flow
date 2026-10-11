@@ -6,7 +6,7 @@ import { estimateLabel, estimatePickerOptions, NO_ESTIMATE } from '@/lib/estimat
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import type { Editor } from '@tiptap/react'
-import { ChevronRight, CircleDashed, Diamond, ExternalLink, FilePlus2, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
+import { ChevronRight, CircleDashed, Diamond, ExternalLink, Link2, Maximize2, Minimize2, MoreHorizontal, Paperclip, Repeat2, Trash2, X } from 'lucide-react'
 import type { BootstrapData, Draft, Issue, IssueLabel, IssueSuggestionPreview } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -129,6 +129,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const [dueDate, setDueDate] = useState('')
   const [labelIds, setLabelIds] = useState<string[]>(initialContext?.labelIds ?? [])
   const [templateId, setTemplateId] = useState('')
+  const [formValues, setFormValues] = useState<TemplateFormValues>({})
+  const [invalidFields, setInvalidFields] = useState<Set<string>>(new Set())
+  // What the last applied template filled in, so switching templates replaces it but never the user's own text.
+  const appliedTemplateRef = useRef<{ title: string; body: string }>({ title: '', body: '' })
   const [recurrence, setRecurrence] = useState('')
   const [serverDraftId, setServerDraftId] = useState('')
   const [createMore, setCreateMore] = useState(false)
@@ -258,22 +262,41 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     const scopes = new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
     return issueLabels.filter(label => !label.scope || label.scope === 'Workspace' || scopes.has(label.scope))
   }, [data.teamSettings, data.teams, issueLabels, teamId])
-  const templateOptions = useMemo(() => {
-    const scopes = new Set(labelTeamScopeIds(teamId, data.teams, data.teamSettings))
-    return data.issueTemplates.filter(item => scopes.has(item.teamId ?? ''))
-  }, [data.issueTemplates, data.teamSettings, data.teams, teamId])
+  const templateOptions = useMemo(() => issueTemplatesForTeam(data, teamId), [data, teamId])
+  const selectedTemplate = templateOptions.find(item => item.id === templateId) ?? data.issueTemplates.find(item => item.id === templateId)
+  const formTemplate = selectedTemplate?.templateType === 'customForm' && (selectedTemplate.formFields?.length ?? 0) > 0 ? selectedTemplate : undefined
   const availableLabelIds = useMemo(() => new Set(availableLabels.map(label => label.id)), [availableLabels])
   const applyTemplate = (id: string) => {
+    const previous = appliedTemplateRef.current
     setTemplateId(id)
-    const template = templateOptions.find(item => item.id === id)
-    if (!template) return
-    setTitle(current => current || template.name)
-    setStateId(template.stateId || defaultState.id)
+    setFormValues({})
+    setInvalidFields(new Set())
+    const template = data.issueTemplates.find(item => item.id === id)
+    if (!template) {
+      // "No template": take back only what the previous template filled in.
+      setTitle(current => current === previous.title ? '' : current)
+      if (previous.body && description?.markdown.trim() === previous.body.trim()) descriptionEditorRef.current?.commands.clearContent(true)
+      appliedTemplateRef.current = { title: '', body: '' }
+      return
+    }
+    // A workspace template's team property moves the issue to that team.
+    const nextTeamId = isWorkspaceIssueTemplate(template) && template.teamId && data.teams.some(team => team.id === template.teamId) ? template.teamId : teamId
+    if (nextTeamId !== teamId) { setTeamId(nextTeamId); setCycleId('') }
+    const nextTitle = template.title ?? ''
+    setTitle(current => !current.trim() || current === previous.title ? nextTitle : current)
+    const states = data.states.filter(state => state.teamId === nextTeamId)
+    setStateId(template.stateId && (states.length ? states : data.states).some(state => state.id === template.stateId) ? template.stateId : defaultState.id)
     setPriority(template.priority)
     setAssigneeId(template.assigneeId ?? data.viewer.id)
     setProjectId(template.projectId ?? '')
     setLabelIds(template.labelIds)
-    if (template.body) descriptionEditorRef.current?.commands.setContent(template.body, { contentType: 'markdown' })
+    const body = template.body ?? ''
+    const currentBody = description?.markdown.trim() ?? ''
+    if (!currentBody || currentBody === previous.body.trim()) {
+      if (body) descriptionEditorRef.current?.commands.setContent(body, { contentType: 'markdown' })
+      else descriptionEditorRef.current?.commands.clearContent(true)
+    }
+    appliedTemplateRef.current = { title: nextTitle, body }
   }
   // A team's default template is preselected for new, untouched issues; team
   // members and people outside the team can have different defaults.
@@ -368,6 +391,11 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
 
   const submit = useCallback(async () => {
     const cleanTitle = title.trim()
+    if (formTemplate) {
+      const missing = missingRequiredFields(formTemplate.formFields ?? [], formValues, { title, priority, dueDate })
+      setInvalidFields(new Set(missing))
+      if (missing.length) { setError('Fill in the required fields'); return }
+    }
     if (!cleanTitle || saving) return
     setSaving(true)
     setError(undefined)
@@ -375,10 +403,10 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       const issue = await onCreate({
         title: cleanTitle,
         teamId,
-        description: description?.markdown.trim() ?? '',
-        descriptionState: description?.documentJSON,
-        descriptionData: description?.document as Record<string, unknown> | undefined,
-        contentState: description?.contentState,
+        description: formTemplate ? templateFormDescription(formTemplate.formFields ?? [], formValues) : description?.markdown.trim() ?? '',
+        descriptionState: formTemplate ? undefined : description?.documentJSON,
+        descriptionData: formTemplate ? undefined : description?.document as Record<string, unknown> | undefined,
+        contentState: formTemplate ? undefined : description?.contentState,
         stateId,
         priority,
         estimate,
@@ -409,7 +437,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
     } finally {
       setSaving(false)
     }
-  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
+  }, [assigneeId, availableLabelIds, createMore, initialContext?.parentId, initialContext?.related, cycleId, description, draftKey, dueDate, estimate, files, formTemplate, formValues, labelIds, onCreate, onDraftDeleted, onOpenChange, onUpload, priority, projectId, projectMilestoneId, recurrence, saving, serverDraftId, stateId, teamId, templateId, title])
 
   const changeOpen = (next: boolean) => {
     if (!next && serverDraftId && hasDraftContent) {
@@ -437,6 +465,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
         <form onSubmit={event => { event.preventDefault(); void submit() }}>
           <header className={styles.header}>
             <PropertyMenu compact label="Team" value={team?.key ?? 'Team'} selectedId={teamId} options={data.teams.filter(item=>!item.retiredAt).map(item=>({id:item.id,label:item.name,keywords:item.key,icon:<TeamIcon team={item}/>,i18nIgnore:true}))} trigger={<><TeamIcon team={team}/><span data-i18n-ignore>{team?.key ?? 'Team'}</span></>} triggerClassName={styles.team} ariaLabel="Set team" onChange={id=>{setTeamId(id);setCycleId('');setLabelIds([]);setTemplateId('')}}/>
+            {templateOptions.length > 0 && <PropertyMenu compact label="Template" ariaLabel="Choose a template" searchPlaceholder="Choose a template…" value={selectedTemplate?.name ?? 'Template'} valueIsEntityName={Boolean(selectedTemplate)} selectedId={templateId} triggerClassName={styles.team} trigger={<><TemplateGlyph name="page" size={13}/><span data-i18n-ignore={selectedTemplate ? true : undefined}>{selectedTemplate?.name ?? 'Template'}</span></>} options={[{ id: '', label: 'No template', icon: <TemplateGlyph name="page"/> }, ...templateOptions.map(item => ({ id: item.id, label: item.name, description: item.description, groupLabel: isWorkspaceIssueTemplate(item) ? 'Workspace' : data.teams.find(team => team.id === (item.visibilityTeamId || item.teamId))?.name, icon: <TemplateGlyph name="page"/>, i18nIgnore: true }))]} onChange={id => applyTemplate(id)}/>}
             <span className={styles.breadcrumb}>›</span><Dialog.Title>New issue</Dialog.Title>
             {serverDraftId ? <button type="button" className={styles.saveDraft} aria-label="Discard draft" disabled={saving} onClick={() => setDiscardConfirmOpen(true)}><Trash2/></button> : hasDraftContent && <button type="button" className={styles.saveDraft} aria-label="Save draft" disabled={saving} onClick={() => void saveDraft()}>{saving ? 'Saving...' : 'Save as draft'}</button>}
             <button type="button" className={`${styles.iconButton} ${styles.expandButton}`} aria-label={expanded ? 'Collapse' : 'Expand'} aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? <Minimize2/> : <Maximize2/>}</button>
@@ -445,11 +474,12 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
 
           <div className={styles.document}>
             <IssueTitleEditor value={title} onChange={setTitle} onEnter={() => descriptionEditorRef.current?.commands.focus('start')} onSubmit={() => void submit()} autoFocus={open} className={styles.titleField} editorRef={editor => { titleEditorRef.current = editor }}/>
-            <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className={styles.descriptionField} editorRef={editor => { descriptionEditorRef.current = editor }}/>
+            {formTemplate
+              ? <TemplateFormFill fields={formTemplate.formFields ?? []} values={formValues} onChange={setFormValues} title={title} onTitle={setTitle} priority={priority} onPriority={setPriority} dueDate={dueDate} onDueDate={setDueDate} invalid={invalidFields}/>
+              : <IssueDescriptionEditor users={data.users} value={description?.markdown ?? ''} state={description?.documentJSON} onChange={setDescription} onSubmit={() => void submit()} className={styles.descriptionField} editorRef={editor => { descriptionEditorRef.current = editor }}/>}
           </div>
 
           <div className={styles.properties}>
-            {templateOptions.length>0 && <MiniProperty label="Template" value={templateOptions.find(item=>item.id===templateId)?.name ?? 'Template'} selectedId={templateId} icon={<FilePlus2/>} options={[{id:'',label:'No template',icon:<FilePlus2/>},...templateOptions.map(item=>({id:item.id,label:item.name,description:item.description,icon:<FilePlus2/>}))]} onChange={id=>applyTemplate(id)}/>}
             <MiniProperty label="Status" value={inTriage ? TRIAGE_STATUS.name : state.name} selectedId={stateId} icon={<StatusIcon state={inTriage ? TRIAGE_STATUS : state}/>} options={[...availableStates].sort((a,b) => (a.position??0)-(b.position??0)).map((item,index) => ({ id:item.id,label:item.name,color:item.color,icon:<StatusIcon state={item}/>,shortcut:index < 5 ? String(index+1) : undefined }))} onChange={setStateId}/>
             <MiniProperty label="Priority" value={priority ? priorityNames[priority] : 'Priority'} selectedId={String(priority)} icon={<PriorityIcon priority={priority}/>} options={[0,1,2,3,4].map(item => ({ id:String(item),label:priorityNames[item],icon:<PriorityIcon priority={item}/>,shortcut:String(item) }))} onChange={value => setPriority(Number(value))}/>
             {estimateType!=='notUsed'&&<MiniProperty label="Estimate" value={estimate >= 0 ? estimateLabel(estimate, estimateType) : 'Estimate'} selectedId={String(estimate)} icon={<EstimateGlyph value={Math.max(estimate, 0)}/>} options={estimateOptions.map(option=>({id:option.id,label:option.label,icon:<EstimateGlyph value={Math.max(option.value, 0)}/>}))} onChange={value=>setEstimate(Number(value))}/>}
@@ -624,6 +654,10 @@ function escapeHtml(value: string) { return value.replace(/[&<>"']/g, character 
 function escapeAttribute(value: string) { return escapeHtml(value) }
 import { useCreateMotion } from '@/components/ui/motion';
 import { TRIAGE_STATUS } from '@/components/triage/triage-model'
+import { issueTemplatesForTeam, isWorkspaceIssueTemplate } from '@/lib/issue-templates'
+import { TemplateGlyph } from '@/components/settings/template-glyphs'
+import { TemplateFormFill } from './template-form-fields'
+import { missingRequiredFields, templateFormDescription, type TemplateFormValues } from '@/lib/template-form'
 
 /** Links a newly created issue to the issue it was created from ("Create related"). */
 async function relateCreatedIssue(created: Issue, related: NonNullable<MyIssuesCreateContext['related']>) {

@@ -52,6 +52,8 @@ export type NewProjectMilestoneDraft = {
   name: string
   description?: string
   targetDate?: string
+  /** The project template milestone this one came from (template issues follow it). */
+  templateMilestoneId?: string
 }
 
 export type NewProjectChoice = { id: string, label: string, color?: string, email?: string, name?: string, avatarUrl?: string, active?: boolean, online?: boolean, invited?: boolean, disabled?: boolean, end?: string, groupId?: string, groupLabel?: string, groupColor?: string, scope?: string, group?: 'your' | 'other', icon?: ReactNode, initials?: string, hoverContent?: ReactNode, hoverClassName?: string, previewData?: ProjectDependencyPreviewData }
@@ -65,10 +67,14 @@ export type NewProjectTemplateChoice = {
   color?: string
   status?: string
   priority?: string
+  leadId?: string
+  memberIds?: string[]
   teamIds?: string[]
   initiativeIds?: string[]
   labelIds?: string[]
   dependencyIds?: string[]
+  dependencyRelations?: ProjectDependencyRelationInput[]
+  milestones?: NewProjectMilestoneDraft[]
 }
 
 export type NewProjectDialogProps = {
@@ -124,8 +130,14 @@ export function NewProjectDialog({
   const labelSignature = labels.map(label => label.id).join('|')
   const templatesRef = useRef(templates)
   const labelsRef = useRef(labels)
+  const leadsRef = useRef(leads)
+  const membersRef = useRef(members)
+  const dependenciesRef = useRef(dependencies)
   templatesRef.current = templates
   labelsRef.current = labels
+  leadsRef.current = leads
+  membersRef.current = members
+  dependenciesRef.current = dependencies
   const [draft, setDraft] = useState<NewProjectDraft>(() => emptyDraft(resolvedDefaultStatus, defaultTeamId))
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -142,7 +154,8 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!open) return
-    const nextDraft = applyProjectTemplateDraft(emptyDraft(resolvedDefaultStatus, defaultTeamId), initialTemplateId, templatesRef.current, labelsRef.current)
+    const baseDraft = emptyDraft(resolvedDefaultStatus, defaultTeamId)
+    const nextDraft = applyProjectTemplateDraft(baseDraft, initialTemplateId, templatesRef.current, { labels: labelsRef.current, leads: leadsRef.current, members: membersRef.current, dependencies: dependenciesRef.current }, baseDraft)
     initialDraftRef.current = nextDraft
     setDraft(nextDraft)
     setError(null)
@@ -193,7 +206,7 @@ export function NewProjectDialog({
     return next
   })
   const applyTemplate = (templateId: string) => {
-    setDraft(current => applyProjectTemplateDraft(current, templateId, templates, labels))
+    setDraft(current => applyProjectTemplateDraft(current, templateId, templates, { labels, leads, members, dependencies }, emptyDraft(resolvedDefaultStatus, defaultTeamId)))
   }
 
   return <div aria-label={t('Create project')} aria-modal={open || undefined} aria-hidden={!open || undefined} inert={!open || undefined} className={`lp-new-project${agentOpen ? ' lp-new-project--agent-open' : ''}`} onKeyDown={event => { if (open) trapFocus(event, discardOpen ? '.lp-new-project__discard-dialog' : undefined) }} role="dialog">
@@ -408,13 +421,69 @@ function emptyDraft(status: string, teamId?: string): NewProjectDraft {
   return { name: '', icon: 'Project', color: '#5e6ad2', summary: '', description: '', status, priority: 'No priority', memberIds: [], teamIds: teamId ? [teamId] : [], initiativeIds: [], labelIds: [], dependencyIds: [], dependencyRelations: [], milestones: [] }
 }
 
-function applyProjectTemplateDraft(current:NewProjectDraft,templateId:string|undefined,templates:NewProjectTemplateChoice[],labels:NewProjectChoice[]):NewProjectDraft{
-  if(!templateId)return current
-  const template=templates.find(item=>item.id===templateId)
-  if(!template)return current
-  const labelOptionIds=new Set(labels.map(label=>label.id))
-  const dependencyIds = template.dependencyIds ? [...template.dependencyIds] : current.dependencyIds
-  return {...current,templateId,name:template.name??template.label,summary:template.summary??'',description:template.description??'',icon:normalizeProjectIcon(template.icon),color:template.color??current.color,status:template.status??current.status,priority:template.priority??current.priority,teamIds:template.teamIds?.length?[...template.teamIds]:current.teamIds,initiativeIds:template.initiativeIds?[...template.initiativeIds]:current.initiativeIds,labelIds:template.labelIds?template.labelIds.filter(id=>labelOptionIds.has(id)):current.labelIds,dependencyIds,dependencyRelations:dependencyIds.map(projectId => ({ projectId, type: 'blocked_by' as const }))}
+type ProjectTemplateDraftChoices = { labels: NewProjectChoice[], leads?: NewProjectChoice[], members?: NewProjectChoice[], dependencies?: NewProjectChoice[] }
+
+const TEMPLATE_DRAFT_FIELDS = ['name', 'summary', 'description', 'icon', 'color', 'status', 'priority', 'leadId', 'memberIds', 'teamIds', 'initiativeIds', 'labelIds', 'dependencyIds', 'dependencyRelations'] as const satisfies ReadonlyArray<keyof NewProjectDraft>
+
+/** The draft values a template sets (fields it leaves empty are left out). */
+function projectTemplateDraftValues(template: NewProjectTemplateChoice, choices: ProjectTemplateDraftChoices): Partial<NewProjectDraft> {
+  const known = (options: NewProjectChoice[] | undefined, id: string) => !options?.length || options.some(option => option.id === id)
+  const labelOptionIds = new Set(choices.labels.map(label => label.id))
+  const values: Partial<NewProjectDraft> = {
+    name: template.name ?? template.label,
+    summary: template.summary ?? '',
+    description: template.description ?? '',
+    icon: normalizeProjectIcon(template.icon),
+  }
+  if (template.color) values.color = template.color
+  if (template.status) values.status = template.status
+  if (template.priority) values.priority = template.priority
+  if (template.leadId && known(choices.leads, template.leadId)) values.leadId = template.leadId
+  const memberIds = (template.memberIds ?? []).filter(id => known(choices.members, id))
+  if (memberIds.length) values.memberIds = memberIds
+  if (template.teamIds?.length) values.teamIds = [...template.teamIds]
+  if (template.initiativeIds?.length) values.initiativeIds = [...template.initiativeIds]
+  if (template.labelIds) values.labelIds = template.labelIds.filter(id => labelOptionIds.has(id))
+  const dependencyOptions = choices.dependencies?.filter(option => !option.id.startsWith('__'))
+  const relations = (template.dependencyRelations ?? (template.dependencyIds ?? []).map(projectId => ({ projectId, type: 'blocked_by' as const })))
+    .filter(relation => known(dependencyOptions, relation.projectId))
+  if (relations.length) {
+    values.dependencyRelations = relations.map(relation => ({ ...relation }))
+    values.dependencyIds = relations.filter(relation => relation.type === 'blocked_by').map(relation => relation.projectId)
+  }
+  return values
+}
+
+function sameDraftValue(left: unknown, right: unknown) {
+  return JSON.stringify(left) === JSON.stringify(right)
+}
+
+/**
+ * Applies a project template to the draft. Values the previous template set
+ * and the user left alone go back to the empty draft first, so picking another
+ * template (or "No template") never leaves stale template values behind.
+ */
+function applyProjectTemplateDraft(current: NewProjectDraft, templateId: string | undefined, templates: NewProjectTemplateChoice[], choices: ProjectTemplateDraftChoices, base: NewProjectDraft): NewProjectDraft {
+  const template = templateId ? templates.find(item => item.id === templateId) : undefined
+  if (templateId && !template) return current
+  let next: NewProjectDraft = { ...current }
+  const previous = current.templateId ? templates.find(item => item.id === current.templateId) : undefined
+  if (previous) {
+    const previousValues = projectTemplateDraftValues(previous, choices)
+    const reset = next as Record<string, unknown>
+    for (const key of TEMPLATE_DRAFT_FIELDS) {
+      if (key in previousValues && sameDraftValue(next[key], previousValues[key])) reset[key] = base[key]
+    }
+  }
+  if (current.templateId || template) {
+    const kept = (next.milestoneDetails ?? next.milestones.map((name): NewProjectMilestoneDraft => ({ name }))).filter(milestone => !milestone.templateMilestoneId)
+    const milestoneDetails = [...(template?.milestones ?? []).map(milestone => ({ ...milestone })), ...kept]
+    next = { ...next, milestoneDetails: milestoneDetails.length || next.milestoneDetails ? milestoneDetails : undefined, milestones: milestoneDetails.map(milestone => milestone.name) }
+  }
+  if (!template) return { ...next, templateId: undefined }
+  next = { ...next, ...projectTemplateDraftValues(template, choices), templateId }
+  if (next.color === undefined) next.color = base.color
+  return next
 }
 
 
