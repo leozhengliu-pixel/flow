@@ -82,13 +82,18 @@ describe('DocumentTemplateChip', () => {
     expect(screen.queryByRole('option', { name: /Other team plan/ })).not.toBeInTheDocument()
   })
 
-  it('applies the picked template (title, icon and Markdown body so the open editor reloads) and reloads data', async () => {
+  it('applies the picked template (title, icon and body), reloads data and tells the open page to show the new body', async () => {
     const user = userEvent.setup()
+    const applied = vi.fn()
+    window.addEventListener('flow:document-template-applied', applied)
     const context = mount(empty())
     await user.click(screen.getByRole('button', { name: 'Choose a template' }))
     await user.click(await screen.findByRole('option', { name: /Workspace kickoff/ }))
-    await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith('doc-1', { title: 'Kickoff', icon: 'Page', content: '# Goals' }))
+    await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith('doc-1', expect.objectContaining({ title: 'Kickoff', icon: 'Page', content: '# Goals' })))
     await waitFor(() => expect(context.reload).toHaveBeenCalled())
+    await waitFor(() => expect(applied).toHaveBeenCalled())
+    expect((applied.mock.calls[0][0] as CustomEvent).detail).toMatchObject({ documentId: 'doc-1', template: expect.objectContaining({ name: 'Workspace kickoff' }) })
+    window.removeEventListener('flow:document-template-applied', applied)
   })
 
   it('falls back to the viewer teams when the document has no team', () => {

@@ -131,6 +131,9 @@ func applyLabelMerge(data *domain.Bootstrap, toID string, fromIDs []string) (dom
 	}
 	for index := range data.ProjectTemplates {
 		data.ProjectTemplates[index].LabelIDs = replace(data.ProjectTemplates[index].LabelIDs)
+		for issueIndex := range data.ProjectTemplates[index].Issues {
+			data.ProjectTemplates[index].Issues[issueIndex].LabelIDs = replace(data.ProjectTemplates[index].Issues[issueIndex].LabelIDs)
+		}
 	}
 	for index := range data.TriageRoutingRules {
 		rule := &data.TriageRoutingRules[index]

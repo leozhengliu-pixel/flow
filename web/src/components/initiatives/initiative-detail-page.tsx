@@ -43,6 +43,7 @@ import './initiatives.css'
 import './initiative-detail-overrides.css'
 import './initiative-mention-fields.css'
 import { AgentWriteGlyph } from '@/components/ui/agent-glyph'
+import { projectTemplateChoices } from '@/lib/project-template-choice'
 
 type Props = {
   onCreateInitiative: (input: InitiativeMutationInput & { name: string }) => Promise<Initiative>
@@ -269,7 +270,7 @@ export function InitiativeDetailPage(props: Props) {
       leads={peopleChoices}
       members={peopleChoices}
       statuses={props.projectStatuses.map(status => ({ id: status.name, label: status.name, color: status.color, icon: <ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
-      templates={props.projectTemplates.map(template => ({ id: template.id, label: template.name, name: template.name, description: template.description, summary: template.summary, icon: template.icon, color: template.color, status: props.projectStatuses.find(status => status.id === template.statusId)?.name, priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority', teamIds: template.teamIds, initiativeIds: template.initiativeIds, labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)), dependencyIds: template.dependencyIds }))}
+      templates={projectTemplateChoices(props.projectTemplates, { projectStatuses: props.projectStatuses, projectLabels, projects: props.projects })}
       onClose={() => setProjectCreateOpen(false)}
       onCreate={async draft => { const project = await props.onCreateProject(projectDraftMutation(draft, props.projects, props.projectStatuses)); await update({ projectIds: [...new Set([...initiative.projectIds, project.id])] }); setProjectCreateOpen(false) }}
       open={projectCreateOpen}

@@ -1,0 +1,30 @@
+/**
+ * Chinese copy for issue & document templates (settings lists, the template editors, the type chooser,
+ * form templates in the new-issue composer). Merged into zhCN by translations.ts.
+ */
+export const templatesZhCN: Record<string, string> = {
+  "Add field…": "添加字段…",
+  "Any templates created here will be available when creating issues, projects, and documents within this team. To create templates that apply to all teams, do so in the workspace": "在此创建的模板可在该团队中创建事项、项目和文档时使用。如需创建适用于所有团队的模板，请前往工作区的",
+  "{issue}, {project}, or {document} templates sections.": "{issue}、{project}或{document}模板设置。",
+  "Change assignee. Currently no one is assigned.": "更改负责人。当前未分配。",
+  "Change priority. No priority is selected": "更改优先级。当前未设置优先级",
+  "Create new document template": "新建文档模板",
+  "Delete the template \"{name}\"?": "删除模板“{name}”？",
+  "Set priority to…": "将优先级设为…",
+  "today": "今天",
+  "yesterday": "昨天",
+  "{count} days ago": "{count} 天前",
+  "{count} months ago": "{count} 个月前",
+  "{count} years ago": "{count} 年前",
+  "1 document template": "1 个文档模板",
+  "{count} document templates": "{count} 个文档模板",
+  "Untitled field": "未命名字段",
+  "Fill in the required fields": "请填写必填字段",
+  "Choose a template": "选择模板",
+  "Choose a template…": "选择模板…",
+  "Could not delete template": "无法删除模板",
+  "Automatically applied upon issue creation, and editable when composing within Flow": "创建事项时自动应用，在 Flow 中编写时可修改",
+  "Template icon": "模板图标",
+  "Copy of {name}": "{name} 的副本",
+  "Instructions content": "说明内容",
+};

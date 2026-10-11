@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { projectStatusOptionColor } from './project-status-color'
+import { PROJECT_STATUS_SWATCHES, hexToLch, normalizeHexColor, projectStatusOptionColor, projectStatusStrokeColor } from './project-status-color'
 
 describe('projectStatusOptionColor', () => {
   const current = { id: 'started', name: 'In progress', color: '#ffcc00' }
@@ -11,5 +11,33 @@ describe('projectStatusOptionColor', () => {
 
   it('keeps the option color for unrelated statuses', () => {
     expect(projectStatusOptionColor({ id: 'done', name: 'Done', color: '#00aa66' }, current)).toBe('#00aa66')
+  })
+})
+
+describe('projectStatusStrokeColor', () => {
+  it('keeps hex colours on dark surfaces and maps the brand yellow and purple to the reference app LCH', () => {
+    expect(projectStatusStrokeColor('#F2994A', 'dark')).toBe('#F2994A')
+    expect(projectStatusStrokeColor('#f2c94c', 'dark')).toBe('lch(80% 90 85)')
+    expect(projectStatusStrokeColor('#5E6AD2', 'light')).toBe('lch(48% 59.31 288.43)')
+  })
+
+  it('darkens bright hex colours on light surfaces', () => {
+    expect(projectStatusStrokeColor('#F2994A', 'light')).toMatch(/^lch\(70\.313% 62\.0\d+ 61\.6\d+\)$/)
+    expect(projectStatusStrokeColor('#d7d8db', 'light')).toMatch(/^lch\(70\.313% 1\.\d+ 27\d\.\d+\)$/)
+    expect(projectStatusStrokeColor('#8A8F98', 'light')).toBe('#8A8F98')
+    expect(projectStatusStrokeColor('lch(60% 40 30)', 'light')).toBe('lch(60% 40 30)')
+  })
+
+  it('converts hex to the LCH values the reference app writes', () => {
+    const [l, c, h] = hexToLch('#f2994a')!
+    expect(l).toBeCloseTo(71.56, 1)
+    expect(c).toBeCloseTo(62.08, 1)
+    expect(h).toBeCloseTo(61.65, 1)
+    expect(normalizeHexColor('#ABC')).toBe('#aabbcc')
+    expect(normalizeHexColor('nope')).toBeNull()
+  })
+
+  it('offers the reference app\'s nine swatches in picker order', () => {
+    expect(PROJECT_STATUS_SWATCHES.map(swatch => swatch.name)).toEqual(['Grey', 'Dark Grey', 'Purple', 'Teal', 'Green', 'Yellow', 'Orange', 'Pink', 'Red'])
   })
 })

@@ -12,6 +12,8 @@ import { customerRequestsZhCN } from './translations-customer-requests';
 import { customerFiltersZhCN } from './translations-customer-filters';
 import { initiativeHierarchyZhCN } from './translations-initiative-hierarchy';
 import { labelSettingsZhCN } from './translations-label-settings';
+import { projectStatusesZhCN } from './translations-project-statuses';
+import { templatesZhCN } from './translations-templates';
 import { settingsAccessZhCN } from './translations-settings-access';
 import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
@@ -30,6 +32,7 @@ import { editorZhCN } from './translations-editor';
 import { favoriteTabsZhCN } from './translations-favorite-tabs';
 import { dateFiltersZhCN } from './translations-date-filters';
 import { toastsZhCN } from './translations-toasts';
+import { projectTemplatesZhCN } from './translations-project-templates';
 
 export const zhCN: Record<string, string> = {
   "View {count} issues": "查看 {count} 个事项",
@@ -5778,6 +5781,8 @@ Object.assign(zhCN, customerRequestsZhCN);
 Object.assign(zhCN, customerFiltersZhCN);
 Object.assign(zhCN, initiativeHierarchyZhCN);
 Object.assign(zhCN, labelSettingsZhCN);
+Object.assign(zhCN, projectStatusesZhCN);
+Object.assign(zhCN, templatesZhCN);
 Object.assign(zhCN, settingsAccessZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
@@ -5801,3 +5806,4 @@ for (const [source, translation] of Object.entries(favoriteTabsZhCN)) zhCN[sourc
 // Date filter presets (Released date, No completed date, typed durations) fill gaps only.
 for (const [source, translation] of Object.entries(dateFiltersZhCN)) zhCN[source] ??= translation;
 for (const [source, translation] of Object.entries(toastsZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(projectTemplatesZhCN)) zhCN[source] ??= translation;

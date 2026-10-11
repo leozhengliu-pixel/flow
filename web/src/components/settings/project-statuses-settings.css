@@ -1,0 +1,107 @@
+/* Settings › Projects › Statuses, measured against the reference page (see project-statuses-settings.tsx). */
+.pst-page{box-sizing:border-box;width:640px;margin:0;padding:0 0 72px;color:var(--project-status-name);font-family:"Inter Variable","SF Pro Display",Inter,sans-serif;letter-spacing:normal}
+.pst-header{display:flex;flex-direction:column;gap:4px;margin:0 0 32px;padding:0 16px}
+.pst-header h1{margin:0;color:var(--project-status-title);font-size:24px;line-height:32px;font-weight:500;letter-spacing:-.16px}
+.pst-header p{margin:0;color:var(--project-status-description);font-size:13px;line-height:22px;font-weight:450}
+
+.pst-card{box-sizing:border-box;width:640px;padding:16px 0 4px;border-radius:10px;background:var(--project-status-card-bg);box-shadow:var(--project-status-card-shadow);font-size:16px;line-height:24px}
+.pst-card[data-disabled]{opacity:.6}
+.pst-group-header{box-sizing:border-box;height:36px;margin:0 12px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:4px 6px 4px 16px;border-radius:6px;background:var(--project-status-group-bg)}
+.pst-group-header h3{margin:0;color:var(--project-status-group-fg);font-size:13px;line-height:normal;font-weight:500;letter-spacing:normal}
+
+.pst-icon-button{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:none;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--project-status-add-fg);font-family:inherit;font-size:12px;line-height:normal;font-weight:500;cursor:default;transition:border .15s,background-color .15s,color .15s,opacity .15s}
+.pst-icon-button svg{flex:none;fill:var(--project-status-add-icon);transition:fill .15s}
+.pst-icon-button:hover:not(:disabled),.pst-icon-button[data-state=open]{background:var(--project-status-add-hover-bg);color:var(--project-status-control-hover-fg)}
+.pst-more:hover:not(:disabled),.pst-more[data-state=open]{background:var(--project-status-more-hover-bg)}
+.pst-icon-button:hover:not(:disabled) svg,.pst-icon-button[data-state=open] svg{fill:var(--project-status-control-hover-fg)}
+.pst-icon-button:disabled{opacity:.5}
+.pst-icon-button:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
+.pst-add{width:24px;height:24px}
+.pst-add svg{width:14px;height:14px}
+
+.pst-row{position:relative;box-sizing:border-box;width:640px;height:60px;display:flex;align-items:center;padding:0 16px;border-radius:3px;outline:0}
+.pst-row[data-dragging]{opacity:.45}
+.pst-row:focus-visible{box-shadow:inset 0 0 0 1px var(--focus-ring)}
+.pst-row-main{box-sizing:border-box;min-width:0;height:60px;flex:1;display:flex;align-items:center;gap:12px;padding:12px 0}
+.pst-mark{box-sizing:border-box;width:34px;height:34px;flex:none;display:flex;align-items:center;justify-content:center;padding:8px;border:1px solid transparent;border-radius:6px;background:color-mix(in srgb,var(--status-color) var(--project-status-icon-alpha),transparent)}
+.pst-mark svg,.pst-color-trigger svg{width:16px;height:16px;flex:none}
+.pst-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.pst-name-line{min-width:0;display:flex;gap:4px}
+.pst-name{overflow:hidden;color:var(--project-status-name);font-size:13px;line-height:normal;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.pst-meta{min-width:0;display:flex;align-items:center;gap:4px;overflow:hidden;color:var(--project-status-usage);font-size:12px;line-height:normal;font-weight:500;white-space:nowrap}
+.pst-usage{flex:none;border-radius:9999px;color:inherit;text-decoration:none;cursor:default}
+.pst-description{min-width:0;overflow:hidden;font-weight:450;text-overflow:ellipsis}
+.pst-actions{width:44px;height:32px;flex:none;display:flex;justify-content:flex-end}
+.pst-more-wrap{width:32px;height:32px;opacity:0;line-height:0;transition:opacity .15s}
+.pst-row:hover .pst-more-wrap,.pst-row:focus-within .pst-more-wrap,.pst-row[data-menu-open] .pst-more-wrap{opacity:1}
+.pst-more{width:32px;height:32px;color:var(--project-status-more-fg);font-size:13px}
+.pst-more svg{width:16px;height:16px;fill:var(--project-status-more-icon)}
+.pst-drag-handle{position:absolute;z-index:1;top:0;left:-2px;width:20px;height:60px;display:grid;place-items:center;color:var(--project-status-drag-handle);opacity:0;cursor:grab;transition:opacity .15s}
+.pst-drag-handle svg{display:block;fill:currentColor}
+.pst-row:hover>.pst-drag-handle,.pst-row:focus-visible>.pst-drag-handle{opacity:1}
+
+.pst-menu{z-index:600;box-sizing:border-box;width:175px;padding:6px 0;border:.5px solid var(--project-status-menu-border);border-radius:12px;outline:0;background:var(--project-status-menu-bg);box-shadow:var(--project-status-menu-shadow);color:var(--project-status-menu-text);font-family:"Inter Variable","SF Pro Display",system-ui,sans-serif;font-size:13px;line-height:19.5px}
+.pst-menu [role=menu]{display:flex;flex-direction:column;outline:0}
+.pst-menu [role=menuitem]{position:relative;z-index:0;box-sizing:border-box;width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 18px 0 14px;border:0;outline:0;background:transparent;color:var(--project-status-menu-text);font-family:inherit;font-size:13px;line-height:normal;font-weight:450;text-align:left;cursor:default}
+.pst-menu-highlight{position:absolute;z-index:-1;inset:0 6px;border-radius:8px;background:transparent}
+.pst-menu [role=menuitem] svg{width:16px;height:16px;flex:none;fill:var(--project-status-menu-icon)}
+.pst-menu [role=menuitem]:is(:hover,:focus-visible){color:var(--project-status-menu-hover-fg)}
+.pst-menu [role=menuitem]:is(:hover,:focus-visible) .pst-menu-highlight{background:var(--project-status-menu-hover-bg)}
+.pst-menu [role=menuitem]:is(:hover,:focus-visible) svg{fill:var(--project-status-menu-hover-fg)}
+
+.pst-editor{box-sizing:border-box;width:608px;height:60px;margin:0 16px;display:flex;align-items:center;gap:12px;padding:12px 0}
+.pst-color-trigger{box-sizing:border-box;width:33px;height:32px;flex:none;display:flex;align-items:center;justify-content:center;padding:0 8px;border:.5px solid var(--project-status-field-border);border-radius:8px;background:var(--project-status-field-bg);cursor:default}
+.pst-color-trigger:focus-visible{outline:1px solid var(--project-status-field-focus);outline-offset:0}
+.pst-field{box-sizing:border-box;min-width:0;height:34px;padding:6px 12px;border:.5px solid var(--project-status-field-border);border-radius:8px;outline:0;background:var(--project-status-field-bg);color:var(--project-status-field-text);font-family:inherit;font-size:13px;line-height:normal;font-weight:400;transition:border .15s}
+.pst-field::placeholder{color:var(--project-status-field-placeholder)}
+.pst-field:focus{outline:1px solid var(--project-status-field-focus);outline-offset:0}
+.pst-field-name{flex:1 1 0}
+.pst-field-description{flex:2 1 0}
+.pst-editor-actions{flex:none;display:flex;gap:8px}
+.pst-button{box-sizing:border-box;height:32px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--project-status-button-fg);font-family:inherit;font-size:13px;line-height:normal;font-weight:500;cursor:default;transition:border .15s,background-color .15s,color .15s,opacity .15s}
+.pst-button:hover:not(:disabled){background:var(--project-status-add-hover-bg);color:var(--project-status-control-hover-fg)}
+.pst-button-primary,.pst-button-primary:hover:not(:disabled){background:var(--project-status-primary-bg);color:var(--project-status-primary-fg);box-shadow:var(--project-status-primary-shadow)}
+.pst-button:disabled{opacity:.5}
+
+.pst-color-menu{z-index:600;position:relative;box-sizing:border-box;width:414px;padding:16px 0;border:1px solid var(--project-status-picker-border);border-radius:6px;outline:0;background:var(--project-status-picker-bg);font-family:"Inter Variable","SF Pro Display",system-ui,sans-serif}
+.pst-swatches{box-sizing:border-box;width:358px;height:22px;display:flex;justify-content:space-between;padding:0 16px}
+.pst-swatch{box-sizing:border-box;width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid transparent;border-radius:50%;outline:2px solid transparent;outline-offset:0;background:var(--palette-color);box-shadow:0 0 3px 3px transparent;cursor:default;transition:outline-color .15s,box-shadow .15s}
+.pst-swatch:is(:hover,:focus-visible){outline-color:var(--project-status-swatch-ring);box-shadow:0 0 3px 3px var(--palette-color)}
+.pst-swatch svg{flex:none;fill:var(--project-status-swatch-check)}
+.pst-custom-toggle-wrap{position:absolute;top:16px;left:358px;box-sizing:border-box;width:54px;height:22px;padding:0 16px}
+.pst-custom-toggle-wrap[data-separated]{left:357px;width:55px;border-left:1px solid var(--project-status-picker-border)}
+.pst-custom-toggle{box-sizing:border-box;display:block;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:transparent;cursor:default}
+.pst-custom-toggle span{display:block;width:22px;height:22px;border-radius:50%;outline:2px solid transparent;background:var(--project-status-custom-gradient)}
+.pst-custom-toggle[aria-pressed=true]{border-radius:4px}
+.pst-custom-toggle:focus-visible span{outline-color:var(--project-status-field-focus)}
+.pst-custom{box-sizing:border-box;width:412px;padding:0 16px}
+.pst-custom-value{box-sizing:border-box;width:380px;height:22px;display:flex;align-items:center;padding-right:20px}
+.pst-custom-current{box-sizing:border-box;width:22px;height:22px;flex:none;border:1px solid transparent;border-radius:50%;background:var(--palette-color)}
+.pst-custom-value label{display:flex;align-items:center;margin-left:12px}
+.pst-custom-value label span{color:var(--project-status-hex-label);font-size:13px;line-height:normal;font-weight:500}
+.pst-custom-value input{box-sizing:border-box;width:89.67px;height:15.5px;padding:0 6px;border:0;outline:0;background:transparent;color:var(--project-status-hex-text);font-family:inherit;font-size:13px;line-height:normal;font-weight:400}
+.pst-custom-note{overflow:hidden;color:var(--project-status-hex-label);font-size:13px;line-height:normal;font-weight:450;text-overflow:ellipsis;white-space:nowrap}
+.pst-custom-controls{height:100px;display:flex;gap:16px;margin-top:16px}
+.pst-saturation{position:relative;width:350px;height:100px;flex:none;border-radius:4px;outline:0;background:linear-gradient(to top,var(--project-status-saturation-black),transparent),linear-gradient(to right,var(--project-status-saturation-white),var(--picker-hue));cursor:crosshair;touch-action:none}
+.pst-saturation:focus-visible,.pst-hue:focus-visible{box-shadow:0 0 0 1px var(--focus-ring)}
+.pst-saturation i{position:absolute;box-sizing:border-box;width:16px;height:16px;transform:translate(-50%,-50%);border:1px solid var(--project-status-picker-thumb);border-radius:10px;box-shadow:0 0 4px var(--project-status-picker-thumb-shadow);pointer-events:none}
+.pst-hue{position:relative;width:6px;height:100px;flex:none;border-radius:4px;outline:0;background:var(--project-status-hue-gradient);cursor:pointer;touch-action:none}
+.pst-hue i{position:absolute;left:-3px;box-sizing:border-box;width:12px;height:4px;transform:translateY(-50%);border:.5px solid var(--project-status-picker-border);border-radius:2px;background:var(--project-status-hue-thumb);box-shadow:0 1px 2px var(--project-status-picker-thumb-shadow);pointer-events:none}
+
+@media (max-width:760px){
+  .pst-page,.pst-card,.pst-row{width:100%}
+  .pst-header{padding:0 8px}
+  .pst-group-header{margin:0 8px}
+  .pst-row{padding:0 8px}
+  .pst-editor{width:calc(100% - 16px);height:auto;margin:0 8px;flex-wrap:wrap}
+  .pst-field-name,.pst-field-description{flex:1 1 calc(100% - 45px)}
+  .pst-field-description{margin-left:45px}
+  .pst-editor-actions{width:100%;justify-content:flex-end}
+  .pst-more-wrap{opacity:1}
+}
+@media (max-width:430px){
+  .pst-color-menu{width:calc(100vw - 16px)}
+  .pst-swatches{width:100%;padding-right:71px}
+  .pst-custom,.pst-custom-value{width:100%}
+  .pst-saturation{width:auto;flex:1}
+}

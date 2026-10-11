@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
@@ -1017,7 +1018,7 @@ func (s *server) listIssueTemplates(w http.ResponseWriter, r *http.Request) {
 	teamID := r.PathValue("id")
 	result := []domain.IssueTemplate{}
 	for _, template := range data.IssueTemplates {
-		if template.TeamID == teamID {
+		if issueTemplateOwnedByTeam(template, teamID) {
 			result = append(result, template)
 		}
 	}
@@ -1055,7 +1056,9 @@ func (s *server) updateIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
 	var updated domain.IssueTemplate
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.updated", templateID, input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == templateID && item.TeamID == teamID })
+		index := slices.IndexFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
+			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
+		})
 		if index < 0 {
 			return errNotFound
 		}
@@ -1073,7 +1076,9 @@ func (s *server) deleteIssueTemplate(w http.ResponseWriter, r *http.Request) {
 	teamID, templateID := r.PathValue("id"), r.PathValue("templateId")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue_template.deleted", templateID, nil, func(data *domain.Bootstrap) error {
 		before := len(data.IssueTemplates)
-		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool { return item.ID == templateID && item.TeamID == teamID })
+		data.IssueTemplates = slices.DeleteFunc(data.IssueTemplates, func(item domain.IssueTemplate) bool {
+			return item.ID == templateID && issueTemplateOwnedByTeam(item, teamID)
+		})
 		if len(data.IssueTemplates) == before {
 			return errNotFound
 		}
@@ -1208,6 +1213,16 @@ func (s *server) deleteTeamLabel(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// issueTemplateOwnedByTeam reports whether a template is one of the team's own templates: created through the team
+// (its team is the owner; workspace templates only use teamId as a default property) or a workspace template whose
+// visibility was narrowed to the team.
+func issueTemplateOwnedByTeam(template domain.IssueTemplate, teamID string) bool {
+	if template.VisibilityTeamID != "" {
+		return template.VisibilityTeamID == teamID
+	}
+	return template.Scope != "workspace" && template.TeamID == teamID
+}
+
 func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, input domain.IssueTemplateMutationInput) error {
 	if input.TeamID != nil {
 		if *input.TeamID != "" && !teamExists(data, *input.TeamID) {
@@ -1239,7 +1254,8 @@ func applyIssueTemplate(data *domain.Bootstrap, template *domain.IssueTemplate, 
 		template.Name = name
 	}
 	if input.Title != nil {
-		template.Title = strings.TrimSpace(*input.Title)
+		// Keep a trailing space: a template title is often a prefix ("Bug: ") the author completes when composing.
+		template.Title = strings.TrimRight(strings.TrimLeftFunc(*input.Title, unicode.IsSpace), "\r\n\t")
 	}
 	if input.Description != nil {
 		template.Description = strings.TrimSpace(*input.Description)

@@ -320,4 +320,80 @@ describe('NewProjectDialog', () => {
       milestoneDetails: [expect.objectContaining({ name: 'Beta', description: expect.stringContaining('[Roadmap](/workspace/initiative/roadmap/overview)') })],
     }))
   })
+  it('applies a template lead, members, dependency relations and milestones, and clears them for No template', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue(undefined)
+    const people = [{ id: 'user-lead', label: 'Lead Person' }, { id: 'user-a', label: 'Member A' }, { id: 'user-b', label: 'Member B' }]
+    render(
+      <I18nProvider>
+        <NewProjectDialog
+          open
+          onClose={vi.fn()}
+          onCreate={onCreate}
+          dependencies={[{ id: 'project-blocker', label: 'Blocker' }, { id: 'project-blocked', label: 'Blocked' }]}
+          initiatives={[{ id: 'initiative-1', label: 'Roadmap' }]}
+          leads={people}
+          members={people}
+          statuses={[{ id: 'Planned', label: 'Planned' }, { id: 'In Progress', label: 'In Progress' }]}
+          teams={[{ id: 'team-1', label: 'Team', color: '#5e6ad2' }]}
+          templates={[{
+            id: 'template-1',
+            label: 'Launch',
+            name: 'Product launch',
+            summary: 'Ship it',
+            status: 'In Progress',
+            priority: 'High',
+            leadId: 'user-lead',
+            memberIds: ['user-a', 'user-b', 'user-gone'],
+            teamIds: ['team-1'],
+            initiativeIds: ['initiative-1'],
+            dependencyIds: ['project-blocker'],
+            dependencyRelations: [{ projectId: 'project-blocker', type: 'blocked_by' }, { projectId: 'project-blocked', type: 'blocks' }, { projectId: 'project-gone', type: 'blocks' }],
+            milestones: [{ templateMilestoneId: 'milestone-beta', name: 'Beta', description: 'Beta exit' }],
+          }]}
+        />
+      </I18nProvider>,
+    )
+
+    await user.click(screen.getByRole('combobox', { name: 'Apply project template' }))
+    await user.click(screen.getByRole('option', { name: 'Launch' }))
+    expect(screen.getByRole('textbox', { name: 'Project name' })).toHaveValue('Product launch')
+    expect(screen.getByText('Beta')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({
+      templateId: 'template-1',
+      name: 'Product launch',
+      summary: 'Ship it',
+      status: 'In Progress',
+      priority: 'High',
+      leadId: 'user-lead',
+      memberIds: ['user-a', 'user-b'],
+      initiativeIds: ['initiative-1'],
+      dependencyIds: ['project-blocker'],
+      dependencyRelations: [{ projectId: 'project-blocker', type: 'blocked_by' }, { projectId: 'project-blocked', type: 'blocks' }],
+      milestones: ['Beta'],
+      milestoneDetails: [{ templateMilestoneId: 'milestone-beta', name: 'Beta', description: 'Beta exit' }],
+    }))
+
+    await user.clear(screen.getByRole('textbox', { name: 'Project name' }))
+    await user.type(screen.getByRole('textbox', { name: 'Project name' }), 'My launch')
+    await user.click(screen.getByRole('combobox', { name: 'Apply project template' }))
+    await user.click(screen.getByRole('option', { name: 'No template' }))
+    expect(screen.queryByText('Beta')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Create project' }))
+    const draft = onCreate.mock.lastCall?.[0]
+    expect(draft).toEqual(expect.objectContaining({
+      templateId: undefined,
+      name: 'My launch',
+      summary: '',
+      status: 'Planned',
+      priority: 'No priority',
+      leadId: undefined,
+      memberIds: [],
+      initiativeIds: [],
+      dependencyIds: [],
+      dependencyRelations: [],
+      milestones: [],
+    }))
+  })
 })

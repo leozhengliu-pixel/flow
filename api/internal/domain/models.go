@@ -1143,11 +1143,31 @@ type ProjectTemplate struct {
 	InitiativeIDs       []string            `json:"initiativeIds,omitempty"`
 	IssueIDs            []string            `json:"issueIds,omitempty"`
 	Milestones          []TemplateMilestone `json:"milestones,omitempty"`
-	Visibility          string              `json:"visibility,omitempty"`
-	VisibilityTeamID    string              `json:"visibilityTeamId,omitempty"`
-	Creator             User                `json:"creator"`
-	CreatedAt           time.Time           `json:"createdAt"`
-	UpdatedAt           time.Time           `json:"updatedAt"`
+	// Issues are created in every project made from the template.
+	Issues []ProjectTemplateIssue `json:"issues,omitempty"`
+	// DependencyRelations preset the new project's "blocked by" and "blocking"
+	// relations. When set, DependencyIDs mirrors its blocked_by projects.
+	DependencyRelations []ProjectDependencyRelationInput `json:"dependencyRelations,omitempty"`
+	Visibility          string                           `json:"visibility,omitempty"`
+	VisibilityTeamID    string                           `json:"visibilityTeamId,omitempty"`
+	Creator             User                             `json:"creator"`
+	CreatedAt           time.Time                        `json:"createdAt"`
+	UpdatedAt           time.Time                        `json:"updatedAt"`
+}
+
+// ProjectTemplateIssue is an issue a project template creates in each new
+// project. MilestoneID names one of the template's milestones and ParentID
+// another issue of the same template (a sub-issue).
+type ProjectTemplateIssue struct {
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description,omitempty"`
+	TeamID      string   `json:"teamId,omitempty"`
+	Priority    int      `json:"priority"`
+	AssigneeID  string   `json:"assigneeId,omitempty"`
+	LabelIDs    []string `json:"labelIds,omitempty"`
+	MilestoneID string   `json:"milestoneId,omitempty"`
+	ParentID    string   `json:"parentId,omitempty"`
 }
 
 type TemplateMilestone struct {
@@ -2423,6 +2443,9 @@ type ProjectMilestoneMutationInput struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
 	TargetDate  *string `json:"targetDate,omitempty"`
+	// TemplateMilestoneID links a milestone sent with a new project to the
+	// project template milestone it came from (template issues follow it).
+	TemplateMilestoneID string `json:"templateMilestoneId,omitempty"`
 }
 
 type ProjectUpdateCreateInput struct {

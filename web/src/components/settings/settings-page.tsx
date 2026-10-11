@@ -30,7 +30,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  CircleDot,
   Code2,
   Command,
   FileText,
@@ -112,6 +111,7 @@ import {
 } from "@/lib/api";
 import type { NotificationSettingsView, SettingsPageId, TeamSettingsSection } from "@/lib/app-routes";
 import { AgentCursorGlyph, AgentHistoryGlyph, AiBurstGlyph, LoopsGlyph } from '@/components/ui/agent-glyph'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import {
   apiKeysSettingsPath,
   applicationEditPath,
@@ -365,6 +365,11 @@ type SettingsPageProps = {
   onReload: () => Promise<void>;
 };
 
+/** The reference app's sidebar glyph for Projects › Statuses. */
+function ProjectStatusesNavGlyph({ size = 16 }: { size?: number | string }) {
+  return <FlowGlyph name="projectStatuses" size={Number(size)} data-settings-nav-glyph="project-statuses" />;
+}
+
 type NavItem = { id: SettingsPageId; label: string; icon: ComponentType<{ size?: number | string }> };
 const NAV: { title: string; items: NavItem[] }[] = [
   {
@@ -392,7 +397,7 @@ const NAV: { title: string; items: NavItem[] }[] = [
     items: [
       { id: "project-labels", label: "Labels", icon: Tag },
       { id: "project-templates", label: "Templates", icon: PanelTop },
-      { id: "project-statuses", label: "Statuses", icon: CircleDot },
+      { id: "project-statuses", label: "Statuses", icon: ProjectStatusesNavGlyph },
       { id: "project-updates", label: "Updates", icon: Activity },
     ],
   },

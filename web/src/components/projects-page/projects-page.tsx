@@ -30,6 +30,7 @@ import { confirmAction, promptAction } from '@/components/ui/action-dialog-servi
 import { listProjectRecords, type ProjectCustomerSummary, type ProjectQueryPage } from '@/lib/api'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { dependencyRelationsWithBlocker, isTimelineZoom, projectDependencyEdges } from './project-timeline-model'
+import { projectTemplateChoices } from '@/lib/project-template-choice'
 
 /** The row's one-line summary falls back to the description as plain text (descriptions are stored as HTML). */
 function descriptionPreview(description: string | undefined) {
@@ -729,21 +730,7 @@ export function ProjectsPage({
       leads={peopleChoices}
       members={peopleChoices}
       statuses={availableProjectStatuses.map(status=>({id:status.name,label:status.name,color:status.color,icon:<ProjectStatusGlyph color={status.color} name={status.name} type={status.type}/> }))}
-      templates={projectTemplates.map(template => ({
-        id: template.id,
-        label: template.name,
-        name: template.name,
-        description: template.description,
-        summary: template.summary,
-        icon: template.icon,
-        color: template.color,
-        status: availableProjectStatuses.find(status => status.id === template.statusId)?.name,
-        priority: ['No priority', 'Urgent', 'High', 'Medium', 'Low'][template.priority] ?? 'No priority',
-        teamIds: template.teamIds,
-        initiativeIds: template.initiativeIds,
-        labelIds: template.labelIds.filter(id => projectLabels.some(label => label.id === id)),
-        dependencyIds: template.dependencyIds,
-      }))}
+      templates={projectTemplateChoices(projectTemplates, { projectStatuses: availableProjectStatuses, projectLabels, projects })}
       onClose={() => setCreateOpen(false)}
       onCreate={create}
       open={createOpen}

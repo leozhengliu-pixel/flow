@@ -82,7 +82,7 @@ describe('issue template body', () => {
     render(issueSettings(data, 'new'))
     await user.type(screen.getByRole('textbox', { name: 'Template name' }), 'Bug report')
     await user.click(screen.getByRole('button', { name: 'Open menu' }))
-    await user.click(await screen.findByRole('option', { name: /Add sub-issue/ }))
+    await user.click(await screen.findByRole('menuitem', { name: /Add sub-issue/ }))
     const composer = screen.getByText('Create sub-issue').closest('section') as HTMLElement
     await user.type(within(composer).getByRole('textbox', { name: 'Issue title' }), 'Follow up')
     await pickDocument(user, within(composer).getByRole('textbox', { name: 'Issue description' }))
@@ -91,7 +91,7 @@ describe('issue template body', () => {
     expect(screen.getByText(/See Launch plan/)).toBeInTheDocument()
     // Editing the saved row opens the same field; a pasted URL becomes a chip and Cmd/Ctrl+Enter saves the row.
     await user.click(screen.getByRole('button', { name: 'Edit sub-issue' }))
-    const editing = document.querySelector('.it-subissue-row.is-editing') as HTMLElement
+    const editing = document.querySelector('.tpl-subissue-row.is-editing') as HTMLElement
     const row = within(editing).getByRole('textbox', { name: 'Issue description' })
     await waitFor(() => expect(editing.querySelector('a[data-agent-entity="document"]')).toHaveTextContent('Launch plan'))
     await user.click(row)

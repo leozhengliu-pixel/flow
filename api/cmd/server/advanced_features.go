@@ -214,25 +214,27 @@ type askInput struct {
 }
 
 type projectTemplateInput struct {
-	Name                *string                     `json:"name,omitempty"`
-	ProjectName         *string                     `json:"projectName,omitempty"`
-	TemplateDescription *string                     `json:"templateDescription,omitempty"`
-	Description         *string                     `json:"description,omitempty"`
-	Summary             *string                     `json:"summary,omitempty"`
-	Icon                *string                     `json:"icon,omitempty"`
-	Color               *string                     `json:"color,omitempty"`
-	StatusID            *string                     `json:"statusId,omitempty"`
-	Priority            *int                        `json:"priority,omitempty"`
-	TeamIDs             *[]string                   `json:"teamIds,omitempty"`
-	LabelIDs            *[]string                   `json:"labelIds,omitempty"`
-	LeadID              *string                     `json:"leadId,omitempty"`
-	MemberIDs           *[]string                   `json:"memberIds,omitempty"`
-	DependencyIDs       *[]string                   `json:"dependencyIds,omitempty"`
-	InitiativeIDs       *[]string                   `json:"initiativeIds,omitempty"`
-	IssueIDs            *[]string                   `json:"issueIds,omitempty"`
-	Milestones          *[]domain.TemplateMilestone `json:"milestones,omitempty"`
-	Visibility          *string                     `json:"visibility,omitempty"`
-	VisibilityTeamID    *string                     `json:"visibilityTeamId,omitempty"`
+	Name                *string                                  `json:"name,omitempty"`
+	ProjectName         *string                                  `json:"projectName,omitempty"`
+	TemplateDescription *string                                  `json:"templateDescription,omitempty"`
+	Description         *string                                  `json:"description,omitempty"`
+	Summary             *string                                  `json:"summary,omitempty"`
+	Icon                *string                                  `json:"icon,omitempty"`
+	Color               *string                                  `json:"color,omitempty"`
+	StatusID            *string                                  `json:"statusId,omitempty"`
+	Priority            *int                                     `json:"priority,omitempty"`
+	TeamIDs             *[]string                                `json:"teamIds,omitempty"`
+	LabelIDs            *[]string                                `json:"labelIds,omitempty"`
+	LeadID              *string                                  `json:"leadId,omitempty"`
+	MemberIDs           *[]string                                `json:"memberIds,omitempty"`
+	DependencyIDs       *[]string                                `json:"dependencyIds,omitempty"`
+	InitiativeIDs       *[]string                                `json:"initiativeIds,omitempty"`
+	IssueIDs            *[]string                                `json:"issueIds,omitempty"`
+	Milestones          *[]domain.TemplateMilestone              `json:"milestones,omitempty"`
+	Issues              *[]domain.ProjectTemplateIssue           `json:"issues,omitempty"`
+	DependencyRelations *[]domain.ProjectDependencyRelationInput `json:"dependencyRelations,omitempty"`
+	Visibility          *string                                  `json:"visibility,omitempty"`
+	VisibilityTeamID    *string                                  `json:"visibilityTeamId,omitempty"`
 }
 
 type slaRuleInput struct {
@@ -1770,6 +1772,28 @@ func applyProjectTemplateInput(data *domain.Bootstrap, template *domain.ProjectT
 			milestones = append(milestones, milestone)
 		}
 		template.Milestones = milestones
+	}
+	if input.DependencyRelations != nil {
+		relations, err := normalizeProjectTemplateDependencyRelations(data, *input.DependencyRelations)
+		if err != nil {
+			return err
+		}
+		template.DependencyRelations = relations
+		template.DependencyIDs = projectTemplateBlockedByIDs(relations)
+	} else if input.DependencyIDs != nil && len(template.DependencyRelations) > 0 {
+		// Legacy writers send only the blocked-by list: keep the template's
+		// blocking relations next to it.
+		template.DependencyRelations = mergeProjectTemplateBlockedBy(template.DependencyRelations, template.DependencyIDs)
+	}
+	if input.Issues != nil {
+		issues, err := normalizeProjectTemplateIssues(data, template, *input.Issues)
+		if err != nil {
+			return err
+		}
+		template.Issues = issues
+	} else if input.Milestones != nil {
+		// Template issues keep only milestones the template still has.
+		pruneProjectTemplateIssueMilestones(template)
 	}
 	if input.Visibility != nil {
 		if !slices.Contains([]string{"workspace", "teams"}, *input.Visibility) {

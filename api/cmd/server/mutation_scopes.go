@@ -74,7 +74,9 @@ func projectIssueScope(ctx context.Context, projectID string) context.Context {
 }
 
 // projectTemplateScope loads the issues a project template names (template
-// edits validate them; creating a project from the template moves them).
+// edits validate them; creating a project from the template moves them) and,
+// when creating a project from a template with template issues, lets the
+// mutation create those issues.
 func projectTemplateScope(ctx context.Context, issueIDs *[]string, templateID string) context.Context {
 	scope := store.MutationScope{}
 	if issueIDs != nil {
@@ -84,7 +86,7 @@ func projectTemplateScope(ctx context.Context, issueIDs *[]string, templateID st
 		scope.Resolve = func(data domain.Bootstrap) store.MutationScope {
 			for _, template := range data.ProjectTemplates {
 				if template.ID == templateID {
-					return store.MutationScope{IssueIDs: slices.Clone(template.IssueIDs)}
+					return store.MutationScope{IssueIDs: slices.Clone(template.IssueIDs), CreateIssues: len(template.Issues) > 0}
 				}
 			}
 			return store.MutationScope{}

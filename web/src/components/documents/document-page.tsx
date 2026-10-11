@@ -30,8 +30,8 @@ import './document-print.css'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 import { isActiveSubscription } from '@/lib/subscription-records'
 import {
-  copyDocumentMarkdown, copyDocumentTitle, copyDocumentUrl, documentDisplayTitle, documentOwner, renameDocument, toggleDocumentFavorite,
-  type DocumentActionContext, type DocumentUiAction,
+  copyDocumentMarkdown, copyDocumentTitle, copyDocumentUrl, DOCUMENT_TEMPLATE_APPLIED_EVENT, documentDisplayTitle, documentOwner, renameDocument, toggleDocumentFavorite,
+  type DocumentActionContext, type DocumentTemplateAppliedDetail, type DocumentUiAction,
 } from './document-actions'
 import { DocumentAccessDialog } from './document-access-dialog'
 import { DocumentAuthorLabels } from './document-author-labels'
@@ -164,6 +164,19 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     await onReload()
     toast.success(t('Content has been restored.'), { id: 'document-version-restored' })
   }
+
+  // A template applied from the chip, the "…" menu or ⌘K replaces the body: remount the editor on it.
+  useEffect(() => {
+    const onApplied = (event: Event) => {
+      const { documentId, template } = (event as CustomEvent<DocumentTemplateAppliedDetail>).detail
+      if (documentId !== document.id) return
+      setTitle(template.title ?? '')
+      setBody({ value: template.content ?? '', state: template.contentData ? JSON.stringify(template.contentData) : template.contentState })
+      setEditorVersion(value => value + 1)
+    }
+    window.addEventListener(DOCUMENT_TEMPLATE_APPLIED_EVENT, onApplied)
+    return () => window.removeEventListener(DOCUMENT_TEMPLATE_APPLIED_EVENT, onApplied)
+  }, [document.id])
 
   const setAuthorNames = (value: boolean) => { setAuthorNamesOpen(value); writeDocumentViewOption(document.id, 'authors', value) }
   const toggleAuthorNames = () => setAuthorNames(!authorNamesOpen)

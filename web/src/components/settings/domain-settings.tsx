@@ -31,7 +31,7 @@ import {
 } from './label-settings-model'
 import { LabelDisplayOptions, LabelFilterBar, LabelFilterMenu, LabelsEmptyState } from './label-settings-toolbar'
 
-export { ProjectStatusesSettings } from './issues-projects-settings'
+export { ProjectStatusesSettings } from './project-statuses-settings'
 
 type Entry = { kind: 'label'; label: IssueLabel } | { kind: 'group'; group: LabelGroup; labels: IssueLabel[] }
 interface LabelSection { id: string; label?: string; entries: Entry[] }

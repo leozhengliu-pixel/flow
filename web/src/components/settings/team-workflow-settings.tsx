@@ -66,7 +66,7 @@ import type {
   WorkflowState,
   WorkflowStateType,
 } from "@/types/flow";
-import { loopsPath, settingsPath, type TeamSettingsSection } from "@/lib/app-routes";
+import { loopsPath, settingsPath, type SettingsPageId, type TeamSettingsSection } from "@/lib/app-routes";
 import { useNavigate } from "react-router-dom";
 import {
   confirmAllowSubTeamsMembership,
@@ -78,7 +78,9 @@ import {
 } from "@/lib/team-security-confirms";
 
 import { TemplateEditor } from "./advanced-settings";
-import { DocumentTemplateEditor } from "@/components/documents/document-template-editor";
+import { DocumentTemplateEditor, DocumentTemplateRow } from "@/components/documents/document-template-editor";
+import { IssueTemplateEditor, TeamIssueTemplateList, TemplateListCard } from "./issue-template-settings";
+import { teamOwnedIssueTemplates } from "@/lib/issue-templates";
 import {
   SettingsCrumb,
   SettingsRow,
@@ -290,6 +292,10 @@ export function TeamWorkflowSettings({
         />
       </>
     );
+  if (section === "templates") {
+    const page = teamTemplateEditorPage({ data, team, subPath, onClose: () => onNavigate("templates"), onReload });
+    if (page) return page;
+  }
   if (section === "recurring-issues")
     return (
       <RecurringIssuesSettingsPage
@@ -329,7 +335,7 @@ export function TeamWorkflowSettings({
               t(TEAM_SECTION_TITLES[section] ?? SECTIONS.find((item) => item.id === section)?.label ?? "")
             )}
           </h1>
-          {TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
+          {section === "templates" ? <TeamTemplatesDescription workspaceSlug={data.workspace.urlKey} /> : TEAM_SECTION_DESCRIPTIONS[section] && <p>{t(TEAM_SECTION_DESCRIPTIONS[section])}</p>}
         </div>
       </header>
       {section === "overview" && (
@@ -2227,7 +2233,7 @@ function TemplatesSettings({
     ...(teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id) ?? []).map((item) => item.id),
   ]);
   const templatesByKind: Record<TemplateKind, AnyTemplate[]> = {
-    issue: data.issueTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
+    issue: teamOwnedIssueTemplates(data.issueTemplates, scopeIds),
     project: data.projectTemplates.filter(
       (item) => item.visibility === "teams" && item.teamIds.some((teamId) => scopeIds.has(teamId)),
     ),
@@ -2303,9 +2309,20 @@ function TemplatesSettings({
     );
   };
   const issueTemplates = templatesByKind.issue as IssueTemplate[];
+  const documentTemplates = templatesByKind.document as DocumentTemplate[];
   return (
     <>
-      {section("issue")}
+      <section className="tpl-section tpl-team-section">
+        <h3>{t("Issue templates")}</h3>
+        <TeamIssueTemplateList
+          data={data}
+          teamId={team.id}
+          items={issueTemplates}
+          onCreate={(form) => onNavigateSubPath?.(form ? "issue/new/form" : "issue/new")}
+          onOpen={(template) => openEditor("issue", template)}
+          onDeleted={onReload}
+        />
+      </section>
       {issueTemplates.length > 0 && (
         <TeamSection
           title="Default issue template"
@@ -2336,17 +2353,31 @@ function TemplatesSettings({
           )}
         </TeamSection>
       )}
-      {section("document")}
-      {editing !== undefined && editingKind &&
-        (editingKind === "document" ? (
-          <DocumentTemplateEditor
-            data={data}
-            teamId={team.id}
-            template={editing as DocumentTemplate | null}
-            onClose={closeEditor}
-            onSaved={onReload}
-          />
-        ) : (
+      <section className="tpl-section tpl-team-section">
+        <h3>{t("Document templates")}</h3>
+        <TemplateListCard
+          emptyLabel="No document templates"
+          createLabel="Create new document template"
+          onCreate={() => openEditor("document", null)}
+          count={documentTemplates.length}
+          countLabel={t(documentTemplates.length === 1 ? "1 document template" : "{count} document templates").replace("{count}", String(documentTemplates.length))}
+        >
+          {documentTemplates.map((template) => {
+            const sourceTeamID = sourceTeamOf("document", template);
+            return (
+              <DocumentTemplateRow
+                key={template.id}
+                template={template}
+                inheritedFrom={sourceTeamID ? (data.teams.find((item) => item.id === sourceTeamID)?.name ?? t("parent team")) : undefined}
+                onOpen={() => openEditor("document", template)}
+                onChanged={onReload}
+              />
+            );
+          })}
+        </TemplateListCard>
+      </section>
+      {editing !== undefined && editingKind === "project" &&
+        (
           <TemplateEditor
             data={data}
             type={editingKind}
@@ -2355,9 +2386,46 @@ function TemplatesSettings({
             onClose={closeEditor}
             onSaved={onReload}
           />
-        ))}
+        )}
     </>
   );
+}
+
+/** Team templates page description: links to the workspace issue, project and document templates pages, then "Docs ↗". */
+function TeamTemplatesDescription({ workspaceSlug }: { workspaceSlug: string }) {
+  const { t } = useI18n();
+  const navigate = useNavigate();
+  const link = (page: SettingsPageId, label: string) => {
+    const href = settingsPath(workspaceSlug, page);
+    return <a href={href} onClick={(event) => { event.preventDefault(); navigate(href); }}>{t(label)}</a>;
+  };
+  return (
+    <p className="tpl-team-description">
+      {t("Any templates created here will be available when creating issues, projects, and documents within this team. To create templates that apply to all teams, do so in the workspace")}{" "}
+      {t("{issue}, {project}, or {document} templates sections.").split(/(\{issue\}|\{project\}|\{document\})/).map((part, index) =>
+        part === "{issue}" ? <span key={index}>{link("issue-templates", "issue")}</span>
+          : part === "{project}" ? <span key={index}>{link("project-templates", "project")}</span>
+            : part === "{document}" ? <span key={index}>{link("documents", "document")}</span>
+              : part)}{" "}
+      <a className="tpl-docs-link" href="https://flow.app/docs/issue-templates" target="_blank" rel="noopener noreferrer">{t("Docs")}</a>
+    </p>
+  );
+}
+
+/** Full-page issue/document template editors of team Settings › Templates (`issue/new`, `issue/new/form`, `issue/{id}/edit`, `document/…`). */
+function teamTemplateEditorPage({ data, team, subPath, onClose, onReload }: { data: BootstrapData; team: Team; subPath?: string; onClose: () => void; onReload: () => Promise<void> }) {
+  const [kind, id, action] = (subPath ?? "").split("/");
+  if (kind === "issue") {
+    if (id === "new") return <IssueTemplateEditor key={`new:${action ?? ""}`} data={data} scopeTeamId={team.id} templateType={action === "form" ? "customForm" : "standard"} backLabel="Team templates" onClose={onClose} onReload={onReload} />;
+    const template = action === "edit" ? data.issueTemplates.find((item) => item.id === id) : undefined;
+    if (template) return <IssueTemplateEditor key={template.id} data={data} template={template} scopeTeamId={template.scope === "workspace" ? undefined : (template.teamId || team.id)} templateType={template.templateType ?? "standard"} backLabel="Team templates" onClose={onClose} onReload={onReload} />;
+  }
+  if (kind === "document") {
+    if (id === "new") return <DocumentTemplateEditor data={data} teamId={team.id} template={null} backLabel="Team templates" onClose={onClose} onSaved={onReload} />;
+    const template = action === "edit" ? data.documentTemplates.find((item) => item.id === id) : undefined;
+    if (template) return <DocumentTemplateEditor key={template.id} data={data} teamId={template.teamId || team.id} template={template} backLabel="Team templates" onClose={onClose} onSaved={onReload} />;
+  }
+  return null;
 }
 
 function StatusesSettings({

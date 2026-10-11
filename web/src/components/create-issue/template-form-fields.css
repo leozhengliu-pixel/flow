@@ -1,0 +1,22 @@
+/* Form template fields inside the new-issue composer (same field metrics as the template editor's preview). */
+.template-form-fill { display: flex; flex-direction: column; gap: 16px; padding: 4px 0 12px; }
+.template-form-field { display: flex; flex-direction: column; gap: 4px; }
+.template-form-field > label { color: var(--tpl-text); font-size: 13px; font-weight: 500; line-height: normal; }
+.template-form-field > label > span { color: var(--tpl-text-2); }
+.template-form-field-description { color: var(--tpl-control-fg); font-size: 12px; font-weight: 450; line-height: normal; }
+.template-form-field input,
+.template-form-field textarea,
+.template-form-field select { box-sizing: border-box; width: 100%; min-height: 33px; padding: 6px 12px; border: 0.5px solid var(--tpl-field-input-border); border-radius: 8px; outline: 0; background: var(--tpl-field-body-bg); color: var(--tpl-text); font: inherit; font-size: 13px; font-weight: 450; line-height: 20px; }
+.template-form-field textarea { resize: vertical; }
+:root .template-form-field input::placeholder,
+:root .template-form-field textarea::placeholder { color: var(--tpl-issue-placeholder); }
+.template-form-field input:focus,
+.template-form-field textarea:focus,
+.template-form-field select:focus { border-color: var(--tpl-primary-bg); }
+.template-form-field.is-invalid input,
+.template-form-field.is-invalid textarea,
+.template-form-field.is-invalid select { border-color: var(--danger, var(--tpl-primary-bg)); }
+.template-form-checkboxes { display: flex; flex-direction: column; gap: 6px; }
+.template-form-checkboxes label { display: inline-flex; align-items: center; gap: 8px; color: var(--tpl-text); font-size: 13px; }
+.template-form-checkboxes input { width: 14px; min-height: 14px; height: 14px; padding: 0; accent-color: var(--tpl-primary-bg); }
+.template-form-instructions { margin: 0; color: var(--tpl-text-2); font-size: 13px; line-height: 20px; white-space: pre-wrap; }

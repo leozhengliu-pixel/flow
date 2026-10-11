@@ -292,7 +292,7 @@ describe('document commands in ⌘K', () => {
       await user.click(option(/Apply document template…/))
       expect(screen.getByText('Workspace')).toBeInTheDocument()
       await user.click(option(/Weekly notes/))
-      await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith('doc-1', { title: 'Weekly', icon: 'Page', content: 'Agenda' }))
+      await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith('doc-1', expect.objectContaining({ title: 'Weekly', icon: 'Page', content: 'Agenda' })))
     })
 
     it('creates a workspace template from the document', async () => {

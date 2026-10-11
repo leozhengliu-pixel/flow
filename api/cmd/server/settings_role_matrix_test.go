@@ -145,6 +145,20 @@ func TestSettingsRoleMatrix(t *testing.T) {
 			want: expectation{"teamOwner": 403, "teamMember": 403, "outsider": 403, "guest": 403},
 		},
 		{
+			name: "edit a project status (the reference app projectStatusManagement)", method: http.MethodPatch, path: "/api/project-statuses/ps_planned",
+			body: func(string) any { return map[string]any{"name": "Planned", "color": "#95a2b3"} },
+			want: expectation{"admin": 200, "teamOwner": 403, "teamMember": 403, "outsider": 403, "guest": 403},
+		},
+		{
+			name: "delete a project status (admins only; the last status of a type stays)", method: http.MethodDelete, path: "/api/project-statuses/ps_canceled",
+			want: expectation{"admin": 400, "teamOwner": 403, "teamMember": 403, "outsider": 403, "guest": 403},
+		},
+		{
+			name: "reorder project statuses (admins only)", method: http.MethodPost, path: "/api/project-statuses/reorder",
+			body: func(string) any { return map[string]any{"ids": []string{}} },
+			want: expectation{"admin": 400, "teamOwner": 403, "teamMember": 403, "outsider": 403, "guest": 403},
+		},
+		{
 			name: "customer statuses (the reference app customers)", method: http.MethodPost, path: "/api/customer-statuses",
 			body: func(string) any { return map[string]any{"name": "Churned", "color": "#95a2b3"} },
 			want: expectation{"teamOwner": 403, "teamMember": 403, "outsider": 403, "guest": 403},

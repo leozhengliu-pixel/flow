@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -764,6 +765,9 @@ func removeLabelReferences(data *domain.Bootstrap, ids map[string]struct{}) {
 	}
 	for index := range data.ProjectTemplates {
 		data.ProjectTemplates[index].LabelIDs = removeIDs(data.ProjectTemplates[index].LabelIDs)
+		for issueIndex := range data.ProjectTemplates[index].Issues {
+			data.ProjectTemplates[index].Issues[issueIndex].LabelIDs = removeIDs(data.ProjectTemplates[index].Issues[issueIndex].LabelIDs)
+		}
 	}
 	for index := range data.TriageRoutingRules {
 		data.TriageRoutingRules[index].LabelIDs = removeIDs(data.TriageRoutingRules[index].LabelIDs)
@@ -843,10 +847,42 @@ type projectStatusInput struct {
 	Type        *string `json:"type,omitempty"`
 }
 
+var (
+	projectStatusHexColor = regexp.MustCompile(`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+	projectStatusLCHColor = regexp.MustCompile(`^lch\(\s*\d+(?:\.\d+)?%?\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?\s*\)$`)
+)
+
+const maxProjectStatusNameLength = 255
+
+// validateProjectStatusInput checks the editable fields a create or update sends:
+// a name may not be blank, and a colour is a hex or LCH colour like the picker writes.
+func validateProjectStatusInput(input projectStatusInput) string {
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		if name == "" {
+			return "name is required"
+		}
+		if len([]rune(name)) > maxProjectStatusNameLength {
+			return "name is too long"
+		}
+	}
+	if input.Color != nil && !projectStatusHexColor.MatchString(*input.Color) && !projectStatusLCHColor.MatchString(*input.Color) {
+		return "color must be a hex or lch() color"
+	}
+	return ""
+}
+
 func (s *server) createProjectStatus(w http.ResponseWriter, r *http.Request) {
 	var input projectStatusInput
-	if !decodeJSON(w, r, &input) || input.Name == nil || strings.TrimSpace(*input.Name) == "" {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if input.Name == nil || strings.TrimSpace(*input.Name) == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if message := validateProjectStatusInput(input); message != "" {
+		writeError(w, http.StatusBadRequest, message)
 		return
 	}
 	var created domain.ProjectStatus
@@ -880,6 +916,10 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if message := validateProjectStatusInput(input); message != "" {
+		writeError(w, http.StatusBadRequest, message)
+		return
+	}
 	id := r.PathValue("id")
 	var updated domain.ProjectStatus
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project_status.updated", id, input, func(data *domain.Bootstrap) error {
@@ -887,7 +927,7 @@ func (s *server) updateProjectStatus(w http.ResponseWriter, r *http.Request) {
 		if index < 0 {
 			return errNotFound
 		}
-		if input.Name != nil && strings.TrimSpace(*input.Name) != "" {
+		if input.Name != nil {
 			data.ProjectStatuses[index].Name = strings.TrimSpace(*input.Name)
 		}
 		if input.Description != nil {
@@ -930,7 +970,7 @@ func (s *server) deleteProjectStatus(w http.ResponseWriter, r *http.Request) {
 			return fmt.Errorf("%w: can't delete the last status of a type", errInvalid)
 		}
 		if slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.Status.ID == id }) {
-			return errors.New("status is used by projects")
+			return fmt.Errorf("%w: the status has projects assigned; archive or move them before deleting the status", errInvalid)
 		}
 		before := len(data.ProjectStatuses)
 		data.ProjectStatuses = slices.DeleteFunc(data.ProjectStatuses, func(status domain.ProjectStatus) bool { return status.ID == id })
@@ -1010,7 +1050,8 @@ func normalizeProjectStatusPositions(data *domain.Bootstrap) {
 func (s *server) listWorkspaceIssueTemplates(w http.ResponseWriter, r *http.Request) {
 	result := []domain.IssueTemplate{}
 	for _, template := range s.workspaceData(r).IssueTemplates {
-		if template.Scope == "workspace" || template.VisibilityTeamID == "" {
+		// Team templates (created through a team) and workspace templates narrowed to one team belong to that team's list.
+		if template.Scope == "workspace" && template.VisibilityTeamID == "" {
 			result = append(result, template)
 		}
 	}
