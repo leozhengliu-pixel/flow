@@ -427,6 +427,7 @@ type DocumentTemplate struct {
 	Description  string         `json:"description,omitempty"`
 	Title        string         `json:"title,omitempty"`
 	Icon         string         `json:"icon,omitempty"`
+	Color        string         `json:"color,omitempty"`
 	Content      string         `json:"content,omitempty"`
 	ContentState string         `json:"contentState,omitempty"`
 	ContentData  map[string]any `json:"contentData,omitempty"`

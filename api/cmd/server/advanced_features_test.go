@@ -276,15 +276,16 @@ func TestDocumentTemplateCRUDAndApplication(t *testing.T) {
 	bootstrap := requestJSON[domain.Bootstrap](t, handler, http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 	team := bootstrap.Teams[0]
 	template := requestJSON[domain.DocumentTemplate](t, handler, http.MethodPost, "/api/document-templates", map[string]any{
-		"teamId": team.ID, "name": "Decision record", "title": "Architecture decision", "content": "Context\n\nDecision",
+		"teamId": team.ID, "name": "Decision record", "title": "Architecture decision", "content": "Context\n\nDecision", "icon": "BookOpen", "color": "#5e6ad2",
 	}, http.StatusCreated)
-	if template.ID == "" || template.TeamID != team.ID {
+	if template.ID == "" || template.TeamID != team.ID || template.Color != "#5e6ad2" {
 		t.Fatalf("document template was not created: %#v", template)
 	}
 	document := requestJSON[domain.Document](t, handler, http.MethodPost, "/api/documents", map[string]any{"templateId": template.ID}, http.StatusCreated)
-	if document.Title != "Architecture decision" || document.Content != "Context\n\nDecision" || !slices.Contains(document.TeamIDs, team.ID) {
+	if document.Title != "Architecture decision" || document.Content != "Context\n\nDecision" || !slices.Contains(document.TeamIDs, team.ID) || document.Icon != "BookOpen" || document.Color != "#5e6ad2" {
 		t.Fatalf("document did not apply template defaults: %#v", document)
 	}
+	requestJSON[any](t, handler, http.MethodPatch, "/api/document-templates/"+template.ID, map[string]any{"color": "purple"}, http.StatusBadRequest)
 	template = requestJSON[domain.DocumentTemplate](t, handler, http.MethodPatch, "/api/document-templates/"+template.ID, map[string]any{"name": "Updated decision record"}, http.StatusOK)
 	if template.Name != "Updated decision record" {
 		t.Fatalf("document template was not updated: %#v", template)

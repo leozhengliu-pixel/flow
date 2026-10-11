@@ -303,6 +303,8 @@ export interface DocumentTemplate {
   description?: string;
   title?: string;
   icon?: string;
+  /** Hex colour of the icon; empty uses the default template grey. */
+  color?: string;
   content?: string;
   contentState?: string;
   contentData?: Record<string, unknown>;

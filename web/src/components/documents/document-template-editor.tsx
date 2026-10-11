@@ -40,11 +40,12 @@ export function DocumentTemplateEditor({ data, teamId, template, backLabel = 'Do
   const { t } = useI18n()
   const [name, setName] = useState(template?.name ?? '')
   const [icon, setIcon] = useState(template?.icon ?? '')
+  const [color, setColor] = useState(template?.color ?? '')
   const [content, setContent] = useState(template?.content ?? '')
   const snapshot = useRef<DescriptionSnapshot | undefined>(undefined)
   const [saving, setSaving] = useState(false)
   const initialState = useMemo(() => template?.contentData ? JSON.stringify(template.contentData) : template?.contentState, [template])
-  const dirty = name !== (template?.name ?? '') || icon !== (template?.icon ?? '') || content !== (template?.content ?? '')
+  const dirty = name !== (template?.name ?? '') || icon !== (template?.icon ?? '') || color !== (template?.color ?? '') || content !== (template?.content ?? '')
   const close = async () => {
     if (dirty && !(await confirmTemplateAction({ title: t('Discard changes?'), description: t('Confirm that you want to discard your changes.'), confirmLabel: t('Discard'), cancelLabel: t('Cancel') }))) return
     onClose()
@@ -56,7 +57,7 @@ export function DocumentTemplateEditor({ data, teamId, template, backLabel = 'Do
     setSaving(true)
     try {
       const input = {
-        teamId, name: name.trim(), icon, content,
+        teamId, name: name.trim(), icon, color, content,
         // Only a touched body replaces the stored editor state.
         ...(snapshot.current ? { contentState: snapshot.current.contentState, contentData: snapshot.current.document as Record<string, unknown> } : {}),
       }
@@ -94,7 +95,7 @@ export function DocumentTemplateEditor({ data, teamId, template, backLabel = 'Do
       <span className="tpl-doc-divider" aria-hidden="true"/>
       <div className="tpl-doc-body">
         <span className="tpl-doc-icon">
-          <DocumentIconPicker document={{ icon, color: DOCUMENT_TEMPLATE_ICON_COLOR }} ariaLabel={t('Document icon')} triggerClassName="tpl-doc-icon-trigger" onChange={visual => setIcon(visual.icon)}/>
+          <DocumentIconPicker document={{ icon, color: color || DOCUMENT_TEMPLATE_ICON_COLOR }} ariaLabel={t('Document icon')} triggerClassName="tpl-doc-icon-trigger" onChange={visual => { setIcon(visual.icon); setColor(visual.color) }}/>
         </span>
         <input ref={nameRef} autoFocus className="tpl-doc-name" aria-label={t('Template name')} placeholder={t('Template name')} value={name} onChange={event => setName(event.target.value)}/>
         <MentionTextField
@@ -121,7 +122,7 @@ export function DocumentTemplateRow({ template, inheritedFrom, onOpen, onChanged
   const { t } = useI18n()
   const duplicate = async () => {
     try {
-      await createDocumentTemplate({ teamId: template.teamId, name: t('Copy of {name}').replace('{name}', template.name), description: template.description ?? '', title: template.title ?? '', icon: template.icon ?? '', content: template.content ?? '', contentState: template.contentState, contentData: template.contentData })
+      await createDocumentTemplate({ teamId: template.teamId, name: t('Copy of {name}').replace('{name}', template.name), description: template.description ?? '', title: template.title ?? '', icon: template.icon ?? '', color: template.color ?? '', content: template.content ?? '', contentState: template.contentState, contentData: template.contentData })
       await onChanged()
     } catch (error) {
       toast.error(error instanceof Error && error.message ? error.message : t('Could not save template'))
@@ -137,8 +138,8 @@ export function DocumentTemplateRow({ template, inheritedFrom, onOpen, onChanged
     }
   }
   return <TemplateListRow
-    icon={<DocumentGlyph icon={template.icon} color={DOCUMENT_TEMPLATE_ICON_COLOR}/>}
-    color={DOCUMENT_TEMPLATE_ICON_COLOR}
+    icon={<DocumentGlyph icon={template.icon} color={template.color || DOCUMENT_TEMPLATE_ICON_COLOR}/>}
+    color={template.color || DOCUMENT_TEMPLATE_ICON_COLOR}
     name={template.name}
     meta={inheritedFrom ? <>{t('Inherited from')} <b data-i18n-ignore>{inheritedFrom}</b></> : template.description ? <span data-i18n-ignore>{template.description}</span> : template.creator ? <>{t('Created by')} <b data-i18n-ignore>{template.creator.displayName}</b></> : undefined}
     onOpen={() => { if (!inheritedFrom) onOpen() }}

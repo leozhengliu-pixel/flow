@@ -2308,6 +2308,7 @@ type documentTemplateInput struct {
 	Description  *string        `json:"description,omitempty"`
 	Title        *string        `json:"title,omitempty"`
 	Icon         *string        `json:"icon,omitempty"`
+	Color        *string        `json:"color,omitempty"`
 	Content      *string        `json:"content,omitempty"`
 	ContentState *string        `json:"contentState,omitempty"`
 	ContentData  map[string]any `json:"contentData,omitempty"`
@@ -2336,6 +2337,14 @@ func applyDocumentTemplateInput(data *domain.Bootstrap, item *domain.DocumentTem
 	}
 	if input.Icon != nil {
 		item.Icon = *input.Icon
+	}
+	if input.Color != nil {
+		// Empty clears the colour (the icon then uses the default grey).
+		color := strings.TrimSpace(*input.Color)
+		if color != "" && !validHexColor(color) {
+			return errInvalid
+		}
+		item.Color = color
 	}
 	if input.Content != nil {
 		item.Content = *input.Content
