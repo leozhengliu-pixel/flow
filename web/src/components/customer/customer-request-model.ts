@@ -1,4 +1,5 @@
 import { markdownPlainText } from '@/lib/markdown-plain-text'
+import { matchesSearch, type SearchTranslate } from '@/lib/search-match'
 import type { Customer, CustomerRequest } from '@/types/flow'
 import type { CustomerPick } from './customer-request-events'
 
@@ -173,7 +174,7 @@ export type CustomerPickOption = { id: string; label: string; kind: 'unknown' | 
  * customers by name, then for typed text `Create new customer: "…"` — or "Add link as source"
  * when the text is a link. With no customers and no text: "Type a name to create your first customer".
  */
-export function customerPickOptions(customers: readonly Customer[], query: string, { withUnknown = true, withSource = true }: { withUnknown?: boolean; withSource?: boolean } = {}): CustomerPickOption[] {
+export function customerPickOptions(customers: readonly Customer[], query: string, { withUnknown = true, withSource = true, translate }: { withUnknown?: boolean; withSource?: boolean; translate?: SearchTranslate } = {}): CustomerPickOption[] {
   const text = query.trim()
   const sorted = [...customers].sort((left, right) => left.name.localeCompare(right.name))
   if (!text) {
@@ -186,7 +187,7 @@ export function customerPickOptions(customers: readonly Customer[], query: strin
   const needle = text.toLocaleLowerCase()
   const matches = sorted.filter(customer => customer.name.toLocaleLowerCase().includes(needle) || customer.domains?.some(domain => domain.toLocaleLowerCase().includes(needle)))
   const options: CustomerPickOption[] = [
-    ...(withUnknown && 'unknown customer'.includes(needle) ? [{ id: '__unknown', kind: 'unknown' as const, label: 'Unknown customer', pick: {} }] : []),
+    ...(withUnknown && matchesSearch(needle, ['Unknown customer'], translate) ? [{ id: '__unknown', kind: 'unknown' as const, label: 'Unknown customer', pick: {} }] : []),
     ...matches.map(customer => ({ id: customer.id, kind: 'customer' as const, label: customer.name, customer, pick: { customerId: customer.id } })),
   ]
   if (looksLikeUrl(text)) {

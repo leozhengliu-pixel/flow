@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { matchesSearch } from '@/lib/search-match'
 import { Search } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n/i18n'
@@ -45,8 +46,8 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: { open: boolean;
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const filtered = useMemo(() => groups.map(group => ({ ...group, shortcuts: group.shortcuts.filter(shortcut =>
-    `${shortcut.label} ${shortcut.keys.join(' ')}`.toLowerCase().includes(query.trim().toLowerCase()),
-  ) })).filter(group => group.shortcuts.length), [query])
+    matchesSearch(query, [shortcut.label, shortcut.keys.join(' ')], t),
+  ) })).filter(group => group.shortcuts.length), [query, t])
 
   return <Dialog open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
     <DialogContent aria-describedby={undefined} className="sidebar-shortcuts-dialog" closeLabel={t('Close dialog')}>

@@ -98,6 +98,7 @@ export interface FreeFormScore {
 export function scoreFreeFormOptions(
   query: string,
   options: Array<{ id: string; label: string; keywords?: string }>,
+  translate?: (source: string) => string,
 ): FreeFormScore[] {
   const normalized = query.trim().toLowerCase()
   if (!normalized) {
@@ -106,10 +107,11 @@ export function scoreFreeFormOptions(
   return options
     .map(option => {
       const label = option.label.toLowerCase()
-      const haystack = `${label} ${option.keywords ?? ''}`.toLowerCase()
+      const shown = translate ? translate(option.label).toLowerCase() : label
+      const haystack = `${label} ${shown !== label ? `${shown} ` : ''}${option.keywords ?? ''}`.toLowerCase()
       let score = 0
-      if (label === normalized) score = 100
-      else if (label.startsWith(normalized)) score = 80
+      if (label === normalized || shown === normalized) score = 100
+      else if (label.startsWith(normalized) || shown.startsWith(normalized)) score = 80
       else if (haystack.includes(normalized)) score = 50
       else {
         const tokens = normalized.split(/\s+/).filter(Boolean)

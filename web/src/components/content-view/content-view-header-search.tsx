@@ -3,7 +3,7 @@
  * Shared header find primitive: conditional inline vs always-visible directory search.
  */
 import { Search, X } from "lucide-react";
-import { useEffect, useId, useRef, type CSSProperties } from "react";
+import { useEffect, useId, useRef, type CSSProperties, type ReactNode } from "react";
 
 import "./content-view-header-search.css";
 
@@ -21,6 +21,8 @@ export type ContentViewHeaderSearchProps = {
   disableKeyboardShortcut?: boolean;
   className?: string;
   "aria-label"?: string;
+  /** Replaces the leading magnifier (e.g. The reference app's filled search glyph). */
+  icon?: ReactNode;
 };
 
 export function ContentViewHeaderSearch({
@@ -34,6 +36,7 @@ export function ContentViewHeaderSearch({
   disableKeyboardShortcut = false,
   className,
   "aria-label": ariaLabel,
+  icon,
 }: ContentViewHeaderSearchProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const reactId = useId();
@@ -75,7 +78,7 @@ export function ContentViewHeaderSearch({
       data-has-value={value ? "" : undefined}
       style={style}
     >
-      <Search aria-hidden="true" />
+      {icon ?? <Search aria-hidden="true" />}
       <input
         ref={inputRef}
         id={reactId}

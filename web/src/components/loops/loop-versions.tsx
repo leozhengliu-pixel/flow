@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { History, RotateCcw } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { UserAvatar } from "@/components/ui/user-avatar";

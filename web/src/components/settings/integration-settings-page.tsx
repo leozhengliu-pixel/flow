@@ -18,7 +18,7 @@ import {
   type IntegrationCatalogEntry,
 } from "@/lib/integration-catalog";
 import type { BootstrapData } from "@/types/flow";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useState } from "react";
 
 type Props = {

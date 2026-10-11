@@ -1,8 +1,8 @@
 import * as Popover from '@radix-ui/react-popover'
-import { ArrowUpRight, CalendarDays, Check, ChevronDown, GitCommitHorizontal, Info } from 'lucide-react'
+import { Check } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import { usePropertyCommand } from '@/components/property/use-property-command'
@@ -48,7 +48,7 @@ export function PipelineEditorPage(props: Props) {
 
 function DocsLink() {
   const { t } = useI18n()
-  return <a className="pipeline-settings-docs" href={RELEASES_DOCS_URL} target="_blank" rel="noreferrer">{t('Docs')}<ArrowUpRight aria-hidden/></a>
+  return <a className="pipeline-settings-docs" href={RELEASES_DOCS_URL} target="_blank" rel="noreferrer">{t('Docs')}</a>
 }
 
 function nameError(name: string, attempted: boolean): string | undefined {
@@ -218,8 +218,8 @@ function PipelineSettingsForm({ data, pipeline, onCancel, onSaved, onChanged }: 
       </SettingsSection>
       <SettingsSection title={t('CI setup')} description={t('Integrate your CI/CD pipeline to automatically track deployments and create releases.')} grouped>
         <div className="pipeline-settings-links">
-          <a href={RELEASE_GITHUB_ACTIONS_DOCS_URL} target="_blank" rel="noreferrer">{t('GitHub Actions')}<ArrowUpRight aria-hidden/></a>
-          <a href={RELEASE_API_DOCS_URL} target="_blank" rel="noreferrer">{t('Release API')}<ArrowUpRight aria-hidden/></a>
+          <a href={RELEASE_GITHUB_ACTIONS_DOCS_URL} target="_blank" rel="noreferrer">{t('GitHub Action')}<FlowGlyph name="externalArrow" size={16}/></a>
+          <a href={RELEASE_API_DOCS_URL} target="_blank" rel="noreferrer">{t('Release API')}<FlowGlyph name="externalArrow" size={16}/></a>
         </div>
         <PipelineAccessKeySection key={`access-key-${pipeline.id}`} pipeline={pipeline} disabled={readOnly} onChanged={reload}/>
         <PipelinePathFilters key={`path-filters-${pipeline.id}`} pipeline={pipeline} disabled={readOnly} onSave={pathFilters => void save({ pathFilters })}/>
@@ -239,8 +239,8 @@ function NameRow({ name, error, autoFocus = false, onChange, onBlur }: { name: s
 function TypeCards({ type, onChange }: { type: ReleasePipeline['type']; onChange: (type: ReleasePipeline['type']) => void }) {
   const { t } = useI18n()
   const cards = [
-    { value: 'scheduled' as const, icon: <CalendarDays/>, label: 'Scheduled', description: 'Collect changes into a release and track its progress over time', hint: 'Common for teams with a release cadence or mobile releases' },
-    { value: 'continuous' as const, icon: <GitCommitHorizontal/>, label: 'Continuous', description: 'Create a new release automatically for each deploy', hint: 'Common for continuous delivery or frequent deploys' },
+    { value: 'scheduled' as const, icon: <FlowGlyph name="scheduledPipeline" size={16}/>, label: 'Scheduled', description: 'Collect changes into a release and track its progress over time', hint: 'Common for teams with a release cadence or mobile releases' },
+    { value: 'continuous' as const, icon: <FlowGlyph name="continuousPipeline" size={16}/>, label: 'Continuous', description: 'Create a new release automatically for each deploy', hint: 'Common for continuous delivery or frequent deploys' },
   ]
   return <div className="pipeline-settings-type-cards" role="radiogroup" aria-label={t('Type')}>
     {cards.map(card => <button key={card.value} type="button" role="radio" aria-checked={type === card.value} className={type === card.value ? 'is-selected' : ''} onClick={() => onChange(card.value)}>
@@ -272,12 +272,12 @@ function TeamsRow({ data, teamIds, disabled = false, onChange }: { data: Bootstr
   const filtered = command.filteredOptions.map(option => teams.find(team => team.id === option.id)).filter((team): team is Team => Boolean(team))
   const selected = data.teams.filter(team => draft.includes(team.id))
   const groupOf = (team: Team) => memberTeamIds.has(team.id) ? 'Your teams' : 'Other teams'
-  return <SettingsRow title={t('Teams')} description={<span className="pipeline-settings-hint">{t('Optionally set team ownership')}<FlowTooltip label={t('Teams set ownership and improve default behaviors like suggested releases. Issues from other teams can still be added to releases.')}><Info aria-label={t('More information')} tabIndex={0}/></FlowTooltip></span>}>
+  return <SettingsRow title={t('Teams')} description={<span className="pipeline-settings-hint">{t('Optionally set team ownership')}<FlowTooltip label={t('Teams set ownership and improve default behaviors like suggested releases. Issues from other teams can still be added to releases.')}><FlowGlyph name="infoFilled" size={12} aria-label={t('More information')} tabIndex={0}/></FlowTooltip></span>}>
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Anchor asChild>
         <div className="pipeline-settings-team-trigger" data-disabled={disabled || undefined}>
           <input ref={command.inputRef} disabled={disabled} data-i18n-ignore={selected.length ? true : undefined} role="combobox" aria-label={t('Teams')} aria-expanded={open} aria-haspopup="listbox" aria-controls="flow-pipeline-team-options" aria-activedescendant={open && command.activeId ? `flow-pipeline-team-${command.activeId}` : undefined} autoComplete="off" spellCheck={false} placeholder={t('Select teams…')} value={open ? command.query : selected.map(team => team.name).join(', ')} onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={event => { command.onQueryChange(event.target.value); setOpen(true) }} onKeyDown={command.onKeyDown}/>
-          <ChevronDown aria-hidden/>
+          <span className="pipeline-settings-team-chevron" aria-hidden="true"><FlowGlyph name="selectChevron" width={10} height={5}/></span>
         </div>
       </Popover.Anchor>
       <Popover.Portal>

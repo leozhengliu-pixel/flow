@@ -1,6 +1,6 @@
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { useRequestEntityUpdates } from '@/lib/entity-updates'
 import { ProjectGlyph } from '@/components/views/project-glyph'
 

@@ -13,7 +13,7 @@ import { resetCodeBlockSettingsCache } from './code-block-settings'
 import { CODE_LANGUAGES, detectLanguage, languageLabel, resolveLanguage } from './languages'
 
 vi.mock('@/i18n/i18n', () => ({ useI18n: () => ({ t: (value: string) => value }) }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 function Harness({ content, editable = true, onReady }: { content: string; editable?: boolean; onReady: (editor: Editor) => void }) {
   const editor = useEditor({ extensions: [Document, Paragraph, Text, Markdown, FlowCodeBlock], content, contentType: 'markdown', editable })

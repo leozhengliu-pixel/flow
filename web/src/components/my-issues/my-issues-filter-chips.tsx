@@ -22,7 +22,7 @@ export function filterChipItem(filter: Pick<MyIssuesAppliedFilter, 'id' | 'field
     // Legacy Agent Session values (Awaiting input) show as the reference app state they now match.
     const legacy = filter.field === 'agentSession' && !known.has(value.value) ? known.get(agentSessionFilterValue(value.value) ?? '') : undefined
     const option = known.get(value.value) ?? (legacy && { ...legacy, id: value.value })
-    const base: MyIssuesFilterOption = option ?? { id: value.value, label: filter.field === 'dates' ? dateFilterValueLabel(value.value) ?? value.valueLabel : value.valueLabel, color: value.color }
+    const base: MyIssuesFilterOption = option ?? { id: value.value, label: filter.field === 'dates' || filter.field === 'releases' ? dateFilterValueLabel(value.value) ?? value.valueLabel : value.valueLabel, color: value.color }
     return { ...base, label: base.label || value.valueLabel, icon: <OptionMark field={filter.field} option={base}/> }
   })
   const ids = values.map(value => value.id)

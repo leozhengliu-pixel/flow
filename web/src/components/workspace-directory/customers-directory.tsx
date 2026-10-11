@@ -1,7 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { matchesSearch } from '@/lib/search-match'
 import { Plus, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
 import { CustomerDialog } from '@/components/customer-detail/customer-dialog'
@@ -309,7 +310,7 @@ function CustomerOwnerPicker({ customer, owner, users, onUpdate }: { customer: C
     <DropdownMenu.Portal>
       <FlowDropdownMenuContent className="customers-picker-menu" label={t('Change customer owner…')}>
         <FlowMenuOptions
-          matches={(option, needle) => option.id ? personMatchesQuery(people.find(user => user.id === option.id)!, needle) : t('No owner').toLocaleLowerCase().includes(needle)}
+          matches={(option, needle) => option.id ? personMatchesQuery(people.find(user => user.id === option.id)!, needle) : matchesSearch(needle, ['No owner'], t)}
           options={options}
           placeholder="Change customer owner…"
           selected={new Set([customer.ownerId ?? ''])}

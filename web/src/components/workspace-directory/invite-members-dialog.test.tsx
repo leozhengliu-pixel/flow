@@ -7,7 +7,7 @@ import { makeBootstrap } from '@/test/fixtures'
 import { InviteMembersDialog } from './invite-members-dialog'
 
 vi.mock('@/lib/api', () => ({ inviteMembers: vi.fn() }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 beforeEach(() => {
   vi.clearAllMocks()

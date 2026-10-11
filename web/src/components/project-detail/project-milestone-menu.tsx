@@ -1,6 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
@@ -9,6 +9,7 @@ import type { Project, ProjectMilestone } from '@/types/flow'
 import { useI18n } from '@/i18n/i18n'
 import { ProjectMenuSearch } from './project-menu-primitives'
 import { projectMilestoneLink } from './project-detail-helpers'
+import { matchesSearch } from '@/lib/search-match'
 
 type MilestoneMenuIconName = 'calendar'|'chevron-right'|'close'|'copy'|'edit'|'issues'|'link'|'link-name'|'milestone'|'more-horizontal'|'project'|'trash'
 
@@ -40,7 +41,7 @@ export function ProjectMilestoneMenu({ count, milestone, onConvert, onDelete, on
 }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
-  const shows = (label: string) => !query || label.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+  const shows = (label: string) => matchesSearch(query, [label], t)
   const link = projectMilestoneLink(milestone.id)
   const copy = (value: string, message: string) => void navigator.clipboard.writeText(value).then(() => toast.success(t(message)))
   const remove = () => { void confirmAction(`Delete “${milestone.name}”?`, { confirmLabel: 'Delete milestone' }).then(confirmed => { if (confirmed) return onDelete() }) }

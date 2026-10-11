@@ -6,7 +6,7 @@
  */
 import { Trash2 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { MentionTextField } from '@/components/editor/mention-text-field'
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'

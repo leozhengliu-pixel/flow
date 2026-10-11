@@ -131,6 +131,8 @@ export interface MyIssuesRowData {
   releaseStages?: string[]
   releaseStatuses?: string[]
   hasReleasedRelease?: boolean
+  /** When each of the issue's releases was released (Releases ▸ Released date matches any). */
+  releasedDates?: string[]
   subscriberIds?: string[]
   relationTypes?: string[]
   hasLinks?: boolean

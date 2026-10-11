@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Play, Plus, RefreshCw, Trash2, Workflow } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { useI18n } from "@/i18n/i18n";
 

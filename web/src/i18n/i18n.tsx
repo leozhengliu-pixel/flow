@@ -64,6 +64,12 @@ export function useI18n() {
   return value
 }
 
+/** `t` when inside the provider, otherwise the identity: shared search hooks also run in isolated unit tests. */
+export function useOptionalTranslate(): (source: string) => string {
+  return useContext(I18nContext)?.t ?? identityTranslate
+}
+const identityTranslate = (source: string) => source
+
 export function LanguageSelect({ className }: { className?: string }) {
   const { locale, setLocale, t } = useI18n()
   return <label className={className} data-i18n-control data-i18n-ignore>

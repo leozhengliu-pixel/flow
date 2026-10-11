@@ -36,7 +36,7 @@ export function CustomerRequestPicker({ customers, title, onPick, onClose }: { c
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
-  const options = useMemo(() => customerPickOptions(customers, query), [customers, query])
+  const options = useMemo(() => customerPickOptions(customers, query, { translate: t }), [customers, query, t])
   useEffect(() => {
     const timer = window.setTimeout(() => inputRef.current?.focus(), 60)
     return () => window.clearTimeout(timer)

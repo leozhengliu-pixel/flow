@@ -180,7 +180,8 @@ import type {
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
 import { OrganizationNotFound } from "@/components/workspace/organization-not-found";
 import { confirmAction } from "@/components/ui/action-dialog-service";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
+import { toastInitiativeCreated, toastIssueCreated, toastProjectCreated } from "@/lib/created-toasts";
 import type {
   ProjectCreateInput,
   ProjectMutationInput,
@@ -1654,6 +1655,7 @@ function App() {
           })
         : current,
     );
+    toastIssueCreated(issue, issuePath(data.workspace.urlKey, issue), translateTitle);
     if (!input.createMore) navigateTo(issuePath(data.workspace.urlKey, issue));
     return issue;
   };
@@ -2173,6 +2175,7 @@ function App() {
       () => createProject(input),
       "Could not create project",
     );
+    if (data) toastProjectCreated(project, projectPath(data.workspace.urlKey, project), translateTitle);
     let relations: ProjectRelation[] | undefined;
     if (input.templateId !== undefined || input.dependencyIds !== undefined || input.dependencyRelations !== undefined) {
       try {
@@ -2320,6 +2323,7 @@ function App() {
       () => createInitiative(input),
       "Could not create initiative",
     );
+    if (data) toastInitiativeCreated(initiative, initiativePath(data.workspace.urlKey, initiative), translateTitle);
     setData((current) =>
       current
         ? {

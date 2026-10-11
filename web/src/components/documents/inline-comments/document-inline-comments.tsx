@@ -13,7 +13,7 @@
 import type { Editor } from '@tiptap/react'
 import { MessageSquareText, X } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { Composer } from '@/components/editor/composer'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'

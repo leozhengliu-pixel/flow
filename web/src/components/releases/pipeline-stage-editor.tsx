@@ -1,9 +1,10 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Lock, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { toast } from '@/lib/toast'
 
+import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
 import { FLOW_COLOR_PALETTE } from '@/components/ui/color-palette'
 import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
@@ -77,7 +78,7 @@ export function PipelineStageEditor({ stages, onChange, releaseCountByStage }: {
       <div className="flow-pipeline-started-header">
         <span className="flow-pipeline-stage-label"><ReleasesIcon className="flow-pipeline-started-icon"/><span>{t('Started')}</span></span>
         <FlowTooltip label={t('Create new release stage')}>
-          <button type="button" className="flow-pipeline-stage-icon-button" aria-label={t('Create new release stage')} disabled={Boolean(edit)} onClick={startCreate}><Plus/></button>
+          <button type="button" className="flow-pipeline-stage-icon-button" aria-label={t('Create new release stage')} disabled={Boolean(edit)} onClick={startCreate}><FlowGlyph name="plus" size={14}/></button>
         </FlowTooltip>
       </div>
       {started.map(stage => edit && !edit.isNew && edit.key === stage.key
@@ -142,22 +143,17 @@ function StartedStageRow({ stage, dragging, disabled, canFreeze, onDragStart, on
       {stage.frozen && <FlowTooltip label={t('Syncs won’t automatically add issues to this stage')}><span className="flow-pipeline-frozen-badge">{t('Frozen')}</span></FlowTooltip>}
     </span>
     {!disabled && <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
-      <DropdownMenu.Trigger asChild><button type="button" className="flow-pipeline-stage-icon-button flow-pipeline-stage-menu-trigger" aria-label={t('Open menu')}><MoreHorizontal/></button></DropdownMenu.Trigger>
+      <DropdownMenu.Trigger asChild><button type="button" className="flow-pipeline-stage-icon-button flow-pipeline-stage-menu-trigger" aria-label={t('Open menu')}><FlowGlyph name="ellipsis" size={14}/></button></DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content data-flow-motion="floating" className="flow-pipeline-settings-menu flow-pipeline-stage-menu" align="end" sideOffset={4}>
-          <DropdownMenu.Item onSelect={onEdit}><Pencil/><span>{t('Edit')}</span></DropdownMenu.Item>
-          <MenuItemWithReason disabled={!canFreeze} reason={t('At least one started stage must remain non-frozen.')} onSelect={onToggleFrozen}><Lock/><span>{t(stage.frozen ? 'Unfreeze' : 'Freeze')}</span></MenuItemWithReason>
-          <DropdownMenu.Item onSelect={onDelete}><Trash2/><span>{t('Delete')}</span></DropdownMenu.Item>
-        </DropdownMenu.Content>
+        <FlowDropdownMenuContent align="end" label={t('Stage options')}>
+          <FlowMenuItem icon={<FlowGlyph name="edit"/>} label="Edit" onSelect={onEdit}/>
+          {canFreeze ? <FlowMenuItem icon={<FlowGlyph name="lock"/>} label={stage.frozen ? 'Unfreeze' : 'Freeze'} onSelect={onToggleFrozen}/>
+            : <FlowTooltip label={t('At least one started stage must remain non-frozen.')} side="right"><div className="flow-pipeline-menu-reason"><FlowMenuItem icon={<FlowGlyph name="lock"/>} label={stage.frozen ? 'Unfreeze' : 'Freeze'} disabled/></div></FlowTooltip>}
+          <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" onSelect={onDelete}/>
+        </FlowDropdownMenuContent>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>}
   </div>
-}
-
-/** A disabled menu item still explains itself on hover's disabledReason. */
-function MenuItemWithReason({ disabled, reason, onSelect, children }: { disabled: boolean; reason: string; onSelect: () => void; children: ReactNode }) {
-  const item = <DropdownMenu.Item disabled={disabled} onSelect={onSelect}>{children}</DropdownMenu.Item>
-  return disabled ? <FlowTooltip label={reason} side="right">{<div className="flow-pipeline-menu-reason">{item}</div>}</FlowTooltip> : item
 }
 
 function StageEditRow({ edit, isNew = false, taken, onChange, onCancel, onSubmit }: {

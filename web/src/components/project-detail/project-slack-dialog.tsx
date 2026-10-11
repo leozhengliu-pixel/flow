@@ -1,6 +1,6 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { AppLink } from '@/components/ui/app-link'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { SlackIcon } from '@/components/issue/issue-icons'

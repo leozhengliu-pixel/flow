@@ -18,7 +18,7 @@ const api = vi.hoisted(() => ({
   setDocumentThreadSubscription: vi.fn(),
 }))
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
-vi.mock('sonner', () => ({ toast: toasts }))
+vi.mock('@/lib/toast', () => ({ toast: toasts }))
 vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
 // The reply/draft composer is a full editor; a textarea keeps these tests on the thread behaviour.
 vi.mock('@/components/editor/composer', () => ({

@@ -4,7 +4,7 @@ import {
   PanelLeft, PanelTop, Plus, Rows3, Columns3, Trash2, Ellipsis, type LucideIcon,
 } from 'lucide-react'
 import { Fragment, useEffect, useState, type MouseEvent } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
 import { deleteWholeTable, runInTable, selectWholeTable, tableAt, tableToText } from './table-commands'

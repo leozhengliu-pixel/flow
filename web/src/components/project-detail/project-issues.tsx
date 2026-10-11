@@ -3,7 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Plus, Trash2, X } from "lucide-react";
 import { MilestoneProgressIcon } from "@/components/issue/milestone-progress-icon";
 import { isMilestoneDateOverdue, milestoneIssueProgress } from "@/components/issue/milestone-progress";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { MyIssuesDisplayMenu } from "@/components/my-issues/my-issues-display-menu";
 import { MyIssuesFilterMenu } from "@/components/my-issues/my-issues-filter-menu";
 import { FilterIcon as Filter } from "@/components/ui/view-action-icons";

@@ -1,4 +1,6 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { useI18n } from '@/i18n/i18n'
+import { matchesSearch } from '@/lib/search-match'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Check, SlidersHorizontal, X } from 'lucide-react'
 import { useState } from 'react'
@@ -17,9 +19,10 @@ const groups: PulseFilterField[][] = [
 function Filter({size=16}:{size?:number}){return <FilterIcon width={size} height={size}/>}
 
 export function PulseFilterMenu({ align='start', compact=false, data, filters, match, onChange, onMatchChange }: { align?:'start'|'end';compact?:boolean;data:BootstrapData;filters:PulseFilter[];match:PulseFilterMatch;onChange:(filters:PulseFilter[])=>void;onMatchChange:(match:PulseFilterMatch)=>void }) {
+  const { t } = useI18n()
   const [query,setQuery]=useState('')
   const [advancedOpen,setAdvancedOpen]=useState(false)
-  const visibleGroups=groups.map(fields=>fields.filter(field=>pulseFilterLabels[field].toLowerCase().includes(query.trim().toLowerCase()))).filter(fields=>fields.length)
+  const visibleGroups=groups.map(fields=>fields.filter(field=>matchesSearch(query,[pulseFilterLabels[field]],t))).filter(fields=>fields.length)
   const updateField=(field:PulseFilterField,value:string)=>{const existing=filters.find(filter=>filter.field===field);if(existing){const values=existing.values.includes(value)?existing.values.filter(item=>item!==value):[...existing.values,value];onChange(values.length?filters.map(filter=>filter.id===existing.id?{...filter,values}:filter):filters.filter(filter=>filter.id!==existing.id));return}onChange([...filters,{id:`pulse_filter_${crypto.randomUUID()}`,field,operator:'is',values:[value]}])}
   return <><DropdownMenu.Root onOpenChange={open=>{if(!open)setQuery('')}}><DropdownMenu.Trigger asChild><button aria-label="Add filter" className="pulse-filter-button" data-compact={compact||undefined} type="button"><Filter size={13}/>{!compact&&'Add filter'}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align={align} className="pulse-menu pulse-filter-builder" sideOffset={5}>
     <div className="pulse-menu-search"><input aria-label="Add Filter…" autoFocus placeholder="Add Filter…" value={query} onChange={event=>setQuery(event.target.value)}/><kbd>F</kbd></div>
@@ -31,9 +34,10 @@ export function PulseFilterMenu({ align='start', compact=false, data, filters, m
 }
 
 function FilterFieldSubmenu({data,field,filters,onToggle}:{data:BootstrapData;field:PulseFilterField;filters:PulseFilter[];onToggle:(value:string)=>void}){
+  const { t } = useI18n()
   const [query,setQuery]=useState('')
   const selected=new Set(filters.find(filter=>filter.field===field)?.values??[])
-  const values=filterValues(data,field).filter(value=>value.label.toLowerCase().includes(query.trim().toLowerCase()))
+  const values=filterValues(data,field).filter(value=>matchesSearch(query,[value.label],t))
   return <DropdownMenu.Sub onOpenChange={open=>{if(!open)setQuery('')}}><DropdownMenu.SubTrigger><span>{pulseFilterLabels[field]}</span><span className="pulse-menu-end pulse-filter-chevron" aria-hidden="true">▶</span></DropdownMenu.SubTrigger><DropdownMenu.Portal><DropdownMenu.SubContent data-flow-motion="floating" className="pulse-menu pulse-filter-values" sideOffset={4} alignOffset={-5}><div className="pulse-menu-search"><input aria-label={pulseFilterLabels[field]} autoFocus placeholder={pulseFilterLabels[field]} value={query} onChange={event=>setQuery(event.target.value)}/></div>{values.map(value=><DropdownMenu.Item key={value.id} onSelect={event=>{event.preventDefault();onToggle(value.id)}}><span className="pulse-filter-checkbox">{selected.has(value.id)&&<CheckboxMark/>}</span><span data-i18n-ignore>{value.label}</span></DropdownMenu.Item>)}{!values.length&&<div className="pulse-filter-empty">No results</div>}</DropdownMenu.SubContent></DropdownMenu.Portal></DropdownMenu.Sub>
 }
 

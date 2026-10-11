@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { useI18n } from '@/i18n/i18n'

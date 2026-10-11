@@ -22,7 +22,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { TeamIcon } from "@/components/issue/issue-icons";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type {
   BootstrapData,
   SavedView,

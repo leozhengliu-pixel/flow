@@ -28,7 +28,7 @@ const favorites = vi.hoisted(() => ({ toggleFavoriteFor: vi.fn() }))
 vi.mock('@/lib/favorites', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/favorites')>(), ...favorites }))
 const dialogs = vi.hoisted(() => ({ confirmAction: vi.fn(), promptAction: vi.fn(), promptDateAction: vi.fn() }))
 vi.mock('@/components/ui/action-dialog-service', () => dialogs)
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const team = { id: 'team-1', key: 'TST', name: 'Test team', color: '#5e6ad2', icon: 'Team' }
 const second = { id: 'team-2', key: 'SEC', name: 'Second team', color: '#5e6ad2', icon: 'Team' }

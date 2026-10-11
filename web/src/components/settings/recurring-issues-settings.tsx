@@ -1,7 +1,7 @@
 import { ExternalLink, GitBranch, MoreHorizontal, Pencil, Plus, Repeat2, SquareArrowOutUpRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { ISSUE_QUERY_INVALIDATED, type IssueQueryInvalidation } from "@/components/issue-explorer/paged-issue-invalidation";
 import { IssueDescriptionEditor } from "@/components/issue/issue-description-editor";

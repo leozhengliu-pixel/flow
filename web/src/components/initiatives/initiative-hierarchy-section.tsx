@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { ChevronDown, ChevronRight, MoreHorizontal, Plus } from 'lucide-react'
 import { Fragment, useMemo, useState, type ReactElement } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { FlowDropdownMenuContent, FlowMenuItem, FlowMenuOptions, FlowSubmenu } from '@/components/ui/row-context-menu'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ViewGlyph } from '@/components/views/view-icon-picker'

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap, viewer } from '@/test/fixtures'
 import type { BootstrapData, WorkspaceSettings } from '@/types/flow'
@@ -10,7 +10,7 @@ import { ActionDialogHost } from '@/components/ui/action-dialogs'
 import { FeatureSettingsPage } from './feature-settings'
 
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), updateWorkspacePreferences: vi.fn(), updateUserSettings: vi.fn() }))
-vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.setItem('flow:locale','en-US') })
 const initial = { sessionDurationDays:30, featureFlags:{'customer-requests':true,initiatives:true,pulse:true},featureSettings:{} } as unknown as WorkspaceSettings
 function page(onReload = vi.fn(), feature: 'customer-requests'|'pulse'|'initiatives'|'ai'|'asks' = 'customer-requests', onNavigateSettings = vi.fn(), overrides: Partial<BootstrapData> = {}) {

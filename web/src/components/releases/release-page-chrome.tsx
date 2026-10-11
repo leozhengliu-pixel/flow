@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import { ChevronRight, Menu, X } from 'lucide-react'
+import { Menu, X } from 'lucide-react'
 import { Fragment, forwardRef, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 
 import { AppLink } from '@/components/ui/app-link'
@@ -28,7 +28,7 @@ export function ReleaseBreadcrumbs({ crumbs }: { crumbs: ReleaseCrumb[] }) {
       const last = index === crumbs.length - 1
       const body = <>{crumb.icon && <span className="flow-releases-crumbs__icon">{crumb.icon}</span>}<span className="flow-releases-crumbs__label" data-i18n-ignore={crumb.translate ? undefined : ''}>{crumb.label}</span></>
       return <Fragment key={index}>
-        {index > 0 && <ChevronRight className="flow-releases-crumbs__chevron" aria-hidden="true"/>}
+        {index > 0 && <span className="flow-releases-crumbs__chevron" aria-hidden="true">›</span>}
         {last ? <h1 className="flow-releases-crumbs__item" aria-current="page">{body}</h1>
           : crumb.href ? <AppLink className="flow-releases-crumbs__item is-link" href={crumb.href} onClick={event => { if (!crumb.onClick || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return; event.preventDefault(); crumb.onClick() }}>{body}</AppLink>
             : <button className="flow-releases-crumbs__item is-link" onClick={crumb.onClick} type="button">{body}</button>}
@@ -65,15 +65,19 @@ export function ReleaseEmptyState({ art, title, paragraphs, primary, secondary, 
   return <div className="flow-releases-empty" role="status">
     <div className="flow-releases-empty__body">
       {art && <div className="flow-releases-empty__art">{art}</div>}
-      <strong className="flow-releases-empty__title">{title}</strong>
-      {paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-      {(primary || secondary || extra) && <div className="flow-releases-empty__actions">
-        {primary && <button className="flow-releases-primary" onClick={primary.onClick} type="button">{t(primary.label)}{primary.shortcut && <ButtonKeys value={primary.shortcut}/>}</button>}
-        {secondary && (secondary.href
-          ? <a className="flow-releases-secondary" href={secondary.href} rel="noreferrer" target="_blank">{t(secondary.label)}</a>
-          : <button className="flow-releases-secondary" onClick={secondary.onClick} type="button">{t(secondary.label)}</button>)}
-        {extra}
-      </div>}
+      <div className="flow-releases-empty__text">
+        <div className="flow-releases-empty__group">
+          <span className="flow-releases-empty__title">{title}</span>
+          <div className="flow-releases-empty__paragraphs">{paragraphs.map((paragraph, index) => <span key={index}>{paragraph}</span>)}</div>
+        </div>
+        {(primary || secondary || extra) && <div className="flow-releases-empty__actions">
+          {primary && <div><button className="flow-releases-primary" onClick={primary.onClick} type="button">{t(primary.label)}{primary.shortcut && <ButtonKeys value={primary.shortcut}/>}</button></div>}
+          {secondary && <div>{secondary.href
+            ? <a className="flow-releases-secondary" href={secondary.href} rel="noreferrer" target="_blank">{t(secondary.label)}</a>
+            : <button className="flow-releases-secondary" onClick={secondary.onClick} type="button">{t(secondary.label)}</button>}</div>}
+          {extra && <div>{extra}</div>}
+        </div>}
+      </div>
     </div>
   </div>
 }

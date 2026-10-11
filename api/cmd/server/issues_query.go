@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -107,11 +108,12 @@ func (s *server) listIssues(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	env := newIssueMatchEnv(data, root)
 	err = s.store.WalkIssueRecords(ctx, scope, func(issue domain.Issue) error {
 		if issue.AgentSessionID != "" && sessionStates != nil {
 			issue.AgentSessionState = sessionStates[issue.AgentSessionID]
 		}
-		if !issueArchiveMatches(issue, query.Get("archived")) || !issueScopeMatches(issue, query) || !issueTextMatches(issue, query.Get("q")) || !root.matches(issue, data) {
+		if !issueArchiveMatches(issue, query.Get("archived")) || !issueScopeMatches(issue, query) || !issueTextMatches(issue, query.Get("q")) || !root.matchesIn(issue, env) {
 			return nil
 		}
 		total++
@@ -247,10 +249,39 @@ func (node issueQueryNode) empty() bool {
 	return node.Field == "" && len(node.And) == 0 && len(node.Or) == 0 && node.Not == nil
 }
 
+// issueMatchEnv is what leaf matching reads besides the issue: the workspace
+// and, when the query filters on releases, each issue's releases (indexed once
+// per query rather than scanned per issue).
+type issueMatchEnv struct {
+	data     domain.Bootstrap
+	releases map[string][]*domain.Release
+}
+
+var issueReleaseFields = []string{"release", "releaseid", "releasepipeline", "releasepipelineid", "releasestage", "releasestatus", "releasedat"}
+
+func newIssueMatchEnv(data domain.Bootstrap, root issueQueryNode) issueMatchEnv {
+	env := issueMatchEnv{data: data}
+	if !slices.ContainsFunc(issueReleaseFields, root.references) {
+		return env
+	}
+	env.releases = map[string][]*domain.Release{}
+	for i := range data.Releases {
+		for _, id := range data.Releases[i].IssueIDs {
+			env.releases[id] = append(env.releases[id], &data.Releases[i])
+		}
+	}
+	return env
+}
+
 func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bool {
+	return node.matchesIn(issue, newIssueMatchEnv(data, node))
+}
+
+func (node issueQueryNode) matchesIn(issue domain.Issue, env issueMatchEnv) bool {
+	data := env.data
 	if len(node.And) > 0 {
 		for _, child := range node.And {
-			if !child.matches(issue, data) {
+			if !child.matchesIn(issue, env) {
 				return false
 			}
 		}
@@ -258,7 +289,7 @@ func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bo
 	if len(node.Or) > 0 {
 		matched := false
 		for _, child := range node.Or {
-			if child.matches(issue, data) {
+			if child.matchesIn(issue, env) {
 				matched = true
 				break
 			}
@@ -267,7 +298,7 @@ func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bo
 			return false
 		}
 	}
-	if node.Not != nil && node.Not.matches(issue, data) {
+	if node.Not != nil && node.Not.matchesIn(issue, env) {
 		return false
 	}
 	if node.Field == "" {
@@ -279,6 +310,9 @@ func (node issueQueryNode) matches(issue domain.Issue, data domain.Bootstrap) bo
 		operator = "is"
 	}
 	actual := issueFieldValues(issue, node.Field, data)
+	if env.releases != nil && slices.Contains(issueReleaseFields, strings.ToLower(strings.TrimSpace(node.Field))) {
+		actual = issueReleaseFieldValues(env.releases[issue.ID], node.Field)
+	}
 	if operator == "isempty" || operator == "isnotempty" {
 		empty := len(actual) == 0 || (len(actual) == 1 && strings.TrimSpace(actual[0]) == "")
 		return empty == (operator == "isempty")
@@ -629,11 +663,45 @@ func issueAttributeFieldValues(issue domain.Issue, field string) []string {
 	return []string{"true"}
 }
 
+// issueReleaseFieldValues reads the release fields (the reference app's Releases filters)
+// from an issue's releases; "releasedAt" lists only released releases.
+func issueReleaseFieldValues(releases []*domain.Release, field string) []string {
+	values := []string{}
+	for _, release := range releases {
+		switch strings.ToLower(strings.TrimSpace(field)) {
+		case "release", "releaseid":
+			values = append(values, release.ID)
+		case "releasepipeline", "releasepipelineid":
+			values = append(values, release.PipelineID)
+		case "releasestage":
+			values = append(values, release.Stage)
+		case "releasestatus":
+			values = append(values, release.Status)
+		case "releasedat":
+			if release.ReleasedAt != nil {
+				values = append(values, release.ReleasedAt.UTC().Format(time.RFC3339Nano))
+			}
+		}
+	}
+	return values
+}
+
+// dateMatch holds when any of the actual dates matches (one for most fields,
+// one per released release for "releasedAt").
 func dateMatch(actual []string, operator string, values []string) bool {
-	if len(actual) == 0 || len(values) == 0 {
+	for _, value := range actual {
+		if singleDateMatch(value, operator, values) {
+			return true
+		}
+	}
+	return false
+}
+
+func singleDateMatch(actual string, operator string, values []string) bool {
+	if len(values) == 0 {
 		return false
 	}
-	date, err := parseQueryDate(actual[0])
+	date, err := parseQueryDate(actual)
 	if err != nil {
 		return false
 	}
@@ -669,7 +737,12 @@ func dateMatch(actual []string, operator string, values []string) bool {
 }
 
 func parseQueryDate(value string) (time.Time, error) {
-	value = strings.TrimSpace(strings.ToLower(value))
+	value = strings.TrimSpace(value)
+	// RFC 3339 needs its upper-case "T" / "Z": parse before folding keywords.
+	if date, err := time.Parse(time.RFC3339, value); err == nil {
+		return date, nil
+	}
+	value = strings.ToLower(value)
 	now := time.Now().UTC()
 	switch value {
 	case "today":

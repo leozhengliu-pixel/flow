@@ -23,6 +23,23 @@ html:root body .command-dialog .command-context-chip {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Typed chip ("Release ⋅ v1.2.0"): the reference app's rounder chip with a dimmed type prefix. */
+html:root body .command-dialog .command-context:has(.command-context-chip.is-typed) {
+  padding-top: 12px;
+}
+html:root body .command-dialog .command-context-chip.is-typed {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: var(--command-typed-chip-bg);
+  box-shadow: none;
+  font-weight: 400;
+  line-height: 18px;
+}
+html:root body .command-dialog .command-context-chip__type {
+  font-weight: 500;
+  opacity: .5;
+}
 html:root body .command-dialog .command-context-page {
   display: inline-flex;
   min-width: 0;

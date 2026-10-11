@@ -829,6 +829,9 @@ func writeMetadataRecordChanges(ctx context.Context, tx *sqlTx, workspace string
 		if err := syncMetadataSearchDocument(ctx, tx, workspace, change.field, change.key, nil); err != nil {
 			return err
 		}
+		if err := writeReleaseIssueRecords(ctx, tx, workspace, change.field, change.key, nil); err != nil {
+			return err
+		}
 	}
 	if err := writeMetadataRecordUpserts(ctx, tx, workspace, upserts); err != nil {
 		return err
@@ -871,6 +874,9 @@ func writeMetadataRecordUpserts(ctx context.Context, tx *sqlTx, workspace string
 			return err
 		}
 		if err := syncMetadataSearchDocument(ctx, tx, workspace, change.field, change.key, []byte(change.raw)); err != nil {
+			return err
+		}
+		if err := writeReleaseIssueRecords(ctx, tx, workspace, change.field, change.key, []byte(change.raw)); err != nil {
 			return err
 		}
 	}

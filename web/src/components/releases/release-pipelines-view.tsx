@@ -1,6 +1,5 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { MoreHorizontal, Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { ContentViewHeaderSearch } from '@/components/content-view/content-view-header-search'
@@ -12,6 +11,7 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { toggleFavoriteFor } from '@/lib/favorites'
 import { canCreateReleasePipeline } from '@/lib/settings-access'
 import { newReleasePipelinePath, releasePipelinePath, releasePipelineSettingsPath } from '@/lib/app-routes'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, ReleasePipeline } from '@/types/flow'
 
@@ -53,7 +53,7 @@ export function ReleasePipelinesView({ data, onNavigate, onOpenSidebar, onCreate
   const groups = grouping === 'team'
     ? [...[...data.teams].sort((a, b) => a.name.localeCompare(b.name)).map(team => ({ id: team.id, team, pipelines: pipelines.filter(item => item.teamIds.includes(team.id)) })), { id: 'none', team: undefined, pipelines: pipelines.filter(item => !item.teamIds.length) }].filter(group => group.pipelines.length)
     : [{ id: 'all', team: undefined, pipelines }]
-  const columns = ['minmax(200px,1fr)', properties.teams && 'minmax(100px,auto)', properties.latest && '100px', '12px'].filter(Boolean).join(' ')
+  const columns = ['minmax(200px,1fr)', properties.teams && 'minmax(100px,auto)', properties.latest && '100px', '4px'].filter(Boolean).join(' ')
   const actionsFor = (pipeline: ReleasePipeline): PipelineMenuActions => ({
     onCreateRelease: () => onCreateRelease(pipeline),
     onToggleFavorite: () => { void toggleFavoriteFor(data, 'release_pipeline', pipeline.id, undefined, isFavorite(data, 'release_pipeline', pipeline.id)) },
@@ -64,17 +64,17 @@ export function ReleasePipelinesView({ data, onNavigate, onOpenSidebar, onCreate
   })
   const sort = (next: Ordering) => { if (ordering === next) setDirection(value => value === 'asc' ? 'desc' : 'asc'); else { setOrdering(next); setDirection('asc') } }
   const options = <DropdownMenu.Root>
-    <DropdownMenu.Trigger asChild><HeaderIconButton label={t('Releases options')} tooltip=""><MoreHorizontal/></HeaderIconButton></DropdownMenu.Trigger>
+    <DropdownMenu.Trigger asChild><HeaderIconButton label={t('Releases options')} tooltip=""><FlowGlyph name="ellipsis"/></HeaderIconButton></DropdownMenu.Trigger>
     <DropdownMenu.Portal><FlowDropdownMenuContent label={t('Releases options')} className="flow-release-actions-menu">
       <FlowMenuItem icon={<SettingsGearIcon/>} label="Go to settings" onSelect={() => onNavigate(`/${data.workspace.urlKey}/settings/releases`)}/>
     </FlowDropdownMenuContent></DropdownMenu.Portal>
   </DropdownMenu.Root>
   return <main className="main-panel flow-releases-page" aria-label={t('Releases')}>
-    <ReleasesHeader onOpenSidebar={onOpenSidebar} actions={canManage && <ScopedFlowTooltip label={t('New release pipeline')}><button className="flow-releases-new-button" aria-label={t('Create new pipeline')} onClick={createPipeline} type="button"><Plus/><span>{t('New pipeline')}</span></button></ScopedFlowTooltip>}>
+    <ReleasesHeader onOpenSidebar={onOpenSidebar} actions={canManage && <ScopedFlowTooltip label={t('New release pipeline')}><button className="flow-releases-new-button" aria-label={t('Create new pipeline')} onClick={createPipeline} type="button"><FlowGlyph name="plus" width={14} height={14}/><span>{t('New pipeline')}</span></button></ScopedFlowTooltip>}>
       <h1 className="flow-releases-header__heading">{t('Releases')}</h1>{options}
     </ReleasesHeader>
-    {data.releasePipelines.length > 0 && <div className="flow-releases-subheader">
-      <ContentViewHeaderSearch alwaysVisible placeholder={t('Find release pipelines…')} value={query} onChange={setQuery} className="flow-releases-search"/>
+    <div className="flow-releases-subheader">
+      <ContentViewHeaderSearch alwaysVisible icon={<FlowGlyph name="search" aria-hidden="true"/>} placeholder={t('Find release pipelines…')} value={query} onChange={setQuery} className="flow-releases-search"/>
       <Popover.Root>
         <Popover.Trigger asChild><ToolbarPillButton label={t('Display options')}><DisplayIcon/></ToolbarPillButton></Popover.Trigger>
         <Popover.Portal><Popover.Content data-flow-motion="floating" aria-label={t('Display options')} className="flow-pipeline-display-popover" align="end" collisionPadding={8} sideOffset={4}>
@@ -84,7 +84,7 @@ export function ReleasePipelinesView({ data, onNavigate, onOpenSidebar, onCreate
             properties={[['active', 'Active releases'], ['teams', 'Teams'], ['latest', 'Latest release']].map(([key, label]) => ({ key, label, active: properties[key as keyof typeof properties], onToggle: () => setProperties(current => ({ ...current, [key]: !current[key as keyof typeof current] })) }))}/>
         </Popover.Content></Popover.Portal>
       </Popover.Root>
-    </div>}
+    </div>
     {!data.releasePipelines.length
       ? <ReleaseEmptyState art={<PipelineEmptyIllustration className="flow-release-art"/>} title={t('Create release pipelines')} paragraphs={[t("Create a new release pipeline to manage upcoming releases and track what's ready to ship."), t('Continuous pipelines capture changes as they deploy. Scheduled pipelines model planned releases with stages, target dates, and freezes.')]} primary={canManage ? { label: 'Create new pipeline', onClick: createPipeline } : undefined} secondary={{ label: 'Documentation', href: RELEASE_DOCS_URL }}/>
       : !pipelines.length
@@ -113,8 +113,8 @@ export function ReleasePipelinesView({ data, onNavigate, onOpenSidebar, onCreate
                     {properties.active && (pipeline.type === 'continuous'
                       ? <span className="flow-pipeline-row__type" title={t("Continuous pipelines don't have active releases")}>{t('Continuous')}</span>
                       : active.length > 0 && <span className="flow-pipeline-row__active">
-                        {(active.length - 3 > 1 ? active.slice(0, 3) : active).map(release => <span key={release.id} className="flow-release-chip" data-i18n-ignore><ReleaseStatusIcon status={release.status} size={14}/><span>{release.name}</span></span>)}
-                        {active.length - 3 > 1 && <span className="flow-release-chip">{t('+{count} releases').replace('{count}', String(active.length - 3))}</span>}
+                        {(active.length - 3 > 1 ? active.slice(0, 3) : active).map(release => <span key={release.id} className="flow-release-title-chip is-strong" data-i18n-ignore><span className="flow-release-title-chip__icon"><ReleaseStatusIcon status={release.status} size={14}/></span><span>{release.name}</span></span>)}
+                        {active.length - 3 > 1 && <span className="flow-release-title-chip is-strong is-text">{t('+{count} releases').replace('{count}', String(active.length - 3))}</span>}
                       </span>)}
                   </span>
                   {properties.teams && <span className="flow-pipeline-row__teams">{teams.length > 0 && <ScopedFlowTooltip label={<span data-i18n-ignore>{teams.map(team => team.name).join(', ')}</span>}><span className="flow-pipeline-row__teams-label">{teams.length === 1 && <TeamIcon team={teams[0]} size={14}/>}<span data-i18n-ignore>{teams.slice(0, 2).map(team => team.key).join(', ')}{teams.length > 2 ? ` +${teams.length - 2}` : ''}</span></span></ScopedFlowTooltip>}</span>}

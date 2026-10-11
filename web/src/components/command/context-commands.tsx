@@ -9,7 +9,7 @@ import {
   Archive, ArrowDown, ArrowUp, Bell, BellOff, CalendarRange, CircleDashed, Clipboard, Copy, CopyPlus, GitBranch, Hash, Layers3,
   Lightbulb, Link2, ListTree, Trash2, UserRound, Users, X,
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
@@ -39,7 +39,7 @@ import { issueReleaseCommands } from './release-commands'
 export type CommandPageId =
   | 'status' | 'assignee' | 'priority' | 'labels' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
   | 'relation' | 'relatedIssue' | 'parent' | 'subIssue'
-  | 'issueRelease' | 'issueReleaseRemove' | 'releaseOpenPipeline' | 'releaseCreate'
+  | 'issueRelease' | 'issueReleaseRemove' | 'releaseOpenPipeline' | 'releaseCreate' | 'releaseDate' | 'releaseStage'
   | 'projectStatus' | 'projectLead' | 'projectTargetDate' | 'projectInitiative'
   | 'documentOpen' | 'documentCreateIn' | 'documentFromTemplate' | 'documentFromTemplateIn' | 'documentTeamOverview' | 'documentTeamOverviewDoc'
   | 'documentOwner' | 'documentRemind' | 'documentMove' | 'documentPin' | 'documentApplyTemplate' | 'documentNewTemplate' | 'documentSubscribers'
@@ -63,6 +63,8 @@ export interface ContextAction {
   run?: () => void | Promise<unknown>
   /** Toggle state shown with a check (e.g. "Subscribe to project updates in Pulse"). */
   checked?: boolean
+  /** Current value shown after the label (e.g. a release date). */
+  detail?: string
 }
 
 export interface PageOption {
@@ -105,13 +107,14 @@ const RELATION_PAGES: { type: IssueRelationType; label: string; icon: ReactNode 
 ]
 const EMPTY_DATA = { issues: [], workspace: { urlKey: '' } } as unknown as BootstrapData
 
-export function contextChip(context: CommandContext | undefined, t: (value: string) => string): { label: string; entity: boolean } | undefined {
+export function contextChip(context: CommandContext | undefined, t: (value: string) => string): { label: string; entity: boolean; type?: string } | undefined {
   if (!context) return
   if (context.kind === 'issues') {
     if (context.issues.length === 1) return { label: `${context.issues[0].identifier} ${context.issues[0].title}`, entity: true }
     return { label: `${context.issues.length} ${t('issues')}`, entity: false }
   }
   if (context.kind === 'project') return { label: context.project.name, entity: true }
+  if (context.kind === 'release') return { label: context.label, entity: true, type: t('Release') }
   if (context.documents && context.documents.length > 1) return { label: `${context.documents.length} ${t('documents')}`, entity: false }
   return { label: context.document.title.trim() || t('Untitled'), entity: true }
 }
@@ -155,6 +158,7 @@ export function useContextCommands({ context, data, page, query, handlers, close
   if (context.kind === 'project') return projectCommands(context, data, page, query, close, t)
   // Document pages and selections are served by document-commands.tsx.
   if (context.kind === 'document') return { heading: 'Document', actions: [], options: [] }
+  if (context.kind === 'release') return { heading: '', actions: [], options: [] }
   return issueCommands({ context, data, page, query, handlers, close, t, refs, issues, remember, candidates, formatDate })
 }
 
@@ -350,7 +354,7 @@ function projectCommands(context: Extract<CommandContext, { kind: 'project' }>, 
   return { heading: 'Project', actions, options }
 }
 
-function datePageOptions(query: string, current: string | undefined, hasValue: boolean, select: (value: string) => () => Promise<unknown>, t: (value: string) => string, projectDates = false): PageOption[] {
+export function datePageOptions(query: string, current: string | undefined, hasValue: boolean, select: (value: string) => () => Promise<unknown>, t: (value: string) => string, projectDates = false, removeLabel?: string): PageOption[] {
   const today = new Date()
   const presets = projectDates
     ? [{ label: 'End of this week', date: endOfWorkWeek(today) }, { label: 'End of this month', date: new Date(today.getFullYear(), today.getMonth() + 1, 0) }, { label: 'End of this quarter', date: new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 3, 0) }, { label: 'End of next quarter', date: new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3 + 6, 0) }]
@@ -358,7 +362,7 @@ function datePageOptions(query: string, current: string | undefined, hasValue: b
   const typed = query.trim() ? parseDate(query.trim(), today, { forwardDate: true }) : null
   const options: PageOption[] = presets.map(preset => { const value = isoDate(preset.date); return { id: preset.label, label: preset.label, icon: <CalendarIcon/>, detail: formatShortDate(value), current: current === value, select: select(value) } })
   if (typed) { const value = isoDate(typed); options.unshift({ id: `custom-${value}`, label: `${t('Set to')} ${formatShortDate(value)}`, icon: <CalendarRange/>, forceMount: true, select: select(value) }) }
-  if (hasValue) options.push({ id: 'remove', label: projectDates ? 'Remove target date' : 'Remove due date', icon: <X/>, keywords: 'clear none', select: select('') })
+  if (hasValue) options.push({ id: 'remove', label: removeLabel ?? (projectDates ? 'Remove target date' : 'Remove due date'), icon: <X/>, keywords: 'clear none', select: select('') })
   return options
 }
 

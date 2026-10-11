@@ -15,7 +15,7 @@ import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileAttachment } fro
 import { AgentAttachIcon } from "@/components/agent/agent-icons";
 import { AgentSkillsPicker } from "@/components/agent/agent-skills-picker";
 import { AttachmentRemoveButton } from "@/components/ui/attachment-remove-button";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { cancelLoopRun, getLoopRun, listLoopRuns, rateLoopRun, replyToLoopRun } from "@/lib/api";
 import { LOOP_RUN_ACTIVITY_EVENT, type LoopRunActivity } from "@/lib/loop-run-activity";
 import { UserAvatar } from "@/components/ui/user-avatar";

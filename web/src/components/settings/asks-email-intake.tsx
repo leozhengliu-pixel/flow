@@ -1,7 +1,7 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronDown, ChevronLeft, ChevronUp, Copy, Mail, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { AppLink } from "@/components/ui/app-link";
 import { confirmAction } from "@/components/ui/action-dialog-service";

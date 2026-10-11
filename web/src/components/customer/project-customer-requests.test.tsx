@@ -9,7 +9,7 @@ import { ProjectCustomerRequestsLauncher, ProjectCustomerRequestsPage, ProjectCu
 import { requestProjectCustomerRequest } from './customer-request-events'
 
 vi.mock('@/lib/api', () => ({ createCustomerRequest: vi.fn(), updateCustomerRequest: vi.fn(), deleteCustomerRequest: vi.fn(), uploadCustomerRequestAttachment: vi.fn(), createIssue: vi.fn(), listIssueRecords: vi.fn().mockResolvedValue({ items: [] }) }))
-vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 globalThis.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} } as unknown as typeof ResizeObserver
 Element.prototype.scrollIntoView ??= function scrollIntoView() {}
 

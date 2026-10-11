@@ -5,7 +5,7 @@ import type { WorkspaceSettings } from '@/types/flow';
 
 const { request } = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('@/lib/api-client', () => ({ request, jsonRequest: (method: string, body: unknown) => ({ method, body: JSON.stringify(body) }) }));
-vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn() } }));
 
 describe('application settings behavior', () => {
   beforeEach(() => { vi.clearAllMocks(); request.mockResolvedValue([]); });

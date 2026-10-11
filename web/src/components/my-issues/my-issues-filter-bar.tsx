@@ -6,6 +6,7 @@ import type { MyIssuesAppliedFilter, MyIssuesFilterOperator } from './my-issues-
 import type { MyIssuesFilterKey, MyIssuesFilterOption } from './my-issues-surface'
 import { FilterFieldIcon, OptionMark } from './my-issues-filter-menu'
 import { chipValueOptions, filterChipItem, type NormalizedFilter } from './my-issues-filter-chips'
+import { isComparableDateValue, isReleasedDateValue } from './my-issues-filter-types'
 
 export type { MyIssuesAppliedFilter, MyIssuesFilterOperator } from './my-issues-filter-types'
 
@@ -36,6 +37,12 @@ export function MyIssuesFilterBar({ className, commands, compact, wrap, filters,
 }) {
   const { t } = useI18n()
   const original = (id: string) => filters.find(filter => filter.id === id)!
-  const normalized: NormalizedFilter[] = filters.map(filter => filter.field === 'advanced' ? { id: filter.id, field: filter.field, fieldLabel: filter.fieldLabel, operator: filter.operator, values: [] } : filterChipItem(filter, filterOptions?.(filter)))
+  const normalized: NormalizedFilter[] = filters.map(filter => filter.field === 'advanced' ? { id: filter.id, field: filter.field, fieldLabel: filter.fieldLabel, operator: filter.operator, values: [] } : translateDateValues(filterChipItem(filter, filterOptions?.(filter)), t))
   return <AppliedFilterBar ariaLabel="Applied filters" className={className} commands={commands} compact={compact} wrap={wrap} countLabel={count => t(count === 1 ? 'issue' : 'issues')} fieldVisual={filter => <FilterFieldGlyph field={filter.field}/>} filters={normalized} onAdd={onAdd ?? (() => {})} onClear={onClear} onOperatorChange={(filter, operator) => onOperatorChange?.(filter.id, operator)} onRemove={filter => onRemove(filter.id)} onSave={onSave} onValuesChange={(filter, values) => onValuesChange?.(filter.id, values)} optionsFor={filter => chipValueOptions(filter.fieldLabel, filterOptions?.(original(filter.id))).map(option => ({ ...option, icon: <OptionMark field={filter.field} option={option}/> }))} renderFilter={renderFilter ? filter => renderFilter(original(filter.id)) : undefined} saveState={saveState} showEmpty={showEmpty} translate={t}/>
+}
+
+/** Date presets are Flow's own copy ("1 week ago", "No released date"): chips show them translated. */
+function translateDateValues(item: NormalizedFilter, t: (source: string) => string): NormalizedFilter {
+  const dated = item.field === 'dates' || item.values.every(value => isComparableDateValue(value.id) || isReleasedDateValue(value.id))
+  return dated && item.values.length ? { ...item, values: item.values.map(value => ({ ...value, label: t(value.label) })) } : item
 }

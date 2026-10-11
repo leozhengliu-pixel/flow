@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { I18nProvider } from '@/i18n/i18n'
 import type { ReleasePipeline } from '@/types/flow'
@@ -10,7 +10,7 @@ import type { ReleasePipeline } from '@/types/flow'
 import { PipelineStageEditor } from './pipeline-stage-editor'
 import { DEFAULT_STAGES, stageMutation, stagesFromPipeline, type StageDraft } from './pipeline-stages'
 
-vi.mock('sonner', () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() } }))
 
 beforeEach(() => {
   vi.clearAllMocks()

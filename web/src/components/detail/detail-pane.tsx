@@ -9,7 +9,7 @@ import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sideb
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useDescriptionSelectionActions } from './description-selection-actions'
 import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { FlowTooltip } from '@/components/ui/tooltip'
 import * as Popover from '@radix-ui/react-popover'
 import * as Select from '@radix-ui/react-select'

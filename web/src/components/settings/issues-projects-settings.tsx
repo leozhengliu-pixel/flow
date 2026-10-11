@@ -36,7 +36,7 @@ import {
   type RefObject,
   type SetStateAction,
 } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import {
   createIssueTemplate,

@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { Editor } from '@tiptap/react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
@@ -11,7 +11,7 @@ import { EmbedToolbar } from './embed-toolbar'
 import { resetFilePreviewCache } from './file-preview'
 
 vi.mock('@/lib/api', () => ({ realtimeClientId: () => 'embed-toolbar-test' }))
-vi.mock('sonner', () => ({ toast: { info: vi.fn(), error: vi.fn(), success: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { info: vi.fn(), error: vi.fn(), success: vi.fn() } }))
 
 const VIDEO = { src: 'https://youtu.be/dQw4w9WgXcQ', embedUrl: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', provider: 'youtube' }
 const FILE = { src: 'https://github.com/acme/web/blob/main/src/app.ts#L1-L2', embedUrl: 'https://github.com/acme/web/blob/main/src/app.ts#L1-L2', provider: 'github' }

@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useCommentsEditState } from './use-comments-edit-state'
 
-vi.mock('sonner', () => ({ toast: { message: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { message: vi.fn(), error: vi.fn() } }))
 
 describe('useCommentsEditState', () => {
   beforeEach(() => {
@@ -23,7 +23,7 @@ describe('useCommentsEditState', () => {
   })
 
   it('toasts on no-op validation', async () => {
-    const { toast } = await import('sonner')
+    const { toast } = await import('@/lib/toast')
     const { result } = renderHook(() => useCommentsEditState())
     expect(result.current.validateNoOpSuggestionOrToast(' same ', 'same')).toBe(false)
     expect(toast.message).toHaveBeenCalled()

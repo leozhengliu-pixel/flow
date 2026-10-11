@@ -10,7 +10,7 @@ import { DocumentRowMenu } from './document-menu'
 
 const api = vi.hoisted(() => ({ updateDocument: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), ...api }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const team = { id: 'team-1', key: 'TST', name: 'Test team', color: '#5e6ad2', icon: 'Team' }
 const document_ = { id: 'doc-1', slugId: 'plan-abc123', title: 'Plan', content: 'Body', creator: viewer, projectIds: [], teamIds: [team.id], subscriberIds: [], favorite: false, createdAt: '', updatedAt: '', revisions: [] } as unknown as FlowDocument

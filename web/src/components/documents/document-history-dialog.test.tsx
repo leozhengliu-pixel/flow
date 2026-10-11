@@ -16,7 +16,7 @@ async function readCss(name: string) {
 
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
-vi.mock('sonner', () => ({ toast: { success: (...args: unknown[]) => toastSuccess(...args), error: (...args: unknown[]) => toastError(...args) } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: (...args: unknown[]) => toastSuccess(...args), error: (...args: unknown[]) => toastError(...args) } }))
 
 const text = (value: string, marks?: PMNode['marks']): PMNode => ({ type: 'text', text: value, ...(marks ? { marks } : {}) })
 const p = (value: string): PMNode => ({ type: 'paragraph', content: [text(value)] })

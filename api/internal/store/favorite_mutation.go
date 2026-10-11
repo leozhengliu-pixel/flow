@@ -56,14 +56,16 @@ func readFavoriteRecords(ctx context.Context, tx *sqlTx, workspace, lock string)
 	return items, orders, rows.Err()
 }
 
-func favoriteByResource(items []domain.Favorite, userID, kind, resourceID string) (domain.Favorite, bool) {
-	index := slices.IndexFunc(items, func(item domain.Favorite) bool {
-		return item.UserID == userID && item.ResourceType == kind && item.ResourceID == resourceID
-	})
-	if index < 0 {
-		return domain.Favorite{}, false
+// favoritesByResource indexes by id the user's favorites of one resource:
+// its root favorite and any tab favorites.
+func favoritesByResource(items []domain.Favorite, userID, kind, resourceID string) map[string]domain.Favorite {
+	matches := map[string]domain.Favorite{}
+	for _, item := range items {
+		if item.UserID == userID && item.ResourceType == kind && item.ResourceID == resourceID {
+			matches[item.ID] = item
+		}
 	}
-	return items[index], true
+	return matches
 }
 
 func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, eventType string, payload any, mutate func(*domain.Bootstrap) (string, error)) error {
@@ -109,9 +111,19 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 		if err != nil {
 			return err
 		}
-		before, existed := favoriteByResource(beforeFavorites, next.Viewer.ID, fields.Type, resourceID)
-		after, exists := favoriteByResource(next.Favorites, next.Viewer.ID, fields.Type, resourceID)
-		if exists && (!existed || !reflect.DeepEqual(before, after)) {
+		// A resource can hold a root favorite and tab favorites, so diff the
+		// viewer's records for it by id rather than by resource.
+		beforeByID := favoritesByResource(beforeFavorites, next.Viewer.ID, fields.Type, resourceID)
+		afterByID := favoritesByResource(next.Favorites, next.Viewer.ID, fields.Type, resourceID)
+		added := false
+		for _, after := range next.Favorites {
+			if _, scoped := afterByID[after.ID]; !scoped {
+				continue
+			}
+			before, existed := beforeByID[after.ID]
+			if existed && reflect.DeepEqual(before, after) {
+				continue
+			}
 			order, known := orders[after.ID]
 			if !known {
 				order = -int(after.CreatedAt.UnixMicro())
@@ -123,13 +135,20 @@ func (s *SQLiteStore) mutateStandaloneFavorite(ctx context.Context, workspace, e
 			if _, err := tx.ExecContext(ctx, `INSERT INTO workspace_metadata_records(workspace_key,field,record_key,collection_order,data) VALUES(?,'favorites',?,?,?) ON CONFLICT(workspace_key,field,record_key) DO UPDATE SET collection_order=excluded.collection_order,data=excluded.data`, workspace, after.ID, order, itemRaw); err != nil {
 				return err
 			}
-			if !existed {
-				if err := ensureOAuthMetadataShape(ctx, tx, workspace, "favorites", "array", lock); err != nil {
-					return err
-				}
+			added = added || !existed
+		}
+		if added {
+			if err := ensureOAuthMetadataShape(ctx, tx, workspace, "favorites", "array", lock); err != nil {
+				return err
 			}
 		}
-		if existed && !exists {
+		for _, before := range beforeFavorites {
+			if _, scoped := beforeByID[before.ID]; !scoped {
+				continue
+			}
+			if _, exists := afterByID[before.ID]; exists {
+				continue
+			}
 			if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_metadata_records WHERE workspace_key=? AND field='favorites' AND record_key=?`, workspace, before.ID); err != nil {
 				return err
 			}

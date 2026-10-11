@@ -5,7 +5,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Copy, Link2, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import { useI18n } from "@/i18n/i18n";
 import { createAgentSession } from "@/lib/api";

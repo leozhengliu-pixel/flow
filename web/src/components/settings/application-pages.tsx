@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppWindow, Plus, Radio } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 import {
   createWebhook,

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { getLoop, getLoopConfig, listLoopTemplates, listLoops } from "@/lib/api";
 import { loopPath, newLoopPath } from "@/lib/app-routes";
 import type { AgentMessagePart, AgentToolCall, BootstrapData, Loop, LoopConfig, LoopRun, LoopTemplate, Team } from "@/types/flow";

@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import type { BootstrapData, Favorite } from '@/types/flow'
 
@@ -11,6 +11,7 @@ type FavoriteIntent = {
   userId: string
   resourceType: string
   resourceId: string
+  tab?: string
   action: 'add' | 'remove'
   favorite: Favorite | null
   generation: number
@@ -21,6 +22,8 @@ type FavoriteDelta = {
   workspaceKey: string
   resourceType: string
   resourceId: string
+  /** The page tab the favorite targets; absent for the resource's root favorite. */
+  tab?: string
   favorite: Favorite | null
 }
 
@@ -39,12 +42,23 @@ function serializeFavoriteRequest<T>(key: string, operation: () => Promise<T>): 
   return request
 }
 
-export function favoriteResourceKey(resourceType: string, resourceId: string) {
-  return `${resourceType}:${resourceId}`
+/** Identifies one favorite target: a resource's root, or one of its page tabs. */
+export function favoriteResourceKey(resourceType: string, resourceId: string, tab?: string) {
+  return tab ? `${resourceType}:${resourceId}:${tab}` : `${resourceType}:${resourceId}`
 }
 
-export function findFavorite(favorites: Favorite[] | undefined, userId: string, resourceType: string, resourceId: string) {
-  return (favorites ?? []).find(item => item.userId === userId && item.resourceType === resourceType && item.resourceId === resourceId)
+/** Whether a favorite targets this resource and tab. Without a tab only the root favorite matches. */
+export function favoriteMatches(item: Favorite, resourceType: string, resourceId: string, tab?: string) {
+  return item.resourceType === resourceType && item.resourceId === resourceId && (item.tab || undefined) === (tab || undefined)
+}
+
+export function findFavorite(favorites: Favorite[] | undefined, userId: string, resourceType: string, resourceId: string, tab?: string) {
+  return (favorites ?? []).find(item => item.userId === userId && favoriteMatches(item, resourceType, resourceId, tab))
+}
+
+/** The viewer's favorite state for a resource's root (tab favorites never count) or for one of its tabs. */
+export function isFavoriteFor(data: Pick<BootstrapData, 'favorites' | 'viewer'>, resourceType: string, resourceId: string, tab?: string) {
+  return Boolean(findFavorite(data.favorites, data.viewer.id, resourceType, resourceId, tab))
 }
 
 export function nextFavoritePosition(favorites: Favorite[] | undefined, userId: string) {
@@ -55,29 +69,33 @@ export function nextFavoritePosition(favorites: Favorite[] | undefined, userId: 
   return position
 }
 
-export function optimisticFavorite(userId: string, resourceType: string, resourceId: string, position = 0): Favorite {
+export function optimisticFavorite(userId: string, resourceType: string, resourceId: string, position = 0, tab?: string): Favorite {
   return {
-    id: `optimistic:${resourceType}:${resourceId}`,
+    id: `optimistic:${favoriteResourceKey(resourceType, resourceId, tab)}`,
     userId,
     resourceType,
     resourceId,
+    ...(tab ? { tab } : {}),
     position,
     createdAt: new Date().toISOString(),
   }
 }
 
-export function applyFavoriteDelta(data: BootstrapData, delta: { resourceType: string; resourceId: string; favorite: Favorite | null }): BootstrapData {
+export function applyFavoriteDelta(data: BootstrapData, delta: { resourceType: string; resourceId: string; tab?: string; favorite: Favorite | null }): BootstrapData {
   const userId = data.viewer.id
   const { resourceType, resourceId, favorite } = delta
+  const tab = delta.tab ?? favorite?.tab
   // Realtime favorite events can originate from another member. They must not
   // flip the viewer's resource marker or inject another user's favorite into
   // this session's sidebar.
   if (favorite && favorite.userId !== userId) return data
   const favorites = favorite
-    ? [favorite, ...(data.favorites ?? []).filter(item => item.id !== favorite.id && !(item.userId === userId && item.resourceType === resourceType && item.resourceId === resourceId))]
-    : (data.favorites ?? []).filter(item => !(item.userId === userId && item.resourceType === resourceType && item.resourceId === resourceId))
+    ? [favorite, ...(data.favorites ?? []).filter(item => item.id !== favorite.id && !(item.userId === userId && favoriteMatches(item, resourceType, resourceId, tab)))]
+    : (data.favorites ?? []).filter(item => !(item.userId === userId && favoriteMatches(item, resourceType, resourceId, tab)))
   const marked = Boolean(favorite)
   const next: BootstrapData = { ...data, favorites }
+  // A tab favorite never changes the resource's own (root) favorite marker.
+  if (tab) return next
   if (resourceType === 'document') next.documents = data.documents.map(item => item.id === resourceId ? { ...item, favorite: marked } : item)
   else if (resourceType === 'cycle') next.cycles = data.cycles.map(item => item.id === resourceId ? { ...item, favorite: marked } : item)
   else if (resourceType === 'initiative') next.initiatives = data.initiatives.map(item => item.id === resourceId ? { ...item, favorite: marked } : item)
@@ -92,7 +110,7 @@ export function overlayPendingFavoriteIntents(data: BootstrapData): BootstrapDat
   let next = data
   for (const [key, intent] of pendingIntents) {
     if (intent.workspaceKey !== data.workspace.urlKey || intent.userId !== data.viewer.id) continue
-    const snapshotFavorite = findFavorite(data.favorites, intent.userId, intent.resourceType, intent.resourceId)
+    const snapshotFavorite = findFavorite(data.favorites, intent.userId, intent.resourceType, intent.resourceId, intent.tab)
     if (intent.confirmedAt && Boolean(snapshotFavorite) === (intent.action === 'add')) {
       pendingIntents.delete(key)
       continue
@@ -104,6 +122,7 @@ export function overlayPendingFavoriteIntents(data: BootstrapData): BootstrapDat
     next = applyFavoriteDelta(next, {
       resourceType: intent.resourceType,
       resourceId: intent.resourceId,
+      tab: intent.tab,
       favorite: intent.action === 'add' ? intent.favorite : null,
     })
   }
@@ -115,7 +134,7 @@ export function emitFavoriteDelta(delta: FavoriteDelta) {
 }
 
 export function patchFavorite(workspaceKey: string, favorite: Favorite) {
-  emitFavoriteDelta({ workspaceKey, resourceType: favorite.resourceType, resourceId: favorite.resourceId, favorite })
+  emitFavoriteDelta({ workspaceKey, resourceType: favorite.resourceType, resourceId: favorite.resourceId, tab: favorite.tab, favorite })
 }
 
 export function toggleFavorite(input: {
@@ -123,12 +142,15 @@ export function toggleFavorite(input: {
   userId: string
   resourceType: string
   resourceId: string
+  /** A page tab of the resource; absent toggles the root favorite. */
+  tab?: string
   currentlyFavorited: boolean
   nextFavorite?: boolean
   existing?: Favorite
   position?: number
 }): Promise<Favorite | void> {
-  const key = `${input.workspaceKey}:${favoriteResourceKey(input.resourceType, input.resourceId)}`
+  const tab = input.tab || undefined
+  const key = `${input.workspaceKey}:${favoriteResourceKey(input.resourceType, input.resourceId, tab)}`
   const stored = pendingIntents.get(key)
   if (stored?.confirmedAt && Date.now() - stored.confirmedAt >= CONFIRMED_INTENT_TTL_MS) pendingIntents.delete(key)
   const pending = pendingIntents.get(key)
@@ -141,17 +163,19 @@ export function toggleFavorite(input: {
     userId: input.userId,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
+    ...(tab ? { tab } : {}),
     generation,
   }
+  const target = { workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, ...(tab ? { tab } : {}) }
   if (next) {
-    const favorite = optimisticFavorite(input.userId, input.resourceType, input.resourceId, input.position ?? 0)
+    const favorite = optimisticFavorite(input.userId, input.resourceType, input.resourceId, input.position ?? 0, tab)
     pendingIntents.set(key, { ...base, action: 'add', favorite })
-    emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite })
-    return serializeFavoriteRequest(key, () => addFavorite(input.resourceType, input.resourceId)).then(created => {
+    emitFavoriteDelta({ ...target, favorite })
+    return serializeFavoriteRequest(key, () => tab ? addFavorite(input.resourceType, input.resourceId, tab) : addFavorite(input.resourceType, input.resourceId)).then(created => {
       if (pendingIntents.get(key)?.generation !== generation) return created
       if (created) {
         pendingIntents.set(key, { ...base, action: 'add', favorite: created, confirmedAt: Date.now() })
-        emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: created })
+        emitFavoriteDelta({ ...target, favorite: created })
       } else {
         pendingIntents.set(key, { ...base, action: 'add', favorite, confirmedAt: Date.now() })
       }
@@ -159,7 +183,7 @@ export function toggleFavorite(input: {
     }).catch(error => {
       if (pendingIntents.get(key)?.generation === generation) {
         pendingIntents.delete(key)
-        emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: null })
+        emitFavoriteDelta({ ...target, favorite: null })
         toast.error('Could not add favorite', { description: error instanceof Error ? error.message : undefined })
       }
       throw error
@@ -167,27 +191,38 @@ export function toggleFavorite(input: {
   }
   const previous = input.existing ?? (pending?.action === 'add' ? pending.favorite : null)
   pendingIntents.set(key, { ...base, action: 'remove', favorite: previous })
-  emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: null })
-  return serializeFavoriteRequest(key, () => removeFavorite(input.resourceType, input.resourceId)).then(() => {
+  emitFavoriteDelta({ ...target, favorite: null })
+  return serializeFavoriteRequest(key, () => tab ? removeFavorite(input.resourceType, input.resourceId, tab) : removeFavorite(input.resourceType, input.resourceId)).then(() => {
     if (pendingIntents.get(key)?.generation === generation) pendingIntents.set(key, { ...base, action: 'remove', favorite: previous, confirmedAt: Date.now() })
   }).catch(error => {
     if (pendingIntents.get(key)?.generation === generation) {
       pendingIntents.delete(key)
-      if (previous) emitFavoriteDelta({ workspaceKey: input.workspaceKey, resourceType: input.resourceType, resourceId: input.resourceId, favorite: previous })
+      if (previous) emitFavoriteDelta({ ...target, favorite: previous })
       toast.error('Could not remove favorite', { description: error instanceof Error ? error.message : undefined })
     }
     throw error
   })
 }
 
+/** Toggles the viewer's root favorite of a resource; its tab favorites are left alone. */
 export function toggleFavoriteFor(data: BootstrapData, resourceType: string, resourceId: string, nextFavorite?: boolean, currentlyFavorited?: boolean) {
-  const existing = findFavorite(data.favorites, data.viewer.id, resourceType, resourceId)
+  return toggleFavoriteTarget(data, resourceType, resourceId, undefined, nextFavorite, currentlyFavorited)
+}
+
+/** Toggles the viewer's favorite of one page tab of a resource (the reference app's tab context menu "Favorite"). */
+export function toggleTabFavoriteFor(data: BootstrapData, resourceType: string, resourceId: string, tab: string, nextFavorite?: boolean) {
+  return toggleFavoriteTarget(data, resourceType, resourceId, tab, nextFavorite)
+}
+
+function toggleFavoriteTarget(data: BootstrapData, resourceType: string, resourceId: string, tab: string | undefined, nextFavorite?: boolean, currentlyFavorited?: boolean) {
+  const existing = findFavorite(data.favorites, data.viewer.id, resourceType, resourceId, tab)
   const favorited = currentlyFavorited ?? Boolean(existing)
   return toggleFavorite({
     workspaceKey: data.workspace.urlKey,
     userId: data.viewer.id,
     resourceType,
     resourceId,
+    tab,
     currentlyFavorited: favorited,
     nextFavorite,
     existing,

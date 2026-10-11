@@ -1,6 +1,6 @@
 import { Filter, MoreHorizontal, Search, ShieldCheck, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { AuditLogEntry, BootstrapData } from "@/types/flow";
 import { listAuditLog } from "@/lib/api";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";

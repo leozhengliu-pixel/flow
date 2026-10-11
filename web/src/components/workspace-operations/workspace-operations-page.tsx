@@ -1,7 +1,7 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Clock3, FilePenLine, GitPullRequest, Inbox, Mail, Menu, MessageCircleQuestion, MoreHorizontal, Plus, Trash2, UserRound, X } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { SelectControl } from '@/components/ui/select-control'

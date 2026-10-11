@@ -1,4 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useOptionalTranslate } from '@/i18n/i18n';
+import { matchesSearch } from '@/lib/search-match';
 import * as Popover from "@radix-ui/react-popover";
 import { ArrowDownWideNarrow, Check, ChevronDown, Search, ArrowDownNarrowWide } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -80,6 +82,7 @@ export function DirectoryFilterMenu({
   /** The reference app's hover tooltip on the icon trigger, e.g. "Add Filter" with its F shortcut. */
   tooltip?: { label: string; shortcut?: string };
 }) {
+  const t = useOptionalTranslate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeGroup, setActiveGroup] = useState<string | null>(null);
@@ -97,10 +100,8 @@ export function DirectoryFilterMenu({
   }, [trigger, triggerNode, onOpenChange]);
   const filteredGroups = useMemo(
     () =>
-      groups.filter((group) =>
-        group.label.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [groups, query],
+      groups.filter((group) => matchesSearch(query, [group.label], t)),
+    [groups, query, t],
   );
   const changeOpen = (open: boolean) => {
     setMenuOpen(open);
@@ -210,10 +211,11 @@ function FilterGroup({
   hideSearch?: boolean;
   submenuClassName?: string;
 }) {
+  const t = useOptionalTranslate();
   const [query, setQuery] = useState("");
   const searchHidden = group.hideSearch ?? hideSearch;
   const choices = (group.choices ?? []).filter((choice) =>
-    `${choice.label} ${choice.keywords ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
+    matchesSearch(query, [choice.label, choice.keywords], choice.entity ? undefined : t),
   );
   useEffect(() => {
     if (!open) setQuery("");

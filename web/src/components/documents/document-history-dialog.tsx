@@ -4,7 +4,7 @@
  */
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Toggle } from '@/components/ui/toggle'

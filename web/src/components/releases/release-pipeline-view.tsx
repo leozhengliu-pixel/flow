@@ -1,22 +1,23 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import * as Popover from '@radix-ui/react-popover'
-import { Check, MoreHorizontal, Plus, Star } from 'lucide-react'
-import { forwardRef, useMemo, useState, type CSSProperties, type HTMLAttributes, type MouseEvent } from 'react'
-import { toast } from 'sonner'
+import { Star } from 'lucide-react'
+import { Suspense, forwardRef, useMemo, useState, type CSSProperties, type HTMLAttributes, type MouseEvent } from 'react'
+import { toast } from '@/lib/toast'
 
-import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
+import { openCommandMenu } from '@/components/command/command-context'
+import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { useFlowHotkeys, useFlowRowShortcuts } from '@/components/ui/menu-shortcuts'
 import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { DisplayIcon } from '@/components/ui/view-action-icons'
-import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { toggleFavoriteFor } from '@/lib/favorites'
 import { canCreateReleasePipeline } from '@/lib/settings-access'
 import { purgeTrashEntry, restoreTrashEntry, updateRelease } from '@/lib/api'
 import { releasePath, releasePipelinePath, releasePipelineSettingsPath, releasePipelinesPath, type ReleasePipelineTab } from '@/lib/app-routes'
 import { useI18n } from '@/i18n/i18n'
+import { AgentChatPanel } from '@/lib/route-pages'
 import type { BootstrapData, Release, ReleasePipeline, TrashEntry } from '@/types/flow'
 
 import { ReleaseChangelog } from './release-changelog'
@@ -24,12 +25,14 @@ import { ReleaseDateMenu } from './release-date-menu'
 import { RELEASE_MENU_SHORTCUTS } from './release-menu-shortcuts'
 import { DisplayOptionsBody, SortHeader } from './release-display-options'
 import { ReleasesIllustration } from './release-illustrations'
-import { ReleaseStatusIcon } from './release-icons'
-import { PipelineActionsDropdown, ReleaseRowContextMenu, ReleaseStageOptions, type PipelineMenuActions } from './release-menus'
+import { ReleaseDateIcon, ReleaseStatusIcon } from './release-icons'
+import { PipelineActionsDropdown, ReleaseRowContextMenu, type PipelineMenuActions, type ReleaseMenuActions } from './release-menus'
+import { useReleaseSelectionCommands } from './release-selection-commands'
 import { HeaderIconButton, RELEASE_DOCS_URL, ReleaseBreadcrumbs, ReleaseEmptyState, ReleasesHeader, ToolbarPillButton } from './release-page-chrome'
-import { dayValue, deletedReleasesForPipeline, releaseCompletion, releaseHasNotes, releaseStageGroups, releaseStatusForStage, releasesForPipeline, sortReleases, type ReleaseOrdering, type SortDirection } from './release-view-model'
+import { dayValue, deletedReleasesForPipeline, releaseCompletion, releaseDateTone, releaseHasNotes, releaseStageGroups, releaseStatusForStage, releasesForPipeline, sortReleases, type ReleaseOrdering, type SortDirection } from './release-view-model'
 import { absoluteUrl, copyToClipboard, isFavorite } from './release-actions-model'
 import { useReleaseActions } from './use-release-actions'
+import { PipelineTabContextMenu } from './pipeline-tab-context-menu'
 
 type Props = {
   data: BootstrapData
@@ -72,13 +75,14 @@ export function ReleasePipelineView({ data, pipeline, tab, onCreate, onNavigate,
   useFlowHotkeys(hotkeys)
   const section = archive ? t('Archived releases') : deleted ? t('Recently deleted releases') : undefined
   const crumbs = [
-    { label: t('Releases'), translate: true, href: releasePipelinesPath(workspace), onClick: () => onNavigate(releasePipelinesPath(workspace)) },
+    // The reference app leads continuous pipelines with a Releases crumb; scheduled pipelines show only their own name.
+    ...(scheduled ? [] : [{ label: t('Releases'), translate: true, href: releasePipelinesPath(workspace), onClick: () => onNavigate(releasePipelinesPath(workspace)) }]),
     { label: pipeline.name, ...(section ? { href: releasePipelinePath(workspace, pipeline.slugId), onClick: () => onNavigate(releasePipelinePath(workspace, pipeline.slugId)) } : {}) },
-    ...(section ? [{ label: section, translate: true }] : []),
+    ...(section ? [{ label: <>{section}{archive && <span className="flow-releases-crumbs__count" data-i18n-ignore>{releasesForPipeline(data, pipeline, true).length}</span>}</>, translate: true }] : []),
   ]
   const tabLink = (value: 'releases' | 'changelog', label: string, key: string) => {
     const href = releasePipelinePath(workspace, pipeline.slugId, value)
-    return <ScopedFlowTooltip label={t(`View ${label}`)} shortcut={key}><a aria-current={tab === value ? 'page' : undefined} className="flow-releases-tab ui-pill" href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.button !== 0) return; event.preventDefault(); onNavigate(href) }}>{t(label)}</a></ScopedFlowTooltip>
+    return <ScopedFlowTooltip label={t(`View ${label}`)} shortcut={key}><PipelineTabContextMenu data={data} pipeline={pipeline} tab={value}><a aria-current={tab === value ? 'page' : undefined} className="flow-releases-tab ui-pill" href={href} onClick={event => { if (event.metaKey || event.ctrlKey || event.button !== 0) return; event.preventDefault(); onNavigate(href) }}>{t(label)}</a></PipelineTabContextMenu></ScopedFlowTooltip>
   }
   const display = scheduled
     ? <DisplayOptionsBody
@@ -87,11 +91,11 @@ export function ReleasePipelineView({ data, pipeline, tab, onCreate, onNavigate,
       properties={([['description', 'Description'], ['version', 'Version'], ['date', 'Release date'], ['completion', 'Completion'], ['notes', 'Release notes']] as const).map(([key, label]) => ({ key, label, active: properties[key], onToggle: () => setProperties(current => ({ ...current, [key]: !current[key] })) }))}/>
     : <DisplayOptionsBody properties={([['version', 'Version'], ['date', 'Release date'], ['notes', 'Release notes']] as const).map(([key, label]) => ({ key, label, active: properties[key], onToggle: () => setProperties(current => ({ ...current, [key]: !current[key] })) }))}/>
   return <main className="main-panel flow-releases-page" aria-label={`${pipeline.name} ${section ?? t(tab === 'changelog' ? 'Changelog' : 'Releases')}`}>
-    <ReleasesHeader onOpenSidebar={onOpenSidebar} actions={scheduled && canManage && !archive && !deleted && <HeaderIconButton label={t('Create new release')} shortcut="N then R" onClick={onCreate}><Plus/></HeaderIconButton>}>
+    <ReleasesHeader onOpenSidebar={onOpenSidebar} actions={scheduled && canManage && !archive && !deleted && <HeaderIconButton label={t('Create new release')} shortcut="N then R" onClick={onCreate}><FlowGlyph name="plus"/></HeaderIconButton>}>
       <ReleaseBreadcrumbs crumbs={crumbs}/>
       {!section && <>
-        <HeaderIconButton aria-pressed={favorite} className="flow-releases-favorite" label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} onClick={pipelineActions.onToggleFavorite}><Star fill={favorite ? 'currentColor' : 'none'}/></HeaderIconButton>
-        <PipelineActionsDropdown pipeline={pipeline} favorite={favorite} archive={archive} canManage={canManage} actions={pipelineActions} trigger={<HeaderIconButton label={t('Pipeline options')} tooltip=""><MoreHorizontal/></HeaderIconButton>}/>
+        <HeaderIconButton aria-pressed={favorite} className="flow-releases-favorite" label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} onClick={pipelineActions.onToggleFavorite}>{favorite ? <Star fill="currentColor"/> : <FlowGlyph name="favorite"/>}</HeaderIconButton>
+        <PipelineActionsDropdown pipeline={pipeline} favorite={favorite} archive={archive} canManage={canManage} actions={pipelineActions} trigger={<HeaderIconButton label={t('Pipeline options')} tooltip=""><FlowGlyph name="ellipsis"/></HeaderIconButton>}/>
       </>}
     </ReleasesHeader>
     {!archive && !deleted && <div className="flow-releases-subheader">
@@ -102,7 +106,7 @@ export function ReleasePipelineView({ data, pipeline, tab, onCreate, onNavigate,
       </Popover.Root>}
     </div>}
     {deleted ? <DeletedReleasesList items={deletedReleasesForPipeline(data, pipeline)} onReload={onReload}/>
-      : tab === 'changelog' ? <ReleaseChangelog data={data} pipeline={pipeline} onCreate={onCreate} onNavigate={onNavigate}/>
+      : tab === 'changelog' ? <ReleaseChangelog data={data} pipeline={pipeline} onCreate={onCreate} onNavigate={onNavigate} onReload={onReload}/>
         : <PipelineReleaseList data={data} pipeline={pipeline} archived={archive} grouping={scheduled && !archive ? grouping : 'none'} ordering={ordering} direction={direction} properties={properties} onSort={next => { if (ordering === next) setDirection(value => value === 'asc' ? 'desc' : 'asc'); else { setOrdering(next); setDirection(next === 'releaseDate' ? 'desc' : 'asc') } }} canManage={canManage} onCreate={onCreate} onNavigate={onNavigate} onReload={onReload}/>}
   </main>
 }
@@ -138,12 +142,12 @@ function PipelineReleaseList({ data, pipeline, archived, grouping, ordering, dir
     return <ReleaseEmptyState art={<ReleasesIllustration/>} title={t(canManage ? 'Create your first release' : 'No releases yet')} paragraphs={[t(canManage ? "Create a new release to start tracking what's shipping. Integrate with your CI/CD tool to automatically add issues to your releases." : 'Releases added to this pipeline will appear here.')]} primary={canManage ? { label: 'Create new release', onClick: onCreate, shortcut: 'N then R' } : undefined} secondary={{ label: 'Documentation', href: `${RELEASE_DOCS_URL}#ci-setup` }}/>
   }
   const columns = scheduled
-    ? ['24px', 'minmax(320px,1fr)', properties.notes && '140px', properties.date && '100px', properties.completion && '132px', '12px'].filter(Boolean).join(' ')
-    : ['24px', 'minmax(240px,max-content)', 'minmax(80px,1fr)', properties.notes && '140px', properties.date && '100px', '12px'].filter(Boolean).join(' ')
+    ? ['24px', 'minmax(320px,1fr)', properties.notes && '140px', properties.date && '100px', properties.completion && '132px', '4px'].filter(Boolean).join(' ')
+    : ['16px', 'minmax(240px,max-content)', 'minmax(80px,1fr)', properties.notes && '140px', properties.date && '100px', '4px'].filter(Boolean).join(' ')
   const groups = grouping === 'stage' ? releaseStageGroups(releases, pipeline) : [{ stage: '', releases }]
   const toggleSelected = (id: string) => setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
   const open = (release: Release, tab: 'issues' | 'release-notes' = 'issues') => onNavigate(releasePath(workspace, pipeline.slugId, release.slugId, tab))
-  return <div className="flow-releases-list is-releases" role="grid" aria-label={t('Releases')} aria-multiselectable="true">
+  return <div className={`flow-releases-list is-releases${scheduled ? '' : ' is-continuous'}`} role="grid" aria-label={t('Releases')} aria-multiselectable="true">
     <div className="flow-releases-list__head" role="row" style={{ gridTemplateColumns: columns } as CSSProperties}>
       <span/>
       {scheduled ? <SortHeader label="Release" active={ordering === 'version'} direction={direction} onClick={() => onSort('version')}/> : <span className="flow-releases-list__label">{t('Release')}</span>}
@@ -157,7 +161,7 @@ function PipelineReleaseList({ data, pipeline, archived, grouping, ordering, dir
       const isCollapsed = collapsed.includes(group.stage)
       return <section className="flow-releases-list__group" key={group.stage || 'all'}>
         {grouping === 'stage' && <button className="flow-releases-group-header" aria-expanded={!isCollapsed} onClick={() => setCollapsed(current => isCollapsed ? current.filter(value => value !== group.stage) : [...current, group.stage])} type="button">
-          <DisclosureTriangle open={!isCollapsed}/>
+          <span className="flow-releases-group-header__toggle"><DisclosureTriangle open={!isCollapsed}/></span>
           <strong data-i18n-ignore={group.stage ? '' : undefined}>{group.stage || t('No stage')}</strong>
         </button>}
         {!isCollapsed && group.releases.map(release => <ReleaseRowContextMenu key={release.id} pipeline={pipeline} release={release} favorite={isFavorite(data, 'release', release.id)} actions={actionsFor(pipeline, release)}>
@@ -165,7 +169,7 @@ function PipelineReleaseList({ data, pipeline, archived, grouping, ordering, dir
         </ReleaseRowContextMenu>)}
       </section>
     })}
-    {selected.length > 0 && <SelectionBar data={data} pipeline={pipeline} ids={selected} onClear={() => setSelected([])} onReload={onReload}/>}
+    {selected.length > 0 && <SelectionBar data={data} pipeline={pipeline} ids={selected} actions={selected.length === 1 ? (release => release && actionsFor(pipeline, release))(data.releases.find(item => item.id === selected[0])) : undefined} onClear={() => setSelected([])} onReload={onReload}/>}
     {dialogs}
   </div>
 }
@@ -180,7 +184,7 @@ const ReleaseRow = forwardRef<HTMLAnchorElement, ReleaseRowProps>(function Relea
   const stop = (event: MouseEvent) => { event.preventDefault(); event.stopPropagation() }
   const version = release.version?.trim()
   return <a {...rest} ref={ref} className="flow-releases-row flow-release-row" data-flow-menu-row="" data-selected={selected || undefined} aria-selected={selected} href={href} role="row" style={{ ...style, gridTemplateColumns: columns }} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) { if (event.shiftKey) { event.preventDefault(); onSelect() } return } event.preventDefault(); onOpen() }}>
-    <span className="flow-release-row__check"><button aria-label={t('Select release')} aria-pressed={selected} className="flow-release-checkbox" onClick={event => { stop(event); onSelect() }} type="button">{selected && <Check strokeWidth={3}/>}</button></span>
+    <span className="flow-release-row__check"><button aria-label={t('Select release')} aria-pressed={selected} className="flow-release-checkbox" onClick={event => { stop(event); onSelect() }} type="button">{selected && <FlowGlyph name="checkboxCheck" width={10} height={9}/>}</button></span>
     <span className="flow-release-row__title">
       <span className="flow-release-row__icon">{release.stage && <ReleaseStatusIcon status={releaseStatusForStage(pipeline, release.stage, release.status)}/>}</span>
       <span className="flow-release-row__copy">
@@ -193,8 +197,8 @@ const ReleaseRow = forwardRef<HTMLAnchorElement, ReleaseRowProps>(function Relea
     </span>
     {!scheduled && <span className="flow-release-row__issues">{release.issueIds.length ? <span className="flow-release-chip">{t(release.issueIds.length === 1 ? '1 issue' : '{count} issues').replace('{count}', String(release.issueIds.length))}</span> : <span className="flow-release-row__muted">-</span>}</span>}
     {properties.notes && <span className="flow-release-row__notes">{releaseHasNotes(data, release)
-      ? <ScopedFlowTooltip label={t('Open release notes')}><button aria-label={t('Open release notes')} className="flow-release-cell-button" onClick={event => { stop(event); onOpen('release-notes') }} type="button"><ViewGlyph icon="Page" color="currentColor"/><span>{t('Release notes')}</span></button></ScopedFlowTooltip>
-      : canManage && <ScopedFlowTooltip label={t('Create release notes')}><button aria-label={t('Create release notes')} className="flow-release-cell-button is-new" onClick={event => { stop(event); onOpen('release-notes') }} type="button"><Plus/><span>{t('New')}</span></button></ScopedFlowTooltip>}</span>}
+      ? <ScopedFlowTooltip label={t('Open release notes')}><button aria-label={t('Open release notes')} className="flow-release-cell-button" onClick={event => { stop(event); onOpen('release-notes') }} type="button"><FlowGlyph name="document" className="flow-release-cell-button__icon"/><span>{t('Release notes')}</span></button></ScopedFlowTooltip>
+      : canManage && <ScopedFlowTooltip label={t('Create release notes')}><button aria-label={t('Create release notes')} className="flow-release-cell-button is-new" onClick={event => { stop(event); onOpen('release-notes') }} type="button"><FlowGlyph name="plus"/><span>{t('New')}</span></button></ScopedFlowTooltip>}</span>}
     {properties.date && <span className="flow-release-row__date" onClick={event => event.preventDefault()}><ReleaseDateCell release={release} scheduled={scheduled} canManage={canManage} onReload={onReload}/></span>}
     {scheduled && properties.completion && <span className="flow-release-row__completion"><CompletionCell data={data} release={release}/></span>}
     <span/>
@@ -212,46 +216,65 @@ function CompletionCell({ data, release }: { data: BootstrapData; release: Relea
   return <ScopedFlowTooltip label={tooltip}><span className="flow-release-completion"><ProgressRing progress={completion.progress}/><span>{completion.summary}</span></span></ScopedFlowTooltip>
 }
 
-/** The reference app's 14px completion ring. */
+/**
+ * The reference app's completion ring: a 16px circle (r 7, 2px stroke) with a round-capped value arc starting just
+ * right of the top and a track arc that leaves a 3-unit gap on both sides; 0% still draws the value dot.
+ */
 export function ProgressRing({ progress }: { progress: number }) {
-  const radius = 5.5
+  const radius = 7
   const circumference = 2 * Math.PI * radius
+  const gap = 3
+  const minimum = 0.48
+  const start = -76
+  const value = Math.min(Math.max(progress, 0), 1)
+  const full = value >= 1
+  const valueLength = full ? circumference : minimum + value * (circumference - 2 * gap - minimum)
+  const trackLength = Math.max(circumference - valueLength - 2 * gap, 0)
+  const trackStart = start + ((valueLength + gap) / circumference) * 360
   return <svg className="flow-release-ring" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-    <circle cx="8" cy="8" r={radius} fill="none" strokeWidth="2" className="flow-release-ring__track"/>
-    {progress > 0 && <circle cx="8" cy="8" r={radius} fill="none" strokeWidth="2" className="flow-release-ring__value" strokeDasharray={`${circumference * Math.min(progress, 1)} ${circumference}`} strokeLinecap="round" transform="rotate(-90 8 8)"/>}
+    {!full && trackLength > 0 && <circle cx="8" cy="8" r={radius} fill="none" strokeWidth="2" className="flow-release-ring__track" strokeDasharray={`${trackLength} ${circumference}`} transform={`rotate(${trackStart} 8 8)`}/>}
+    <circle cx="8" cy="8" r={radius} fill="none" strokeWidth="2" className="flow-release-ring__value" strokeDasharray={`${valueLength} ${circumference}`} strokeLinecap="round" transform={`rotate(${start} 8 8)`}/>
   </svg>
 }
 
 export function ReleaseDateCell({ release, scheduled, canManage, onReload, long = false }: { release: Release; scheduled: boolean; canManage: boolean; onReload: () => Promise<void>; long?: boolean }) {
   const { t, formatDate, formatRelative } = useI18n()
-  const short = (value: string) => long ? formatDate(dayValue(value), { month: 'short', day: 'numeric', year: 'numeric' }) : formatDate(dayValue(value), { month: 'short', day: 'numeric' })
+  const short = (value: string) => long && new Date(dayValue(value)).getFullYear() !== new Date().getFullYear() ? formatDate(dayValue(value), { month: 'short', day: 'numeric', year: 'numeric' }) : formatDate(dayValue(value), { month: 'short', day: 'numeric' })
   const full = (value: string) => formatDate(value, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })
+  if (!scheduled && long) {
+    const value = release.releasedAt ?? release.createdAt
+    return <ScopedFlowTooltip label={full(value)}><span className="flow-release-date"><ReleaseDateIcon tone="released"/><span>{short(value)}</span></span></ScopedFlowTooltip>
+  }
   if (!scheduled) {
     const value = release.releasedAt ?? release.createdAt
     return <span className="flow-release-date is-muted" title={full(value)}>{formatRelative(value)}</span>
   }
   if (release.status === 'released' && release.releasedAt) {
     const title = release.targetDate ? t('Released {date} (Initial target: {target})').replace('{date}', full(release.releasedAt)).replace('{target}', short(release.targetDate)) : t('Released {date}').replace('{date}', full(release.releasedAt))
-    return <ScopedFlowTooltip label={title}><span className="flow-release-date"><IssueActionGlyph label="Mark as done" fallback={<Check/>}/><span>{short(release.releasedAt)}</span></span></ScopedFlowTooltip>
+    return <ScopedFlowTooltip label={title}><span className="flow-release-date"><ReleaseDateIcon tone="released"/><span>{short(release.releasedAt)}</span></span></ScopedFlowTooltip>
   }
   if (release.status === 'canceled') return <span className="flow-release-date">{release.updatedAt ? short(release.updatedAt) : ''}</span>
-  const body = release.targetDate ? <><IssueActionGlyph label="Due date" fallback={null}/><span>{short(release.targetDate)}</span></> : long ? <><FlowGlyph name="dateAdd"/><span>{t('Release date')}</span></> : <FlowGlyph name="dateAdd"/>
+  const body = release.targetDate ? <><ReleaseDateIcon tone={release.status === 'inProgress' || release.status === 'planned' ? releaseDateTone(release.targetDate) : 'set'}/><span>{short(release.targetDate)}</span></> : long ? <><FlowGlyph name="dateAdd"/><span>{t('Release date')}</span></> : <FlowGlyph name="dateAdd"/>
   if (!canManage) return release.targetDate ? <span className="flow-release-date">{body}</span> : null
   const change = (value: string) => { void updateRelease(release.id, { targetDate: value }).then(onReload).catch(error => toast.error(error instanceof Error ? error.message : t('Could not save release'))) }
   return <ReleaseDateMenu value={release.targetDate} onChange={change} align="start" trigger={<button aria-label={t('Change release target date')} className={`flow-release-date flow-release-cell-button${release.targetDate || long ? '' : ' is-add'}`} onClick={event => event.stopPropagation()} title={t(release.targetDate ? 'Change target date' : 'Add target date')} type="button">{body}</button>}/>
 }
 
-function SelectionBar({ data, pipeline, ids, onClear, onReload }: { data: BootstrapData; pipeline: ReleasePipeline; ids: string[]; onClear: () => void; onReload: () => Promise<void> }) {
+function SelectionBar({ data, pipeline, ids, actions, onClear, onReload }: { data: BootstrapData; pipeline: ReleasePipeline; ids: string[]; actions?: ReleaseMenuActions; onClear: () => void; onReload: () => Promise<void> }) {
   const { t } = useI18n()
+  const [agentOpen, setAgentOpen] = useState(false)
   const releases = data.releases.filter(item => ids.includes(item.id))
-  const setStage = (stage: string) => { void Promise.all(releases.map(release => updateRelease(release.id, { stage, status: releaseStatusForStage(pipeline, stage, release.status) }))).then(onReload).then(onClear).catch(error => toast.error(error instanceof Error ? error.message : t('Could not save release'))) }
-  return <div className="flow-release-selection" role="toolbar" aria-label={t('Selected releases')}>
-    <span>{t('{count} selected').replace('{count}', String(ids.length))}</span>
-    <button aria-label={t('Clear selection')} onClick={onClear} type="button"><FlowGlyph name="closeChat" width={12} height={12}/></button>
-    {pipeline.type === 'scheduled' && <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild><button className="flow-release-selection__action" type="button"><ReleaseStatusIcon status="planned" size={14}/>{t('Stage')}</button></DropdownMenu.Trigger>
-      <DropdownMenu.Portal><FlowDropdownMenuContent label={t('Change stage…')} className="flow-release-stage-menu"><ReleaseStageOptions pipeline={pipeline} onChoose={setStage}/></FlowDropdownMenuContent></DropdownMenu.Portal>
-    </DropdownMenu.Root>}
+  useReleaseSelectionCommands({ data, pipeline, releases, actions, onReload })
+  return <div className="flow-release-selection-slot">
+    <div className="flow-release-selection" role="toolbar" aria-label={t('Selected releases')}>
+      <span className="flow-release-selection__count">{t('{count} selected').replace('{count}', String(ids.length))}</span>
+      <div className="flow-release-selection__actions">
+        <button className="flow-release-selection__button is-actions" onClick={() => openCommandMenu()} type="button"><FlowGlyph name="command" width={14} height={14}/><span>{t('Actions')}</span></button>
+        <ScopedFlowTooltip label={t('Ask agent')}><button aria-label={t('Ask agent')} className="flow-release-selection__button is-icon" onClick={() => setAgentOpen(true)} type="button"><AgentCursorGlyph size={14}/></button></ScopedFlowTooltip>
+        <ScopedFlowTooltip label={t('Clear selection')}><button aria-label={t('Clear selection')} className="flow-release-selection__button is-icon is-ghost" onClick={onClear} type="button"><FlowGlyph name="closeChat" width={14} height={14}/></button></ScopedFlowTooltip>
+      </div>
+    </div>
+    {agentOpen && <Suspense fallback={null}><AgentChatPanel data={data} issues={[]} open onClose={() => setAgentOpen(false)}/></Suspense>}
   </div>
 }
 
@@ -263,7 +286,7 @@ function DeletedReleasesList({ items, onReload }: { items: TrashEntry[]; onReloa
       <div className="flow-releases-row flow-release-deleted-row">
         <ReleaseStatusIcon status="canceled"/>
         <span className="flow-release-deleted-row__copy"><strong data-i18n-ignore>{item.title}</strong><small>{t('Deleted by')} <span data-i18n-ignore>{item.deletedBy.displayName}</span> · {formatDate(item.deletedAt, { month: 'short', day: 'numeric', year: 'numeric' })}</small></span>
-        <DropdownMenu.Trigger asChild><button className="flow-releases-header-button" aria-label={`${t('Open actions')} ${item.title}`} type="button"><MoreHorizontal/></button></DropdownMenu.Trigger>
+        <DropdownMenu.Trigger asChild><button className="flow-releases-header-button" aria-label={`${t('Open actions')} ${item.title}`} type="button"><FlowGlyph name="ellipsis"/></button></DropdownMenu.Trigger>
       </div>
       <DropdownMenu.Portal><FlowDropdownMenuContent align="end" label={t('Release options')} className="flow-release-actions-menu">
         <FlowMenuItem icon={<FlowGlyph name="moveTop"/>} label="Restore" onSelect={() => { void restoreTrashEntry(item.id).then(onReload).catch(error => toast.error(error instanceof Error ? error.message : t('Could not restore release'))) }}/>

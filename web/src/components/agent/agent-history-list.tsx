@@ -1,5 +1,5 @@
 import { useMemo, type MouseEvent } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   FlowContextMenuPortal,
   FlowContextMenuRoot,

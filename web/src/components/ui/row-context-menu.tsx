@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type K
 import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { useI18n } from '@/i18n/i18n'
 import { AppLink } from './app-link'
+import { FlowGlyph } from './menu-glyphs'
 import { createShortcutMatcher, shortcutSteps, takeQueuedShortcut } from './menu-shortcuts'
 import './row-context-menu.css'
 
@@ -215,22 +216,28 @@ export function FlowMenuOptions({ options, selected, multiple = false, placehold
   return <>
     {placeholder && <FlowMenuSearch value={query} onChange={setQuery} placeholder={placeholder} onChoose={byKey}/>}
     <div className={placeholder ? 'flow-menu__list' : undefined} ref={list} role="presentation">
-      {visible.map((option, index) => <OptionRow key={option.id || '__none'} option={option} group={option.group && option.group !== visible[index - 1]?.group ? option.group : undefined} checked={selected.has(option.id)} multiple={multiple} keepOpen={keepOpen} onChoose={onChoose}/>)}
+      {visible.map((option, index) => <OptionRow key={option.id || '__none'} option={option} group={option.group && option.group !== visible[index - 1]?.group ? option.group : undefined} checked={selected.has(option.id)} focusOnOpen={!placeholder && !multiple && selected.has(option.id)} multiple={multiple} keepOpen={keepOpen} onChoose={onChoose}/>)}
       {footer?.(query.trim())}
       {!visible.length && !footer?.(query.trim()) && <div className="flow-menu__empty">{t(emptyLabel)}</div>}
     </div>
   </>
 }
 
-function OptionRow({ option, group, checked, multiple, keepOpen, onChoose }: { option: FlowMenuOption; group?: string; checked: boolean; multiple: boolean; keepOpen: boolean; onChoose: (id: string) => void }) {
+function OptionRow({ option, group, checked, focusOnOpen = false, multiple, keepOpen, onChoose }: { option: FlowMenuOption; group?: string; checked: boolean; focusOnOpen?: boolean; multiple: boolean; keepOpen: boolean; onChoose: (id: string) => void }) {
   const { t } = useI18n()
   const label = option.translate === false ? option.label : t(option.label)
   const Kit = useContext(KitContext)
   const ref = useRef<HTMLDivElement>(null)
   useRegisterShortcut(option.shortcut, () => ref.current?.click(), option.disabled)
+  // Like the reference app's select menus, a menu without a filter field opens with its chosen row highlighted.
+  useEffect(() => {
+    if (!focusOnOpen) return
+    const frame = window.requestAnimationFrame(() => ref.current?.focus({ preventScroll: true }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [focusOnOpen])
   const content = multiple
     ? <FlowMenuRowContent leading={<span className="flow-menu__checkbox" aria-hidden="true"><span>{checked && <Check strokeWidth={3}/>}</span></span>} icon={option.icon} label={label} detail={option.detail} shortcut={option.shortcut}/>
-    : <FlowMenuRowContent icon={option.icon} label={label} detail={option.detail} shortcut={option.shortcut} trailing={checked ? <span className="flow-menu__check" aria-hidden="true"><Check size={14}/></span> : undefined}/>
+    : <FlowMenuRowContent icon={option.icon} label={label} detail={option.detail} shortcut={option.shortcut} trailing={checked ? <span className="flow-menu__check" aria-hidden="true"><FlowGlyph name="check"/></span> : undefined}/>
   const i18n = option.translate === false ? '' : undefined
   return <>
     {group && <div className="flow-menu__group-label" data-i18n-ignore={i18n}>{option.translate === false ? group : t(group)}</div>}

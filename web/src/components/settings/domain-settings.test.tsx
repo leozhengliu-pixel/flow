@@ -1,14 +1,14 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap } from '@/test/fixtures'
 import { deleteWorkspaceLabel } from '@/lib/api'
 import { DomainLabelsSettings } from './domain-settings'
 
 vi.mock('@/lib/api', async original => ({ ...await original<typeof import('@/lib/api')>(), deleteWorkspaceLabel: vi.fn() }))
-vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn() } }))
 beforeEach(() => { vi.clearAllMocks(); localStorage.setItem('flow:locale', 'en-US') })
 
 function page(onReload: () => Promise<void>) {

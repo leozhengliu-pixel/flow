@@ -1,8 +1,8 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
-import { ArchiveRestore, ArrowDown, ArrowUp, X } from 'lucide-react'
+import { ArchiveRestore } from 'lucide-react'
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { TeamIcon } from '@/components/issue/issue-icons'
 import styles from '@/components/my-issues/my-issues-bulk-action-bar.module.css'
@@ -50,10 +50,10 @@ function PipelineBulkBar({ count, actions, onClear }: { count: number; actions: 
   if (!count) return null
   const title = t('{count} selected').replace('{count}', String(count))
   return <>
-    <div aria-label={title} className={styles.bar} role="toolbar">
-      <span className={styles.count}>{title}</span>
-      <button type="button" aria-expanded={open} className={styles.actionsButton} onClick={() => setOpen(true)}><kbd className="flow-pipelines-bulk-kbd">⌘</kbd>{t('Actions')}</button>
-      <button type="button" aria-label={t('Clear selection')} className={styles.clearButton} onClick={onClear}><X size={15}/></button>
+    <div aria-label={title} className="flow-pipelines-bulk-bar" role="toolbar">
+      <span className="flow-pipelines-bulk-bar__count">{title}</span>
+      <button type="button" aria-expanded={open} className="flow-pipelines-bulk-bar__button" onClick={() => setOpen(true)}><FlowGlyph name="command" width={14} height={14}/><span>{t('Actions')}</span></button>
+      <button type="button" aria-label={t('Clear selection')} className="flow-pipelines-bulk-bar__button is-ghost" onClick={onClear}><FlowGlyph name="closeChat" width={14} height={14}/></button>
     </div>
     <Dialog.Root open={open} onOpenChange={setOpen}><Dialog.Portal><Dialog.Overlay data-flow-motion="backdrop" className={styles.overlay}/><Dialog.Content data-flow-motion="dialog" aria-describedby={undefined} className={styles.commandDialog}>
       <Dialog.Title className={styles.commandTitle}>{title}</Dialog.Title>
@@ -70,7 +70,10 @@ function PipelineBulkBar({ count, actions, onClear }: { count: number; actions: 
 
 function SelectBox({ checked, label, onToggle }: { checked: boolean; label: string; onToggle: () => void }) {
   return <span className="flow-pipelines-settings-select" role="cell" onClick={event => event.stopPropagation()}>
-    <input type="checkbox" aria-label={label} checked={checked} onChange={onToggle}/>
+    <span className="flow-pipelines-settings-check" data-checked={checked || undefined}>
+      <input type="checkbox" aria-label={label} checked={checked} onChange={onToggle}/>
+      {checked && <FlowGlyph name="checkboxCheck" width={10} height={9}/>}
+    </span>
   </span>
 }
 
@@ -110,9 +113,9 @@ export function PipelineSettingsRows({ data, pipelines, onOpen, onOpenReleases, 
     <span>{t(filtering ? 'No matching pipelines' : 'No pipelines')}</span>
     {filtering && <button type="button" className="flow-pipelines-settings-pill" onClick={onClearFilter}>{t('Clear filters')}</button>}
   </div>
-  const header = (key: SortKey, label: string) => <button type="button" className="flow-pipelines-settings-sort" aria-label={`${t('Order by')} ${t(label)}`} onClick={() => sortBy(key)}>
-    <span>{t(label)}</span>{sort.key === key && (sort.direction === 'asc' ? <ArrowDown/> : <ArrowUp/>)}
-  </button>
+  const header = (key: SortKey, label: string) => <span className="flow-pipelines-settings-head-cell"><button type="button" className="flow-pipelines-settings-sort" data-active={sort.key === key || undefined} aria-label={`${t('Order by')} ${t(label)}`} onClick={() => sortBy(key)}>
+    <span>{t(label)}</span><span className="flow-pipelines-settings-sort__icon" data-direction={sort.direction} aria-hidden="true"><FlowGlyph name="sortArrow" size={12}/></span>
+  </button></span>
   const selectedPipelines = pipelines.filter(pipeline => selection.selected.includes(pipeline.id))
   const canCreate = canCreateReleasePipeline(data)
   const bulkActions: BulkAction[] = [
@@ -130,7 +133,7 @@ export function PipelineSettingsRows({ data, pipelines, onOpen, onOpenReleases, 
   </>
   return <div className={`flow-pipelines-settings-table${selection.selected.length ? ' has-selection' : ''}`} role="table" aria-label={t('Release pipelines')}>
     <div className="flow-pipelines-settings-head" role="row">
-      <span/>{header('name', 'Pipeline name')}<span>{t('Teams')}</span>{header('type', 'Type')}{header('releases', 'Releases')}{header('latest', 'Latest release')}<span/>
+      <span/>{header('name', 'Pipeline name')}<span className="flow-pipelines-settings-head-cell"><span>{t('Teams')}</span></span>{header('type', 'Type')}{header('releases', 'Releases')}{header('latest', 'Latest release')}<span/>
     </div>
     {sorted.map(pipeline => {
       const summary = summaries.get(pipeline.id) ?? { releaseCount: 0 }
@@ -141,7 +144,7 @@ export function PipelineSettingsRows({ data, pipelines, onOpen, onOpenReleases, 
         <ContextMenuTrigger asChild>
           <div className={`flow-pipelines-settings-row${selected ? ' is-selected' : ''}`} role="row" aria-selected={selected} tabIndex={0} onClick={() => selection.selected.length ? selection.toggle(pipeline.id) : onOpen(pipeline)} onKeyDown={event => { if (event.target !== event.currentTarget) return; if (event.key === 'Enter') onOpen(pipeline); if (event.key === 'x') selection.toggle(pipeline.id) }}>
             <SelectBox checked={selected} label={t('Select pipeline')} onToggle={() => selection.toggle(pipeline.id)}/>
-            <span className="flow-pipelines-settings-name" role="cell"><strong data-i18n-ignore>{pipeline.name}</strong>{pipeline.production && <em>{t('Production')}</em>}</span>
+            <span className="flow-pipelines-settings-name" role="cell"><strong data-i18n-ignore>{pipeline.name}</strong>{pipeline.production && <span className="flow-pipelines-settings-badge"><em>{t('Production')}</em></span>}</span>
             <span role="cell"><PipelineTeamsLabel teams={pipeline.teamIds.map(id => data.teams.find(team => team.id === id)).filter((team): team is Team => Boolean(team))}/></span>
             <span role="cell" className="flow-pipelines-settings-muted">{t(pipeline.type === 'scheduled' ? 'Scheduled' : 'Continuous')}</span>
             <span role="cell"><FlowTooltip label={countLabel}>
@@ -197,7 +200,7 @@ export function DeletedPipelineRows({ data, entries, filtering, onRestored }: { 
         <ContextMenuTrigger asChild disabled={!restorable(entry)}>
           <div className={`flow-pipelines-settings-row${isSelected ? ' is-selected' : ''}`} role="row" aria-selected={isSelected} tabIndex={0} onClick={() => { if (selection.selected.length) selection.toggle(entry.id) }}>
             <SelectBox checked={isSelected} label={t('Select pipeline')} onToggle={() => selection.toggle(entry.id)}/>
-            <span className="flow-pipelines-settings-name" role="cell"><strong data-i18n-ignore>{entry.title}</strong>{payload.production && <em>{t('Production')}</em>}</span>
+            <span className="flow-pipelines-settings-name" role="cell"><strong data-i18n-ignore>{entry.title}</strong>{payload.production && <span className="flow-pipelines-settings-badge"><em>{t('Production')}</em></span>}</span>
             <span role="cell"><PipelineTeamsLabel teams={teamIds.map(id => data.teams.find(team => team.id === id)).filter((team): team is Team => Boolean(team))}/></span>
             <span role="cell" className="flow-pipelines-settings-muted">{payload.type ? t(payload.type === 'scheduled' ? 'Scheduled' : 'Continuous') : ''}</span>
             <span role="cell" className="flow-pipelines-settings-muted"><FlowTooltip label={formatDate(entry.deletedAt, { dateStyle: 'medium', timeStyle: 'short' })}><time dateTime={entry.deletedAt}>{formatRelative(entry.deletedAt)}</time></FlowTooltip></span>

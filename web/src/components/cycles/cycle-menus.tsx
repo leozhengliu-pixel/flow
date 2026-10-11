@@ -2,7 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { CalendarDays, Check, ChevronRight, Copy, Download, Edit3, ExternalLink, Link2, MoreHorizontal, Play, Star } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import type { Cycle, CycleMutationInput, User } from '@/types/flow'
 import { getCycleCalendarFeed } from '@/lib/api'

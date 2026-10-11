@@ -14,7 +14,7 @@ vi.mock('@/lib/api', () => ({ addSubscription: mocks.subscribe, removeSubscripti
 vi.mock('@/lib/api-client', () => ({ request: mocks.request }))
 vi.mock('@/lib/resource-preferences', () => ({ refreshResourcePreferences: mocks.refresh }))
 vi.mock('@/components/ui/action-dialog-service', () => ({ confirmAction: mocks.confirm }))
-vi.mock('sonner', () => ({ toast: { error: mocks.error, success: mocks.success } }))
+vi.mock('@/lib/toast', () => ({ toast: { error: mocks.error, success: mocks.success } }))
 
 function fixture() {
   const data = makeBootstrap({ favorites: [], subscriptions: [], teamSettings: {} })

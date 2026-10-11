@@ -1,6 +1,6 @@
 import { Link2, SquareArrowOutUpRight, Trash2, Type } from 'lucide-react'
 import type { MouseEvent, ReactElement } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import { safeEmbedHref } from './embed-providers'

@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { createRef, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
 import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'

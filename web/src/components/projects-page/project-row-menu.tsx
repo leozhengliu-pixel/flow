@@ -1,6 +1,6 @@
 import { useRef, useState, type MouseEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { NoAssigneeIcon, PriorityIcon, SlackIcon } from '@/components/issue/issue-icons'
 import { ProjectLabelMenuContent } from '@/components/property/project-label-menu-content'

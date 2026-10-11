@@ -1,4 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog'
+import { matchesSearch } from '@/lib/search-match'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Check, Paperclip, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -75,7 +76,7 @@ function PulseHealthMenu({ health, kind, onChange }: { health: Project['health']
   const values: Project['health'][] = ['onTrack', 'atRisk', 'offTrack']
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const visible = values.filter(value => healthLabel(value).toLowerCase().includes(query.trim().toLowerCase()))
+  const visible = values.filter(value => matchesSearch(query, [healthLabel(value)], t))
   const choose = (value: Project['health']) => { onChange(value); setOpen(false) }
   return <DropdownMenu.Root open={open} onOpenChange={next => { setOpen(next); if (!next) setQuery('') }}><DropdownMenu.Trigger asChild><button aria-label={label} className={`pulse-health-chip is-${health}`} type="button"><i/><span>{t(healthLabel(health))}</span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="pulse-menu pulse-health-menu" sideOffset={5}><div className="pulse-menu-search"><input aria-label={label} autoFocus placeholder={`${label}…`} value={query} onChange={event => setQuery(event.target.value)}/></div>{visible.map(value => <button key={value} onClick={() => choose(value)} role="menuitem" type="button"><i className={`pulse-health-dot is-${value}`}/><span>{t(healthLabel(value))}</span>{health === value && <Check className="pulse-menu-end" size={13}/>}</button>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>
 }

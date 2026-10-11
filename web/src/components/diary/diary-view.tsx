@@ -3,7 +3,7 @@
  */
 import { CalendarDays, Plus } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { MentionTextField } from '@/components/editor/mention-text-field'
 import { createDocument, deleteDocument, listDocuments, updateDocument } from '@/lib/api'
 import { useI18n } from '@/i18n/i18n'

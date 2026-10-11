@@ -1,7 +1,7 @@
 import { ChevronsDownUp, EllipsisVertical, Link2 } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
 import { useEffect, useRef, useState, type RefObject } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n/i18n'
 import { HEADING_SELECTOR, headingLink, headingSlug, headingSlugs, makeHeadingCollapsible, revealHeadingFromHash } from './heading-links'

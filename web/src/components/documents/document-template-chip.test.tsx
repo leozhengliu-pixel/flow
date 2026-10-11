@@ -11,7 +11,7 @@ import { documentTemplateOptions, isNewEmptyDocument } from './document-template
 
 const api = vi.hoisted(() => ({ updateDocument: vi.fn() }))
 vi.mock('@/lib/api', async importOriginal => ({ ...await importOriginal<typeof import('@/lib/api')>(), ...api }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const team = { id: 'team-1', key: 'TST', name: 'Test team', color: '#5e6ad2', icon: 'Team' }
 const other = { id: 'team-2', key: 'OTH', name: 'Other team', color: '#5e6ad2', icon: 'Team' }

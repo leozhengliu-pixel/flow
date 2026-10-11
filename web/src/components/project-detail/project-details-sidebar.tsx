@@ -1,4 +1,5 @@
 import { AppLink } from '@/components/ui/app-link'
+import { matchesSearch } from '@/lib/search-match'
 import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 import { Component, useId, useEffect, useMemo, useState, type DragEvent, type ErrorInfo, type KeyboardEvent, type ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
@@ -6,7 +7,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Line, type LineCustomSvgLayerProps, type SliceTooltipProps } from '@nivo/line'
 import { ArrowRight, Blocks, ChevronRight, Flag, MoreHorizontal, OctagonMinus, Plus, X, Send, MessageSquare } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { Avatar } from '@/components/issue/issue-row'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { CalendarIcon, MembersIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, SlackIcon, TeamIcon } from '@/components/issue/issue-icons'
@@ -302,7 +303,7 @@ function ProjectDependencyMenu({ onUpdate, onUpdateProject, project, projectRela
   const directions = [
     { id: 'blockedBy' as const, label: 'Blocked by…', icon: <IssueActionGlyph label="Blocked by…" fallback={<OctagonMinus size={16}/>} /> },
     { id: 'blocking' as const, label: 'Blocking…', icon: <IssueActionGlyph label="Blocking…" fallback={<Blocks size={16}/>} /> },
-  ].filter(item => item.label.toLowerCase().includes(query.trim().toLowerCase()))
+  ].filter(item => matchesSearch(query, [item.label], t))
 
   const reset = () => { setDirection(undefined); setQuery('') }
   // The reference app disables the Properties "+" when the workspace has no other project to depend on.

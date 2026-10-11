@@ -1,34 +1,38 @@
 /* Settings › Releases › New pipeline / pipeline settings. Rows and cards come from settings-primitives
    (settings-row / settings-card / settings-group); this file only styles the pipeline-specific controls. */
 .pipeline-settings-page{display:block;min-width:0}
-.pipeline-settings-docs{display:inline-flex;align-items:center;gap:2px;padding:1px 4px;border-radius:8px;color:var(--set-text);font-weight:450;text-decoration:none}
-.pipeline-settings-docs:hover,.pipeline-settings-docs:focus-visible{outline:0;background:var(--bg-hover)}
-.pipeline-settings-docs svg{width:12px;height:12px;flex:none}
+.pipeline-settings-docs{display:inline;margin-left:-3px;padding:1px 4px;border-radius:8px;color:var(--release-title-fg);font-weight:450;text-decoration:none;white-space:nowrap}
+.pipeline-settings-docs:after{content:"↗";margin-left:4px}
+.pipeline-settings-docs:is(:hover,:focus-visible,:active){outline:0;background:var(--release-version-chip-bg)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-page-header p{margin-top:4px;line-height:22px}
 .pipeline-settings-title{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:100%}
 .pipeline-settings-title>span:first-child{min-width:0;overflow-wrap:anywhere}
-.pipeline-settings-type-badge{flex:none;padding:0 8px;border-radius:999px;background:var(--set-search-bg);box-shadow:0 0 0 .5px var(--set-sep);color:var(--set-desc);font-size:12px;font-weight:500;line-height:18px;letter-spacing:0;vertical-align:middle}
+.pipeline-settings-type-badge{flex:none;padding:0 8px;border-radius:999px;background:var(--release-version-chip-hover-bg);box-shadow:none;color:var(--release-secondary-fg);font-size:12px;font-weight:500;line-height:18px;letter-spacing:0;vertical-align:middle}
 .pipeline-settings-read-only{width:max-content;max-width:calc(100% - 32px);margin:-16px 16px 32px;padding:6px 10px;border-radius:8px;background:var(--bg-hover);color:var(--set-desc);font-size:12px}
 .pipeline-settings-fieldset{display:contents;min-width:0;margin:0;padding:0;border:0}
 .pipeline-settings-fieldset:disabled [draggable="true"],.pipeline-settings-fieldset:disabled [role="button"]{pointer-events:none}
 .pipeline-settings-icon-button{width:28px;height:28px;flex:none;display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:transparent;color:var(--set-desc)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-page-header>.pipeline-settings-icon-button,.flow-pipeline-stage-icon-button{width:24px;height:24px;padding:0 2px;border:.5px solid transparent;border-radius:9999px;color:var(--release-text)}
+.pipeline-settings-page .settings-page-header>.pipeline-settings-icon-button svg{width:14px;height:14px;fill:var(--release-secondary-fg)}
 .pipeline-settings-icon-button svg{width:16px;height:16px}
 .pipeline-settings-icon-button:hover:not(:disabled),.pipeline-settings-icon-button[data-state=open]{background:var(--bg-hover);color:var(--set-text)}
 html:root .settings-app .settings-main .pipeline-settings-page .settings-page-header>.pipeline-settings-icon-button{margin-top:2px}
 .pipeline-settings-input{width:300px;max-width:100%;flex:none}
-html:root .settings-app .settings-main .pipeline-settings-page .settings-input{height:32px;padding:6px 12px;border:.5px solid var(--set-search-border);border-radius:8px;background:var(--set-card);box-shadow:none;color:var(--set-text);font:400 13px/19px var(--font)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-input{height:32px;padding:6px 12px;border:.5px solid var(--release-input-border);border-radius:8px;background:var(--set-card);box-shadow:none;color:var(--set-text);font:400 13px/19px var(--font)}
 html:root .settings-app .settings-main .pipeline-settings-page .settings-input::placeholder{color:var(--set-desc)}
-html:root .settings-app .settings-main .pipeline-settings-page .settings-input:focus{border-color:var(--accent-primary);box-shadow:0 0 0 1px var(--accent-primary)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-input:focus{border-color:var(--release-input-border);box-shadow:none;outline:1px solid var(--release-primary-bg);outline-offset:-1px}
 .pipeline-settings-input[aria-invalid=true]{border-color:var(--semantic-danger)!important}
 .pipeline-settings-error{color:var(--semantic-danger)!important}
-.pipeline-settings-hint{display:inline-flex!important;align-items:center;gap:4px}
-.pipeline-settings-hint svg{width:12px;height:12px;flex:none;color:var(--set-desc);outline:0}
-.pipeline-settings-team-trigger{box-sizing:border-box;width:300px;max-width:100%;height:32px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 10px 0 12px;border:.5px solid var(--set-search-border);border-radius:8px;background:var(--set-card);color:var(--set-text)}
+html:root .settings-app .settings-main .pipeline-settings-page .pipeline-settings-hint{display:inline-flex;align-items:center;gap:4px;color:var(--set-desc);line-height:normal}
+.pipeline-settings-hint svg{width:12px;height:12px;flex:none;color:var(--set-desc);fill:var(--set-desc);outline:0}
+.pipeline-settings-team-trigger{box-sizing:border-box;width:300px;max-width:100%;height:33px;display:flex;align-items:center;justify-content:space-between;gap:0;padding:4px 4px 4px 9px;border:.5px solid var(--release-input-border);border-radius:8px;background:var(--set-card);color:var(--set-text)}
 .pipeline-settings-team-trigger:focus-within{border-color:var(--accent-primary);box-shadow:0 0 0 1px var(--accent-primary)}
-.pipeline-settings-team-trigger>input{min-width:0;flex:1;height:30px;padding:0;border:0;outline:0;background:transparent;color:var(--set-text);font:400 13px/19px var(--font);text-overflow:ellipsis}
+.pipeline-settings-team-trigger>input{min-width:0;flex:1;height:24px;padding:0;border:0;outline:0;background:transparent;color:var(--set-text);font:400 13px/19px var(--font);text-overflow:ellipsis}
 .pipeline-settings-team-trigger>input::placeholder{color:var(--set-desc)}
-.pipeline-settings-team-trigger>svg{width:13px;height:13px;flex:none;color:var(--set-desc)}
+.pipeline-settings-team-chevron{width:22px;height:24px;display:flex;flex:none;align-items:center;justify-content:center;padding:1px 6px}
+.pipeline-settings-team-chevron svg{fill:var(--release-menu-fg)}
 .pipeline-settings-team-trigger[data-disabled]{opacity:.6}
-html:root .settings-app .settings-main .settings-card>.settings-row.pipeline-settings-type-row{flex-direction:column;align-items:stretch;gap:12px}
+html:root .settings-app .settings-main .settings-card>.settings-row.pipeline-settings-type-row{flex-direction:column;align-items:stretch;gap:11px}
 .pipeline-settings-type-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .pipeline-settings-type-cards>button{box-sizing:border-box;min-width:0;min-height:130px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:12px;border:.5px solid var(--set-search-border);border-radius:8px;background:var(--set-card);color:var(--set-desc);font:inherit;text-align:left;transition:background-color .15s ease,color .15s ease}
 .pipeline-settings-type-cards>button:hover{background:var(--bg-hover)}
@@ -41,14 +45,17 @@ html:root .settings-app .settings-main .settings-card>.settings-row.pipeline-set
 .pipeline-settings-type-cards>button.is-selected .pipeline-settings-type-description{opacity:1}
 .pipeline-settings-type-cards small{font-size:12px;font-weight:450;line-height:1.4;text-wrap:pretty}
 html:root .settings-app .settings-main .pipeline-settings-page .settings-section>.settings-card+.settings-group{margin-top:24px}
-.pipeline-settings-links{display:flex;flex-wrap:wrap;gap:20px;margin:0 16px 24px}
-.pipeline-settings-links a{display:inline-flex;align-items:center;gap:4px;color:var(--set-text);font-size:13px;font-weight:500;text-decoration:none}
-.pipeline-settings-links a:hover{text-decoration:underline}
-.pipeline-settings-links svg{width:14px;height:14px}
-.pipeline-settings-template{box-sizing:border-box;min-height:145px;padding:12px 16px;border:.5px solid var(--set-search-border);border-radius:8px;background:var(--set-card);color:var(--set-control-text);cursor:text}
+.pipeline-settings-links{display:flex;flex-wrap:wrap;gap:2px;margin:-8px 16px 24px 8px}
+.pipeline-settings-links a{height:24px;display:inline-flex;align-items:center;gap:4px;padding:0 8px;border:.5px solid transparent;border-radius:9999px;color:var(--release-text);font-size:12px;font-weight:500;line-height:normal;text-decoration:none;transition-property:border,background-color,color,opacity;transition-duration:.15s}
+.pipeline-settings-links a:hover{background:var(--release-ghost-hover-bg);transition-duration:0s}
+.pipeline-settings-links svg{width:16px;height:16px;fill:var(--release-text)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-action.pipeline-settings-ghost-action{margin-right:-6px;background:transparent;box-shadow:none;color:var(--release-menu-fg)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-action.pipeline-settings-ghost-action:hover:not(:disabled){background:var(--release-ghost-hover-bg)}
+html:root .settings-app .settings-main .pipeline-settings-page .settings-row input[type=checkbox]{margin-right:6px}
+.pipeline-settings-template{box-sizing:border-box;min-height:145px;padding:12px 16px;border:.5px solid var(--release-input-border);border-radius:8px;background:var(--set-card);color:var(--set-control-text);cursor:text}
 .pipeline-settings-template:focus-within{border-color:var(--accent-primary)}
 .pipeline-settings-template-editor{min-height:120px;font-size:13px}
-.pipeline-settings-textarea{box-sizing:border-box;display:block;width:100%;min-height:59px;padding:6px 12px;border:.5px solid var(--set-search-border);border-radius:8px;outline:0;background:var(--set-card);color:var(--set-control-text);font:400 13px/19.5px var(--font);resize:vertical}
+.pipeline-settings-textarea{box-sizing:border-box;display:block;width:100%;min-height:59px;padding:6px 12px;border:.5px solid var(--release-input-border);border-radius:8px;outline:0;background:var(--set-card);color:var(--set-control-text);font:400 13px/19.5px var(--font);resize:vertical}
 .pipeline-settings-textarea::placeholder{color:var(--set-desc)}
 .pipeline-settings-textarea:focus{border-color:var(--accent-primary)}
 .pipeline-settings-textarea:disabled{opacity:.6}
@@ -77,11 +84,11 @@ body .flow-pipeline-team-menu{width:149px;padding:0;animation-duration:.15s!impo
 .flow-pipeline-stage-card{box-sizing:border-box;width:640px;max-width:100%;overflow:hidden;border-radius:10px;background:var(--set-card);box-shadow:var(--set-card-shadow);color:var(--theme-text-primary)}
 .flow-pipeline-stage-row,.flow-pipeline-started-header{box-sizing:border-box;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 16px;border-bottom:.5px solid var(--set-sep)}
 .flow-pipeline-stage-card>.flow-pipeline-stage-row:last-child{border-bottom:0}
-.flow-pipeline-stage-label{min-width:0;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;line-height:16px}
+.flow-pipeline-stage-label{min-width:0;display:flex;align-items:center;gap:8px;color:var(--release-menu-fg);font-size:13px;font-weight:500;line-height:normal}
 .flow-pipeline-stage-label>span:not(.flow-pipeline-frozen-badge){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .flow-pipeline-stage-label svg{width:16px;height:16px;flex:none}
 .flow-pipeline-started-icon{color:var(--theme-text-secondary)}
-.flow-pipeline-started-group{border-bottom:1px solid var(--set-sep)}
+.flow-pipeline-started-group{border-bottom:.5px solid var(--set-sep)}
 .flow-pipeline-started-group>.flow-pipeline-stage-row{min-height:49.5px;background:var(--release-stage-items-bg)}
 .flow-pipeline-started-group>.flow-pipeline-stage-row:last-child{border-bottom:0}
 .flow-pipeline-started-group>.flow-pipeline-stage-edit.is-new{background:var(--set-card)}
@@ -117,3 +124,33 @@ body .flow-pipeline-team-menu{width:149px;padding:0;animation-duration:.15s!impo
 /* The reference app's template editor uses the 13px settings text size, not the 15px issue description size. */
 .pipeline-settings-template .description-editor,.pipeline-settings-template .description-editor p{font-size:13px;line-height:20.8px}
 .pipeline-settings-template .description-editor{min-height:120px;outline:0}
+.pipeline-settings-template .issue-description-root{width:100%;margin:0}
+.pipeline-settings-template .issue-description-root .description-editor{margin:0;padding:0}
+.pipeline-settings-template .description-editor p.is-editor-empty:first-child:before{color:var(--release-menu-faint-fg)}
+.pipeline-settings-page,.flow-pipelines-settings{text-rendering:optimizeLegibility}
+/* The reference app's 24px ghost icon buttons in the stage list (+, ⋯). */
+.flow-pipeline-stage-card .flow-pipeline-stage-icon-button{border-radius:9999px;color:var(--release-text)}
+.flow-pipeline-stage-card .flow-pipeline-stage-icon-button svg{fill:var(--release-secondary-fg)}
+.flow-pipeline-stage-card .flow-pipeline-stage-icon-button:is(:hover,[data-state=open]):not(:disabled){background:var(--release-ghost-hover-bg)}
+.flow-pipeline-stage-card .flow-pipeline-stage-icon-button:is(:hover,[data-state=open]):not(:disabled) svg{fill:var(--release-title-fg)}
+/* New pipeline type cards (the reference app: 94.5 selected fill, 91.9 hairline, lch 20 / 40 text). */
+.pipeline-settings-type-cards>button{min-height:0;border-color:var(--release-popover-border);background:var(--release-popover-bg);color:var(--release-menu-muted-fg)}
+.pipeline-settings-type-cards>button:hover{background:var(--release-type-card-hover-bg)}
+.pipeline-settings-type-cards>button.is-selected{background:var(--release-version-pill-bg);color:var(--release-menu-fg)}
+.pipeline-settings-type-title svg{color:var(--release-menu-faint-fg);fill:currentColor}
+.pipeline-settings-type-title b{line-height:normal}
+.pipeline-settings-type-description,.pipeline-settings-type-cards>button.is-selected .pipeline-settings-type-description{opacity:1}
+html:root .settings-app .settings-main .pipeline-settings-type-cards>button>span,html:root .settings-app .settings-main .pipeline-settings-type-cards>button>small{color:inherit}
+html:root .settings-app .settings-main .pipeline-settings-type-cards .pipeline-settings-type-description{font-size:13px;font-weight:500;line-height:19.5px}
+html:root .settings-app .settings-main .pipeline-settings-type-cards .pipeline-settings-type-title b{color:inherit}
+
+/* Settings cards use the reference app's settings text scale (90.8 / 63.3 / 39.5 in dark). */
+.pipeline-settings-page{--release-menu-fg:var(--set-control-text);--release-menu-muted-fg:var(--set-desc);--release-menu-faint-fg:var(--release-details-faint-fg)}
+.flow-pipeline-stage-menu-trigger svg[data-flow-glyph]{fill:var(--release-details-faint-fg)}
+.flow-pipeline-stage-card svg[data-status=planned]{fill:var(--release-stage-planned-icon)}
+.flow-pipeline-stage-card svg[data-status=canceled]{fill:var(--release-stage-canceled-icon)}
+html:root .settings-app .settings-main .pipeline-settings-subsection>header>p{margin-top:4px}
+html:root .settings-app .settings-main .pipeline-settings-page .pipeline-settings-type-row .settings-row-copy>*{color:var(--set-control-text)}
+.pipeline-settings-type-cards{--release-popover-border:var(--release-dialog-border);--release-popover-bg:var(--release-details-bg);--release-version-pill-bg:var(--release-details-version-bg)}
+html:root .settings-app .settings-main .pipeline-settings-type-cards>button:not(.is-selected):hover{color:var(--release-type-card-hover-fg)}
+html:root .settings-app .settings-main .pipeline-settings-type-cards>button:not(.is-selected):hover>.pipeline-settings-type-description{color:var(--release-type-card-hover-desc)}

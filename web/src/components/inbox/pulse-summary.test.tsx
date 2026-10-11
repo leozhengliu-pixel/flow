@@ -21,7 +21,7 @@ vi.mock('@/lib/api', async original => ({
   updateUserSettings: vi.fn(),
   updateInboxNotification: vi.fn(async () => undefined),
 }))
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('@/lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 const flowActor = { id: 'flow', name: 'Flow', displayName: 'Flow', email: '', active: true } as unknown as Notification['actor']
 

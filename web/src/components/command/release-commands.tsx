@@ -6,7 +6,7 @@
  * settings) and the issue ones (add to release…, remove from release…).
  */
 import { Archive, Settings, Trash2, X } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 
 import { ReleasePipelineIcon, ReleasesIcon, ReleaseStatusIcon } from '@/components/releases/release-icons'
 import { setIssueReleases } from '@/lib/api'

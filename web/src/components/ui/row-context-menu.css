@@ -87,8 +87,10 @@ a.flow-menu__row { text-decoration: none; }
 }
 
 .flow-menu__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.flow-menu__detail { flex: none; color: var(--pk-faint); }
+.flow-menu__detail { flex: none; margin-left: 4px; color: var(--pk-faint); }
 .flow-menu__check { display: grid; place-items: center; width: 16px; height: 16px; flex: 0 0 16px; color: var(--pk-muted); }
+.flow-menu__row[data-highlighted] .flow-menu__check { color: inherit; }
+.flow-menu__row[aria-checked=true]:has(.flow-menu__check) { padding-right: 14px; }
 
 .flow-menu__end {
   display: flex;

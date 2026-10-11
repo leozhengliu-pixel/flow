@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { translatedKeywords } from '@/lib/search-match';
 import { Command } from "cmdk";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { StatusIcon, TeamIcon } from "@/components/issue/issue-icons";
@@ -77,6 +78,7 @@ export function LoopCommandPicker({
                   key={item.id}
                   disabled={item.disabled}
                   value={`${item.id} ${item.label} ${item.detail ?? ""} ${item.keywords ?? ""}`}
+                  keywords={item.entity ? undefined : translatedKeywords([item.label], t)}
                   onSelect={() => !item.disabled && onSelect(item)}
                   className={item.disabled ? "loops-picker-item is-disabled" : "loops-picker-item"}
                 >

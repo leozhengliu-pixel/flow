@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, typ
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { ArrowDownNarrowWide, ArrowDownWideNarrow, ChevronRight, CircleCheck, CircleX, Clock3, Copy, Link2, Settings2, UserRoundCog } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '@/lib/toast'
 import { useScopedIssueRecords } from '@/hooks/use-scoped-issue-records'
 import { IssuesSplitViewPage } from '@/components/issues-split-view'
 import { ContentViewHeaderFavoriteActionButton } from '@/components/content-view'

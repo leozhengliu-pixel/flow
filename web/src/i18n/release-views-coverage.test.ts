@@ -34,7 +34,7 @@ describe('release views translations', () => {
         if (!text || seen.has(text) || !/[A-Za-z]{2,}/.test(text) || /^(?:https?:|flow-|[a-z]+-[a-z-]+$)/.test(text)) continue
         seen.add(text)
         const zh = (zhCN as Record<string, string>)[text] ?? translateToChinese(text)
-        if (/[A-Za-z]{3,}/.test(zh.replace(/\b(?:Agent|URL|CI|CD)\b|\{[a-z]+\}/g, ''))) missing.push(`${path.split('/').pop()}: ${text} → ${zh}`)
+        if (/[A-Za-z]{3,}/.test(zh.replace(/\b(?:Agent|URL|CI|CD|Markdown|SHA)\b|\{[a-z]+\}/g, ''))) missing.push(`${path.split('/').pop()}: ${text} → ${zh}`)
       }
     }
     expect(seen.size).toBeGreaterThan(80)
