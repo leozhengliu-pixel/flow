@@ -149,16 +149,7 @@ function ProjectTemplateList({
   onDuplicate: (template: ProjectTemplate) => void;
   onReload: () => Promise<void>;
 }) {
-  const { t, locale } = useI18n();
-  const remove = async (item: ProjectTemplate) => {
-    if (!(await confirmTemplateDelete(item, t, locale))) return;
-    try {
-      await deleteProjectTemplate(item.id);
-      await onReload();
-    } catch (error) {
-      toast.error(errorMessage(error));
-    }
-  };
+  const { t } = useI18n();
   return (
     <div className="pt-list-page" data-i18n-ignore>
       <header className="pt-list-header">
@@ -172,57 +163,145 @@ function ProjectTemplateList({
           </a>
         </p>
       </header>
-      <section className="pt-list-card">
-        <header>
-          <h3>
-            {items.length
-              ? t(items.length === 1 ? "1 project template" : "project template count").replace(
-                  "{count}",
-                  String(items.length),
-                )
-              : t("No project templates")}
-          </h3>
-          <button type="button" aria-label={t("Create new project template")} onClick={onCreate}>
-            <FlowGlyph name="plus" />
-            {t("New template")}
-          </button>
-        </header>
-        {items.map((item) => (
-          <div className="pt-list-row" key={item.id}>
-            <button type="button" aria-label={item.name} className="pt-row-link" onClick={() => onOpen(item)} />
+      <ProjectTemplateListCard data={data} items={items} onCreate={onCreate} onOpen={onOpen} onDuplicate={onDuplicate} onReload={onReload} />
+    </div>
+  );
+}
+
+/**
+ * The project template card shared by Settings › Projects › Templates and a team's Settings › Templates:
+ * "No project templates" / "N project templates" with "New template", then one row per template.
+ * Templates inherited from a parent team show where they come from and cannot be opened here.
+ */
+export function ProjectTemplateListCard({
+  data,
+  items,
+  onCreate,
+  onOpen,
+  onDuplicate,
+  onReload,
+  inheritedFrom,
+}: {
+  data: BootstrapData;
+  items: ProjectTemplate[];
+  onCreate: () => void;
+  onOpen: (template: ProjectTemplate) => void;
+  onDuplicate: (template: ProjectTemplate) => void;
+  onReload: () => Promise<void>;
+  /** The parent team a template is inherited from, when it is not this team's own. */
+  inheritedFrom?: (template: ProjectTemplate) => string | undefined;
+}) {
+  const { t, locale } = useI18n();
+  const remove = async (item: ProjectTemplate) => {
+    if (!(await confirmTemplateDelete(item, t, locale))) return;
+    try {
+      await deleteProjectTemplate(item.id);
+      await onReload();
+    } catch (error) {
+      toast.error(errorMessage(error));
+    }
+  };
+  return (
+    <section className="pt-list-card" data-i18n-ignore>
+      <header>
+        <h3>
+          {items.length
+            ? t(items.length === 1 ? "1 project template" : "project template count").replace("{count}", String(items.length))
+            : t("No project templates")}
+        </h3>
+        <button type="button" aria-label={t("Create new project template")} onClick={onCreate}>
+          <FlowGlyph name="plus" />
+          {t("New template")}
+        </button>
+      </header>
+      {items.map((item) => {
+        const parent = inheritedFrom?.(item);
+        return (
+          <div className={`pt-list-row${parent ? " is-inherited" : ""}`} key={item.id}>
+            {!parent && <button type="button" aria-label={item.name} className="pt-row-link" onClick={() => onOpen(item)} />}
             <span className="pt-row-icon" style={{ "--pt-icon-color": item.color || DEFAULT_COLOR } as CSSProperties}>
               <ViewGlyph color={item.color || DEFAULT_COLOR} icon={normalizeProjectIcon(item.icon)} />
             </span>
             <span className="pt-row-text">
               <strong data-i18n-ignore>{item.name}</strong>
               <small>
-                {t("Created on")} {relativeTemplateTime(item.createdAt, t)}
+                {parent ? (
+                  <>
+                    {t("Inherited from")} <b data-i18n-ignore>{parent}</b>
+                  </>
+                ) : item.templateDescription ? (
+                  <span data-i18n-ignore>{item.templateDescription}</span>
+                ) : item.creator?.displayName ? (
+                  <>
+                    {t("Created by")} <b data-i18n-ignore>{item.creator.displayName}</b>
+                  </>
+                ) : (
+                  relativeTemplateTime(item.createdAt, t)
+                )}
               </small>
             </span>
-            <DropdownMenu.Root modal={false}>
-              <DropdownMenu.Trigger asChild>
-                <button type="button" aria-label={t("Open menu")} className="pt-row-menu-trigger">
-                  <FlowGlyph name="ellipsis" />
-                </button>
-              </DropdownMenu.Trigger>
-              <DropdownMenu.Portal>
-                <FlowDropdownMenuContent label={t("Template actions")} align="end" className="pt-template-menu">
-                  <FlowMenuItem icon={<FlowGlyph name="edit" />} label="Edit" onSelect={() => onOpen(item)} />
-                  <FlowMenuItem icon={<TemplateGlyph name="duplicate" />} label="Duplicate…" onSelect={() => onDuplicate(item)} />
-                  <FlowMenuItem
-                    icon={<FlowGlyph name="copy" />}
-                    label="Copy URL to create project from template"
-                    onSelect={() => void copyTemplateUrl(data, item, t)}
-                  />
-                  <FlowMenuSeparator />
-                  <FlowMenuItem icon={<FlowGlyph name="delete" />} label="Delete" onSelect={() => void remove(item)} />
-                </FlowDropdownMenuContent>
-              </DropdownMenu.Portal>
-            </DropdownMenu.Root>
+            {!parent && (
+              <DropdownMenu.Root modal={false}>
+                <DropdownMenu.Trigger asChild>
+                  <button type="button" aria-label={t("Open menu")} className="pt-row-menu-trigger">
+                    <FlowGlyph name="ellipsis" />
+                  </button>
+                </DropdownMenu.Trigger>
+                <DropdownMenu.Portal>
+                  <FlowDropdownMenuContent label={t("Template actions")} align="end" className="pt-template-menu">
+                    <FlowMenuItem icon={<FlowGlyph name="edit" />} label="Edit" onSelect={() => onOpen(item)} />
+                    <FlowMenuItem icon={<TemplateGlyph name="duplicate" />} label="Duplicate…" onSelect={() => onDuplicate(item)} />
+                    <FlowMenuItem
+                      icon={<FlowGlyph name="copy" />}
+                      label="Copy URL to create project from template"
+                      onSelect={() => void copyTemplateUrl(data, item, t)}
+                    />
+                    <FlowMenuSeparator />
+                    <FlowMenuItem icon={<FlowGlyph name="delete" />} label="Delete" onSelect={() => void remove(item)} />
+                  </FlowDropdownMenuContent>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Root>
+            )}
           </div>
-        ))}
-      </section>
-    </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/**
+ * A team's full-page project template editor (team Settings › Templates › project/new, project/{id}/edit,
+ * project/{id}/duplicate): the workspace editor with the team preset as the template's team and visibility.
+ */
+export function TeamProjectTemplateEditor({
+  data,
+  teamId,
+  template,
+  source,
+  onClose,
+  onDuplicate,
+  onReload,
+}: {
+  data: BootstrapData;
+  teamId: string;
+  template?: ProjectTemplate;
+  source?: ProjectTemplate;
+  onClose: () => void;
+  onDuplicate?: () => void;
+  onReload: () => Promise<void>;
+}) {
+  return (
+    <ProjectTemplateEditor
+      key={template?.id ?? `new:${source?.id ?? ""}`}
+      data={data}
+      template={template}
+      source={source}
+      teamId={teamId}
+      backLabel="Team templates"
+      onClose={onClose}
+      onDuplicate={onDuplicate}
+      onReload={onReload}
+    />
   );
 }
 
@@ -293,6 +372,8 @@ function ProjectTemplateEditor({
   data,
   template,
   source,
+  teamId,
+  backLabel = "Project templates",
   onClose,
   onDuplicate,
   onReload,
@@ -300,13 +381,19 @@ function ProjectTemplateEditor({
   data: BootstrapData;
   template?: ProjectTemplate;
   source?: ProjectTemplate;
+  /** A team's own template: new templates start with this team and team visibility. */
+  teamId?: string;
+  backLabel?: string;
   onClose: () => void;
   onDuplicate?: () => void;
   onReload: () => Promise<void>;
 }) {
   const { t, locale } = useI18n();
   // The draft starts from the template once; saving reloads and closes the editor.
-  const [initial] = useState(() => draftFrom(data, template ?? source, source ? `Copy of ${source.name}` : undefined));
+  const [initial] = useState(() => {
+    const draft = draftFrom(data, template ?? source, source ? `Copy of ${source.name}` : undefined);
+    return teamId && !template && !source ? { ...draft, teamIds: [teamId], visibilityTeamId: teamId } : draft;
+  });
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [milestoneComposer, setMilestoneComposer] = useState<MilestoneComposerState>(null);
@@ -388,9 +475,9 @@ function ProjectTemplateEditor({
 
   return (
     <div className="pt-editor" data-i18n-ignore>
-      <a className="pt-back" href={`${location.pathname.split("/settings/")[0]}/settings/project-templates`} onClick={(event) => { event.preventDefault(); void close(); }}>
+      <a className="pt-back" href={teamId ? location.pathname.replace(/\/templates\/project\/.*$/, "/templates") : `${location.pathname.split("/settings/")[0]}/settings/project-templates`} onClick={(event) => { event.preventDefault(); void close(); }}>
         <FlowGlyph name="chevronLeft" width={14} height={14} />
-        <span>{t("Project templates")}</span>
+        <span>{t(backLabel)}</span>
       </a>
       <div className="pt-editor-inner">
         <header className="pt-title">

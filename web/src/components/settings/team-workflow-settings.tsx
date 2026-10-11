@@ -77,9 +77,9 @@ import {
   type TeamPermissionKey,
 } from "@/lib/team-security-confirms";
 
-import { TemplateEditor } from "./advanced-settings";
 import { DocumentTemplateEditor, DocumentTemplateRow } from "@/components/documents/document-template-editor";
 import { IssueTemplateEditor, TeamIssueTemplateList, TemplateListCard } from "./issue-template-settings";
+import { ProjectTemplateListCard, TeamProjectTemplateEditor } from "./project-template-settings";
 import { teamOwnedIssueTemplates } from "@/lib/issue-templates";
 import {
   SettingsCrumb,
@@ -293,7 +293,7 @@ export function TeamWorkflowSettings({
       </>
     );
   if (section === "templates") {
-    const page = teamTemplateEditorPage({ data, team, subPath, onClose: () => onNavigate("templates"), onReload });
+    const page = teamTemplateEditorPage({ data, team, subPath, onClose: () => onNavigate("templates"), onDuplicate: (next) => onNavigate("templates", next), onReload });
     if (page) return page;
   }
   if (section === "recurring-issues")
@@ -2206,6 +2206,8 @@ function ResolvedSummariesSettings({
 }
 
 type TemplateKind = "issue" | "project" | "document";
+/** The team a team-visible project template belongs to (older templates only list it among their teams). */
+const projectTemplateTeam = (template: ProjectTemplate) => template.visibilityTeamId || template.teamIds[0];
 type AnyTemplate = IssueTemplate | ProjectTemplate | DocumentTemplate;
 const NO_TEMPLATE = "none";
 
@@ -2213,7 +2215,6 @@ function TemplatesSettings({
   data,
   team,
   onReload,
-  subPath,
   onNavigateSubPath,
 }: {
   data: BootstrapData;
@@ -2224,34 +2225,22 @@ function TemplatesSettings({
 }) {
   const { t } = useI18n();
   const { settings, save } = useTeamSettings(data, team, onReload);
-  // The URL (templates/{kind}/new | templates/{kind}/{id}/edit) owns the
-  // open editor so it survives reloads and can be linked to.
-  const [routeKind, routeId, routeAction] = (subPath ?? "").split("/");
-  const editingKind = (["issue", "project", "document"] as const).find((kind) => kind === routeKind);
   const scopeIds = new Set([
     team.id,
     ...(teamHierarchy(data.teams, data.teamSettings).ancestors.get(team.id) ?? []).map((item) => item.id),
   ]);
   const templatesByKind: Record<TemplateKind, AnyTemplate[]> = {
     issue: teamOwnedIssueTemplates(data.issueTemplates, scopeIds),
-    project: data.projectTemplates.filter(
-      (item) => item.visibility === "teams" && item.teamIds.some((teamId) => scopeIds.has(teamId)),
-    ),
+    project: data.projectTemplates.filter((item) => item.visibility === "teams" && scopeIds.has(projectTemplateTeam(item) ?? "")),
     document: data.documentTemplates.filter((item) => scopeIds.has(item.teamId ?? "")),
   };
-  const editing: AnyTemplate | null | undefined = !editingKind
-    ? undefined
-    : routeId === "new"
-      ? null
-      : routeAction === "edit"
-        ? templatesByKind[editingKind].find((item) => item.id === routeId)
-        : undefined;
+  // The URL (templates/{kind}/new | templates/{kind}/{id}/edit) owns the full-page editor
+  // (see teamTemplateEditorPage) so it survives reloads and can be linked to.
   const openEditor = (kind: TemplateKind, template: AnyTemplate | null) =>
     onNavigateSubPath?.(template === null ? `${kind}/new` : `${kind}/${template.id}/edit`);
-  const closeEditor = () => onNavigateSubPath?.(undefined);
   const sourceTeamOf = (kind: TemplateKind, template: AnyTemplate) =>
     kind === "project"
-      ? (template as ProjectTemplate).teamIds.find((teamId) => scopeIds.has(teamId) && teamId !== team.id)
+      ? (projectTemplateTeam(template as ProjectTemplate) !== team.id ? projectTemplateTeam(template as ProjectTemplate) : undefined)
       : (template as IssueTemplate | DocumentTemplate).teamId && (template as IssueTemplate | DocumentTemplate).teamId !== team.id
         ? (template as IssueTemplate | DocumentTemplate).teamId
         : undefined;
@@ -2270,44 +2259,6 @@ function TemplatesSettings({
       onChange={(next) => onChange(next === NO_TEMPLATE ? "" : next)}
     />
   );
-  const section = (kind: TemplateKind) => {
-    const templates = templatesByKind[kind];
-    return (
-      <TeamSection key={kind} title={`${titleCase(kind)} templates`}>
-        {templates.map((template) => {
-          const sourceTeamID = sourceTeamOf(kind, template);
-          const inherited = Boolean(sourceTeamID);
-          return (
-            <TeamRow
-              key={template.id}
-              className={inherited ? "team-template-row is-inherited" : "personal-row-link team-template-row"}
-              title={<span data-i18n-ignore>{template.name}</span>}
-              description={
-                inherited ? (
-                  <>
-                    {t("Inherited from")}{" "}
-                    <span data-i18n-ignore>{data.teams.find((item) => item.id === sourceTeamID)?.name ?? t("parent team")}</span>
-                  </>
-                ) : template.description ? (
-                  <span data-i18n-ignore>{template.description}</span>
-                ) : undefined
-              }
-              role={inherited ? undefined : "button"}
-              tabIndex={inherited ? undefined : 0}
-              onClick={inherited ? undefined : () => openEditor(kind, template)}
-              onKeyDown={inherited ? undefined : (event) => { if (event.key === "Enter") openEditor(kind, template); }}
-            />
-          );
-        })}
-        <TeamRow className="settings-row--action" title={templates.length ? "" : `No ${kind} templates`}>
-          <button className="settings-action" type="button" onClick={() => openEditor(kind, null)}>
-            <Plus size={13} />
-            {t("New template")}
-          </button>
-        </TeamRow>
-      </TeamSection>
-    );
-  };
   const issueTemplates = templatesByKind.issue as IssueTemplate[];
   const documentTemplates = templatesByKind.document as DocumentTemplate[];
   return (
@@ -2342,7 +2293,21 @@ function TemplatesSettings({
           )}
         </TeamSection>
       )}
-      {section("project")}
+      <section className="tpl-section tpl-team-section">
+        <h3>{t("Project templates")}</h3>
+        <ProjectTemplateListCard
+          data={data}
+          items={templatesByKind.project as ProjectTemplate[]}
+          onCreate={() => openEditor("project", null)}
+          onOpen={(template) => openEditor("project", template)}
+          onDuplicate={(template) => onNavigateSubPath?.(`project/${template.id}/duplicate`)}
+          onReload={onReload}
+          inheritedFrom={(template) => {
+            const source = sourceTeamOf("project", template);
+            return source ? (data.teams.find((item) => item.id === source)?.name ?? t("parent team")) : undefined;
+          }}
+        />
+      </section>
       {templatesByKind.project.length > 0 && (
         <TeamSection title="Default project template" description="Pre-select a template when creating a project for this team">
           {templateSelect(
@@ -2376,17 +2341,6 @@ function TemplatesSettings({
           })}
         </TemplateListCard>
       </section>
-      {editing !== undefined && editingKind === "project" &&
-        (
-          <TemplateEditor
-            data={data}
-            type={editingKind}
-            teamId={team.id}
-            template={editing as IssueTemplate | ProjectTemplate | null}
-            onClose={closeEditor}
-            onSaved={onReload}
-          />
-        )}
     </>
   );
 }
@@ -2413,12 +2367,19 @@ function TeamTemplatesDescription({ workspaceSlug }: { workspaceSlug: string }) 
 }
 
 /** Full-page issue/document template editors of team Settings › Templates (`issue/new`, `issue/new/form`, `issue/{id}/edit`, `document/…`). */
-function teamTemplateEditorPage({ data, team, subPath, onClose, onReload }: { data: BootstrapData; team: Team; subPath?: string; onClose: () => void; onReload: () => Promise<void> }) {
+function teamTemplateEditorPage({ data, team, subPath, onClose, onDuplicate, onReload }: { data: BootstrapData; team: Team; subPath?: string; onClose: () => void; onDuplicate?: (subPath: string) => void; onReload: () => Promise<void> }) {
   const [kind, id, action] = (subPath ?? "").split("/");
   if (kind === "issue") {
     if (id === "new") return <IssueTemplateEditor key={`new:${action ?? ""}`} data={data} scopeTeamId={team.id} templateType={action === "form" ? "customForm" : "standard"} backLabel="Team templates" onClose={onClose} onReload={onReload} />;
     const template = action === "edit" ? data.issueTemplates.find((item) => item.id === id) : undefined;
     if (template) return <IssueTemplateEditor key={template.id} data={data} template={template} scopeTeamId={template.scope === "workspace" ? undefined : (template.teamId || team.id)} templateType={template.templateType ?? "standard"} backLabel="Team templates" onClose={onClose} onReload={onReload} />;
+  }
+  if (kind === "project") {
+    const projectSource = (templateId: string) => data.projectTemplates.find((item) => item.id === templateId);
+    if (id === "new") return <TeamProjectTemplateEditor data={data} teamId={team.id} onClose={onClose} onReload={onReload} />;
+    const template = projectSource(id);
+    if (template && action === "duplicate") return <TeamProjectTemplateEditor data={data} teamId={team.id} source={template} onClose={onClose} onReload={onReload} />;
+    if (template && action === "edit") return <TeamProjectTemplateEditor data={data} teamId={projectTemplateTeam(template) || team.id} template={template} onClose={onClose} onDuplicate={onDuplicate ? () => onDuplicate(`project/${template.id}/duplicate`) : undefined} onReload={onReload} />;
   }
   if (kind === "document") {
     if (id === "new") return <DocumentTemplateEditor data={data} teamId={team.id} template={null} backLabel="Team templates" onClose={onClose} onSaved={onReload} />;
@@ -3411,8 +3372,5 @@ function message(error: unknown) {
   return error instanceof Error
     ? error.message
     : "Could not save team settings";
-}
-function titleCase(value: string) {
-  return value.slice(0, 1).toUpperCase() + value.slice(1);
 }
 import { AppLink } from '@/components/ui/app-link';
