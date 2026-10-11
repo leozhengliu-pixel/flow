@@ -892,7 +892,9 @@ func statusUpdates(data domain.Bootstrap, args map[string]any) (any, error) {
 				return nil, err
 			}
 			for id := range parents {
-				if !slices.Contains(initiative.ProjectIDs, id) && !slices.ContainsFunc(data.Projects, func(project domain.Project) bool { return project.ID == id && slices.Contains(project.Initiatives, initiative.ID) }) {
+				if !slices.Contains(initiative.ProjectIDs, id) && !slices.ContainsFunc(data.Projects, func(project domain.Project) bool {
+					return project.ID == id && slices.Contains(project.Initiatives, initiative.ID)
+				}) {
 					delete(parents, id)
 				}
 			}

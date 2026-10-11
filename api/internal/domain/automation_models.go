@@ -45,25 +45,25 @@ type WorkflowAction struct {
 }
 
 type WorkflowDefinition struct {
-	ID             string            `json:"id"`
-	Name           string            `json:"name"`
-	Description    string            `json:"description,omitempty"`
-	TeamID         string            `json:"teamId,omitempty"`
-	Trigger        string            `json:"trigger"`
-	Schedule       string            `json:"schedule,omitempty"`
-	Conditions     map[string]string `json:"conditions"`
-	Actions        []WorkflowAction  `json:"actions"`
-	Enabled        bool              `json:"enabled"`
-	MaxAttempts    int               `json:"maxAttempts"`
-	NextRunAt      *time.Time        `json:"nextRunAt,omitempty"`
-	LastRunAt      *time.Time        `json:"lastRunAt,omitempty"`
-	LastRunStatus  string            `json:"lastRunStatus,omitempty"`
-	ConsecutiveErr int               `json:"consecutiveErrors"`
-	CreatorID      string            `json:"creatorId"`
-	OwnerID        string            `json:"ownerId,omitempty"`
-	TrustedSourceKeys []string       `json:"trustedSourceKeys,omitempty"`
-	CreatedAt      time.Time         `json:"createdAt"`
-	UpdatedAt      time.Time         `json:"updatedAt"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Description       string            `json:"description,omitempty"`
+	TeamID            string            `json:"teamId,omitempty"`
+	Trigger           string            `json:"trigger"`
+	Schedule          string            `json:"schedule,omitempty"`
+	Conditions        map[string]string `json:"conditions"`
+	Actions           []WorkflowAction  `json:"actions"`
+	Enabled           bool              `json:"enabled"`
+	MaxAttempts       int               `json:"maxAttempts"`
+	NextRunAt         *time.Time        `json:"nextRunAt,omitempty"`
+	LastRunAt         *time.Time        `json:"lastRunAt,omitempty"`
+	LastRunStatus     string            `json:"lastRunStatus,omitempty"`
+	ConsecutiveErr    int               `json:"consecutiveErrors"`
+	CreatorID         string            `json:"creatorId"`
+	OwnerID           string            `json:"ownerId,omitempty"`
+	TrustedSourceKeys []string          `json:"trustedSourceKeys,omitempty"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	UpdatedAt         time.Time         `json:"updatedAt"`
 }
 
 type WorkflowRun struct {

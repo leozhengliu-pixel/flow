@@ -297,7 +297,9 @@ func TestProjectCustomerSummariesAndFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	direct := summaries["project_aut"]
-	if direct == nil || !slices.ContainsFunc(direct.Customers, func(customer ProjectCustomer) bool { return customer.ID == "c1" && customer.Revenue == 1000 && customer.OwnerID == "owner" }) {
+	if direct == nil || !slices.ContainsFunc(direct.Customers, func(customer ProjectCustomer) bool {
+		return customer.ID == "c1" && customer.Revenue == 1000 && customer.OwnerID == "owner"
+	}) {
 		t.Fatalf("project request missing from summary: %+v", direct)
 	}
 	summary := &ProjectCustomerSummary{Customers: []ProjectCustomer{{ID: "c1", Important: true, OwnerID: "owner", Status: "active", Revenue: 1000, Size: 12}, {ID: "c2", Tier: "silver"}}, UnknownCustomer: true}

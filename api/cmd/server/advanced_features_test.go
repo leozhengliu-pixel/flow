@@ -219,8 +219,12 @@ func TestDocumentPermissionsAndPresenceEndpoints(t *testing.T) {
 	}
 	if otherTeam != "" {
 		moved := requestJSON[domain.Document](t, handler, http.MethodPatch, "/api/documents/"+teamDocument.ID, map[string]any{"teamIds": []string{otherTeam}}, http.StatusOK)
-		if slices.ContainsFunc(moved.Permissions, func(item domain.DocumentPermission) bool { return item.SubjectType == "team" && item.SubjectID == firstTeam }) ||
-			!slices.ContainsFunc(moved.Permissions, func(item domain.DocumentPermission) bool { return item.SubjectType == "team" && item.SubjectID == otherTeam && item.Role == "editor" }) {
+		if slices.ContainsFunc(moved.Permissions, func(item domain.DocumentPermission) bool {
+			return item.SubjectType == "team" && item.SubjectID == firstTeam
+		}) ||
+			!slices.ContainsFunc(moved.Permissions, func(item domain.DocumentPermission) bool {
+				return item.SubjectType == "team" && item.SubjectID == otherTeam && item.Role == "editor"
+			}) {
 			t.Fatalf("moving the document did not move its team access: %#v", moved.Permissions)
 		}
 	}

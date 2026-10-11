@@ -477,11 +477,11 @@ func TestOmitDirectoryExcludedTeamsDropsOrgLeafAndRetiredPayload(t *testing.T) {
 			{ID: "global-todo"},
 		},
 		TeamSettings: map[string]domain.TeamSettings{
-			"team-xw":                               {TeamID: "team-xw"},
-			"team_hr_750ec2f0c6d179114a0e1e32":      {TeamID: "team_hr_750ec2f0c6d179114a0e1e32"},
-			"team_hr_dc_site":                       {TeamID: "team_hr_dc_site"},
-			"retired-team":                          {TeamID: "retired-team"},
-			"team_hr_mine":                          {TeamID: "team_hr_mine"},
+			"team-xw":                          {TeamID: "team-xw"},
+			"team_hr_750ec2f0c6d179114a0e1e32": {TeamID: "team_hr_750ec2f0c6d179114a0e1e32"},
+			"team_hr_dc_site":                  {TeamID: "team_hr_dc_site"},
+			"retired-team":                     {TeamID: "retired-team"},
+			"team_hr_mine":                     {TeamID: "team_hr_mine"},
 		},
 		CycleSettings: map[string]domain.CycleSettings{
 			"team_hr_750ec2f0c6d179114a0e1e32": {},

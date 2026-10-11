@@ -147,7 +147,10 @@ func (s *server) finishPasskeyRegistration(w http.ResponseWriter, r *http.Reques
 	actor := requestActor(s, r)
 	data := s.workspaceData(r)
 	var pending *domain.PasskeyRegistrationChallenge
-	if !strings.HasPrefix(input.RegistrationID,"passkey_reg_") {writeError(w,http.StatusBadRequest,"invalid registration session");return}
+	if !strings.HasPrefix(input.RegistrationID, "passkey_reg_") {
+		writeError(w, http.StatusBadRequest, "invalid registration session")
+		return
+	}
 	for index := range data.PasskeyRegistrationChallenges {
 		item := &data.PasskeyRegistrationChallenges[index]
 		if item.ID == input.RegistrationID && item.UserID == actor.ID {

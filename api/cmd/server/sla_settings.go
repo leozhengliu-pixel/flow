@@ -10,6 +10,7 @@ func slaEnabled(data *domain.Bootstrap) bool {
 	enabled, configured := settings["enabled"].(bool)
 	return !configured || enabled
 }
+
 const (
 	slaWorkWeekMonFri = "monFri"
 	slaWorkWeekSunThu = "sunThu"

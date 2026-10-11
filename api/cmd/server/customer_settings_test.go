@@ -49,7 +49,9 @@ func TestCustomerTaxonomyCreateValidatesAndAppends(t *testing.T) {
 	taxonomy := requestJSON[struct {
 		Statuses []domain.CustomerStatus `json:"statuses"`
 	}](t, handler, http.MethodGet, "/api/customer-taxonomy", nil, http.StatusOK)
-	if !slices.ContainsFunc(taxonomy.Statuses, func(item domain.CustomerStatus) bool { return item.ID == first.ID && item.Description == "Needs attention" }) {
+	if !slices.ContainsFunc(taxonomy.Statuses, func(item domain.CustomerStatus) bool {
+		return item.ID == first.ID && item.Description == "Needs attention"
+	}) {
 		t.Fatalf("description was not persisted: %#v", taxonomy.Statuses)
 	}
 }

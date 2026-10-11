@@ -82,7 +82,9 @@ func TestAPIKeyAuthenticationChecksCurrentOAuthPolicyAndAuthorization(t *testing
 		return slices.ContainsFunc(policies, func(p struct {
 			ID, Status string
 			Scopes     []string
-		}) bool { return p.ID == client && p.Status == "approved" && !slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(p.Scopes, scope) }) })
+		}) bool {
+			return p.ID == client && p.Status == "approved" && !slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(p.Scopes, scope) })
+		})
 	}
 	if _, err := repo.AuthenticateAPIKeyRecord(ctx, "", key.SecretHash, approved); err != nil {
 		t.Fatal(err)

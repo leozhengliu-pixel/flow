@@ -44,12 +44,22 @@ func buildWorkspaceAgentPrompt(data domain.Bootstrap, issues []domain.Issue, ski
 	return prompt.String()
 }
 
-func (s *server) updateWorkspaceAgentGuidance(w http.ResponseWriter,r *http.Request) {
-	var input struct {Instructions string `json:"instructions"`}
-	if !decodeJSON(w,r,&input){return}
-	if len([]rune(input.Instructions))>8000 {writeError(w,400,"workspace guidance must not exceed 8000 characters");return}
-	err:=s.store.MutateWorkspace(r.Context(),workspaceKey(r),"workspace.agent_guidance_updated","workspace",nil,func(data *domain.Bootstrap)error{data.WorkspaceSettings.AgentInstructions=strings.TrimSpace(input.Instructions);return nil})
-	respondMutation(w,err,200,map[string]string{"instructions":strings.TrimSpace(input.Instructions)})
+func (s *server) updateWorkspaceAgentGuidance(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		Instructions string `json:"instructions"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if len([]rune(input.Instructions)) > 8000 {
+		writeError(w, 400, "workspace guidance must not exceed 8000 characters")
+		return
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "workspace.agent_guidance_updated", "workspace", nil, func(data *domain.Bootstrap) error {
+		data.WorkspaceSettings.AgentInstructions = strings.TrimSpace(input.Instructions)
+		return nil
+	})
+	respondMutation(w, err, 200, map[string]string{"instructions": strings.TrimSpace(input.Instructions)})
 }
 
 func truncateSettingsText(value string, limit int) string {
