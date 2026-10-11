@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react'
 import * as Popover from '@radix-ui/react-popover'
 import { Search } from 'lucide-react'
-import { FLOW_CORE_ICON_NAMES, FLOW_VIEW_ICON_ALIASES, FLOW_VIEW_ICON_NAMES } from './flow-view-icon-data'
+import { FLOW_VIEW_ICON_ALIASES, FLOW_VIEW_ICON_NAMES } from './flow-view-icon-data'
 import styles from './view-icon-picker.module.css'
+import { ensureViewIconSprite } from './view-icon-sprite'
 import { useI18n } from '@/i18n/i18n'
 
 export const DEFAULT_VIEW_ICON = 'CustomView'
@@ -20,10 +21,11 @@ export type ViewVisual = { icon: string; color: string }
 
 export function ViewGlyph({ className, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, style }: { className?: string; color?: string; icon?: string; style?: CSSProperties }) {
   const assetIcon = FLOW_VIEW_ICON_ALIASES[icon] ?? icon
+  useEffect(() => { void ensureViewIconSprite() }, [])
   if (!ICON_NAME_SET.has(assetIcon) && assetIcon !== 'Team') return isEmoji(icon)
     ? <span aria-hidden="true" className={`${styles.glyph} ${styles.emojiGlyph} ${className ?? ''}`} style={{ color, ...style }}>{icon}</span>
     : <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color, ...style }} viewBox="0 0 16 16"><use href="#CustomView"/></svg>
-  return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color, ...style }} viewBox="0 0 16 16"><use href={`${FLOW_CORE_ICON_NAMES.has(assetIcon) ? '' : '/flow-view-icons.svg'}#${assetIcon}`}/></svg>
+  return <svg aria-hidden="true" className={`${styles.glyph} ${className ?? ''}`} fill="currentColor" style={{ color, ...style }} viewBox="0 0 16 16"><use href={`#${assetIcon}`}/></svg>
 }
 
 export function ViewIconPicker({ align = 'start', ariaLabel, color = DEFAULT_VIEW_COLOR, icon = DEFAULT_VIEW_ICON, onChange, prependIcons = [], prependTeam = false, triggerClassName, triggerContent }: { align?: 'start' | 'center' | 'end'; ariaLabel?: string; color?: string; icon?: string; onChange: (visual: ViewVisual) => void; prependIcons?: string[]; prependTeam?: boolean; triggerClassName?: string; /** Replaces the glyph inside the trigger (e.g. a loop template's icon). */ triggerContent?: ReactNode }) {
