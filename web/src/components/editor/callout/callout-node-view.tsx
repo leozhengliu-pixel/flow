@@ -20,7 +20,7 @@ export function CalloutView({ editor, node, updateAttributes }: ReactNodeViewPro
     <NodeViewWrapper as="aside" className={`description-callout${legacy ? ` is-${color}` : ''}`} data-callout="" data-color={color} data-icon={icon || undefined} style={legacy ? undefined : { '--callout-color': color } as CSSProperties}>
       <span className="description-callout-controls" contentEditable={false} data-i18n-ignore>
         {editor.isEditable
-          ? <ViewIconPicker ariaLabel={t('Change callout icon or color')} color={calloutPickerColor(color)} icon={icon} onChange={next => updateAttributes({ icon: next.icon, color: normalizeCalloutColor(next.color) })} triggerContent={glyph}/>
+          ? <ViewIconPicker surface="page" ariaLabel={t('Change callout icon or color')} color={calloutPickerColor(color)} icon={icon} onChange={next => updateAttributes({ icon: next.icon, color: normalizeCalloutColor(next.color) })} triggerContent={glyph}/>
           : <span className="description-callout-glyph">{glyph}</span>}
       </span>
       <NodeViewContent className="description-callout-content"/>

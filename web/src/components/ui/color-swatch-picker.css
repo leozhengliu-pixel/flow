@@ -1,0 +1,35 @@
+/* The reference app's colour picker (see color-swatch-picker.tsx). Colours come from the --color-picker-* and
+   --color-swatch-* tokens; each surface picks its elevation's set. */
+.csp{--csp-surface:var(--color-picker-surface);--csp-border:var(--color-picker-border);--csp-hex-label:var(--color-picker-hex-label);--csp-hex-text:var(--color-picker-hex-text);--csp-thumb-border:var(--color-picker-hue-thumb-border);position:relative;box-sizing:border-box;width:100%;padding:16px 0;background:var(--csp-surface);font-family:"Inter Variable","SF Pro Display",-apple-system,system-ui,"Segoe UI",sans-serif;font-size:13px;line-height:19.5px;cursor:default}
+.csp[data-surface=elevated]{--csp-surface:var(--color-picker-elevated-surface);--csp-border:var(--color-picker-elevated-border);--csp-hex-label:var(--color-picker-elevated-hex-label);--csp-hex-text:var(--color-picker-elevated-hex-text);--csp-thumb-border:var(--color-picker-elevated-hue-thumb-border)}
+.csp[data-surface=icon]{--csp-surface:var(--color-picker-icon-surface);--csp-border:var(--color-picker-icon-border);--csp-hex-label:var(--color-picker-icon-hex-label);--csp-hex-text:var(--color-picker-icon-hex-text);--csp-thumb-border:var(--color-picker-icon-hue-thumb-border)}
+.csp:is([data-surface=elevated],[data-surface=icon]){--color-swatch-grey:var(--color-swatch-card-grey);--color-swatch-orange:var(--color-swatch-card-orange);--color-swatch-pink:var(--color-swatch-card-pink)}
+.csp[data-framed]{border:1px solid var(--csp-border);border-radius:6px}
+.csp-swatches{box-sizing:border-box;width:calc(100% - 54px);height:22px;display:flex;justify-content:space-between;padding:0 16px}
+.csp-swatch{box-sizing:border-box;width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid transparent;border-radius:50%;outline:2px solid transparent;outline-offset:0;background:var(--palette-color);box-shadow:0 0 3px 3px transparent;color:var(--csp-surface);cursor:default}
+.csp-swatches .csp-swatch:is(:hover,:focus-visible){outline-color:var(--color-picker-swatch-ring);box-shadow:0 0 3px 3px var(--palette-color)}
+.csp-swatch svg{flex:none;fill:currentColor}
+.csp-toggle-wrap{position:absolute;top:16px;right:0;box-sizing:border-box;width:55px;height:22px;padding:0 16px;border-left:1px solid transparent}
+.csp[data-mode=swatches] .csp-toggle-wrap{border-left-color:var(--csp-border)}
+.csp-toggle{box-sizing:border-box;display:block;width:22px;height:22px;padding:0;border:0;border-radius:50%;outline:0;background:transparent;cursor:default}
+.csp-toggle span{display:block;width:22px;height:22px;border-radius:50%;outline:2px solid transparent;outline-offset:2px;background:var(--color-picker-custom-gradient);transition:outline-color .25s}
+.csp-toggle[aria-pressed=true]{border-radius:4px}
+.csp-toggle:is([aria-pressed=true],:focus-visible) span{outline-color:var(--color-picker-toggle-ring)}
+.csp-custom{box-sizing:border-box;width:100%;padding:0 16px}
+.csp-custom-value{box-sizing:border-box;width:100%;height:22px;display:flex;align-items:center;padding-right:20px}
+.csp-current{outline:0}
+.csp-custom-value label{min-width:0;flex:1;display:flex;align-items:center;margin-left:12px}
+.csp-custom-value[data-note] label{flex:none}
+.csp-custom-value label span{flex:none;color:var(--csp-hex-label);font-size:13px;line-height:normal;font-weight:500}
+.csp-custom-value input{box-sizing:border-box;min-width:0;flex:1;height:15.5px;padding:0 6px;border:0;outline:0;background:transparent;color:var(--csp-hex-text);font-family:inherit;font-size:13px;line-height:normal;font-weight:400}
+.csp-custom-value[data-note] input{width:89.67px;flex:none}
+.csp-custom-note{min-width:0;overflow:hidden;color:var(--csp-hex-label);font-size:13px;line-height:normal;font-weight:450;text-overflow:ellipsis;white-space:nowrap}
+.csp-custom-controls{height:100px;display:flex;gap:16px;margin-top:16px}
+.csp-pad{position:relative;min-width:0;flex:0 1 350px;height:100px}
+.csp-hue{position:relative;width:6px;height:100px;flex:none}
+.csp-pad canvas,.csp-hue canvas{display:block;width:100%;height:100px;border-radius:4px;outline:0;cursor:default;touch-action:none}
+.csp-pad canvas:focus-visible,.csp-hue canvas:focus-visible{box-shadow:0 0 0 1px var(--focus-ring)}
+.csp-pad i{position:absolute;box-sizing:border-box;width:16px;height:16px;transform:translate(calc(-50% + 1px),calc(-50% + 1px));border:1px solid var(--color-picker-thumb);border-radius:10px;box-shadow:0 0 4px var(--color-picker-thumb-shadow);pointer-events:none}
+.csp-hue i{position:absolute;left:-3px;box-sizing:border-box;width:12px;height:4px;transform:translateY(calc(-50% - 1px));border:.5px solid var(--csp-thumb-border);border-radius:2px;background:var(--color-picker-hue-thumb);box-shadow:0 1px 2px var(--color-picker-thumb-shadow);pointer-events:none}
+/* Standalone colour popovers (labels, statuses, stages): Radix content around a framed picker. */
+.csp-popover{z-index:1100;box-sizing:border-box;width:414px;max-width:calc(100vw - 16px);outline:0}

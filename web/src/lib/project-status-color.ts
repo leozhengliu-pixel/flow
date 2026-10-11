@@ -2,19 +2,6 @@ export function projectStatusOptionColor(status: { id: string; name: string; col
   return status.id === current.id || status.name === current.name ? current.color : status.color
 }
 
-/** The reference app's project status colour swatches, in picker order. */
-export const PROJECT_STATUS_SWATCHES: ReadonlyArray<{ name: string; color: string }> = [
-  { name: 'Grey', color: '#bec2c8' },
-  { name: 'Dark Grey', color: '#95a2b3' },
-  { name: 'Purple', color: '#5e6ad2' },
-  { name: 'Teal', color: '#26b5ce' },
-  { name: 'Green', color: '#4cb782' },
-  { name: 'Yellow', color: '#f2c94c' },
-  { name: 'Orange', color: '#f2994a' },
-  { name: 'Pink', color: '#f7c8c1' },
-  { name: 'Red', color: '#eb5757' },
-]
-
 /** Default colour per status type for a newly created status. */
 export const PROJECT_STATUS_DEFAULT_COLORS: Record<string, string> = {
   backlog: '#f2994a',

@@ -22,7 +22,7 @@ import { groupsForResource, isWorkspaceLabel, labelResourceType } from '@/lib/la
 import { labelPath } from '@/lib/app-routes'
 import { useStoredState } from '@/hooks/use-stored-state'
 import { useI18n } from '@/i18n/i18n'
-import { FLOW_COLOR_PALETTE } from '@/components/ui/color-palette'
+import { ColorSwatchPicker } from '@/components/ui/color-swatch-picker'
 
 import {
   DEFAULT_LABEL_DISPLAY, EMPTY_LABEL_FILTERS, canMergeLabels, compareLabels, isFilteringLabels, labelGridTemplate, labelRuleUsage,
@@ -478,15 +478,10 @@ function LabelRow({ context, label, grouped, treeLast = false, selected, groups,
 function GroupTreeBranch({last}:{last:boolean}){return <span aria-hidden="true" className={`domain-label-tree-branch${last?' is-last':''}`}/>}
 
 function LabelColorPicker({ color, disabled = false, kind, label, onChange }: { color: string; disabled?: boolean; kind: 'group'|'label'; label: string; onChange: (color: string) => void | Promise<void> }) {
-  const { t } = useI18n()
-  const customColorRef = useRef<HTMLInputElement>(null)
-  const normalized = color.toLowerCase()
-  const preset = FLOW_COLOR_PALETTE.some(option => option.value === normalized)
-  return <Popover.Root><Popover.Trigger asChild><button aria-label={label} className="domain-label-color" data-kind={kind} disabled={disabled} type="button">{kind === 'group' ? <PaletteMark color={color}/> : <i style={{ background: color }}/>}</button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" data-i18n-ignore align="center" className="domain-label-color-popover" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} side="bottom" sideOffset={3}><div className="domain-label-color-presets">{FLOW_COLOR_PALETTE.map(option => <button aria-label={t(option.name)} data-selected={normalized === option.value} key={option.value} onClick={() => void onChange(option.value)} style={{ color: option.value }} type="button"><span style={{ background: option.value }}>{normalized === option.value && <ColorCheck/>}</span></button>)}</div><button aria-label={t('Set custom color')} className="domain-label-custom-color" data-selected={!preset} onClick={() => customColorRef.current?.click()} type="button"><span/>{!preset && <i/>}</button><input aria-hidden="true" className="domain-label-native-color" onChange={event => void onChange(event.target.value.toLowerCase())} ref={customColorRef} tabIndex={-1} type="color" value={/^#[0-9a-f]{6}$/i.test(color) ? color : '#95a2b3'}/></Popover.Content></Popover.Portal></Popover.Root>
+  return <Popover.Root><Popover.Trigger asChild><button aria-label={label} className="domain-label-color" data-kind={kind} disabled={disabled} type="button">{kind === 'group' ? <PaletteMark color={color}/> : <i style={{ background: color }}/>}</button></Popover.Trigger><Popover.Portal><Popover.Content data-flow-motion="floating" data-i18n-ignore align="center" className="csp-popover" collisionPadding={8} onCloseAutoFocus={event => event.preventDefault()} side="bottom" sideOffset={2}><ColorSwatchPicker color={color} framed onChange={next => { if (next !== color.toLowerCase()) void onChange(next) }}/></Popover.Content></Popover.Portal></Popover.Root>
 }
 
 function PaletteMark({ color }: { color: string }) { return <svg aria-hidden="true" fill={color} viewBox="0 0 16 16"><path clipRule="evenodd" d="M7.95 6A1.75 1.75 0 1 0 7.95 2.5 1.75 1.75 0 0 0 7.95 6ZM4.45 9.5A1.75 1.75 0 1 0 4.45 6a1.75 1.75 0 0 0 0 3.5ZM7.95 13a1.75 1.75 0 1 0 0-3.5 1.75 1.75 0 0 0 0 3.5Zm5.25-5.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0Z" fillRule="evenodd"/></svg> }
-function ColorCheck() { return <svg aria-hidden="true" fill="currentColor" viewBox="0 0 10 8"><path d="M3.47 5.708 1.884 4.123a.576.576 0 0 0-.815.814l1.996 1.994a.576.576 0 0 0 .814 0L8.931 1.883a.576.576 0 0 0-.815-.814L3.47 5.708Z"/></svg> }
 
 function SelectionCell({ kind, selected, onToggle }: { kind: 'label'|'group'; selected: boolean; onToggle: () => void }) { const { t } = useI18n(); return <label className="domain-label-indent domain-label-select"><input type="checkbox" aria-label={t(kind === 'group' ? 'Select group' : 'Select label')} checked={selected} onChange={onToggle}/></label> }
 

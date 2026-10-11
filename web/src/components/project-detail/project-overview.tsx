@@ -65,7 +65,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
   return <TooltipProvider delayDuration={450} skipDelayDuration={300}><div className="project-overview">
     {outline.length > 1 && <ProjectOutlineRail items={outline}/>}
     <section className="project-overview__intro">
-      <ViewIconPicker color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
+      <ViewIconPicker surface="page" color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
       <ProjectEditableText ariaLabel="Project name" className="project-overview__name" placeholder="Project name" value={project.name} onCommit={name => save({ name })}/>
       <ProjectEditableText ariaLabel="Project summary" className="project-overview__summary" placeholder="Add a short summary…" value={project.summary} onCommit={summary => save({ summary })}/>
       <div className="project-overview__property-section">

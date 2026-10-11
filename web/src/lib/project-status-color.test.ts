@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PROJECT_STATUS_SWATCHES, hexToLch, normalizeHexColor, projectStatusOptionColor, projectStatusStrokeColor } from './project-status-color'
+import { hexToLch, normalizeHexColor, projectStatusOptionColor, projectStatusStrokeColor } from './project-status-color'
 
 describe('projectStatusOptionColor', () => {
   const current = { id: 'started', name: 'In progress', color: '#ffcc00' }
@@ -35,9 +35,5 @@ describe('projectStatusStrokeColor', () => {
     expect(h).toBeCloseTo(61.65, 1)
     expect(normalizeHexColor('#ABC')).toBe('#aabbcc')
     expect(normalizeHexColor('nope')).toBeNull()
-  })
-
-  it('offers the reference app\'s nine swatches in picker order', () => {
-    expect(PROJECT_STATUS_SWATCHES.map(swatch => swatch.name)).toEqual(['Grey', 'Dark Grey', 'Purple', 'Teal', 'Green', 'Yellow', 'Orange', 'Pink', 'Red'])
   })
 })

@@ -63,30 +63,6 @@
 .pst-button-primary,.pst-button-primary:hover:not(:disabled){background:var(--project-status-primary-bg);color:var(--project-status-primary-fg);box-shadow:var(--project-status-primary-shadow)}
 .pst-button:disabled{opacity:.5}
 
-.pst-color-menu{z-index:600;position:relative;box-sizing:border-box;width:414px;padding:16px 0;border:1px solid var(--project-status-picker-border);border-radius:6px;outline:0;background:var(--project-status-picker-bg);font-family:"Inter Variable","SF Pro Display",system-ui,sans-serif}
-.pst-swatches{box-sizing:border-box;width:358px;height:22px;display:flex;justify-content:space-between;padding:0 16px}
-.pst-swatch{box-sizing:border-box;width:22px;height:22px;flex:none;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid transparent;border-radius:50%;outline:2px solid transparent;outline-offset:0;background:var(--palette-color);box-shadow:0 0 3px 3px transparent;cursor:default;transition:outline-color .15s,box-shadow .15s}
-.pst-swatch:is(:hover,:focus-visible){outline-color:var(--project-status-swatch-ring);box-shadow:0 0 3px 3px var(--palette-color)}
-.pst-swatch svg{flex:none;fill:var(--project-status-swatch-check)}
-.pst-custom-toggle-wrap{position:absolute;top:16px;left:358px;box-sizing:border-box;width:54px;height:22px;padding:0 16px}
-.pst-custom-toggle-wrap[data-separated]{left:357px;width:55px;border-left:1px solid var(--project-status-picker-border)}
-.pst-custom-toggle{box-sizing:border-box;display:block;width:22px;height:22px;padding:0;border:0;border-radius:50%;background:transparent;cursor:default}
-.pst-custom-toggle span{display:block;width:22px;height:22px;border-radius:50%;outline:2px solid transparent;background:var(--project-status-custom-gradient)}
-.pst-custom-toggle[aria-pressed=true]{border-radius:4px}
-.pst-custom-toggle:focus-visible span{outline-color:var(--project-status-field-focus)}
-.pst-custom{box-sizing:border-box;width:412px;padding:0 16px}
-.pst-custom-value{box-sizing:border-box;width:380px;height:22px;display:flex;align-items:center;padding-right:20px}
-.pst-custom-current{box-sizing:border-box;width:22px;height:22px;flex:none;border:1px solid transparent;border-radius:50%;background:var(--palette-color)}
-.pst-custom-value label{display:flex;align-items:center;margin-left:12px}
-.pst-custom-value label span{color:var(--project-status-hex-label);font-size:13px;line-height:normal;font-weight:500}
-.pst-custom-value input{box-sizing:border-box;width:89.67px;height:15.5px;padding:0 6px;border:0;outline:0;background:transparent;color:var(--project-status-hex-text);font-family:inherit;font-size:13px;line-height:normal;font-weight:400}
-.pst-custom-note{overflow:hidden;color:var(--project-status-hex-label);font-size:13px;line-height:normal;font-weight:450;text-overflow:ellipsis;white-space:nowrap}
-.pst-custom-controls{height:100px;display:flex;gap:16px;margin-top:16px}
-.pst-saturation{position:relative;width:350px;height:100px;flex:none;border-radius:4px;outline:0;background:linear-gradient(to top,var(--project-status-saturation-black),transparent),linear-gradient(to right,var(--project-status-saturation-white),var(--picker-hue));cursor:crosshair;touch-action:none}
-.pst-saturation:focus-visible,.pst-hue:focus-visible{box-shadow:0 0 0 1px var(--focus-ring)}
-.pst-saturation i{position:absolute;box-sizing:border-box;width:16px;height:16px;transform:translate(-50%,-50%);border:1px solid var(--project-status-picker-thumb);border-radius:10px;box-shadow:0 0 4px var(--project-status-picker-thumb-shadow);pointer-events:none}
-.pst-hue{position:relative;width:6px;height:100px;flex:none;border-radius:4px;outline:0;background:var(--project-status-hue-gradient);cursor:pointer;touch-action:none}
-.pst-hue i{position:absolute;left:-3px;box-sizing:border-box;width:12px;height:4px;transform:translateY(-50%);border:.5px solid var(--project-status-picker-border);border-radius:2px;background:var(--project-status-hue-thumb);box-shadow:0 1px 2px var(--project-status-picker-thumb-shadow);pointer-events:none}
 
 @media (max-width:760px){
   .pst-page,.pst-card,.pst-row{width:100%}
@@ -98,10 +74,4 @@
   .pst-field-description{margin-left:45px}
   .pst-editor-actions{width:100%;justify-content:flex-end}
   .pst-more-wrap{opacity:1}
-}
-@media (max-width:430px){
-  .pst-color-menu{width:calc(100vw - 16px)}
-  .pst-swatches{width:100%;padding-right:71px}
-  .pst-custom,.pst-custom-value{width:100%}
-  .pst-saturation{width:auto;flex:1}
 }

@@ -108,7 +108,7 @@ describe('ProjectStatusesSettings', () => {
     await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
     await user.click(screen.getByRole('button', { name: 'Color' }))
     await user.click(await screen.findByRole('button', { name: 'Set custom color' }))
-    const hex = screen.getByRole('textbox', { name: 'HEX' })
+    const hex = screen.getByRole('textbox', { name: 'HEX color' })
     await user.clear(hex)
     await user.type(hex, '#123abc{Enter}')
     expect(screen.getByRole('button', { name: 'Select default color' })).toHaveAttribute('aria-pressed', 'true')

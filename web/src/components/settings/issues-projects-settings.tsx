@@ -40,6 +40,9 @@ import {
 import { markdownPlainText } from "@/lib/markdown-plain-text";
 import { labelsForResource, toggleGroupedLabelIds } from "@/lib/labels";
 import { useI18n } from "@/i18n/i18n";
+import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
+import { normalizeHexColor, projectStatusStrokeColor } from "@/lib/project-status-color";
+import { useResolvedTheme } from "@/hooks/use-resolved-theme";
 import { MentionTextField } from "@/components/editor/mention-text-field";
 import type {
   BootstrapData,
@@ -1216,41 +1219,24 @@ export function StatusColorPicker({
   type,
   onChange,
   preview,
+  adjustContrast = false,
 }: {
   color: string;
   type: string;
   onChange: (color: string) => void;
   preview?: ReactNode;
+  /** Workflow statuses: note when the reference app darkens the colour for contrast on light surfaces. */
+  adjustContrast?: boolean;
 }) {
   const { t } = useI18n(),
-    satRef = useRef<HTMLDivElement>(null),
-    hsv = hexToHsv(color),
-    [draft, setDraft] = useState(color.toLowerCase());
+    theme = useResolvedTheme(),
+    [open, setOpen] = useState(false);
   const progress = type === "started" ? 0.7 : undefined;
-  const commit = (next: string) => {
-    const normalized = normalizeHex(next);
-    if (!normalized) return;
-    setDraft(normalized);
-    if (normalized === color.toLowerCase()) return;
-    onChange(normalized);
-  };
-  const pickSaturation = (clientX: number, clientY: number) => {
-    const rect = satRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    commit(
-      hsvToHex(
-        hsv.h,
-        clamp((clientX - rect.left) / rect.width),
-        clamp(1 - (clientY - rect.top) / rect.height),
-      ),
-    );
-  };
+  const hex = normalizeHexColor(color);
+  const adjusted =
+    adjustContrast && hex !== null && projectStatusStrokeColor(hex, theme) !== hex;
   return (
-    <Popover.Root
-      onOpenChange={(open) => {
-        if (open) setDraft(color.toLowerCase());
-      }}
-    >
+    <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button
           className="ip-status-color"
@@ -1273,154 +1259,34 @@ export function StatusColorPicker({
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content data-flow-motion="floating"
-          align="start"
-          className="ip-status-color-menu"
+          align="center"
+          className="csp-popover"
           collisionPadding={8}
-          sideOffset={4}
+          sideOffset={2}
           data-i18n-ignore
           onCloseAutoFocus={(event) => event.preventDefault()}
           onKeyDown={(event) => {
-            if (event.key === "Escape") event.stopPropagation();
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              event.preventDefault();
+              setOpen(false);
+            }
           }}
         >
-          <div className="ip-status-color-value">
-            <span aria-hidden="true" style={{ background: color }}>
-              <Check />
-            </span>
-            <label>
-              HEX
-              <input
-                aria-label="HEX"
-                spellCheck={false}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onBlur={() => {
-                  const normalized = normalizeHex(draft);
-                  if (normalized) commit(normalized);
-                  else setDraft(color.toLowerCase());
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    const normalized = normalizeHex(draft);
-                    if (normalized) commit(normalized);
-                  }
-                }}
-              />
-            </label>
-          </div>
-          <div className="ip-status-color-controls">
-            <div
-              aria-label={t("Saturation and brightness")}
-              aria-valuemax={100}
-              aria-valuemin={0}
-              aria-valuenow={Math.round(hsv.s * 100)}
-              className="ip-status-saturation"
-              onKeyDown={(event) => {
-                let s = hsv.s,
-                  v = hsv.v;
-                if (event.key === "ArrowLeft") s -= 0.01;
-                else if (event.key === "ArrowRight") s += 0.01;
-                else if (event.key === "ArrowDown") v -= 0.01;
-                else if (event.key === "ArrowUp") v += 0.01;
-                else return;
-                event.preventDefault();
-                commit(hsvToHex(hsv.h, clamp(s), clamp(v)));
-              }}
-              onPointerDown={(event) => {
-                event.currentTarget.setPointerCapture(event.pointerId);
-                pickSaturation(event.clientX, event.clientY);
-              }}
-              onPointerMove={(event) => {
-                if (event.currentTarget.hasPointerCapture(event.pointerId))
-                  pickSaturation(event.clientX, event.clientY);
-              }}
-              ref={satRef}
-              role="slider"
-              style={
-                { "--status-hue": `hsl(${hsv.h} 100% 50%)` } as CSSProperties
-              }
-              tabIndex={0}
-            >
-              <i
-                style={{
-                  left: `${hsv.s * 100}%`,
-                  top: `${(1 - hsv.v) * 100}%`,
-                }}
-              />
-            </div>
-            <div className="ip-status-hue-wrap">
-              <input
-                aria-label={t("Hue")}
-                max="360"
-                min="0"
-                onChange={(event) =>
-                  commit(hsvToHex(Number(event.target.value), hsv.s, hsv.v))
-                }
-                type="range"
-                value={Math.round(hsv.h)}
-              />
-              <i style={{ top: `${(hsv.h / 360) * 100}%` }} />
-            </div>
-          </div>
+          <ColorSwatchPicker
+            color={color}
+            framed
+            note={adjusted ? t("Contrast has been adjusted") : undefined}
+            surface="elevated"
+            onChange={(next, source) => {
+              if (next !== color.toLowerCase()) onChange(next);
+              if (source === "swatch") setOpen(false);
+            }}
+          />
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
   );
-}
-
-function clamp(value: number) {
-  return Math.min(1, Math.max(0, value));
-}
-function normalizeHex(value: string) {
-  const trimmed = value.trim();
-  const short = /^#?([0-9a-f]{3})$/i.exec(trimmed);
-  if (short)
-    return `#${short[1]
-      .split("")
-      .map((part) => part + part)
-      .join("")
-      .toLowerCase()}`;
-  const full = /^#?([0-9a-f]{6})$/i.exec(trimmed);
-  return full ? `#${full[1].toLowerCase()}` : null;
-}
-function hexToHsv(value: string) {
-  const normalized = normalizeHex(value) ?? "#8a8f98",
-    number = Number.parseInt(normalized.slice(1), 16),
-    r = ((number >> 16) & 255) / 255,
-    g = ((number >> 8) & 255) / 255,
-    b = (number & 255) / 255,
-    max = Math.max(r, g, b),
-    min = Math.min(r, g, b),
-    delta = max - min;
-  let h = 0;
-  if (delta) {
-    if (max === r) h = 60 * (((g - b) / delta) % 6);
-    else if (max === g) h = 60 * ((b - r) / delta + 2);
-    else h = 60 * ((r - g) / delta + 4);
-  }
-  return { h: h < 0 ? h + 360 : h, s: max === 0 ? 0 : delta / max, v: max };
-}
-function hsvToHex(h: number, s: number, v: number) {
-  const c = v * s,
-    x = c * (1 - Math.abs(((h / 60) % 2) - 1)),
-    m = v - c;
-  let r = 0,
-    g = 0,
-    b = 0;
-  if (h < 60) [r, g, b] = [c, x, 0];
-  else if (h < 120) [r, g, b] = [x, c, 0];
-  else if (h < 180) [r, g, b] = [0, c, x];
-  else if (h < 240) [r, g, b] = [0, x, c];
-  else if (h < 300) [r, g, b] = [x, 0, c];
-  else [r, g, b] = [c, 0, x];
-  return `#${[r, g, b]
-    .map((part) =>
-      Math.round((part + m) * 255)
-        .toString(16)
-        .padStart(2, "0"),
-    )
-    .join("")}`;
 }
 
 function formatDuration(minutes: number, t: (value: string) => string) {
