@@ -13,7 +13,7 @@
 .pt-list-card>header h3{margin:0;padding-bottom:2px;color:var(--pt-text);font-size:13px;font-weight:450;line-height:normal}
 .pt-list-card>header button{box-sizing:border-box;height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 12px 0 10px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--pt-text-2);font-family:inherit;font-size:13px;font-weight:500;line-height:normal}
 .pt-list-card>header button svg{width:16px;height:16px;flex:none}
-.pt-list-card>header button:hover{background:var(--pt-pill-hover-bg)}
+.pt-list-card>header button:hover{background:var(--pt-list-button-hover-bg);color:var(--pt-text)}
 .pt-list-row{position:relative;box-sizing:border-box;height:64px;display:grid;grid-template-columns:44px minmax(0,1fr) 24px;align-items:center;padding:0 16px;border-top:.5px solid var(--pt-border)}
 .pt-list-row:hover{background:var(--pt-row-hover-bg)}
 .pt-row-link{position:absolute;z-index:1;inset:0;padding:0;border:0;background:transparent}
@@ -196,3 +196,9 @@ html:root body .property-command-surface.pt-picker .property-command-icon:has(.p
 @media (prefers-reduced-motion:reduce){
   .pt-pill,.pt-button,.pt-back,.pt-section-title svg,.pt-create-more input,.pt-create-more input::after{transition:none}
 }
+
+/* The card inside a team's Settings › Templates section (Issue / Project / Document templates). */
+.tpl-section>.pt-list-card{margin-top:16px}
+.pt-list-row.is-inherited{cursor:default}
+.pt-list-row.is-inherited:hover{background:transparent}
+.pt-row-text small b{font-weight:inherit}
