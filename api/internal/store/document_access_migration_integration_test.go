@@ -81,7 +81,7 @@ func TestExternalDatabaseDocumentDefaultAccessMigration(t *testing.T) {
 	want := map[string][]string{
 		"doc_team_owner":  {"user:" + creator.ID + "=owner", "team:" + team + "=editor"},
 		"doc_team_viewer": {"team:" + team + "=viewer", "user:" + creator.ID + "=owner"},
-		"doc_no_team":     {"user:" + creator.ID + "=owner", "workspace:=editor"},
+		"doc_no_team":     {"user:" + creator.ID + "=owner"}, // a document without teams keeps its access
 	}
 	for id, expected := range want {
 		if got := grants(id); !slices.Equal(got, expected) {

@@ -159,7 +159,6 @@ func runLoopScale(t *testing.T, count int, auth bool) {
 	timed("GET /api/bootstrap", http.MethodGet, "/api/bootstrap", nil, http.StatusOK)
 }
 
-
 // Loop mutations run on workspace metadata without the issue collection;
 // issue identifiers in markdown instructions still become mention chips.
 func TestLoopMarkdownInstructionsResolveIssueMentions(t *testing.T) {

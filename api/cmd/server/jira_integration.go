@@ -258,4 +258,3 @@ func ensureJiraLinksCleared(data *domain.Bootstrap, provider string) {
 	}
 	data.JiraLinks = nil
 }
-

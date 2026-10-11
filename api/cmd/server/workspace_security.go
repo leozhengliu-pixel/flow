@@ -145,13 +145,12 @@ func (s *server) workspaceAccessStatus(w http.ResponseWriter, r *http.Request) {
 		"allowedAuthServices": services,
 		"allowedAuthLabels":   authServiceLabels(services),
 		"workspace": map[string]any{
-			"name":                 data.Workspace.Name,
-			"urlKey":               data.Workspace.URLKey,
-			"deletionRequestedAt":  data.Workspace.DeletionRequestedAt,
+			"name":                data.Workspace.Name,
+			"urlKey":              data.Workspace.URLKey,
+			"deletionRequestedAt": data.Workspace.DeletionRequestedAt,
 		},
 	})
 }
-
 
 func ensureAllowedAuthServices(input *domain.WorkspaceSettings, previous domain.WorkspaceSettings, patch map[string]json.RawMessage) {
 	if input == nil {

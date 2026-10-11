@@ -189,7 +189,9 @@ func (s *server) putReviewPreview(w http.ResponseWriter, r *http.Request) {
 		return review.ID == r.PathValue("id") || review.SlugID == r.PathValue("id")
 	})
 	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "code_review.preview", r.PathValue("id"), input, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool { return item.ID == r.PathValue("id") || item.SlugID == r.PathValue("id") })
+		index := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
+			return item.ID == r.PathValue("id") || item.SlugID == r.PathValue("id")
+		})
 		if index < 0 {
 			return errNotFound
 		}
