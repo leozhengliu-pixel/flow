@@ -82,6 +82,16 @@ describe('DocumentTemplateEditor', () => {
     expect(api.createDocumentTemplate).not.toHaveBeenCalled()
   })
 
+  it('saves the colour picked for the template icon and shows it on the icon', async () => {
+    const user = userEvent.setup()
+    mount(saved, 'team-1')
+    await user.click(screen.getByRole('button', { name: 'Document icon' }))
+    await user.click(screen.getByRole('button', { name: 'Color #5e6ad2' }))
+    expect(screen.getByRole('button', { name: 'Document icon' }).querySelector('svg')).toHaveStyle({ color: '#5e6ad2' })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(api.updateDocumentTemplate).toHaveBeenCalledWith('tpl-1', expect.objectContaining({ icon: 'Page', color: '#5e6ad2' })))
+  })
+
   it('deletes an existing template from its menu after confirming, then closes', async () => {
     const user = userEvent.setup()
     confirm.confirmTemplateAction.mockResolvedValue(true)

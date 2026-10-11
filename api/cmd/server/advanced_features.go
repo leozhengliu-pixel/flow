@@ -431,6 +431,9 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
 		if template != nil {
 			created.Icon, created.Content, created.ContentState = template.Icon, template.Content, template.ContentState
+			if template.Color != "" {
+				created.Color = template.Color
+			}
 			if template.ContentData != nil {
 				created.ContentData = template.ContentData
 			}

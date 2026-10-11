@@ -1441,6 +1441,7 @@ type DocumentTemplateMutation = Partial<
     | "description"
     | "title"
     | "icon"
+    | "color"
     | "content"
     | "contentState"
     | "contentData"

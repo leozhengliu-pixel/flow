@@ -230,6 +230,7 @@ export type DocumentTemplateAppliedDetail = { documentId: string; template: Docu
 export async function applyTemplateToDocument(ctx: DocumentActionContext, document: FlowDocument, template: DocumentTemplate) {
   const applied = await guarded(ctx, () => updateDocument(document.id, {
     title: template.title ?? '', icon: template.icon ?? '', content: template.content ?? '',
+    ...(template.color ? { color: template.color } : {}),
     // The template's editor state keeps rich content (mentions, tables) exactly; Markdown alone would flatten it.
     ...(template.contentData ? { contentData: template.contentData } : {}),
     ...(template.contentState ? { contentState: template.contentState } : {}),
