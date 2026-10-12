@@ -1,0 +1,6 @@
+.application-team-access{margin:12px 0;padding:0;border:0;min-width:0}
+.application-team-access legend{margin-bottom:8px;color:var(--theme-text-secondary);font-size:12px}
+.application-team-access label{display:flex;align-items:center;gap:8px;min-height:32px;margin:0;font-size:13px;color:var(--theme-text-primary)}
+.application-team-access input{width:14px;height:14px;flex:none;accent-color:var(--accent-primary)}
+.application-team-access .application-team-options{max-height:200px;overflow:auto;margin:6px 0 0 22px;padding:4px 8px;border:1px solid var(--theme-border-strong);border-radius:6px}
+.application-team-options span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

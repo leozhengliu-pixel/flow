@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -41,6 +42,9 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 		return result, err
 	}
 	key := result.Key
+	if key.GrantType == "" && key.AuthorizationID == "" && strings.HasPrefix(key.OAuthClientID, "flow_client_") {
+		return result, ErrAuthForbidden
+	}
 	if subtle.ConstantTimeCompare([]byte(key.SecretHash), []byte(hash)) != 1 || key.RevokedAt != nil || key.ExpiresAt != nil && !key.ExpiresAt.After(time.Now().UTC()) {
 		return result, ErrAuthForbidden
 	}
@@ -52,12 +56,12 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 	if err := json.Unmarshal(raw, &result.Workspace); err != nil {
 		return result, err
 	}
-	role, status, err := s.WorkspaceRole(ctx, result.Workspace.ID, key.CreatorID)
+	role, status, err := s.WorkspaceRole(ctx, result.Workspace.ID, key.SubjectID())
 	if err != nil || status != "active" {
 		return result, ErrAuthForbidden
 	}
 	result.Role = role
-	result.User, err = s.UserByID(ctx, key.CreatorID)
+	result.User, err = s.UserByID(ctx, key.SubjectID())
 	if err != nil {
 		return result, err
 	}
@@ -69,11 +73,29 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 		if err != nil || !app.Active || app.WorkspaceKey != workspace || key.OAuthClientID != app.ClientID || !slices.Contains(app.Scopes, "read") {
 			return result, ErrAuthForbidden
 		}
-		if slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) }) {
+		if key.Scopes == nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) }) {
 			return result, ErrAuthForbidden
 		}
+		result.Key.Actor = "app"
+		teams := slices.Clone(app.AccessTeamIDs())
+		if key.TeamRestriction == "selected" || key.TeamRestriction == "" && len(key.TeamIDs) > 0 {
+			teams = slices.DeleteFunc(teams, func(id string) bool { return !slices.Contains(key.TeamIDs, id) })
+		}
 		result.Key.TeamRestriction = "selected"
-		result.Key.TeamIDs = slices.Clone(app.TeamIDs)
+		result.Key.TeamIDs = teams
+	}
+	if key.GrantType == "client_credentials" || key.GrantType == "developer_token" || strings.HasPrefix(key.OAuthClientID, "flow_client_") {
+		home, ok := s.OAuthApplicationHome(key.OAuthClientID)
+		if !ok {
+			return result, ErrAuthForbidden
+		}
+		client, err := s.workspaceOAuthApplication(ctx, home, key.OAuthClientID)
+		if err != nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(client.Scopes, scope) }) {
+			return result, ErrAuthForbidden
+		}
+		if key.GrantType == "client_credentials" && (!client.SupportsClientCredentials || key.ClientSecretHash == "" || subtle.ConstantTimeCompare([]byte(key.ClientSecretHash), []byte(tokenHash(client.ClientSecret))) != 1) {
+			return result, ErrAuthForbidden
+		}
 	}
 	if key.AuthorizationID != "" {
 		var authorization domain.OAuthAuthorization
@@ -86,7 +108,7 @@ func (s *SQLiteStore) AuthenticateAPIKeyRecord(ctx context.Context, workspaceHin
 		if err := json.Unmarshal(raw, &authorization); err != nil {
 			return result, err
 		}
-		if authorization.RevokedAt != nil || authorization.UserID != key.CreatorID || authorization.ClientID != key.OAuthClientID || key.Scopes == nil && authorization.Scopes != nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(authorization.Scopes, scope) }) {
+		if authorization.RevokedAt != nil || authorization.UserID != key.SubjectID() || authorization.ClientID != key.OAuthClientID || key.Scopes == nil && authorization.Scopes != nil || slices.ContainsFunc(key.Scopes, func(scope string) bool { return !slices.Contains(authorization.Scopes, scope) }) {
 			return result, ErrAuthForbidden
 		}
 	}

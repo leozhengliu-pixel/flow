@@ -17,11 +17,12 @@ import (
 )
 
 var personalOAuthScopes = []string{"read", "write", "openid", "email"}
-var supportedOAuthScopes = []string{"read", "write", "openid", "email", "app:mentionable", "app:assignable"}
+var supportedOAuthScopes = append(slices.Clone(personalOAuthScopes), domain.ApplicationScopes()[2:]...)
 
 type oauthAuthorizationRequest struct {
 	Actor               string   `json:"actor,omitempty"`
 	TeamIDs             []string `json:"teamIds,omitempty"`
+	AllPublicTeams      bool     `json:"allPublicTeams,omitempty"`
 	ClientID            string   `json:"clientId"`
 	RedirectURI         string   `json:"redirectUri"`
 	ResponseType        string   `json:"responseType"`
@@ -66,9 +67,9 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 		"registration_endpoint":                 base + "/oauth/register",
 		"revocation_endpoint":                   base + "/oauth/revoke",
 		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
 		"code_challenge_methods_supported":      []string{"S256"},
-		"token_endpoint_auth_methods_supported": []string{"none"},
+		"token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "client_secret_post"},
 		"scopes_supported":                      scopes,
 	})
 }
@@ -153,6 +154,13 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 		writeOAuthError(w, http.StatusForbidden, "access_denied", "No accessible workspace")
 		return
 	}
+	if client.HomeWorkspaceKey != "" && !client.PublicEnabled {
+		account.Workspaces = slices.DeleteFunc(account.Workspaces, func(item domain.WorkspaceMembership) bool { return item.Workspace.URLKey != client.HomeWorkspaceKey })
+		if len(account.Workspaces) == 0 {
+			writeOAuthError(w, 403, "access_denied", "This application is private to its workspace")
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"client":      client,
 		"actor":       request.Actor,
@@ -192,12 +200,17 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	if input.Actor == "app" && (!workspaceAdminRole(workspace.ViewerRole) || len(input.TeamIDs) == 0) {
+	if client.HomeWorkspaceKey != "" && !client.PublicEnabled && client.HomeWorkspaceKey != workspace.Workspace.URLKey {
+		writeOAuthError(w, 403, "access_denied", "This application is private to its workspace")
+		return
+	}
+	if input.Actor == "app" && (!workspaceAdminRole(workspace.ViewerRole) || !input.AllPublicTeams && len(input.TeamIDs) == 0) {
 		writeOAuthError(w, 403, "access_denied", "An administrator must select the teams this application can access")
 		return
 	}
 	authorizationID := fmt.Sprintf("oauth_authorization_%d", time.Now().UnixNano())
-	if !applicationApproved(&workspace, client.ClientID, scopes) {
+	ownWorkspace, ownApplication := s.store.OAuthApplicationHome(client.ClientID)
+	if !(ownApplication && ownWorkspace == workspace.Workspace.URLKey) && !applicationApproved(&workspace, client.ClientID, scopes) {
 		err := s.store.RequestOAuthApplicationApproval(r.Context(), workspace.Workspace.URLKey, client.ClientID, func(data *domain.Bootstrap) error {
 			items := applicationPolicies(data)
 			index := slices.IndexFunc(items, func(item applicationPolicy) bool { return item.ID == client.ClientID })
@@ -230,6 +243,7 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	grant.Actor = input.Actor
 	grant.InstallerID = actor.ID
 	grant.TeamIDs = input.TeamIDs
+	grant.AllPublicTeams = input.AllPublicTeams
 	_, err = s.store.CreateOAuthAuthorizationGrant(r.Context(), code, grant, domain.OAuthAuthorization{ID: authorizationID, ClientID: client.ClientID, ClientName: client.ClientName, UserID: actor.ID, Scopes: scopes, CreatedAt: time.Now().UTC()}, applicationApproved)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
@@ -257,10 +271,12 @@ func (s *server) exchangeMCPToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch r.Form.Get("grant_type") {
+	case "client_credentials":
+		s.issueClientCredentials(w, r, r.Form)
 	case "authorization_code", "refresh_token":
 		s.issueOAuthTokens(w, r)
 	default:
-		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "Supported grants: authorization_code, refresh_token")
+		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "Supported grants: authorization_code, refresh_token, client_credentials")
 	}
 }
 
@@ -340,7 +356,7 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 	if request.CodeChallenge == "" || request.CodeChallengeMethod != "S256" {
 		return client, nil, fmt.Errorf("S256 PKCE code challenge is required")
 	}
-	scopes := normalizedStrings(strings.Fields(request.Scope))
+	scopes := normalizedStrings(strings.Fields(strings.ReplaceAll(request.Scope, ",", " ")))
 	if request.Actor != "app" {
 		scopes = slices.DeleteFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") })
 	}
@@ -350,11 +366,21 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 	if request.Actor == "app" && (!slices.Contains(scopes, "read") || slices.Contains(scopes, "email") || slices.Contains(scopes, "openid")) {
 		return client, nil, fmt.Errorf("app authorization requires read and cannot request personal identity scopes")
 	}
+	if request.Actor == "app" {
+		var err error
+		scopes, err = domain.NormalizeApplicationScopes(scopes)
+		if err != nil {
+			return client, nil, err
+		}
+	}
 	if slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(supportedOAuthScopes, scope) }) {
 		return client, nil, fmt.Errorf("one or more requested scopes are unsupported")
 	}
 	if strings.HasSuffix(request.Resource, "/mcp/readonly") && slices.Contains(scopes, "write") {
 		return client, nil, fmt.Errorf("the read-only MCP endpoint does not accept write scope")
+	}
+	if client.AllowedScopes != nil && slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(client.AllowedScopes, scope) }) {
+		return client, nil, fmt.Errorf("requested scopes exceed the application's configured permissions")
 	}
 	return client, scopes, nil
 }
@@ -366,7 +392,11 @@ func oauthRequestFromQuery(query url.Values) oauthAuthorizationRequest {
 func oauthScopeLabels(scopes []string) []string {
 	labels := []string{}
 	for _, scope := range scopes {
-		labels = append(labels, map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address", "app:mentionable": "Mention application", "app:assignable": "Delegate issues to application"}[scope])
+		label := map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address", "app:mentionable": "Mention application", "app:assignable": "Delegate issues to application"}[scope]
+		if label == "" {
+			label = scope
+		}
+		labels = append(labels, label)
 	}
 	return labels
 }

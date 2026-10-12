@@ -28,6 +28,17 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 		limit = 30
 	}
 	types := searchTypes(r.URL.Query().Get("types"))
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok && key.Actor == "app" {
+		if !apiKeyHasScope(key, "initiative:read") && !apiKeyHasScope(key, "initiative:write") {
+			delete(types, "initiative")
+		}
+		if !apiKeyHasScope(key, "customer:read") && !apiKeyHasScope(key, "customer:write") {
+			delete(types, "customer")
+		}
+		if !apiKeyHasScope(key, "release:read") {
+			delete(types, "release")
+		}
+	}
 	userID := policy.Viewer.ID
 	if query != "" {
 		_ = s.store.RecordSearch(r.Context(), policy.Workspace.ID, userID, query)
@@ -46,6 +57,9 @@ func (s *server) searchWorkspace(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		issueRecordsError(w, err)
 		return
+	}
+	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
+		filterApplicationScopeProjection(&data, key)
 	}
 	results := []domain.SearchResult{}
 	if query != "" {

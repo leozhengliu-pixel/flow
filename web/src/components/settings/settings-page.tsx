@@ -3599,11 +3599,15 @@ function OAuthEditor({
     app?.redirectUris.join("\n") ?? "",
   );
   const [scopes, setScopes] = useState(app?.scopes.join(", ") ?? "read");
+  const [clientCredentials, setClientCredentials] = useState(app?.supportsClientCredentials ?? false);
+  const [publicEnabled, setPublicEnabled] = useState(app?.publicEnabled ?? false);
   const save = async () => {
     try {
       const input = {
         name,
         description,
+        supportsClientCredentials: clientCredentials,
+        publicEnabled,
         redirectUris: redirects.split(/\s+/).filter(Boolean),
         scopes: scopes
           .split(",")
@@ -3659,6 +3663,14 @@ function OAuthEditor({
             value={scopes}
             onChange={(event) => setScopes(event.target.value)}
           />
+        </label>
+        <label className="settings-toggle-row">
+          Client credentials
+          <Toggle label="Client credentials" checked={clientCredentials} onChange={setClientCredentials}/>
+        </label>
+        <label className="settings-toggle-row">
+          Allow installation in other workspaces
+          <Toggle label="Allow installation in other workspaces" checked={publicEnabled} onChange={setPublicEnabled}/>
         </label>
         <footer>
           {app && (

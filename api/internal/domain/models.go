@@ -6,16 +6,17 @@ import (
 )
 
 type User struct {
-	App              bool       `json:"app,omitempty"`
-	BuiltinAgent     bool       `json:"builtinAgent,omitempty"`
-	OAuthClientID    string     `json:"oauthClientId,omitempty"`
-	AppScopes        []string   `json:"appScopes,omitempty"`
-	AppTeamIDs       []string   `json:"appTeamIds,omitempty"`
-	OutOfOfficeUntil *time.Time `json:"outOfOfficeUntil,omitempty"`
-	ID               string     `json:"id"`
-	UserID           string     `json:"userId,omitempty"`
-	Name             string     `json:"name"`
-	DisplayName      string     `json:"displayName"`
+	App               bool       `json:"app,omitempty"`
+	BuiltinAgent      bool       `json:"builtinAgent,omitempty"`
+	OAuthClientID     string     `json:"oauthClientId,omitempty"`
+	AppScopes         []string   `json:"appScopes,omitempty"`
+	AppTeamIDs        []string   `json:"appTeamIds,omitempty"`
+	AppAllPublicTeams bool       `json:"appAllPublicTeams,omitempty"`
+	OutOfOfficeUntil  *time.Time `json:"outOfOfficeUntil,omitempty"`
+	ID                string     `json:"id"`
+	UserID            string     `json:"userId,omitempty"`
+	Name              string     `json:"name"`
+	DisplayName       string     `json:"displayName"`
 	// Username is the workspace-unique handle (the reference app's "username"), derived
 	// per request from account settings or the email local part.
 	Username      string `json:"username,omitempty"`
@@ -1431,13 +1432,18 @@ type CustomEmoji struct {
 }
 
 type APIKey struct {
-	ID         string   `json:"id"`
-	Name       string   `json:"name"`
-	Prefix     string   `json:"prefix"`
-	SecretHash string   `json:"secretHash,omitempty"`
-	CreatorID  string   `json:"creatorId"`
-	Scopes     []string `json:"scopes"`
-	TeamIDs    []string `json:"teamIds"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Prefix           string   `json:"prefix"`
+	SecretHash       string   `json:"secretHash,omitempty"`
+	CreatorID        string   `json:"creatorId"`
+	SubjectUserID    string   `json:"subjectUserId,omitempty"`
+	IssuedByUserID   string   `json:"issuedByUserId,omitempty"`
+	Actor            string   `json:"actor,omitempty"`
+	GrantType        string   `json:"grantType,omitempty"`
+	ClientSecretHash string   `json:"clientSecretHash,omitempty"`
+	Scopes           []string `json:"scopes"`
+	TeamIDs          []string `json:"teamIds"`
 	// TeamRestriction distinguishes an unrestricted key ("all") from a key
 	// explicitly constrained to the selected TeamIDs ("selected"). Empty is
 	// treated as "all" for backwards compatibility with existing records.
@@ -1474,6 +1480,9 @@ type PasskeyRegistrationChallenge struct {
 type OAuthClient struct {
 	ClientID                string    `json:"client_id"`
 	ClientName              string    `json:"client_name"`
+	AllowedScopes           []string  `json:"allowed_scopes,omitempty"`
+	HomeWorkspaceKey        string    `json:"-"`
+	PublicEnabled           bool      `json:"-"`
 	ClientURI               string    `json:"client_uri,omitempty"`
 	LogoURI                 string    `json:"logo_uri,omitempty"`
 	RedirectURIs            []string  `json:"redirect_uris"`
@@ -1487,6 +1496,7 @@ type OAuthAuthorizationCode struct {
 	Actor           string    `json:"actor,omitempty"`
 	InstallerID     string    `json:"installerId,omitempty"`
 	TeamIDs         []string  `json:"teamIds,omitempty"`
+	AllPublicTeams  bool      `json:"allPublicTeams,omitempty"`
 	ClientID        string    `json:"clientId"`
 	WorkspaceKey    string    `json:"workspaceKey"`
 	UserID          string    `json:"userId"`
@@ -1501,6 +1511,7 @@ type OAuthRefreshGrant struct {
 	Actor           string    `json:"actor,omitempty"`
 	InstallerID     string    `json:"installerId,omitempty"`
 	TeamIDs         []string  `json:"teamIds,omitempty"`
+	AllPublicTeams  bool      `json:"allPublicTeams,omitempty"`
 	ClientID        string    `json:"clientId"`
 	WorkspaceKey    string    `json:"workspaceKey"`
 	UserID          string    `json:"userId"`
@@ -1523,17 +1534,20 @@ type OAuthAuthorization struct {
 }
 
 type OAuthApplication struct {
-	ID           string    `json:"id"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description,omitempty"`
-	LogoURL      string    `json:"logoUrl,omitempty"`
-	ClientID     string    `json:"clientId"`
-	ClientSecret string    `json:"clientSecret,omitempty"`
-	RedirectURIs []string  `json:"redirectUris"`
-	Scopes       []string  `json:"scopes"`
-	CreatorID    string    `json:"creatorId"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID                        string    `json:"id"`
+	Name                      string    `json:"name"`
+	Description               string    `json:"description,omitempty"`
+	LogoURL                   string    `json:"logoUrl,omitempty"`
+	ClientID                  string    `json:"clientId"`
+	ClientSecret              string    `json:"clientSecret,omitempty"`
+	RedirectURIs              []string  `json:"redirectUris"`
+	Scopes                    []string  `json:"scopes"`
+	SupportsClientCredentials bool      `json:"supportsClientCredentials"`
+	CredentialsAuthorizedBy   string    `json:"credentialsAuthorizedBy,omitempty"`
+	PublicEnabled             bool      `json:"publicEnabled"`
+	CreatorID                 string    `json:"creatorId"`
+	CreatedAt                 time.Time `json:"createdAt"`
+	UpdatedAt                 time.Time `json:"updatedAt"`
 }
 
 type Webhook struct {

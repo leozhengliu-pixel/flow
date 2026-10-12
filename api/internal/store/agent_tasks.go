@@ -46,7 +46,7 @@ func syncApplicationTask(ctx context.Context, tx *sqlTx, workspace string, issue
 	if err := json.Unmarshal(appRaw, &app); err != nil {
 		return err
 	}
-	if !app.User().CanDelegateTo(issue.Team.ID) {
+	if !app.User().CanDelegateToTeam(issue.Team) {
 		return ErrAuthForbidden
 	}
 	actor, _ := ctx.Value(actorContextKey{}).(domain.User)
@@ -149,16 +149,35 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, ErrIssueVersion
 	}
 	terminal := task.Status == "complete" || task.Status == "error" || task.Status == "canceled"
-	if terminal && activity.Type != "retry" || !terminal && activity.Type == "retry" {
+	if terminal && activity.Type != "retry" && activity.Type != "prompt" && activity.Type != "feedback" || !terminal && activity.Type == "retry" {
 		return task, ErrIssueVersion
 	}
-	if task.Status == "awaitingInput" && activity.Type != "prompt" && activity.Type != "canceled" {
-		return task, ErrIssueVersion
-	}
-	if task.Status != "awaitingInput" && activity.Type == "prompt" {
+	if task.Status == "awaitingInput" && activity.Type != "prompt" && activity.Type != "canceled" && activity.Type != "feedback" && (activity.Type != "thought" || task.PendingTool != nil) {
 		return task, ErrIssueVersion
 	}
 	switch activity.Type {
+	case "feedback":
+		if task.Status == "pending" || task.Status == "active" || activity.ActorID == "" || activity.Body == "" || len(activity.Body) > 32 || strings.TrimSpace(activity.Body) != activity.Body {
+			return task, ErrIssueQuery
+		}
+		targetID, _ := activity.Metadata["activityId"].(string)
+		if _, ok := activity.Metadata["enabled"].(bool); !ok {
+			return task, ErrIssueQuery
+		}
+		var raw []byte
+		var target domain.AgentActivity
+		if err := s.db.QueryRowContext(ctx, `SELECT data FROM application_agent_activities WHERE session_id=? AND id=?`, id, targetID).Scan(&raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return task, ErrIssueQuery
+			}
+			return task, err
+		}
+		if err := json.Unmarshal(raw, &target); err != nil {
+			return task, err
+		}
+		if target.Type != "response" && target.Type != "elicitation" && target.Type != "error" {
+			return task, ErrIssueQuery
+		}
 	case "thought", "action", "output":
 		task.Status = "active"
 	case "response":
@@ -170,6 +189,11 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		task.PendingTool = activity.ToolCall
 	case "prompt":
 		task.Status = "pending"
+		if activity.Signal == "stop" {
+			task.Status = "canceled"
+			task.PendingTool = nil
+			break
+		}
 		if task.PendingTool != nil {
 			if activity.ToolCall == nil || (activity.ToolCall.Status != "approved" && activity.ToolCall.Status != "rejected") {
 				return task, ErrIssueQuery
@@ -183,6 +207,8 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		task.PendingTool = nil
 	case "canceled":
 		task.Status = "canceled"
+		task.PendingTool = nil
+		activity.Signal = "stop"
 	default:
 		return task, ErrIssueQuery
 	}
@@ -243,11 +269,12 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	}
 	if sink := s.realtime(); sink != nil {
 		// Clients refresh the task panel of this resource on the push instead of polling.
-		resource := task.IssueID
-		if resource == "" {
-			resource = task.ResourceID
+		resourceID := task.IssueID
+		if resourceID == "" {
+			resourceID = task.ResourceID
 		}
-		sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d", id, task.Version), Type: "agent_task.updated", AggregateID: resource, CreatedAt: task.UpdatedAt})
+		payload, _ := json.Marshal(map[string]any{"taskId": task.ID, "resourceId": resourceID, "resourceType": task.ResourceType, "version": task.Version})
+		sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d", id, task.Version), Type: "agent_task.updated", AggregateID: resourceID, Payload: payload, CreatedAt: task.UpdatedAt})
 	}
 	return task, nil
 }

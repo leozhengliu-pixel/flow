@@ -186,7 +186,7 @@ func TestAPIKeyScopesAndTeamProjection(t *testing.T) {
 	if writeResponse.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("read-only key write status = %d", writeResponse.StatusCode)
 	}
-	app := authRequest[domain.OAuthApplication](t, admin, http.MethodPost, server.URL+"/api/oauth-applications", map[string]any{"name": "Automation client", "redirectUris": []string{}, "scopes": []string{"read"}}, "test-workspace", http.StatusCreated)
+	app := authRequest[domain.OAuthApplication](t, admin, http.MethodPost, server.URL+"/api/oauth-applications", map[string]any{"name": "Automation client", "redirectUris": []string{}, "scopes": []string{"read"}, "supportsClientCredentials": true}, "test-workspace", http.StatusCreated)
 	token := authRequest[struct {
 		AccessToken string `json:"access_token"`
 	}](t, authClient(t), http.MethodPost, server.URL+"/api/oauth/token", map[string]string{"grant_type": "client_credentials", "client_id": app.ClientID, "client_secret": app.ClientSecret}, "test-workspace", http.StatusOK)

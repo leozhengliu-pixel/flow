@@ -21,6 +21,7 @@ import type {
 import { applicationEditPath } from "@/lib/app-routes";
 
 import { ApplicationHeader } from "./application-header";
+import { ApplicationCredentials } from './application-credentials';
 import {
   SettingsPageTitle as PageTitle,
   SettingsRow as Row,
@@ -155,6 +156,7 @@ export function ApplicationDetailsPage({
           }
         />
       </Section>
+      <ApplicationCredentials app={app} onReload={onReload}/>
       <Section title="Delivery failures">
         {loading ? (
           <p className="application-muted">Loading failures…</p>

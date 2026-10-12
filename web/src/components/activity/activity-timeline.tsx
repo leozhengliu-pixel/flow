@@ -3,7 +3,8 @@ import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, R
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
 import { Composer } from '@/components/editor/composer'
-import { useRef, useState } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { useAgentCommentThreadIds } from '@/components/agent/issue-agent-task-context'
 import { toast } from '@/lib/toast'
 import { useActivityHighlight, useActivityHighlightTarget, type ActivityHighlightTarget } from './activity-highlight'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
@@ -36,6 +37,7 @@ export function ActivityTimeline({
   onUpload,
   threadSubscriptions,
   onThreadSubscription,
+  renderAgentThread,
 }: {
   events: ActivityEvent[]
   comments: Comment[]
@@ -54,8 +56,10 @@ export function ActivityTimeline({
   /** The viewer's explicit thread choices; participants follow threads implicitly. */
   threadSubscriptions?: ThreadSubscription[]
   onThreadSubscription?: (commentId: string, state: ThreadSubscriptionState | null) => Promise<void>
+  renderAgentThread?: (comment: Comment) => ReactNode
 }) {
   const { t } = useI18n()
+  const agentCommentIds = useAgentCommentThreadIds()
   const [threadOverrides, setThreadOverrides] = useState<Record<string, ThreadSubscriptionState | null>>({})
   const explicitThreadState = (rootId: string): ThreadSubscriptionState | null => rootId in threadOverrides
     ? threadOverrides[rootId]
@@ -272,7 +276,7 @@ export function ActivityTimeline({
                       />
                     </article>
                   ))}
-                  {replying === item.id ? (
+                  {agentCommentIds.has(item.id) && renderAgentThread ? renderAgentThread(item) : replying === item.id ? (
                     <div className="comment-thread__composer">
                       <Composer
                         compact

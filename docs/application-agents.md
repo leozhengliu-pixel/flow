@@ -5,6 +5,10 @@ or administrator. They are distinct from the person who installed them. An
 application's issue edits, comments and agent activities are attributed to that
 identity.
 
+For registration, OAuth installation, machine credentials, REST examples and a
+runnable external Agent, see the [developer guide](developers.md)
+([简体中文](developers.zh-CN.md)).
+
 ## Enable the Built-in Agent
 
 1. Configure the existing Flow Agent provider. The Responses, Messages and Chat
@@ -63,6 +67,11 @@ retain the existing personal OAuth behavior.
 | `write` | Use permitted resource mutation APIs within those teams |
 | `app:mentionable` | Start a task from a structured mention in an issue, project or document comment |
 | `app:assignable` | Accept issue delegation |
+
+Team access supports all public teams, public teams plus selected private teams,
+or selected teams only. Public-team grants include public teams created later;
+private teams require an explicit grant. Current access is checked when tokens
+and task callbacks are used.
 
 An application with either agent capability can report its own task activities
 without receiving general `write` access. It cannot request `admin`, `openid` or
@@ -164,6 +173,13 @@ Structured comment mentions use the editor's `mention` node with the app
 user ID; plain matching text does not execute agents. Re-saving the same comment
 does not duplicate the mention task, and an application cannot recursively invoke
 another agent through its own comments.
+
+External applications may stream `thought` and `output` chunks, then finalize
+with `response`. The UI groups chunks and renders Markdown in the original
+source-comment thread. `elicitation` supports `select` options and targeted
+HTTPS `auth` links. Human replies can continue both waiting and completed
+conversations; stop clears pending execution. See the bilingual developer guide
+for signal schemas and the runnable streaming model example.
 
 ## Operational Boundaries
 

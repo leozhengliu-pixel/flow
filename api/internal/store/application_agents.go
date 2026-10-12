@@ -62,6 +62,9 @@ func (s *SQLiteStore) ApplicationByUser(ctx context.Context, id string) (domain.
 	err := s.db.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE user_id=?`, id).Scan(&raw)
 	if err == nil {
 		err = json.Unmarshal(raw, &a)
+		if err == nil {
+			s.resolveApplicationAccess(&a)
+		}
 	}
 	return a, err
 }
@@ -84,11 +87,35 @@ func (s *SQLiteStore) ListApplications(ctx context.Context, workspace string) ([
 		}
 		out = append(out, a)
 	}
+	for index := range out {
+		s.resolveApplicationAccess(&out[index])
+	}
 	return out, rows.Err()
 }
 
+func (s *SQLiteStore) resolveApplicationAccess(a *domain.ApplicationInstallation) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	data := s.workspaces[a.WorkspaceKey]
+	a.ResolveTeamAccess(data.Teams, data.TeamSettings)
+	found := false
+	for _, data := range s.workspaces {
+		for _, app := range data.OAuthApplications {
+			if app.ClientID != a.ClientID {
+				continue
+			}
+			found = true
+			a.Name, a.AvatarURL = app.Name, app.LogoURL
+			a.Scopes = slices.DeleteFunc(slices.Clone(a.Scopes), func(scope string) bool { return !slices.Contains(app.Scopes, scope) })
+		}
+	}
+	if !found && strings.HasPrefix(a.ClientID, "flow_client_") {
+		a.Active = false
+	}
+}
+
 // Installation creates a non-login principal and its memberships in the same
-// transaction. Public teams are not implicitly granted to applications.
+// transaction. Public-team access is an explicit grant, not team membership.
 func (s *SQLiteStore) installApplicationTx(ctx context.Context, tx *sqlTx, lock string, current domain.Bootstrap, a domain.ApplicationInstallation, secret string) (domain.Bootstrap, domain.ApplicationInstallation, error) {
 	var role, status string
 	if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`+lock, current.Workspace.ID, a.InstalledBy).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
@@ -101,7 +128,7 @@ func (s *SQLiteStore) installApplicationTx(ctx context.Context, tx *sqlTx, lock 
 // workspace membership, team memberships and user record. Callers authorize.
 func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sqlTx, lock string, current domain.Bootstrap, a domain.ApplicationInstallation, secret string) (domain.Bootstrap, domain.ApplicationInstallation, error) {
 	a.WorkspaceKey = current.Workspace.URLKey
-	if a.ClientID == "" || a.Name == "" || len(a.Name) > 200 || len(a.TeamIDs) == 0 {
+	if a.ClientID == "" || a.Name == "" || len(a.Name) > 200 || !a.AllPublicTeams && len(a.TeamIDs) == 0 {
 		return current, a, ErrIssueQuery
 	}
 	for _, id := range a.TeamIDs {
@@ -139,11 +166,10 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 	}
 	a.TeamIDs = slices.Compact(slices.Sorted(slices.Values(a.TeamIDs)))
 	a.Scopes = slices.Compact(slices.Sorted(slices.Values(a.Scopes)))
-	for _, scope := range a.Scopes {
-		if !slices.Contains([]string{"read", "write", "app:mentionable", "app:assignable"}, scope) {
-			return current, a, ErrAuthForbidden
-		}
+	if _, err := domain.NormalizeApplicationScopes(a.Scopes); err != nil {
+		return current, a, ErrAuthForbidden
 	}
+	a.ResolveTeamAccess(current.Teams, current.TeamSettings)
 	raw, err = json.Marshal(a)
 	if err != nil {
 		return current, a, err
@@ -199,6 +225,12 @@ func (s *SQLiteStore) InstallApplication(ctx context.Context, workspace string, 
 			return current, err
 		}
 		a = installed
+		if !a.Active {
+			next, err = revokeApplicationCredentialsTx(ctx, tx, workspace, a.UserID, next)
+			if err != nil {
+				return next, err
+			}
+		}
 		event, err = oauthRecordEvent(ctx, tx, "application.updated", a.ID)
 		return next, err
 	})
@@ -206,6 +238,41 @@ func (s *SQLiteStore) InstallApplication(ctx context.Context, workspace string, 
 		s.publishOAuthRecordEvent(workspace, event)
 	}
 	return a, err
+}
+
+func revokeApplicationCredentialsTx(ctx context.Context, tx *sqlTx, workspace, userID string, data domain.Bootstrap) (domain.Bootstrap, error) {
+	now := time.Now().UTC()
+	data.APIKeys = slices.Clone(data.APIKeys)
+	for index := range data.APIKeys {
+		key := &data.APIKeys[index]
+		if key.SubjectID() != userID || key.RevokedAt != nil {
+			continue
+		}
+		key.RevokedAt = &now
+		raw, err := json.Marshal(key)
+		if err != nil {
+			return data, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='apiKeys' AND record_key=?`, raw, workspace, key.ID); err != nil {
+			return data, err
+		}
+	}
+	data.OAuthAuthorizations = slices.Clone(data.OAuthAuthorizations)
+	for index := range data.OAuthAuthorizations {
+		grant := &data.OAuthAuthorizations[index]
+		if grant.UserID != userID || grant.RevokedAt != nil {
+			continue
+		}
+		grant.RevokedAt = &now
+		raw, err := json.Marshal(grant)
+		if err != nil {
+			return data, err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='oauthAuthorizations' AND record_key=?`, raw, workspace, grant.ID); err != nil {
+			return data, err
+		}
+	}
+	return data, nil
 }
 
 func (s *SQLiteStore) decorateAppUser(ctx context.Context, u *domain.User) error {
@@ -231,21 +298,22 @@ func (s *SQLiteStore) oauthClientInTransaction(ctx context.Context, tx *sqlTx, i
 	if !errors.Is(err, sql.ErrNoRows) {
 		return client, err
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT data FROM workspace_metadata_records WHERE field='oauthApplications'`)
+	rows, err := tx.QueryContext(ctx, `SELECT workspace_key,data FROM workspace_metadata_records WHERE field='oauthApplications'`)
 	if err != nil {
 		return client, err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var a domain.OAuthApplication
-		if err := rows.Scan(&raw); err != nil {
+		var home string
+		if err := rows.Scan(&home, &raw); err != nil {
 			return client, err
 		}
 		if err := json.Unmarshal(raw, &a); err != nil {
 			return client, err
 		}
 		if a.ClientID == id {
-			return domain.OAuthClient{ClientID: id, ClientName: a.Name, RedirectURIs: a.RedirectURIs}, nil
+			return domain.OAuthClient{ClientID: id, ClientName: a.Name, LogoURI: a.LogoURL, RedirectURIs: a.RedirectURIs, AllowedScopes: a.Scopes, HomeWorkspaceKey: home, PublicEnabled: a.PublicEnabled}, nil
 		}
 	}
 	return client, ErrAuthForbidden
@@ -303,7 +371,7 @@ func (s *SQLiteStore) EnsureBuiltinApplication(ctx context.Context, workspace st
 			next = *existing
 			next.Active, next.ServerSuspended = true, false
 		}
-		next.Scopes = []string{"app:assignable", "app:mentionable", "read", "write"}
+		next.Scopes = slices.Sorted(slices.Values(domain.ApplicationScopes()))
 		if next.AllTeams || len(next.TeamIDs) == 0 {
 			next.AllTeams = true
 			next.TeamIDs = teams

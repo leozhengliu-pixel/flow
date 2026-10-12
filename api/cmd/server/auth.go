@@ -160,6 +160,9 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 }
 
 func apiKeyRestrictedPersonalPath(path string) bool {
+	if strings.HasPrefix(path, "/api/oauth-applications/") && (strings.HasSuffix(path, "/developer-token") || strings.HasSuffix(path, "/rotate-secret")) {
+		return true
+	}
 	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") {
 		return true
 	}
@@ -188,6 +191,40 @@ func (s *server) authenticateAPIKey(r *http.Request) (domain.User, *domain.APIKe
 // not implied by create-only scopes: a caller must explicitly grant read (or
 // the broader write/admin scope) to query workspace data.
 func apiKeyAllowsRequest(r *http.Request, key domain.APIKey) bool {
+	if key.Actor == "app" {
+		if key.Scopes == nil {
+			return false
+		}
+		if strings.HasPrefix(r.URL.Path, "/api/releases") || strings.HasPrefix(r.URL.Path, "/api/release-pipelines") {
+			if r.Method == http.MethodGet || r.Method == http.MethodHead {
+				return apiKeyHasScope(key, "release:read")
+			}
+			if r.Method == http.MethodPost && r.URL.Path == "/api/releases" {
+				return apiKeyHasScope(key, "release:create")
+			}
+			if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, "/api/releases/") && len(strings.Split(strings.Trim(r.URL.Path, "/"), "/")) == 3 && apiKeyHasScope(key, "releaseStage:update") {
+				var input map[string]json.RawMessage
+				if !peekRequestJSON(r, &input) || len(input) == 0 {
+					return false
+				}
+				for field := range input {
+					if field != "stage" && field != "stageFrozen" {
+						return false
+					}
+				}
+				return true
+			}
+			return false
+		}
+		for _, group := range []struct{ prefix, read, write string }{{"/api/customers", "customer:read", "customer:write"}, {"/api/customer-requests", "customer:read", "customer:write"}, {"/api/initiatives", "initiative:read", "initiative:write"}} {
+			if strings.HasPrefix(r.URL.Path, group.prefix) {
+				if r.Method == http.MethodGet || r.Method == http.MethodHead {
+					return apiKeyHasScope(key, group.read) || apiKeyHasScope(key, group.write)
+				}
+				return apiKeyHasScope(key, group.write)
+			}
+		}
+	}
 	if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/agent-tasks/") && strings.HasSuffix(r.URL.Path, "/activities") && (apiKeyHasScope(key, "app:assignable") || apiKeyHasScope(key, "app:mentionable")) {
 		return true
 	}
@@ -267,6 +304,7 @@ func workspaceAdminRole(role string) bool {
 // projection. API keys are often narrower than the creator's membership, so
 // returning the unrestricted bootstrap would expose unrelated resources.
 func applyAPIKeyProjection(data *domain.Bootstrap, key domain.APIKey) {
+	filterApplicationScopeProjection(data, key)
 	if !apiKeyTeamRestrictionSelected(key) {
 		return
 	}
@@ -707,6 +745,9 @@ func permissionForRequest(r *http.Request) string {
 }
 
 func workspacePermissionAllows(settings domain.WorkspaceSettings, permission, role string) bool {
+	if role == "app" && slices.Contains([]string{"initiative", "label", "template"}, permission) {
+		role = "member"
+	}
 	if role == "guest" {
 		return false
 	}

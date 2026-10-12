@@ -466,6 +466,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/oauth-applications", s.createOAuthApplication)
 	mux.HandleFunc("PATCH /api/oauth-applications/{id}", s.updateOAuthApplication)
 	mux.HandleFunc("DELETE /api/oauth-applications/{id}", s.deleteOAuthApplication)
+	mux.HandleFunc("POST /api/oauth-applications/{id}/developer-token", s.createApplicationDeveloperToken)
+	mux.HandleFunc("POST /api/oauth-applications/{id}/rotate-secret", s.rotateOAuthApplicationSecret)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/failures", s.listOAuthAppFailures)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/sync-groups", s.listOAuthSyncGroupRequests)
 	mux.HandleFunc("POST /api/oauth-applications/{id}/sync-groups/{requestId}", s.decideOAuthSyncGroupRequest)
@@ -1079,6 +1081,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool { return item.AuditLog })
 	for index := range data.APIKeys {
 		data.APIKeys[index].SecretHash = ""
+		data.APIKeys[index].ClientSecretHash = ""
 		if data.APIKeys[index].Scopes != nil {
 			for scopeIndex, scope := range data.APIKeys[index].Scopes {
 				data.APIKeys[index].Scopes[scopeIndex] = canonicalAPIKeyScope(scope)
@@ -1131,6 +1134,7 @@ func filterBootstrapForAPIKey(data *domain.Bootstrap, r *http.Request) {
 	if !ok {
 		return
 	}
+	filterApplicationScopeProjection(data, key)
 	// Never expose other credentials through a token-authenticated bootstrap,
 	// even when the token owner is a workspace admin.
 	data.APIKeys = slices.DeleteFunc(data.APIKeys, func(item domain.APIKey) bool { return item.ID != key.ID })
@@ -5429,7 +5433,7 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		if *input.DelegateID != "" && issue.Delegate == nil {
 			return nil, fmt.Errorf("%w: unknown delegate", errInvalid)
 		}
-		if issue.Delegate != nil && !issue.Delegate.CanDelegateTo(issue.Team.ID) {
+		if issue.Delegate != nil && !issue.Delegate.CanDelegateToTeam(issue.Team) {
 			return nil, fmt.Errorf("%w: application cannot access or accept delegation in this team", errInvalid)
 		}
 		if previousDelegate != *input.DelegateID {

@@ -73,6 +73,7 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 			matched = slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
 				return member.UserID == data.Viewer.ID && member.TeamID == permission.SubjectID
 			})
+			matched = matched || data.Viewer.App && slices.Contains(data.Viewer.AppTeamIDs, permission.SubjectID)
 		}
 		if matched && documentRoleRank(permission.Role) > documentRoleRank(best) {
 			best = permission.Role
@@ -91,6 +92,9 @@ func documentRole(s *server, data domain.Bootstrap, document domain.Document) st
 			return "viewer"
 		}
 		return "none"
+	}
+	if data.Viewer.App && slices.ContainsFunc(document.TeamIDs, func(id string) bool { return slices.Contains(data.Viewer.AppTeamIDs, id) }) {
+		return "viewer"
 	}
 	if len(document.TeamIDs) == 0 {
 		return "viewer"

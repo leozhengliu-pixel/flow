@@ -138,7 +138,15 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 		}
 		teamID := ""
 		for _, id := range teamIDs {
-			if slices.Contains(app.TeamIDs, id) {
+			allowed := slices.Contains(app.TeamIDs, id)
+			if app.AllPublicTeams && !allowed {
+				var teamRaw []byte
+				var team domain.Team
+				if err := tx.QueryRowContext(ctx, `SELECT data FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' AND record_key=?`, workspace, id).Scan(&teamRaw); err == nil && json.Unmarshal(teamRaw, &team) == nil {
+					allowed = !team.Private && team.RetiredAt == nil
+				}
+			}
+			if allowed {
 				teamID = id
 				break
 			}
@@ -147,7 +155,7 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 			continue
 		}
 		taskID := fmt.Sprintf("mention_%x", sha256.Sum256([]byte(workspace+":"+comment.ID+":"+id)))
-		task := domain.AgentTask{ID: taskID, WorkspaceKey: workspace, ResourceType: resourceType, ResourceID: resource, TeamID: teamID, AppUserID: id, CreatorID: comment.User.ID, Status: "pending", Prompt: comment.Body, Trigger: "mention", Version: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		task := domain.AgentTask{ID: taskID, CommentID: comment.ID, WorkspaceKey: workspace, ResourceType: resourceType, ResourceID: resource, TeamID: teamID, AppUserID: id, CreatorID: comment.User.ID, Status: "pending", Prompt: comment.Body, Trigger: "mention", Version: 1, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		if resourceType == "issue" {
 			task.IssueID = resource
 		}

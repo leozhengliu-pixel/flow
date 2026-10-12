@@ -1,20 +1,32 @@
-import { request } from './api-client'
+import { ApiError, request } from './api-client'
 import type { User } from '@/types/flow'
 function apiRequest<T>(path: string, workspace: string, options: RequestInit = {}): Promise<T> {
   return request<T>(path, { ...options, headers: { 'Content-Type': 'application/json', 'X-Workspace-Key': workspace, ...options.headers } })
 }
 
-export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; builtin: boolean; active: boolean; allTeams?: boolean; serverSuspended?: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
-export type ApplicationTask = { id: string; issueId: string; teamId: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled'; prompt: string; trigger: string; version: number; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string} }
+export type ApplicationInstallation = { id: string; workspaceKey: string; clientId: string; name: string; userId: string; installedBy: string; scopes: string[]; teamIds: string[]; allPublicTeams?: boolean; builtin: boolean; active: boolean; allTeams?: boolean; serverSuspended?: boolean; webhookUrl?: string; avatarUrl?: string; createdAt: string; updatedAt: string }
+export type ApplicationTask = { id: string; issueId: string; teamId: string; commentId?: string; appUserId: string; creatorId: string; status: 'pending' | 'active' | 'awaitingInput' | 'complete' | 'error' | 'canceled'; prompt: string; initialPrompt?: string; trigger: string; version: number; createdAt?: string; updatedAt: string; pendingTool?: {name:string;arguments:unknown;status:string} }
 /** Window event fired when the realtime stream reports an agent task change; detail is the task's resource id. */
 export const AGENT_TASK_ACTIVITY_EVENT = 'flow:agent-task-activity'
 /** Task states the agent may still change on its own; only these keep a fallback poll running. */
 export const isApplicationTaskRunning = (task: Pick<ApplicationTask, 'status'>) => task.status === 'pending' || task.status === 'active'
-export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string }
+export type ApplicationActivity = { id: string; sessionId: string; actorId: string; type: string; body: string; url?: string; createdAt: string; signal?: 'select' | 'auth' | 'stop'; signalMetadata?: { options?: { label?: string; value: string }[]; url?: string; userId?: string; providerName?: string }; metadata?: { action?: string; parameter?: string; result?: string; activityId?: string; enabled?: boolean } }
 export const isAgentMember = (user: User) => Boolean(user.app && user.active && (user.appScopes?.includes('app:assignable') || user.appScopes?.includes('app:mentionable')))
 export const canDelegateTo = (user: User, teamId: string) => Boolean(user.app && user.active && user.appScopes?.includes('app:assignable') && user.appTeamIds?.includes(teamId))
 export const listApplications = (workspace: string) => apiRequest<ApplicationInstallation[]>('/api/application-installations', workspace)
 export const saveApplication = (workspace: string, input: Partial<ApplicationInstallation>) => apiRequest<{application: ApplicationInstallation; webhookSecret: string}>(`/api/application-installations${input.id ? `/${encodeURIComponent(input.id)}` : ''}`, workspace, { method: input.id ? 'PATCH' : 'POST', body: JSON.stringify(input) })
 export const listApplicationTasks = (workspace: string, issueId: string, signal?: AbortSignal, resourceType = 'issue') => apiRequest<ApplicationTask[]>(`/api/agent-tasks?resourceType=${resourceType}&resourceId=${encodeURIComponent(issueId)}`, workspace, { signal })
 export const getApplicationTask = (workspace: string, id: string, after = '', signal?: AbortSignal) => apiRequest<{session: ApplicationTask; activities: ApplicationActivity[]}>(`/api/agent-tasks/${encodeURIComponent(id)}?after=${encodeURIComponent(after)}`, workspace, { signal })
-export const replyApplicationTask = (workspace: string, task: ApplicationTask, type: 'prompt' | 'canceled' | 'retry', body: string, approve?:boolean) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({expectedVersion: task.version, type, body, approve}) })
+export const reactApplicationTask = (workspace: string, task: ApplicationTask, activityId: string, emoji: string, enabled: boolean) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({ expectedVersion: task.version, type: 'feedback', activityId, body: emoji, enabled }) })
+export async function replyApplicationTask(workspace: string, task: ApplicationTask, type: 'prompt' | 'canceled' | 'retry', body: string, approve?: boolean): Promise<ApplicationTask> {
+  const send = (version: number) => apiRequest<ApplicationTask>(`/api/agent-tasks/${encodeURIComponent(task.id)}/activities`, workspace, { method: 'POST', body: JSON.stringify({ expectedVersion: version, type, body, approve }) })
+  try { return await send(task.version) }
+  catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 409 || approve !== undefined || task.pendingTool || type === 'retry') throw error
+    const next = await getApplicationTask(workspace, task.id, String(task.version).padStart(20, '0'))
+    // Streaming may advance the version while the person presses Send. Never
+    // retry across somebody else's prompt, approval, cancellation or result.
+    if (!next.activities.length || next.activities.length === 100 || next.activities.some(activity => !['thought', 'output', 'action'].includes(activity.type)) || next.session.pendingTool) throw error
+    return send(next.session.version)
+  }
+}

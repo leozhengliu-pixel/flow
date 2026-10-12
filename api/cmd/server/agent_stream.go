@@ -849,6 +849,9 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 		return nil, fmt.Errorf("Agent tools are disabled")
 	}
 	if strings.HasPrefix(call.Name, "external_") {
+		if invoker, ok := r.Context().Value(builtinInvokerContextKey{}).(domain.User); ok {
+			data.Viewer = invoker
+		}
 		return s.executeConnectorTool(r, data, call)
 	}
 	if isWebTool(call.Name) {
@@ -884,6 +887,9 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		actor.APIKey = key
+	}
+	if invoker, ok := r.Context().Value(builtinInvokerContextKey{}).(domain.User); ok {
+		actor.AuthorizationUserID = invoker.ID
 	}
 	ctx := context.WithValue(r.Context(), authUserContextKey{}, data.Viewer)
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, workspaceKey(r))

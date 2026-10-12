@@ -869,19 +869,28 @@ export function createOAuthApplication(input: {
   logoUrl?: string;
   redirectUris: string[];
   scopes: string[];
+  supportsClientCredentials?: boolean;
+  publicEnabled?: boolean;
 }): Promise<OAuthApplication> {
   return request("/api/oauth-applications", jsonRequest("POST", input));
 }
 export function updateOAuthApplication(
   id: string,
   input: Partial<
-    Pick<OAuthApplication, "name" | "description" | "logoUrl" | "redirectUris" | "scopes">
+    Pick<OAuthApplication, "name" | "description" | "logoUrl" | "redirectUris" | "scopes" | "supportsClientCredentials" | "publicEnabled">
   >,
 ): Promise<OAuthApplication> {
   return request(`/api/oauth-applications/${id}`, jsonRequest("PATCH", input));
 }
 export function deleteOAuthApplication(id: string): Promise<void> {
   return request(`/api/oauth-applications/${id}`, { method: "DELETE" });
+}
+export type ApplicationToken = { access_token: string; token_type: 'Bearer'; expires_in: number; scope: string; actor: 'user' | 'app'; subject_user_id?: string; app_user_id?: string }
+export function createApplicationDeveloperToken(id: string, actor: 'user' | 'app', scopes: string[]): Promise<ApplicationToken> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/developer-token`, jsonRequest('POST', { actor, scopes }))
+}
+export function rotateOAuthApplicationSecret(id: string): Promise<{ clientSecret: string }> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/rotate-secret`, { method: 'POST' })
 }
 export interface OAuthAuthorizationRequest {
   actor?: 'user' | 'app';
@@ -909,6 +918,7 @@ export function fetchOAuthAuthorizationRequest(
 export function decideOAuthAuthorization(input: {
   actor?: string;
   teamIds?: string[];
+  allPublicTeams?: boolean;
   clientId: string;
   redirectUri: string;
   responseType: string;

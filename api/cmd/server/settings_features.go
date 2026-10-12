@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1136,6 +1135,7 @@ func secretHash(value string) string {
 
 func publicAPIKey(key domain.APIKey) domain.APIKey {
 	key.SecretHash = ""
+	key.ClientSecretHash = ""
 	return key
 }
 
@@ -1552,11 +1552,13 @@ func (s *server) listOAuthApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 type oauthInput struct {
-	Name         *string   `json:"name,omitempty"`
-	Description  *string   `json:"description,omitempty"`
-	LogoURL      *string   `json:"logoUrl,omitempty"`
-	RedirectURIs *[]string `json:"redirectUris,omitempty"`
-	Scopes       *[]string `json:"scopes,omitempty"`
+	Name                      *string   `json:"name,omitempty"`
+	Description               *string   `json:"description,omitempty"`
+	LogoURL                   *string   `json:"logoUrl,omitempty"`
+	RedirectURIs              *[]string `json:"redirectUris,omitempty"`
+	Scopes                    *[]string `json:"scopes,omitempty"`
+	SupportsClientCredentials *bool     `json:"supportsClientCredentials,omitempty"`
+	PublicEnabled             *bool     `json:"publicEnabled,omitempty"`
 }
 
 func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) {
@@ -1565,12 +1567,16 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if err := validateOAuthInput(&input); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
 	clientID, _ := randomSecret("flow_client_")
 	secret, _ := randomSecret("flow_secret_")
 	actor := requestActor(s, r)
 	var created domain.OAuthApplication
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", input, func(data *domain.Bootstrap) (string, error) {
-		created = domain.OAuthApplication{ID: fmt.Sprintf("oauth_app_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		created = domain.OAuthApplication{ID: fmt.Sprintf("oauth_app_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		applyOAuthInput(&created, input)
 		data.OAuthApplications = append([]domain.OAuthApplication{created}, data.OAuthApplications...)
 		return created.ID, nil
@@ -1594,12 +1600,22 @@ func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
 	if input.Scopes != nil {
 		app.Scopes = normalizedStrings(*input.Scopes)
 	}
+	if input.SupportsClientCredentials != nil {
+		app.SupportsClientCredentials = *input.SupportsClientCredentials
+	}
+	if input.PublicEnabled != nil {
+		app.PublicEnabled = *input.PublicEnabled
+	}
 	app.UpdatedAt = time.Now().UTC()
 }
 
 func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) {
 	var input oauthInput
 	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if err := validateOAuthInput(&input); err != nil {
+		writeError(w, 400, err.Error())
 		return
 	}
 	id := r.PathValue("id")
@@ -1610,6 +1626,9 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 			return errNotFound
 		}
 		applyOAuthInput(&data.OAuthApplications[index], input)
+		if input.Scopes != nil || input.SupportsClientCredentials != nil {
+			data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
+		}
 		updated = data.OAuthApplications[index]
 		updated.ClientSecret = ""
 		return nil
@@ -1635,47 +1654,20 @@ func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) exchangeOAuthToken(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		GrantType    string `json:"grant_type"`
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
-	}
-	if !decodeJSON(w, r, &input) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		var input struct {
+			GrantType    string `json:"grant_type"`
+			ClientID     string `json:"client_id"`
+			ClientSecret string `json:"client_secret"`
+			Scope        string `json:"scope"`
+		}
+		if !decodeJSON(w, r, &input) {
+			return
+		}
+		s.issueClientCredentials(w, r, url.Values{"grant_type": {input.GrantType}, "client_id": {input.ClientID}, "client_secret": {input.ClientSecret}, "scope": {input.Scope}})
 		return
 	}
-	if input.GrantType != "client_credentials" {
-		writeError(w, http.StatusBadRequest, "unsupported grant_type")
-		return
-	}
-	data, ok := s.store.WorkspaceMetadata(workspaceKey(r))
-	if !ok {
-		writeError(w, http.StatusNotFound, "workspace not found")
-		return
-	}
-	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool {
-		return app.ClientID == input.ClientID && subtle.ConstantTimeCompare([]byte(app.ClientSecret), []byte(input.ClientSecret)) == 1
-	})
-	if index < 0 {
-		writeError(w, http.StatusUnauthorized, "invalid client credentials")
-		return
-	}
-	app := data.OAuthApplications[index]
-	secret, err := randomSecret("flow_oauth_")
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	expiresAt := time.Now().UTC().Add(time.Hour)
-	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: app.Name + " OAuth token", Prefix: secret[:min(len(secret), 19)], SecretHash: secretHash(secret), CreatorID: app.CreatorID, Scopes: normalizeAPIKeyScopes(app.Scopes), TeamIDs: []string{}, TeamRestriction: "all", CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt, OAuthClientID: app.ClientID}
-	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_token.created", app.ID, nil, func(next *domain.Bootstrap) error {
-		next.APIKeys = append([]domain.APIKey{key}, next.APIKeys...)
-		return nil
-	})
-	if err != nil {
-		respondMutation(w, err, http.StatusOK, nil)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": secret, "token_type": "Bearer", "expires_in": 3600, "scope": strings.Join(app.Scopes, " ")})
+	s.exchangeMCPToken(w, r)
 }
 
 func (s *server) listIntegrations(w http.ResponseWriter, r *http.Request) {

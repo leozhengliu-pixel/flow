@@ -50,9 +50,10 @@ type mcpRPCError struct {
 }
 
 type mcpActor struct {
-	WorkspaceKey string
-	User         domain.User
-	APIKey       domain.APIKey
+	WorkspaceKey        string
+	User                domain.User
+	APIKey              domain.APIKey
+	AuthorizationUserID string
 }
 
 func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
@@ -200,6 +201,41 @@ func validMCPRequestID(id any) bool {
 }
 
 func mcpToolAllowed(tool flowMCPTool, key domain.APIKey, readonly bool, args map[string]any) bool {
+	if key.Actor == "app" {
+		if strings.Contains(tool.Name, "release") {
+			if tool.Access == "read" {
+				return apiKeyHasScope(key, "release:read")
+			}
+			if readonly || tool.Name != "save_release" {
+				return false
+			}
+			if stringArg(args, "id") == "" {
+				return apiKeyHasScope(key, "release:create")
+			}
+			if !apiKeyHasScope(key, "releaseStage:update") {
+				return false
+			}
+			for field := range args {
+				if field != "id" && field != "stage" {
+					return false
+				}
+			}
+			return stringArg(args, "stage") != ""
+		}
+		for _, group := range []string{"customer", "initiative", "release"} {
+			if strings.Contains(tool.Name, group) {
+				permission := group + ":read"
+				writePermission := group + ":write"
+				if group == "release" {
+					writePermission = "release:create"
+				}
+				if tool.Access != "read" {
+					return !readonly && apiKeyHasScope(key, writePermission)
+				}
+				return apiKeyHasScope(key, permission) || apiKeyHasScope(key, writePermission)
+			}
+		}
+	}
 	if tool.Access == "read" {
 		return mcpAPIKeyHasScope(key, "read")
 	}

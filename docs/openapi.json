@@ -10827,6 +10827,113 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/oauth-applications/{id}/developer-token": {
+      "post": {
+        "operationId": "post_oauth_applications_id_developer_token",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "POST /api/oauth-applications/{id}/developer-token",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One-time developer access token, valid for one hour.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "const": "Bearer"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "refresh_token": {
+                      "type": "string"
+                    },
+                    "actor": {
+                      "enum": [
+                        "app",
+                        "user"
+                      ]
+                    },
+                    "subject_user_id": {
+                      "type": "string"
+                    },
+                    "app_user_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "scope"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "description": "Requires an interactive workspace owner/admin session. App tokens never inherit the issuing administrator role.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "actor": {
+                    "enum": [
+                      "app",
+                      "user"
+                    ],
+                    "default": "app"
+                  },
+                  "scopes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/oauth-applications/{id}/failures": {
       "get": {
         "operationId": "get_oauth_applications_id_failures",
@@ -10855,6 +10962,42 @@
           }
         },
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/oauth-applications/{id}/rotate-secret": {
+      "post": {
+        "operationId": "post_oauth_applications_id_rotate_secret",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "POST /api/oauth-applications/{id}/rotate-secret",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Flow API response. See the domain model documentation for resource fields.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "x-flow-source": "main.go",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "description": "Rotate the client secret and immediately invalidate existing client-credentials tokens. The new secret is returned once."
       }
     },
     "/api/oauth-applications/{id}/sync-groups": {
@@ -11021,6 +11164,51 @@
         ],
         "summary": "POST /api/oauth/token",
         "responses": {
+          "200": {
+            "description": "OAuth token response. Access tokens are secrets and should not be logged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "const": "Bearer"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "refresh_token": {
+                      "type": "string"
+                    },
+                    "actor": {
+                      "enum": [
+                        "app",
+                        "user"
+                      ]
+                    },
+                    "subject_user_id": {
+                      "type": "string"
+                    },
+                    "app_user_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "scope"
+                  ]
+                }
+              }
+            }
+          },
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",
             "content": {
@@ -11030,7 +11218,56 @@
             }
           }
         },
-        "x-flow-source": "main.go"
+        "x-flow-source": "main.go",
+        "security": [],
+        "description": "OAuth authorization-code, refresh-token and opt-in app-actor client-credentials grants. Confidential clients authenticate with HTTP Basic or form fields.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "grant_type"
+                ],
+                "properties": {
+                  "grant_type": {
+                    "enum": [
+                      "authorization_code",
+                      "refresh_token",
+                      "client_credentials"
+                    ]
+                  },
+                  "client_id": {
+                    "type": "string"
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "refresh_token": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/posts": {
@@ -17340,7 +17577,8 @@
             }
           }
         },
-        "x-flow-source": "main.go"
+        "x-flow-source": "main.go",
+        "security": []
       }
     },
     "/oauth/revoke": {
@@ -17360,7 +17598,8 @@
             }
           }
         },
-        "x-flow-source": "main.go"
+        "x-flow-source": "main.go",
+        "security": []
       }
     },
     "/oauth/token": {
@@ -17371,6 +17610,51 @@
         ],
         "summary": "POST /oauth/token",
         "responses": {
+          "200": {
+            "description": "OAuth token response. Access tokens are secrets and should not be logged.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "const": "Bearer"
+                    },
+                    "expires_in": {
+                      "type": "integer"
+                    },
+                    "scope": {
+                      "type": "string"
+                    },
+                    "refresh_token": {
+                      "type": "string"
+                    },
+                    "actor": {
+                      "enum": [
+                        "app",
+                        "user"
+                      ]
+                    },
+                    "subject_user_id": {
+                      "type": "string"
+                    },
+                    "app_user_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in",
+                    "scope"
+                  ]
+                }
+              }
+            }
+          },
           "default": {
             "description": "Flow API response. See the domain model documentation for resource fields.",
             "content": {
@@ -17380,7 +17664,56 @@
             }
           }
         },
-        "x-flow-source": "main.go"
+        "x-flow-source": "main.go",
+        "security": [],
+        "description": "OAuth authorization-code, refresh-token and opt-in app-actor client-credentials grants. Confidential clients authenticate with HTTP Basic or form fields.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "grant_type"
+                ],
+                "properties": {
+                  "grant_type": {
+                    "enum": [
+                      "authorization_code",
+                      "refresh_token",
+                      "client_credentials"
+                    ]
+                  },
+                  "client_id": {
+                    "type": "string"
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "code": {
+                    "type": "string"
+                  },
+                  "redirect_uri": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "code_verifier": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "refresh_token": {
+                    "type": "string",
+                    "writeOnly": true
+                  },
+                  "scope": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/scim/v2/{workspace}/Groups": {
@@ -17857,7 +18190,7 @@
       "sessionCookie": {
         "type": "apiKey",
         "in": "cookie",
-        "name": "flow_session"
+        "name": "flow_clone_session"
       },
       "bearerToken": {
         "type": "http",
