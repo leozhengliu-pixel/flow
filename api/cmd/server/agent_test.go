@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -155,13 +156,65 @@ func TestAgentSessionStreamsResponsesAndExecutesReadTools(t *testing.T) {
 	}
 }
 
-func TestAgentSessionWriteToolsRequireApproval(t *testing.T) {
+// Like the reference app's agent, Flow writes apply immediately: no approval step.
+func TestAgentSessionWriteToolsRunWithoutApproval(t *testing.T) {
 	var providerCalls atomic.Int32
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		call := providerCalls.Add(1)
 		w.Header().Set("Content-Type", "text/event-stream")
 		if call == 1 {
 			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_write\",\"call_id\":\"call_write\",\"type\":\"function_call\",\"name\":\"save_issue\",\"arguments\":\"{}\"}}\n\n" +
+				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_write\",\"arguments\":\"{}\"}\n\n" +
+				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+			return
+		}
+		_, _ = w.Write([]byte("event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Done.\"}\n\n" +
+			"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+	}))
+	defer provider.Close()
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	s := &server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-responses", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()}
+	handler := newHandler(s)
+	defer s.stopDeliveryScheduler(context.Background())
+	host := httptest.NewServer(handler)
+	defer host.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, host.URL+"/api/agent/sessions/stream", strings.NewReader(`{"message":"Update the issue","location":"page"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := host.Client().Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream := string(body)
+	if strings.Contains(stream, "tool.approval_required") {
+		t.Fatalf("a Flow write asked for approval: %s", stream)
+	}
+	if providerCalls.Load() != 2 || !strings.Contains(stream, "Done.") || !strings.Contains(stream, "session.completed") {
+		t.Fatalf("write did not run straight through calls=%d body=%s", providerCalls.Load(), stream)
+	}
+}
+
+// Third-party connector tools act outside Flow, so they still wait for the user.
+func TestAgentSessionExternalToolsRequireApproval(t *testing.T) {
+	var providerCalls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		call := providerCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		if call == 1 {
+			_, _ = w.Write([]byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"item_write\",\"call_id\":\"call_write\",\"type\":\"function_call\",\"name\":\"external_demo_send\",\"arguments\":\"{}\"}}\n\n" +
 				"event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"item_id\":\"item_write\",\"arguments\":\"{}\"}\n\n" +
 				"event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
 			return
