@@ -47,6 +47,7 @@ func issueRole(s *server, data domain.Bootstrap, issue domain.Issue) string {
 				matched = slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
 					return member.TeamID == permission.SubjectID && member.UserID == data.Viewer.ID
 				})
+				matched = matched || data.Viewer.App && slices.Contains(data.Viewer.AppTeamIDs, permission.SubjectID)
 			}
 			if matched && issuePermissionRank(permission.Role) > issuePermissionRank(best) {
 				best = strings.ToLower(strings.TrimSpace(permission.Role))
@@ -63,6 +64,15 @@ func issueRole(s *server, data domain.Bootstrap, issue domain.Issue) string {
 	}
 	if best != "" {
 		return best
+	}
+	if data.Viewer.App && data.Viewer.Active && slices.Contains(data.Viewer.AppTeamIDs, issue.Team.ID) {
+		if slices.Contains(data.Viewer.AppScopes, "write") || slices.Contains(data.Viewer.AppScopes, "create_issues") {
+			return "editor"
+		}
+		if slices.Contains(data.Viewer.AppScopes, "create_comments") {
+			return "commenter"
+		}
+		return "viewer"
 	}
 	if slices.ContainsFunc(data.TeamMembers, func(member domain.TeamMember) bool {
 		return member.TeamID == issue.Team.ID && member.UserID == data.Viewer.ID

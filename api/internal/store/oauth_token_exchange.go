@@ -103,13 +103,28 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		if approved != nil && !approved(&policy, grant.ClientID, grant.Scopes) {
 			return ErrAuthForbidden
 		}
+		if grant.Actor == "app" {
+			var raw []byte
+			var installation domain.ApplicationInstallation
+			if err := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND user_id=?`+lock, workspace, grant.UserID).Scan(&raw); err != nil {
+				return ErrAuthForbidden
+			}
+			if json.Unmarshal(raw, &installation) != nil || !installation.Active || slices.ContainsFunc(grant.Scopes, func(scope string) bool { return !slices.Contains(installation.Scopes, scope) }) {
+				return ErrAuthForbidden
+			}
+		}
 		key.CreatorID = grant.UserID
+		key.SubjectUserID = grant.UserID
+		key.IssuedByUserID = grant.UserID
+		key.Actor = "user"
+		key.GrantType = kind
 		key.Scopes = slices.Clone(grant.Scopes)
 		key.OAuthClientID = grant.ClientID
 		key.AuthorizationID = grant.AuthorizationID
 		if grant.Actor == "app" {
-			key.TeamRestriction = "selected"
-			key.TeamIDs = slices.Clone(grant.TeamIDs)
+			key.IssuedByUserID = grant.InstallerID
+			key.Actor = "app"
+			key.TeamRestriction = "application"
 		}
 		// Access tokens live an hour and each exchange issues a new one, so
 		// drop expired OAuth token rows instead of letting them pile up. Live

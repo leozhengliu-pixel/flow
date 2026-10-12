@@ -41,6 +41,11 @@ func setApplicationPolicies(data *domain.Bootstrap, items []applicationPolicy) {
 }
 
 func applicationApproved(data *domain.Bootstrap, clientID string, scopes []string) bool {
+	for _, app := range data.OAuthApplications {
+		if app.ClientID == clientID {
+			return !slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) })
+		}
+	}
 	if !data.WorkspaceSettings.ReviewThirdPartyApplications {
 		return true
 	}

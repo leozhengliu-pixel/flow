@@ -1492,6 +1492,10 @@ export interface APIKey {
   name: string;
   prefix: string;
   creatorId: UUID;
+  subjectUserId?: UUID;
+  issuedByUserId?: UUID;
+  actor?: 'user' | 'app';
+  grantType?: string;
   // `null` is the persisted full-access representation; an explicit empty
   // array is a deny-all policy and must remain distinguishable in the UI.
   scopes: string[] | null;
@@ -1526,6 +1530,8 @@ export interface OAuthApplication {
   clientSecret?: string;
   redirectUris: string[];
   scopes: string[];
+  supportsClientCredentials?: boolean;
+  publicEnabled?: boolean;
   creatorId: UUID;
   createdAt: string;
   updatedAt: string;

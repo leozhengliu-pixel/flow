@@ -170,10 +170,10 @@ func (s *SQLiteStore) OAuthClient(ctx context.Context, clientID string) (domain.
 func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClient, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, data := range s.workspaces {
+	for workspace, data := range s.workspaces {
 		for _, app := range data.OAuthApplications {
 			if app.ClientID == clientID {
-				return domain.OAuthClient{ClientID: app.ClientID, ClientName: app.Name, RedirectURIs: app.RedirectURIs, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}, TokenEndpointAuthMethod: "none", CreatedAt: app.CreatedAt}, true
+				return domain.OAuthClient{ClientID: app.ClientID, ClientName: app.Name, LogoURI: app.LogoURL, AllowedScopes: slices.Clone(app.Scopes), HomeWorkspaceKey: workspace, PublicEnabled: app.PublicEnabled, RedirectURIs: app.RedirectURIs, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}, TokenEndpointAuthMethod: "none", CreatedAt: app.CreatedAt}, true
 			}
 		}
 	}

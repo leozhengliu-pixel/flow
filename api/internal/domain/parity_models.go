@@ -92,18 +92,20 @@ type TeamPinnedResource struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 type AgentActivity struct {
-	ActorID   string         `json:"actorId,omitempty"`
-	URL       string         `json:"url,omitempty"`
-	ToolCall  *AgentToolCall `json:"toolCall,omitempty"`
-	ID        string         `json:"id"`
-	SessionID string         `json:"sessionId"`
-	IssueID   string         `json:"issueId,omitempty"`
-	Type      string         `json:"type"`
-	Status    string         `json:"status"`
-	Body      string         `json:"body,omitempty"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
-	CreatedAt time.Time      `json:"createdAt"`
-	UpdatedAt time.Time      `json:"updatedAt"`
+	Signal         string         `json:"signal,omitempty"`
+	SignalMetadata map[string]any `json:"signalMetadata,omitempty"`
+	ActorID        string         `json:"actorId,omitempty"`
+	URL            string         `json:"url,omitempty"`
+	ToolCall       *AgentToolCall `json:"toolCall,omitempty"`
+	ID             string         `json:"id"`
+	SessionID      string         `json:"sessionId"`
+	IssueID        string         `json:"issueId,omitempty"`
+	Type           string         `json:"type"`
+	Status         string         `json:"status"`
+	Body           string         `json:"body,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+	CreatedAt      time.Time      `json:"createdAt"`
+	UpdatedAt      time.Time      `json:"updatedAt"`
 }
 type AIConversation struct {
 	ID        string         `json:"id"`

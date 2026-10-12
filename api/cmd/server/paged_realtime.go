@@ -52,6 +52,19 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	if domain.RoutineCredentialEvent(event.Type) {
 		return event, false, nil
 	}
+	if event.Type == "agent_task.updated" {
+		var payload struct {
+			TaskID string `json:"taskId"`
+		}
+		if json.Unmarshal(event.Payload, &payload) != nil || payload.TaskID == "" {
+			return event, false, nil
+		}
+		_, _, err := s.authorizedAgentTask(r, payload.TaskID, false)
+		if err != nil {
+			return event, false, nil
+		}
+		return event, true, nil
+	}
 	if event.Type == "workspace_preferences.updated" {
 		metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
 		if !ok {

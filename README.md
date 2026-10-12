@@ -218,6 +218,7 @@ round-trip tests against PostgreSQL, MySQL, Redis, and S3-compatible storage.
 - [Delivery roadmap](docs/delivery-roadmap.md)
 - [Domain model](docs/domain-model.md)
 - [Application members and agent tasks](docs/application-agents.md)
+- [Develop applications and Agents](docs/developers.md) ([简体中文](docs/developers.zh-CN.md))
 - [OpenAPI route inventory](docs/openapi.json)
 - [Testing](docs/testing.md)
 - [Operations and backup](docs/operations.md)

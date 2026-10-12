@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
+import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
 import { RealtimeEventQueue } from '@/lib/realtime-event-queue'
 import { connectSharedRealtime, type RealtimeMessage } from '@/lib/shared-realtime'
@@ -80,6 +81,12 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
       let event: RealtimeEvent
       try { event = JSON.parse(message.data) as RealtimeEvent }
       catch { return }
+      // Agent task pushes (streamed thoughts and output) refresh only the task panels of their resource. They skip the
+      // workspace sync queue so each chunk reaches the thread at once and never triggers a workspace reload.
+      if (event.type.startsWith('agent_task.')) {
+        window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: event.aggregateId ?? '' }))
+        return
+      }
       if (event.payload?.presence) setPresence(event.payload.presence)
       if (event.type === 'connected') {
         return

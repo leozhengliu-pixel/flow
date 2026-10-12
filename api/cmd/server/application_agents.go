@@ -64,8 +64,14 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 		input.AvatarURL = "/favicon.svg"
 		input.WebhookURL = ""
 		input.ServerSuspended = false
-		input.Scopes = []string{"read", "write", "app:assignable", "app:mentionable"}
+		input.Scopes = domain.ApplicationScopes()
 	} else {
+		scopes, err := domain.NormalizeApplicationScopes(input.Scopes)
+		if err != nil {
+			writeError(w, 400, err.Error())
+			return
+		}
+		input.Scopes = scopes
 		if input.ClientID == store.BuiltinApplicationClientID {
 			writeError(w, 400, "Reserved application client")
 			return
@@ -81,19 +87,31 @@ func (s *server) configureApplicationInstallation(w http.ResponseWriter, r *http
 		}
 		input.Name = client.ClientName
 		input.AvatarURL = client.LogoURI
+		if client.HomeWorkspaceKey != "" && client.HomeWorkspaceKey != data.Workspace.URLKey && !client.PublicEnabled {
+			writeError(w, 403, "This application is private to its home workspace")
+			return
+		}
+		if client.AllowedScopes != nil && slices.ContainsFunc(input.Scopes, func(scope string) bool {
+			return !slices.Contains(client.AllowedScopes, scope)
+		}) {
+			writeError(w, 400, "Requested scopes exceed the application registration")
+			return
+		}
 		if input.WebhookURL != "" && !integrationEndpointSafe(r.Context(), input.WebhookURL, s.authDisabled) {
 			writeError(w, 400, "Invalid application webhook URL")
 			return
 		}
 	}
-	if len(input.TeamIDs) == 0 || len(input.TeamIDs) > 500 {
+	if !input.AllPublicTeams && len(input.TeamIDs) == 0 || len(input.TeamIDs) > 500 {
 		writeError(w, 400, "Select at least one team (up to 500)")
 		return
 	}
-	if !slices.Contains(input.Scopes, "read") {
-		writeError(w, 400, "Application read scope is required")
+	scopes, scopeErr := domain.NormalizeApplicationScopes(input.Scopes)
+	if scopeErr != nil {
+		writeError(w, 400, scopeErr.Error())
 		return
 	}
+	input.Scopes = scopes
 	input.InstalledBy = data.Viewer.ID
 	secret, err := randomSecret("flow_webhook_")
 	if err != nil {
@@ -259,25 +277,43 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 		return
 	}
 	var input struct {
-		Version int64  `json:"expectedVersion"`
-		Type    string `json:"type"`
-		Body    string `json:"body"`
-		URL     string `json:"url"`
-		Approve *bool  `json:"approve,omitempty"`
+		Version        int64          `json:"expectedVersion"`
+		Type           string         `json:"type"`
+		Body           string         `json:"body"`
+		ActivityID     string         `json:"activityId"`
+		Enabled        *bool          `json:"enabled"`
+		URL            string         `json:"url"`
+		Approve        *bool          `json:"approve,omitempty"`
+		Signal         string         `json:"signal,omitempty"`
+		SignalMetadata map[string]any `json:"signalMetadata,omitempty"`
+		Content        *struct {
+			Type      string `json:"type"`
+			Body      string `json:"body"`
+			Action    string `json:"action"`
+			Parameter string `json:"parameter"`
+			Result    string `json:"result"`
+		} `json:"content,omitempty"`
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 80<<10)
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	if !data.Viewer.App && input.Type != "prompt" && input.Type != "canceled" && input.Type != "retry" {
+	if input.Content != nil {
+		input.Type, input.Body = input.Content.Type, input.Content.Body
+	}
+	if err := validateApplicationSignal(input.Type, input.Signal, input.SignalMetadata, data.Viewer.App); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if !data.Viewer.App && input.Type != "prompt" && input.Type != "canceled" && input.Type != "retry" && input.Type != "feedback" {
 		writeError(w, 403, "Only the session application may emit agent activities")
 		return
 	}
-	if input.Type == "prompt" && input.Approve == nil && strings.TrimSpace(input.Body) == "" {
+	if input.Type == "prompt" && task.PendingTool == nil && input.Signal != "stop" && strings.TrimSpace(input.Body) == "" {
 		writeError(w, 400, "A reply is required")
 		return
 	}
-	if data.Viewer.App && (input.Type == "prompt" || input.Type == "canceled" || input.Type == "retry") {
+	if data.Viewer.App && (input.Type == "prompt" || input.Type == "canceled" || input.Type == "retry" || input.Type == "feedback") {
 		writeError(w, 403, "Application cannot impersonate user input")
 		return
 	}
@@ -285,8 +321,18 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 		writeError(w, 400, "Activity links must use HTTPS")
 		return
 	}
-	activity := domain.AgentActivity{ActorID: data.Viewer.ID, Type: input.Type, Body: input.Body, URL: input.URL}
-	if input.Type == "prompt" && task.PendingTool != nil {
+	activity := domain.AgentActivity{ActorID: data.Viewer.ID, Type: input.Type, Body: input.Body, URL: input.URL, Signal: input.Signal, SignalMetadata: input.SignalMetadata}
+	if input.Type == "feedback" {
+		if input.ActivityID == "" || input.Enabled == nil || input.Signal != "" || input.URL != "" {
+			writeError(w, 400, "Feedback requires an activity ID and an explicit enabled value")
+			return
+		}
+		activity.Metadata = map[string]any{"activityId": input.ActivityID, "enabled": *input.Enabled}
+	}
+	if input.Content != nil && input.Type == "action" {
+		activity.Metadata = map[string]any{"action": input.Content.Action, "parameter": input.Content.Parameter, "result": input.Content.Result}
+	}
+	if input.Type == "prompt" && input.Signal != "stop" && task.PendingTool != nil {
 		if input.Approve == nil {
 			writeError(w, 400, "Explicit approval or rejection is required")
 			return
@@ -303,6 +349,10 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 		activity.ToolCall = &call
 	}
 	updated, err := s.store.AppendAgentActivity(r.Context(), task.WorkspaceKey, task.ID, input.Version, activity)
+	if err == store.ErrIssueQuery {
+		writeError(w, 400, "Invalid activity or feedback target")
+		return
+	}
 	if err == store.ErrIssueVersion {
 		writeError(w, 409, "Session changed; reload before replying")
 		return
@@ -352,7 +402,7 @@ func (s *server) runApplicationAgentWorker(ctx context.Context) {
 
 func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTask) {
 	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
-	if err != nil || !app.Active || !slices.Contains(app.TeamIDs, task.TeamID) {
+	if err != nil || !app.Active || !slices.Contains(app.AccessTeamIDs(), task.TeamID) {
 		_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{Type: "canceled", Body: "Application access was revoked."})
 		return
 	}
@@ -373,7 +423,7 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 						return
 					}
 					installation, err := s.store.ApplicationByUser(ctx, task.AppUserID)
-					if err != nil || !installation.Active || !slices.Contains(installation.TeamIDs, task.TeamID) {
+					if err != nil || !installation.Active || !slices.Contains(installation.AccessTeamIDs(), task.TeamID) {
 						cancel()
 						return
 					}
@@ -382,7 +432,7 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 		}(ctx)
 	}
 	user := app.User()
-	key := domain.APIKey{CreatorID: user.ID, Scopes: app.Scopes, TeamRestriction: "selected", TeamIDs: app.TeamIDs, OAuthClientID: app.ClientID}
+	key := domain.APIKey{CreatorID: user.ID, SubjectUserID: user.ID, Actor: "app", Scopes: app.Scopes, TeamRestriction: "selected", TeamIDs: app.AccessTeamIDs(), OAuthClientID: app.ClientID}
 	ctx = context.WithValue(ctx, authUserContextKey{}, user)
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, task.WorkspaceKey)
 	ctx = context.WithValue(ctx, apiKeyContextKey{}, key)
@@ -395,6 +445,14 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 	}
 	data.Viewer = app.User()
 	data.ViewerRole = "app"
+	if app.Builtin {
+		var err error
+		r, data, err = s.builtinApplicationContext(r, app, task)
+		if err != nil {
+			_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{Type: "canceled", Body: "The requesting user no longer has access to this resource."})
+			return
+		}
+	}
 	if agentWorkspacePolicy(data.WorkspaceSettings, "app") != nil {
 		_, _ = s.store.AppendAgentActivity(ctx, task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{Type: "canceled", Body: "Agent execution is disabled by workspace policy."})
 		return
@@ -456,7 +514,7 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 func (s *server) executeBuiltinApplication(r *http.Request, app domain.ApplicationInstallation, task domain.AgentTask, data domain.Bootstrap) {
 	appendWithTool := func(kind, body string, call *domain.AgentToolCall) error {
 		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
-		if err != nil || !current.Active || !slices.Contains(current.TeamIDs, task.TeamID) {
+		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
 			return store.ErrAuthForbidden
 		}
 		next, err := s.store.AppendAgentActivity(r.Context(), task.WorkspaceKey, task.ID, task.Version, domain.AgentActivity{ActorID: task.AppUserID, Type: kind, Body: body, ToolCall: call})
@@ -468,12 +526,16 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 	appendActivity := func(kind, body string) error { return appendWithTool(kind, body, nil) }
 	execute := func(call domain.AgentToolCall) ([]byte, error) {
 		current, err := s.store.ApplicationByUser(r.Context(), task.AppUserID)
-		if err != nil || !current.Active || !slices.Contains(current.TeamIDs, task.TeamID) {
+		if err != nil || !current.Active || !slices.Contains(current.AccessTeamIDs(), task.TeamID) {
 			return nil, store.ErrAuthForbidden
 		}
-		key := domain.APIKey{CreatorID: current.UserID, Scopes: current.Scopes, TeamRestriction: "selected", TeamIDs: current.TeamIDs, OAuthClientID: current.ClientID}
+		key := domain.APIKey{CreatorID: current.UserID, SubjectUserID: current.UserID, Actor: "app", Scopes: current.Scopes, TeamRestriction: "selected", TeamIDs: current.AccessTeamIDs(), OAuthClientID: current.ClientID}
 		req := r.WithContext(context.WithValue(r.Context(), apiKeyContextKey{}, key))
-		return s.executeAgentTool(req, data, call)
+		req, scoped, err := s.builtinApplicationContext(req, current, task)
+		if err != nil {
+			return nil, err
+		}
+		return s.executeAgentTool(req, scoped, call)
 	}
 	if !s.agent.Enabled {
 		_ = appendActivity("error", "Flow Agent is not configured.")

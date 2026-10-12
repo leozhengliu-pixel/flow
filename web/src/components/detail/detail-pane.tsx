@@ -3,7 +3,7 @@ import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/
 import { issueCustomerRowData } from '@/components/issue-explorer/customer-filter'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import { DocumentGlyph } from '@/components/documents/document-icon'
-import { IssueAgentPicker, IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
+import { IssueAgentPicker, IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
 import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
@@ -129,7 +129,7 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
       variant={triageView?'triage':'page'}
     />}
     <div className="issue-scroll"><div className="issue-layout">
-      <article className="issue-document">
+      <IssueAgentTasksProvider key={`${data.workspace.id}:${issue.id}`} issue={issue} data={data} onUpload={uploadCommentFile}><article className="issue-document">
         <IssueTitleEditor value={title} onChange={value=>{setTitle(value);schedule({title:value})}} onBlur={()=>void flush()}/>
         {parentIssue&&<IssueParentContext parent={parentIssue} issues={data.issues} workspaceKey={data.workspace.urlKey} onOpen={()=>openIssue(parentIssue)}/>}
         {embedded&&triageActions&&<div className="issue-triage-embedded-actions"><span>{t('Triage')}</span>{triageActions}</div>}
@@ -171,13 +171,12 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         {(linkedDocuments.length>0||linkedResources.length>0)&&<IssueResources documents={linkedDocuments} links={linkedResources} workspaceKey={data.workspace.urlKey} actions={issueOptionsActions} onDeleteLink={onDeleteAttachment}/>}
         {data.workspaceSettings.featureFlags['customer-requests'] !== false && <IssueCustomerNeedsSection data={data} issueId={issue.id} requests={[...localCustomerRequests, ...customerRequests]} onLocalCreated={request=>setLocalCustomerRequests(current=>[request,...current.filter(item=>item.id!==request.id)])}/>}
         <IssueAttachments attachments={fileAttachments} upload={uploadState} onRetry={upload} onDelete={onDeleteAttachment}/>
-        <IssueAgentTasks key={`${data.workspace.id}:${issue.id}`} issue={issue} data={data}/>
         {descriptionSelection.panels}
         <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
         {historyLoading&&<div className="issue-history-state" role="status">{t('Loading activity...')}</div>}
         {historyError&&!historyLoading&&<div className="issue-history-state" role="alert"><span>{t('Could not load activity')}: {historyError}</span>{onRetryHistory&&<Button variant="ghost" size="sm" onClick={onRetryHistory}><RotateCw size={14}/>{t('Retry')}</Button>}</div>}
-        <div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider></div><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
-      </article>
+        <div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} renderAgentThread={comment=><IssueAgentTasks issue={issue} data={data} commentId={comment.id}/>} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider><IssueAgentTasks issue={issue} data={data} standalone/></div><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
+      </article></IssueAgentTasksProvider>
       <div className="issue-agent-rail">
         {agentOpen ? (
           <EntityAgentPanel

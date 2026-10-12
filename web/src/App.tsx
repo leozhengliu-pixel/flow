@@ -1242,8 +1242,7 @@ function App() {
         await reloadAgentRecords(workspace, viewerId, event);
         return;
       }
-      // Delegated-agent task panels refresh on this push instead of polling.
-      if (event.type.startsWith('agent_task.')) window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: event.aggregateId ?? '' }));
+      // agent_task.* pushes never reach here: use-workspace-realtime dispatches AGENT_TASK_ACTIVITY_EVENT directly.
       const entity = event.payload?.entity;
       if (/^(favorite\.|favorite_folder\.|subscription\.)/.test(event.type)) {
         const preferences = await fetchResourcePreferences(workspace);

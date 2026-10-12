@@ -104,6 +104,11 @@ docker compose up -d --build
 PostgreSQL/MySQL、S3/MinIO、Google OAuth、企业 OIDC、SAML、Secret 文件和
 OpenTelemetry 的完整配置见 [部署配置](docs/configuration.md) 与 [`.env.example`](.env.example)。
 
+## 开发应用
+
+应用接入、OAuth 安装、客户端凭据、权限范围和外部 Agent 开发，见
+[Flow 开发者指南](docs/developers.zh-CN.md)（[English](docs/developers.md)）。
+
 ## 验证
 
 ```bash

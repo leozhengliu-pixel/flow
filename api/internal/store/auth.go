@@ -1534,7 +1534,7 @@ func teamVisibleToUser(data domain.Bootstrap, teamID, userID, workspaceRole stri
 		return true
 	}
 	if workspaceRole == "app" {
-		return false
+		return data.Viewer.ID == userID && data.Viewer.App && data.Viewer.Active && slices.Contains(data.Viewer.AppTeamIDs, teamID)
 	}
 	settings := data.TeamSettings[teamID]
 	access := strings.ToLower(strings.TrimSpace(settings.Access))

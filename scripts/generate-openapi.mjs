@@ -37,6 +37,39 @@ for (const route of routes) {
   }
 }
 
+const tokenResponse = { type: 'object', properties: {
+  access_token: { type: 'string' }, token_type: { const: 'Bearer' }, expires_in: { type: 'integer' },
+  scope: { type: 'string' }, refresh_token: { type: 'string' }, actor: { enum: ['app', 'user'] }, subject_user_id: { type: 'string' }, app_user_id: { type: 'string' },
+}, required: ['access_token', 'token_type', 'expires_in', 'scope'] }
+for (const tokenPath of ['/oauth/token', '/api/oauth/token']) {
+  const operation = paths[tokenPath]?.post
+  if (!operation) continue
+  operation.security = []
+  operation.description = 'OAuth authorization-code, refresh-token and opt-in app-actor client-credentials grants. Confidential clients authenticate with HTTP Basic or form fields.'
+  operation.requestBody = { required: true, content: { 'application/x-www-form-urlencoded': { schema: {
+    type: 'object', required: ['grant_type'], properties: {
+      grant_type: { enum: ['authorization_code', 'refresh_token', 'client_credentials'] }, client_id: { type: 'string' }, client_secret: { type: 'string', writeOnly: true },
+      code: { type: 'string' }, redirect_uri: { type: 'string', format: 'uri' }, code_verifier: { type: 'string', writeOnly: true }, refresh_token: { type: 'string', writeOnly: true }, scope: { type: 'string' },
+    },
+  } } } }
+  operation.responses['200'] = { description: 'OAuth token response. Access tokens are secrets and should not be logged.', content: { 'application/json': { schema: tokenResponse } } }
+}
+for (const publicPath of ['/oauth/register', '/oauth/revoke']) {
+  if (paths[publicPath]?.post) paths[publicPath].post.security = []
+}
+const developerToken = paths['/api/oauth-applications/{id}/developer-token']?.post
+if (developerToken) {
+  developerToken.security = [{ sessionCookie: [] }]
+  developerToken.description = 'Requires an interactive workspace owner/admin session. App tokens never inherit the issuing administrator role.'
+  developerToken.requestBody = { required: true, content: { 'application/json': { schema: { type: 'object', properties: { actor: { enum: ['app', 'user'], default: 'app' }, scopes: { type: 'array', items: { type: 'string' }, minItems: 1 } } } } } }
+  developerToken.responses['200'] = { description: 'One-time developer access token, valid for one hour.', content: { 'application/json': { schema: tokenResponse } } }
+}
+const rotateSecret = paths['/api/oauth-applications/{id}/rotate-secret']?.post
+if (rotateSecret) {
+  rotateSecret.security = [{ sessionCookie: [] }]
+  rotateSecret.description = 'Rotate the client secret and immediately invalidate existing client-credentials tokens. The new secret is returned once.'
+}
+
 const document = {
   openapi: '3.1.0',
   info: {
@@ -48,7 +81,7 @@ const document = {
   paths,
   components: {
     securitySchemes: {
-      sessionCookie: { type: 'apiKey', in: 'cookie', name: 'flow_session' },
+      sessionCookie: { type: 'apiKey', in: 'cookie', name: 'flow_clone_session' },
       bearerToken: { type: 'http', scheme: 'bearer' },
     },
   },

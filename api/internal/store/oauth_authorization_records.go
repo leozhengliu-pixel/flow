@@ -16,7 +16,7 @@ import (
 
 func oauthPolicyMetadata(ctx context.Context, tx metadataReader, workspace, lock string) (domain.Bootstrap, error) {
 	data := domain.Bootstrap{Settings: map[string]any{}}
-	rows, err := tx.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND ((field='workspaceSettings' AND record_key='reviewThirdPartyApplications') OR (field='settings' AND record_key='applicationPolicies'))`+lock, workspace)
+	rows, err := tx.QueryContext(ctx, `SELECT field,record_key,data FROM workspace_metadata_records WHERE workspace_key=? AND ((field='workspaceSettings' AND record_key='reviewThirdPartyApplications') OR (field='settings' AND record_key='applicationPolicies') OR field='oauthApplications')`+lock, workspace)
 	if err != nil {
 		return data, err
 	}
@@ -27,7 +27,12 @@ func oauthPolicyMetadata(ctx context.Context, tx metadataReader, workspace, lock
 		if err := rows.Scan(&field, &id, &raw); err != nil {
 			return data, err
 		}
-		if field == "workspaceSettings" {
+		if field == "oauthApplications" {
+			var app domain.OAuthApplication
+			err = json.Unmarshal(raw, &app)
+			app.ClientSecret = ""
+			data.OAuthApplications = append(data.OAuthApplications, app)
+		} else if field == "workspaceSettings" {
 			err = json.Unmarshal(raw, &data.WorkspaceSettings.ReviewThirdPartyApplications)
 		} else {
 			var value any
@@ -111,9 +116,16 @@ func ensureOAuthMetadataShape(ctx context.Context, tx *sqlTx, workspace, field, 
 	return err
 }
 
-func oauthRecordEvent(ctx context.Context, tx *sqlTx, eventType, id string) (domain.DomainEvent, error) {
+func oauthRecordEvent(ctx context.Context, tx *sqlTx, eventType, id string, values ...any) (domain.DomainEvent, error) {
 	now := time.Now().UTC()
 	event := domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: eventType, AggregateID: id, Payload: json.RawMessage(`null`), CreatedAt: now}
+	if len(values) > 0 {
+		payload, err := json.Marshal(values[0])
+		if err != nil {
+			return event, err
+		}
+		event.Payload = payload
+	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, id, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano))
 	return event, err
 }
@@ -135,8 +147,14 @@ func (s *SQLiteStore) CreateOAuthAuthorizationGrant(ctx context.Context, code st
 			if err != nil {
 				return current, err
 			}
+			if client.HomeWorkspaceKey != "" && !client.PublicEnabled && client.HomeWorkspaceKey != grant.WorkspaceKey {
+				return current, ErrAuthForbidden
+			}
+			if client.AllowedScopes != nil && slices.ContainsFunc(grant.Scopes, func(scope string) bool { return !slices.Contains(client.AllowedScopes, scope) }) {
+				return current, ErrAuthForbidden
+			}
 			var installed domain.ApplicationInstallation
-			installation := domain.ApplicationInstallation{ClientID: grant.ClientID, Name: client.ClientName, AvatarURL: client.LogoURI, InstalledBy: grant.InstallerID, Scopes: grant.Scopes, TeamIDs: grant.TeamIDs, Active: true}
+			installation := domain.ApplicationInstallation{ClientID: grant.ClientID, Name: client.ClientName, AvatarURL: client.LogoURI, InstalledBy: grant.InstallerID, Scopes: grant.Scopes, TeamIDs: grant.TeamIDs, AllPublicTeams: grant.AllPublicTeams, Active: true}
 			var previous []byte
 			if findErr := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND client_id=?`, grant.WorkspaceKey, grant.ClientID).Scan(&previous); findErr == nil {
 				var old domain.ApplicationInstallation

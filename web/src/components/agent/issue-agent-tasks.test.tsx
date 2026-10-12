@@ -1,16 +1,18 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
 import { makeBootstrap,makeIssue,viewer } from '@/test/fixtures'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { AGENT_TASK_ACTIVITY_EVENT,canDelegateTo,listApplicationTasks,getApplicationTask,replyApplicationTask,type ApplicationTask } from '@/lib/application-agents'
-import { IssueAgentTasks,IssueAgentPicker } from './issue-agent-tasks'
+import { setRuntimePreferences } from '@/lib/runtime-preferences'
+import { AGENT_TASK_ACTIVITY_EVENT,canDelegateTo,listApplicationTasks,getApplicationTask,reactApplicationTask,replyApplicationTask,type ApplicationTask } from '@/lib/application-agents'
+import { IssueAgentTasks,IssueAgentPicker,IssueAgentTasksProvider } from './issue-agent-tasks'
 
-vi.mock('@/lib/application-agents',async original=>({...await original<typeof import('@/lib/application-agents')>(),listApplicationTasks:vi.fn(),getApplicationTask:vi.fn(),replyApplicationTask:vi.fn()}))
+vi.mock('@/lib/application-agents',async original=>({...await original<typeof import('@/lib/application-agents')>(),listApplicationTasks:vi.fn(),getApplicationTask:vi.fn(),replyApplicationTask:vi.fn(),reactApplicationTask:vi.fn()}))
 vi.mock('./agent-rich-text',()=>({AgentRichText:({content}:{content:string})=><div>{content}</div>}))
 const app={...viewer,id:'app-one',displayName:'Agent',app:true,appScopes:['app:assignable'],appTeamIds:['team-1']}
 const task:ApplicationTask={id:'session',issueId:'issue-1',teamId:'team-1',appUserId:app.id,creatorId:viewer.id,status:'awaitingInput',version:3,prompt:'Inspect',trigger:'delegation',updatedAt:'',pendingTool:{name:'save_issue',arguments:{title:'Changed'},status:'pending'}}
+afterEach(()=>setRuntimePreferences({}))
 beforeEach(()=>{vi.clearAllMocks();vi.mocked(listApplicationTasks).mockResolvedValue([task]);vi.mocked(getApplicationTask).mockResolvedValue({session:task,activities:[]});vi.mocked(replyApplicationTask).mockResolvedValue({...task,status:'pending'})})
 describe('issue agent tasks',()=>{
   it('gates delegates by application capabilities and selected teams',()=>{
@@ -32,6 +34,55 @@ describe('issue agent tasks',()=>{
     render(<I18nProvider><IssueAgentTasks issue={issue} data={makeBootstrap({users:[viewer,app]})}/></I18nProvider>)
     await user.click(await screen.findByRole('button',{name:'Approve'}))
     await waitFor(()=>expect(replyApplicationTask).toHaveBeenCalledWith('workspace',task,'prompt','',true))
+  })
+  it('selects an option locally and submits only after Continue',async()=>{
+    const user=userEvent.setup(),waiting={...task,pendingTool:undefined,commentId:'comment-one'}
+    vi.mocked(listApplicationTasks).mockResolvedValue([waiting])
+    vi.mocked(getApplicationTask).mockResolvedValue({session:waiting,activities:[{id:'q',sessionId:task.id,actorId:app.id,type:'elicitation',body:'Language?',createdAt:'',signal:'select',signalMetadata:{options:[{value:'English'},{value:'Chinese'}]}}]})
+    const issue=makeIssue({delegate:app}),data=makeBootstrap({users:[viewer,app]})
+    render(<I18nProvider><IssueAgentTasksProvider issue={issue} data={data}><IssueAgentTasks issue={issue} data={data} commentId="comment-one"/></IssueAgentTasksProvider></I18nProvider>)
+    await user.click(await screen.findByRole('button',{name:'Chinese'}))
+    expect(replyApplicationTask).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button',{name:'Continue with selected option'}))
+    await waitFor(()=>expect(replyApplicationTask).toHaveBeenCalledWith('workspace',waiting,'prompt','Chinese',undefined))
+    expect(listApplicationTasks).toHaveBeenCalledTimes(2)
+  })
+  it('allows a follow-up after a completed response',async()=>{
+    const user=userEvent.setup(),completed={...task,status:'complete' as const,pendingTool:undefined}
+    vi.mocked(listApplicationTasks).mockResolvedValue([completed])
+    vi.mocked(getApplicationTask).mockResolvedValue({session:completed,activities:[{id:'r',sessionId:task.id,actorId:app.id,type:'response',body:'Done',createdAt:''}]})
+    render(<I18nProvider><IssueAgentTasks issue={makeIssue({delegate:app})} data={makeBootstrap({users:[viewer,app]})}/></I18nProvider>)
+    await user.click(await screen.findByRole('button',{name:/Leave a reply/}))
+    await user.type(screen.getByRole('textbox',{name:'Reply to agent'}),'Explain further')
+    await user.click(screen.getByRole('button',{name:'Send reply'}))
+    await waitFor(()=>expect(replyApplicationTask).toHaveBeenCalledWith('workspace',completed,'prompt','Explain further',undefined))
+  })
+  it('preserves Chinese composition and honors the comment submit preference',async()=>{
+    const user=userEvent.setup(),completed={...task,status:'complete' as const,pendingTool:undefined}
+    vi.mocked(listApplicationTasks).mockResolvedValue([completed])
+    vi.mocked(getApplicationTask).mockResolvedValue({session:completed,activities:[]})
+    render(<I18nProvider><IssueAgentTasks issue={makeIssue({delegate:app})} data={makeBootstrap({users:[viewer,app]})}/></I18nProvider>)
+    await user.click(await screen.findByRole('button',{name:/Leave a reply/}))
+    const input=screen.getByRole('textbox',{name:'Reply to agent'})
+    await user.type(input,'中文')
+    fireEvent.keyDown(input,{key:'Enter',isComposing:true})
+    expect(replyApplicationTask).not.toHaveBeenCalled()
+    setRuntimePreferences({sendComments:'⌘ Enter'})
+    fireEvent.keyDown(input,{key:'Enter'})
+    expect(replyApplicationTask).not.toHaveBeenCalled()
+    fireEvent.keyDown(input,{key:'Enter',ctrlKey:true})
+    await waitFor(()=>expect(replyApplicationTask).toHaveBeenCalledWith('workspace',completed,'prompt','中文',undefined))
+  })
+  it('saves a reaction without resuming the completed task',async()=>{
+    const user=userEvent.setup(),completed={...task,status:'complete' as const,pendingTool:undefined}
+    vi.mocked(listApplicationTasks).mockResolvedValue([completed])
+    vi.mocked(getApplicationTask).mockResolvedValue({session:completed,activities:[{id:'r',sessionId:task.id,actorId:app.id,type:'response',body:'Answer',createdAt:''}]})
+    vi.mocked(reactApplicationTask).mockResolvedValue({...completed,version:4})
+    render(<I18nProvider><IssueAgentTasks issue={makeIssue({delegate:app})} data={makeBootstrap({users:[viewer,app]})}/></I18nProvider>)
+    await user.click(await screen.findByRole('button',{name:/React with thumbs up/}))
+    await waitFor(()=>expect(reactApplicationTask).toHaveBeenCalledWith('workspace',completed,'r','👍',true))
+    expect(replyApplicationTask).not.toHaveBeenCalled()
+    expect(await screen.findByRole('button',{name:/React with thumbs up/})).toHaveAttribute('aria-pressed','true')
   })
   describe('refresh',()=>{
     afterEach(()=>{vi.useRealTimers()})

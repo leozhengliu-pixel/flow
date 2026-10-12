@@ -57,6 +57,12 @@ func visibleIssueTeams(data domain.Bootstrap, userID, role string) []string {
 		if team.ArchivedAt != nil {
 			continue
 		}
+		if role == "app" {
+			if data.Viewer.ID == userID && data.Viewer.App && data.Viewer.Active && slices.Contains(data.Viewer.AppTeamIDs, team.ID) {
+				visible = append(visible, team.ID)
+			}
+			continue
+		}
 		allowed := isWorkspaceAdminRole(role) || roles[team.ID] != ""
 		settings := data.TeamSettings[team.ID]
 		if !allowed && role != "guest" {

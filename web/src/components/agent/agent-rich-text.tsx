@@ -8,7 +8,7 @@ import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
 import { AgentEntityNode } from './agent-entity-node'
 import styles from './agent-rich-text.module.css'
 
-export function AgentRichText({ ariaLabel = 'AI message', className, content }: { ariaLabel?: string; className: string; content: string }) {
+export function AgentRichText({ ariaLabel = 'AI message', className = 'agent-rich-text', content }: { ariaLabel?: string; className?: string; content: string }) {
   const editor = useEditor({
     immediatelyRender: false,
     editable: false,

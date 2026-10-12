@@ -2075,5 +2075,13 @@ func (s *SQLiteStore) Events(ctx context.Context, aggregateID string) ([]domain.
 		event.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
 		events = append(events, event)
 	}
+	// RFC3339Nano drops trailing zeros, so lexical SQL order can place a later
+	// fractional timestamp before an earlier one. Compare decoded instants.
+	slices.SortStableFunc(events, func(a, b domain.DomainEvent) int {
+		if order := a.CreatedAt.Compare(b.CreatedAt); order != 0 {
+			return order
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
 	return events, rows.Err()
 }

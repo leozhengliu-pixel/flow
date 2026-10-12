@@ -60,6 +60,33 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 			return nil, err
 		}
 	}
+	if actor.AuthorizationUserID != "" && (name == "save_issue" || strings.Contains(name, "attachment") || name == "save_comment") {
+		viewer, err := s.store.UserByID(ctx, actor.AuthorizationUserID)
+		if err != nil || !viewer.Active {
+			return nil, fmt.Errorf("requester access was revoked")
+		}
+		authorized := data
+		authorized.Viewer = viewer
+		authorized.ViewerRole, _, err = s.store.WorkspaceRole(ctx, data.Workspace.ID, viewer.ID)
+		if err != nil {
+			return nil, err
+		}
+		rank := issuePermissionRank("editor")
+		if name == "save_comment" {
+			rank = issuePermissionRank("commenter")
+		}
+		for _, field := range []string{"id", "issue", "issueId"} {
+			query := stringArg(args, field)
+			if query == "" {
+				continue
+			}
+			for _, issue := range data.Issues {
+				if equalFoldAny(query, issue.ID, issue.Identifier) && issuePermissionRank(issueRole(s, authorized, issue)) < rank {
+					return nil, fmt.Errorf("requester cannot modify this issue")
+				}
+			}
+		}
+	}
 	switch name {
 	case "get_workspace":
 		return map[string]any{"id": data.Workspace.ID, "name": data.Workspace.Name, "urlKey": data.Workspace.URLKey, "viewer": data.Viewer}, nil
@@ -318,9 +345,24 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 }
 
 func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.Bootstrap, error) {
-	data, err := s.store.PagedWorkspaceMetadata(ctx, actor.WorkspaceKey, actor.User.ID)
+	userID := actor.User.ID
+	if actor.AuthorizationUserID != "" {
+		userID = actor.AuthorizationUserID
+	}
+	data, err := s.store.PagedWorkspaceMetadata(ctx, actor.WorkspaceKey, userID)
 	if err != nil {
 		return data, fmt.Errorf("workspace access denied")
+	}
+	filterApplicationScopeProjection(&data, actor.APIKey)
+	if actor.AuthorizationUserID != "" {
+		appData, err := s.store.PagedWorkspaceMetadata(ctx, actor.WorkspaceKey, actor.User.ID)
+		if err != nil {
+			return data, err
+		}
+		data.Documents = slices.DeleteFunc(data.Documents, func(doc domain.Document) bool {
+			return !slices.ContainsFunc(appData.Documents, func(other domain.Document) bool { return other.ID == doc.ID })
+		})
+		data.Viewer, data.ViewerRole = actor.User, "app"
 	}
 	// Passkeys are account-scoped metadata. MCP callers may inspect workspace
 	// resources, but must not enumerate credentials belonging to other users.
@@ -393,7 +435,11 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 }
 
 func (s *server) mcpIssueQuery(ctx context.Context, actor mcpActor) (store.IssueRecordQuery, error) {
-	data, access, err := s.store.IssueQueryAccess(ctx, actor.WorkspaceKey, actor.User.ID)
+	userID := actor.User.ID
+	if actor.AuthorizationUserID != "" {
+		userID = actor.AuthorizationUserID
+	}
+	data, access, err := s.store.IssueQueryAccess(ctx, actor.WorkspaceKey, userID)
 	q := store.IssueRecordQuery{Workspace: data.Workspace.URLKey, Access: &access, Archived: "all"}
 	if apiKeyTeamRestrictionSelected(actor.APIKey) {
 		q.AllowedTeamIDs = slices.Clone(actor.APIKey.TeamIDs)
