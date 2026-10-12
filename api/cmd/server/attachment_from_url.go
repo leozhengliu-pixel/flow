@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,20 @@ import (
 
 const maxAttachmentFromURLBytes = 20 << 20
 
+// attachmentFetchClient downloads user-supplied URLs. Every dial (including
+// redirect hops) must resolve to a public address, so the endpoint can't be
+// used to reach loopback, private networks or cloud metadata services.
+var attachmentFetchClient = func() *http.Client {
+	client := secureOutboundClient(30 * time.Second)
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 || (req.URL.Scheme != "http" && req.URL.Scheme != "https") || req.URL.User != nil {
+			return errors.New("unsafe redirect")
+		}
+		return nil
+	}
+	return client
+}
+
 func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		URL   string `json:"url"`
@@ -27,7 +42,7 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 	}
 	raw := strings.TrimSpace(input.URL)
 	parsed, err := url.ParseRequestURI(raw)
-	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
 		writeError(w, http.StatusBadRequest, "a valid http or https URL is required")
 		return
 	}
@@ -38,7 +53,7 @@ func (s *server) createAttachmentFromURL(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	req.Header.Set("User-Agent", "FlowAttachmentFetcher/1.0")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := attachmentFetchClient().Do(req)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "could not fetch url")
 		return

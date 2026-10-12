@@ -729,6 +729,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issue-records/{id}/relations", s.issueRecordAlias(s.createRelation))
 	mux.HandleFunc("DELETE /api/issue-records/{id}/relations/{relationId}", s.issueRecordAlias(s.deleteRelation))
 	mux.HandleFunc("POST /api/issue-records/{id}/attachments", s.issueRecordAlias(s.createAttachment))
+	mux.HandleFunc("POST /api/issue-records/{id}/attachments/from-url", s.issueRecordAlias(s.createAttachmentFromURL))
 	mux.HandleFunc("POST /api/issue-records/{id}/links", s.issueRecordAlias(s.createIssueLink))
 	mux.HandleFunc("DELETE /api/issue-records/{id}/attachments/{attachmentId}", s.issueRecordAlias(s.deleteAttachment))
 	mux.HandleFunc("POST /api/issue-records/{id}/reminders", s.issueRecordAlias(s.createIssueReminder))
