@@ -558,7 +558,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
 				continue
 			}
-			if (s.agentToolRequiresApproval(call.Name) || strings.HasPrefix(call.Name, "external_")) && !sessionLoopTool(*session, call) {
+			if (agentToolNeedsApproval(call.Name)) && !sessionLoopTool(*session, call) {
 				approvalID := fmt.Sprintf("agent_approval_%d", time.Now().UnixNano())
 				call.ApprovalID = approvalID
 				call.Status = "pending"
@@ -805,6 +805,16 @@ func cleanAgentSessionTitle(text string) string {
 	return strings.TrimSpace(title)
 }
 
+// agentToolNeedsApproval reports whether a chat or agent-thread tool call waits
+// for the user. Like the reference app's agent, Flow writes (issues, documents, projects,
+// views, deletes to trash…) apply immediately; only third-party connector
+// tools, which act outside Flow, ask first.
+func agentToolNeedsApproval(name string) bool {
+	return strings.HasPrefix(name, "external_")
+}
+
+// agentToolRequiresApproval reports whether a tool writes workspace data (used
+// by loop scope checks).
 func (s *server) agentToolRequiresApproval(name string) bool {
 	if !s.agent.WriteTools || !s.agent.ToolsEnabled {
 		return false

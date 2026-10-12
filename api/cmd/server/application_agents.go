@@ -634,7 +634,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
 		for _, call := range turn.ToolCalls {
-			if s.agentToolRequiresApproval(call.Name) || strings.HasPrefix(call.Name, "external_") {
+			if agentToolNeedsApproval(call.Name) {
 				call.Status = "pending"
 				_ = appendWithTool("elicitation", "This action requires your confirmation: "+call.Name+"\n"+string(call.Arguments), &call)
 				return
