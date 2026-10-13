@@ -540,14 +540,14 @@ func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain
 		value := intArg(args, "priority", 0)
 		input.Priority = &value
 	}
-	if value, present := nullableStringArg(args, "startDate"); present {
-		input.StartDate = &value
+	if input.StartDate, err = mcpDateArg(args, "startDate"); err != nil {
+		return nil, err
 	}
 	if value, ok := args["startDateResolution"].(string); ok {
 		input.StartDateResolution = &value
 	}
-	if value, present := nullableStringArg(args, "targetDate"); present {
-		input.TargetDate = &value
+	if input.TargetDate, err = mcpDateArg(args, "targetDate"); err != nil {
+		return nil, err
 	}
 	if value, ok := args["targetDateResolution"].(string); ok {
 		input.TargetDateResolution = &value
@@ -563,7 +563,11 @@ func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain
 			input.LeadID = &user.ID
 		}
 	}
-	if state := stringArg(args, "state"); state != "" {
+	if _, present := args["state"]; present {
+		state := stringArg(args, "state")
+		if state == "" {
+			return nil, fmt.Errorf("state must be a project status name, id or type")
+		}
 		for _, status := range data.ProjectStatuses {
 			if equalFoldAny(state, status.ID, status.Name, status.Type) {
 				input.StatusID = &status.ID
@@ -571,7 +575,11 @@ func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain
 			}
 		}
 		if input.StatusID == nil {
-			return nil, fmt.Errorf("project status not found")
+			names := []string{}
+			for _, status := range data.ProjectStatuses {
+				names = append(names, status.Name)
+			}
+			return nil, fmt.Errorf("project status %q not found; use one of: %s", state, strings.Join(names, ", "))
 		}
 	}
 	if labels, present := args["labels"]; present {
@@ -635,7 +643,67 @@ func (s *server) saveMCPProject(ctx context.Context, actor mcpActor, data domain
 	if err != nil {
 		return nil, err
 	}
-	return mcpFindProject(updated, saved.ID)
+	project, err := mcpFindProject(updated, saved.ID)
+	if err != nil {
+		return nil, err
+	}
+	// A save that reports success must have changed what it was asked to:
+	// never answer with the unchanged project.
+	if input.StatusID != nil && project.Status.ID != *input.StatusID {
+		return nil, fmt.Errorf("project state was not applied (still %q)", project.Status.Name)
+	}
+	if err := mcpDateApplied("startDate", input.StartDate, project.StartDate); err != nil {
+		return nil, err
+	}
+	if err := mcpDateApplied("targetDate", input.TargetDate, project.TargetDate); err != nil {
+		return nil, err
+	}
+	return project, nil
+}
+
+// mcpDateArg reads an optional date argument: absent leaves the field
+// alone, null or "" clears it, and anything else must be a YYYY-MM-DD date
+// (an RFC 3339 timestamp is cut to its date). A value that can't be read is
+// an error, so a write never silently skips it.
+func mcpDateArg(args map[string]any, key string) (*string, error) {
+	value, present := args[key]
+	if !present {
+		return nil, nil
+	}
+	empty := ""
+	if value == nil {
+		return &empty, nil
+	}
+	text, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("%s must be a date (YYYY-MM-DD) or null", key)
+	}
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return &empty, nil
+	}
+	if parsed, err := time.Parse(time.RFC3339, text); err == nil {
+		text = parsed.Format(time.DateOnly)
+	}
+	if _, err := time.Parse(time.DateOnly, text); err != nil {
+		return nil, fmt.Errorf("%s must be a date (YYYY-MM-DD) or null, got %q", key, text)
+	}
+	return &text, nil
+}
+
+// mcpDateApplied checks that a saved date matches the requested one.
+func mcpDateApplied(key string, requested, saved *string) error {
+	if requested == nil {
+		return nil
+	}
+	got := ""
+	if saved != nil {
+		got = *saved
+	}
+	if got != *requested {
+		return fmt.Errorf("%s was not applied (still %q)", key, got)
+	}
+	return nil
 }
 
 func (s *server) saveMCPInitiative(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -681,8 +749,8 @@ func (s *server) saveMCPInitiative(ctx context.Context, actor mcpActor, data dom
 		value := intArg(args, "priority", 0)
 		input.Priority = &value
 	}
-	if value, present := nullableStringArg(args, "targetDate"); present {
-		input.TargetDate = &value
+	if input.TargetDate, err = mcpDateArg(args, "targetDate"); err != nil {
+		return nil, err
 	}
 	if owner, present := nullableStringArg(args, "owner"); present {
 		if owner == "" {
@@ -733,7 +801,20 @@ func (s *server) saveMCPInitiative(ctx context.Context, actor mcpActor, data dom
 	} else {
 		result, err = invokeJSONHandler(ctx, http.MethodPatch, map[string]string{"id": current.ID}, input, s.updateInitiative)
 	}
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+	var saved domain.Initiative
+	if err := jsonClone(result, &saved); err != nil {
+		return nil, err
+	}
+	if input.Status != nil && !strings.EqualFold(saved.Status, strings.TrimSpace(*input.Status)) {
+		return nil, fmt.Errorf("initiative status was not applied (still %q)", saved.Status)
+	}
+	if err := mcpDateApplied("targetDate", input.TargetDate, saved.TargetDate); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (s *server) saveMCPMilestone(ctx context.Context, _ mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -749,8 +830,8 @@ func (s *server) saveMCPMilestone(ctx context.Context, _ mcpActor, data domain.B
 	if value, ok := args["description"].(string); ok {
 		input.Description = &value
 	}
-	if value, present := nullableStringArg(args, "targetDate"); present {
-		input.TargetDate = &value
+	if input.TargetDate, err = mcpDateArg(args, "targetDate"); err != nil {
+		return nil, err
 	}
 	if id == "" {
 		if input.Name == nil || strings.TrimSpace(*input.Name) == "" {
