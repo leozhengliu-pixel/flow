@@ -704,3 +704,58 @@ func TestMCPMarkdownInlineKeepsIntrawordUnderscores(t *testing.T) {
 		t.Fatalf("marks = %v", marked)
 	}
 }
+
+// GFM tables become editor tables (they used to be flattened into one
+// paragraph of "|" lines joined by hard breaks, and contentData wins over the
+// Markdown on the page).
+func TestMCPMarkdownDocumentTables(t *testing.T) {
+	cellTexts := func(row any) []string {
+		texts := []string{}
+		for _, cell := range row.(map[string]any)["content"].([]any) {
+			texts = append(texts, proseMirrorPlainText(map[string]any{"type": "doc", "content": cell.(map[string]any)["content"]}))
+		}
+		return texts
+	}
+	t.Run("standard table after a heading and before code", func(t *testing.T) {
+		blocks := mcpMarkdownDocument("## 环境总览\n| 环境 | 地址 | 说明 |\n| :--- | :---: | ---: |\n| dev | `http://a|b` | **主** [文档](https://flow.test/x) |\n| prod | x \\| y |\n```sh\nmake\n```")["content"].([]any)
+		if len(blocks) != 3 || blocks[0].(map[string]any)["type"] != "heading" || blocks[1].(map[string]any)["type"] != "table" || blocks[2].(map[string]any)["type"] != "codeBlock" {
+			t.Fatalf("blocks = %s", mustJSON(t, blocks))
+		}
+		rows := blocks[1].(map[string]any)["content"].([]any)
+		if len(rows) != 3 {
+			t.Fatalf("rows = %s", mustJSON(t, rows))
+		}
+		if header := rows[0].(map[string]any)["content"].([]any)[0].(map[string]any); header["type"] != "tableHeader" {
+			t.Fatalf("header cell = %v", header)
+		}
+		if got := cellTexts(rows[0]); strings.Join(got, ",") != "环境,地址,说明" {
+			t.Fatalf("header = %q", got)
+		}
+		if got := cellTexts(rows[2]); len(got) != 3 || got[1] != "x | y" || strings.TrimSpace(got[2]) != "" {
+			t.Fatalf("short row = %q", got)
+		}
+		raw := string(mustJSON(t, rows[1]))
+		for _, want := range []string{`"type":"tableCell"`, `"text":"http://a|b"`, `"type":"code"`, `"type":"bold"`, `"href":"https://flow.test/x"`} {
+			if !strings.Contains(raw, want) {
+				t.Errorf("row missing %s: %s", want, raw)
+			}
+		}
+	})
+	t.Run("table interrupts a paragraph and ends at a blank line", func(t *testing.T) {
+		blocks := mcpMarkdownDocument("Intro\na | b\n--|--\n1 | 2\n3 | 4 | 5\n\nAfter")["content"].([]any)
+		if len(blocks) != 3 || blocks[1].(map[string]any)["type"] != "table" || blocks[2].(map[string]any)["type"] != "paragraph" {
+			t.Fatalf("blocks = %s", mustJSON(t, blocks))
+		}
+		rows := blocks[1].(map[string]any)["content"].([]any)
+		if got := cellTexts(rows[2]); len(got) != 2 {
+			t.Fatalf("extra cells kept: %q", got)
+		}
+	})
+	t.Run("not tables", func(t *testing.T) {
+		for _, markdown := range []string{"a | b\n---", "a | b\nnext | line", "- a | b\n--|--", "plain\n|---|---|"} {
+			if strings.Contains(string(mustJSON(t, mcpMarkdownDocument(markdown))), `"type":"table"`) {
+				t.Errorf("%q became a table", markdown)
+			}
+		}
+	})
+}

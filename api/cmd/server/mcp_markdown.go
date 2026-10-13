@@ -13,8 +13,8 @@ import (
 // document templates). The editor renders contentData in preference to the
 // Markdown text, so saving Markdown alone would leave an empty or stale editor
 // document behind. It covers the StarterKit blocks the editor offers:
-// headings (1-4), paragraphs, bullet/ordered/task lists, quotes, code blocks
-// and dividers, plus bold, italic, strike, inline code and links.
+// headings (1-4), paragraphs, bullet/ordered/task lists, quotes, code blocks,
+// dividers and GFM tables, plus bold, italic, strike, inline code and links.
 func mcpMarkdownDocument(markdown string) map[string]any {
 	lines := strings.Split(strings.ReplaceAll(markdown, "\r\n", "\n"), "\n")
 	content := mcpMarkdownBlocks(lines)
@@ -25,12 +25,13 @@ func mcpMarkdownDocument(markdown string) map[string]any {
 }
 
 var (
-	mcpMarkdownHeading = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
-	mcpMarkdownBullet  = regexp.MustCompile(`^\s*[-*+]\s+(.*)$`)
-	mcpMarkdownOrdered = regexp.MustCompile(`^\s*(\d+)[.)]\s+(.*)$`)
-	mcpMarkdownTask    = regexp.MustCompile(`^\[([ xX])\]\s+(.*)$`)
-	mcpMarkdownRule    = regexp.MustCompile(`^\s*(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$`)
-	mcpMarkdownInline  = regexp.MustCompile("`([^`]+)`|\\*\\*([^*]+)\\*\\*|__([^_]+)__|~~([^~]+)~~|\\*([^*\\s][^*]*)\\*|_([^_\\s][^_]*)_|\\[([^\\]]+)\\]\\(([^)\\s]+)\\)")
+	mcpMarkdownHeading      = regexp.MustCompile(`^(#{1,6})\s+(.*)$`)
+	mcpMarkdownBullet       = regexp.MustCompile(`^\s*[-*+]\s+(.*)$`)
+	mcpMarkdownOrdered      = regexp.MustCompile(`^\s*(\d+)[.)]\s+(.*)$`)
+	mcpMarkdownTask         = regexp.MustCompile(`^\[([ xX])\]\s+(.*)$`)
+	mcpMarkdownRule         = regexp.MustCompile(`^\s*(?:(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,})$`)
+	mcpMarkdownTableDivider = regexp.MustCompile(`^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$`)
+	mcpMarkdownInline       = regexp.MustCompile("`([^`]+)`|\\*\\*([^*]+)\\*\\*|__([^_]+)__|~~([^~]+)~~|\\*([^*\\s][^*]*)\\*|_([^_\\s][^_]*)_|\\[([^\\]]+)\\]\\(([^)\\s]+)\\)")
 )
 
 func mcpMarkdownBlocks(lines []string) []any {
@@ -58,6 +59,15 @@ func mcpMarkdownBlocks(lines []string) []any {
 				block["content"] = []any{map[string]any{"type": "text", "text": text}}
 			}
 			blocks = append(blocks, block)
+		case mcpMarkdownTableStart(lines, index):
+			header := mcpMarkdownTableCells(line)
+			rows := []any{mcpMarkdownTableRow("tableHeader", header, len(header))}
+			index += 2
+			for index < len(lines) && strings.TrimSpace(lines[index]) != "" && strings.Contains(lines[index], "|") {
+				rows = append(rows, mcpMarkdownTableRow("tableCell", mcpMarkdownTableCells(lines[index]), len(header)))
+				index++
+			}
+			blocks = append(blocks, map[string]any{"type": "table", "content": rows})
 		case mcpMarkdownRule.MatchString(trimmed):
 			blocks = append(blocks, map[string]any{"type": "horizontalRule"})
 			index++
@@ -104,7 +114,7 @@ func mcpMarkdownBlocks(lines []string) []any {
 			blocks = append(blocks, map[string]any{"type": "orderedList", "attrs": map[string]any{"start": max(startNumber, 1)}, "content": items})
 		default:
 			paragraph := []string{}
-			for index < len(lines) && mcpMarkdownParagraphLine(lines[index]) {
+			for index < len(lines) && mcpMarkdownParagraphLine(lines[index]) && (len(paragraph) == 0 || !mcpMarkdownTableStart(lines, index)) {
 				paragraph = append(paragraph, strings.TrimSpace(lines[index]))
 				index++
 			}
@@ -112,6 +122,66 @@ func mcpMarkdownBlocks(lines []string) []any {
 		}
 	}
 	return blocks
+}
+
+// mcpMarkdownTableStart reports whether lines[index] opens a GFM table: a
+// row with a pipe followed by a divider row with as many columns (so a "---"
+// under a line that happens to contain a pipe stays a rule). Headings, quotes
+// and list items keep their own meaning.
+func mcpMarkdownTableStart(lines []string, index int) bool {
+	line := lines[index]
+	if trimmed := strings.TrimSpace(line); mcpMarkdownHeading.MatchString(trimmed) || strings.HasPrefix(trimmed, ">") || mcpMarkdownBullet.MatchString(line) || mcpMarkdownOrdered.MatchString(line) {
+		return false
+	}
+	if index+1 >= len(lines) || !strings.Contains(line, "|") || !strings.Contains(lines[index+1], "-") || !mcpMarkdownTableDivider.MatchString(lines[index+1]) {
+		return false
+	}
+	return len(mcpMarkdownTableCells(line)) == len(mcpMarkdownTableCells(lines[index+1]))
+}
+
+// mcpMarkdownTableCells splits a table row into its trimmed cells. The outer
+// pipes are optional; an escaped pipe (\|) and pipes inside code spans stay in
+// the cell.
+func mcpMarkdownTableCells(line string) []string {
+	row := strings.TrimSpace(line)
+	row = strings.TrimPrefix(row, "|")
+	if strings.HasSuffix(row, "|") && !strings.HasSuffix(row, "\\|") {
+		row = strings.TrimSuffix(row, "|")
+	}
+	cells := []string{}
+	var cell strings.Builder
+	inCode := false
+	for index := 0; index < len(row); index++ {
+		switch char := row[index]; {
+		case char == '\\' && index+1 < len(row) && row[index+1] == '|':
+			cell.WriteByte('|')
+			index++
+		case char == '`':
+			inCode = !inCode
+			cell.WriteByte(char)
+		case char == '|' && !inCode:
+			cells = append(cells, strings.TrimSpace(cell.String()))
+			cell.Reset()
+		default:
+			cell.WriteByte(char)
+		}
+	}
+	return append(cells, strings.TrimSpace(cell.String()))
+}
+
+// mcpMarkdownTableRow builds a table row of exactly columns cells (the
+// header's count): missing cells are empty and extra ones are dropped, as GFM
+// renders them.
+func mcpMarkdownTableRow(cellType string, cells []string, columns int) map[string]any {
+	content := make([]any, 0, columns)
+	for column := range columns {
+		value := ""
+		if column < len(cells) {
+			value = cells[column]
+		}
+		content = append(content, map[string]any{"type": cellType, "content": []any{mcpMarkdownParagraph(value)}})
+	}
+	return map[string]any{"type": "tableRow", "content": content}
 }
 
 func mcpMarkdownParagraphLine(line string) bool {
