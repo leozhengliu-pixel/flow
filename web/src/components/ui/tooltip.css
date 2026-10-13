@@ -1,43 +1,45 @@
+/*
+ * The app-wide tooltip (measured against the reference app in both themes): a 27.5px surface — 5px 8px padding,
+ * .5px border, 8px radius, a hairline shadow — with the label in 450 11px/16.5px and the shortcut as 18×17px
+ * boxed keys 3px apart, 8px after the label. Colours come from the --tooltip-* tokens in styles/tokens.css;
+ * `--elevated` is the lighter palette used over elevated surfaces.
+ */
 .flow-tooltip-content {
   z-index: 1100;
-  max-width: 280px;
-  height: 28px;
-  min-height: 28px;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  min-height: 27.5px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   padding: 5px 8px;
-  border: .5px solid var(--theme-border-strong);
+  border: .5px solid var(--tooltip-border);
   border-radius: 8px;
   outline: 0;
-  background: var(--theme-surface-2);
-  box-shadow: var(--shadow);
-  color: var(--theme-text-primary);
+  background: var(--tooltip-bg);
+  box-shadow: var(--tooltip-shadow);
+  color: var(--tooltip-text);
   font: 450 11px/16.5px var(--font);
+  letter-spacing: normal;
   white-space: nowrap;
   user-select: none;
-  animation: flow-tooltip-in 100ms ease-out;
+}
+.flow-tooltip-content--elevated {
+  --tooltip-bg: var(--tooltip-elevated-bg);
+  --tooltip-border: var(--tooltip-elevated-border);
+  --tooltip-text: var(--tooltip-elevated-text);
+  --tooltip-muted: var(--tooltip-elevated-muted);
+  --tooltip-key-border: var(--tooltip-elevated-key-border);
 }
 
-.flow-tooltip-content--title { height: auto; white-space: pre-line; }
-/* Rich hover cards (customer lists, stats): size to their content instead of the one-line tooltip height. */
-.flow-tooltip-content--card { height: auto; min-height: 0; }
-.flow-tooltip-content--title .flow-tooltip-copy { overflow-wrap: anywhere; }
-.flow-tooltip-copy { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.flow-tooltip-shortcut { color: var(--theme-text-tertiary); font: 10px/1 var(--font-monospace); }
-.flow-tooltip-shortcut:has(.flow-tooltip-then) { display: inline-flex; align-items: center; gap: 4px; }
-.flow-tooltip-then { font-family: var(--font); }
+/* Long labels wrap at the reference's 520px text width. */
+.flow-tooltip-copy { min-width: 0; max-width: 520px; overflow-wrap: anywhere; white-space: normal; }
+.flow-tooltip-content--title { white-space: pre-line; }
+.flow-tooltip-content--title .flow-tooltip-copy { white-space: pre-line; }
+/* Rich hover cards (customer lists, stats): size to their content. */
+.flow-tooltip-content--card { min-height: 0; }
 
-@keyframes flow-tooltip-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
-
-:root[data-theme="light"] .flow-tooltip-content {
-  background: var(--theme-surface-2);
-  border-color: var(--popover-border);
-  box-shadow: var(--shadow-control);
-  color: var(--theme-text-primary);
-}
-:root[data-theme="light"] .flow-tooltip-shortcut { color: var(--theme-text-tertiary); }
-
-@media (prefers-reduced-motion: reduce) {
-  .flow-tooltip-content { animation: none; }
-}
+/* The 17.1px key caps overhang the 16.5px text line, sitting .5px above its centre like the reference. */
+.flow-tooltip-shortcut { height: 16.5px; display: inline-flex; flex: none; align-items: center; gap: 3px; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
+.flow-tooltip-key { box-sizing: border-box; min-width: 18px; height: 17.1px; margin-top: -1px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--tooltip-key-border); border-radius: 4px; background: transparent; color: var(--tooltip-muted); font: 400 11px/12.1px var(--font); }
+.flow-tooltip-then { color: var(--tooltip-muted); font: 450 10px/16.5px var(--font); }

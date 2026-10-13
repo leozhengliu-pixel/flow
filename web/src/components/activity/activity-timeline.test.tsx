@@ -157,7 +157,8 @@ describe('issue activity timeline', () => {
   })
 
   describe('referenced resources', () => {
-    const eventOf = (id: string, type: string, metadata: Record<string, string>): ActivityEvent => ({ id, type, createdAt: '2026-09-01T00:00:00Z', actor: viewer, metadata })
+    // Hours apart, so consecutive field changes are not folded into one row.
+    const eventOf = (id: string, type: string, metadata: Record<string, string>): ActivityEvent => ({ id, type, createdAt: `2026-09-01T${String(Number(id.replace(/\D/g, '')) % 24).padStart(2, '0')}:00:00Z`, actor: viewer, metadata })
     const renderTimeline = (events: ActivityEvent[], data: BootstrapData) => render(<I18nProvider><MemoryRouter><WorkspaceStoreProvider account={null} data={data} session={null}>
       <ActivityTimeline events={events} comments={[]} context={data} viewerId={viewer.id} onReply={vi.fn()} onEdit={vi.fn()} onDelete={vi.fn()} onReaction={vi.fn()}/>
     </WorkspaceStoreProvider></MemoryRouter></I18nProvider>)

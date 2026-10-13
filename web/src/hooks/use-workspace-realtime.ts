@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { realtimeClientId, updatePresence } from '@/lib/api'
 import { AGENT_TASK_ACTIVITY_EVENT } from '@/lib/application-agents'
+import { INBOX_ACTIVITY_EVENT, inboxUnread } from '@/lib/inbox-unread'
 import { loadRealtimeCursor, saveRealtimeCursor } from '@/lib/realtime-cache'
 import { RealtimeEventQueue } from '@/lib/realtime-event-queue'
 import { connectSharedRealtime, type RealtimeMessage } from '@/lib/shared-realtime'
@@ -85,6 +86,11 @@ export function useWorkspaceRealtime({ workspaceKey, viewerId, issueId, route, o
       // workspace sync queue so each chunk reaches the thread at once and never triggers a workspace reload.
       if (event.type.startsWith('agent_task.')) {
         window.dispatchEvent(new CustomEvent(AGENT_TASK_ACTIVITY_EVENT, { detail: event.aggregateId ?? '' }))
+        // An agent's reply in a thread updated the Inbox notifications of the people in it.
+        if (event.type === 'agent_task.replied') {
+          inboxUnread.schedule(workspaceKey, 300)
+          window.dispatchEvent(new CustomEvent(INBOX_ACTIVITY_EVENT, { detail: event }))
+        }
         return
       }
       if (event.payload?.presence) setPresence(event.payload.presence)

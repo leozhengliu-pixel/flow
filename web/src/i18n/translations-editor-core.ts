@@ -38,5 +38,7 @@ export const editorCoreZhCN: Record<string, string> = {
   "Comment": "评论",
   "From": "来自",
   "About this selection from the document:": "关于文档中的这段所选内容：",
+  "About this selection from the project description:": "关于项目描述中的这段所选内容：",
+  "About this selection from the initiative description:": "关于目标描述中的这段所选内容：",
   "Untitled": "无标题",
 }

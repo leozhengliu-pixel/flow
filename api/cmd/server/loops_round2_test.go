@@ -236,22 +236,30 @@ func TestLoopWebSearchWithoutProviderAddsNotice(t *testing.T) {
 	}
 }
 
+// Like the reference app, Flow Agent has web access unless an admin turns it off.
 func TestAgentChatWebSearchFollowsWorkspaceSetting(t *testing.T) {
 	provider := &fakeLoopProvider{}
 	srv, handler := newLoopTestServer(t, provider)
 	host := httptest.NewServer(handler)
 	t.Cleanup(host.Close)
 	srv.webSearch = &fakeWebSearch{results: []websearch.Result{{Title: "A", URL: "https://example.com/a", Snippet: "a"}}}
+	if config := requestJSON[map[string]any](t, handler, http.MethodGet, "/api/workspace/loop-settings", nil, http.StatusOK); config["agentWebSearch"] != true {
+		t.Fatalf("web access must default to on: %v", config)
+	}
+	updated := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/workspace/loop-settings", map[string]any{"agentWebSearch": false}, http.StatusOK)
+	if updated["agentWebSearch"] != false {
+		t.Fatalf("settings = %v", updated)
+	}
 	provider.replies = []string{"Hello."}
 	streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": "Hi", "location": "page"}, nil)
 	provider.mu.Lock()
-	if strings.Contains(strings.Join(provider.tools[0], ","), "web_search") {
+	if tools := strings.Join(provider.tools[0], ","); strings.Contains(tools, "web_search") || strings.Contains(tools, "fetch_url") {
 		provider.mu.Unlock()
-		t.Fatal("web search offered while the workspace setting is off")
+		t.Fatal("web tools offered while an admin turned web access off")
 	}
-	provider.replies, provider.tools, provider.inputs = []string{`tool:web_search {"query":"flow"}`, "Found it: https://example.com/a"}, nil, nil
+	provider.replies, provider.tools, provider.inputs = []string{`tool:web_search {"query":"flow"}`, "Found it: [example.com](https://example.com/a)"}, nil, nil
 	provider.mu.Unlock()
-	updated := requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/workspace/loop-settings", map[string]any{"agentWebSearch": true}, http.StatusOK)
+	updated = requestJSON[map[string]any](t, handler, http.MethodPatch, "/api/workspace/loop-settings", map[string]any{"agentWebSearch": true}, http.StatusOK)
 	if updated["agentWebSearch"] != true {
 		t.Fatalf("settings = %v", updated)
 	}
@@ -261,7 +269,22 @@ func TestAgentChatWebSearchFollowsWorkspaceSetting(t *testing.T) {
 	}
 	provider.mu.Lock()
 	defer provider.mu.Unlock()
-	if !strings.Contains(strings.Join(provider.tools[0], ","), "web_search") || !strings.Contains(provider.inputs[0], "cite the URLs") {
+	if tools := strings.Join(provider.tools[0], ","); !strings.Contains(tools, "web_search") || !strings.Contains(tools, "fetch_url") || !strings.Contains(provider.inputs[0], "hostname") {
+		t.Fatalf("tools = %v", provider.tools[0])
+	}
+}
+
+// Without a search provider, chat still reads pages (fetch_url) and is told honestly that it cannot search.
+func TestAgentChatFetchesPagesWithoutSearchProvider(t *testing.T) {
+	provider := &fakeLoopProvider{}
+	srv, handler := newLoopTestServer(t, provider)
+	host := httptest.NewServer(handler)
+	t.Cleanup(host.Close)
+	provider.replies = []string{"Hello."}
+	streamAgent(t, srv, host, "/api/agent/sessions/stream", map[string]any{"message": "Hi", "location": "page"}, nil)
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
+	if tools := strings.Join(provider.tools[0], ","); strings.Contains(tools, "web_search") || !strings.Contains(tools, "fetch_url") || !strings.Contains(provider.inputs[0], "web search is not configured") {
 		t.Fatalf("tools = %v", provider.tools[0])
 	}
 }

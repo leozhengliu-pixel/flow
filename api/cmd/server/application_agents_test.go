@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -230,22 +231,34 @@ func TestBuiltinApplicationStreamsAndFinishesUnderItsOwnIdentity(t *testing.T) {
 	}
 }
 
-func TestApplicationExplicitToolApprovalCannotBeInferredFromText(t *testing.T) {
-	s, handler, data, app := applicationFixture(t)
-	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues", map[string]any{"title": "Approval", "teamId": data.Teams[0].ID, "delegateId": app.UserID}, 201)
-	task, _ := s.store.AgentTask(t.Context(), data.Workspace.URLKey, issue.AgentSessionID)
-	call := domain.AgentToolCall{ID: "call", Name: "save_issue", Arguments: json.RawMessage(`{"title":"changed"}`), Status: "pending"}
-	task, err := s.store.AppendAgentActivity(t.Context(), data.Workspace.URLKey, task.ID, task.Version, domain.AgentActivity{Type: "elicitation", ToolCall: &call, ActorID: app.UserID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	requestJSON[any](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "body": "approve"}, 400)
-	task = requestJSON[domain.AgentTask](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", map[string]any{"expectedVersion": task.Version, "type": "prompt", "approve": false}, 200)
-	if task.PendingTool == nil || task.PendingTool.Status != "rejected" {
-		t.Fatal("lost explicit approval decision")
-	}
-	if task.Prompt != "Approval" {
-		t.Fatal("approval reply erased the original task prompt")
+// Like 参照应用, a reply answers a pending approval: "approve" / "yes" / "批准" approves, anything else rejects; an
+// explicit decision still works, and the original task prompt is kept.
+func TestApplicationToolApprovalAcceptsReplies(t *testing.T) {
+	for _, test := range []struct {
+		body any
+		want string
+	}{{"approve", "approved"}, {"批准", "approved"}, {"Yes!", "approved"}, {"not now, change the title first", "rejected"}, {nil, "rejected"}} {
+		s, handler, data, app := applicationFixture(t)
+		issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues", map[string]any{"title": "Approval", "teamId": data.Teams[0].ID, "delegateId": app.UserID}, 201)
+		task, _ := s.store.AgentTask(t.Context(), data.Workspace.URLKey, issue.AgentSessionID)
+		call := domain.AgentToolCall{ID: "call", Name: "save_issue", Arguments: json.RawMessage(`{"title":"changed"}`), Status: "pending"}
+		task, err := s.store.AppendAgentActivity(t.Context(), data.Workspace.URLKey, task.ID, task.Version, domain.AgentActivity{Type: "elicitation", ToolCall: &call, ActorID: app.UserID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := map[string]any{"expectedVersion": task.Version, "type": "prompt"}
+		if test.body == nil {
+			input["approve"] = false
+		} else {
+			input["body"] = test.body
+		}
+		task = requestJSON[domain.AgentTask](t, handler, "POST", "/api/agent-tasks/"+task.ID+"/activities", input, 200)
+		if task.PendingTool == nil || task.PendingTool.Status != test.want {
+			t.Fatalf("reply %v: pending tool = %#v, want %s", test.body, task.PendingTool, test.want)
+		}
+		if task.InitialPrompt != "Approval" && task.Prompt != "Approval" {
+			t.Fatal("approval reply erased the original task prompt")
+		}
 	}
 }
 
@@ -320,5 +333,51 @@ func TestBuiltinApplicationExecutesOnlyTheApprovedStoredTool(t *testing.T) {
 				t.Fatalf("approval was not consumed: %+v", task)
 			}
 		})
+	}
+}
+
+// In a comment thread the built-in agent's ask_user ends the run as a select elicitation (the thread shows the
+// options), and the person's reply — the picked option — starts the next run with the question in its history.
+func TestBuiltinApplicationAsksWithOptionsAndResumesOnTheReply(t *testing.T) {
+	s, handler, data, _ := applicationFixture(t)
+	var calls atomic.Int32
+	var secondHistory string
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		if calls.Add(1) == 1 {
+			arguments, _ := json.Marshal(`{"question":"Proceed?","options":[{"label":"Approve"},{"label":"Reject"}]}`)
+			_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"I need your approval to post this update.\"}}]}\n\n"+
+				"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"ask_user\",\"arguments\":"+string(arguments)+"}}]},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n")
+			return
+		}
+		raw, _ := io.ReadAll(r.Body)
+		secondHistory = string(raw)
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Posted.\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer provider.Close()
+	s.agent = appconfig.AgentConfig{Enabled: true, Protocol: "openai-chat-completions", BaseURL: provider.URL, APIKey: "test", Model: "test", Timeout: time.Second * 5, ToolsEnabled: true}
+	s.agentClient = provider.Client()
+	app, err := s.store.InstallApplication(t.Context(), data.Workspace.URLKey, domain.ApplicationInstallation{ClientID: "builtin-flow-agent", Name: "Flow Agent", Builtin: true, Active: true, InstalledBy: data.Viewer.ID, Scopes: []string{"read", "write", "app:assignable"}, TeamIDs: []string{data.Teams[0].ID}}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	issue := requestJSON[domain.Issue](t, handler, "POST", "/api/issues", map[string]any{"title": "Ask", "teamId": data.Teams[0].ID, "delegateId": app.UserID}, 201)
+	task, _ := s.store.AgentTask(t.Context(), data.Workspace.URLKey, issue.AgentSessionID)
+	s.deliverApplicationTask(t.Context(), task)
+	task, _ = s.store.AgentTask(t.Context(), data.Workspace.URLKey, task.ID)
+	activities, _ := s.store.AgentActivities(t.Context(), data.Workspace.URLKey, task.ID, "")
+	last := activities[len(activities)-1]
+	options, _ := last.SignalMetadata["options"].([]any)
+	if task.Status != "awaitingInput" || last.Type != "elicitation" || last.Signal != "select" || len(options) != 2 || !strings.HasSuffix(last.Body, "Proceed?") || !strings.HasPrefix(last.Body, "I need your approval") {
+		t.Fatalf("question: status=%s last=%+v", task.Status, last)
+	}
+	task, err = s.store.AppendAgentActivity(t.Context(), data.Workspace.URLKey, task.ID, task.Version, domain.AgentActivity{ActorID: data.Viewer.ID, Type: "prompt", Body: "Approve"})
+	if err != nil || task.Status != "pending" {
+		t.Fatalf("reply: %+v %v", task, err)
+	}
+	s.deliverApplicationTask(t.Context(), task)
+	task, _ = s.store.AgentTask(t.Context(), data.Workspace.URLKey, task.ID)
+	if task.Status != "complete" || calls.Load() != 2 || !strings.Contains(secondHistory, "Proceed?") || !strings.Contains(secondHistory, `"Approve"`) {
+		t.Fatalf("resume: status=%s calls=%d history=%s", task.Status, calls.Load(), secondHistory)
 	}
 }

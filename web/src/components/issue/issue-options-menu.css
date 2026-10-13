@@ -45,3 +45,9 @@
 :root[data-theme="light"] .issue-options-shortcut kbd{border-color:var(--border);background:var(--theme-control);color:var(--muted)}
 :root[data-theme="light"] .issue-link-dialog{border-color:var(--popover-border);background:var(--theme-surface-2);box-shadow:var(--shadow-dialog);color:var(--theme-text-primary)}
 :root[data-theme="light"] .issue-link-dialog input{background:var(--theme-surface-1);color:var(--theme-text-primary)}
+/* "Remove ▸": "<Relation> <ID>" then the linked issue's title, muted; the surface grows to 383px, then the title truncates. */
+.issue-options-submenu[data-menu="Remove"]{width:max-content;max-width:383px}
+.issue-options-remove-text{min-width:0;flex:1 1 auto;display:flex;align-items:center;gap:4px}
+.issue-options-remove-text>.issue-options-label{flex:0 1 auto}
+.issue-options-remove-title{min-width:0;flex:1 1 auto;margin-left:4px;overflow:hidden;color:var(--pk-faint);text-overflow:ellipsis;white-space:nowrap}
+.issue-options-then{color:var(--pk-muted);font:450 11px/23px var(--font)}

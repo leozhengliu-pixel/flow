@@ -21,6 +21,7 @@ import {
   sortProjectsByRelevance,
 } from '@/components/projects-page/projects-relevance'
 
+import { NestingLine } from '@/components/ui/nesting-line'
 import './issue-project-picker.css'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
 
@@ -106,7 +107,7 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     onChange={projectMilestoneId => onUpdate({ projectMilestoneId })}
     onCreate={async name => { const created = onCreateMilestone ? await onCreateMilestone(project.id, { name }) : await createProjectMilestoneRequest(project.id, { name }); setCreatedMilestones(current => ({ ...current, [project.id]: [...(current[project.id] ?? []), created] })); await onUpdate({ projectMilestoneId: created.id }) }}
   /> : null
-  const body = <><div className="issue-project-row">{projectMenu}{project && <a className="issue-project-open" href={`/${data.workspace.urlKey}/project/${project.slugId}/overview`} aria-label={t('Open project')}><OpenChevron/></a>}</div>{milestoneMenu&&<div className="issue-milestone-row">{milestoneMenu}</div>}</>
+  const body = <><div className="issue-project-row">{projectMenu}{project && <a className="issue-project-open" href={`/${data.workspace.urlKey}/project/${project.slugId}/overview`} aria-label={t('Open project')}><OpenChevron/></a>}</div>{milestoneMenu&&<div className="issue-milestone-row">{grouped&&<NestingLine className="issue-milestone-nesting-line" heightAbove={14}/>}{milestoneMenu}</div>}</>
 
   return <>
     {grouped ? <div ref={rootRef}><section className="property-group issue-project-group"><h4>{t('Project')}</h4>{body}</section></div> : <div ref={rootRef} className="issue-project-property">{body}</div>}

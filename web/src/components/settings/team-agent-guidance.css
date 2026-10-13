@@ -1,0 +1,94 @@
+.team-agent-guidance {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.team-agent-guidance-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+.team-agent-guidance textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  font: 13px/1.55 inherit;
+  outline: 0;
+}
+.team-agent-guidance textarea:focus {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 1px var(--focus-ring);
+}
+.team-agent-guidance textarea:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.team-agent-guidance footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.team-agent-guidance footer > span {
+  margin-right: auto;
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.team-agent-guidance-inherited {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.team-agent-guidance-inherited summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.team-agent-guidance-inherited summary::-webkit-details-marker {
+  display: none;
+}
+.team-agent-guidance-inherited summary svg {
+  transition: transform 150ms ease;
+}
+.team-agent-guidance-inherited[open] summary svg {
+  transform: rotate(90deg);
+}
+.team-agent-guidance-inherited summary span {
+  color: var(--faint);
+}
+.team-agent-guidance-inherited section {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg-hover);
+}
+.team-agent-guidance-inherited h4 {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+.team-agent-guidance-inherited p {
+  margin: 0;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 720px) {
+  .team-agent-guidance textarea {
+    min-height: 160px;
+  }
+}

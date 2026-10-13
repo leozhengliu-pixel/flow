@@ -339,6 +339,8 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		return listMCPTemplates(data, args)
 	case "list_customers":
 		return s.listMCPCustomers(ctx, actor, data, args)
+	case "get_customer":
+		return s.getMCPCustomer(ctx, actor, data, args)
 	default:
 		return s.callFlowWriteTool(ctx, actor, data, name, args)
 	}
@@ -363,6 +365,10 @@ func (s *server) mcpWorkspaceData(ctx context.Context, actor mcpActor) (domain.B
 			return !slices.ContainsFunc(appData.Documents, func(other domain.Document) bool { return other.ID == doc.ID })
 		})
 		data.Viewer, data.ViewerRole = actor.User, "app"
+	}
+	if data.Viewer.ID == actor.User.ID && data.Viewer.Via == nil {
+		// Records the tool writes keep the caller's attribution ("via <App>", "Flow … on behalf of").
+		data.Viewer.Via = actor.User.Via
 	}
 	// Passkeys are account-scoped metadata. MCP callers may inspect workspace
 	// resources, but must not enumerate credentials belonging to other users.
@@ -467,6 +473,10 @@ func (s *server) hydrateMCPIssueArguments(ctx context.Context, actor mcpActor, d
 		case string:
 			if len(x) <= 191 && x != "" {
 				values[x] = true
+			}
+			// Chip text or a link names its issue by the identifier it starts with (see mcpFindIssue).
+			if key := agentIssueReferenceKey(x); key != "" && len(key) <= 191 {
+				values[key] = true
 			}
 		case []string:
 			for _, v := range x {
@@ -1088,6 +1098,14 @@ func mcpFindIssue(data domain.Bootstrap, query string) (domain.Issue, error) {
 	for _, item := range data.Issues {
 		if equalFoldAny(query, item.ID, item.Identifier) {
 			return item, nil
+		}
+	}
+	// Chip text or a link copied from the conversation ("DEV-42 Fix login", "[DEV-42](…/issue/DEV-42)").
+	if key := agentIssueReferenceKey(query); key != "" {
+		for _, item := range data.Issues {
+			if equalFoldAny(key, item.ID, item.Identifier) {
+				return item, nil
+			}
 		}
 	}
 	return domain.Issue{}, fmt.Errorf("issue %q not found", query)

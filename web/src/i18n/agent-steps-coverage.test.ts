@@ -39,6 +39,24 @@ describe('agent step and loop run vocabulary', () => {
     }
   })
 
+  it('labels delete and customer tool rows the way the reference app words them', () => {
+    const zh = (name: string, args?: Record<string, unknown>) => toolStatusLabel(name, false, translateToChinese, args)
+    expect(zh('delete_project')).toBe('已删除项目')
+    expect(zh('delete_initiative')).toBe('已删除目标')
+    expect(zh('delete_view')).toBe('已删除视图')
+    expect(zh('delete_loop')).toBe('已删除 Loop')
+    expect(zh('delete_agent_skill')).toBe('已删除技能')
+    expect(zh('delete_customer')).toBe('已删除客户')
+    expect(zh('delete_customer_request')).toBe('已删除客户需求')
+    expect(zh('save_customer')).toBe('已创建客户')
+    expect(zh('save_customer', { id: 'customer_1' })).toBe('已更新客户')
+    expect(zh('save_customer_request')).toBe('已记录客户需求')
+    expect(zh('save_cycle', { id: '48' })).toBe('已更新周期')
+    expect(zh('get_customer')).toBe('已查看客户')
+    expect(toolStatusLabel('save_customer_request', true, source => source)).toBe('Logging customer request…')
+    expect(translatePhaseTitle('Deleting QA fix – Roadmap, QA fix – Board', translateToChinese)).toBe('删除 QA fix – Roadmap、QA fix – Board')
+  })
+
   it('keeps unknown tools readable in Chinese and English', () => {
     expect(toolStatusLabel('github_search_code', false, translateToChinese)).toBe('已运行 github search code')
     expect(toolStatusLabel('github_search_code', true, source => source)).toBe('Running github search code…')

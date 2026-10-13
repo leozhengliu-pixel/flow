@@ -5,8 +5,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n/i18n'
-import { makeBootstrap, makeIssue, project } from '@/test/fixtures'
-import type { AgentSession, Issue, IssueUpdateInput } from '@/types/flow'
+import { makeBootstrap, makeIssue, project, teammate, viewer } from '@/test/fixtures'
+import type { AgentSession, Issue, IssueUpdateInput, User } from '@/types/flow'
 import { CommandMenu } from './command-menu'
 import { resetCommandContext, useRegisterCommandContext, type CommandContext } from './command-context'
 
@@ -25,8 +25,9 @@ function Register({ context }: { context?: CommandContext }) {
   return null
 }
 
-function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = {}) {
+function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = {}, bootstrap = data) {
   const onAskAgent = vi.fn()
+  const onAskAgentQuery = vi.fn()
   const onOpenAgentSession = vi.fn()
   const onUpdateIssue = vi.fn(async (id: string, input: IssueUpdateInput) => ({ ...(id === second.id ? second : first), ...input }) as Issue)
   const onUpdateIssues = vi.fn(async (ids: string[], input: IssueUpdateInput) => ids.map(id => ({ ...(id === second.id ? second : first), ...input }) as Issue))
@@ -36,15 +37,15 @@ function setup(context?: CommandContext, agent: { sessions?: AgentSession[] } = 
     const [open, setOpen] = useState(true)
     return <>
       <Register context={context}/>
-      <CommandMenu open={open} onOpenChange={value => { onOpenChange(value); setOpen(value) }} data={data} onUpdateIssue={onUpdateIssue} onUpdateIssues={onUpdateIssues}
+      <CommandMenu open={open} onOpenChange={value => { onOpenChange(value); setOpen(value) }} data={bootstrap} onUpdateIssue={onUpdateIssue} onUpdateIssues={onUpdateIssues}
         onCreateIssue={noop} onCreateIssueTemplate={noop} onCreateProject={noop} onCreateView={noop} onCreateInitiative={noop} onSearchWorkspace={noop}
         onNavigateInbox={noop} onNavigateMyIssues={noop} onNavigateProjects={noop} onNavigateInitiatives={noop} onNavigateViews={noop} onNavigateMembers={noop}
         onNavigateCustomers={noop} onNavigateAgent={noop} onOpenResult={noop}
-        onAskAgent={onAskAgent} agentSessions={agent.sessions} onOpenAgentSession={onOpenAgentSession}/>
+        onAskAgent={onAskAgent} onAskAgentQuery={onAskAgentQuery} agentSessions={agent.sessions} onOpenAgentSession={onOpenAgentSession}/>
     </>
   }
   render(<MemoryRouter><I18nProvider><Harness/></I18nProvider></MemoryRouter>)
-  return { onUpdateIssue, onUpdateIssues, onOpenChange, onAskAgent, onOpenAgentSession, user: userEvent.setup() }
+  return { onUpdateIssue, onUpdateIssues, onOpenChange, onAskAgent, onAskAgentQuery, onOpenAgentSession, user: userEvent.setup() }
 }
 
 const input = () => document.querySelector<HTMLInputElement>('[cmdk-input]')!
@@ -110,6 +111,21 @@ describe('context-aware command menu', () => {
     expect(screen.getByRole('option', { name: /Feature/ })).toBeInTheDocument()
   })
 
+  it('assign page: No assignee 0, people, agents continuing the numbers, number keys select, invite under "New user"', async () => {
+    const flow = { id: 'app_flow', name: 'Flow', displayName: 'Flow', email: '', active: true, app: true, appScopes: ['app:assignable'], appTeamIds: [first.team.id] } as User
+    const { user, onUpdateIssue } = setup({ kind: 'issues', source: 'detail', issues: [first] }, {}, makeBootstrap({ issues: [first, second], users: [viewer, teammate, flow] }))
+    await user.click(screen.getByRole('option', { name: /Assign to…/ }))
+    expect(input()).toHaveAttribute('placeholder', 'Assign to…')
+    const rows = screen.getAllByRole('option')
+    expect(rows.map(row => row.querySelector('.command-option-label')?.textContent)).toEqual(['No assignee', viewer.displayName, teammate.displayName, 'Flow', 'Invite and assign…'])
+    expect(rows.map(row => row.querySelector('.command-option-shortcut')?.textContent ?? '')).toEqual(['0', '1', '2', '3', ''])
+    expect(screen.getByText('New user')).toBeInTheDocument()
+    expect(document.querySelector('[data-agent-badge]')).toBeNull()
+    await user.click(input())
+    await user.keyboard('3')
+    await waitFor(() => expect(onUpdateIssue).toHaveBeenCalledWith(first.id, { delegateId: 'app_flow' }))
+  })
+
   it('goes back to the root page with Backspace on an empty query', async () => {
     const { user } = setup({ kind: 'issues', source: 'detail', issues: [first] })
     await user.click(screen.getByRole('option', { name: /Assign to…/ }))
@@ -161,6 +177,32 @@ describe('context-aware command menu', () => {
     await user.click(row)
     expect(onAskAgent).toHaveBeenCalledTimes(1)
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('Tab with a typed question hands it to the chat once and closes the menu', async () => {
+    const { user, onAskAgent, onAskAgentQuery, onOpenChange } = setup()
+    await user.type(input(), '  What is the status of this issue?  ')
+    await user.keyboard('{Tab}')
+    expect(onAskAgentQuery).toHaveBeenCalledTimes(1)
+    expect(onAskAgentQuery).toHaveBeenCalledWith('What is the status of this issue?')
+    expect(onAskAgent).not.toHaveBeenCalled()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('Tab with an empty box just opens the floating chat, and so does the Ask Flow hint', async () => {
+    const { user, onAskAgent, onAskAgentQuery } = setup()
+    await user.click(input())
+    await user.keyboard('{Tab}')
+    expect(onAskAgent).toHaveBeenCalledTimes(1)
+    expect(onAskAgentQuery).not.toHaveBeenCalled()
+  })
+
+  it('clicking the Ask Flow hint sends the typed question like Tab', async () => {
+    const { user, onAskAgentQuery } = setup()
+    await user.type(input(), 'summarise this')
+    await user.click(screen.getByRole('button', { name: /Ask Flow/ }))
+    expect(onAskAgentQuery).toHaveBeenCalledTimes(1)
+    expect(onAskAgentQuery).toHaveBeenCalledWith('summarise this')
   })
 
   it('lists past agent chats on "Open past agent chat…", filters them and opens the chosen one', async () => {

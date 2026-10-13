@@ -61,9 +61,13 @@ describe('agents in assignee and agent filters', () => {
   it('lists delegatable agents with the badge and matches delegated issues', () => {
     const { data, delegated, row } = fixture()
     const options = explorerPropertyOptions(data)
-    const assignee = options.assignee.find(option => option.id === agent.id)
-    expect(assignee).toMatchObject({ agent: true, groupId: 'agents', count: 1 })
+    // Pickers list the agent after the people with no group; the Assignee filter lists people only, agents are under Agent.
+    expect(options.assignee.find(option => option.id === agent.id)).toMatchObject({ agent: true })
+    expect(options.assignee.find(option => option.id === agent.id)).not.toHaveProperty('groupId')
     expect(options.assignee.findIndex(option => option.id === agent.id)).toBe(options.assignee.length - 1)
+    expect(explorerFilterOptions('assignee', options)?.some(option => option.id === agent.id)).toBe(false)
+    expect(explorerFilterOptions('assignee', options)?.some(option => option.id === viewer.id)).toBe(true)
+    expect(options.agent.find(option => option.id === agent.id)).toMatchObject({ agent: true, count: 1 })
     // All delegatable agents are offered, not only those on loaded issues.
     expect(explorerPropertyOptions(data, []).agent.some(option => option.id === agent.id)).toBe(true)
     expect(matchesExplorerFilter(row(delegated), filter('assignee', [agent.id]))).toBe(true)
@@ -81,15 +85,15 @@ describe('agents in assignee and agent filters', () => {
     expect(optimistic.assignee?.id).toBe(row(plain).assignee?.id)
   })
 
-  it('filters agent sessions by the reference app\'s four states', () => {
+  it('filters agent sessions by the reference app\'s four states and Stale', () => {
     const { data, delegated, suggested, row } = fixture()
     const awaiting = makeIssue({ id: 'issue-4', identifier: 'TST-4', delegate: agent, agentSessionId: 'task-2', agentSessionState: 'awaitingInput' })
     const merged = makeIssue({ id: 'issue-5', identifier: 'TST-5', delegate: agent, agentSessionId: 'task-3', agentSessionState: 'merged' })
     const dismissed = makeIssue({ id: 'issue-6', identifier: 'TST-6', delegate: agent, agentSessionId: 'task-4', agentSessionState: 'canceled' })
     const complete = makeIssue({ id: 'issue-7', identifier: 'TST-7', delegate: agent, agentSessionId: 'task-5', agentSessionState: 'complete' })
     const states = explorerPropertyOptions({ ...data, issues: [...data.issues, awaiting, merged, dismissed, complete] }).agentSession
-    expect(states.map(option => option.label)).toEqual(['Active', 'Error', 'Dismissed', 'Merged'])
-    expect(states.map(option => [option.id, option.count])).toEqual([['state:active', 1], ['state:error', 1], ['state:canceled', 1], ['state:merged', 1]])
+    expect(states.map(option => option.label)).toEqual(['Active', 'Error', 'Dismissed', 'Merged', 'Stale'])
+    expect(states.map(option => [option.id, option.count])).toEqual([['state:active', 1], ['state:error', 1], ['state:canceled', 1], ['state:merged', 1], ['state:stale', 0]])
     const matches = (issue: typeof delegated, values: string[]) => matchesExplorerFilter(row(issue), filter('agentSession', values))
     expect(matches(delegated, ['state:error'])).toBe(true)
     expect(matches(delegated, ['state:active'])).toBe(false)

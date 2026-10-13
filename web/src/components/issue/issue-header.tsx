@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from '@/lib/toast'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Presence, WorkflowState } from '@/types/flow'
 import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/issue-options-menu'
-import { FlowBranchIcon, FlowChevronIcon, FlowCodingToolsIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
+import { FlowBranchIcon, FlowChevronIcon, FlowCodingToolsIcon, FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 import { issuePath, settingsPath } from '@/lib/app-routes'
 import { enabledCodingTools, renderCodingPrompt, type CodingTool } from '@/lib/coding-tools'
 import { issueBreadcrumbs } from '@/lib/issue-navigation-context'
@@ -54,7 +54,7 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
   const presenceGroup=viewers.length>0?<IssuePresence viewers={viewers} label={t('People viewing this issue')}/>:null
   return <header className={triage?'issue-header issue-header--triage':'issue-header'}>
     <button type="button" data-sidebar-trigger aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))} />
-    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.team&&<span className="issue-breadcrumb-team-icon" aria-hidden="true"><ViewGlyph color={crumb.team.color} icon={crumb.team.icon || 'Team'}/></span>}{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}><FlowFavoriteIcon/></button></HeaderTooltip><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.team&&<span className="issue-breadcrumb-team-icon" aria-hidden="true"><ViewGlyph color={crumb.team.color} icon={crumb.team.icon || 'Team'}/></span>}{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     {triage&&presenceGroup}
     {triageActions}
@@ -130,12 +130,9 @@ function usePageKeys(options:{enabled:boolean;closable:boolean;canGoNext:boolean
   },[enabled])
 }
 
-/** Header tooltips: the reference app's key caps (one bordered key per key, "then" between sequences), 8px below. */
+/** Header tooltips are the app-wide tooltip (boxed keys, "then" between steps, 8px below). */
 function HeaderTooltip({label,shortcut,disabled,children}:{label:React.ReactNode;shortcut?:string;disabled?:boolean;children:React.ReactElement}){
-  return <FlowTooltip label={label} shortcut={shortcut?<HeaderKeys value={shortcut}/>:undefined} disabled={disabled} sideOffset={8} contentClassName="issue-header-tooltip">{children}</FlowTooltip>
-}
-function HeaderKeys({value}:{value:string}){
-  return <>{value.split(' then ').map((step,index)=><span className="issue-header-keys" key={index}>{index>0&&<span className="issue-header-keys-then">then</span>}{step.split(' ').filter(Boolean).map((key,keyIndex)=><kbd key={keyIndex}>{key}</kbd>)}</span>)}</>
+  return <FlowTooltip label={label} shortcut={shortcut} disabled={disabled}>{children}</FlowTooltip>
 }
 
 function CommandButton({label,shortcut,onClick,className,children}:{label:string;shortcut?:string;onClick?:()=>void;className?:string;children:React.ReactNode}){return <HeaderTooltip label={label} shortcut={shortcut}><button className={className?`issue-command-button ${className}`:'issue-command-button'} type="button" aria-label={label} onClick={onClick}>{children}</button></HeaderTooltip>}

@@ -444,9 +444,12 @@ the work asynchronously.
   "previousComments": [
     { "id": "comment_root", "body": "Payments fail on retry", "userId": "usr_9a1b", "userName": "Grace Hopper", "createdAt": "..." }
   ],
-  "guidance": [{ "body": "Always open draft pull requests.", "origin": "workspace" }],
+  "guidance": [
+    { "body": "Always open draft pull requests.", "origin": "workspace" },
+    { "body": "Use the payments repository.", "origin": "team", "teamId": "team_eng", "teamKey": "ENG", "teamName": "Engineering" }
+  ],
   "agentActivity": { "type": "prompt", "body": "Use the staging database" },
-  "promptContext": "<issue identifier=\"ENG-42\">\n<title>Retry failed payments</title>\n...\n</issue>\n<primary-directive-thread comment-id=\"comment_root\">\n<comment author=\"Ada Lovelace\" created-at=\"...\">\n<user id=\"usr_7f2c\"/>\n@Deploy bot can you take this?\n</comment>\n</primary-directive-thread>\n<guidance>\n<guidance-rule origin=\"workspace\">Always open draft pull requests.</guidance-rule>\n</guidance>\n",
+  "promptContext": "<issue identifier=\"ENG-42\">\n<title>Retry failed payments</title>\n...\n</issue>\n<primary-directive-thread comment-id=\"comment_root\">\n<comment author=\"Ada Lovelace\" created-at=\"...\">\n<user id=\"usr_7f2c\"/>\n@Deploy bot can you take this?\n</comment>\n</primary-directive-thread>\n<guidance>\n<guidance-rule origin=\"workspace\">Always open draft pull requests.</guidance-rule>\n<guidance-rule origin=\"team\" team-name=\"Engineering\">Use the payments repository.</guidance-rule>\n</guidance>\n",
   "webhookTimestamp": 1791822652000
 }
 ```
@@ -457,8 +460,14 @@ the work asynchronously.
   guidance rules. All text is XML-escaped.
 - `previousComments` are the earlier comments of the triggering thread (empty
   for delegation).
-- `guidance` lists the workspace's agent guidance
-  (**Settings › Agents › Additional guidance**) with its `origin`.
+- `guidance` lists the agent guidance that applies to the session, least
+  specific first: the workspace's (**Settings › Agents › Additional
+  guidance**, `origin: "workspace"`), then the guidance of the session team's
+  parent teams and of the team itself (**Team settings › Team agents ›
+  Additional guidance**, `origin: "team"` with `teamId`, `teamKey` and
+  `teamName`). Later rules win when they conflict, so a team's own guidance
+  wins over its parent team's and the workspace's. Empty levels are left out;
+  each rule is at most 8,000 characters.
 - `agentActivity` is the person's prompt, on `prompted` events only.
 
 The delivery is signed like every other webhook (`Flow-Signature`,

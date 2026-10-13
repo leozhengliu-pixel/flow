@@ -2,11 +2,11 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
-import { ViaApp } from '@/components/ui/via-app'
-import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
+import { AttributedAction, ViaApp } from '@/components/ui/via-app'
+import { activityActor, attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import { Composer } from '@/components/editor/composer'
 import { useRef, useState, type ReactNode } from 'react'
-import { useAgentCommentThreadIds } from '@/components/agent/issue-agent-task-context'
+import { useAgentCommentThreadIds, useStandaloneAgentSessions, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import { toast } from '@/lib/toast'
 import { useActivityHighlight, useActivityHighlightTarget, type ActivityHighlightTarget } from './activity-highlight'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n/i18n'
 import { CalendarIcon, CycleIcon, LabelIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
-import { activityTimeLabel, describeIssueActivityParts, type ActivityContext, type ActivityPart } from './issue-activity-model'
+import { activityTimeLabel, coalesceIssueEvents, describeIssueActivityParts, issueEventFieldCount, type ActivityContext, type ActivityPart } from './issue-activity-model'
 import { MentionReference } from '@/components/editor/mentions/mention-reference'
 import { inlineCommentsState } from '@/lib/inline-comments-state'
 import './activity-timeline.css'
@@ -40,6 +40,7 @@ export function ActivityTimeline({
   threadSubscriptions,
   onThreadSubscription,
   renderAgentThread,
+  renderAgentSession,
 }: {
   events: ActivityEvent[]
   comments: Comment[]
@@ -58,10 +59,13 @@ export function ActivityTimeline({
   /** The viewer's explicit thread choices; participants follow threads implicitly. */
   threadSubscriptions?: ThreadSubscription[]
   onThreadSubscription?: (commentId: string, state: ThreadSubscriptionState | null) => Promise<void>
-  renderAgentThread?: (comment: Comment) => ReactNode
+  renderAgentThread?: (comment: Comment, controls: AgentThreadControls) => ReactNode
+  /** Renders an agent session that has no source comment (a delegation); it sits at its chronological position. */
+  renderAgentSession?: (taskId: string) => ReactNode
 }) {
   const { t } = useI18n()
   const agentCommentIds = useAgentCommentThreadIds()
+  const standaloneSessions = useStandaloneAgentSessions()
   const [threadOverrides, setThreadOverrides] = useState<Record<string, ThreadSubscriptionState | null>>({})
   const explicitThreadState = (rootId: string): ThreadSubscriptionState | null => rootId in threadOverrides
     ? threadOverrides[rootId]
@@ -72,6 +76,22 @@ export function ActivityTimeline({
       setThreadOverrides(current => ({ ...current, [rootId]: state }))
     }).catch(error => toast.error(error instanceof Error ? error.message : t('Could not update thread subscription')))
     : undefined
+  /** The thread's subscription and resolve controls, repeated in the menu of the agent replies inside it. */
+  const agentThreadControls = (item: Comment): AgentThreadControls => {
+    const state = explicitThreadState(item.id)
+    const participating = item.user.id === viewerId || Boolean(replies.get(item.id)?.some(reply => reply.user.id === viewerId))
+    const following = state === 'subscribed' || (participating && state !== 'muted')
+    return {
+      following,
+      onToggleSubscription: changeThread ? () => changeThread(item.id, following ? (participating ? 'muted' : null) : 'subscribed') : undefined,
+      resolved: Boolean(item.resolved),
+      onResolve: onResolve ? () => void run(item.id, async () => {
+        await onResolve(item.id, !item.resolved)
+        if (parentId) inlineCommentsState.resolveMark(parentType, parentId, item.id, !item.resolved)
+      }) : undefined,
+      parentIssueId: parentType === 'issue' ? parentId : undefined,
+    }
+  }
   const [replying, setReplying] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<Comment | null>(null)
@@ -88,14 +108,24 @@ export function ActivityTimeline({
       replies.set(comment.parentId, items)
     }
   }
+  // Like the reference app, a thread reads oldest to newest with the reply box at the bottom, whatever order the page arrived in.
+  for (const thread of replies.values()) thread.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   const topLevel = comments.filter((comment) => !comment.parentId || !commentIds.has(comment.parentId))
-  const eventItems = events.flatMap((event) => {
+  // Consecutive field changes by one actor read as one row ("Flow set priority to Urgent and set the estimate to 3
+  // on behalf of Dev User"), unless a comment was posted between them.
+  const commentTimes = topLevel.map((comment) => new Date(comment.createdAt).getTime())
+  const coalesced = coalesceIssueEvents(
+    [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    (previous, next) => !commentTimes.some((time) => time > new Date(previous.createdAt).getTime() && time < new Date(next.createdAt).getTime()),
+  )
+  const eventItems = coalesced.flatMap((event) => {
     const description = describeIssueActivityParts(event, context, t)
     return description ? [{ ...event, description }] : []
   })
   const items = [
     ...eventItems.map((event) => ({ ...event, kind: 'event' as const })),
     ...topLevel.map((comment) => ({ ...comment, kind: 'comment' as const })),
+    ...(renderAgentSession ? standaloneSessions.map((session) => ({ ...session, kind: 'agentSession' as const })) : []),
   ].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   const targetComment = target?.kind === 'comment' ? comments.find((comment) => comment.id === target.id) : undefined
   const targetIndex = items.findIndex(
@@ -134,7 +164,9 @@ export function ActivityTimeline({
             Show {hidden} older activities
           </button>
         )}
-        {visible.map((item) => (
+        {visible.map((item) => item.kind === 'agentSession' ? (
+          <div className="timeline-item agent-session" key={`agent-session-${item.id}`}>{renderAgentSession?.(item.id)}</div>
+        ) : (
           <div
             className={`timeline-item ${item.kind}`}
             data-activity-anchor={item.kind === 'event' ? `activity-${item.id}` : undefined}
@@ -147,7 +179,7 @@ export function ActivityTimeline({
                   <ActivityEventIcon event={item} context={context} />
                 </div>
                 <div>
-                  <ActivityRow event={item} description={item.description} />
+                  <ActivityRow event={item} description={item.description} context={context} />
                 </div>
               </>
             ) : (
@@ -278,7 +310,7 @@ export function ActivityTimeline({
                       />
                     </article>
                   ))}
-                  {agentCommentIds.has(item.id) && renderAgentThread ? renderAgentThread(item) : replying === item.id ? (
+                  {agentCommentIds.has(item.id) && renderAgentThread ? renderAgentThread(item, agentThreadControls(item)) : replying === item.id ? (
                     <div className="comment-thread__composer">
                       <Composer
                         compact
@@ -315,11 +347,11 @@ export function ActivityTimeline({
   )
 }
 
-function ActivityRow({ event, description }: { event: ActivityEvent; description: ActivityPart[] }) {
+function ActivityRow({ event, description, context }: { event: ActivityEvent; description: ActivityPart[]; context?: ActivityContext }) {
   const { locale } = useI18n()
   return (
     <p className="activity-row" data-i18n-ignore>
-      <strong>{attributedActorName(event.actor, event.botActor)}</strong><ViaApp user={event.actor} botActor={event.botActor} />{' '}{description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)}
+      <AttributedAction actor={activityActor(event.actor, event.botActor, context?.users)}>{description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)}</AttributedAction>
       <span className="activity-time">
         <span className="activity-dot">·</span>
         <a href={`#activity-${event.id}`} title={format(new Date(event.createdAt), 'PPpp')}>
@@ -332,7 +364,8 @@ function ActivityRow({ event, description }: { event: ActivityEvent; description
 
 function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?: ActivityContext }) {
   const m = event.metadata ?? {}
-  if (event.type === 'issue.updated') {
+  // Like the reference app, a row that changed several fields shows who did it rather than one field's icon.
+  if (event.type === 'issue.updated' && issueEventFieldCount(event) < 2) {
     if (m.state)
       return (
         <StatusIcon
@@ -356,7 +389,8 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   }
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
   if (event.type.includes('relation') || event.type.includes('review')) return <Link2 size={14} />
-  return <Avatar name={attributedActorName(event.actor, event.botActor)} avatarUrl={attributedActorAvatar(event.actor, event.botActor)} />
+  const actor = activityActor(event.actor, event.botActor, context?.users)
+  return <Avatar name={actor.name} avatarUrl={actor.avatarUrl} />
 }
 
 export function CommentMenu({

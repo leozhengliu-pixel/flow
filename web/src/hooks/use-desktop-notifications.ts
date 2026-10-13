@@ -24,7 +24,7 @@ export function useDesktopNotifications(data: BootstrapData | null) {
       const content = desktopNotificationContent(data, source, issue)
       const notification = new Notification(content.title, { body: content.body, tag: source.groupKey || source.id })
       localStorage.setItem(marker, new Date().toISOString())
-      notification.onclick = () => { window.focus(); window.location.assign(issue ? issuePath(data.workspace.urlKey, issue) : `/${encodeURIComponent(data.workspace.urlKey)}/inbox?notification=${encodeURIComponent(source.id)}`); notification.close() }
+      notification.onclick = () => { window.focus(); window.location.assign(issue ? `${issuePath(data.workspace.urlKey, issue)}${source.type === 'agentReply' && source.commentId ? `#comment-${encodeURIComponent(source.commentId)}` : ''}` : `/${encodeURIComponent(data.workspace.urlKey)}/inbox?notification=${encodeURIComponent(source.id)}`); notification.close() }
       delivered.push(source.id)
     }
     if (delivered.length) {
@@ -41,7 +41,8 @@ export function desktopNotificationContent(data: BootstrapData, source: FlowNoti
   }
   // Server-written copy (update comments/reactions and other non-issue notifications).
   if (!issue && (source.title || source.text)) return { title: source.title || data.workspace.name, body: markdownPlainText(source.text) }
-  const body = source.type === 'assignment' ? `${source.actor.displayName} assigned this issue to you` : source.type === 'mention' ? `${source.actor.displayName} mentioned you` : source.type === 'comment' ? `${source.actor.displayName} commented on this issue` : `${source.actor.displayName} updated this issue`
+  // An agent's reply in a thread carries its own line ("Flow replied: …").
+  const body = source.type === 'agentReply' && source.text ? markdownPlainText(source.text) : source.type === 'assignment' ? `${source.actor.displayName} assigned this issue to you` : source.type === 'mention' ? `${source.actor.displayName} mentioned you` : source.type === 'comment' ? `${source.actor.displayName} commented on this issue` : `${source.actor.displayName} updated this issue`
   const project = data.projects.find(item=>item.id===source.projectId)
   return { title: issue ? `${issue.identifier} ${issue.title}` : project?.name ?? data.workspace.name, body }
 }

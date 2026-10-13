@@ -171,7 +171,7 @@ export function SavedViewInsightsPanel({ allRows, data, onClose, onSave, rows, v
   const icon = viewIcon ?? <ViewGlyph color={view.color} icon={view.icon}/>
   const controls = (layout: 'row' | 'column') => <InsightControls config={config} data={data} layout={layout} onMeasure={selectMeasure} onToggleStatuses={toggleStatuses} onChange={patchConfig}/>
 
-  if (expanded) return <TooltipProvider delayDuration={450} skipDelayDuration={300}><aside aria-label={t('View insights')} className={styles.fullscreen} data-selection={target ? true : undefined}>
+  if (expanded) return <TooltipProvider delayDuration={450} skipDelayDuration={400}><aside aria-label={t('View insights')} className={styles.fullscreen} data-selection={target ? true : undefined}>
     <header className={styles.fullscreenHeader}>
       <div className={styles.crumbs}>
         <span className={styles.crumbIcon} aria-hidden="true">{icon}</span>
@@ -244,7 +244,7 @@ function isTextEntry(target: EventTarget | null) {
 }
 
 function ScopedTooltip({ label, shortcut, children }: { label: string; shortcut?: string; children: ReactElement }) {
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><FlowTooltip label={label} shortcut={shortcut} align="end">{children}</FlowTooltip></TooltipProvider>
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><FlowTooltip label={label} shortcut={shortcut} align="end">{children}</FlowTooltip></TooltipProvider>
 }
 
 export function InsightHiddenNotice({ hidden, onShow }: { hidden: number; onShow: () => void }) {
@@ -309,7 +309,7 @@ function InsightAggregationPicker({ config, layout, onChange }: { config: SavedV
   const { t } = useI18n()
   const selected = selectedAggregations(config)
   const label = selected.length ? selected.map(percentileLabel).join(', ') : t('None')
-  return <label className={styles.picker} data-layout={layout}><span>{t('Aggregations')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Aggregations')} className={styles.select}><span>{label}</span><span className={styles.selectChevron}><InsightSelectChevron/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop data-flow-motion="floating" {...INSIGHT_MENU_POSITION} className={styles.menu} collisionPadding={8}><TooltipProvider delayDuration={450} skipDelayDuration={300}>
+  return <label className={styles.picker} data-layout={layout}><span>{t('Aggregations')}</span><DropdownMenu.Root><DropdownMenu.Trigger asChild><button type="button" aria-label={t('Aggregations')} className={styles.select}><span>{label}</span><span className={styles.selectChevron}><InsightSelectChevron/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop data-flow-motion="floating" {...INSIGHT_MENU_POSITION} className={styles.menu} collisionPadding={8}><TooltipProvider delayDuration={450} skipDelayDuration={400}>
     {(['median', 'p75', 'p95'] as const).map(id => {
       const checked = selected.includes(id)
       return <DropdownMenu.CheckboxItem className={`${styles.menuItem} ${styles.treeItem}`} key={id} checked={checked} onSelect={event => event.preventDefault()} onCheckedChange={next => onChange(next ? [...selected, id] : selected.filter(value => value !== id))}>
@@ -368,7 +368,7 @@ function InsightPicker({ label, layout, onChange, options, value, display, subme
     else if (event.key === 'Backspace' && query) { event.preventDefault(); setQuery(current => current.slice(0, -1)) }
   }
   const selected = display ?? { label: findInsightOption(options, value)?.label ?? value }
-  return <label className={styles.picker} data-layout={layout}><span>{t(label)}</span><DropdownMenu.Root open={open} onOpenChange={setOpen}><DropdownMenu.Trigger asChild><button aria-label={t(label)} className={styles.select} type="button">{selected.icon && <span className={styles.selectIcon} aria-hidden="true">{selected.icon}</span>}<span data-i18n-ignore>{t(selected.label)}</span><span className={styles.selectChevron}><InsightSelectChevron/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop ref={content} data-flow-motion="floating" {...INSIGHT_MENU_POSITION} className={`${styles.menu} ${styles.selectMenu}`} collisionPadding={8} onKeyDown={onKeyDown} onCloseAutoFocus={event => event.preventDefault()}><TooltipProvider delayDuration={450} skipDelayDuration={300}>
+  return <label className={styles.picker} data-layout={layout}><span>{t(label)}</span><DropdownMenu.Root open={open} onOpenChange={setOpen}><DropdownMenu.Trigger asChild><button aria-label={t(label)} className={styles.select} type="button">{selected.icon && <span className={styles.selectIcon} aria-hidden="true">{selected.icon}</span>}<span data-i18n-ignore>{t(selected.label)}</span><span className={styles.selectChevron}><InsightSelectChevron/></span></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content loop ref={content} data-flow-motion="floating" {...INSIGHT_MENU_POSITION} className={`${styles.menu} ${styles.selectMenu}`} collisionPadding={8} onKeyDown={onKeyDown} onCloseAutoFocus={event => event.preventDefault()}><TooltipProvider delayDuration={450} skipDelayDuration={400}>
     <span className={styles.menuSearch} role="status">{normalized ? `${visible.length} ${t('results')}` : t('Showing all items')}</span>
     {visible.map((option, index) => <InsightPickerOption key={option.id} first={index === 0} onChange={next => { onChange(next); if (!option.children?.length && !submenu?.(option.id)) setOpen(false) }} option={option} submenu={submenu?.(option.id)} value={value}/>)}
     {!visible.length && <div className={styles.menuEmpty}>{t('No results')}</div>}

@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { CalendarIcon, NoAssigneeIcon, PriorityIcon, ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { AppLink } from '@/components/ui/app-link'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
@@ -10,7 +11,7 @@ import { linkAgentEntities } from './agent-answer-content'
 import { AgentEntityDataContext, agentEntityHref } from './agent-entity-data'
 import { useAgentEntity } from './agent-entity-fetch'
 import { AgentEntityHover } from './agent-entity-hover'
-import type { AgentEntity, AgentEntityTarget } from './agent-entity-refs'
+import { resolveAgentEntity, type AgentEntity, type AgentEntityTarget } from './agent-entity-refs'
 import { AgentRichText } from './agent-rich-text'
 import styles from './agent-answer.module.css'
 
@@ -29,10 +30,16 @@ export function AgentAnswerText({ ariaLabel, className, data, markdown }: { aria
 }
 
 /** The resources an answer references, as the reference app lists them under the text: issues as rows, documents and views as cards. */
-export function AgentReferencedResources({ data, references }: { data?: BootstrapData; references: AgentEntityTarget[] }) {
+export function AgentReferencedResources({ data, references, exclude = [] }: { data?: BootstrapData; references: AgentEntityTarget[]; exclude?: string[] }) {
   if (!data) return null
-  const issues = references.filter(reference => reference.kind === 'issue')
-  const cards = references.filter(reference => reference.kind === 'document' || reference.kind === 'view')
+  // Issues, documents and views the reply created or edited already have their result card (the reference app shows only the card).
+  const issues = references.filter(reference => {
+    if (reference.kind !== 'issue') return false
+    const resolved = resolveAgentEntity(data, reference)
+    const id = resolved?.kind === 'issue' ? resolved.issue.id : reference.id
+    return !exclude.includes(`issue:${id}`) && !exclude.includes(`issue:${reference.id}`)
+  })
+  const cards = references.filter(reference => (reference.kind === 'document' || reference.kind === 'view') && !exclude.includes(`${reference.kind}:${reference.id}`))
   if (issues.length < 2 && !cards.length) return null
   return (
     <>
@@ -61,9 +68,9 @@ function AgentReferencedIssueRow({ data, reference }: { data: BootstrapData; ref
     <li>
       <AgentEntityHover data={data} entity={state.entity}>
         <AppLink className={styles.referenceRow} data-agent-entity="issue" data-i18n-ignore href={agentEntityHref(data, state.entity)}>
-          <PriorityIcon priority={issue.priority} size={16}/>
+          <PriorityIcon priority={issue.priority} size={14}/>
           <span className={styles.entityIdentifier}>{issue.identifier}</span>
-          <StatusIcon size={16} state={issue.state}/>
+          <StatusIcon size={14} state={issue.state}/>
           <span className={styles.referenceTitle}>{issue.title}</span>
           {assignee ? <UserAvatar avatarUrl={issue.assignee?.avatarUrl} className={styles.referenceAvatar} name={assignee}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
         </AppLink>
@@ -121,17 +128,42 @@ function AgentReferencedCard({ data, reference }: { data: BootstrapData; referen
   )
 }
 
-/** Follow-up suggestion pills under the latest answer; clicking one sends it as the next message. */
-export function AgentSuggestionChips({ disabled = false, onSelect, suggestions }: { disabled?: boolean; onSelect: (suggestion: string) => void; suggestions: string[] }) {
+/**
+ * The reference app's option pills under an agent reply ("Choose an option"): follow-up suggestions and the options of a question
+ * the agent stopped on (ask_user). Picking one sends it; once a question is answered the pills collapse into the chosen
+ * one with a check.
+ */
+export function AgentChoicePills({ choices, selected, disabled = false, onSelect }: { choices: { label: string; value: string }[]; selected?: string; disabled?: boolean; onSelect?: (choice: { label: string; value: string }) => void }) {
   const { t } = useI18n()
-  if (!suggestions.length) return null
+  const shown = selected === undefined ? choices : choices.filter(choice => choice.value === selected)
+  if (!shown.length) return null
   return (
-    <div aria-label={t('Suggested follow-ups')} className={styles.suggestions} role="group">
-      {suggestions.map(suggestion => (
-        <button className={styles.suggestion} data-i18n-ignore disabled={disabled} key={suggestion} onClick={() => onSelect(suggestion)} type="button">
-          {suggestion}
-        </button>
-      ))}
+    <div className={styles.choices} data-agent-choices="">
+      <div aria-label={t('Choose an option')} className={styles.choiceGroup} role="group">
+        {shown.map(choice => (
+          <button
+            aria-pressed={selected === undefined ? undefined : true}
+            className={styles.choice}
+            data-i18n-ignore
+            data-selected={selected === undefined ? undefined : ''}
+            disabled={disabled || selected !== undefined || !onSelect}
+            key={choice.value}
+            onClick={() => onSelect?.(choice)}
+            type="button"
+          >
+            <span className={styles.choiceLabel}>
+              <span>{choice.label}</span>
+              <span aria-hidden="true" className={styles.choiceCheck}><FlowGlyph name="resolveThread" size={14}/></span>
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   )
+}
+
+/** Follow-up suggestion pills under the latest answer; clicking one sends it as the next message. */
+export function AgentSuggestionChips({ disabled = false, onSelect, suggestions }: { disabled?: boolean; onSelect: (suggestion: string) => void; suggestions: string[] }) {
+  if (!suggestions.length) return null
+  return <AgentChoicePills choices={suggestions.map(suggestion => ({ label: suggestion, value: suggestion }))} disabled={disabled} onSelect={choice => onSelect(choice.value)}/>
 }

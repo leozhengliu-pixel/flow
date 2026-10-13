@@ -13,15 +13,16 @@ import { AgentWriteIcon } from '@/components/agent/agent-icons'
 import { useI18n } from '@/i18n/i18n'
 import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import { Avatar } from '@/components/issue/issue-row'
-import { ViaApp } from '@/components/ui/via-app'
-import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
+import { AttributedAction, ViaApp } from '@/components/ui/via-app'
+import { activityActor, attributedActorAvatar, attributedActorName, type ActivityActor } from '@/lib/actor-attribution'
+import { coalesceHistoryEntries, describeHistoryEntry } from '@/components/activity/entity-history-model'
 import { CalendarIcon, PriorityIcon, ProjectIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { DeleteCommentDialog } from '@/components/activity/activity-timeline'
 import { ResolvedComment } from '@/components/activity/resolved-comment'
 import { ProjectCommentMenu } from './project-comment-menu'
 import { Composer } from '@/components/editor/composer'
-import type { AuditLogEntry, Comment, Project, ProjectUpdate, ThreadSubscription, ThreadSubscriptionState } from '@/types/flow'
+import type { ActorBot, AuditLogEntry, Comment, Project, ProjectUpdate, ThreadSubscription, ThreadSubscriptionState, User } from '@/types/flow'
 import type { ProjectDetailProps } from './project-detail-types'
 import { projectUpdateChanges, type ProjectPropertyChange } from './project-update-changes'
 import { PROJECT_HEALTHS } from './project-detail-types'
@@ -71,7 +72,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
   ].sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt)), [commentThreads, projectUpdates])
   // Projects created before the creator was recorded keep the lead/viewer fallback.
   const creator = project.creator ?? project.lead ?? viewer
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [editorKey, setEditorKey] = useState(0)
   const [agentOpen, setAgentOpen] = useState(false)
   const [history, setHistory] = useState<AuditLogEntry[]>([])
@@ -108,7 +109,7 @@ export function ProjectActivity({ activities, drafts = [], project, projectUpdat
     if (rest.length) insertEmbedFiles(view, rest, uploadInlineMedia)
     composerEditorRef.current?.commands.focus()
   }
-  const propertyEvents = useMemo(() => buildProjectEvents(activities, { actor: creator, createdAt: project.createdAt, color: project.color }), [activities, creator, project.createdAt, project.color])
+  const propertyEvents = useMemo(() => buildProjectEvents(activities, { actor: creator, botActor: project.botActor, createdAt: project.createdAt, color: project.color }, history, users, t, locale), [activities, creator, project.botActor, project.createdAt, project.color, history, users, t, locale])
 
   useEffect(() => {
     if (!body.trim() || saving) return
@@ -310,14 +311,16 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
 }
 
 function CommentEntry({ comment }: { comment: Comment }) { return <article className="project-activity__comment"><Avatar name={attributedActorName(comment.user, comment.botActor)} avatarUrl={attributedActorAvatar(comment.user, comment.botActor)}/><div><header><strong>{attributedActorName(comment.user, comment.botActor)}</strong><ViaApp user={comment.user} botActor={comment.botActor}/><time>{formatDistanceToNowStrict(new Date(comment.createdAt), { addSuffix: true })}</time></header><div className="project-activity__rich"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div></div></article> }
-function PropertyEvent({ actor, icon, reference, text, time }: { actor?: string; icon?: ReactNode; reference?: ActivityRef; text: string; time: string }) {
+function PropertyEvent({ actor, icon, reference, text, time }: { actor?: ActivityActor; icon?: ReactNode; reference?: ActivityRef; text: string; time: string }) {
   const { t } = useI18n()
+  const chip = reference && <> <MentionReference id={reference.id} label={reference.label || t(REFERENCE_TYPE_LABEL[reference.type])} type={reference.type}/></>
+  // Flow's agent rows show the agent's avatar where a property icon would be.
+  const marker = icon ?? (actor?.onBehalfOf ? <span className="project-activity__event-avatar"><Avatar name={actor.name} avatarUrl={actor.avatarUrl}/></span> : <span className="project-activity__event-dot"/>)
   // The reference app bolds the actor and runs the date straight after the sentence.
-  const rest = actor && text.startsWith(`${actor} `) ? text.slice(actor.length) : undefined
-  return <div className="project-activity__event">{icon ?? <span className="project-activity__event-dot"/>}<span>{rest !== undefined ? <><strong>{actor}</strong>{rest}</> : text}{reference && <> <MentionReference id={reference.id} label={reference.label || t(REFERENCE_TYPE_LABEL[reference.type])} type={reference.type}/></>}<time> · {format(new Date(time), 'MMM d')}</time></span></div>
+  return <div className="project-activity__event">{marker}<span>{actor ? <AttributedAction actor={actor}>{text}{chip}</AttributedAction> : <>{text}{chip}</>}<time> · {format(new Date(time), 'MMM d')}</time></span></div>
 }
 
-type ProjectPropertyEvent = { id: string; icon?: ReactNode; actor?: string; reference?: ActivityRef; text: string; time: string }
+type ProjectPropertyEvent = { id: string; icon?: ReactNode; actor?: ActivityActor; reference?: ActivityRef; text: string; time: string }
 // The reference app's project Activity tab lists events without month group headings.
 function ActivityPropertyTimeline({ events }: { events: ProjectPropertyEvent[] }) {
   return <>{events.map(event => <PropertyEvent actor={event.actor} icon={event.icon} key={event.id} reference={event.reference} text={event.text} time={event.time}/>)}</>
@@ -331,10 +334,15 @@ function formatPropertyValue(field: string, value: string) {
   return value
 }
 
-function buildProjectEvents(activities: ProjectDetailProps['activities'], creation?: { actor: { displayName: string }; createdAt: string; color?: string }): ProjectPropertyEvent[] {
-  const events: ProjectPropertyEvent[] = activities.map(event => ({ id: event.id, actor: event.actor.displayName, icon: event.type === 'project.created' ? <ProjectIcon size={16}/> : event.type.includes('initiative') ? <Flag size={16}/> : event.type.includes('date') ? <CalendarIcon size={16}/> : event.type.includes('priority') ? <PriorityIcon priority={Number(event.metadata.priority ?? 0)} size={16}/> : undefined, reference: projectEventReference(event), text: activityLabel(event), time: event.createdAt }))
+function buildProjectEvents(activities: ProjectDetailProps['activities'], creation: { actor: User; botActor?: ActorBot; createdAt: string; color?: string } | undefined, history: AuditLogEntry[] = [], users: User[] = [], t: (text: string) => string = text => text, locale = 'en'): ProjectPropertyEvent[] {
+  const events: ProjectPropertyEvent[] = activities.map(event => ({ id: event.id, actor: activityActor(event.actor, event.botActor, users), icon: event.type === 'project.created' ? <ProjectIcon size={16}/> : event.type.includes('initiative') ? <Flag size={16}/> : event.type.includes('date') ? <CalendarIcon size={16}/> : event.type.includes('priority') ? <PriorityIcon priority={Number(event.metadata.priority ?? 0)} size={16}/> : undefined, reference: projectEventReference(event), text: activityLabel(event, t), time: event.createdAt }))
+  // Property changes and milestones from the project history ("Flow set priority to High on behalf of Dev User").
+  for (const entry of coalesceHistoryEntries(history)) {
+    const text = entry.action === 'created' ? null : describeHistoryEntry(entry, 'project', t, locale)
+    if (text) events.push({ id: entry.id, actor: activityActor(entry.actor, entry.botActor, users), text, time: entry.createdAt })
+  }
   // The API does not persist a project.created event, so synthesize the creation entry the reference app always shows at the bottom of the feed.
-  if (creation && !Number.isNaN(Date.parse(creation.createdAt)) && !activities.some(event => event.type === 'project.created')) events.push({ id: 'project-created', actor: creation.actor.displayName, icon: <ProjectIcon size={16} style={creation.color ? { color: creation.color } : undefined}/>, text: `${creation.actor.displayName} created the project`, time: creation.createdAt })
+  if (creation && !Number.isNaN(Date.parse(creation.createdAt)) && !activities.some(event => event.type === 'project.created')) events.push({ id: 'project-created', actor: activityActor(creation.actor, creation.botActor, users), icon: <ProjectIcon size={16} style={creation.color ? { color: creation.color } : undefined}/>, text: t('created the project'), time: creation.createdAt })
   return events.sort((left, right) => +new Date(right.time) - +new Date(left.time))
 }
 
@@ -363,12 +371,12 @@ function projectEventReference(event: ProjectDetailProps['activities'][number]):
   return undefined
 }
 
-function activityLabel(event: ProjectDetailProps['activities'][number]) {
-  const actor = event.actor.displayName
+/** The action of an activity event, without its actor. */
+function activityLabel(event: ProjectDetailProps['activities'][number], t: (text: string) => string) {
   const reference = projectEventReference(event)
   const value = reference ? '' : event.metadata.name ?? event.metadata.label ?? event.metadata.status ?? event.metadata.projectName ?? ''
   const labels: Record<string, string> = { 'project.created': 'created the project', 'project.updated': 'updated the project', 'project.commented': 'commented on the project', 'project.update_created': 'posted a project update', 'project.reminder_created': 'created a project reminder', 'project.milestone_created': 'added a milestone', 'project.milestone_updated': 'updated a milestone', 'project.milestone_deleted': 'deleted a milestone' }
-  return `${actor} ${labels[event.type] ?? event.type.replaceAll('.', ' ')}${value ? ` ${value}` : ''}`
+  return `${labels[event.type] ? t(labels[event.type]) : event.type.replaceAll('.', ' ')}${value ? ` ${value}` : ''}`
 }
 
 function EditUpdateDialog({ onOpenChange, onSave, open, update }: { onOpenChange: (open: boolean) => void; onSave: (id: string, input: { body?: string; health?: Project['health'] }) => Promise<void>; open: boolean; update?: ProjectUpdate }) {

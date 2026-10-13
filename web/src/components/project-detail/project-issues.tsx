@@ -26,6 +26,7 @@ import {
   explorerBoardGroupUpdate,
   explorerBulkOptions,
   explorerPropertyOptions,
+  assigneeContextOptions,
   explorerUpdateForProperty,
   issueHierarchyFields,
   issueToExplorerRow,
@@ -401,17 +402,7 @@ export function ProjectIssues({
         kind: "priority" as const,
         priority: priority as 0 | 1 | 2 | 3 | 4,
       })),
-      assignee: [
-        { id: "", label: "No assignee", kind: "assignee" as const },
-        ...users
-          .filter((user) => user.active)
-          .map((user) => ({
-            id: user.id,
-            label: user.displayName,
-            avatarUrl: user.avatarUrl,
-            kind: "assignee" as const,
-          })),
-      ],
+      assignee: assigneeContextOptions(users.filter((user) => user.active)),
       dueDate: dueDateOptions(),
       cycle: [{ id: '', label: 'No cycle', kind: 'cycle' as const }, ...(cycles ?? []).map(cycle => ({ id: cycle.id, teamId: cycle.teamId, label: cycle.name, kind: 'cycle' as const }))],
       labels: labels.map((label) => ({

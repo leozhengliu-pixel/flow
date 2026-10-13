@@ -98,6 +98,14 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.saveMCPAgentSkill(ctx, actor, data, args)
 	case "save_loop":
 		return s.saveMCPLoop(ctx, actor, data, args)
+	case "delete_project", "delete_initiative", "delete_view", "delete_loop", "delete_agent_skill", "delete_customer", "delete_customer_request":
+		return s.deleteMCPResource(ctx, actor, data, name, args)
+	case "save_customer":
+		return s.saveMCPCustomer(ctx, actor, data, args)
+	case "save_customer_request":
+		return s.saveMCPCustomerRequest(ctx, actor, data, args)
+	case "save_cycle":
+		return s.saveMCPCycle(ctx, actor, data, args)
 	default:
 		return nil, fmt.Errorf("tool %q is not implemented", name)
 	}
@@ -410,6 +418,8 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			if err != nil {
 				return err
 			}
+			// The issue history shows the change like an edit in the app.
+			appendEstimateActivity(next, issue, estimate)
 			issue.Estimate = estimate
 			return nil
 		}); err != nil {
@@ -448,7 +458,9 @@ func mcpIssueWriteReceipt(issue domain.Issue, workspace string, args map[string]
 	put(creating || hasAnyArg(args, "title"), "title", issue.Title)
 	put(hasAnyArg(args, "description", "patch"), "description", issue.Description)
 	put(creating || hasAnyArg(args, "team"), "team", issue.Team)
-	put(creating || hasAnyArg(args, "state"), "state", issue.State)
+	// The live status is always returned: automations (delegation, triage, parent/sub-issue rules) can move an
+	// issue on any write, and the agent must report the real status, not guess it.
+	receipt["state"] = issue.State
 	put(hasAnyArg(args, "priority"), "priority", issue.Priority)
 	put(hasAnyArg(args, "priority"), "priorityLabel", issue.PriorityLabel)
 	put(hasAnyArg(args, "assignee"), "assignee", issue.Assignee)
@@ -1131,7 +1143,7 @@ func (s *server) mutateAnyComment(ctx context.Context, actor mcpActor, data doma
 }
 
 func newMCPComment(user domain.User, body string, bodyData map[string]any, parentID *string) domain.Comment {
-	return domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: body, BodyData: bodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: user}
+	return domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: body, BodyData: bodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: user, BotActor: revisionBotActor(user)}
 }
 
 func (s *server) updateMCPReview(ctx context.Context, _ mcpActor, data domain.Bootstrap, args map[string]any, action string) (any, error) {

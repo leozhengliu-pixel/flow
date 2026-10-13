@@ -73,6 +73,8 @@ func (s *server) requestAgentTurn(ctx context.Context, messages []agentProviderM
 		return agentProviderTurn{}, err
 	}
 	tools := s.agentTurnTools(ctx)
+	// Stored chats can hold calls without outputs (a stopped reply, an open question); providers refuse those.
+	messages = sanitizeAgentProviderMessages(messages)
 	protocol := s.agent.Protocol
 	if protocol == "" {
 		protocol = "openai-chat-completions"
@@ -106,8 +108,8 @@ func (s *server) agentTurnTools(ctx context.Context) []agentProviderTool {
 	if extra, ok := ctx.Value(agentExtraToolsKey{}).([]agentProviderTool); ok && len(tools) > 0 {
 		tools = append(tools, extra...)
 	}
-	if len(tools) > 0 && agentWebToolsEnabled(ctx) && s.webSearchAvailable() {
-		tools = append(tools, webToolDefinitions...)
+	if len(tools) > 0 && agentWebToolsEnabled(ctx) {
+		tools = append(tools, s.agentWebToolList()...)
 	}
 	// Loop runs narrow the tool list to what the loop is permitted to use.
 	if allow, ok := ctx.Value(agentToolFilterKey{}).(func(agentProviderTool) bool); ok {
@@ -136,6 +138,7 @@ func (s *server) agentMaxOutputTokens(ctx context.Context) int {
 
 func (s *server) requestAgentTurnWithoutTools(ctx context.Context, messages []agentProviderMessage) (agentProviderTurn, error) {
 	emit := func(agentProviderEvent) error { return nil }
+	messages = sanitizeAgentProviderMessages(messages)
 	protocol := s.agent.Protocol
 	if protocol == "" {
 		protocol = "openai-chat-completions"
@@ -203,6 +206,11 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 			return map[string]any{"type": "function", "name": tool.Name, "description": tool.Description, "parameters": parameters}
 		})
 	}
+	// Without a search provider, a web-enabled turn searches with the provider's hosted tool.
+	native := len(tools) > 0 && agentWebToolsEnabled(ctx) && s.agentNativeWebSearch()
+	if native {
+		payload["tools"] = append(payload["tools"].([]any), map[string]any{"type": "web_search"})
+	}
 	// Requests sharing a cache key are routed to where their common prefix (tools and instructions) is already
 	// processed. Without it this provider cached nothing, and every turn re-read ~15k tokens of tools.
 	cacheKey, _ := ctx.Value(agentPromptCacheKey{}).(string)
@@ -215,6 +223,15 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 		// An OpenAI-compatible gateway that doesn't know the field: drop it from now on.
 		s.agentPromptCacheOff.Store(true)
 		delete(payload, "prompt_cache_key")
+		response, err = s.agentProviderRequest(ctx, "/responses", payload, false)
+	}
+	if native && errors.As(err, &providerErr) && providerErr.status == http.StatusBadRequest && strings.Contains(strings.ToLower(providerErr.message), "web_search") {
+		// A gateway without hosted web search: fetch_url still works; stop offering search from now on.
+		s.agentNativeWebSearchOff.Store(true)
+		payload["tools"] = slices.DeleteFunc(payload["tools"].([]any), func(tool any) bool {
+			item, ok := tool.(map[string]any)
+			return ok && item["type"] == "web_search"
+		})
 		response, err = s.agentProviderRequest(ctx, "/responses", payload, false)
 	}
 	if err != nil {
@@ -243,6 +260,10 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 				Type      string `json:"type"`
 				Name      string `json:"name"`
 				Arguments string `json:"arguments"`
+				Action    struct {
+					Query   string   `json:"query"`
+					Queries []string `json:"queries"`
+				} `json:"action"`
 			} `json:"item"`
 			Response struct {
 				ID     string `json:"id"`
@@ -284,7 +305,19 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 		case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
 			turn.Reasoning += event.Delta
 			return emit(agentProviderEvent{Type: "reasoning.delta", Delta: event.Delta})
-		case "response.output_item.added":
+		case "response.output_item.added", "response.output_item.done":
+			if event.Item.Type == "web_search_call" {
+				// Hosted search runs on the provider's side; it shows as a step, never as a call to execute.
+				status := "running"
+				if event.Type == "response.output_item.done" {
+					status = "completed"
+				}
+				arguments, _ := json.Marshal(map[string]any{"query": firstNonEmpty(event.Item.Action.Query, strings.Join(event.Item.Action.Queries, ", "))})
+				return emit(agentProviderEvent{Type: "tool.hosted", ToolCall: &domain.AgentToolCall{ID: agentHostedToolPrefix + event.Item.ID, Name: webSearchToolName, Arguments: arguments, Status: status}})
+			}
+			if event.Type == "response.output_item.done" {
+				return nil
+			}
 			if event.Item.Type == "function_call" {
 				id := firstNonEmpty(event.Item.CallID, event.Item.ID)
 				call := &domain.AgentToolCall{ID: id, Name: event.Item.Name, Arguments: json.RawMessage(event.Item.Arguments), Status: "running"}
@@ -427,7 +460,21 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 			return map[string]any{"name": tool.Name, "description": tool.Description, "input_schema": parameters}
 		})
 	}
+	// Without a search provider, a web-enabled turn searches with Claude's web search server tool.
+	native := len(tools) > 0 && agentWebToolsEnabled(ctx) && s.agentNativeWebSearch()
+	if native {
+		payload["tools"] = append(payload["tools"].([]any), map[string]any{"type": "web_search_20250305", "name": webSearchToolName, "max_uses": 5})
+	}
 	response, err := s.agentProviderRequest(ctx, "/messages", payload, true)
+	var providerErr *agentProviderError
+	if native && errors.As(err, &providerErr) && providerErr.status == http.StatusBadRequest && strings.Contains(strings.ToLower(providerErr.message), "web_search") {
+		s.agentNativeWebSearchOff.Store(true)
+		payload["tools"] = slices.DeleteFunc(payload["tools"].([]any), func(tool any) bool {
+			item, ok := tool.(map[string]any)
+			return ok && item["type"] == "web_search_20250305"
+		})
+		response, err = s.agentProviderRequest(ctx, "/messages", payload, true)
+	}
 	if err != nil {
 		return agentProviderTurn{}, err
 	}
@@ -438,6 +485,9 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 	}
 	turn := agentProviderTurn{}
 	calls := map[int]*domain.AgentToolCall{}
+	// Hosted web search blocks by stream index, and their streamed query.
+	hosted := map[int]string{}
+	hostedArgs := map[string]json.RawMessage{}
 	err = readSSE(response.Body, func(_ string, data string) error {
 		var event struct {
 			Type         string `json:"type"`
@@ -447,6 +497,8 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 				ID    string          `json:"id"`
 				Name  string          `json:"name"`
 				Input json.RawMessage `json:"input"`
+				// ToolUseID links a server tool's result to its call (web_search_tool_result).
+				ToolUseID string `json:"tool_use_id"`
 			} `json:"content_block"`
 			Delta struct {
 				Type        string `json:"type"`
@@ -469,6 +521,14 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 		case "message_start":
 			turn.ResponseID = event.Message.ID
 		case "content_block_start":
+			switch event.ContentBlock.Type {
+			case "server_tool_use":
+				hosted[event.Index] = agentHostedToolPrefix + event.ContentBlock.ID
+				return emit(agentProviderEvent{Type: "tool.hosted", ToolCall: &domain.AgentToolCall{ID: hosted[event.Index], Name: webSearchToolName, Status: "running"}})
+			case "web_search_tool_result":
+				id := agentHostedToolPrefix + event.ContentBlock.ToolUseID
+				return emit(agentProviderEvent{Type: "tool.hosted", ToolCall: &domain.AgentToolCall{ID: id, Name: webSearchToolName, Arguments: hostedArgs[id], Status: "completed"}})
+			}
 			if event.ContentBlock.Type == "tool_use" {
 				arguments := event.ContentBlock.Input
 				if strings.TrimSpace(string(arguments)) == "{}" {
@@ -487,6 +547,10 @@ func (s *server) requestAnthropicMessages(ctx context.Context, messages []agentP
 				turn.Reasoning += event.Delta.Thinking
 				return emit(agentProviderEvent{Type: "reasoning.delta", Delta: event.Delta.Thinking})
 			case "input_json_delta":
+				if id := hosted[event.Index]; id != "" {
+					hostedArgs[id] = append(hostedArgs[id], event.Delta.PartialJSON...)
+					return nil
+				}
 				if call := calls[event.Index]; call != nil {
 					call.Arguments = append(call.Arguments, event.Delta.PartialJSON...)
 					return emit(agentProviderEvent{Type: "tool.delta", Delta: event.Delta.PartialJSON, ToolCall: cloneToolCall(call)})
@@ -710,7 +774,14 @@ func anthropicMessages(messages []agentProviderMessage) (string, []any) {
 			continue
 		}
 		if message.ToolResult != nil {
-			result = append(result, map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result", "tool_use_id": message.ToolResult.CallID, "content": message.ToolResult.Content, "is_error": message.ToolResult.IsError}}})
+			block := map[string]any{"type": "tool_result", "tool_use_id": message.ToolResult.CallID, "content": message.ToolResult.Content, "is_error": message.ToolResult.IsError}
+			// All results of one assistant turn go back in a single user message, as the Messages API expects.
+			if last := len(result) - 1; last >= 0 && anthropicToolResultMessage(result[last]) {
+				previous := result[last].(map[string]any)
+				previous["content"] = append(previous["content"].([]any), block)
+				continue
+			}
+			result = append(result, map[string]any{"role": "user", "content": []any{block}})
 			continue
 		}
 		content := []any{}
@@ -730,6 +801,24 @@ func anthropicMessages(messages []agentProviderMessage) (string, []any) {
 		result = append(result, map[string]any{"role": message.Role, "content": content})
 	}
 	return system, result
+}
+
+// anthropicToolResultMessage reports whether an encoded message is a user message holding only tool results.
+func anthropicToolResultMessage(value any) bool {
+	message, ok := value.(map[string]any)
+	if !ok || message["role"] != "user" {
+		return false
+	}
+	content, ok := message["content"].([]any)
+	if !ok || len(content) == 0 {
+		return false
+	}
+	for _, block := range content {
+		if item, ok := block.(map[string]any); !ok || item["type"] != "tool_result" {
+			return false
+		}
+	}
+	return true
 }
 
 func emitDecodedAgentTurn(turn agentProviderTurn, decodeErr error, emit func(agentProviderEvent) error) error {

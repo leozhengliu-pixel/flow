@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { AgentBadge } from '@/components/agent/agent-badge'
+import { NoAssigneeIcon } from '@/components/issue/issue-icons'
+import { avatarColor } from '@/components/issue/avatar-color'
+import { UserAvatar } from '@/components/ui/user-avatar'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
+import { assigneeShortcut } from '@/lib/agent-members'
+import { openMemberInvite } from '@/lib/invite-navigation'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
 import { ChevronLeft, ChevronRight, X } from 'lucide-react'
@@ -15,7 +20,7 @@ import { matchesSearch, translatedKeywords } from '@/lib/search-match'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 
 export type MyIssuesBulkAction = 'assign' | 'unassignMe' | 'status' | 'priority' | 'project' | 'labels' | 'dueDate' | 'copyId' | 'copyUrl' | 'copyTitle' | 'copyTitleLink' | 'copyDescriptionMarkdown' | 'copyContentMarkdown' | 'copyBranch' | 'copyPrompt' | 'subscribers' | 'removeSubscribers' | 'markAs' | 'archive' | 'delete'
-export interface MyIssuesBulkActionOption { id: string; label: string; color?: string; /** Agent member: shown with the "Agent" pill; assigning delegates. */ agent?: boolean }
+export interface MyIssuesBulkActionOption { id: string; label: string; color?: string; /** Agent member: assigning delegates (the "Agent" pill lives in the hover card only). */ agent?: boolean }
 
 export interface MyIssuesBulkActionBarProps {
   selectedIssues: MyIssuesRowData[]
@@ -56,6 +61,7 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
   useEffect(() => { if (!open) setPendingAction(undefined) }, [open])
   if (!selectedIssues.length) return null
   const count = selectedIssues.length
+  const options = pendingAction ? actionOptions?.(pendingAction) ?? [] : []
   return <>
     <div className={styles.bar} role="toolbar" aria-label={`${count} selected issues`} data-error={Boolean(error)}>
       <span className={styles.count}>{loading ? 'Updating...' : `${count}\u00a0selected`}</span>
@@ -68,10 +74,11 @@ export function MyIssuesBulkActionBar({ selectedIssues, loading = false, error, 
       <Dialog.Title className={styles.commandTitle}>{pendingAction ? actions.find(action => action.id === pendingAction)?.label : count === 1 ? `${selectedIssues[0].identifier} · ${selectedIssues[0].title}` : `${count} selected issues`}</Dialog.Title>
       {pendingAction && <button type="button" className={styles.commandBack} aria-label="Back to actions" onClick={() => setPendingAction(undefined)}><ChevronLeft size={13}/>Back</button>}
       <Dialog.Close className={styles.commandClose} aria-label="Close command menu"><span>Backspace</span><kbd>⌫</kbd></Dialog.Close>
-      <Command label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} className={styles.command} loop filter={pendingAction && ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? (value, query) => { const person = directoryPerson(directory.users, value); return person ? Number(personMatchesQuery(person, query)) : Number(matchesSearch(query, [actionOptions?.(pendingAction)?.find(option => (option.id || 'none') === value)?.label ?? value], t)) } : undefined}>
-        <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
+      <Command onKeyDown={event => { if (pendingAction !== 'assign' || event.metaKey || event.ctrlKey || event.altKey || !/^\d$/.test(event.key)) return; const index = options.findIndex((_option, position) => assigneeShortcut(position) === event.key); if (index >= 0) { event.preventDefault(); onAction('assign', selectedIssues, options[index].id); setOpen(false) } }} label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} className={styles.command} loop filter={pendingAction && ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? (value, query) => { const person = directoryPerson(directory.users, value); return person ? Number(personMatchesQuery(person, query)) : Number(matchesSearch(query, [actionOptions?.(pendingAction)?.find(option => (option.id || 'none') === value)?.label ?? value], t)) } : undefined}>
+        <div className={styles.commandInput}><Command.Input key={pendingAction ?? 'actions'} aria-label={pendingAction ? `Search ${actions.find(action => action.id === pendingAction)?.label}` : 'Command menu'} placeholder={pendingAction === 'assign' ? 'Assign to…' : pendingAction ? 'Search...' : 'Type a command...'} autoFocus/>{!pendingAction && <><span>Ask Flow</span><kbd>Tab</kbd></>}</div>
         <Command.List className={styles.commandList}><Command.Empty className={styles.commandEmpty}>No commands found</Command.Empty>{pendingAction
-          ? actionOptions?.(pendingAction)?.map(option => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...translatedKeywords([option.label], t), ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span>{option.agent && <AgentBadge/>}</span></Command.Item></PersonHover> })
+          ? <>{options.map((option, position) => { const person = ['assign','subscribers','removeSubscribers'].includes(pendingAction) ? directoryPerson(directory.users, option.id) : undefined; return <PersonHover key={option.id || 'none'} person={person}><Command.Item value={option.id || 'none'} keywords={[option.label, ...translatedKeywords([option.label], t), ...(person ? [personSearchText(person)] : [])]} className={styles.commandItem} onSelect={() => { onAction(pendingAction, selectedIssues, option.id); setOpen(false) }}><span className={styles.optionLabel}>{pendingAction === 'assign' && (option.id ? <UserAvatar avatarUrl={person?.avatarUrl} className={`avatar core-person-picker-avatar ${styles.optionAvatar}`} color={avatarColor(option.id)} name={option.label}/> : <NoAssigneeIcon size={16}/>)}{option.color && <i style={{ backgroundColor: option.color }}/>}<span>{option.label}</span></span>{pendingAction === 'assign' && assigneeShortcut(position) && <kbd>{assigneeShortcut(position)}</kbd>}</Command.Item></PersonHover> })}
+            {pendingAction === 'assign' && <Command.Group heading="New user"><Command.Item value="Invite and assign…" keywords={['invite']} className={styles.commandItem} onSelect={() => { setOpen(false); openMemberInvite() }}><span className={styles.optionLabel}><FlowGlyph name="invitePlane" size={16} className={styles.inviteIcon}/><span>Invite and assign…</span></span></Command.Item></Command.Group>}</>
           : availableActions.map(action => <Command.Item key={action.id} value={action.label} keywords={translatedKeywords([action.label], t)} className={styles.commandItem} onSelect={() => { const options = actionOptions?.(action.id); if (options?.length) setPendingAction(action.id); else { onAction(action.id, selectedIssues); setOpen(false) } }}><span>{action.label}</span>{action.shortcut && <kbd>{action.shortcut}</kbd>}</Command.Item>)}</Command.List>
       </Command>
     </Dialog.Content></Dialog.Portal></Dialog.Root>

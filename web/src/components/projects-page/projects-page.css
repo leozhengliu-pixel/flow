@@ -91,7 +91,6 @@
 :root[data-theme="light"] .lp-projects-filter__empty,
 :root[data-theme="light"] .lp-projects-filter__values small,
 :root[data-theme="light"] .lp-projects__add-view,
-:root[data-theme="light"] .lp-project-lead-tooltip__shortcut,
 :root[data-theme="light"] .lp-project-health.is-no-update,
 :root[data-theme="light"] .lp-project-priority.is-none,
 :root[data-theme="light"] .lp-new-project__discard,
@@ -759,37 +758,6 @@
 .lp-project-row__lead.is-empty:focus-within .lp-project-lead-trigger,
 .lp-project-card__lead.is-empty:hover .lp-project-lead-trigger,
 .lp-project-card__lead.is-empty:focus-within .lp-project-lead-trigger { opacity: 1; }
-.lp-project-lead-tooltip {
-  align-items: center;
-  animation: lp-project-tooltip-in 100ms ease-out;
-  background: var(--theme-control);
-  border: .5px solid var(--theme-border-strong);
-  border-radius: 8px;
-  box-shadow: 0 3px 8px rgb(0 0 0 / 20%), 0 1px 2px rgb(0 0 0 / 20%);
-  color: var(--theme-text-primary);
-  display: flex;
-  font-family: "Inter Variable", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-size: 11px;
-  gap: 8px;
-  height: 33px;
-  padding: 5px 8px;
-  user-select: none;
-  z-index: 120;
-}
-.lp-project-lead-tooltip__shortcut { align-items: center; color: #929297; display: flex; gap: 3px; height: 23px; }
-.lp-project-lead-tooltip__shortcut > span { font-size: 10px; }
-.lp-project-lead-tooltip__shortcut kbd {
-  align-items: center;
-  border: .5px solid var(--theme-border-strong);
-  border-radius: 4px;
-  display: inline-flex;
-  font: inherit;
-  height: 18px;
-  justify-content: center;
-  min-width: 18px;
-  padding: 2px;
-}
-@keyframes lp-project-tooltip-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: translateY(0); } }
 .lp-project-property__menu {
   background: var(--theme-control);
   border: .5px solid var(--theme-border-strong);

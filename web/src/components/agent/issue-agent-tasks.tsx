@@ -1,18 +1,21 @@
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Check, ChevronDown, ChevronRight, Copy, ExternalLink, Paperclip, RefreshCw, Square } from 'lucide-react'
-import { GridLoader } from '@/components/ui/grid-loader'
-import type { BootstrapData, Issue, IssueUpdateInput, User } from '@/types/flow'
-import { PersonPicker } from '@/components/issue/core-property-pickers'
+import * as RadixMenu from '@radix-ui/react-dropdown-menu'
+import { ArrowUp, CheckCircle2, Circle, CircleDot, ExternalLink, Paperclip, XCircle } from 'lucide-react'
+import type { BootstrapData, Issue, User } from '@/types/flow'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { activityTimeLabel } from '@/components/activity/issue-activity-model'
 import { commentShortcutMatches } from '@/lib/runtime-preferences'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { AGENT_TASK_ACTIVITY_EVENT, canDelegateTo, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, reactApplicationTask, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
+import { AGENT_TASK_ACTIVITY_EVENT, deleteApplicationActivity, getApplicationTask, isApplicationTaskRunning, listApplicationTasks, reactApplicationTask, replyApplicationTask, type ApplicationTask, type ApplicationActivity } from '@/lib/application-agents'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
-import { AgentAnswerText } from './agent-answer'
+import { AgentAnswerText, AgentChoicePills } from './agent-answer'
+import { agentApprovalChoices, agentApprovalMarkdown } from './agent-approval-model'
 import { AgentCommentGlyph } from './agent-comment-glyph'
-import { agentThreadItems, agentThreadReactions } from './agent-thread-items'
-import { CommentThreads, TaskDirectory, type Directory } from './issue-agent-task-context'
+import { agentThreadItems, agentThreadReactions, agentWorkingPhase } from './agent-thread-items'
+import { CommentThreads, StandaloneSessions, TaskDirectory, type AgentThreadControls, type Directory, type StandaloneAgentSession } from './issue-agent-task-context'
+import { FlowGlyph, type FlowGlyphName } from '@/components/ui/menu-glyphs'
+import { toast } from '@/lib/toast'
+import '@/components/project-detail/project-action-menu.css'
+import '@/components/project-detail/project-comment-menu.css'
 import { useI18n } from '@/i18n/i18n'
 import './application-agents.css'
 import './issue-agent-thread.css'
@@ -74,35 +77,35 @@ export function IssueAgentTasksProvider({ issue, data, resourceType = 'issue', c
   const directory = useTaskDirectory(issue, data, resourceType, true)
   const idsKey = directory.tasks.map(task => task.commentId).filter(Boolean).sort().join(',')
   const ids = useMemo(() => new Set(idsKey ? idsKey.split(',') : []), [idsKey])
-  return <TaskDirectory.Provider value={{ ...directory, onUpload }}><CommentThreads.Provider value={ids}>{children}</CommentThreads.Provider></TaskDirectory.Provider>
+  const standaloneKey = byCreation(directory.tasks.filter(task => !task.commentId)).map(task => `${task.id}|${taskCreatedAt(task)}`).join(',')
+  const standalone = useMemo<StandaloneAgentSession[]>(() => standaloneKey ? standaloneKey.split(',').map(item => { const [id, createdAt] = item.split('|'); return { id, createdAt } }) : [], [standaloneKey])
+  return <TaskDirectory.Provider value={{ ...directory, onUpload }}><CommentThreads.Provider value={ids}><StandaloneSessions.Provider value={standalone}>{children}</StandaloneSessions.Provider></CommentThreads.Provider></TaskDirectory.Provider>
 }
 
-export function IssueAgentPicker({ issue, data, onUpdate }: { issue: Issue; data: BootstrapData; onUpdate: (input: IssueUpdateInput) => Promise<void> }) {
-  const { t } = useI18n()
-  const users = data.users.filter(user => canDelegateTo(user, issue.team.id))
-  if (!users.length && !issue.delegate || data.viewerRole === 'guest' && data.workspaceSettings.preventGuestAgents) return null
-  return <div className="core-property-picker"><PersonPicker label="Agent" ariaLabel={t('Delegate to agent')} people={users.map(user => ({ ...user, label: user.displayName }))} selectedId={issue.delegate?.id} onChange={delegateId => onUpdate({ delegateId })} emptyOptionLabel="No agent" emptyTriggerLabel="Delegate to agent" searchPlaceholder="Find agent…" triggerClassName="core-property-trigger"/></div>
+const taskCreatedAt = (task: ApplicationTask) => task.createdAt || task.updatedAt
+/** Sessions oldest first, like comments: a newer session never shows above an older one. */
+function byCreation(tasks: ApplicationTask[]) {
+  return [...tasks].sort((a, b) => (Date.parse(taskCreatedAt(a)) || 0) - (Date.parse(taskCreatedAt(b)) || 0) || a.id.localeCompare(b.id))
 }
 
-export function IssueAgentTasks({ issue, data, resourceType = 'issue', commentId, standalone = false, onUpload }: { issue: Resource; data: BootstrapData; resourceType?: ResourceType; commentId?: string; standalone?: boolean; onUpload?: (file: File) => Promise<string> }) {
+export function IssueAgentTasks({ issue, data, resourceType = 'issue', commentId, taskId, standalone = false, onUpload, threadControls, teamId }: { issue: Resource; data: BootstrapData; resourceType?: ResourceType; commentId?: string; /** Show only this session (the activity timeline places standalone sessions one by one). */ taskId?: string; standalone?: boolean; onUpload?: (file: File) => Promise<string>; /** The comment thread's own controls (subscription, resolve, sub-issues) for the agent replies' menu. */ threadControls?: AgentThreadControls; /** Team used by "New issue from comment". */ teamId?: string }) {
   const { t } = useI18n()
   const shared = useContext(TaskDirectory)
   const matches = shared?.key === `${data.workspace.urlKey}:${resourceType}:${issue.id}`
   const own = useTaskDirectory(issue, data, resourceType, !matches)
   const directory = matches ? shared : own
-  const tasks = directory.tasks.filter(task => commentId ? task.commentId === commentId : !standalone || !task.commentId)
+  const tasks = byCreation(directory.tasks.filter(task => taskId ? task.id === taskId : commentId ? task.commentId === commentId : !standalone || !task.commentId))
   if (!tasks.length) return directory.error && !commentId ? <p role="alert">{directory.error}</p> : null
   return <div className={`issue-agent-threads${commentId ? ' is-comment-thread' : ' is-standalone'}`} aria-label={t('Agent sessions')}>
-    {tasks.map(task => <AgentTaskThread key={task.id} task={task} data={data} onChanged={directory.refresh} onUpload={onUpload ?? directory.onUpload}/>) }
+    {tasks.map(task => <AgentTaskThread key={task.id} task={task} data={data} onChanged={directory.refresh} onUpload={onUpload ?? directory.onUpload} threadControls={threadControls} teamId={teamId}/>) }
   </div>
 }
 
-function AgentTaskThread({ task, data, onChanged, onUpload }: { task: ApplicationTask; data: BootstrapData; onChanged: () => void; onUpload?: (file: File) => Promise<string> }) {
+function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, teamId }: { task: ApplicationTask; data: BootstrapData; onChanged: () => void; onUpload?: (file: File) => Promise<string>; threadControls?: AgentThreadControls; teamId?: string }) {
   const { t } = useI18n()
   const [activities, setActivities] = useState<ApplicationActivity[]>([])
   const [reply, setReply] = useState('')
   const [replying, setReplying] = useState(false)
-  const [selection, setSelection] = useState('')
   const [busy, setBusy] = useState(false)
   const busyRef = useRef(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -111,15 +114,17 @@ function AgentTaskThread({ task, data, onChanged, onUpload }: { task: Applicatio
   const cursor = useRef({ key: '', after: '' })
   const agent = data.users.find(user => user.id === task.appUserId)
   const name = agent?.displayName || agent?.name || t('Application')
-  const current = session.version >= task.version ? session : task
-  const generating = ['pending', 'active'].includes(current.status)
+  // Session fields that do not bump the version (plan, external URLs, derived stale/unresponsive) arrive with the
+  // task list, which reloads on every push; a reply's own result is newer until the list catches up.
+  const current = session.version > task.version ? session : task
+  // AIG: an agent that never acknowledged the event is shown as unresponsive, and one silent for 30 minutes as stale,
+  // instead of "Working…" forever.
+  const unresponsive = Boolean(current.unresponsive) && ['pending', 'active'].includes(current.status)
+  const generating = ['pending', 'active'].includes(current.status) && !unresponsive
   const items = useMemo(() => agentThreadItems(activities), [activities])
   const reactions = useMemo(() => agentThreadReactions(activities), [activities])
-  const thinkingId = generating ? items.findLast(item => item.kind === 'thinking')?.id : undefined
   const pendingQuestion = current.status === 'awaitingInput' ? items.findLast(item => item.activity.type === 'elicitation' && !item.resolved) : undefined
-  const options = pendingQuestion?.activity.signal === 'select' ? pendingQuestion.activity.signalMetadata?.options ?? [] : []
-  const selectedOption = options.find(option => option.value === selection)
-  const replyBody = selectedOption ? `${selectedOption.value}${reply.trim() ? `\n\n${reply.trim()}` : ''}` : reply.trim()
+  const replyBody = reply.trim()
   useEffect(() => {
     const abort = new AbortController()
     const key = `${data.workspace.urlKey}:${task.id}`
@@ -148,7 +153,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload }: { task: Applicatio
     busyRef.current = true; setBusy(true); setError('')
     try {
       const updated = await replyApplicationTask(data.workspace.urlKey, current, type, body, approve)
-      setSession(updated); setReply(''); setSelection(''); setReplying(false); onChanged()
+      setSession(updated); setReply(''); setReplying(false); onChanged()
     } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
     finally { busyRef.current = false; setBusy(false) }
   }
@@ -174,35 +179,68 @@ function AgentTaskThread({ task, data, onChanged, onUpload }: { task: Applicatio
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); onChanged() }
     finally { busyRef.current = false; setBusy(false) }
   }
-  return <section className="issue-agent-thread" data-agent-task-id={task.id} data-status={current.status} aria-label={`${name} ${t('Agent session')}`}>
-    {items.map(item => {
+  const remove = async (activityId: string) => {
+    if (busyRef.current) return
+    busyRef.current = true; setBusy(true); setError('')
+    try {
+      const updated = await deleteApplicationActivity(data.workspace.urlKey, current, activityId)
+      setSession(updated)
+      setActivities(previous => [...previous, { id: String(updated.version).padStart(20, '0'), sessionId: task.id, actorId: data.viewer.id, type: 'deleted', body: '', metadata: { activityId }, createdAt: updated.updatedAt }])
+      onChanged()
+    } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
+    finally { busyRef.current = false; setBusy(false) }
+  }
+  // Like the reference app, a comment thread never shows the agent's thinking or steps: while it works the thread ends with one
+  // "<Agent> Working…" row (the current phase, shimmering), and its answer then lands as a reply.
+  const shown = items.filter(item => item.kind === 'message' && !(generating && item.output))
+  const phase = generating ? agentWorkingPhase(activities, t) : ''
+  const canDelete = data.viewer.id === task.creatorId || data.viewerRole === 'admin' || data.viewerRole === 'owner'
+  const delegator = task.trigger === 'delegation' && !task.commentId ? data.users.find(user => user.id === task.creatorId) : undefined
+  return <section className="issue-agent-thread" id={`agent-session-${task.id}`} data-agent-task-id={task.id} data-status={current.status} data-unresponsive={unresponsive || undefined} aria-label={`${name} ${t('Agent session')}`}>
+    {/* AIG: a delegated issue names the responsible human ("Delegated to Flow by Skyler"). */}
+    {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', name).replace('{user}', delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/></div>}
+    <AgentSessionDetails session={current}/>
+    {shown.map(item => {
       const activity = item.activity
       const human = ['prompt', 'retry', 'canceled'].includes(activity.type)
       const user = human ? data.users.find(user => user.id === activity.actorId) || data.viewer : agent
-      if (item.kind === 'thinking') return <details className="issue-agent-thinking" key={item.id}><summary><ChevronRight size={12}/><span>{t(item.id === thinkingId ? 'Thinking…' : 'Thought process')}</span>{item.id === thinkingId && <GridLoader className="issue-agent-spinner" size={12}/>}</summary><AgentAnswerText className="issue-agent-markdown" data={data} markdown={item.body}/></details>
-      if (item.kind === 'action') return <div className="issue-agent-action" key={item.id}>{activity.type === 'canceled' ? <Square size={12}/> : <Check size={12}/>}<span>{activity.metadata?.action || item.body || t('Action')}</span>{activity.metadata?.parameter && <small>{activity.metadata.parameter}</small>}{activity.metadata?.result && <AgentAnswerText className="issue-agent-markdown" data={data} markdown={activity.metadata.result}/>}</div>
-      const options = activity.signal === 'select' ? activity.signalMetadata?.options ?? [] : []
-      const selected = options.find(option => option.value === item.selected)
-      const visibleOptions = item.resolved && selected ? [selected] : []
+      const approval = activity.type === 'elicitation' ? activity.signalMetadata?.approval : undefined
+      const options = (activity.signal === 'select' ? activity.signalMetadata?.options ?? [] : []).map(option => ({ label: option.label || option.value, value: option.value }))
+      // An approval (bulk delete, an update the agent wrote) reads as a preview in the viewer's language with Approve / Reject.
+      const choices = approval ? agentApprovalChoices(options, t) : options
+      const body = approval && approval.kind !== 'connector' ? agentApprovalMarkdown(approval, t) : item.body
       const auth = activity.signal === 'auth' && !item.resolved
       const authUser = activity.signalMetadata?.userId
-      return <article className="issue-agent-message" key={item.id} data-type={activity.type} data-message-id={item.id}>
-        <AgentMessageHeader user={user} name={human ? user?.displayName || t('User') : name} time={activity.createdAt}/>
+      return <article className="issue-agent-message" key={item.id} id={`agent-activity-${item.id}`} data-type={activity.type} data-message-id={item.id}>
+        <AgentMessageHeader user={user} name={human ? user?.displayName || t('User') : name} time={activity.createdAt} anchor={`agent-activity-${item.id}`}/>
         {!human && !item.output && <div className="issue-agent-message-actions">
           <EmojiPicker align="end" onSelect={emoji => react(activity.id, emoji)}><button type="button" aria-label={t('Add reaction')} disabled={busy || generating}><AgentCommentGlyph name="reaction"/></button></EmojiPicker>
           <span className="issue-agent-votes">{(['👍', '👎'] as const).map(emoji => <button key={emoji} type="button" aria-label={`${t(emoji === '👍' ? 'React with thumbs up' : 'React with thumbs down')}. ${t('Reaction count')}: ${reactions[activity.id]?.[emoji]?.length ?? 0}.`} aria-pressed={reactions[activity.id]?.[emoji]?.includes(data.viewer.id) ?? false} disabled={busy || generating} onClick={() => void react(activity.id, emoji)}><AgentCommentGlyph name={emoji === '👍' ? 'up' : 'down'}/></button>)}</span>
-          <DropdownMenu><DropdownMenuTrigger asChild><button type="button" aria-label={t('Open menu')}><AgentCommentGlyph name="more"/></button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => { void navigator.clipboard.writeText(item.body).catch(error => setError(String(error))) }}><Copy size={14}/>{t('Copy response')}</DropdownMenuItem><DropdownMenuItem disabled={busy} onSelect={() => void submit(generating || current.status === 'awaitingInput' ? 'canceled' : 'retry', '')}>{generating || current.status === 'awaitingInput' ? <><Square size={14}/>{t('Send stop request')}</> : <><RefreshCw size={14}/>{t('Retry agent')}</>}</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+          <AgentReplyCommentMenu
+            body={item.body}
+            controls={threadControls}
+            linkId={`agent-activity-${item.id}`}
+            onDelete={canDelete ? () => void remove(activity.id) : undefined}
+            teamId={teamId}
+          />
         </div>}
-        <div className="issue-agent-message-body"><AgentAnswerText className="issue-agent-markdown" data={data} markdown={item.body}/>
-          {visibleOptions.length > 0 && <div className="issue-agent-choices is-resolved" role="group" aria-label={t('Selected option')}>{visibleOptions.map(option => <button key={option.value} type="button" aria-pressed disabled><span>{option.label || option.value}</span><Check size={14}/></button>)}</div>}
+        <div className="issue-agent-message-body"><AgentAnswerText className="issue-agent-markdown" data={data} markdown={body}/>
+          {choices.length > 0 && <AgentChoicePills choices={choices} disabled={busy || item.id !== pendingQuestion?.id} onSelect={choice => void submit('prompt', choice.value)} selected={item.resolved ? item.selected ?? '' : undefined}/>}
           {auth && (authUser && authUser !== data.viewer.id ? <p className="issue-agent-auth-wait">{t('Waiting for')} {data.users.find(user => user.id === authUser)?.displayName || t('another member')} {t('to link their account.')}</p> : <a className="issue-agent-auth-link" href={activity.signalMetadata?.url} target="_blank" rel="noreferrer"><ExternalLink size={14}/>{t('Link account')}</a>)}
           {activity.url && <a href={activity.url} target="_blank" rel="noreferrer">{t('Open result')}</a>}
           {!human && <ReactionPills reactions={reactions[activity.id]} viewerId={data.viewer.id} onToggle={emoji => react(activity.id, emoji)}/>}
         </div>
       </article>
     })}
-    {generating && !items.some(item => item.output) && <div className="issue-agent-working" role="status"><GridLoader className="issue-agent-spinner" size={13}/><span>{t(current.status === 'pending' ? 'Thinking…' : 'Working…')}</span></div>}
-    {current.pendingTool && current.status === 'awaitingInput' && <div className="issue-agent-approval"><span>{t('Approval required')}: {current.pendingTool.name}</span><button type="button" disabled={busy} onClick={() => void submit('prompt', '', false)}>{t('Reject')}</button><button type="button" disabled={busy} onClick={() => void submit('prompt', '', true)}>{t('Approve')}</button></div>}
+    {generating && <div className="issue-agent-working" role="status" aria-live="polite">
+      <AgentMessageHeader user={agent} name={name} time=""/>
+      <AgentWorkingLabel text={phase}/>
+    </div>}
+    {(unresponsive || current.status === 'stale') && <div className="issue-agent-working issue-agent-session-state" role="status" data-state={unresponsive ? 'unresponsive' : 'stale'}>
+      <AgentMessageHeader user={agent} name={name} time=""/>
+      <span className="issue-agent-working-text">{t(unresponsive ? '{name} didn’t respond' : 'No activity from {name} for 30 minutes').replace('{name}', name)}</span>
+    </div>}
+    {current.pendingTool && current.status === 'awaitingInput' && !pendingQuestion?.activity.signalMetadata?.options?.length && <div className="issue-agent-approval"><span>{t('Approval required')}: {current.pendingTool.name}</span><button type="button" disabled={busy} onClick={() => void submit('prompt', '', false)}>{t('Reject')}</button><button type="button" disabled={busy} onClick={() => void submit('prompt', '', true)}>{t('Approve')}</button></div>}
     <div className="issue-agent-thread-footer">
       {onUpload && (
         <input ref={fileInput} type="file" hidden onChange={event => {
@@ -211,7 +249,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload }: { task: Applicatio
           if (file) void upload(file)
         }}/>
       )}
-      {replying || reply || options.length > 0 ? (
+      {replying || reply ? (
         <form onSubmit={event => { event.preventDefault(); if (replyBody) void submit('prompt', replyBody) }}>
           <div className="issue-agent-reply-input">
             <UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/>
@@ -221,20 +259,16 @@ function AgentTaskThread({ task, data, onChanged, onUpload }: { task: Applicatio
             }}/>
           </div>
           <div className="issue-agent-reply-tools">
-            <AgentChoices options={options} selected={selectedOption?.value} disabled={busy} onSelect={value => setSelection(selection === value ? '' : value)}/>
+            <span/>
             {onUpload && <button type="button" aria-label={t('Attach images, files, or videos')} disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14}/></button>}
-            {generating && !replyBody ? <button type="button" aria-label={t('Stop agent')} disabled={busy} onClick={() => void submit('canceled', '')}><Square size={14}/></button> : (
-              <button type="submit" className={selectedOption ? 'has-label' : ''} aria-label={t(selectedOption ? 'Continue with selected option' : 'Send reply')} disabled={busy || !replyBody}>
-                {selectedOption && <span>{t('Continue')}</span>}<ArrowUp size={14}/>
-              </button>
-            )}
+            <button type="submit" aria-label={t('Send reply')} disabled={busy || !replyBody}><ArrowUp size={14}/></button>
           </div>
         </form>
       ) : <>
         <button type="button" className="issue-agent-start-reply" onClick={() => setReplying(true)}><UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/><span>{t('Leave a reply…')}</span></button>
         <div className="issue-agent-idle-tools">
           {onUpload && <button type="button" aria-label={t('Attach images, files, or videos')} disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14}/></button>}
-          <button type="button" aria-label={t(generating ? 'Stop agent' : 'Send reply')} disabled={busy || !generating} onClick={() => void submit('canceled', '')}>{generating ? <Square size={14}/> : <ArrowUp size={14}/>}</button>
+          <button type="button" aria-label={t('Send reply')} disabled><ArrowUp size={14}/></button>
         </div>
       </>}
     </div>
@@ -242,16 +276,73 @@ function AgentTaskThread({ task, data, onChanged, onUpload }: { task: Applicatio
   </section>
 }
 
-function AgentChoices({ options, selected, disabled, onSelect }: { options: { label?: string; value: string }[]; selected?: string; disabled: boolean; onSelect: (value: string) => void }) {
+/**
+ * What an agent attached to its session (the reference app's agentSessionUpdate): external links as chips, such as its pull request
+ * or run page, and its plan as a checklist (pending, in progress, completed, canceled) above the replies.
+ */
+export function AgentSessionDetails({ session }: { session: Pick<ApplicationTask, 'externalUrls' | 'plan'> }) {
   const { t } = useI18n()
-  const [query, setQuery] = useState('')
-  if (!options.length) return <span/>
-  const selectedOption = options.find(option => option.value === selected)
-  const inline = options.length === 1 || options.length <= 2 && options.every(option => (option.label || option.value).length < 30 && !/^https?:\/\//.test(option.value))
-  return <div className="issue-agent-choices" role="group" aria-label={t('Select an option')}>{inline ? options.map(option => <button key={option.value} type="button" title={option.label && option.label !== option.value ? `${option.label}\n${option.value}` : undefined} aria-pressed={option.value === selected} disabled={disabled} onClick={() => onSelect(option.value)}><span>{option.label || option.value}</span></button>) : <DropdownMenu onOpenChange={() => setQuery('')}><DropdownMenuTrigger asChild><button type="button" disabled={disabled} aria-label={t('Select an option')}><span>{selectedOption?.label || selectedOption?.value || t('Select an option')}</span><ChevronDown size={14}/></button></DropdownMenuTrigger><DropdownMenuContent><input autoFocus aria-label={t('Search options')} placeholder={t('Search options…')} value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.stopPropagation()}/>{options.filter(option => `${option.label || ''} ${option.value}`.toLowerCase().includes(query.toLowerCase())).map(option => <DropdownMenuItem key={option.value} onSelect={() => onSelect(option.value)}>{option.label || option.value}{option.value === selected && <Check size={14}/>}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>}</div>
+  const links = (session.externalUrls ?? []).filter(link => /^https?:\/\//i.test(link.url))
+  const plan = session.plan ?? []
+  if (!links.length && !plan.length) return null
+  const label = (link: { url: string; label?: string }) => {
+    if (link.label?.trim()) return link.label.trim()
+    try { return new URL(link.url).hostname } catch { return link.url }
+  }
+  const stepLabel = { pending: 'Pending', inProgress: 'In progress', completed: 'Completed', canceled: 'Canceled' } as const
+  return <div className="issue-agent-session-details">
+    {links.length > 0 && <div className="issue-agent-external-links" aria-label={t('Session links')}>
+      {links.map(link => <a key={link.url} href={link.url} target="_blank" rel="noreferrer" title={link.url}><ExternalLink size={12} aria-hidden="true"/><span data-i18n-ignore>{label(link)}</span></a>)}
+    </div>}
+    {plan.length > 0 && <ol className="issue-agent-plan" aria-label={t('Plan')}>
+      {plan.map((step, index) => {
+        const Icon = step.status === 'completed' ? CheckCircle2 : step.status === 'canceled' ? XCircle : step.status === 'inProgress' ? CircleDot : Circle
+        return <li key={index} data-status={step.status}><Icon size={14} aria-label={t(stepLabel[step.status] ?? 'Pending')}/><span data-i18n-ignore>{step.content}</span></li>
+      })}
+    </ol>}
+  </div>
 }
 
-function AgentMessageHeader({ user, name, time }: { user?: User; name: string; time: string }) {
+/** The working row's label: muted text with the reference app's light sweep, fading in whenever the phase changes. */
+function AgentWorkingLabel({ text }: { text: string }) {
+  return <span className="issue-agent-working-label" key={text}>
+    <span className="issue-agent-working-text">{text}<span aria-hidden="true" className="issue-agent-working-shine">{text}</span></span>
+  </span>
+}
+
+/**
+ * The "…" menu on an agent's reply in a comment thread, as the reference app lists it: thread subscription, resolve the thread,
+ * copy link / Markdown, new issue or sub-issue from the reply, delete.
+ */
+function AgentReplyCommentMenu({ body, controls, linkId, onDelete, teamId }: { body: string; controls?: AgentThreadControls; linkId: string; onDelete?: () => void; teamId?: string }) {
+  const { t } = useI18n()
+  const copy = (value: string, done: string) => void navigator.clipboard.writeText(value)
+    .then(() => toast.success(t(done)))
+    .catch(() => toast.error(t('Could not copy to clipboard')))
+  const newIssue = (subIssue: boolean) => window.dispatchEvent(new CustomEvent('flow-create-issue-from-selection', { detail: { text: body, teamId, parentId: subIssue ? controls?.parentIssueId : undefined } }))
+  return <RadixMenu.Root>
+    <RadixMenu.Trigger asChild><button type="button" aria-label={t('Comment options')}><AgentCommentGlyph name="more"/></button></RadixMenu.Trigger>
+    <RadixMenu.Portal>
+      <RadixMenu.Content data-flow-motion="floating" align="end" sideOffset={4} collisionPadding={16} className="project-action-menu project-comment-menu" aria-label={t('Comment options')}>
+        {controls?.onToggleSubscription && <><MenuItem glyph={controls.following ? 'unsubscribe' : 'subscribe'} label={t(controls.following ? 'Unsubscribe from thread' : 'Subscribe to thread')} onSelect={controls.onToggleSubscription}/><RadixMenu.Separator/></>}
+        {controls?.onResolve && <><MenuItem glyph="resolveThread" label={t(controls.resolved ? 'Unresolve thread' : 'Resolve thread with comment')} onSelect={controls.onResolve}/><RadixMenu.Separator/></>}
+        <MenuItem glyph="copyLink" label={t('Copy link to comment')} onSelect={() => copy(`${location.href.split('#')[0]}#${linkId}`, 'Copied link to comment')}/>
+        <MenuItem glyph="copyMarkdown" label={t('Copy content as Markdown')} onSelect={() => copy(body, 'Copied to clipboard')}/>
+        <RadixMenu.Separator/>
+        <MenuItem glyph="newIssueFromComment" label={t('New issue from comment…')} onSelect={() => newIssue(false)}/>
+        {controls?.parentIssueId && <MenuItem glyph="newSubIssueFromComment" label={t('New sub-issue from comment…')} onSelect={() => newIssue(true)}/>}
+        {onDelete && <><RadixMenu.Separator/><MenuItem glyph="delete" label={t('Delete')} onSelect={onDelete}/></>}
+      </RadixMenu.Content>
+    </RadixMenu.Portal>
+  </RadixMenu.Root>
+}
+
+function MenuItem({ glyph, label, onSelect }: { glyph: FlowGlyphName; label: string; onSelect: () => void }) {
+  return <RadixMenu.Item onSelect={onSelect}><span className="project-menu-icon" aria-hidden="true"><FlowGlyph name={glyph}/></span><span className="project-menu-label">{label}</span></RadixMenu.Item>
+}
+
+function AgentMessageHeader({ user, name, time, anchor }: { user?: User; name: string; time: string; anchor?: string }) {
   const { locale } = useI18n()
-  return <header className="issue-agent-message-header"><UserAvatar className="avatar" name={name} avatarUrl={user?.avatarUrl}/><strong data-i18n-ignore>{name}</strong>{time && !Number.isNaN(Date.parse(time)) && <time dateTime={time}>{activityTimeLabel(time, Date.now(), locale).replace(/m(?= ago$)/, 'min')}</time>}</header>
+  const label = time && !Number.isNaN(Date.parse(time)) ? activityTimeLabel(time, Date.now(), locale).replace(/m(?= ago$)/, 'min') : ''
+  return <header className="issue-agent-message-header"><UserAvatar className="avatar" name={name} avatarUrl={user?.avatarUrl}/><strong data-i18n-ignore>{name}</strong>{label && (anchor ? <a href={`#${anchor}`}><time dateTime={time}>{label}</time></a> : <time dateTime={time}>{label}</time>)}</header>
 }

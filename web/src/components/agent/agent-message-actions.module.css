@@ -1,0 +1,196 @@
+/* The reference app's agent reply actions (thumbs up, thumbs down, copy) and the hover actions under your own messages. */
+.replyActions {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+}
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.userActions {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.action {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--agent-action-icon);
+  cursor: default;
+  transition: border-color .15s, background-color .15s, color .15s;
+}
+.action > span {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+.action svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+.action[data-pressed] {
+  color: var(--agent-action-pressed-icon);
+}
+.action:hover,
+.action:focus-visible {
+  background: var(--agent-action-hover-bg);
+  color: var(--agent-action-hover-icon);
+  outline: 0;
+}
+
+/* "Leave feedback" dialog. */
+.overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  background: var(--overlay-modal);
+}
+.dialog {
+  position: fixed;
+  z-index: 1001;
+  top: 22%;
+  left: 50%;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  transform: translateX(-50%);
+  border: .5px solid var(--agent-dialog-border);
+  border-radius: 12px;
+  background: var(--agent-dialog-bg);
+  box-shadow: var(--agent-dialog-shadow);
+  color: var(--agent-thread-text);
+  font-family: var(--font);
+  outline: 0;
+}
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 20px 12px;
+}
+.dialogHeading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dialogTitle {
+  margin: 0;
+  color: var(--agent-thread-text);
+  font: 600 15px/23px var(--font);
+}
+.dialogDescription {
+  color: var(--agent-thread-muted);
+  font: 450 13px/normal var(--font);
+}
+.dialogField {
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 12px;
+  border: .5px solid var(--agent-dialog-border);
+  border-radius: 8px;
+}
+.dialogField textarea {
+  width: 100%;
+  min-height: 66px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: var(--agent-thread-text);
+  font: 450 15px/24px var(--font);
+}
+.dialogField textarea::placeholder {
+  color: var(--agent-composer-placeholder);
+}
+.dialogFiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.dialogFiles > span {
+  max-width: 220px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+  border: .5px solid var(--agent-dialog-border);
+  border-radius: 6px;
+}
+.dialogFiles b {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dialogFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 20px 16px;
+}
+.dialogAttach {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--agent-thread-muted);
+}
+.dialogAttach:hover {
+  background: var(--agent-action-hover-bg);
+  color: var(--agent-action-hover-icon);
+}
+.dialogButtons {
+  display: flex;
+  gap: 8px;
+}
+.dialogCancel,
+.dialogSend {
+  height: 32px;
+  padding: 0 12px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  font: 500 13px/normal var(--font);
+  transition: background-color .15s, opacity .15s;
+}
+.dialogCancel {
+  background: var(--agent-send-bg);
+  color: var(--agent-thread-text);
+}
+.dialogCancel:hover {
+  background: var(--agent-send-hover-bg);
+}
+.dialogSend {
+  background: var(--accent-primary);
+  box-shadow: var(--shadow);
+  color: var(--on-accent);
+}
+.dialogSend:hover:not(:disabled) {
+  background: var(--accent-primary-hover);
+}
+.dialogSend:disabled {
+  opacity: .6;
+}

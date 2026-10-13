@@ -34,14 +34,18 @@ export const CHAT_TOOL_LABELS: Record<string, [string, string]> = {
   save_document_permissions: ["Updating document access…", "Updated document access"],
   save_template: ["Saving template…", "Saved template"], update_notification: ["Updating inbox…", "Updated inbox"],
   save_agent_skill: ["Saving skill…", "Saved skill"], save_loop: ["Saving loop…", "Saved loop"],
+  delete_agent_skill: ["Deleting skill…", "Deleted skill"], save_customer: ["Creating customer…", "Created customer"],
+  save_customer_request: ["Logging customer request…", "Logged customer request"], save_cycle: ["Updating cycle…", "Updated cycle"],
   report_progress: ["Reporting progress…", "Reported progress"],
+  web_search: ["Searching the web…", "Searched the web"], fetch_url: ["Reading web page…", "Read web page"],
 }
 
 /** Chat labels of save tools called with an id (an update instead of a create). */
 export const CHAT_TOOL_UPDATE_LABELS: Record<string, [string, string]> = {
   save_issue: ["Updating issue…", "Updated issue"], save_project: ["Updating project…", "Updated project"],
   save_initiative: ["Updating initiative…", "Updated initiative"], save_comment: ["Updating comment…", "Updated comment"],
-  save_team: ["Updating team…", "Updated team"],
+  save_team: ["Updating team…", "Updated team"], save_customer: ["Updating customer…", "Updated customer"],
+  save_customer_request: ["Updating customer request…", "Updated customer request"],
 }
 
 /** Chat labels of other tools by verb: [running, done] templates; {subject} is the rest of the tool name. */
@@ -68,15 +72,22 @@ export const LOOP_TOOL_TEMPLATES = [
 ]
 
 /** A running or finished chat tool call's label, translated. */
-export function toolStatusLabel(name: string, running: boolean, t: Translate, args?: Record<string, unknown>) {
+export function toolStatusLabel(name: string, running: boolean, t: Translate, args?: Record<string, unknown>, argumentsPending = false) {
   const tool = name.replace(/^mcp__flow\./, "")
   const updating = typeof args?.id === "string" && args.id !== ""
+  const [verb, ...words] = tool.split("_")
+  // A save_* call is a create or an update depending on its id; while its arguments still stream in it is neither yet.
+  if (verb === "save" && words.length && running && argumentsPending && !hasArguments(args)) return fillSubject("Saving {subject}…", words.join(" "), t)
+  if (verb === "save" && words.length && updating && !CHAT_TOOL_UPDATE_LABELS[tool]) return fillSubject(CHAT_TOOL_VERBS.update[running ? 0 : 1], words.join(" "), t)
   const fixed = (updating ? CHAT_TOOL_UPDATE_LABELS[tool] : undefined) ?? CHAT_TOOL_LABELS[tool]
   if (fixed) return t(fixed[running ? 0 : 1])
-  const [verb, ...words] = tool.split("_")
   const templates = words.length ? CHAT_TOOL_VERBS[verb] : undefined
   if (templates) return fillSubject(templates[running ? 0 : 1], words.join(" "), t)
   return fillSubject(CHAT_TOOL_FALLBACK[running ? 0 : 1], tool.replaceAll("_", " ") || "tool", t)
+}
+
+function hasArguments(args?: Record<string, unknown>) {
+  return Boolean(args && typeof args === "object" && Object.keys(args).length)
 }
 
 /** A server-written tool label (loop run steps, the loop builder's save_loop title), translated. */
@@ -155,6 +166,13 @@ export function workingLabel(parts: NonNullable<AgentMessage["parts"]>, t: Trans
   const between = step >= 0 && parts.slice(step + 1, tool).every(part => part.type === "toolCall");
   if (between) return `${translatePhaseTitle(parts[step].title!, t).replace(/…$/, "")}…`;
   const call = parts[tool].toolCall!;
-  return toolStatusLabel(call.name, true, t, call.arguments);
+  return toolStatusLabel(call.name, true, t, call.arguments, call.status === "running");
 }
 
+/**
+ * A provider reasoning summary ("Figuring out query filters — I need to…"), as opposed to narration the model wrote
+ * for the user between tool calls (saved as `…_narration_N`).
+ */
+export function isProviderReasoning(part: NonNullable<AgentMessage["parts"]>[number]) {
+  return part.type === "reasoning" && !part.id.includes("_narration_");
+}

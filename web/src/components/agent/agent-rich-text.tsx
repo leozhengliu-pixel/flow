@@ -7,6 +7,7 @@ import { FlowCodeBlock } from '@/components/editor/code-block/code-block-extensi
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
 import { AgentEntityNode } from './agent-entity-node'
 import styles from './agent-rich-text.module.css'
+import './agent-chat-document.css'
 
 export function AgentRichText({ ariaLabel = 'AI message', className = 'agent-rich-text', content }: { ariaLabel?: string; className?: string; content: string }) {
   const editor = useEditor({

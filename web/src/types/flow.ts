@@ -250,6 +250,8 @@ export interface DocumentRevision {
   contentState?: string;
   contentData?: Record<string, unknown>;
   author: User;
+  /** The latest edit was made through an application or Flow's agent ("<User> via Flow"). */
+  botActor?: ActorBot;
   /** Everyone who edited during the burst this version covers (author is the latest). */
   authorIds?: UUID[];
   /** When the version's editing burst ended (versions are post-update snapshots). */
@@ -377,7 +379,8 @@ export interface Issue {
   addedToCycle?: "planned" | "during" | "after";
   agentSessionId?: UUID;
   /** Status of the delegated agent's current session, or "merged" once a linked pull request merged (decorated by the server). */
-  agentSessionState?: "pending" | "active" | "awaitingInput" | "complete" | "error" | "canceled" | "merged";
+  /** "stale": a pending or active session whose agent has been silent for 30 minutes (derived by the server). */
+  agentSessionState?: "pending" | "active" | "awaitingInput" | "complete" | "error" | "canceled" | "merged" | "stale";
   suggestedLabelIds?: UUID[];
   /** Active Triage Intelligence suggestion targets (the reference app "Triage Intelligence" filters). */
   suggestedAssigneeIds?: UUID[];
@@ -571,6 +574,8 @@ export interface PulseSummaryPayload {
   excerpt?: string;
   quotedText?: string;
   emoji?: string;
+  /** agentReply notifications: the kind of reply (response, elicitation = waiting for input, error). */
+  agentActivity?: "response" | "elicitation" | "error" | string;
   [key: string]: unknown;
 }
 export type NotificationCategory =
@@ -787,6 +792,8 @@ export interface Project {
   /** Absent on projects created before the creator was recorded. */
   creatorId?: UUID;
   creator?: User;
+  /** Created through an application or by Flow's agent on behalf of the creator. */
+  botActor?: ActorBot;
   memberIds: UUID[];
   labelIds: UUID[];
   teamIds: UUID[];
@@ -1074,7 +1081,10 @@ export interface LoopVersion {
 export interface LoopConfig {
   webSearchAvailable: boolean;
   webSearchProvider: "tavily" | "brave" | "searxng" | "";
+  /** Whether Flow Agent has web access (on unless an admin turned it off). */
   agentWebSearch: boolean;
+  /** Without a search provider, the model provider's hosted web search answers searches. */
+  agentNativeWebSearch?: boolean;
   codeAccessAvailable: boolean;
   externalLoopTriggers: boolean;
   trustedSourcesMode: "none" | "allowlist";
@@ -1436,7 +1446,10 @@ export interface WorkspaceSettings {
   agentGuidancePermission?: string;
   agentInstructions?: string;
   preventGuestAgents?: boolean;
+  /** Older opt-in flag; agentWebSearchDisabled decides web access now. */
   agentWebSearch?: boolean;
+  /** Flow Agent's web access is on unless this is set. */
+  agentWebSearchDisabled?: boolean;
   externalLoopTriggers?: boolean;
   mcpConnectorsEnabled?: boolean;
   reviewThirdPartyApplications?: boolean;
@@ -1588,6 +1601,9 @@ export interface ActorBot {
   avatarUrl?: string;
   userDisplayName?: string;
   userAvatarUrl?: string;
+  /** Flow's agent (`type: "agent"`): the person it acted for ("Flow … on behalf of <User>"). */
+  onBehalfOfId?: string;
+  onBehalfOfName?: string;
 }
 export interface OAuthAuthorization {
   id: UUID;
@@ -1972,6 +1988,8 @@ export type ThreadSubscriptionState = "subscribed" | "muted";
 export interface AuditLogEntry {
   id: UUID;
   actor: User;
+  /** Made through an application or by Flow's agent ("Flow … on behalf of <actor>"). */
+  botActor?: ActorBot;
   action: string;
   resourceType: string;
   resourceId: UUID;
@@ -2065,6 +2083,8 @@ export interface Initiative {
   health: Project["health"];
   owner?: User;
   creator: User;
+  /** Created through an application or by Flow's agent on behalf of the creator. */
+  botActor?: ActorBot;
   leadTeamId?: UUID;
   contributingTeamIds: UUID[];
   labelIds: UUID[];
@@ -2453,6 +2473,8 @@ export interface TeamSettings {
   agentSkills: TeamAgentSkill[];
   agentConnectors?: TeamAgentConnector[];
   projectUpdatePrompt: string;
+  /** Additional guidance for agents working in this team (Team settings › Agents); wins over workspace and parent team guidance. */
+  agentGuidance?: string;
   resolvedThreadSummaries: boolean;
   showInitiatives: boolean;
   inheritIssueEstimation: boolean;
@@ -2788,7 +2810,17 @@ export interface AgentMessage extends AgentChatMessage {
   /** Resources @-mentioned in a user message, in order. */
   mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: UUID; label: string }[];
   durationMs?: number;
+  /** The owner's rating of an assistant reply (thumbs up / down, with an optional note). */
+  feedback?: AgentFeedback;
+  /** The question part a user message answered by picking an option (shown on the question, not as a bubble). */
+  answerTo?: UUID;
   createdAt: string;
+}
+/** A rating and/or note about agent output (the reference app's "This was helpful" / "Leave feedback…"). */
+export interface AgentFeedback {
+  rating?: "positive" | "negative";
+  comment?: string;
+  updatedAt: string;
 }
 export interface AgentMessagePart {
 	 elicitation?: import('@/components/agent/agent-elicitation').ElicitationPrompt;
@@ -2802,12 +2834,43 @@ export interface AgentMessagePart {
     | "widget"
     | "elicitation"
     | "context"
-    | "step";
+    | "step"
+    | "question";
   /** Step title from report_progress ("Reviewing project activity"). */
   title?: string;
   text?: string;
   status?: "pending" | "running" | "completed" | "error";
   toolCall?: AgentToolCall;
+  /** A choice the agent stopped on (ask_user): `text` is the question; answered by the next message. */
+  question?: AgentQuestion;
+}
+/** The reference app's select elicitation: options shown as pills; `selected` is the picked value, `answer` free text instead. */
+export interface AgentQuestion {
+  options: { label: string; value: string }[];
+  allowFreeText: boolean;
+  selected?: string;
+  answer?: string;
+  /** Set when the question asks to approve actions the agent held back (bulk deletes, an update it wrote). */
+  approval?: AgentApproval;
+}
+/** Tool calls waiting for the user's approval, with what they would change. */
+export interface AgentApproval {
+  kind: "delete" | "publish" | "connector";
+  targets?: AgentApprovalTarget[];
+  body?: string;
+  health?: string;
+  parent?: AgentApprovalTarget;
+  decision?: "approved" | "rejected";
+}
+export interface AgentApprovalTarget {
+  kind: string;
+  id: string;
+  label: string;
+  title?: string;
+  href?: string;
+  subIssues?: number;
+  /** Other linked items the delete touches, by kind. */
+  affected?: Record<string, number>;
 }
 export interface AgentToolCall {
   id: UUID;
@@ -2819,6 +2882,28 @@ export interface AgentToolCall {
   status: "pending" | "running" | "completed" | "error";
   error?: string;
   approvalId?: string;
+  /** What a successful Flow write did: drives the reply's result card and its Undo / Restore. */
+  change?: AgentChange;
+}
+/** One agent write: the entity it touched and, for an update, the previous and new values of the fields it changed. */
+export interface AgentChange {
+  action: "created" | "updated" | "deleted";
+  entityType: string;
+  entityId?: string;
+  parentId?: string;
+  label?: string;
+  /** App path of the entity, so the card links before the client has loaded a new record. */
+  url?: string;
+  fields?: string[];
+  before?: Record<string, unknown>;
+  after?: Record<string, unknown>;
+  undoable: boolean;
+  /** "undone" after Undo (the card then offers Restore). */
+  state?: "" | "undone";
+  note?: string;
+  /** Fields the last Undo / Restore left alone because they changed after the agent's edit. */
+  skipped?: string[];
+  updatedAt?: string;
 }
 export interface AgentSession {
   id: UUID;
@@ -2834,6 +2919,8 @@ export interface AgentSession {
   projectIds?: UUID[];
   skillIds: UUID[];
   messages: AgentMessage[];
+  /** Notes left about the whole conversation from the chat menu's "Leave feedback…". */
+  feedback?: AgentFeedback[];
   createdAt: string;
   updatedAt: string;
   /** When the owner last saw the chat; it is unread while `updatedAt` is later. Missing on chats from before read tracking. */

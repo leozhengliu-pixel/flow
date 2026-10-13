@@ -31,7 +31,7 @@ void prepareInitialLocale().then(() => createRoot(document.getElementById('root'
     <FlowMotionProvider><I18nProvider>
       <BrowserRouter>
         <LightboxEditorProvider>
-          <TooltipProvider delayDuration={450} skipDelayDuration={300}>
+          <TooltipProvider>
             <App />
           </TooltipProvider>
           <TitleTooltipBridge />

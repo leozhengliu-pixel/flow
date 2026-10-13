@@ -6,7 +6,7 @@
  * state) or a snapshot AFTER the edit (so revisions[0] equals the current document); both work: a revision identical to
  * the live document (same title and content) is dropped so no two rows look "current".
  */
-import type { DocumentRevision, FlowDocument, User } from '@/types/flow'
+import type { ActorBot, DocumentRevision, FlowDocument, User } from '@/types/flow'
 import { diffDocuments, type HistoryDiffResult, type PMNode } from './document-history-diff'
 import { documentSourceToDoc } from './document-json-doc'
 
@@ -18,6 +18,8 @@ export interface HistoryEntry {
   content: string
   contentData?: Record<string, unknown>
   author: User
+  /** The edit was made through an application or by Flow's agent ("Dev User via Flow"). */
+  botActor?: ActorBot
   createdAt: string
 }
 
@@ -25,7 +27,7 @@ export interface HistoryDay { key: string; date: Date; entries: HistoryEntry[] }
 
 export const CURRENT_ENTRY_ID = 'current'
 
-export function buildHistoryEntries(document: Pick<FlowDocument, 'title' | 'content' | 'contentData' | 'creator' | 'updatedAt' | 'revisions'>): HistoryEntry[] {
+export function buildHistoryEntries(document: Pick<FlowDocument, 'title' | 'content' | 'contentData' | 'creator' | 'updatedAt' | 'revisions'> & Partial<Pick<FlowDocument, 'botActor'>>): HistoryEntry[] {
   const revisions = [...(document.revisions ?? [])]
   const current: HistoryEntry = {
     id: CURRENT_ENTRY_ID,
@@ -34,6 +36,7 @@ export function buildHistoryEntries(document: Pick<FlowDocument, 'title' | 'cont
     content: document.content,
     contentData: document.contentData,
     author: revisions[0]?.author ?? document.creator,
+    botActor: revisions.length ? revisions[0].botActor : document.botActor,
     createdAt: document.updatedAt,
   }
   const previous = revisions
@@ -45,6 +48,7 @@ export function buildHistoryEntries(document: Pick<FlowDocument, 'title' | 'cont
       content: revision.content,
       contentData: revision.contentData,
       author: revision.author,
+      botActor: revision.botActor,
       createdAt: revision.createdAt,
     }))
   return [current, ...previous]

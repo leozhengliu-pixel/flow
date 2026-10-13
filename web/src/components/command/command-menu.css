@@ -117,3 +117,17 @@ html:root body .command-dialog .command-chat-time {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* Number-key hints on assignee rows and the invite glyph (secondary text colour). */
+html:root body .command-dialog .command-option-shortcut {
+  flex: none;
+  margin-left: auto;
+  color: var(--pk-muted);
+  font: 500 11px/1.1 var(--font);
+}
+html:root body .command-dialog .command-option-current + .command-option-shortcut {
+  margin-left: 8px;
+}
+html:root body .command-dialog .command-invite-icon {
+  color: var(--pk-muted);
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { attributedActorAvatar, attributedActorLabel, attributedActorName, viaAppName } from "./actor-attribution";
+import { activityActor, attributedActionText, attributedActorAvatar, attributedActorLabel, attributedActorName, isAgentBot, sameActivityActor, viaAppName } from "./actor-attribution";
 
 const user = { displayName: "Mark", name: "mark", avatarUrl: "https://img.test/mark.png" };
 
@@ -32,5 +32,36 @@ describe("actor attribution", () => {
   it("does not add 'via' for the application's own user or a nameless bot", () => {
     expect(viaAppName({ ...user, app: true }, { type: "oauthApplication", name: "Zendesk" })).toBeUndefined();
     expect(viaAppName(user, { type: "oauthApplication" })).toBeUndefined();
+  });
+});
+
+describe("Flow agent attribution", () => {
+  const person = { id: "u1", displayName: "Dev User", name: "dev" };
+  const agent = { id: "builtin-flow-agent", type: "agent", name: "Flow", avatarUrl: "/favicon.svg", onBehalfOfId: "u1", onBehalfOfName: "Dev (old name)" };
+
+  it("names the agent as the actor and the person it acted for", () => {
+    expect(isAgentBot(agent)).toBe(true);
+    expect(activityActor(person, agent, [person])).toEqual({ name: "Flow", avatarUrl: "/favicon.svg", onBehalfOf: "Dev User" });
+    // Without the directory, the recorded name; for the agent's own app user, never the app as the person.
+    expect(activityActor(person, agent).onBehalfOf).toBe("Dev (old name)");
+    expect(activityActor({ displayName: "Flow", app: true }, { ...agent, onBehalfOfName: undefined, onBehalfOfId: undefined }).onBehalfOf).toBeUndefined();
+    expect(activityActor(person, { type: "oauthApplication", name: "Zendesk" })).toEqual({ name: "Dev User", avatarUrl: undefined, via: "Zendesk" });
+  });
+
+  it("keeps comments and records as '<User> via Flow'", () => {
+    expect(attributedActorLabel(person, agent)).toBe("Dev User via Flow");
+  });
+
+  it("phrases the action for rows that render the actor separately", () => {
+    const actor = activityActor(person, agent, [person]);
+    expect(attributedActionText(actor, "created the initiative")).toBe("created the initiative on behalf of Dev User");
+    const zh = (text: string) => (text === "{actor} {action} on behalf of {user}" ? "{actor} 代表 {user} {action}" : text);
+    expect(attributedActionText(actor, "创建了目标", zh)).toBe("代表 Dev User 创建了目标");
+    expect(attributedActionText({ name: "Dev User" }, "created the initiative")).toBe("created the initiative");
+  });
+
+  it("treats the same person through different attribution as different actors", () => {
+    expect(sameActivityActor({ actor: person, botActor: agent }, { actor: person, botActor: agent })).toBe(true);
+    expect(sameActivityActor({ actor: person, botActor: agent }, { actor: person })).toBe(false);
   });
 });

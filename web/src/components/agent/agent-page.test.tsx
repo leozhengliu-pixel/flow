@@ -215,7 +215,7 @@ describe('agent page composer', () => {
     const session: AgentSession = {
       id: 'session-parts', slugId: 'parts', userId: 'user-1', title: 'Tool run', favorite: false, location: 'page', issueIds: [], skillIds: [],
       messages: [{ id: 'assistant', role: 'assistant', content: 'Finished', createdAt: '2026-08-31T00:00:00Z', parts: [
-        { id: 'reasoning', type: 'reasoning', text: 'Checked workspace state', status: 'completed' },
+        { id: 'msg_narration_0', type: 'reasoning', text: 'Checked workspace state', status: 'completed' },
         { id: 'tool', type: 'toolCall', status: 'completed', toolCall: { id: 'call', name: 'list_issues', arguments: { query: 'bug' }, result: { items: [] }, status: 'completed' } },
         { id: 'text', type: 'text', text: 'Finished', status: 'completed' },
         { id: 'error', type: 'error', text: 'Partial warning', status: 'error' },
@@ -240,7 +240,8 @@ describe('agent page composer', () => {
     const user = userEvent.setup()
     render(<I18nProvider><AgentPage chatSlug="edit" data={makeBootstrap({ agentSessions: [session], agentSkills: [] })} onNavigate={vi.fn()} onOpenSidebar={vi.fn()} onSessionChange={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button', { name: 'Edit message' }))
-    expect(screen.getByText('Original answer')).toBeVisible()
+    // Like the reference app, the edited message and everything after it leave the conversation while the composer holds it.
+    expect(screen.queryByText('Original answer')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Send a message to Flow AI' })).toHaveTextContent('Original question')
     expect(screen.getByText('Editing message')).toBeVisible()
   })

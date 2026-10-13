@@ -93,3 +93,11 @@
 .sentMention>span{color:var(--chip-text)}
 /* Preflight strips list markers; answers show bullets and numbers. */
 .messageDocument ul{list-style:disc}.messageDocument ol{list-style:decimal}.messageDocument ul ul{list-style:circle}.messageDocument li::marker{color:var(--theme-text-secondary)}
+/* The reference app: a question (its text, then the option pills) 12px under the reply text. */
+.question{align-self:stretch;display:grid;gap:12px;margin-top:12px}
+.question>[data-agent-choices]{margin-top:0}
+/* Copy / edit under your message on hover (4px below, no room taken); thumbs and copy 12px under a reply. */
+.userActions{margin:4px 0 -30px;opacity:0;transition:opacity 100ms ease}
+.userMessage:hover .userActions,.userMessage:focus-within .userActions{opacity:1}
+.replyActions{align-self:stretch;margin-top:12px;margin-left:-10px;opacity:0;transition:opacity 100ms ease}
+.latestReplyActions,.agentMessage:hover .replyActions,.agentMessage:focus-within .replyActions{opacity:1}

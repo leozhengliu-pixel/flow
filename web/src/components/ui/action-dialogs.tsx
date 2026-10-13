@@ -292,7 +292,7 @@ export function ActionDialogHost() {
           ) : (
             <>
               <button disabled={!request} onClick={onCancel} type="button">
-                Cancel
+                {displayRequest?.kind === "confirm" && displayRequest.cancelLabel ? displayRequest.cancelLabel : "Cancel"}
               </button>
               <button
                 className={displayRequest?.kind === "confirm" && displayRequest.danger ? "danger" : "primary"}

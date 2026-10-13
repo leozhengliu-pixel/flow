@@ -131,6 +131,38 @@ export function TriageIntelligenceSuggestions({
   const pending = !failed && (refreshing || Boolean(remote?.pending) || (!generatedAt && !suggestions.length))
   const elapsed = usePendingSeconds(enabled && inTriage && pending)
 
+  const runAgain = async () => {
+    setRefreshing(true)
+    setFailed(false)
+    try {
+      await refreshIssueSuggestions(issue.id)
+      const result = normalizeRemote(await fetchIssueSuggestions(issue.id))
+      setRemoved(new Set())
+      setRemote(result)
+      // An asynchronous (agentic) run is still pending: keep polling until it lands.
+      if (result.pending) setReloadKey(key => key + 1)
+    } catch (error) {
+      setFailed(true)
+      toast.error(error instanceof Error ? error.message : 'Could not refresh suggestions')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  // The issue options menu's "Find suggestions" runs here when this card is mounted, so its progress shows.
+  const latestRunAgain = useRef(runAgain)
+  useEffect(() => { latestRunAgain.current = runAgain })
+  useEffect(() => {
+    if (!enabled) return
+    const onFind = (event: Event) => {
+      if ((event as CustomEvent<{ issueId?: string }>).detail?.issueId !== issue.id) return
+      event.preventDefault()
+      void latestRunAgain.current()
+    }
+    window.addEventListener('flow:find-issue-suggestions', onFind)
+    return () => window.removeEventListener('flow:find-issue-suggestions', onFind)
+  }, [enabled, issue.id])
+
   if (!enabled || (!inTriage && !suggestions.length)) return null
   const thinking = remote?.thinking ?? suggestions.map(item => readThinking(item.metadata?.thinking)).find(Boolean)
 
@@ -178,24 +210,6 @@ export function TriageIntelligenceSuggestions({
     })
     if (results.some(result => result.status === 'rejected')) toast.error('Could not dismiss all suggestions')
     setBusy(undefined)
-  }
-
-  const runAgain = async () => {
-    setRefreshing(true)
-    setFailed(false)
-    try {
-      await refreshIssueSuggestions(issue.id)
-      const result = normalizeRemote(await fetchIssueSuggestions(issue.id))
-      setRemoved(new Set())
-      setRemote(result)
-      // An asynchronous (agentic) run is still pending: keep polling until it lands.
-      if (result.pending) setReloadKey(key => key + 1)
-    } catch (error) {
-      setFailed(true)
-      toast.error(error instanceof Error ? error.message : 'Could not refresh suggestions')
-    } finally {
-      setRefreshing(false)
-    }
   }
 
   const empty = !pending && !failed && !suggestions.length

@@ -34,7 +34,11 @@ func issueAccessMetadata(data domain.Bootstrap) domain.Bootstrap {
 	result.Teams = slices.Clone(data.Teams)
 	result.TeamSettings = make(map[string]domain.TeamSettings, len(data.TeamSettings))
 	for id, settings := range data.TeamSettings {
-		result.TeamSettings[id] = domain.TeamSettings{TeamID: id, ParentTeamID: settings.ParentTeamID, Access: settings.Access, MembershipRestriction: settings.MembershipRestriction, SettingsPermission: settings.SettingsPermission, LabelPermission: settings.LabelPermission, MemberPermission: settings.MemberPermission}
+		result.TeamSettings[id] = domain.TeamSettings{TeamID: id, ParentTeamID: settings.ParentTeamID, Access: settings.Access, MembershipRestriction: settings.MembershipRestriction, SettingsPermission: settings.SettingsPermission, LabelPermission: settings.LabelPermission, MemberPermission: settings.MemberPermission,
+			// Agents working an issue follow its team chain's guidance (Team settings › Agents).
+			AgentGuidance: settings.AgentGuidance,
+			// Team skills are part of an agent's issue context (internal and third-party agents alike).
+			AgentSkills: slices.Clone(settings.AgentSkills)}
 	}
 	return result
 }

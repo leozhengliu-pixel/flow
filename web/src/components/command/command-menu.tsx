@@ -71,6 +71,7 @@ export function CommandMenu({
   onOpenCustomer,
   onNavigateAgent,
   onAskAgent,
+  onAskAgentQuery,
   agentSessions,
   onOpenAgentSession,
   onNavigateReviews,
@@ -107,6 +108,8 @@ export function CommandMenu({
   onNavigateAgent: () => void
   /** "Ask Flow" (⌘J): open the floating agent chat; omitted where the shortcut does nothing. */
   onAskAgent?: () => void
+  /** "Ask Flow" with the typed question (Tab): runs it in the floating chat with the current page as context, or in the page chat on the Agent page. */
+  onAskAgentQuery?: (question: string) => void
   /** The viewer's agent chats for "Open past agent chat…"; the entry needs `onOpenAgentSession` too. */
   agentSessions?: AgentSession[]
   onOpenAgentSession?: (session: AgentSession) => void
@@ -161,6 +164,13 @@ export function CommandMenu({
   }
   const openPage = (next: CommandPage) => { setPages(current => [...current, next]); setQuery('') }
   const back = () => { setPages(current => current.slice(0, -1)); setQuery('') }
+  // Tab (or the "Ask Flow" hint): the typed question runs in the chat at once; an empty box just opens the chat.
+  const askFlow = () => {
+    const question = query.trim()
+    if (question && onAskAgentQuery) closeAnd(() => onAskAgentQuery(question))()
+    else if (onAskAgent) closeAnd(onAskAgent)()
+    else closeAnd(onNavigateAgent)()
+  }
   const actions: CommandAction[] = [
     { id: 'create-issue', group: 'Issues', label: 'Create new issue...', icon: <Plus/>, shortcut: ['C'], keywords: 'new ticket task', run: closeAnd(onCreateIssue) },
     { id: 'create-project', group: 'Projects', label: 'Create new project...', icon: <FolderKanban/>, shortcut: ['N', 'then', 'P'], run: closeAnd(onCreateProject) },
@@ -229,7 +239,11 @@ export function CommandMenu({
     if (event.key === 'Backspace' && !query && customerPicker) { event.preventDefault(); setCustomerPicker(false); return }
     if (event.key === 'Backspace' && !query && pastChats) { event.preventDefault(); setPastChats(false); return }
     if (event.key === 'Backspace' && !query && pages.length) { event.preventDefault(); back(); return }
-    if (event.key === 'Tab' && !page) { event.preventDefault(); closeAnd(onNavigateAgent)() }
+    if (page && !query && !event.metaKey && !event.ctrlKey && !event.altKey && /^\d$/.test(event.key)) {
+      const match = contextCommands.options.find(option => option.shortcut === event.key)
+      if (match) { event.preventDefault(); selectOption(match); return }
+    }
+    if (event.key === 'Tab' && !event.shiftKey && !event.nativeEvent.isComposing && !page && !customerPicker && !pastChats) { event.preventDefault(); askFlow() }
   }
   const selectOption = (option: PageOption) => {
     if (option.page) { openPage(option.page); return }
@@ -260,7 +274,7 @@ export function CommandMenu({
         </div>}
         <div className="command-input">
           <Command.Input aria-label="Command menu" placeholder={pastChats ? t('Open past agent chat…') : customerPicker ? t('Open customer…') : page ? t(page.label) : t('Type a command or search...')} autoFocus value={query} onValueChange={setQuery} onKeyDown={onInputKeyDown}/>
-          {!page && !customerPicker && !pastChats && <button type="button" onClick={closeAnd(onNavigateAgent)}><span>Ask Flow</span><kbd>Tab</kbd></button>}
+          {!page && !customerPicker && !pastChats && <button type="button" onClick={askFlow}><span>Ask Flow</span><kbd>Tab</kbd></button>}
         </div>
         {pastChats ? <Command.List>
           {pastChatGroups.map(group => <Fragment key={group.label}>
@@ -289,6 +303,7 @@ export function CommandMenu({
               <span className="command-option-label" data-i18n-ignore={option.entity || undefined}>{option.entity ? option.label : t(option.label)}</span>
               {option.detail && <small className="command-option-detail" data-i18n-ignore>{option.detail}</small>}
               {option.current && <span className="command-option-current" aria-label={t('Current')}><Check size={14}/></span>}
+              {option.shortcut && <kbd className="command-option-shortcut">{option.shortcut}</kbd>}
               {option.page && <ChevronRight className="command-option-current" size={14}/>}
             </Command.Item>)}
           </Command.Group>)}

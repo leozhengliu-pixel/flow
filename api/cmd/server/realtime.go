@@ -351,6 +351,10 @@ func realtimeEventVisible(data domain.Bootstrap, event domain.RealtimeEvent) boo
 	if id == "" {
 		return true
 	}
+	if event.Type == "agent_task.replied" {
+		// An agent replied in an issue thread (its Inbox notifications changed).
+		return slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id })
+	}
 	if strings.HasPrefix(event.Type, "issue.") || strings.HasPrefix(event.Type, "comment.") || strings.HasPrefix(event.Type, "attachment.") {
 		visible := slices.ContainsFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id }) || slices.ContainsFunc(data.Documents, func(document domain.Document) bool { return document.ID == id })
 		return visible || strings.HasSuffix(event.Type, ".created") && realtimeEntityVisible(data, event)

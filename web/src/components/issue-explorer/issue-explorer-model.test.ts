@@ -8,6 +8,7 @@ import {
   buildExplorerIssueGroups,
   explorerBoardGroupUpdate,
   executeExplorerBulkAction,
+  explorerFilterOptions,
   explorerPropertyOptions,
   explorerUpdateForAction,
   explorerUpdateForProperty,
@@ -73,7 +74,7 @@ describe('issue explorer workflow model', () => {
     })
     const options = explorerPropertyOptions(data)
     expect(options.status.find(item => item.id === started.id)?.count).toBe(1)
-    expect(options.assignee[0].count).toBe(1)
+    expect(explorerFilterOptions('assignee', options)?.[0].count).toBe(1)
     expect(options.labels[0].count).toBe(1)
 
     expect(applyExplorerFilters(data.issues, [filter('priority', ['2'])], data).map(issue => issue.id)).toEqual([first.id])

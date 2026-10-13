@@ -1,4 +1,6 @@
 import type { ApplicationActivity } from '@/lib/application-agents'
+import { splitAgentSuggestions } from './agent-answer-content'
+import { toolStatusLabel } from './agent-step-labels'
 
 export type AgentThreadItem = { id: string; kind: 'message' | 'thinking' | 'action'; activity: ApplicationActivity; body: string; output?: boolean; selected?: string; resolved?: boolean }
 
@@ -6,9 +8,11 @@ export function agentThreadItems(activities: ApplicationActivity[]): AgentThread
   let items: AgentThreadItem[] = []
   let turn = 0
   let pending: AgentThreadItem | undefined
+  // Replies a person deleted from the thread (the reference app's comment menu "Delete").
+  const deleted = new Set(activities.filter(activity => activity.type === 'deleted' && activity.metadata?.activityId).map(activity => activity.metadata!.activityId!))
   for (let index = 0; index < activities.length; index++) {
     const activity = activities[index]
-    if (activity.type === 'feedback') continue
+    if (activity.type === 'feedback' || activity.type === 'deleted') continue
     if (activity.type === 'prompt' || activity.type === 'retry') {
       turn = items.length
       const selected = pending?.activity.signal === 'select' && pending.activity.signalMetadata?.options?.find(option => option.value === activity.body || activity.body.startsWith(`${option.value}\n\n`))
@@ -37,8 +41,14 @@ export function agentThreadItems(activities: ApplicationActivity[]): AgentThread
     if (['response', 'elicitation'].includes(activity.type)) items = items.filter((item, position) => position < turn || !item.output)
     if (pending) { pending.resolved = true; pending = undefined }
     const item: AgentThreadItem = { id: activity.id, kind: activity.type === 'action' ? 'action' : 'message', activity, body: activity.body }
+    if (deleted.has(activity.id)) continue
     items.push(item)
     if (activity.type === 'elicitation') pending = item
+  }
+  // Comment threads have no suggestion chips (the reference app's threads neither): an agent's trailing ```suggestions block,
+  // which only the chat panel turns into chips, is dropped instead of showing as a code block.
+  for (const item of items) {
+    if (item.kind === 'message' && !['prompt', 'retry', 'canceled'].includes(item.activity.type)) item.body = splitAgentSuggestions(item.body).prose
   }
   return items
 }
@@ -57,3 +67,17 @@ export function agentThreadReactions(activities: ApplicationActivity[]): Record<
   }
   return reactions
 }
+
+/**
+ * The phase shown on a working agent's row (the reference app: "Working…", then what it is doing, e.g. "Looking at issues…"):
+ * the newest step of the current turn, as a running label.
+ */
+export function agentWorkingPhase(activities: ApplicationActivity[], t: (source: string) => string) {
+  const turn = activities.findLastIndex(activity => activity.type === 'prompt' || activity.type === 'retry')
+  const action = activities.slice(turn + 1).findLast(activity => activity.type === 'action')
+  const name = (action?.metadata?.action || action?.body || '').trim()
+  if (!name || /^(Approved action|Action rejected):/.test(name)) return t('Working…')
+  if (/^[a-z][a-z0-9_.]*$/.test(name)) return toolStatusLabel(name, true, t)
+  return `${name.replace(/[.…]+$/, '')}…`
+}
+

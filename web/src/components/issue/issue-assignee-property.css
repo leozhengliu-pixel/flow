@@ -1,0 +1,104 @@
+/*
+ * The reference app IssueDetailsPaneSidebar assignee + delegate (values from the reference app's bundle):
+ * - wrapper: flex column, width 100%;
+ * - avatars are "micro" (14px) — the assignee's with 1px either side, the delegated agent's only 1px right;
+ * - delegate block: 32px tall, 4px above the trigger, padding-left 23px, position relative;
+ * - its NestingLine: left 14px (under the assignee avatar's centre), from the assignee row's bottom, 10px stem.
+ * Flow's sidebar triggers carry 2px vertical margins, so the block starts 2px lower than the reference app's and the
+ * line is lifted 2px to land on the same pixels.
+ */
+.issue-assignee-group {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+}
+.issue-assignee-group .core-property-trigger > .avatar {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  margin: 0 1px;
+  font-size: 8px;
+}
+.issue-assignee-group .issue-delegate-trigger > .avatar {
+  margin: 0 1px 0 0;
+}
+.issue-delegate-row {
+  position: relative;
+  height: 32px;
+  padding-left: 23px;
+}
+.issue-delegate-nesting-line {
+  top: -2px;
+  left: 14px;
+}
+
+/* A delegate added while open: the row grows 0 → 32px (150ms), then the curve fades in and the agent
+   slides right from the assignee's column (150ms, ease-out) — the reference app's movesDown / movesRight. */
+.issue-delegate-row[data-entering] {
+  overflow: hidden;
+  animation: issue-delegate-grow 150ms ease both;
+}
+.issue-delegate-row[data-entering] > .issue-delegate-nesting-line {
+  animation: issue-delegate-fade 150ms ease 150ms both;
+}
+.issue-delegate-row[data-entering] > .issue-delegate-property {
+  animation: issue-delegate-slide 150ms ease-out 150ms both;
+}
+@keyframes issue-delegate-grow {
+  from { height: 0; }
+  to { height: 32px; }
+}
+@keyframes issue-delegate-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes issue-delegate-slide {
+  from { transform: translateX(-23px); }
+  to { transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .issue-delegate-row[data-entering],
+  .issue-delegate-row[data-entering] > .issue-delegate-nesting-line,
+  .issue-delegate-row[data-entering] > .issue-delegate-property {
+    animation: none;
+  }
+}
+
+/* Assignee menu: the delegated agent sits under the assignee, avatar 24px in, on a NestingLine
+   (the reference app: icon wrapper flex + relative, line left 7px / top -8px / 9px stem). */
+.core-nested-delegate-icon {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.core-nested-delegate-icon > .avatar {
+  margin-left: 24px;
+}
+.core-nested-delegate-line {
+  top: -8px;
+  left: 7px;
+}
+
+/* Sidebar rows sit on the reference app's 32px pitch: keep each trigger's 2px margins inside its picker (they used to
+   collapse through the 32px-min picker and add 2px between Status, Priority and Assignee). */
+.issue-properties > .core-property-picker {
+  display: flow-root;
+}
+.issue-properties > h3 + .core-property-picker {
+  margin-top: -2px;
+}
+/* The reference app's sidebar property buttons all put the text 6px after the 16px icon slot (x = 28). */
+.issue-properties .label-project-trigger {
+  gap: 6px;
+}
+/* The nested row's icon cell grows past 16px so the 24px indent pushes the name right. */
+html:root body .property-command-surface .property-command-icon:has(.core-nested-delegate-icon),
+html:root body .property-command-surface .property-command-icon > :has(> .core-nested-delegate-icon) {
+  width: auto;
+  flex: none;
+}
+html:root body .property-command-surface:not(.property-command-labels):not(.property-command-project):not(.property-command-milestone):not(.property-command-project-labels) .property-command-options [role=option]:not(:has(.property-command-checkbox)):has(.core-nested-delegate-icon) {
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
+}

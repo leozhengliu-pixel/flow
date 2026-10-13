@@ -87,6 +87,16 @@ const (
 // than documentRevisionIdleWindow apart — update that version in place, so
 // history holds one entry per burst and revisions[0] is always the current
 // state. It reports whether a new version started.
+// revisionBotActor is the attribution of an edit made by the request's viewer
+// ("Last edit by <User> via Flow" when Flow's agent wrote it).
+func revisionBotActor(author domain.User) *domain.ActorBot {
+	if author.Via == nil {
+		return nil
+	}
+	copy := *author.Via
+	return &copy
+}
+
 func recordDocumentRevision(document *domain.Document, author domain.User, now time.Time, force bool) bool {
 	if len(document.Revisions) > 0 && !force {
 		latest := &document.Revisions[0]
@@ -101,14 +111,14 @@ func recordDocumentRevision(document *domain.Document, author domain.User, now t
 			coediting := latest.Author.ID != author.ID && now.Sub(latest.CreatedAt) < documentRevisionCoeditWindow
 			if sameAuthor || coediting {
 				latest.Title, latest.Content, latest.ContentState, latest.ContentData = document.Title, document.Content, document.ContentState, document.ContentData
-				latest.Author, latest.CreatedAt = author, now
+				latest.Author, latest.CreatedAt, latest.BotActor = author, now, revisionBotActor(author)
 				latest.AuthorIDs = appendUnique(latest.AuthorIDs, author.ID)
 				return false
 			}
 		}
 	}
 	started := now
-	revision := domain.DocumentRevision{ID: fmt.Sprintf("revision_%d", now.UnixNano()), DocumentID: document.ID, Title: document.Title, Content: document.Content, ContentState: document.ContentState, ContentData: document.ContentData, Author: author, AuthorIDs: []string{author.ID}, CreatedAt: now, StartedAt: &started}
+	revision := domain.DocumentRevision{ID: fmt.Sprintf("revision_%d", now.UnixNano()), DocumentID: document.ID, Title: document.Title, Content: document.Content, ContentState: document.ContentState, ContentData: document.ContentData, Author: author, BotActor: revisionBotActor(author), AuthorIDs: []string{author.ID}, CreatedAt: now, StartedAt: &started}
 	document.Revisions = append([]domain.DocumentRevision{revision}, document.Revisions...)
 	if len(document.Revisions) > maxDocumentRevisions {
 		document.Revisions = document.Revisions[:maxDocumentRevisions]

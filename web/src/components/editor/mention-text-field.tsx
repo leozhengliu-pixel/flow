@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import type { Editor } from '@tiptap/react'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
 import type { DescriptionSnapshot } from '@/components/issue/editor/editor-content'
+import type { DescriptionSelectionActions } from '@/components/issue/editor/structured-blocks'
 import { usePeopleDirectory } from '@/components/property/people-context'
 import type { User } from '@/types/flow'
 import './mention-text-field.css'
@@ -23,6 +24,8 @@ export type MentionTextFieldProps = {
   onSubmit?: () => void
   onBlur?: () => void
   editorRef?: (editor: Editor | null) => void
+  /** Extra actions on the floating selection toolbar (Ask agent, Create issue from selection). */
+  selectionActions?: DescriptionSelectionActions
 }
 
 /**
@@ -31,7 +34,7 @@ export type MentionTextFieldProps = {
  * field. It replaces a `<textarea>` that holds markdown: `value` / `onChange` carry the same markdown string, so records
  * and the API stay as they are. Clearing `value` (after a submit) empties the editor even while it has focus.
  */
-export function MentionTextField({ value, onChange, state, ariaLabel, placeholder, className, users, autoFocus, onSubmit, onBlur, editorRef }: MentionTextFieldProps) {
+export function MentionTextField({ value, onChange, state, ariaLabel, placeholder, className, users, autoFocus, onSubmit, onBlur, editorRef, selectionActions }: MentionTextFieldProps) {
   const directory = usePeopleDirectory()
   const people = useMemo(() => users ?? [...directory.users.values()], [directory.users, users])
   const editor = useRef<Editor | null>(null)
@@ -56,6 +59,7 @@ export function MentionTextField({ value, onChange, state, ariaLabel, placeholde
       onChange={snapshot => onChange(snapshot.markdown, snapshot)}
       onSubmit={onSubmit}
       placeholder={placeholder}
+      selectionActions={selectionActions}
       state={state}
       users={people}
       value={value}

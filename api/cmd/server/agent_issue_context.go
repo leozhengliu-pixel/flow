@@ -8,6 +8,16 @@ import (
 )
 
 func (s *server) agentIssueContext(r *http.Request, ids []string) (domain.Bootstrap, error) {
+	return s.loadAgentIssueContext(r, ids, true)
+}
+
+// agentAvailableIssueContext loads the issues of an existing chat that still exist. A chat keeps working after
+// an issue in its context is deleted (for example by the agent itself); the missing issue is simply left out.
+func (s *server) agentAvailableIssueContext(r *http.Request, ids []string) (domain.Bootstrap, error) {
+	return s.loadAgentIssueContext(r, ids, false)
+}
+
+func (s *server) loadAgentIssueContext(r *http.Request, ids []string, strict bool) (domain.Bootstrap, error) {
 	data, q, err := s.pagedRealtimeMetadata(r)
 	if err != nil {
 		return data, err
@@ -28,7 +38,7 @@ func (s *server) agentIssueContext(r *http.Request, ids []string) (domain.Bootst
 	if err != nil {
 		return data, err
 	}
-	if len(page.Items) != len(ids) {
+	if strict && len(page.Items) != len(ids) {
 		return data, fmt.Errorf("one or more selected issues were not found")
 	}
 	data.Issues, err = s.projectIssueRecordReferences(r, data, q, page.Items)

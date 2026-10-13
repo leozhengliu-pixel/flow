@@ -1,0 +1,18 @@
+/* The reference app NestingLine: width 1px, bgBorderSolid, pointer-events none; the curve is 10px wide, absolute. */
+.nesting-line {
+  position: absolute;
+  z-index: 1;
+  display: block;
+  width: 1px;
+  background-color: var(--nesting-line);
+  pointer-events: none;
+}
+.nesting-line__curve {
+  position: absolute;
+  left: 0;
+  display: block;
+  width: 10px;
+  height: 9px;
+  overflow: visible;
+  fill: var(--nesting-line);
+}

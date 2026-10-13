@@ -135,7 +135,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				protocol = params.ProtocolVersion
 			}
 			w.Header().Set("MCP-Protocol-Version", protocol)
-			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"protocolVersion": protocol, "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "Flow", "version": version}, "instructions": "Manage Flow issues, projects, initiatives, documents, releases, reviews, teams, and comments."}})
+			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: request.ID, Result: map[string]any{"protocolVersion": protocol, "capabilities": map[string]any{"tools": map[string]any{"listChanged": false}}, "serverInfo": map[string]string{"name": "Flow", "version": version}, "instructions": "Manage Flow issues, projects, initiatives, cycles, documents, customers, releases, reviews, teams, views, loops, and comments."}})
 		case "notifications/initialized":
 			w.WriteHeader(http.StatusAccepted)
 		case "ping":

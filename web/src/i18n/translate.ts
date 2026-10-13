@@ -108,6 +108,7 @@ export function translateToChinese(source: string): string {
     [/^Assign to\. Current assignee is (.+)$/, name => `指派负责人。当前负责人是 ${name}`],
     [/^Change priority\. No priority is selected$/, () => '更改优先级。当前未设置优先级'],
     [/^Change assignee\. (.+) is assigned$/, name => `更改负责人。当前负责人是 ${name}`],
+    [/^Change assignee\. (.+) is delegated$/, name => `更改负责人。已委托给 ${name}`],
     [/^Change project target date$/, () => '更改项目目标日期'],
     [/^Create (issue|project) view in (.+)$/, (resource, name) => `在 ${name} 中创建${resource === 'issue' ? '事项' : '项目'}视图`],
     [/^Save to (.+)$/, name => `保存到 ${name}`],

@@ -1,0 +1,35 @@
+/* The reference app's result cards under an agent reply: a muted "Created DEV-50" / "Updated project" label above a bordered card. */
+.changes{align-self:stretch;display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.change{display:flex;flex-direction:column;gap:6px;max-width:504px}
+.header{color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:16px}
+.card{display:flex;flex-direction:column;gap:8px;box-sizing:border-box;padding:12px;border:.5px solid var(--theme-border);border-radius:8px;color:var(--text);font-size:12px;font-weight:450;line-height:16px}
+/* What no longer exists reads struck through: a create that was undone, a delete that was not. */
+.change[data-state="undone"][data-action="created"] .entity,.change:not([data-state])[data-action="deleted"] .entity{color:var(--theme-text-secondary)}
+.change[data-state="undone"][data-action="created"] .entityLabel,.change:not([data-state])[data-action="deleted"] .entityLabel{text-decoration:line-through;text-decoration-color:var(--theme-text-tertiary,currentColor)}
+.entity{display:flex;align-items:center;gap:8px;min-width:0;color:var(--text);font-size:13px;font-weight:500;text-decoration:none}
+a.entity:hover .entityLabel{text-decoration:underline}
+a.entity:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;border-radius:4px}
+.entity svg{flex:0 0 auto;width:16px;height:16px}
+.entityIdentifier{flex:0 0 auto;color:var(--theme-text-secondary);font-weight:450}
+.entityLabel{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.summary{margin:0;color:var(--theme-text-secondary);font-size:12px;line-height:18px}
+.preview{display:-webkit-box;margin:0;overflow:hidden;color:var(--theme-text-secondary);font-size:12px;line-height:18px;-webkit-box-orient:vertical;-webkit-line-clamp:2;white-space:pre-line}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pill{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border:.5px solid var(--theme-border);border-radius:9999px;color:var(--theme-text-secondary);font-size:12px}
+.pill svg{width:14px;height:14px}
+.note{margin:0;color:var(--theme-text-tertiary,var(--theme-text-secondary));font-size:12px;line-height:16px}
+.footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px;padding-top:8px;border-top:.5px solid var(--theme-border)}
+.highlight{display:inline-flex;align-items:center;gap:8px;color:var(--theme-text-secondary);font-size:12px;cursor:default}
+.undo{display:inline-flex;align-items:center;gap:6px;height:24px;margin-left:auto;padding:0 6px;border:0;border-radius:6px;background:transparent;color:var(--theme-text-primary);font:500 12px/normal var(--font);cursor:default}
+.undo:hover:not(:disabled),.undo:focus-visible{background:var(--theme-surface-hover);outline:0}
+.undo:disabled{opacity:.5}
+.undo svg{width:14px;height:14px;color:var(--theme-text-secondary)}
+/* The in-card diff when the edited editor is not on screen. */
+.diff{display:flex;flex-direction:column;gap:2px;max-height:240px;margin:0;padding:0;overflow:auto;list-style:none;font-size:12px;line-height:18px}
+.diff li{padding:2px 8px;border-left:2px solid transparent;border-radius:2px;white-space:pre-wrap;overflow-wrap:anywhere}
+.diff li[data-kind="added"]{border-left-color:var(--accent-primary);background:var(--accent-soft)}
+.diff li[data-kind="removed"]{color:var(--theme-text-tertiary,var(--theme-text-secondary));text-decoration:line-through}
+.diff li[data-kind="same"]{color:var(--theme-text-secondary)}
+/* Highlight changes in the live editor: an accent bar in the gutter beside each changed block. */
+.highlightLayer{position:fixed;inset:0;z-index:30;pointer-events:none}
+.highlightBar{position:fixed;top:0;left:0;width:2px;border-radius:1px;background:var(--accent-primary)}

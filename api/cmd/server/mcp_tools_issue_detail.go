@@ -673,47 +673,12 @@ func listMCPTemplates(data domain.Bootstrap, args map[string]any) (any, error) {
 
 func (s *server) listMCPCustomers(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	query := stringArg(args, "query")
-	// The paged metadata projection cannot see issue records, so it drops every
-	// issue-linked request. Read the workspace's requests and apply the same
-	// rule (no guests; linked issue and project must be visible) here.
-	all := data.CustomerRequests
-	if raw, ok := s.store.WorkspaceMetadata(data.Workspace.URLKey); ok && data.ViewerRole != "guest" {
-		all = raw.CustomerRequests
-	}
-	issueIDs := []string{}
-	for _, request := range all {
-		if request.IssueID != "" {
-			issueIDs = append(issueIDs, request.IssueID)
-		}
-	}
-	issues := map[string]domain.Issue{}
-	if len(issueIDs) > 0 {
-		q, err := s.mcpIssueQuery(ctx, actor)
-		if err != nil {
-			return nil, err
-		}
-		q.Filter, q.Limit, q.Summary = store.IssueFilter{Field: "id", Values: issueIDs}, 500, true
-		page, err := s.store.QueryIssueRecords(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		for _, issue := range page.Items {
-			issues[issue.ID] = issue
-		}
+	visible, issues, err := s.visibleMCPCustomerRequests(ctx, actor, data)
+	if err != nil {
+		return nil, err
 	}
 	requests := map[string][]domain.CustomerRequest{}
-	for _, request := range all {
-		if request.ArchivedAt != nil {
-			continue
-		}
-		if _, ok := issues[request.IssueID]; request.IssueID != "" && !ok {
-			continue
-		}
-		if request.ProjectID != "" {
-			if _, err := mcpFindProject(data, request.ProjectID); err != nil {
-				continue
-			}
-		}
+	for _, request := range visible {
 		requests[request.CustomerID] = append(requests[request.CustomerID], request)
 	}
 	items := []map[string]any{}
@@ -725,14 +690,7 @@ func (s *server) listMCPCustomers(ctx context.Context, actor mcpActor, data doma
 		if boolArg(args, "includeRequests") {
 			needs := []map[string]any{}
 			for _, request := range requests[customer.ID] {
-				need := map[string]any{"id": request.ID, "body": request.Body, "source": request.Source, "priority": request.Priority, "creator": mcpUserRef(&request.Creator), "createdAt": request.CreatedAt}
-				if issue, ok := issues[request.IssueID]; ok {
-					need["issue"] = map[string]any{"id": issue.ID, "identifier": issue.Identifier, "title": issue.Title, "status": issue.State.Name}
-				}
-				if project, err := mcpFindProject(data, request.ProjectID); request.ProjectID != "" && err == nil {
-					need["project"] = map[string]any{"id": project.ID, "name": project.Name}
-				}
-				needs = append(needs, need)
+				needs = append(needs, mcpCustomerRequestItem(data, issues, request))
 			}
 			item["requests"] = needs
 		}

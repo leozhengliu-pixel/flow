@@ -15,7 +15,8 @@ without PKCE, client credentials, `actor=app`, scopes, refresh-token rotation,
 revocation, introspection, "via App" attribution and application manifests.
 [Webhooks](webhooks.md) covers data change events, payloads, signature
 verification, retries, the delivery log, application webhooks and agent session
-events. The [OpenAPI inventory](openapi.json) lists HTTP routes. The
+events. The [TypeScript SDK](sdk.md) (`@flow/sdk`) wraps the REST API, webhook
+verification and OAuth for Node.js and browsers. The [OpenAPI inventory](openapi.json) lists HTTP routes. The
 [domain model](domain-model.md) describes resources. This guide describes the
 application authorization and execution contract; it does not require a
 particular model provider or Agent framework.
@@ -227,7 +228,8 @@ application's full team grant.
 The full REST reference (pagination, filtering, errors, rate limits, file
 uploads, link attachments, customers, audit log, prefilled issue links, MCP
 client setup) is in [api.md](api.md); the typed contract is
-[openapi.json](openapi.json).
+[openapi.json](openapi.json). From TypeScript, use the typed client in
+[sdk.md](sdk.md) (`new FlowClient({ apiKey, apiUrl })`).
 
 Send `Authorization: Bearer ACCESS_TOKEN` on API requests. Flow's credential
 lookup resolves the token's workspace; `X-Workspace-Key` can select that same

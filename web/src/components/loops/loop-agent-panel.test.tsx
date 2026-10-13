@@ -31,7 +31,7 @@ const reply: AgentMessage = {
   parts: [
     { id: 'q1', type: 'elicitation', status: 'completed', text: "Route, but don't close", elicitation: { ...question('q1', 'How much should the triage loop do on its own?', ['Route and close clear duplicates', "Route, but don't close"]), action: 'accept' } },
     { id: 't1', type: 'toolCall', status: 'completed', toolCall: { id: 'c1', name: 'save_loop', title: 'Updated workflow definition draft', status: 'completed', result: { id: 'loop-9', name: 'Triage agent', status: 'draft' } } },
-    { id: 'r1', type: 'reasoning', status: 'completed', text: 'Checking the team setup' },
+    { id: 'r1_narration_0', type: 'reasoning', status: 'completed', text: 'Checking the team setup' },
     { id: 't2', type: 'toolCall', status: 'completed', toolCall: { id: 'c2', name: 'save_loop', title: 'Created automation', status: 'completed', result: { id: 'loop-9', name: 'Triage agent', status: 'published', published: true, teamId: 'team-1', teamName: 'Test team', runCount30d: 0 } } },
   ],
 }
@@ -79,9 +79,9 @@ describe('LoopAgentPanel', () => {
     expect(card.querySelector('.status-glyph')).not.toBeNull()
     const order = [intro, answer, updated, worked, final, created]
     for (let index = 1; index < order.length; index += 1) expect(order[index - 1].compareDocumentPosition(order[index]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(within(panel).getByRole('button', { name: 'Good response' })).toBeVisible()
-    expect(within(panel).getByRole('button', { name: 'Bad response' })).toBeVisible()
-    expect(within(panel).getByRole('button', { name: 'Copy message' })).toBeVisible()
+    expect(within(panel).getByRole('button', { name: 'This was helpful' })).toBeVisible()
+    expect(within(panel).getByRole('button', { name: 'Leave feedback…' })).toBeVisible()
+    expect(within(panel).getAllByRole('button', { name: 'Copy message' }).at(-1)).toBeVisible()
     expect(onLoopSaved).toHaveBeenCalled()
   })
 

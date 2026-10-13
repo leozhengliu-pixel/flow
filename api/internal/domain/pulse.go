@@ -108,6 +108,9 @@ type NotificationPayload struct {
 	Excerpt        string `json:"excerpt,omitempty"`
 	QuotedText     string `json:"quotedText,omitempty"`
 	Emoji          string `json:"emoji,omitempty"`
+	// AgentActivity is the kind of agent reply an agentReply notification
+	// announces: response, elicitation (the agent waits for input) or error.
+	AgentActivity string `json:"agentActivity,omitempty"`
 }
 
 type PulseUpdateRef struct {

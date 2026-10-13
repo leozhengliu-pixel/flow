@@ -152,7 +152,19 @@ type AgentMessage struct {
 	// Mentions are the resources @-mentioned in a user message, in order.
 	Mentions   []AgentMention `json:"mentions,omitempty"`
 	DurationMS int64          `json:"durationMs,omitempty"`
-	CreatedAt  time.Time      `json:"createdAt"`
+	// AnswerTo is the question part a user message answered by picking one of its options (shown as the chosen
+	// option on the question, not as a separate message).
+	AnswerTo string `json:"answerTo,omitempty"`
+	// Feedback is the owner's rating of an assistant reply (thumbs up / down with an optional note).
+	Feedback  *AgentFeedback `json:"feedback,omitempty"`
+	CreatedAt time.Time      `json:"createdAt"`
+}
+
+// AgentFeedback is a rating ("positive" or "negative") and/or a written note about agent output.
+type AgentFeedback struct {
+	Rating    string    `json:"rating,omitempty"`
+	Comment   string    `json:"comment,omitempty"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 // AgentMention is an @-mentioned issue, project, document or user.
@@ -170,6 +182,52 @@ type AgentMessagePart struct {
 	Text        string            `json:"text,omitempty"`
 	Status      string            `json:"status,omitempty"`
 	ToolCall    *AgentToolCall    `json:"toolCall,omitempty"`
+	// Question is a choice the agent asked the user for (the ask_user tool; the reference app's select elicitation).
+	Question *AgentQuestion `json:"question,omitempty"`
+}
+
+// AgentQuestion is a question with options the agent paused on. It is answered by the user's next message:
+// Selected holds the chosen option's value, Answer free text typed instead.
+type AgentQuestion struct {
+	Options       []AgentQuestionOption `json:"options"`
+	AllowFreeText bool                  `json:"allowFreeText"`
+	Selected      string                `json:"selected,omitempty"`
+	Answer        string                `json:"answer,omitempty"`
+	// Approval is set when the question asks to approve actions the agent held back (bulk deletes, publishing an
+	// update it wrote): the app shows a readable preview, and the held calls run once the user approves.
+	Approval *AgentApproval `json:"approval,omitempty"`
+}
+
+// AgentApproval is a set of tool calls waiting for the user's approval, with what they would change.
+type AgentApproval struct {
+	// Kind is "delete" (several items to the trash) or "publish" (a project or initiative update).
+	Kind    string                `json:"kind"`
+	Targets []AgentApprovalTarget `json:"targets,omitempty"`
+	// Body and Health are the update to publish; Parent names its project or initiative.
+	Body   string               `json:"body,omitempty"`
+	Health string               `json:"health,omitempty"`
+	Parent *AgentApprovalTarget `json:"parent,omitempty"`
+	// Calls are the held tool calls; Decision is "approved" or "rejected" once handled.
+	Calls    []AgentToolCall `json:"calls,omitempty"`
+	Decision string          `json:"decision,omitempty"`
+}
+
+// AgentApprovalTarget is one item an approval names, shown as a chip.
+type AgentApprovalTarget struct {
+	Kind  string `json:"kind"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Title string `json:"title,omitempty"`
+	Href  string `json:"href,omitempty"`
+	// SubIssues counts an issue's sub-issues, which deleting it affects.
+	SubIssues int `json:"subIssues,omitempty"`
+	// Affected counts other linked items the delete touches, by kind ("issues", "milestones", …).
+	Affected map[string]int `json:"affected,omitempty"`
+}
+
+type AgentQuestionOption struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 type AgentElicitation struct {
@@ -196,6 +254,35 @@ type AgentToolCall struct {
 	// ApprovalID is set while a write tool is waiting for the user decision.
 	// It is intentionally transient and omitted from normal tool calls.
 	ApprovalID string `json:"approvalId,omitempty"`
+	// Change is what a successful Flow write did (the chat's "Created …" / "Updated …" result card and its Undo).
+	Change *AgentChange `json:"change,omitempty"`
+}
+
+// AgentChange records one agent write for the result card and Undo / Restore: the entity it touched and, for an
+// update, the previous and new values of the fields it changed (in the write tool's argument shape, capped in size).
+type AgentChange struct {
+	// Action is "created", "updated" or "deleted".
+	Action     string `json:"action"`
+	EntityType string `json:"entityType"`
+	EntityID   string `json:"entityId,omitempty"`
+	// ParentID is the project or initiative a milestone or status update belongs to.
+	ParentID string `json:"parentId,omitempty"`
+	// Label names the entity as it was written (issue identifier, project name, document title…).
+	Label string `json:"label,omitempty"`
+	// URL is the entity's app path, so the card links even before the client has loaded the new record.
+	URL    string          `json:"url,omitempty"`
+	Fields []string        `json:"fields,omitempty"`
+	Before json.RawMessage `json:"before,omitempty"`
+	After  json.RawMessage `json:"after,omitempty"`
+	// Undoable is false when the change cannot be reverted (unsupported entity or snapshots over the size cap).
+	Undoable bool `json:"undoable"`
+	// State is "" while the change is applied and "undone" after Undo (the card then offers Restore).
+	State string `json:"state,omitempty"`
+	// Note explains a partial undo or restore, e.g. fields that changed since and were left alone.
+	Note string `json:"note,omitempty"`
+	// Skipped lists the fields the last undo or restore left alone because they changed after the agent's edit.
+	Skipped   []string   `json:"skipped,omitempty"`
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
 }
 
 type AgentSession struct {
@@ -219,6 +306,8 @@ type AgentSession struct {
 	// UpdatedAt is later (a reply landed after they looked); conversations from
 	// before read tracking have no LastReadAt and count as read.
 	LastReadAt *time.Time `json:"lastReadAt,omitempty"`
+	// Feedback holds notes the owner left about the whole conversation ("Leave feedback…" in the chat menu).
+	Feedback []AgentFeedback `json:"feedback,omitempty"`
 }
 
 type PersonalAgentSkill struct {
@@ -420,6 +509,8 @@ type DocumentRevision struct {
 	ContentState string         `json:"contentState,omitempty"`
 	ContentData  map[string]any `json:"contentData,omitempty"`
 	Author       User           `json:"author"`
+	// BotActor attributes the latest edit to an application or to Flow's agent.
+	BotActor *ActorBot `json:"botActor,omitempty"`
 	// AuthorIDs lists everyone who edited during the burst this version
 	// covers (Author is the latest). CreatedAt is when the burst ended.
 	AuthorIDs []string  `json:"authorIds,omitempty"`
@@ -613,6 +704,7 @@ type TeamSettings struct {
 	AgentSkills              []TeamAgentSkill     `json:"agentSkills"`
 	AgentConnectors          []TeamAgentConnector `json:"agentConnectors,omitempty"`
 	ProjectUpdatePrompt      string               `json:"projectUpdatePrompt"`
+	AgentGuidance            string               `json:"agentGuidance,omitempty"` // Team settings › Agents; wins over workspace and parent team guidance
 	ResolvedSummaries        bool                 `json:"resolvedThreadSummaries"`
 	ShowInitiatives          bool                 `json:"showInitiatives"`
 	InheritIssueEstimation   bool                 `json:"inheritIssueEstimation"`
@@ -763,6 +855,7 @@ type Project struct {
 	Lead                 *User                        `json:"lead,omitempty"`
 	CreatorID            string                       `json:"creatorId,omitempty"`
 	Creator              *User                        `json:"creator,omitempty"`
+	BotActor             *ActorBot                    `json:"botActor,omitempty"` // creation through an application or Flow's agent
 	MemberIDs            []string                     `json:"memberIds"`
 	LabelIDs             []string                     `json:"labelIds"`
 	TeamIDs              []string                     `json:"teamIds"`
@@ -1314,16 +1407,19 @@ type WorkspaceSettings struct {
 	GoogleAuthEnabled        bool                `json:"googleAuthEnabled"`
 	EmailAuthEnabled         bool                `json:"emailAuthEnabled"`
 	// AllowedAuthServices lists login methods for other domains (google, email, passkey, saml, appUser).
-	AllowedAuthServices          []string          `json:"allowedAuthServices,omitempty"`
-	DisableAdminBypass           bool              `json:"disableAdminBypass"`
-	InitiativePermission         string            `json:"initiativePermission,omitempty"`
-	LoopPermission               string            `json:"loopPermission,omitempty"`
-	ImportPermission             string            `json:"importPermission,omitempty"`
-	PinnedViewPermission         string            `json:"pinnedViewPermission,omitempty"`
-	AgentGuidancePermission      string            `json:"agentGuidancePermission,omitempty"`
-	AgentInstructions            string            `json:"agentInstructions,omitempty"`
-	PreventGuestAgents           bool              `json:"preventGuestAgents"`
-	AgentWebSearch               bool              `json:"agentWebSearch"`
+	AllowedAuthServices     []string `json:"allowedAuthServices,omitempty"`
+	DisableAdminBypass      bool     `json:"disableAdminBypass"`
+	InitiativePermission    string   `json:"initiativePermission,omitempty"`
+	LoopPermission          string   `json:"loopPermission,omitempty"`
+	ImportPermission        string   `json:"importPermission,omitempty"`
+	PinnedViewPermission    string   `json:"pinnedViewPermission,omitempty"`
+	AgentGuidancePermission string   `json:"agentGuidancePermission,omitempty"`
+	AgentInstructions       string   `json:"agentInstructions,omitempty"`
+	PreventGuestAgents      bool     `json:"preventGuestAgents"`
+	AgentWebSearch          bool     `json:"agentWebSearch"`
+	// AgentWebSearchDisabled turns Flow Agent's web access off. Web access is on by default's agent;
+	// AgentWebSearch above is the older opt-in flag and no longer decides it.
+	AgentWebSearchDisabled       bool              `json:"agentWebSearchDisabled"`
 	ExternalLoopTriggers         bool              `json:"externalLoopTriggers"`
 	MCPConnectorsEnabled         bool              `json:"mcpConnectorsEnabled"`
 	ReviewThirdPartyApplications bool              `json:"reviewThirdPartyApplications"`
@@ -1934,6 +2030,7 @@ type SubscriptionMutationInput struct {
 type AuditLogEntry struct {
 	ID           string         `json:"id"`
 	Actor        User           `json:"actor"`
+	BotActor     *ActorBot      `json:"botActor,omitempty"`
 	Action       string         `json:"action"`
 	ResourceType string         `json:"resourceType"`
 	ResourceID   string         `json:"resourceId"`
@@ -2071,6 +2168,7 @@ type Initiative struct {
 	Health               string                          `json:"health"`
 	Owner                *User                           `json:"owner,omitempty"`
 	Creator              User                            `json:"creator"`
+	BotActor             *ActorBot                       `json:"botActor,omitempty"` // creation through an application or Flow's agent
 	LeadTeamID           string                          `json:"leadTeamId,omitempty"`
 	ContributingTeamIDs  []string                        `json:"contributingTeamIds"`
 	LabelIDs             []string                        `json:"labelIds"`
@@ -2700,6 +2798,7 @@ type TeamSettingsMutationInput struct {
 	AgentSkills                         *[]TeamAgentSkill          `json:"agentSkills,omitempty"`
 	AgentConnectors                     *[]TeamAgentConnector      `json:"agentConnectors,omitempty"`
 	ProjectUpdatePrompt                 *string                    `json:"projectUpdatePrompt,omitempty"`
+	AgentGuidance                       *string                    `json:"agentGuidance,omitempty"`
 	ResolvedSummaries                   *bool                      `json:"resolvedThreadSummaries,omitempty"`
 	ShowInitiatives                     *bool                      `json:"showInitiatives,omitempty"`
 	InheritIssueEstimation              *bool                      `json:"inheritIssueEstimation,omitempty"`

@@ -1144,6 +1144,39 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/feedback": {
+      "post": {
+        "operationId": "post_agent_sessions_id_feedback",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/feedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. This route is not part of the typed public contract yet; see docs/api.md and the domain schemas.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/sessions/{id}/messages": {
       "post": {
         "operationId": "post_agent_sessions_id_messages",
@@ -1218,6 +1251,88 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/agent/sessions/{id}/messages/{messageId}/feedback": {
+      "put": {
+        "operationId": "put_agent_sessions_id_messages_messageId_feedback",
+        "tags": [
+          "agent"
+        ],
+        "summary": "PUT /api/agent/sessions/{id}/messages/{messageId}/feedback",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. This route is not part of the typed public contract yet; see docs/api.md and the domain schemas.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent/sessions/{id}/messages/{messageId}/restore": {
+      "post": {
+        "operationId": "post_agent_sessions_id_messages_messageId_restore",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/messages/{messageId}/restore",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. This route is not part of the typed public contract yet; see docs/api.md and the domain schemas.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/agent/sessions/{id}/messages/{messageId}/stream": {
       "patch": {
         "operationId": "patch_agent_sessions_id_messages_messageId_stream",
@@ -1225,6 +1340,47 @@
           "agent"
         ],
         "summary": "PATCH /api/agent/sessions/{id}/messages/{messageId}/stream",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. This route is not part of the typed public contract yet; see docs/api.md and the domain schemas.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-source": "main.go"
+      }
+    },
+    "/api/agent/sessions/{id}/messages/{messageId}/undo": {
+      "post": {
+        "operationId": "post_agent_sessions_id_messages_messageId_undo",
+        "tags": [
+          "agent"
+        ],
+        "summary": "POST /api/agent/sessions/{id}/messages/{messageId}/undo",
         "parameters": [
           {
             "name": "id",
@@ -25019,7 +25175,7 @@
   "components": {
     "schemas": {
       "ActorBot": {
-        "description": "ActorBot attributes a record to an OAuth application (\"<User> via <App>\"). It is stored on issues, comments, attachments, documents and activity when the request was authenticated with an OAuth token: - actor=user token: the record's user is the person who authorized the application; ActorBot names the application. - actor=app token with createAsUser: the record's user is the application user; UserDisplayName / UserAvatarURL name the external person the application acted for.",
+        "description": "ActorBot attributes a record to an OAuth application (\"<User> via <App>\"). It is stored on issues, comments, attachments, documents and activity when the request was authenticated with an OAuth token: - actor=user token: the record's user is the person who authorized the application; ActorBot names the application. - actor=app token with createAsUser: the record's user is the application user; UserDisplayName / UserAvatarURL name the external person the application acted for. - Flow's agent (Type \"agent\"): the record's user is the person the agent worked for (in-app chat) or the agent's own app user (comment threads and delegation); OnBehalfOfID / OnBehalfOfName name the person either way, so history reads \"Flow <did X> on behalf of <User>\".",
         "properties": {
           "avatarUrl": {
             "type": "string"
@@ -25028,6 +25184,13 @@
             "type": "string"
           },
           "name": {
+            "type": "string"
+          },
+          "onBehalfOfId": {
+            "description": "OnBehalfOfID / OnBehalfOfName name the person an agent acted for.",
+            "type": "string"
+          },
+          "onBehalfOfName": {
             "type": "string"
           },
           "type": {
@@ -25172,6 +25335,16 @@
           },
           "actor": {
             "$ref": "#/components/schemas/User"
+          },
+          "botActor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorBot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "createdAt": {
             "format": "date-time",
@@ -26156,6 +26329,17 @@
             },
             "type": "array"
           },
+          "botActor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorBot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "BotActor attributes the latest edit to an application or to Flow's agent."
+          },
           "content": {
             "type": "string"
           },
@@ -26310,6 +26494,17 @@
       "Initiative": {
         "description": "Initiative is the workspace-level planning aggregate above projects. ProjectIDs intentionally stores stable project IDs; list progress and health are projections computed by the client from the associated projects.",
         "properties": {
+          "botActor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorBot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "creation through an application or Flow's agent"
+          },
           "color": {
             "type": "string"
           },
@@ -27714,6 +27909,17 @@
               "string",
               "null"
             ]
+          },
+          "botActor": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActorBot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "creation through an application or Flow's agent"
           },
           "color": {
             "type": "string"

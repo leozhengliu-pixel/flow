@@ -1,4 +1,5 @@
 import type { ActivityEvent, BootstrapData } from '@/types/flow'
+import { isAgentBot, sameActivityActor } from '@/lib/actor-attribution'
 
 export type ActivityContext = Pick<BootstrapData, 'users' | 'projects' | 'labels' | 'cycles' | 'issues' | 'states'> & Partial<Pick<BootstrapData, 'releases' | 'reviews'>>
 type Translate = (text: string) => string
@@ -13,8 +14,18 @@ export function activityPartsText(parts: ActivityPart[]) {
   return parts.map(part => typeof part === 'string' ? part : part.label).join('')
 }
 
-function joinParts(groups: ActivityPart[][], separator: string): ActivityPart[] {
-  return groups.flatMap((group, index) => index ? [separator, ...group] : group)
+/** The word before the last of several changes: " and " ("…, … and …"); zh-CN "，并". */
+export function lastChangeSeparator(t: Translate): string {
+  return t('{changes} and {last}').match(/^\{changes\}([\s\S]*)\{last\}$/)?.[1] ?? ' and '
+}
+
+/** The separator between changes: ", " (zh-CN "，"). */
+export function changeSeparator(t: Translate): string {
+  return t('{changes}, {next}').match(/^\{changes\}([\s\S]*)\{next\}$/)?.[1] ?? ', '
+}
+
+function joinParts(groups: ActivityPart[][], separator: string, last = separator): ActivityPart[] {
+  return groups.flatMap((group, index) => index ? [index === groups.length - 1 ? last : separator, ...group] : group)
 }
 
 function mergeText(parts: ActivityPart[]): ActivityPart[] {
@@ -59,7 +70,8 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
     if (m.state) changes.push(m.stateBefore ? phrase('moved from {from} to {to}', { from: t(m.stateBefore), to: t(m.state) }) : phrase('moved to {state}', { state: t(m.state) }))
     if (m.title) changes.push(phrase('changed the title to {title}', { title: m.title }))
     if (m.priority) changes.push(phrase('set priority to {priority}', { priority: t(m.priority) }))
-    if ('assignee' in m) changes.push(text(!m.assignee ? t('removed the assignee') : m.assignee === event.actor.id ? t('assigned the issue to themselves') : person(m.assignee) ? activityPartsText(phrase('assigned the issue to {name}', { name: person(m.assignee)! })) : t('changed the assignee')))
+    // Flow's agent acts as the person it works for: "assigned the issue to Dev User", never "to themselves".
+    if ('assignee' in m) changes.push(text(!m.assignee ? t('removed the assignee') : m.assignee === event.actor.id && !isAgentBot(event.botActor) ? t('assigned the issue to themselves') : person(m.assignee) ? activityPartsText(phrase('assigned the issue to {name}', { name: person(m.assignee)! })) : t('changed the assignee')))
     if ('delegate' in m) changes.push(text(!m.delegate ? t('removed the delegate') : person(m.delegate) ? activityPartsText(phrase('delegated the issue to {name}', { name: person(m.delegate)! })) : t('changed the delegate')))
     if ('project' in m) {
       const project = context?.projects.find(item => item.id === m.project)
@@ -87,7 +99,8 @@ export function describeIssueActivityParts(event: ActivityEvent, context?: Activ
     else if ('recurrence' in m || 'nextOccurrenceAt' in m) changes.push(text(t('changed the recurring schedule')))
     // Document snapshots, subscribers, ordering, and before-values are audit metadata.
     // They do not produce standalone entries in the visible issue activity feed.
-    return changes.length ? mergeText(joinParts(changes, t(', '))) : null
+    // Like the reference app: "set priority to Urgent and set the estimate to 3", "…, … and …".
+    return changes.length ? mergeText(joinParts(changes, changeSeparator(t), lastChangeSeparator(t))) : null
   }
   if (event.type.startsWith('comment.') || event.type.includes('reaction') || event.type === 'issue.reacted') return null
   if (event.type === 'issue.releases_updated') {
@@ -127,4 +140,53 @@ export function activityTimeLabel(createdAt: string, now: number, locale: string
   const [size, unit, short] = seconds < 3600 ? [60, 'minute', 'm'] : seconds < 86400 ? [3600, 'hour', 'h'] : seconds < 604800 ? [86400, 'day', 'd'] : seconds < 2592000 ? [604800, 'week', 'w'] : seconds < 31536000 ? [2592000, 'month', 'mo'] : [31536000, 'year', 'y']
   const count = Math.floor(seconds / Number(size))
   return locale === 'zh-CN' ? new Intl.RelativeTimeFormat(locale, { numeric: 'always', style: 'short' }).format(-count, unit as Intl.RelativeTimeFormatUnit) : `${count}${short} ago`
+}
+
+/** Field families an `issue.updated` event can change (a family's before / id / type keys travel with it). */
+const ISSUE_FIELD_KEYS = ['state', 'title', 'priority', 'assignee', 'delegate', 'project', 'projectMilestone', 'cycle', 'labels', 'dueDate', 'estimate', 'parent', 'archived', 'recurrence', 'recurringNext', 'nextOccurrenceAt']
+
+/** How many fields an `issue.updated` event changed. */
+export function issueEventFieldCount(event: ActivityEvent): number {
+  const metadata = event.metadata ?? {}
+  return ISSUE_FIELD_KEYS.filter(key => key in metadata).length
+}
+
+/** Consecutive changes by the same actor this close together read as one history row (the reference app's coalesced rows). */
+export const ACTIVITY_COALESCE_WINDOW_MS = 2 * 60_000
+
+/**
+ * Whether `next` can join `previous` in one row: both are field changes by the same actor and attribution
+ * (a person, an application, or Flow's agent for the same person), close together, of the same automation,
+ * and they change different fields (changing one field twice stays two rows).
+ */
+export function canCoalesceIssueEvents(previous: ActivityEvent, next: ActivityEvent): boolean {
+  if (previous.type !== 'issue.updated' || next.type !== 'issue.updated' || !sameActivityActor(previous, next)) return false
+  const gap = new Date(next.createdAt).getTime() - new Date(previous.createdAt).getTime()
+  if (!(gap >= 0 && gap <= ACTIVITY_COALESCE_WINDOW_MS)) return false
+  const before = previous.metadata ?? {}
+  const after = next.metadata ?? {}
+  if ((before.automation ?? '') !== (after.automation ?? '')) return false
+  const fields = (metadata: Record<string, string>) => ISSUE_FIELD_KEYS.filter(key => key in metadata)
+  const changed = fields(before)
+  const adding = fields(after)
+  return changed.length > 0 && adding.length > 0 && !adding.some(key => changed.includes(key))
+}
+
+/** One event for both: the first one's id and position, every field either changed. */
+export function mergeIssueEvents(previous: ActivityEvent, next: ActivityEvent): ActivityEvent {
+  return { ...previous, metadata: { ...previous.metadata, ...next.metadata } }
+}
+
+/**
+ * Folds consecutive field changes into single rows; `events` must be in time order. `canJoin` can keep rows apart
+ * (the timeline keeps a comment posted between two changes between them).
+ */
+export function coalesceIssueEvents(events: ActivityEvent[], canJoin: (previous: ActivityEvent, next: ActivityEvent) => boolean = () => true): ActivityEvent[] {
+  const result: ActivityEvent[] = []
+  for (const event of events) {
+    const last = result.at(-1)
+    if (last && canCoalesceIssueEvents(last, event) && canJoin(last, event)) result[result.length - 1] = mergeIssueEvents(last, event)
+    else result.push(event)
+  }
+  return result
 }

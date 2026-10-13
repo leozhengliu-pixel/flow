@@ -25,6 +25,7 @@ import { filterEditorCommands } from './editor/editor-commands'
 import { SelectionToolbar } from './editor/selection-toolbar'
 import { showsSelectionToolbar } from './editor/selection-toolbar-visibility'
 import { structuredBlocks, type DescriptionSelectionActions } from './editor/structured-blocks'
+import { handleSelectionShortcut } from './editor/selection-shortcuts'
 import { DescriptionImage, insertImageFiles, type DescriptionImageUpload } from './editor/image-extension'
 import { DescriptionCallout, DescriptionCalloutSchema } from './editor/callout-extension'
 import { DescriptionDiagram } from './editor/diagram-extension'
@@ -122,6 +123,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   const [saveError, setSaveError] = useState<string | undefined>(recovery ? 'Unsaved local changes are available to download.' : undefined)
   const presenceRef = useRef(collaboration?.onPresence)
   submitRef.current = onSubmit
+  const selectionActionsRef = useRef(selectionActions)
+  selectionActionsRef.current = selectionActions
   presenceRef.current = collaboration?.onPresence
   const [slash, setSlash] = useState<SlashCommandState>(closedSlash)
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -222,6 +225,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       },
       handleKeyDown: (view, event) => {
         if (handleEditorSubmit(event, submitRef.current)) return true
+        if (handleSelectionShortcut(event, view.state.selection, view.state.doc, selectionActionsRef.current)) return true
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyU') {
           event.preventDefault()
           pickDescriptionFiles(files => insertPickedFiles(view, files, uploadImageRef.current))

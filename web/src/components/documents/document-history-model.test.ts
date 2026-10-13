@@ -56,3 +56,14 @@ describe('entryPreview', () => {
     expect(entryPreview(current, undefined, true).changes).toBe(0)
   })
 })
+
+describe('version attribution', () => {
+  it('keeps each version\'s "via Flow" attribution, and the creation\'s when there are no versions', () => {
+    const agent = { type: 'agent', name: 'Flow', onBehalfOfId: 'u1' }
+    const author = { id: 'u1', name: 'dev', displayName: 'Dev User' } as never
+    const base = { title: 'Doc', content: 'Now', creator: author, updatedAt: '2026-10-12T09:00:00Z' }
+    const withVersions = buildHistoryEntries({ ...base, revisions: [{ id: 'r1', documentId: 'd', title: 'Doc', content: 'Before', author, botActor: agent, createdAt: '2026-10-12T08:00:00Z' }] })
+    expect(withVersions.map(entry => entry.botActor?.name)).toEqual(['Flow', 'Flow'])
+    expect(buildHistoryEntries({ ...base, revisions: [], botActor: agent })[0].botActor).toEqual(agent)
+  })
+})

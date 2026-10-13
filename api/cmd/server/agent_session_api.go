@@ -336,7 +336,11 @@ func (s *server) agentSessionEventBody(ctx context.Context, app domain.Applicati
 	}
 	previous := agentPreviousComments(comments, trigger)
 	payload["previousComments"] = previous
-	guidance := agentGuidanceRules(data, task.TeamID)
+	guidanceTeamID := task.TeamID
+	if issue != nil && issue.Team.ID != "" {
+		guidanceTeamID = issue.Team.ID
+	}
+	guidance := agentGuidanceRules(data, guidanceTeamID)
 	payload["guidance"] = guidance
 	payload["agentSession"] = session
 	if task.Version > 1 {
@@ -386,12 +390,19 @@ func agentPreviousComments(comments []domain.Comment, trigger *domain.Comment) [
 	return result
 }
 
-// agentGuidanceRules lists the guidance an agent should follow: the
-// workspace's agent guidance (Settings › Agents).
+// agentGuidanceRules lists the guidance an agent should follow, like
+// The reference app's `guidance`: the workspace's agent guidance (Settings › Agents),
+// then the guidance of the session's team's parent teams and of the team
+// itself (Team settings › Agents), most specific last. Team rules carry the
+// team's id, key and name.
 func agentGuidanceRules(data domain.Bootstrap, teamID string) []map[string]any {
 	rules := []map[string]any{}
-	if body := strings.TrimSpace(data.WorkspaceSettings.AgentInstructions); body != "" {
-		rules = append(rules, map[string]any{"body": truncateSettingsText(body, 8000), "origin": "workspace"})
+	for _, rule := range agentGuidanceChain(data, teamID) {
+		item := map[string]any{"body": rule.Body, "origin": rule.Origin}
+		if rule.Origin == "team" {
+			item["teamId"], item["teamKey"], item["teamName"] = rule.TeamID, rule.TeamKey, rule.TeamName
+		}
+		rules = append(rules, item)
 	}
 	return rules
 }

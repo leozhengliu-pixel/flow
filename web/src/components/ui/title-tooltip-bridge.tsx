@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { TOOLTIP_DELAY, TOOLTIP_OFFSET, TOOLTIP_SKIP_DELAY } from './tooltip'
 
 /**
  * Renders native `title` attributes as Flow tooltips app-wide, so every hover hint shares the
@@ -8,7 +9,7 @@ import { createPortal } from 'react-dom'
  * tooltip) and restored afterwards; an element whose only accessible name was the title gets it as
  * `aria-label` in the meantime. Opt out with `data-native-title` on the element or an ancestor.
  */
-export function TitleTooltipBridge({ delay = 450, skipDelay = 300 }: { delay?: number; skipDelay?: number }) {
+export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_SKIP_DELAY }: { delay?: number; skipDelay?: number }) {
   const [tip, setTip] = useState<{ text: string; rect: DOMRect } | null>(null)
   const active = useRef<HTMLElement | null>(null)
   const timer = useRef<number | undefined>(undefined)
@@ -97,7 +98,7 @@ function TitleTooltip({ text, rect }: { text: string; rect: DOMRect }) {
   useLayoutEffect(() => {
     const node = ref.current
     if (!node) return
-    const width = node.offsetWidth, height = node.offsetHeight, gap = 6, pad = 8
+    const width = node.offsetWidth, height = node.offsetHeight, gap = TOOLTIP_OFFSET, pad = 8
     const below = rect.bottom + gap + height <= window.innerHeight - pad
     const left = Math.min(Math.max(rect.left + rect.width / 2 - width / 2, pad), Math.max(pad, window.innerWidth - width - pad))
     setPosition({ top: below ? rect.bottom + gap : Math.max(pad, rect.top - gap - height), left, side: below ? 'bottom' : 'top' })
@@ -108,6 +109,6 @@ function TitleTooltip({ text, rect }: { text: string; rect: DOMRect }) {
     className="flow-tooltip-content flow-tooltip-content--title"
     data-flow-motion="tooltip"
     data-side={position?.side ?? 'bottom'}
-    style={{ position: 'fixed', top: position?.top ?? rect.bottom + 6, left: position?.left ?? rect.left, visibility: position ? 'visible' : 'hidden', pointerEvents: 'none' }}
+    style={{ position: 'fixed', top: position?.top ?? rect.bottom + TOOLTIP_OFFSET, left: position?.left ?? rect.left, visibility: position ? 'visible' : 'hidden', pointerEvents: 'none' }}
   ><span className="flow-tooltip-copy">{text}</span></div>
 }

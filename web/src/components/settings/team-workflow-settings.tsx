@@ -114,6 +114,7 @@ import {
 import "./issues-projects-settings.css";
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 import { AgentSkillsIcon } from '@/components/agent/agent-icons'
+import { TeamAgentGuidanceSettings } from './team-agent-guidance'
 
 const SECTIONS: {
   id: TeamSettingsSection;
@@ -219,6 +220,7 @@ const TEAM_SECTION_DESCRIPTIONS: Partial<Record<TeamSettingsSection, string>> = 
   cycles:
     "Cycles create rhythm and focus with short, time-boxed planning windows. Automations can create future cycles, carry over unfinished work, and move issues in or out based on status.",
   workflow: "Manage issue automations, git workflows and other workflows",
+  agents: "AI agents can work alongside you as teammates. Tackle complex tasks together or delegate entire issues end-to-end.",
   triage: "Define how incoming issues and requests are handled in triage",
   notifications: "Connect a Slack channel to receive notifications when issues are created or updated in this team.",
   templates: "Any templates created here will be available when creating issues, projects, and documents within this team. To create templates that apply to all teams, do so in the workspace issue, project, or document templates sections.",
@@ -349,7 +351,12 @@ export function TeamWorkflowSettings({
           onOpenTeams={onOpenTeams}
         />
       )}
-  {section === "agents" && <TeamAgentsSettings data={data} />}
+      {section === "agents" && (
+        <>
+          <TeamAgentGuidanceSettings data={data} team={team} onReload={onReload} />
+          <TeamAgentsSettings data={data} />
+        </>
+      )}
       {section === "agent-connectors" && (
         <TeamAgentConnectorsSettings data={data} team={team} onReload={onReload} />
       )}

@@ -23,7 +23,7 @@ import { createRef, useCallback, useEffect, useMemo, useRef, useState, type Reac
 import { toast } from '@/lib/toast'
 
 import { DueDateCommand } from '@/components/issue/due-date-picker'
-import { FlowOptionsIcon } from '@/components/issue/flow-header-icons'
+import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon } from '@/components/issue/flow-header-icons'
 import { CalendarIcon } from '@/components/issue/issue-icons'
 import { ReleasesIcon } from '@/components/releases/release-icons'
 import { confirmAction } from '@/components/ui/action-dialog-service'
@@ -39,6 +39,8 @@ import { isMacPlatform } from '@/components/project-detail/project-detail-shortc
 import { RecurrenceDialog } from './recurrence-picker'
 import { MentionBody } from '@/components/editor/mentions/mention-body'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
+import { deleteRelation, refreshIssueSuggestions } from '@/lib/api'
+import { issueRemovableLinks, issueEverythingMarkdown, issueMarkdown, type IssueRemovableLink } from './issue-options-model'
 import type { ActivityEvent, BootstrapData, Issue, IssueRelationType, IssueUpdateInput } from '@/types/flow'
 
 export type RelatedIssueCreationKind = 'issue' | 'sub-issue' | 'parent' | 'blocked' | 'blocking' | 'copy'
@@ -79,7 +81,7 @@ interface IssueOptionsMenuProps {
   onShowDescriptionHistory?: () => void
 }
 
-type Submenu = 'release' | 'create' | 'mark' | 'copy' | 'convert' | 'remind'
+type Submenu = 'release' | 'create' | 'mark' | 'remove' | 'copy' | 'convert' | 'remind'
 type DialogName = 'link' | 'review' | 'related' | 'reminder' | 'loop' | 'history' | 'recurrence' | null
 
 export function IssueOptionsMenu({
@@ -114,7 +116,7 @@ export function IssueOptionsMenu({
   const [busy, setBusy] = useState(false)
   const parentFilterRef = useRef<HTMLInputElement>(null)
   const parentMenuRef = useRef<HTMLDivElement>(null)
-  const anchors = useMemo(() => Object.fromEntries(['due','release','create','mark','copy','convert','remind'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
+  const anchors = useMemo(() => Object.fromEntries(['due','release','create','mark','remove','copy','convert','remind'].map(key => [key, createRef<HTMLDivElement>()])) as Record<Submenu | 'due', RefObject<HTMLDivElement | null>>, [])
   const [focusNested, setFocusNested] = useState(false)
   const [highlight, setHighlight] = useState(false)
   const [rootQuery, setRootQuery] = useState('')
@@ -172,6 +174,24 @@ export function IssueOptionsMenu({
     const next = subscribed ? issue.subscriberIds.filter(id => id !== data.viewer.id) : [...issue.subscriberIds, data.viewer.id]
     void perform(() => onUpdate({ subscriberIds: next }), subscribed ? 'Unsubscribed from issue' : 'Subscribed to issue')
   }, [data?.viewer.id, issue.subscriberIds, onUpdate, perform, subscribed])
+
+  const removable = useMemo(() => data ? issueRemovableLinks(issue, data) : [], [data, issue])
+  const removeLink = (link: IssueRemovableLink) => {
+    closeMenu()
+    // The reference app removes the link at once, without a confirmation.
+    const work = link.kind === 'parent' ? onUpdate({ parentId: '' }) : deleteRelation(link.ownerId, link.relationId)
+    void work.catch(error => toast.error(error instanceof Error ? error.message : t('Could not remove relation')))
+  }
+  const findSuggestions = () => {
+    closeMenu()
+    // An open Triage Intelligence card runs it (and shows its progress); otherwise start the run here.
+    const handled = !window.dispatchEvent(new CustomEvent('flow:find-issue-suggestions', { detail: { issueId: issue.id }, cancelable: true }))
+    const started = handled ? Promise.resolve() : refreshIssueSuggestions(issue.id).then(() => undefined)
+    void started.then(
+      () => toast.info(t('Started identifying suggestions'), { description: t('Identifying suggestions for {identifier}.').replace('{identifier}', issue.identifier) }),
+      error => toast.error(error instanceof Error ? error.message : t('Could not refresh suggestions')),
+    )
+  }
 
   const beginAddLink = useCallback(() => {
     setLinkUrl('')
@@ -274,12 +294,13 @@ export function IssueOptionsMenu({
               <Separator/>
               <Option icon={<Repeat2/>} label="Create related" nested="create" anchor={anchors.create} expanded={submenu === 'create'} onHover={() => openNested('create')} onSelect={() => openNested('create', true)}/>
               <Option icon={<Link2/>} label="Mark as" nested="mark" anchor={anchors.mark} expanded={submenu === 'mark'} onHover={() => openNested('mark')} onSelect={() => openNested('mark', true)}/>
+              {removable.length > 0 && <Option icon={<X/>} label="Remove" nested="remove" anchor={anchors.remove} expanded={submenu === 'remove'} onHover={() => openNested('remove')} onSelect={() => openNested('remove', true)}/>}
               <Separator/>
               <Option icon={<Copy/>} label="Copy" nested="copy" anchor={anchors.copy} expanded={submenu === 'copy'} onHover={() => openNested('copy')} onSelect={() => openNested('copy', true)}/>
-              <Option icon={<RefreshCw/>} label="Convert into" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
+              <Option icon={<RefreshCw/>} label="Convert to" nested="convert" anchor={anchors.convert} expanded={submenu === 'convert'} onHover={() => openNested('convert')} onSelect={() => openNested('convert', true)}/>
               {actions && <Option icon={<Copy/>} label="Make a copy…" onSelect={() => actions.makeCopy ? void perform(actions.makeCopy) : beginRelated('copy')}/>}
               <Separator/>
-              <Option icon={<Star fill={favorited ? 'currentColor' : 'none'}/>} label={favorited ? 'Unfavorite' : 'Favorite'} shortcut="Option F" onSelect={() => {
+              <Option icon={<Star/>} glyph={favorited ? <FlowFavoriteFilledIcon/> : <FlowFavoriteIcon/>} label={favorited ? 'Remove from favorites' : 'Favorite'} shortcut="Option F" onSelect={() => {
                 if (actions) void perform(actions.toggleFavorite)
                 else {
                   closeMenu()
@@ -289,6 +310,7 @@ export function IssueOptionsMenu({
               <Option icon={<Bell/>} label="Remind me" shortcut="Shift H" nested="remind" anchor={anchors.remind} expanded={submenu === 'remind'} onHover={() => { if (actions) openNested('remind') }} onSelect={() => actions ? openNested('remind', true) : (closeMenu(), onRemind?.())}/>
               {data?.viewer.id && <Option icon={<Bell/>} label={subscribed ? 'Unsubscribe' : 'Subscribe'} shortcut="Shift S" onSelect={toggleSubscription}/>}
               <Separator/>
+              {data?.workspaceSettings.featureFlags['triage-intelligence'] && <Option icon={<Search/>} label="Find suggestions" onSelect={findSuggestions}/>}
               {data?.workspaceSettings.featureFlags.loops !== false && <Option icon={<Repeat2/>} label="Run loop…" onSelect={() => {
                 setLoopPrompt(issue.description)
                 openDialog('loop')
@@ -323,17 +345,20 @@ export function IssueOptionsMenu({
             <Option icon={<Link2/>} label="Blocking..." shortcut="M, then X" onSelect={() => chooseRelation('blocks')}/>
             <Option icon={<Copy/>} label="Duplicate of..." shortcut="M, then M" onSelect={() => chooseRelation('duplicate')}/>
           </SubmenuSurface>}
+          {submenu === 'remove' && <SubmenuSurface label="Remove" anchor={anchors.remove} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
+            {removable.map((link, index) => <RemoveOption key={link.key} link={link} separated={index > 0 && removable[index - 1].kind === 'parent'} onSelect={() => removeLink(link)}/>)}
+          </SubmenuSurface>}
           {submenu === 'copy' && <SubmenuSurface label="Copy" anchor={anchors.copy} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
             <Option icon={<Copy/>} label="Copy ID" shortcut="Command ." onSelect={() => void copy(issue.identifier, 'Issue ID copied to clipboard')}/>
             <Option icon={<Link/>} label="Copy URL" shortcut="Command Shift ," onSelect={() => void copy(url, 'Issue URL copied to clipboard')}/>
             <Option icon={<Copy/>} label="Copy title" shortcut="Command Shift '" onSelect={() => void copy(issue.title, 'Issue title copied to clipboard')}/>
             <Option icon={<Copy/>} label="Copy title as link" shortcut="Command C" onSelect={() => void copy(titleLink, 'Title link copied to clipboard')}/>
-            <Option icon={<Copy/>} label="Copy description as Markdown" onSelect={() => void copy(issue.description, 'Description copied to clipboard')}/>
-            <Option icon={<Copy/>} label="Copy content as Markdown" shortcut="Command Option C" onSelect={() => void copy(`# ${issue.title}\n\n${issue.description}`, 'Content copied to clipboard')}/>
+            <Option icon={<Copy/>} label="Copy issue as Markdown" onSelect={() => void copy(issueMarkdown(issue), 'Copied to clipboard')}/>
+            <Option icon={<Copy/>} label="Copy everything as Markdown" shortcut="Command Option C" onSelect={() => void copy(issueEverythingMarkdown(issue, url, data), 'Copied to clipboard')}/>
             <Option icon={<Copy/>} label="Copy git branch name" shortcut="Command Shift ." onSelect={() => void copy(configuredIssueBranch(issue,data), 'Branch name copied to clipboard','branch')}/>
             <Option icon={<Copy/>} label="Copy as prompt" shortcut="Command Option P" onSelect={() => void copy(issuePrompt, 'Prompt copied to clipboard','prompt')}/>
           </SubmenuSurface>}
-          {submenu === 'convert' && <SubmenuSurface label="Convert into" anchor={anchors.convert} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
+          {submenu === 'convert' && <SubmenuSurface label="Convert to" anchor={anchors.convert} autoFocus={focusNested} onReturn={returnToParent} onCloseAll={closeMenu}>
             <Option icon={<RefreshCw/>} label="Project..." onSelect={() => {
               if (actions) void confirmAction(`Convert ${issue.identifier} to a project?`,{description:'The original issue will be deleted.',confirmLabel:'Convert'}).then(confirmed=>{if(confirmed)return perform(() => actions.convert('project'), 'Converted to project')})
             }}/>
@@ -436,11 +461,11 @@ function IssueOptionsDialogFooter({ busy, disabled, action, onCancel, onSubmit }
   return <footer><button type="button" onClick={onCancel}>Cancel</button><button type="button" className="primary" disabled={disabled || busy} onClick={onSubmit}>{busy ? 'Working...' : action}</button></footer>
 }
 
-function Option({ icon, label, detail, shortcut, nested, anchor, expanded, danger, onHover, onSelect }: { icon: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; onHover?: () => void; onSelect?: () => void }) {
+function Option({ icon, glyph, label, detail, shortcut, nested, anchor, expanded, danger, onHover, onSelect }: { icon: ReactNode; /** Replaces the label's action glyph. */ glyph?: ReactNode; label: string; detail?: string; shortcut?: string; nested?: Submenu | 'due'; anchor?: RefObject<HTMLDivElement | null>; expanded?: boolean; danger?: boolean; onHover?: () => void; onSelect?: () => void }) {
   const { t } = useI18n()
   const text = t(label.replaceAll('...', '…'))
   return <Command.Item ref={anchor} className={`issue-options-item${danger ? ' danger' : ''}`} value={label} keywords={[text]} data-submenu={nested} data-submenu-open={expanded || undefined} aria-expanded={nested ? Boolean(expanded) : undefined} onPointerEnter={onHover} onSelect={onSelect}>
-    <span className="issue-options-icon" aria-hidden="true"><IssueActionGlyph label={label} fallback={icon}/></span>
+    <span className="issue-options-icon" aria-hidden="true">{glyph ?? <IssueActionGlyph label={label} fallback={icon}/>}</span>
     <span className="issue-options-label">{text}</span>
     {detail && <small className="issue-options-detail">{detail}</small>}
     {shortcut && <IssueOptionsShortcut value={shortcut}/>}
@@ -449,13 +474,28 @@ function Option({ icon, label, detail, shortcut, nested, anchor, expanded, dange
 }
 
 function IssueOptionsShortcut({ value }: { value: string }) {
-  const glyph: Record<string,string> = {Command:'⌘',Shift:'⇧',Option:'⌥',Control:'⌃',Ctrl:'⌃',Backspace:'⌫'}
+  // The reference app spells Control out as "Ctrl", even on macOS.
+  const glyph: Record<string,string> = {Command:'⌘',Shift:'⇧',Option:'⌥',Control:'Ctrl',Ctrl:'Ctrl',Backspace:'⌫'}
   const keys = value.split(' ').map(key => glyph[key] ?? key.replace(/^M,$/, 'M'))
-  return <span className="issue-options-shortcut"><span className="sr-only">{value}</span>{keys.map((key,index) => <kbd key={`${key}-${index}`}>{key}</kbd>)}</span>
+  // Sequences ("M, then R") put a plain "then" between the keys, not a key cap.
+  return <span className="issue-options-shortcut"><span className="sr-only">{value}</span>{keys.map((key,index) => key === 'then' ? <span className="issue-options-then" aria-hidden="true" key={`then-${index}`}>then</span> : <kbd key={`${key}-${index}`}>{key}</kbd>)}</span>
 }
 
 function Separator() {
   return <div className="issue-options-separator" role="separator"/>
+}
+
+/** "Remove ▸" row: "<Relation> <ID>" then the linked issue's title, muted. */
+function RemoveOption({ link, separated, onSelect }: { link: IssueRemovableLink; separated: boolean; onSelect: () => void }) {
+  const { t } = useI18n()
+  const label = `${t(link.label)} ${link.identifier}`
+  return <>
+    {separated && <Separator/>}
+    <Command.Item className="issue-options-item issue-options-remove-item" value={`${link.key} ${label} ${link.title}`} onSelect={onSelect}>
+      <span className="issue-options-icon" aria-hidden="true"><IssueActionGlyph label={link.glyph} fallback={<X/>}/></span>
+      <span className="issue-options-remove-text"><span className="issue-options-label" data-i18n-ignore>{label}</span><span className="issue-options-remove-title" data-i18n-ignore>{link.title}</span></span>
+    </Command.Item>
+  </>
 }
 
 function descriptionHistory(issue: Issue, activities: ActivityEvent[]) {

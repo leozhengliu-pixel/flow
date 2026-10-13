@@ -2,6 +2,7 @@ import { format } from 'date-fns'
 
 import type { Initiative, Project } from '@/types/flow'
 import { fiscalMonthOffset, fiscalYear } from '@/lib/runtime-preferences'
+import { openMemberInvite } from '@/lib/invite-navigation'
 
 type DateFormatter = (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string
 
@@ -29,10 +30,7 @@ export function formatProjectPropertyDate(
     : formatDate(`${value}T00:00:00`, { month: 'short', day: 'numeric' })
 }
 
-export function inviteProjectMember() {
-  const workspace = location.pathname.split('/').filter(Boolean)[0]
-  if (workspace) location.assign(`/${workspace}/members?invite=1`)
-}
+export const inviteProjectMember = openMemberInvite
 
 export function initiativeStatusLabel(status: Initiative['status']) {
   return status === 'active' ? 'Active' : status === 'canceled' ? 'Canceled' : status.charAt(0).toUpperCase() + status.slice(1)

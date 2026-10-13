@@ -20,3 +20,8 @@
 html:root .searchable-menu-scroll [role=menuitem]{position:relative;isolation:isolate}
 html:root .searchable-menu-scroll [role=menuitem][data-menu-active]{background:transparent;color:var(--pk-text)}
 html:root .searchable-menu-scroll [role=menuitem][data-menu-active]::before{content:"";position:absolute;inset:0 6px;z-index:-1;border-radius:8px;background:var(--pk-hover)}
+
+/* Number-key hints and group labels (assignee lists). */
+.searchable-menu-scroll [role=menuitem]>kbd{margin-left:auto;color:var(--pk-muted);font:500 11px/1.1 var(--font)}
+.searchable-menu-scroll [role=menuitem]>svg+kbd,.searchable-menu-scroll [role=menuitem]>kbd{flex:none}
+.searchable-menu-group{height:30px;display:flex;align-items:center;padding:8px 14px;color:var(--pk-muted);font:500 12px/normal var(--font)}

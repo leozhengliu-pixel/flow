@@ -260,7 +260,7 @@ export function DomainLabelsSettings({ data, resourceType, team, onReload }: { d
   const columnLabel = (column: LabelColumn) => t(({ title: 'Name', description: 'Description', team: 'Team', rules: 'Rules', usage: resourceType === 'issue' ? 'Issues' : resourceType === 'project' ? 'Projects' : 'Initiatives', lastAppliedAt: 'Last applied', createdAt: 'Created', archivedAt: 'Archived' } as Record<LabelColumn, string>)[column])
   const sort = (column: LabelColumn) => setDisplay({ ...display, ordering: column, descending: column === ordering ? !display.descending : column === 'rules' || column === 'usage' || column === 'archivedAt' })
 
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><div className="domain-labels-page" data-i18n-ignore>
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className="domain-labels-page" data-i18n-ignore>
     <header className="settings-page-header domain-labels-header">
       <div><h1>{t(`${team ? 'Team ' + noun.one : noun.one.charAt(0).toUpperCase() + noun.one.slice(1)} labels`)}</h1></div>
       <div className="settings-header-actions">

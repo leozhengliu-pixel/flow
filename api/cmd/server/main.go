@@ -65,6 +65,7 @@ type server struct {
 	agent                          appconfig.AgentConfig
 	agentClient                    *http.Client
 	agentPromptCacheOff            atomic.Bool // the provider rejected prompt_cache_key; later requests leave it out
+	agentNativeWebSearchOff        atomic.Bool // the provider rejected its hosted web search tool; later requests leave it out
 	tts                            appconfig.TTSConfig
 	ttsClient                      *http.Client
 	webSearch                      websearch.Provider // nil when no provider is configured
@@ -214,6 +215,7 @@ func newHandler(s *server) http.Handler {
 	}
 	s.store.SetRealtimeSink(s.publishRealtime)
 	s.store.SetWebhookSink(s.dispatchDomainEvent)
+	s.store.SetAgentReplyListener(s.notifyAgentReply)
 	s.startCoordination()
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
@@ -319,6 +321,10 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/agent/sessions/{id}/elicitations/{elicitationId}", s.resolveAgentElicitation)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/stop", s.stopAgentSession)
 	mux.HandleFunc("POST /api/agent/sessions/{id}/read", s.markAgentSessionRead)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/feedback", s.createAgentSessionFeedback)
+	mux.HandleFunc("PUT /api/agent/sessions/{id}/messages/{messageId}/feedback", s.updateAgentMessageFeedback)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/messages/{messageId}/undo", s.undoAgentMessageChanges)
+	mux.HandleFunc("POST /api/agent/sessions/{id}/messages/{messageId}/restore", s.restoreAgentMessageChanges)
 	mux.HandleFunc("GET /api/agent/skills", s.listAgentSkillsHTTP)
 	mux.HandleFunc("POST /api/agent/skills", s.createAgentSkill)
 	mux.HandleFunc("PATCH /api/agent/skills/{id}", s.updateAgentSkill)
@@ -2980,6 +2986,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if creator.ID != "" {
 			created.CreatorID = creator.ID
 			created.Creator = &creator
+			created.BotActor = viewerBotActor(data, creator)
 		}
 		if err := applyProjectUpdate(data, &created, input); err != nil {
 			return "", err
@@ -3136,7 +3143,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 	var created domain.Initiative
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -3146,6 +3153,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 		}
 		data.InitiativeUpdates[created.ID] = []domain.InitiativeUpdate{}
 		syncInitiativeProjects(data, created.ID, nil, created.ProjectIDs)
+		appendInitiativeAudit(data, nil, created)
 		return created.ID, nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
@@ -3164,11 +3172,13 @@ func (s *server) updateInitiative(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		before := slices.Clone(initiative.ProjectIDs)
+		previous := initiativeTrackedProperties(*initiative)
 		if err := applyInitiativeUpdate(data, initiative, input); err != nil {
 			return err
 		}
 		initiative.UpdatedAt = time.Now().UTC()
 		syncInitiativeProjects(data, id, before, initiative.ProjectIDs)
+		appendInitiativeAudit(data, previous, *initiative)
 		updated = *initiative
 		return nil
 	})
@@ -3808,6 +3818,7 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		}
 		project.Milestones = append(project.Milestones, created)
 		project.UpdatedAt = now
+		appendAudit(data, "milestone_created", "project", projectID, map[string]any{"milestoneId": created.ID, "milestoneName": created.Name})
 		return nil
 	})
 	respondMutation(w, err, http.StatusCreated, created)
@@ -3848,6 +3859,7 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		milestone.UpdatedAt = time.Now().UTC()
 		project.UpdatedAt = milestone.UpdatedAt
 		updated = *milestone
+		appendAudit(data, "milestone_updated", "project", projectID, map[string]any{"milestoneId": milestone.ID, "milestoneName": milestone.Name})
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
@@ -3903,10 +3915,15 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 			return err
 		}
 		before := len(project.Milestones)
+		removedName := ""
+		if index := slices.IndexFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == milestoneID }); index >= 0 {
+			removedName = project.Milestones[index].Name
+		}
 		project.Milestones = slices.DeleteFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == milestoneID })
 		if len(project.Milestones) == before {
 			return errNotFound
 		}
+		appendAudit(data, "milestone_deleted", "project", projectID, map[string]any{"milestoneName": removedName})
 		for index := range data.Issues {
 			if data.Issues[index].ProjectMilestoneID != nil && *data.Issues[index].ProjectMilestoneID == milestoneID {
 				data.Issues[index].ProjectMilestoneID = nil
@@ -5345,6 +5362,9 @@ func applyUpdate(data *domain.Bootstrap, issue *domain.Issue, input domain.Issue
 		issue.DocumentContent.ContentState = contentState
 		issue.DocumentContent.UpdatedAt = now
 		changes["documentContent"] = issue.DocumentContent.ID
+	}
+	if stateID := delegationStartedState(data, *issue, input); stateID != nil {
+		input.StateID = stateID
 	}
 	if input.StateID != nil {
 		value := stateForTeam(data, issue.Team.ID, *input.StateID)

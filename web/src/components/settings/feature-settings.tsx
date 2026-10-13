@@ -173,7 +173,7 @@ function LoopsWebSearchSettings({busy}:{busy:boolean}) {
       <FeatureRow title="Web search provider" description={config===undefined?undefined:available?t("Configured ({provider})").replace("{provider}",config.webSearchProvider||t("custom")):"Web search isn't configured for this workspace. A server administrator can enable it by setting FLOW_WEB_SEARCH_PROVIDER (tavily, brave or searxng)."}>
         <span className={`feature-status${available?" is-on":""}`}>{t(config===undefined?"Checking…":available?"Available":"Not configured")}</span>
       </FeatureRow>
-      <FeatureRow title="Web search in Flow Agent chat" description="Let Flow Agent search the web when answering in chat"><Toggle checked={config?.agentWebSearch===true} disabled={busy||!available} label="Web search in Flow Agent chat" onChange={value=>void setAgentWebSearch(value)}/></FeatureRow>
+      <FeatureRow title="Web search in Flow Agent chat" description={config?.agentNativeWebSearch&&!available?"Flow Agent searches with the AI provider's built-in web search and reads pages it links to.":"Let Flow Agent search the web when answering in chat"}><Toggle checked={config?.agentWebSearch===true} disabled={busy||config===undefined} label="Web search in Flow Agent chat" onChange={value=>void setAgentWebSearch(value)}/></FeatureRow>
     </FeatureCard>
   </FeatureSection></div>;
 }

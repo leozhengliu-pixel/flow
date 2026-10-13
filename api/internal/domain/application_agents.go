@@ -134,6 +134,18 @@ func (t *AgentTask) DeriveTimedState(now time.Time) {
 	if t.DeliveredAt != nil && (t.LastActivityAt == nil || t.LastActivityAt.Before(*t.DeliveredAt)) && now.Sub(*t.DeliveredAt) > AgentAcknowledgementWindow {
 		t.Unresponsive = true
 	}
+	if staleAt := t.StaleAt(); staleAt != nil && now.After(*staleAt) {
+		t.Status = "stale"
+	}
+}
+
+// StaleAt is when a pending or active session goes stale: AgentStaleAfter
+// after the agent's latest activity (or the latest delivery to it). It is nil
+// for other states and for sessions the agent has not been asked to work on.
+func (t AgentTask) StaleAt() *time.Time {
+	if t.Status != "pending" && t.Status != "active" {
+		return nil
+	}
 	last := t.LastActivityAt
 	if t.DeliveredAt != nil && (last == nil || last.Before(*t.DeliveredAt)) {
 		last = t.DeliveredAt
@@ -141,7 +153,9 @@ func (t *AgentTask) DeriveTimedState(now time.Time) {
 	if last == nil && t.Status == "active" {
 		last = &t.UpdatedAt
 	}
-	if last != nil && now.Sub(*last) > AgentStaleAfter {
-		t.Status = "stale"
+	if last == nil {
+		return nil
 	}
+	at := last.Add(AgentStaleAfter)
+	return &at
 }
