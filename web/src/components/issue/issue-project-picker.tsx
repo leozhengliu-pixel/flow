@@ -22,6 +22,7 @@ import {
 } from '@/components/projects-page/projects-relevance'
 
 import { NestingLine } from '@/components/ui/nesting-line'
+import { FlowTooltip } from '@/components/ui/tooltip'
 import './issue-project-picker.css'
 import { projectTemplateChoices } from '@/lib/project-template-choice'
 
@@ -102,12 +103,12 @@ export function IssueProjectPicker({ data, issue, grouped = false, presence = []
     searchPlaceholder={milestone ? t('Move to milestone…') : t('Add to milestone…')}
     searchShortcut="Shift M"
     ariaLabel={milestone ? `${t('Change milestone')}. ${milestone.name}` : t('Set milestone')}
-    triggerClassName="label-project-trigger issue-milestone-trigger"
+    triggerClassName={milestone ? 'label-project-trigger issue-milestone-trigger' : 'label-project-trigger issue-milestone-trigger is-empty'}
     trigger={<><MilestoneProgressIcon overdue={isMilestoneDateOverdue(milestone?.targetDate)} progress={milestone ? milestoneIssueProgress(data.issues, project.id, milestone.id) : undefined} unassigned={!milestone}/><span data-i18n-ignore={milestone ? true : undefined}>{milestone?.name ?? t('Set milestone')}</span></>}
     onChange={projectMilestoneId => onUpdate({ projectMilestoneId })}
     onCreate={async name => { const created = onCreateMilestone ? await onCreateMilestone(project.id, { name }) : await createProjectMilestoneRequest(project.id, { name }); setCreatedMilestones(current => ({ ...current, [project.id]: [...(current[project.id] ?? []), created] })); await onUpdate({ projectMilestoneId: created.id }) }}
   /> : null
-  const body = <><div className="issue-project-row">{projectMenu}{project && <a className="issue-project-open" href={`/${data.workspace.urlKey}/project/${project.slugId}/overview`} aria-label={t('Open project')}><OpenChevron/></a>}</div>{milestoneMenu&&<div className="issue-milestone-row">{grouped&&<NestingLine className="issue-milestone-nesting-line" heightAbove={14}/>}{milestoneMenu}</div>}</>
+  const body = <><div className="issue-project-row">{projectMenu}{project && <FlowTooltip label={t('Open project')}><a className="issue-project-open" href={`/${data.workspace.urlKey}/project/${project.slugId}/overview`} aria-label={t('Open project')}><span className="issue-project-open-hit"><OpenChevron/></span></a></FlowTooltip>}</div>{milestoneMenu&&<div className="issue-milestone-row">{grouped&&<NestingLine className="issue-milestone-nesting-line" heightAbove={14}/>}{milestoneMenu}</div>}</>
 
   return <>
     {grouped ? <div ref={rootRef}><section className="property-group issue-project-group"><h4>{t('Project')}</h4>{body}</section></div> : <div ref={rootRef} className="issue-project-property">{body}</div>}
