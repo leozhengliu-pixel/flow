@@ -101,10 +101,16 @@ func (s *server) agentApprovalForTurn(r *http.Request, data domain.Bootstrap, ca
 		name := agentToolBaseName(call.Name)
 		switch {
 		case strings.HasPrefix(name, "delete_"):
-			deletes = append(deletes, call)
-			for _, ref := range agentDeleteReferences(call) {
+			refs := agentDeleteReferences(call)
+			for _, ref := range refs {
 				targets = append(targets, s.agentApprovalTarget(r, data, name, ref))
 			}
+			// The approved call deletes exactly the item the preview showed: its id argument is pinned to the
+			// resolved id, so running it later never re-resolves the reference to something else.
+			if len(refs) == 1 {
+				call = agentPinnedDeleteCall(call, targets[len(targets)-1].ID)
+			}
+			deletes = append(deletes, call)
 		case name == "save_status_update":
 			var args struct {
 				ID string `json:"id"`
@@ -147,6 +153,97 @@ func (s *server) agentApprovalForTurn(r *http.Request, data domain.Bootstrap, ca
 		return nil
 	}
 	return approval
+}
+
+// agentPinnedDeleteCall returns call with its id argument replaced by the resolved id.
+func agentPinnedDeleteCall(call domain.AgentToolCall, id string) domain.AgentToolCall {
+	var args map[string]any
+	if strings.TrimSpace(id) == "" || json.Unmarshal(call.Arguments, &args) != nil {
+		return call
+	}
+	if current, ok := args["id"].(string); !ok || current == id {
+		return call
+	}
+	args["id"] = id
+	if raw, err := json.Marshal(args); err == nil {
+		call.Arguments = raw
+	}
+	return call
+}
+
+// agentIssueReferenceShape is an issue identifier (DEV-42) or internal issue id (issue_42).
+var agentIssueReferenceShape = regexp.MustCompile(`(?i)^(?:[a-z][a-z0-9]{0,9}-[0-9]{1,7}|issue_[a-z0-9]+)$`)
+
+// agentUngroundedIssueTarget returns the issue a delete_issue call, or a save_issue call that updates an existing
+// issue, names without the conversation ever having shown it, or "". The grounding is what the user wrote, the
+// loaded context and replies they saw (messages before historyEnd), and successful tool results; the model's own
+// arguments and text in this run do not count. Writing to an issue nobody looked up is a guess: a model asked to
+// create sub-issues of DEV-230 updated DEV-231…233 ("the next numbers"), unrelated issues that a later
+// "delete the sub-issues" then deleted.
+func agentUngroundedIssueTarget(call domain.AgentToolCall, messages []agentProviderMessage, historyEnd int) string {
+	var refs []string
+	switch agentToolBaseName(call.Name) {
+	case "delete_issue":
+		refs = agentDeleteReferences(call)
+	case "save_issue":
+		var args map[string]any
+		if json.Unmarshal(call.Arguments, &args) != nil {
+			return ""
+		}
+		if id, ok := args["id"].(string); ok && strings.TrimSpace(id) != "" {
+			refs = []string{normalizeAgentReference(id, true)}
+		}
+	default:
+		return ""
+	}
+	if len(refs) == 0 {
+		return ""
+	}
+	var seen strings.Builder
+	for index, message := range messages {
+		switch {
+		case message.ToolResult != nil:
+			if !message.ToolResult.IsError {
+				seen.WriteString(message.ToolResult.Content)
+			}
+		case message.Role == "assistant" && index >= historyEnd:
+			// This run's own text is not evidence.
+		default:
+			seen.WriteString(message.Content)
+		}
+		seen.WriteString("\n")
+	}
+	text := strings.ToUpper(seen.String())
+	for _, ref := range refs {
+		ref = strings.ToUpper(strings.TrimSpace(ref))
+		if !agentIssueReferenceShape.MatchString(ref) {
+			continue // not an id or identifier; the tool resolves (or rejects) it
+		}
+		if !agentTextMentionsReference(text, ref) {
+			return ref
+		}
+	}
+	return ""
+}
+
+// agentTextMentionsReference reports whether text holds ref as a whole token (DEV-23 is not in "DEV-231").
+func agentTextMentionsReference(text, ref string) bool {
+	for offset := 0; ; {
+		at := strings.Index(text[offset:], ref)
+		if at < 0 {
+			return false
+		}
+		start, end := offset+at, offset+at+len(ref)
+		if (start == 0 || !isASCIIWordByte(text[start-1]) && text[start-1] != '-') && (end == len(text) || !isASCIIWordByte(text[end])) {
+			return true
+		}
+		offset = start + 1
+	}
+}
+
+// agentUngroundedIssueMessage is the tool error for a write to an issue the conversation never showed.
+func agentUngroundedIssueMessage(ref string) string {
+	return fmt.Sprintf("Not run: %s has not appeared in this conversation (not in the user's request, the context or any tool result), so it may not be the issue you mean. To create an issue, call save_issue without id. To change or delete an existing issue, look it up first (get_issue, or list_issues with parentId for sub-issues) and use the id or identifier the result gives.", ref)
 }
 
 // agentApprovalTarget names one item a held call would change, for the preview.

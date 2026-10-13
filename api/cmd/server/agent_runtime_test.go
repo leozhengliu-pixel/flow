@@ -421,7 +421,7 @@ func TestAgentChatToolsAcceptChipTextIDs(t *testing.T) {
 		_, _ = io.WriteString(w, responsesCall("call_child", "save_issue", map[string]any{"title": "QA fix – Backend streaming export job", "team": data.Teams[0].ID, "parentId": strings.TrimSpace(chip)})+
 			responsesCall("call_parent", "save_issue", map[string]any{"id": chip, "priority": 1})+responsesCompleted)
 	}}
-	streamRuntime(t, handler, "/api/agent/sessions/stream", `{"message":"QA fix – break it down","location":"page"}`)
+	streamRuntime(t, handler, "/api/agent/sessions/stream", `{"message":"QA fix – break `+parent.Identifier+` down","location":"page"}`)
 	sessions := requestJSON[[]domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions", nil, http.StatusOK)
 	reply := sessions[0].Messages[len(sessions[0].Messages)-1]
 	for _, part := range reply.Parts {

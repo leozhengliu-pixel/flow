@@ -609,7 +609,7 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			_ = appendActivity("response", rebaseAgentWorkspaceLinks(turn.Text, data.Workspace.URLKey, agentLinkBaseURL(r)))
 			return
 		}
-		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
+		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
 		// Mid-task narration written with tool calls is not the answer; only the final turn's text is posted.
 		pending.Reset()
 		if index := slices.IndexFunc(turn.ToolCalls, func(call domain.AgentToolCall) bool { return call.Name == askUserTool }); index >= 0 {

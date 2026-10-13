@@ -105,7 +105,7 @@ func TestAgentChatBulkDeleteWaitsForApproval(t *testing.T) {
 			_, _ = io.WriteString(w, responsesText("Deleted both; they are in the trash."))
 		},
 	}
-	streamRuntime(t, handler, "/api/agent/sessions/stream", `{"message":"QA fix – delete the two QA fix issues","location":"page"}`)
+	streamRuntime(t, handler, "/api/agent/sessions/stream", `{"message":"QA fix – delete `+first.Identifier+` and `+second.Identifier+`","location":"page"}`)
 	if len(provider.bodies) != 1 {
 		t.Fatalf("the run must stop on the approval; provider calls = %d", len(provider.bodies))
 	}

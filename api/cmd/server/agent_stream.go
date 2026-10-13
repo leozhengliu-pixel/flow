@@ -291,6 +291,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	contextTeams := append(agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects)), agentInitiativeTeamIDs(initiatives)...)
 	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session), contextTeams...)
 	messages := agentProviderHistory(*session, system, agentIssueTitles(contextIssues))
+	// What the user has seen so far; this run's own assistant text does not ground a write (see agentUngroundedIssueTarget).
+	historyEnd := len(messages)
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
 	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
@@ -526,7 +528,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		if len(turn.ToolCalls) == 0 {
 			break
 		}
-		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
+		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
 		// A turn running several tools gets a phase title above their rows, named from the calls (no model call).
 		phaseKey := ""
 		if title := agentPhaseTitle(turn.ToolCalls); title != "" {
@@ -555,10 +557,21 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 		}
 		executed := make([]domain.AgentToolCall, 0, len(turn.ToolCalls))
+		// Updating or deleting an issue the conversation never showed is a guess: the call fails with an
+		// explanation instead of running (or being offered for approval).
+		ungrounded := map[string]string{}
+		grounded := make([]domain.AgentToolCall, 0, len(turn.ToolCalls))
+		for _, call := range turn.ToolCalls {
+			if ref := agentUngroundedIssueTarget(call, messages, historyEnd); ref != "" {
+				ungrounded[call.ID] = ref
+				continue
+			}
+			grounded = append(grounded, call)
+		}
 		// Bulk deletes and publishing an update the agent wrote itself wait for the user's approval.
 		var approval *domain.AgentApproval
 		if asked == "" && len(session.LoopIDs) == 0 {
-			approval = s.agentApprovalForTurn(r, data, turn.ToolCalls, agentLatestUserMessage(*session))
+			approval = s.agentApprovalForTurn(r, data, grounded, agentLatestUserMessage(*session))
 		}
 		held := map[string]bool{}
 		if approval != nil {
@@ -568,6 +581,28 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
+			if ref, ok := ungrounded[call.ID]; ok {
+				message := agentUngroundedIssueMessage(ref)
+				call.Status, call.Error = "error", message
+				call.Result, _ = json.Marshal(map[string]string{"error": message})
+				key := "tool:" + call.ID
+				index, found := partIndex[key]
+				if found {
+					parts[index].Status, parts[index].ToolCall = call.Status, cloneToolCall(&call)
+				} else {
+					index = len(parts)
+					partIndex[key] = index
+					parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: call.Status, ToolCall: cloneToolCall(&call)})
+				}
+				if writer != nil {
+					part := parts[index]
+					if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+						return domain.AgentSession{}, err
+					}
+				}
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
+				continue
+			}
 			if held[call.ID] {
 				if placeholder, ok := partIndex["tool:"+call.ID]; ok && parts[placeholder].Type == "toolCall" {
 					parts = removeAgentPart(parts, partIndex, placeholder)
