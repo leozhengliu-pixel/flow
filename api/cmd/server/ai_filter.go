@@ -64,6 +64,7 @@ func (s *server) aiIssueFilter(w http.ResponseWriter, r *http.Request) {
 	if len(fields) > 24 {
 		fields = fields[:24]
 	}
+	viewer := authUser(r)
 	known := map[string]map[string]string{}
 	var vocabulary strings.Builder
 	for _, field := range fields {
@@ -82,11 +83,16 @@ func (s *server) aiIssueFilter(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			known[field][option.ID] = label
-			parts = append(parts, fmt.Sprintf("%q=%s", option.ID, strings.ReplaceAll(label, "\n", " ")))
+			shown := label
+			if viewer.ID != "" && option.ID == viewer.ID && !strings.HasSuffix(label, "(me)") {
+				// "me", "my", "分配给我" resolve to the signed-in person even when the page did not mark them.
+				shown += " (me)"
+			}
+			parts = append(parts, fmt.Sprintf("%q=%s", option.ID, strings.ReplaceAll(shown, "\n", " ")))
 		}
 		fmt.Fprintf(&vocabulary, "%s: %s\n", field, strings.Join(parts, "; "))
 	}
-	prompt := fmt.Sprintf("Current user: %s\nToday: %s\nVocabulary (field: \"id\"=label):\n%s\nRequest: %s", firstNonEmpty(input.ViewerName, "unknown"), firstNonEmpty(input.Today, time.Now().UTC().Format("2006-01-02")), vocabulary.String(), input.Query)
+	prompt := fmt.Sprintf("Current user: %s\nToday: %s\nVocabulary (field: \"id\"=label):\n%s\nRequest: %s", firstNonEmpty(input.ViewerName, viewer.DisplayName, viewer.Name, "unknown"), firstNonEmpty(input.Today, time.Now().UTC().Format("2006-01-02")), vocabulary.String(), input.Query)
 	// Slower reasoning models routinely need more than 20s; follow the configured Agent timeout up to 60s.
 	timeout := 20 * time.Second
 	if s.agent.Timeout > timeout {

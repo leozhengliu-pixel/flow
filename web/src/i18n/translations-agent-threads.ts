@@ -12,4 +12,9 @@ export const agentThreadsZhCN: Record<string, string> = {
   "{name} is waiting for your input": "{name} 正在等待你的回复",
   "{name} ran into an error: {text}": "{name} 出错了：{text}",
   "{name} ran into an error": "{name} 出错了",
+  // The agent side panel on an issue, project, initiative or document.
+  "Ask about this {type}…": "询问这个{type}…",
+  "Ask anything about this {type}": "关于这个{type}，随便问",
+  "Ask anything or propose changes": "随便问，或提议修改",
+  "Loading conversation…": "正在加载对话…",
 };

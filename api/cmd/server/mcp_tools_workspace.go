@@ -1283,6 +1283,10 @@ func (s *server) saveMCPDocument(ctx context.Context, actor mcpActor, data domai
 		}
 	}
 	content, hasContent := args["content"].(string)
+	if hasContent && id == "" {
+		// The title is shown above the body; a new body that opens by repeating it as a heading would show it twice.
+		content = stripLeadingTitleHeading(content, stringArg(args, "title"))
+	}
 	if patches, ok := args["patch"].([]any); ok {
 		if hasContent {
 			return nil, fmt.Errorf("provide content or patch, not both")
@@ -1970,4 +1974,24 @@ func (s *server) mcpTeamRoles(ctx context.Context, data domain.Bootstrap, teamID
 		}
 	}
 	return roles
+}
+
+// stripLeadingTitleHeading drops a first Markdown heading that only repeats the title ("# Release checklist" in a
+// document titled "Release checklist"), with the blank lines after it.
+func stripLeadingTitleHeading(content, title string) string {
+	title = strings.Join(strings.Fields(title), " ")
+	if title == "" {
+		return content
+	}
+	trimmed := strings.TrimLeft(content, " \t\r\n")
+	line, rest, _ := strings.Cut(trimmed, "\n")
+	heading := strings.TrimSpace(line)
+	if !strings.HasPrefix(heading, "#") {
+		return content
+	}
+	heading = strings.TrimSpace(strings.TrimLeft(heading, "#"))
+	if !strings.EqualFold(strings.Join(strings.Fields(heading), " "), title) {
+		return content
+	}
+	return strings.TrimLeft(rest, " \t\r\n")
 }

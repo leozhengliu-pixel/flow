@@ -72,3 +72,24 @@ func TestAgentTaskPushesReachProjectAndDocumentViewers(t *testing.T) {
 		}
 	}
 }
+
+// Mentioning an agent in a workspace document (no team or project) or in a document attached to an issue starts a
+// session; before, such documents had no team and the mention was silently dropped.
+func TestAgentMentionInWorkspaceAndIssueDocumentsStartsSession(t *testing.T) {
+	s, handler, data, app := applicationFixture(t)
+	app.TeamIDs = []string{data.Issues[0].Team.ID}
+	app.InstalledBy = data.Viewer.ID
+	if _, err := s.store.InstallApplication(t.Context(), data.Workspace.URLKey, app, ""); err != nil {
+		t.Fatal(err)
+	}
+	body := map[string]any{"body": "@Agent look", "bodyData": map[string]any{"type": "doc", "content": []any{map[string]any{"type": "paragraph", "content": []any{map[string]any{"type": "mention", "attrs": map[string]any{"id": app.UserID, "label": "Agent"}}}}}}}
+	workspaceDoc := requestJSON[domain.Document](t, handler, "POST", "/api/documents", map[string]any{"title": "QA agent – workspace doc"}, 201)
+	issueDoc := requestJSON[domain.Document](t, handler, "POST", "/api/documents", map[string]any{"title": "QA agent – issue doc", "issueId": data.Issues[0].ID}, 201)
+	for _, doc := range []domain.Document{workspaceDoc, issueDoc} {
+		requestJSON[domain.Comment](t, handler, "POST", "/api/documents/"+doc.ID+"/comments", body, 201)
+		tasks := requestJSON[[]domain.AgentTask](t, handler, "GET", "/api/agent-tasks?resourceType=document&resourceId="+doc.ID, nil, 200)
+		if len(tasks) != 1 || tasks[0].TeamID != data.Issues[0].Team.ID {
+			t.Fatalf("%s: sessions = %+v", doc.Title, tasks)
+		}
+	}
+}

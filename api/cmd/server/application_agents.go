@@ -454,6 +454,10 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 	ctx = context.WithValue(ctx, workspaceKeyContextKey{}, task.WorkspaceKey)
 	ctx = context.WithValue(ctx, apiKeyContextKey{}, key)
 	ctx = store.ContextWithActor(ctx, user)
+	// Links in tool results and the reply point at the app the person uses, not the worker's internal host.
+	if base := s.loopAppURL(); base != "" {
+		ctx = context.WithValue(ctx, agentBaseURLKey{}, base)
+	}
 	r, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://flow.internal/api/agent-tasks/"+task.ID, nil)
 	data, err := s.applicationTaskContext(r, task, false)
 	if err != nil {
@@ -601,7 +605,8 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 			return
 		}
 		if len(turn.ToolCalls) == 0 {
-			_ = appendActivity("response", turn.Text)
+			// Links to this workspace's pages under a made-up host point at the app instead.
+			_ = appendActivity("response", rebaseAgentWorkspaceLinks(turn.Text, data.Workspace.URLKey, agentLinkBaseURL(r)))
 			return
 		}
 		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})

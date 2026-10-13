@@ -432,18 +432,23 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		}
 		for _, delta := range choice.Delta.ToolCalls {
 			call := calls[delta.Index]
-			if call == nil {
+			started := call == nil
+			if started {
 				call = &domain.AgentToolCall{ID: delta.ID, Status: "running"}
 				calls[delta.Index] = call
-				if err := emit(agentProviderEvent{Type: "tool.started", ToolCall: cloneToolCall(call)}); err != nil {
-					return err
-				}
 			}
 			if delta.ID != "" {
 				call.ID = delta.ID
 			}
 			call.Name += delta.Function.Name
 			call.Arguments = append(call.Arguments, delta.Function.Arguments...)
+			// The first chunk carries the call's name: announce the call with it, so its row reads "Creating issue…"
+			// rather than a nameless "Running tool…" (and load_tools is recognized and kept out of view).
+			if started {
+				if err := emit(agentProviderEvent{Type: "tool.started", ToolCall: cloneToolCall(call)}); err != nil {
+					return err
+				}
+			}
 			if delta.Function.Name != "" || delta.Function.Arguments != "" {
 				if err := emit(agentProviderEvent{Type: "tool.delta", Delta: delta.Function.Arguments, ToolCall: cloneToolCall(call)}); err != nil {
 					return err

@@ -131,4 +131,85 @@ describe('EntityAgentPanel', () => {
     )
     expect(await screen.findByText('Newer initiative chat')).toBeVisible()
   })
+
+  it('reopens a document’s own chat, never an unrelated one whose slug mentions "document"', async () => {
+    api.listAgentSessions.mockResolvedValue([
+      { ...session, id: 'unrelated', slugId: 'create-a-document-qa-agent-c4-meeting-notes-abc', title: 'QA Agent C4 Notes', issueIds: [], updatedAt: '2026-09-03T00:00:00Z' },
+      { ...session, id: 'own', title: 'Release checklist chat', issueIds: [], documentIds: ['document_1791896373053747000'], updatedAt: '2026-09-01T00:00:00Z' },
+    ])
+    render(
+      <I18nProvider>
+        <EntityAgentPanel open onRequestClose={vi.fn()} target={{ type: 'document', id: 'document_1791896373053747000', title: 'Release checklist' }}/>
+      </I18nProvider>,
+    )
+    expect(await screen.findByText('Release checklist chat')).toBeVisible()
+    expect(screen.queryByText('QA Agent C4 Notes')).not.toBeInTheDocument()
+  })
+
+  it('starts a new chat for a document no chat has in context', async () => {
+    api.listAgentSessions.mockResolvedValue([
+      { ...session, id: 'unrelated', slugId: 'create-a-document-qa-agent-c4-meeting-notes-abc', title: 'QA Agent C4 Notes', issueIds: [], updatedAt: '2026-09-03T00:00:00Z' },
+    ])
+    render(
+      <I18nProvider>
+        <EntityAgentPanel open onRequestClose={vi.fn()} target={{ type: 'document', id: 'document_1791896373053747000', title: 'Release checklist' }}/>
+      </I18nProvider>,
+    )
+    await waitFor(() => expect(api.listAgentSessions).toHaveBeenCalled())
+    expect(await screen.findByText('New chat')).toBeVisible()
+    expect(screen.queryByText('QA Agent C4 Notes')).not.toBeInTheDocument()
+  })
+
+  it('marks its chat as docked so the app does not also open it as the floating chat', async () => {
+    localStorage.removeItem('flow:closed-agent-sessions')
+    const docked = vi.fn()
+    window.addEventListener('flow:agent-session-docked', docked)
+    api.listAgentSessions.mockResolvedValue([{ ...session, id: 'initiative-chat', title: 'Initiative chat', issueIds: [], initiativeIds: ['initiative-1'] }])
+    render(
+      <I18nProvider>
+        <EntityAgentPanel open onRequestClose={vi.fn()} target={{ type: 'initiative', id: 'initiative-1', title: 'Payments Q4' }}/>
+      </I18nProvider>,
+    )
+    expect(await screen.findByText('Initiative chat')).toBeVisible()
+    await waitFor(() => expect(docked).toHaveBeenCalled())
+    expect(JSON.parse(localStorage.getItem('flow:closed-agent-sessions') ?? '[]')).toContain('initiative-chat')
+    window.removeEventListener('flow:agent-session-docked', docked)
+  })
+
+  it('answers the reply’s question when an option pill is picked', async () => {
+    const user = userEvent.setup()
+    const asking: AgentSession = {
+      ...session, id: 'asking', title: 'Asking chat', issueIds: [], initiativeIds: ['initiative-1'],
+      messages: [
+        { id: 'u1', role: 'user', content: 'Set the target date', createdAt: '2026-08-31T00:00:00Z' },
+        { id: 'a1', role: 'assistant', content: 'Which one?', createdAt: '2026-08-31T00:00:01Z', parts: [
+          { id: 'a1_q', type: 'question', status: 'pending', text: 'Which one?', question: { options: [{ label: 'Project', value: 'project' }, { label: 'Both', value: 'both' }], allowFreeText: true } },
+        ] },
+      ],
+    }
+    api.listAgentSessions.mockResolvedValue([asking])
+    streams.streamAgentSessionMessage.mockResolvedValue(asking)
+    render(
+      <I18nProvider>
+        <EntityAgentPanel open onRequestClose={vi.fn()} target={{ type: 'initiative', id: 'initiative-1', title: 'Payments Q4' }}/>
+      </I18nProvider>,
+    )
+    await user.click(await screen.findByRole('button', { name: 'Both' }))
+    await waitFor(() => expect(streams.streamAgentSessionMessage).toHaveBeenCalledWith('asking', 'Both', expect.any(Function), expect.anything(), { answer: { partId: 'a1_q', value: 'both' } }))
+  })
+
+  it('does not reload the chat when the host re-renders with a new but equal target', async () => {
+    api.listAgentSessions.mockResolvedValue([{ ...session, id: 'initiative-chat', title: 'Initiative chat', issueIds: [], initiativeIds: ['initiative-1'] }])
+    const view = (title: string) => (
+      <I18nProvider>
+        <EntityAgentPanel onSessionChange={vi.fn()} open onRequestClose={vi.fn()} target={{ type: 'initiative', id: 'initiative-1', title }}/>
+      </I18nProvider>
+    )
+    const { rerender } = render(view('Payments Q4'))
+    expect(await screen.findByText('Initiative chat')).toBeVisible()
+    rerender(view('Payments Q4'))
+    rerender(view('Payments Q4 (renamed)'))
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(api.listAgentSessions).toHaveBeenCalledTimes(1)
+  })
 })

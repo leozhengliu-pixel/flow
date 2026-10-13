@@ -66,9 +66,11 @@ export function AgentMentionInput({
     const matches = (text: string) => !needle || text.toLocaleLowerCase().includes(needle)
     const pageIds = new Set(pageIssues.map(issue => issue.id))
     const issue = (item: MentionIssue, group: string): MentionOption => ({ key: `issue:${item.id}`, type: 'issue', id: item.id, label: item.identifier, detail: item.title, icon: <StatusIcon state={item.state} size={14}/>, group })
-    const page = pageIssues.filter(item => matches(`${item.identifier} ${item.title}`)).map(item => issue(item, 'This page'))
+    // "DEV-2" lists DEV-2 itself first (then DEV-2…), before the slice cuts the list.
+    const ranked = <T extends MentionIssue>(items: T[]) => needle ? items.map((item, index) => ({ item, index, rank: issueMentionRank(item.identifier, needle) })).sort((a, b) => a.rank - b.rank || a.index - b.index).map(entry => entry.item) : items
+    const page = ranked(pageIssues.filter(item => matches(`${item.identifier} ${item.title}`))).map(item => issue(item, 'This page'))
     const users = data.users.filter(item => item.active && !item.app && matches(`${item.displayName} ${item.name} ${item.email}`)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `user:${item.id}`, type: 'user', id: item.id, label: item.displayName, icon: <UserAvatar className={styles.avatar} avatarUrl={item.avatarUrl} color={avatarColor(item.id)} name={item.displayName}/>, group: 'Users' }))
-    const issues = candidates.filter(item => !pageIds.has(item.id) && !item.archivedAt && matches(`${item.identifier} ${item.title}`)).slice(0, GROUP_LIMIT).map(item => issue(item, 'Issues'))
+    const issues = ranked(candidates.filter(item => !pageIds.has(item.id) && !item.archivedAt && matches(`${item.identifier} ${item.title}`))).slice(0, GROUP_LIMIT).map(item => issue(item, 'Issues'))
     const projects = needle ? data.projects.filter(item => !item.archivedAt && matches(item.name)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `project:${item.id}`, type: 'project', id: item.id, label: item.name, icon: <ProjectIcon size={14} style={{ color: item.color }}/>, group: 'Projects' })) : []
     const initiatives = needle ? (data.initiatives ?? []).filter(item => matches(item.name)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `initiative:${item.id}`, type: 'initiative', id: item.id, label: item.name, icon: <ViewGlyph color={item.color} icon={item.icon || 'Initiative'}/>, group: 'Initiatives' })) : []
     const documents = needle ? (data.documents ?? []).filter(item => matches(item.title)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `document:${item.id}`, type: 'document', id: item.id, label: item.title, icon: <FileText size={14}/>, group: 'Documents' })) : []
@@ -210,4 +212,12 @@ export function AgentMentionInput({
       {chip.option.detail ? <><span className={styles.identifier}>{chip.option.label}</span> {chip.option.detail}</> : chip.option.label}
     </>, chip.el, `${chip.option.key}:${index}`))}
   </div>
+}
+
+/** How well an issue identifier answers a mention query: the exact identifier, then identifiers starting with it. */
+function issueMentionRank(identifier: string, needle: string) {
+  const key = identifier.toLocaleLowerCase()
+  if (key === needle) return 0
+  if (key.startsWith(needle)) return 1
+  return 2
 }

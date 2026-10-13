@@ -105,7 +105,12 @@ export function agentChangeErrorMessage(message: string, t: (source: string) => 
 
 /** Entity keys ("document:doc_1") that have a result card, so the reference cards under the answer skip them. */
 export function agentChangeEntityKeys(message: Pick<AgentMessage, 'parts'>) {
-  return agentChangeCards(message).filter(card => card.kind && card.entityId).map(card => `${card.kind}:${card.entityId}`)
+  return agentChangeCards(message).filter(card => card.kind && card.entityId).flatMap(card => {
+    const keys = [`${card.kind}:${card.entityId}`]
+    // An issue the page has not loaded yet is referenced by its identifier ("DEV-12"), which is the card's label.
+    if (card.kind === 'issue' && /^[A-Z][A-Z0-9]*-\d+$/i.test(card.label)) keys.push(`issue:${card.label.toUpperCase()}`)
+    return keys
+  })
 }
 
 function textValue(value: unknown) {
