@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -512,14 +513,29 @@ func (s *SQLiteStore) ReplaceSCIMGroupMembers(ctx context.Context, workspaceID, 
 // Memberships introduced by SCIM are tracked separately so removing a user
 // from the IdP group does not remove a manually managed team membership.
 func (s *SQLiteStore) SyncSCIMGroupTeam(ctx context.Context, workspaceID, groupID, teamID string) error {
+	_, err := s.SyncSCIMGroupTeamChanges(ctx, workspaceID, groupID, teamID)
+	return err
+}
+
+// SyncSCIMGroupTeamChanges is SyncSCIMGroupTeam that also returns the team
+// memberships it added (origin scim) and removed, for the audit log. It only
+// removes memberships SCIM added itself (managed), and never a team owner.
+func (s *SQLiteStore) SyncSCIMGroupTeamChanges(ctx context.Context, workspaceID, groupID, teamID string) ([]domain.TeamMemberChange, error) {
 	teamID, groupID = strings.TrimSpace(teamID), strings.TrimSpace(groupID)
 	if workspaceID == "" || groupID == "" || teamID == "" {
-		return nil
+		return nil, nil
 	}
 	group, err := s.SCIMGroup(ctx, workspaceID, groupID)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	teamKey := ""
+	if data, _, ok := s.workspaceByID(workspaceID); ok {
+		if index := slices.IndexFunc(data.Teams, func(team domain.Team) bool { return team.ID == teamID }); index >= 0 {
+			teamKey = data.Teams[index].Key
+		}
+	}
+	changes := []domain.TeamMemberChange{}
 	nextMembers := map[string]bool{}
 	for _, member := range group.Members {
 		if strings.TrimSpace(member.UserID) != "" {
@@ -528,7 +544,7 @@ func (s *SQLiteStore) SyncSCIMGroupTeam(ctx context.Context, workspaceID, groupI
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT user_id,managed FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND group_id=?`, workspaceID, teamID, groupID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	previous := map[string]bool{}
 	for rows.Next() {
@@ -536,46 +552,47 @@ func (s *SQLiteStore) SyncSCIMGroupTeam(ctx context.Context, workspaceID, groupI
 		var managed int
 		if err := rows.Scan(&userID, &managed); err != nil {
 			rows.Close()
-			return err
+			return nil, err
 		}
 		previous[userID] = managed == 1
 	}
 	if err := rows.Close(); err != nil {
-		return err
+		return nil, err
 	}
 	stamp := time.Now().UTC().Format(time.RFC3339Nano)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer tx.Rollback()
 	if _, err = tx.ExecContext(ctx, `DELETE FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND group_id=?`, workspaceID, teamID, groupID); err != nil {
-		return err
+		return nil, err
 	}
 	for userID := range nextMembers {
 		var existingRole string
 		existingErr := tx.QueryRowContext(ctx, `SELECT role FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&existingRole)
 		managed := 0
 		if errors.Is(existingErr, sql.ErrNoRows) {
-			if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at) VALUES(?,?,?,?,?)`, workspaceID, teamID, userID, "member", stamp); err != nil {
-				return err
+			if _, err = tx.ExecContext(ctx, `INSERT INTO team_memberships(workspace_id,team_id,user_id,role,joined_at,origin) VALUES(?,?,?,?,?,?)`, workspaceID, teamID, userID, "member", stamp, domain.TeamMemberOriginSCIM); err != nil {
+				return nil, err
 			}
 			managed = 1
+			changes = append(changes, domain.TeamMemberChange{TeamID: teamID, TeamKey: teamKey, UserID: userID, Action: domain.TeamMemberAdded, RoleAfter: "member", Origin: domain.TeamMemberOriginSCIM})
 		} else if existingErr != nil {
-			return existingErr
+			return nil, existingErr
 		} else if previous[userID] {
 			managed = 1
 		} else {
 			var otherManaged int
 			if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND user_id=? AND group_id<>?`, workspaceID, teamID, userID, groupID).Scan(&otherManaged); err != nil {
-				return err
+				return nil, err
 			}
 			if otherManaged > 0 {
 				managed = 1
 			}
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO scim_team_memberships(workspace_id,team_id,group_id,user_id,managed,updated_at) VALUES(?,?,?,?,?,?)`, workspaceID, teamID, groupID, userID, managed, stamp); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	for userID, managed := range previous {
@@ -584,7 +601,7 @@ func (s *SQLiteStore) SyncSCIMGroupTeam(ctx context.Context, workspaceID, groupI
 		}
 		var otherGroups int
 		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM scim_team_memberships WHERE workspace_id=? AND team_id=? AND user_id=?`, workspaceID, teamID, userID).Scan(&otherGroups); err != nil {
-			return err
+			return nil, err
 		}
 		if otherGroups > 0 {
 			continue
@@ -595,15 +612,22 @@ func (s *SQLiteStore) SyncSCIMGroupTeam(ctx context.Context, workspaceID, groupI
 			continue
 		}
 		if membershipErr != nil {
-			return membershipErr
+			return nil, membershipErr
 		}
 		if strings.EqualFold(role, "member") {
 			if _, err = tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND team_id=? AND user_id=? AND role='member'`, workspaceID, teamID, userID); err != nil {
-				return err
+				return nil, err
 			}
+			changes = append(changes, domain.TeamMemberChange{TeamID: teamID, TeamKey: teamKey, UserID: userID, Action: domain.TeamMemberRemoved, RoleBefore: "member", Origin: domain.TeamMemberOriginSCIM})
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	slices.SortFunc(changes, func(a, b domain.TeamMemberChange) int {
+		return strings.Compare(a.Action+"\x00"+a.UserID, b.Action+"\x00"+b.UserID)
+	})
+	return changes, nil
 }
 
 func (s *SQLiteStore) recomputeSCIMUserRole(ctx context.Context, workspaceID, userID string) error {

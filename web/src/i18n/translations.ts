@@ -21,6 +21,7 @@ import { settingsAccessZhCN } from './translations-settings-access';
 import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
 import { webhookSettingsZhCN } from './translations-webhook-settings';
+import { teamMemberOriginsZhCN } from './translations-team-member-origins';
 import { agentMentionsZhCN } from './translations-agent-mentions';
 import { loopRunsZhCN } from './translations-loop-runs';
 import { agentStepsZhCN } from './translations-agent-steps';
@@ -2641,6 +2642,8 @@ export const zhCN: Record<string, string> = {
   "Issue view summary": "事项视图摘要",
   "Loading details": "正在加载详情",
   "Loading issues": "正在加载事项",
+  "Loading issue": "正在加载事项",
+  "Checking issue access": "正在检查事项访问权限",
   "Open command menu": "打开命令菜单",
   "See issues": "查看事项",
   "Comment options": "评论选项",
@@ -5840,6 +5843,7 @@ Object.assign(zhCN, settingsAccessZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
 Object.assign(zhCN, webhookSettingsZhCN);
+Object.assign(zhCN, teamMemberOriginsZhCN);
 Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
 Object.assign(zhCN, agentThreadsZhCN);

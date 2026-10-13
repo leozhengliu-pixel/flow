@@ -10,6 +10,7 @@ func (s *server) registerPublicAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/organization", s.getOrganization)
 	mux.HandleFunc("GET /api/teams", s.listTeamsConnection)
 	mux.HandleFunc("GET /api/teams/{id}", s.getTeamRecord)
+	s.registerTeamMemberRoutes(mux)
 	mux.HandleFunc("GET /api/users", s.listUsersConnection)
 	mux.HandleFunc("GET /api/users/{id}", s.getUserRecord)
 	mux.HandleFunc("GET /api/workflow-states", s.listWorkflowStatesConnection)

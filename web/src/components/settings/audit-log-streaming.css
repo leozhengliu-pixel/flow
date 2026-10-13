@@ -26,3 +26,12 @@
   justify-content: flex-end;
   gap: 8px;
 }
+.settings-audit-resource {
+  min-width: 0;
+  display: grid;
+}
+.settings-audit-resource small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

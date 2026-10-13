@@ -98,6 +98,10 @@ type TeamMember struct {
 	JoinedAt      time.Time `json:"joinedAt"`
 	Managed       bool      `json:"managed,omitempty"`
 	ManagedSource string    `json:"managedSource,omitempty"`
+	// Origin records what created the membership: manual, invitation, api,
+	// sync or scim (see team_membership.go). Rows from before origins were
+	// tracked read as manual.
+	Origin string `json:"origin,omitempty" enum:"manual,invitation,api,sync,scim"`
 }
 
 type Invitation struct {

@@ -2580,6 +2580,75 @@ export interface TeamConnection {
   totalCount?: number
 }
 
+export interface TeamMember {
+  joinedAt: string
+  managed?: boolean
+  managedSource?: string
+  /** Origin records what created the membership: manual, invitation, api, sync or scim (see team_membership.go). Rows from before origins were tracked read as manual. */
+  origin?: "manual" | "invitation" | "api" | "sync" | "scim"
+  role: string
+  teamId: string
+  userId: string
+}
+
+/** TeamMemberChange is one team membership a write added, removed or changed (or, in a dry run, would). */
+export interface TeamMemberChange {
+  /** Action is added, removed, role_changed or origin_changed. */
+  action: "added" | "removed" | "role_changed" | "origin_changed"
+  /** Inherited marks a parent-team membership added because the user joined one of its sub-teams. */
+  inherited?: boolean
+  /** Origin is the membership's origin (for a removal, the origin it had). */
+  origin: "manual" | "invitation" | "api" | "sync" | "scim"
+  originBefore?: string
+  roleAfter?: string
+  roleBefore?: string
+  teamId: string
+  teamKey?: string
+  userId: string
+  userName?: string
+}
+
+/** TeamMemberInput adds a member to a team or changes their role. Origin is manual, api or sync (invitation and scim are set by Flow); on an existing membership a given origin replaces the stored one. */
+export interface TeamMemberInput {
+  origin?: "manual" | "api" | "sync"
+  role?: "member" | "owner"
+}
+
+/** TeamMemberKept is a member a removal or sync left in place (or did not add), and why. */
+export interface TeamMemberKept {
+  origin?: string
+  /** Reason is owner, origin_mismatch, scim_managed, last_owner, sub_team_member, not_a_member or unknown_user. */
+  reason: "owner" | "origin_mismatch" | "scim_managed" | "last_owner" | "sub_team_member" | "not_a_member" | "unknown_user"
+  role?: string
+  teamId: string
+  userId: string
+  userName?: string
+}
+
+/** TeamMemberRemoval is the result of removing a member from a team. With dryRun nothing was written and Removed lists what would be removed. */
+export interface TeamMemberRemoval {
+  dryRun: boolean
+  kept: TeamMemberKept[]
+  removed: TeamMemberChange[]
+}
+
+/** TeamMemberSyncInput makes a team's membership match a directory. Members lists the user ids or emails that belong on the team. Users missing from the team are added with Origin (default sync); members not listed are removed only when their origin is in RemoveOrigins (default: Origin). Owners and SCIM-managed members are never removed, and manual members only when "manual" is listed explicitly. */
+export interface TeamMemberSyncInput {
+  dryRun?: boolean
+  members: string[]
+  origin?: "manual" | "api" | "sync"
+  removeOrigins?: string[]
+}
+
+/** TeamMemberSyncResult lists what a sync added, removed and kept (with dryRun: what it would). */
+export interface TeamMemberSyncResult {
+  added: TeamMemberChange[]
+  dryRun: boolean
+  kept: TeamMemberKept[]
+  removed: TeamMemberChange[]
+  skipped: TeamMemberKept[]
+}
+
 export interface TeamPartial {
   /** ArchivedAt marks a deleted team inside its restoration window. Archived teams and their issues are hidden from every viewer until restored or purged. */
   archivedAt?: string | null
