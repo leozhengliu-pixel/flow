@@ -20,7 +20,7 @@ import {
 import { DEFAULT_PROJECT_ISSUE_DISPLAY } from "./project-issue-display";
 import { ProjectDetailsSidebar } from "./project-details-sidebar";
 import { ProjectInsights } from "./project-insights";
-import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks';
+import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks';
 import { ProjectCustomerRequestsLauncher, ProjectCustomerRequestsPage } from "@/components/customer/project-customer-requests";
 import { projectCustomerRequests } from "@/components/customer/customer-request-events";
 import {
@@ -676,7 +676,11 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
           {tab === "requests" && props.issueData && (
             <ProjectCustomerRequestsPage data={props.issueData} project={displayedProject} issues={projectIssues} />
           )}
-          {tab === "activity" && <><ProjectActivity {...props} />{props.issueData&&<IssueAgentTasks resourceType="project" issue={{id:project.id}} data={props.issueData}/>}</>}
+          {/* Comment and update threads show their agent sessions inline (one task directory for the page); a session
+              without a source comment sits under the feed. */}
+          {tab === "activity" && (props.issueData
+            ? <IssueAgentTasksProvider resourceType="project" issue={{id:project.id}} data={props.issueData}><ProjectActivity {...props} /><IssueAgentTasks resourceType="project" issue={{id:project.id}} data={props.issueData} standalone/></IssueAgentTasksProvider>
+            : <ProjectActivity {...props} />)}
           {tab === "issues" &&
             (props.editingSavedView && activeSavedView ? (
               <ProjectNewView

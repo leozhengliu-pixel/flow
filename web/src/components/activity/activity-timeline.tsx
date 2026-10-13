@@ -6,7 +6,7 @@ import { AttributedAction, ViaApp } from '@/components/ui/via-app'
 import { activityActor, attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import { Composer } from '@/components/editor/composer'
 import { useRef, useState, type ReactNode } from 'react'
-import { useAgentCommentThreadIds, useStandaloneAgentSessions, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
+import { hasAgentThread, useAgentCommentThreadIds, useStandaloneAgentSessions, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import { toast } from '@/lib/toast'
 import { useActivityHighlight, useActivityHighlightTarget, type ActivityHighlightTarget } from './activity-highlight'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
@@ -59,7 +59,8 @@ export function ActivityTimeline({
   /** The viewer's explicit thread choices; participants follow threads implicitly. */
   threadSubscriptions?: ThreadSubscription[]
   onThreadSubscription?: (commentId: string, state: ThreadSubscriptionState | null) => Promise<void>
-  renderAgentThread?: (comment: Comment, controls: AgentThreadControls) => ReactNode
+  /** threadIds: the thread's comment and its replies (a session a reply started belongs to the thread too). */
+  renderAgentThread?: (comment: Comment, controls: AgentThreadControls, threadIds: string[]) => ReactNode
   /** Renders an agent session that has no source comment (a delegation); it sits at its chronological position. */
   renderAgentSession?: (taskId: string) => ReactNode
 }) {
@@ -108,6 +109,7 @@ export function ActivityTimeline({
       replies.set(comment.parentId, items)
     }
   }
+  const threadIdsOf = (rootId: string) => [rootId, ...(replies.get(rootId) ?? []).map((reply) => reply.id)]
   // Like the reference app, a thread reads oldest to newest with the reply box at the bottom, whatever order the page arrived in.
   for (const thread of replies.values()) thread.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   const topLevel = comments.filter((comment) => !comment.parentId || !commentIds.has(comment.parentId))
@@ -310,7 +312,7 @@ export function ActivityTimeline({
                       />
                     </article>
                   ))}
-                  {agentCommentIds.has(item.id) && renderAgentThread ? renderAgentThread(item, agentThreadControls(item)) : replying === item.id ? (
+                  {renderAgentThread && hasAgentThread(agentCommentIds, threadIdsOf(item.id)) ? renderAgentThread(item, agentThreadControls(item), threadIdsOf(item.id)) : replying === item.id ? (
                     <div className="comment-thread__composer">
                       <Composer
                         compact

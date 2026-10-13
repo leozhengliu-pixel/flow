@@ -19,6 +19,7 @@ import type { Comment, User } from '@/types/flow'
 import { commentMarkdown, type InlineThread } from './inline-comments-model'
 import { ViaApp } from '@/components/ui/via-app'
 import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
+import { hasAgentThread, useAgentCommentThreadIds, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 
 export interface ThreadActions {
   reply: (thread: InlineThread, body: string, bodyData?: Record<string, unknown>) => Promise<void>
@@ -46,11 +47,18 @@ export interface ThreadCardProps {
   style?: React.CSSProperties
   /** Resolved-comments panel: show the quote and "Reopen thread" instead of resolve. */
   variant?: 'gutter' | 'resolved'
+  /** The agent session a comment of this thread started; like the reference app it answers in the card and takes its reply row. */
+  renderAgentThread?: (threadIds: string[], controls: AgentThreadControls) => ReactNode
 }
 
-export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(function InlineThreadCard({ thread, viewer, users, active, canComment, canModerate, muted, actions, onActivate, style, variant = 'gutter' }, ref) {
+export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(function InlineThreadCard({ thread, viewer, users, active, canComment, canModerate, muted, actions, onActivate, style, variant = 'gutter', renderAgentThread }, ref) {
   const { t } = useI18n()
   const resolved = variant === 'resolved'
+  const agentThreads = useAgentCommentThreadIds()
+  const threadIds = [thread.root.id, ...thread.replies.map(reply => reply.id)]
+  const agentThread = renderAgentThread && hasAgentThread(agentThreads, threadIds)
+    ? renderAgentThread(threadIds, { following: !muted, onToggleSubscription: () => void actions.toggleThreadSubscription(thread), resolved: Boolean(thread.root.resolved), onResolve: canComment ? () => void actions.resolve(thread, !thread.root.resolved) : undefined })
+    : null
   return <TooltipProvider><div
     className={`document-thread-card${active ? ' is-active' : ''}${resolved ? ' is-resolved' : ''}`}
     data-thread-id={thread.root.id}
@@ -79,7 +87,7 @@ export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(func
       headerExtra={!resolved && canComment && <FlowTooltip label={t('Resolve thread')}><button aria-label={t('Resolve thread')} className="document-thread-icon" onClick={() => void actions.resolve(thread, true)} type="button"><Check size={14}/></button></FlowTooltip>}
     />
     {thread.replies.map(reply => <ThreadComment key={reply.id} comment={reply} viewer={viewer} users={users} canComment={canComment} canModerate={canModerate} actions={actions} thread={thread}/>)}
-    {!resolved && canComment && (active
+    {agentThread ?? (!resolved && canComment && (active
       ? <div className="document-thread-reply">
         <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
         <div className="document-thread-reply-composer"><Composer compact users={users} placeholder={t('Reply…')} onSubmit={(body, bodyData) => actions.reply(thread, body, bodyData)}/></div>
@@ -88,7 +96,7 @@ export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(func
         <UserAvatar avatarUrl={viewer.avatarUrl} className="document-thread-avatar" name={viewer.displayName || viewer.name}/>
         <span>{t('Reply…')}</span>
         <span aria-hidden className="document-thread-send"><ArrowUp size={14}/></span>
-      </button>)}
+      </button>))}
   </div></TooltipProvider>
 })
 

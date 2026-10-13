@@ -444,6 +444,21 @@ describe('ProjectActivity comment cards', () => {
     expect(menuRows(screen.getByRole('menu'))).toEqual(['Edit', '---', 'Copy link to comment', 'Copy content as Markdown', '---', 'New issue from comment…', '---', 'Delete'])
   })
 
+  it('opens and reveals the thread a #comment- deep link points into', async () => {
+    const reply = { ...root, id: 'c-reply', parentId: root.id, body: 'A reply', reactions: {} } as Comment
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => undefined)
+    window.history.replaceState(null, '', '/workspace/project/project-one/activity#comment-c-reply')
+    try {
+      render(<I18nProvider><ProjectActivity {...commentProps([root, reply])} /></I18nProvider>)
+      expect(screen.getByRole('button', { name: 'Open 1 comment' })).toHaveAttribute('aria-expanded', 'true')
+      expect(document.getElementById('comment-c-reply')).toBeInTheDocument()
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    } finally {
+      scrollIntoView.mockRestore()
+      window.history.replaceState(null, '', '/')
+    }
+  })
+
   it('toggles reactions through the reaction pills', async () => {
     const user = userEvent.setup()
     const props = commentProps([root])
@@ -502,7 +517,8 @@ describe('ProjectActivity mentions in update edits and update comments', () => {
     await user.keyboard('Plan @Launch')
     await user.click(await screen.findByRole('option', { name: /Launch plan/ }))
     await user.click(within(box.closest('.project-activity__comment-box') as HTMLElement).getByRole('button', { name: 'Comment' }))
-    await waitFor(() => expect(onCommentProjectUpdate).toHaveBeenCalledWith(props.project.id, 'update-1', 'Plan [Launch plan](/workspace/document/plan-abc)'))
+    // The editor JSON goes along, so a mentioned agent (a user mention node) can start a session on the comment.
+    await waitFor(() => expect(onCommentProjectUpdate).toHaveBeenCalledWith(props.project.id, 'update-1', 'Plan [Launch plan](/workspace/document/plan-abc)', expect.objectContaining({ type: 'doc' })))
   })
 
   it('shows what Flow did on behalf of a person: the creation and folded property changes', async () => {

@@ -75,7 +75,7 @@ export function DocumentAgentPanel({
       />
       {open && (
         <div className={styles.tasks}>
-          <IssueAgentTasks data={data} issue={{ id: document.id }} resourceType="document" />
+          <IssueAgentTasks data={data} issue={{ id: document.id }} resourceType="document" standalone />
         </div>
       )}
       {changesVisible && (

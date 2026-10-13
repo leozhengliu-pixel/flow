@@ -81,3 +81,12 @@ export function agentWorkingPhase(activities: ApplicationActivity[], t: (source:
   return `${name.replace(/[.…]+$/, '')}…`
 }
 
+
+/**
+ * How many messages a comment thread shows for one agent session (the agent's replies and the people's replies to it),
+ * for the thread's "N comments" count. A reply still streaming is not counted until it lands.
+ */
+export function agentThreadMessageCount(activities: ApplicationActivity[], status: string) {
+  const generating = status === 'pending' || status === 'active'
+  return agentThreadItems(activities).filter(item => item.kind === 'message' && !(generating && item.output)).length
+}

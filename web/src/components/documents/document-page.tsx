@@ -3,7 +3,7 @@ import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Link2, Menu, MoreHorizontal, Star } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
 import { DocumentAgentPanel } from '@/components/agent/document-agent-panel'
-import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
+import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -243,7 +243,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const displayTitle = documentDisplayTitle({ title }, t)
   const documentUrlLabel = t('Copy document URL')
 
-  return <main className={`main-panel document-page${agentOpen && !deleted ? ' has-agent' : ''}${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
+  // One agent task directory for the page: comment cards show their own sessions (the reference app answers inside the thread).
+  return <IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${agentOpen && !deleted ? ' has-agent' : ''}${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
     <header className="document-header">
       <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><Menu size={18}/></button>
       <DocumentBreadcrumb data={data} document={{ ...document, title }} origin={origin} onBack={onBack}/>
@@ -304,7 +305,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         </DocumentContentProvider>
         {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter} railOpen={agentOpen}/>}
       </div>
-      {!deleted && <EntityActivityPanel allowAgent entityId={document.id} entityTitle={displayTitle} entityType="document" emptyLabel="No activity yet"><IssueAgentTasks resourceType="document" issue={{ id: document.id }} data={data}/></EntityActivityPanel>}
+      {!deleted && <EntityActivityPanel allowAgent entityId={document.id} entityTitle={displayTitle} entityType="document" emptyLabel="No activity yet"><IssueAgentTasks resourceType="document" issue={{ id: document.id }} data={data} standalone/></EntityActivityPanel>}
     </article>
     {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}
     {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
@@ -313,7 +314,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     {agentOpen && !deleted && <aside className="document-agent-rail" aria-label={t('Entity agent panel')}>
       <DocumentAgentPanel key={agentPrompt ?? 'default'} data={data} document={document} contextIssues={linkedIssue ? [linkedIssue] : []} initialPrompt={agentPrompt} onRequestClose={() => { setAgentOpen(false); setAgentPrompt(undefined) }} open={agentOpen}/>
     </aside>}
-  </main>
+  </main></IssueAgentTasksProvider>
 }
 
 const NO_COMMENTS: Comment[] = []

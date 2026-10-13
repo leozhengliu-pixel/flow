@@ -658,8 +658,10 @@ function ProgressRing({ completed, engaged, total }: { completed: number; engage
   return <svg aria-hidden="true" className="project-details-sidebar__progress-ring" height="16" viewBox="0 0 16 16" width="16"><circle className="is-track" cx="8" cy="8" fill="none" r="7" strokeWidth="2"/><circle className="is-started" cx="8" cy="8" fill="none" r="7" strokeDasharray={`${startedLength} ${circumference}`} strokeLinecap="round" strokeWidth="2" transform={`rotate(${startedRotation} 8 8)`}/><circle className="is-completed" cx="8" cy="8" fill="none" r="7" strokeDasharray={`${completeLength} ${circumference}`} strokeLinecap="round" strokeWidth="2" transform="rotate(-90 8 8)"/></svg>
 }
 
+/** The sidebar's activity line for a project update (whole sentences, so the Chinese dictionary can translate them). */
+const UPDATE_EVENT_TEXT: Record<string, string> = { onTrack: 'posted an on track update', atRisk: 'posted an at risk update', offTrack: 'posted an off track update' }
 function projectEvents(project: Project, updates: ProjectUpdate[], viewer: User) {
-  const events: { id: string; kind: 'update' | 'created' | 'comment'; actor: string; text: string; date: string; at?: number }[] = updates.map(update => ({ id: update.id, kind: 'update' as const, at: Date.parse(update.createdAt), actor: update.user.displayName, text: `posted an ${update.health === 'noUpdate' ? '' : update.health.replace(/[A-Z]/g, match => ` ${match.toLowerCase()}`)} update`, date: formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true }) }))
+  const events: { id: string; kind: 'update' | 'created' | 'comment'; actor: string; text: string; date: string; at?: number }[] = updates.map(update => ({ id: update.id, kind: 'update' as const, at: Date.parse(update.createdAt), actor: update.user.displayName, text: UPDATE_EVENT_TEXT[update.health] ?? 'posted an update', date: formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true }) }))
   // Property values supplied when the project was created are part of the creation event, not later changes,
   // and the API keeps no property history, so no "changed priority" / "assigned lead" entries are synthesized here.
   // The reference app lists top-level project comments here as: <actor> commented “<text>” · <date>.

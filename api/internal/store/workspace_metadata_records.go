@@ -385,9 +385,15 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 		}
 	}
 	if key.field == "projects" {
-		var next, prior struct {
-			Comments []domain.Comment `json:"comments"`
+		if err := syncNewCommentMentions(ctx, tx, workspace, key.key, value.data, previous); err != nil {
+			return err
 		}
+	}
+	// A comment on a project update starts the mentioned agents' sessions on
+	// the project, like a project comment (the reference app answers in the update's
+	// thread).
+	if key.field == "projectUpdates" {
+		var next, prior metadataUpdate
 		if err := json.Unmarshal(value.data, &next); err != nil {
 			return err
 		}
@@ -396,19 +402,9 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 				return err
 			}
 		}
-		seen := map[string]bool{}
-		for _, comment := range prior.Comments {
-			seen[comment.ID] = true
-		}
-		for _, comment := range next.Comments {
-			if !seen[comment.ID] {
-				raw, err := json.Marshal(comment)
-				if err != nil {
-					return err
-				}
-				if err := syncApplicationMentions(ctx, tx, workspace, key.key, raw); err != nil {
-					return err
-				}
+		if next.Parent != "" && len(next.Item) > 0 {
+			if err := syncNewCommentMentions(ctx, tx, workspace, next.Parent, next.Item, prior.Item); err != nil {
+				return err
 			}
 		}
 	}
@@ -419,6 +415,39 @@ func writeMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, ke
 		return err
 	}
 	return syncMetadataSearchDocument(ctx, tx, workspace, key.field, key.key, value.data)
+}
+
+// syncNewCommentMentions starts application mention sessions for the
+// comments a record (a project, a project update) gained since previous.
+func syncNewCommentMentions(ctx context.Context, tx *sqlTx, workspace, resource string, data, previous []byte) error {
+	var next, prior struct {
+		Comments []domain.Comment `json:"comments"`
+	}
+	if err := json.Unmarshal(data, &next); err != nil {
+		return err
+	}
+	if len(previous) > 0 {
+		if err := json.Unmarshal(previous, &prior); err != nil {
+			return err
+		}
+	}
+	seen := map[string]bool{}
+	for _, comment := range prior.Comments {
+		seen[comment.ID] = true
+	}
+	for _, comment := range next.Comments {
+		if seen[comment.ID] {
+			continue
+		}
+		raw, err := json.Marshal(comment)
+		if err != nil {
+			return err
+		}
+		if err := syncApplicationMentions(ctx, tx, workspace, resource, raw); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func deleteMetadataRecordRow(ctx context.Context, tx *sqlTx, workspace string, key metadataRecordKey) error {
