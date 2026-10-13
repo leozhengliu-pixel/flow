@@ -1,0 +1,47 @@
+{
+  "name": "@flow/sdk",
+  "version": "0.2.0",
+  "description": "TypeScript SDK for the Flow REST API: typed client, pagination, errors, webhooks and OAuth helpers",
+  "license": "Apache-2.0",
+  "type": "module",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/leozhengliu-pixel/flow.git",
+    "directory": "sdk/typescript"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+      "require": { "types": "./dist/index.d.cts", "default": "./dist/index.cjs" }
+    },
+    "./webhooks": {
+      "import": { "types": "./dist/webhooks.d.ts", "default": "./dist/webhooks.js" },
+      "require": { "types": "./dist/webhooks.d.cts", "default": "./dist/webhooks.cjs" }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "generate": "node scripts/generate.mjs",
+    "generate:check": "node scripts/generate.mjs --check",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsup": "^8.5.1",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.1"
+  }
+}
