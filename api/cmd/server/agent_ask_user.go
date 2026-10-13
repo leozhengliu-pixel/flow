@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"flow/api/internal/domain"
 )
@@ -124,4 +127,96 @@ func answerAgentQuestion(session *domain.AgentSession, message string, answer *a
 		return "", fmt.Errorf("%w: there is no question waiting for an answer", errInvalid)
 	}
 	return "", nil
+}
+
+// partialJSONStringField reads the string value of a top-level key from JSON
+// that is still streaming in: the text so far, unescaped, even before its
+// closing quote has arrived ("" until the value starts).
+func partialJSONStringField(raw []byte, key string) string {
+	needle := []byte(`"` + key + `"`)
+	start := -1
+	for offset := 0; offset < len(raw); {
+		found := bytes.Index(raw[offset:], needle)
+		if found < 0 {
+			return ""
+		}
+		at := offset + found
+		if at == 0 || raw[at-1] != '\\' {
+			start = at + len(needle)
+			break
+		}
+		offset = at + 1
+	}
+	if start < 0 {
+		return ""
+	}
+	index := start
+	for index < len(raw) && (raw[index] == ' ' || raw[index] == '\n' || raw[index] == '\t' || raw[index] == '\r') {
+		index++
+	}
+	if index >= len(raw) || raw[index] != ':' {
+		return ""
+	}
+	index++
+	for index < len(raw) && (raw[index] == ' ' || raw[index] == '\n' || raw[index] == '\t' || raw[index] == '\r') {
+		index++
+	}
+	if index >= len(raw) || raw[index] != '"' {
+		return ""
+	}
+	index++
+	var out strings.Builder
+	for index < len(raw) {
+		char := raw[index]
+		switch {
+		case char == '"':
+			return out.String()
+		case char != '\\':
+			out.WriteByte(char)
+			index++
+			continue
+		}
+		if index+1 >= len(raw) {
+			return out.String()
+		}
+		switch escaped := raw[index+1]; escaped {
+		case 'n':
+			out.WriteByte('\n')
+		case 't':
+			out.WriteByte('\t')
+		case 'r':
+			out.WriteByte('\r')
+		case 'b':
+			out.WriteByte('\b')
+		case 'f':
+			out.WriteByte('\f')
+		case 'u':
+			if index+6 > len(raw) {
+				return out.String()
+			}
+			code, err := strconv.ParseUint(string(raw[index+2:index+6]), 16, 32)
+			if err != nil {
+				return out.String()
+			}
+			index += 6
+			if utf16.IsSurrogate(rune(code)) {
+				if index+6 > len(raw) {
+					return out.String()
+				}
+				low, err := strconv.ParseUint(string(raw[index+2:index+6]), 16, 32)
+				if err != nil || raw[index] != '\\' || raw[index+1] != 'u' {
+					return out.String()
+				}
+				out.WriteRune(utf16.DecodeRune(rune(code), rune(low)))
+				index += 6
+				continue
+			}
+			out.WriteRune(rune(code))
+			continue
+		default:
+			out.WriteByte(escaped)
+		}
+		index += 2
+	}
+	return out.String()
 }

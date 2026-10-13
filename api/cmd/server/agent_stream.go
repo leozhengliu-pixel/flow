@@ -414,6 +414,14 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 			if writer != nil {
 				part := parts[index]
+				// ask_user's question is the reply's closing text: stream it as it is written, like reply text, instead
+				// of a hidden tool row that only turns into the question once the call ends. The finished question
+				// replaces this part (it reuses the placeholder's id).
+				if event.ToolCall.Name == askUserTool {
+					part.Type, part.Status, part.ToolCall = "question", "running", nil
+					part.Text = partialJSONStringField(event.ToolCall.Arguments, "question")
+					part.Question = &domain.AgentQuestion{Options: []domain.AgentQuestionOption{}}
+				}
 				return writer.send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
 			}
 		}

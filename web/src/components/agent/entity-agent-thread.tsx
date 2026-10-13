@@ -324,7 +324,10 @@ export function EntityAgentThread({
         )}
         {streamOther.map(part => (
           <div className={styles.streamPart} key={part.id}>
-            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.type === 'error' ? <AgentErrorDetail error={part.text ?? ''} /> : part.text}
+            {part.type === 'elicitation' ? <AgentElicitation part={part} /> : part.type === 'error' ? <AgentErrorDetail error={part.text ?? ''} /> : part.type === 'question' && part.question
+              // ask_user's question streams while the model writes it; its options arrive with the finished call.
+              ? <AgentQuestionPrompt ariaLabel={t('AI message')} className={`${styles.messageDocument} agent-chat-document`} data={entityData} disabled part={part}/>
+              : part.text}
           </div>
         ))}
       </div>
