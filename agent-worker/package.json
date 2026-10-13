@@ -1,0 +1,38 @@
+{
+  "name": "@flow/agent-worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Flow agent runtime worker on the OpenAI Agents SDK (spike)",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.79",
+    "@modelcontextprotocol/client": "2.3.1",
+    "@openai/agents": "0.20.0",
+    "@openai/agents-extensions": "0.20.0",
+    "ai": "7.0.138",
+    "openai": "7.32.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts",
+    "cli": "tsx src/cli.ts",
+    "eval": "tsx src/eval.ts",
+    "concurrency": "tsx src/concurrency.ts",
+    "checks": "tsx src/checks.ts",
+    "cleanup": "tsx src/cleanup.ts",
+    "build": "tsc --noEmit false --outDir dist",
+    "report": "tsx src/report.ts",
+    "load": "tsx src/load.ts",
+    "long": "tsx src/long.ts",
+    "queue-worker": "tsx src/queue-worker.ts"
+  }
+}
