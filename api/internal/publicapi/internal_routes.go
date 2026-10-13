@@ -688,6 +688,17 @@ var InternalRoutes = []string{
 	"POST /api/workspaces/{workspaceKey}/members/{userId}/suspend",
 	"POST /api/workspaces/{workspaceKey}/teams",
 	"PUT /api/workspaces/{workspaceKey}/teams/{teamId}/members/{userId}",
+	// /internal (agent workers; authenticated by the worker secret or a run token)
+	"DELETE /internal/agent-runtime/runs/{id}/state",
+	"GET /internal/agent-runtime/runs/{id}/changes",
+	"GET /internal/agent-runtime/runs/{id}/payload",
+	"GET /internal/agent-runtime/runs/{id}/state",
+	"POST /internal/agent-runtime/claim",
+	"POST /internal/agent-runtime/runs/{id}/activities",
+	"POST /internal/agent-runtime/runs/{id}/complete",
+	"POST /internal/agent-runtime/runs/{id}/heartbeat",
+	"POST /internal/agent-runtime/runs/{id}/token",
+	"PUT /internal/agent-runtime/runs/{id}/state",
 	// /mcp
 	"POST /mcp",
 	"POST /mcp/readonly",

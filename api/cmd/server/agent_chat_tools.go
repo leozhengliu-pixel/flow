@@ -79,6 +79,8 @@ var agentToolGroups = []agentToolGroup{
 // the upload tools need file bytes the chat model does not have.
 var agentChatHiddenTools = map[string]bool{
 	agentProgressTool: true, "prepare_attachment_upload": true, "create_attachment_from_upload": true, "create_attachment": true,
+	// MCP-only tools (agentMCPOnlyTools) are not in the in-process agent's tool set at all.
+	"count_issues": true,
 }
 
 const agentLoadToolsTool = "load_tools"

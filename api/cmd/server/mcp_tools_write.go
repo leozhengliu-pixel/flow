@@ -188,6 +188,14 @@ func (s *server) saveMCPIssue(ctx context.Context, actor mcpActor, data domain.B
 			return nil, err
 		}
 	}
+	if team.ID == "" && id == "" {
+		// A sub-issue goes to its parent's team unless another team is named.
+		if parent := stringArg(args, "parentId"); parent != "" {
+			if issue, err := mcpFindIssue(data, parent); err == nil {
+				team = issue.Team
+			}
+		}
+	}
 	if team.ID == "" {
 		return nil, fmt.Errorf("team is required when creating an issue")
 	}

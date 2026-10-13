@@ -465,6 +465,31 @@
     }
   },
   {
+    "name": "mcp__flow.count_issues",
+    "access": "read",
+    "description": "Count the issues in the user's Flow workspace that match the filters, across every page. It takes the same filters as `list_issues` and returns `{count}`. Use it whenever the user asks how many issues there are, instead of counting `list_issues` results. For my issues, use \"me\" as the assignee. Use \"null\" for no assignee.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "assignee": { "type": ["string", "null"], "description": "User ID, name, email, or \"me\"" },
+        "createdAt": { "type": "string", "description": "Created after: ISO-8601 date/duration (e.g., -P1D)" },
+        "cycle": { "type": "string", "description": "Cycle name, number, or ID" },
+        "delegate": { "type": "string", "description": "Agent name or ID. When the user asks to delegate to \"Flow\" or \"the Flow agent\", this refers to the \"Flow\" app user specifically" },
+        "includeArchived": { "type": "boolean", "description": "Include archived items" },
+        "label": { "type": "string", "description": "Label name or ID" },
+        "parentId": { "type": "string", "description": "Parent issue ID or identifier (e.g., LIN-123)" },
+        "priority": { "type": "integer", "minimum": 0, "maximum": 4, "description": "0=None, 1=Urgent, 2=High, 3=Medium, 4=Low" },
+        "project": { "type": "string", "description": "Project name, ID, identifier (e.g., PROJ-123), or slug" },
+        "query": { "type": "string", "description": "Search issue title or description" },
+        "release": { "type": "string", "description": "Release ID or slug" },
+        "state": { "type": "string", "description": "State type, name, or ID" },
+        "team": { "type": "string", "description": "Team name or ID" },
+        "updatedAt": { "type": "string", "description": "Updated after: ISO-8601 date/duration (e.g., -P1D)" }
+      }
+    }
+  },
+  {
     "name": "mcp__flow.list_release_notes",
     "access": "read",
     "description": "List release notes in the workspace, optionally filtered by pipeline or covered release.",
@@ -575,7 +600,7 @@
   {
     "name": "mcp__flow.save_issue",
     "access": "write",
-    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`). Pass `archived` to archive or restore an existing issue.",
+    "description": "Create or update a Flow issue. If `id` is provided, updates the existing issue; otherwise creates a new one. When creating, `title` and `team` are required; a sub-issue created with `parentId` and no `team` goes to its parent's team. Note: use `assignee` (not `assigneeId`) to set the assignee — it accepts a user ID, name, email, or \"me\". To hand work to an AI agent, set `delegate` (with optional `delegateInstructions`). Pass `archived` to archive or restore an existing issue.",
     "input_schema": {
       "type": "object",
       "required": [],

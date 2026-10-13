@@ -37,6 +37,7 @@ type SQLiteStore struct {
 	realtimeSink     atomic.Pointer[func(string, domain.RealtimeEvent)]
 	webhookSink      atomic.Pointer[func(string, domain.DomainEvent)]
 	agentReplies     atomic.Pointer[AgentReplyListener] // see SetAgentReplyListener
+	agentRunWake     agentRunWaker                      // see AgentRunWake
 	coordinator      WorkspaceCoordinator
 	fixtureProfile   string
 	fixturePassword  string

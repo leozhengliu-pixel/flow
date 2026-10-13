@@ -84,6 +84,10 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 			raw, _ := json.Marshal(result.Content)
 			t.Fatalf("%s: %s", name, raw)
 		}
+		// Strict MCP clients reject a structuredContent that is not an object (list results are {items}).
+		if _, ok := result.StructuredContent.(map[string]any); result.StructuredContent != nil && !ok {
+			t.Errorf("%s: structuredContent is %T, not an object", name, result.StructuredContent)
+		}
 		seen[name] = true
 		return result.StructuredContent
 	}
@@ -105,7 +109,7 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		{"list_users", map[string]any{"team": team}}, {"get_user", map[string]any{"query": "me"}},
 		{"list_issue_statuses", map[string]any{"team": team}}, {"get_issue_status", map[string]any{"team": team, "name": "Todo"}},
 		{"list_issue_labels", map[string]any{"team": team}}, {"list_project_labels", nil}, {"list_initiative_labels", nil},
-		{"list_issues", map[string]any{"team": team, "limit": 2}}, {"list_cycles", map[string]any{"teamId": team}},
+		{"list_issues", map[string]any{"team": team, "limit": 2}}, {"count_issues", map[string]any{"team": team}}, {"list_cycles", map[string]any{"teamId": team}},
 		{"list_projects", nil}, {"get_project", map[string]any{"query": project}}, {"list_milestones", map[string]any{"project": project}},
 		{"list_initiatives", nil}, {"list_documents", nil}, {"get_document", map[string]any{"id": "contract-doc"}},
 		{"list_comments", map[string]any{"issueId": issue}}, {"get_status_updates", map[string]any{"type": "project"}},

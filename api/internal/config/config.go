@@ -49,7 +49,22 @@ type AgentConfig struct {
 	// NativeWebSearch lets chat search the web with the model provider's hosted search tool (OpenAI Responses
 	// web_search, Anthropic web_search) when no FLOW_WEB_SEARCH_PROVIDER is configured. On by default.
 	NativeWebSearch bool
+	// Runtime selects where built-in agent runs execute: "inprocess" (the API's own tool loop, the default) or
+	// "worker" (the agent-worker sidecar, claiming runs through the internal runtime API). FLOW_AGENT_RUNTIME.
+	Runtime string
+	// WorkerSecret authenticates agent workers on the internal runtime API (/internal/agent-runtime/*);
+	// FLOW_AGENT_WORKER_SECRET. The internal API is off while it is empty.
+	WorkerSecret string
+	// WorkspaceRunConcurrency caps the agent runs one workspace holds at a time on the worker runtime;
+	// FLOW_AGENT_WORKSPACE_CONCURRENCY.
+	WorkspaceRunConcurrency int
 }
+
+// Agent runtimes (AgentConfig.Runtime).
+const (
+	AgentRuntimeInProcess = "inprocess"
+	AgentRuntimeWorker    = "worker"
+)
 
 // TTSConfig configures text-to-speech for Pulse summaries ("Listen"). It
 // calls an OpenAI-compatible POST {BaseURL}/audio/speech endpoint. The base
@@ -177,6 +192,8 @@ func Load() (Config, error) {
 			Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second), MaxOutputTokens: integer("FLOW_AGENT_MAX_OUTPUT_TOKENS", 4096),
 			AnthropicVersion: value("FLOW_AGENT_ANTHROPIC_VERSION", "2023-06-01"), ToolsEnabled: boolean("FLOW_AGENT_TOOLS_ENABLED", true), WriteTools: boolean("FLOW_AGENT_WRITE_TOOLS", false),
 			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")), NativeWebSearch: boolean("FLOW_AGENT_NATIVE_WEB_SEARCH", true),
+			Runtime: strings.ToLower(value("FLOW_AGENT_RUNTIME", AgentRuntimeInProcess)), WorkerSecret: secret("FLOW_AGENT_WORKER_SECRET"),
+			WorkspaceRunConcurrency: integer("FLOW_AGENT_WORKSPACE_CONCURRENCY", 4),
 		},
 		TTS: TTSConfig{
 			Enabled: boolean("FLOW_TTS_ENABLED", false), BaseURL: strings.TrimRight(value("FLOW_TTS_BASE_URL", value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1")), "/"),
@@ -288,6 +305,9 @@ func (c Config) Validate() error {
 	if c.Agent.MaxOutputTokens < 1 || c.Agent.MaxOutputTokens > 131072 {
 		return fmt.Errorf("FLOW_AGENT_MAX_OUTPUT_TOKENS must be between 1 and 131072")
 	}
+	if err := c.Agent.validateRuntime(); err != nil {
+		return err
+	}
 	if c.TTS.Enabled && (c.TTS.BaseURL == "" || c.TTS.Model == "" || c.TTS.Voice == "") {
 		return fmt.Errorf("FLOW_TTS_BASE_URL, FLOW_TTS_MODEL and FLOW_TTS_VOICE are required when FLOW_TTS_ENABLED=true")
 	}
@@ -299,6 +319,26 @@ func (c Config) Validate() error {
 	}
 	if c.Telemetry.Enabled && c.Telemetry.Endpoint == "" && (c.Telemetry.TraceEndpoint == "" || c.Telemetry.MetricEndpoint == "") {
 		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT or both signal-specific trace and metric endpoints are required when telemetry is enabled")
+	}
+	return nil
+}
+
+// validateRuntime checks the agent runtime settings: the worker runtime needs a worker secret, and a secret must
+// be long enough to resist guessing (it guards an API that acts for any user).
+func (c AgentConfig) validateRuntime() error {
+	switch c.Runtime {
+	case "", AgentRuntimeInProcess, AgentRuntimeWorker:
+	default:
+		return fmt.Errorf("FLOW_AGENT_RUNTIME must be inprocess or worker")
+	}
+	if c.Runtime == AgentRuntimeWorker && c.WorkerSecret == "" {
+		return fmt.Errorf("FLOW_AGENT_WORKER_SECRET is required when FLOW_AGENT_RUNTIME=worker")
+	}
+	if c.WorkerSecret != "" && len(c.WorkerSecret) < 32 {
+		return fmt.Errorf("FLOW_AGENT_WORKER_SECRET must be at least 32 characters")
+	}
+	if c.WorkspaceRunConcurrency < 0 || c.WorkspaceRunConcurrency > 1000 {
+		return fmt.Errorf("FLOW_AGENT_WORKSPACE_CONCURRENCY must be between 1 and 1000")
 	}
 	return nil
 }

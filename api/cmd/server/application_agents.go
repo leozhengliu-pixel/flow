@@ -558,19 +558,10 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		}
 		return nil
 	}
-	issueTitle := agentIssueTitles(data.Issues)
-	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, data.Issues, nil, task.TeamID) + builtinTaskContext(task)}, {Role: "user", Content: agentModelUserText(builtinTaskPrompt(task, data), nil, issueTitle)}}
-	if task.ResourceType == "document" && len(data.Documents) == 1 {
-		messages[1].Content += "\nDocument: " + documentDisplayTitle(data.Documents[0].Title) + "\n" + data.Documents[0].Content
-	}
-	if task.ResourceType == "project" && len(data.Projects) == 1 {
-		messages[1].Content += "\nProject: " + data.Projects[0].Name + "\n" + data.Projects[0].Description
-	}
-	if web := agentWebAccess(data.WorkspaceSettings); web {
+	if agentWebAccess(data.WorkspaceSettings) {
 		r = r.WithContext(withAgentWebTools(r.Context()))
-		messages[0].Content += s.agentWebNote()
 	}
-	messages = append(messages, s.builtinThreadHistory(r, task, issueTitle)...)
+	messages := s.builtinThreadMessages(r, task, data, data.Issues)
 	latestPrompt := task.Prompt
 	if task.PendingTool != nil {
 		call := *task.PendingTool
@@ -694,6 +685,24 @@ func (s *server) executeBuiltinApplication(r *http.Request, app domain.Applicati
 		}
 	}
 	_ = appendActivity("error", "Agent reached its tool execution limit.")
+}
+
+// builtinThreadMessages is the conversation a built-in thread run starts from: the system prompt (rules, workspace,
+// team and personal guidance, contextIssues), the task prompt with the document or project it is about, and the
+// thread so far. The worker runtime reads the same conversation from the run payload.
+func (s *server) builtinThreadMessages(r *http.Request, task domain.AgentTask, data domain.Bootstrap, contextIssues []domain.Issue) []agentProviderMessage {
+	issueTitle := agentIssueTitles(data.Issues)
+	messages := []agentProviderMessage{{Role: "system", Content: workspaceAgentSystemPrompt(data, contextIssues, nil, task.TeamID) + builtinTaskContext(task)}, {Role: "user", Content: agentModelUserText(builtinTaskPrompt(task, data), nil, issueTitle)}}
+	if task.ResourceType == "document" && len(data.Documents) == 1 {
+		messages[1].Content += "\nDocument: " + documentDisplayTitle(data.Documents[0].Title) + "\n" + data.Documents[0].Content
+	}
+	if task.ResourceType == "project" && len(data.Projects) == 1 {
+		messages[1].Content += "\nProject: " + data.Projects[0].Name + "\n" + data.Projects[0].Description
+	}
+	if agentWebAccess(data.WorkspaceSettings) {
+		messages[0].Content += s.agentWebNote()
+	}
+	return append(messages, s.builtinThreadHistory(r, task, issueTitle)...)
 }
 
 // builtinThreadHistory is the thread so far as a conversation: the person's replies, and the agent's answers and

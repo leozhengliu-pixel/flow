@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 
 	"flow/api/internal/domain"
 )
@@ -294,4 +297,87 @@ func (s *server) mcpProjectIssueCount(ctx context.Context, actor mcpActor, proje
 		return 0, err
 	}
 	return int(page.Total), nil
+}
+
+// Batch deletes: every delete tool addressed by `id` also takes `ids`, so one call (and one bulk-delete approval)
+// carries all the targets of "delete these 3 sub-issues". Each target is deleted like a single call; the receipt
+// lists the per-item receipts and the targets that failed.
+
+// mcpBatchDeleteLimit caps the targets of one batch delete call.
+const mcpBatchDeleteLimit = 50
+
+// mcpBatchDeleteTools are the delete tools whose schema addresses the target by `id`.
+var mcpBatchDeleteTools = sync.OnceValue(func() map[string]bool {
+	tools := map[string]bool{}
+	var inventory []flowMCPTool
+	if json.Unmarshal(flowMCPToolInventory, &inventory) != nil {
+		return tools
+	}
+	for _, item := range inventory {
+		name := strings.TrimPrefix(item.Name, "mcp__flow.")
+		var schema struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		}
+		if strings.HasPrefix(name, "delete_") && json.Unmarshal(item.InputSchema, &schema) == nil && schema.Properties["id"] != nil {
+			tools[name] = true
+		}
+	}
+	return tools
+})
+
+// mcpBatchDeleteSchema adds `ids` to a delete tool's input schema (raw, decoded) and makes `id` optional.
+func mcpBatchDeleteSchema(schema map[string]any) {
+	properties, _ := schema["properties"].(map[string]any)
+	if properties == nil {
+		return
+	}
+	properties["ids"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 1, "maxItems": mcpBatchDeleteLimit,
+		"description": "Delete several items in one call: their IDs, instead of `id`."}
+	if required, ok := schema["required"].([]any); ok {
+		schema["required"] = slices.DeleteFunc(required, func(value any) bool { return value == "id" })
+	}
+}
+
+// callFlowBatchDelete runs a delete tool once per entry of args.ids.
+func (s *server) callFlowBatchDelete(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	if stringArg(args, "id") != "" {
+		return nil, fmt.Errorf("pass either id or ids, not both")
+	}
+	ids := []string{}
+	for _, id := range stringsArg(args, "ids") {
+		if id = strings.TrimSpace(id); id != "" && !slices.Contains(ids, id) {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("ids must name at least one item")
+	}
+	if len(ids) > mcpBatchDeleteLimit {
+		return nil, fmt.Errorf("ids can name at most %d items", mcpBatchDeleteLimit)
+	}
+	items := []any{}
+	failures := []map[string]string{}
+	for _, id := range ids {
+		single := maps.Clone(args)
+		delete(single, "ids")
+		single["id"] = id
+		result, err := s.callFlowTool(ctx, actor, name, single)
+		if err != nil {
+			failures = append(failures, map[string]string{"id": id, "error": err.Error()})
+			continue
+		}
+		items = append(items, result)
+	}
+	if len(items) == 0 {
+		messages := make([]string, 0, len(failures))
+		for _, failure := range failures {
+			messages = append(messages, failure["id"]+": "+failure["error"])
+		}
+		return nil, fmt.Errorf("nothing was deleted: %s", strings.Join(messages, "; "))
+	}
+	receipt := map[string]any{"deleted": len(items), "items": items}
+	if len(failures) > 0 {
+		receipt["errors"] = failures
+	}
+	return receipt, nil
 }
