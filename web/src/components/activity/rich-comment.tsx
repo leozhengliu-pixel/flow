@@ -9,8 +9,10 @@ import { DescriptionImage } from '@/components/issue/editor/image-extension'
 import { DescriptionFile, DescriptionVideo } from '@/components/issue/editor/file-extension'
 import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
 import '@/components/issue/issue-description-editor.css'
+import { useOptionalTranslate } from '@/i18n/i18n'
 
 export function RichComment({ body, data, version }: { body: string; data?: Record<string, unknown>; version?: number }) {
+  const t = useOptionalTranslate()
   const selection = data?.selection as { issueId?: string; text?: string; from?: number; to?: number } | undefined
   const initial = commentContent(body, data)
   const editor = useEditor({
@@ -19,7 +21,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
     extensions: [StarterKit.configure({ link: { openOnClick: false, autolink: true, linkOnPaste: true } }), Markdown, MentionChipNode, EmbedNode, DescriptionImage, DescriptionFile, DescriptionVideo, ...structuredBlocks],
     content: initial.content,
     contentType: initial.contentType,
-    editorProps: { attributes: { role: 'document', 'aria-label': 'Comment' } },
+    editorProps: { attributes: { role: 'document', 'aria-label': t('Comment') } },
   })
 
   const contentKey = useMemo(() => `${version ?? ''}:${body}:${data ? JSON.stringify(data) : ''}`, [body, data, version])
@@ -36,7 +38,7 @@ export function RichComment({ body, data, version }: { body: string; data?: Reco
   // After the content effect: the references in the new content become mentions (display only).
   useMentionConversion(editor, contentKey, true, !validDocument(data))
 
-  if (!editor) return <div aria-label="Comment" role="document"><p>{body}</p></div>
+  if (!editor) return <div aria-label={t('Comment')} role="document"><p>{body}</p></div>
   return <>{selection?.text && <button className="comment-selection-quote" type="button" onClick={() => window.dispatchEvent(new CustomEvent('flow-reveal-description-selection', { detail: selection }))}>{selection.text}</button>}<EditorContent editor={editor}/></>
 }
 

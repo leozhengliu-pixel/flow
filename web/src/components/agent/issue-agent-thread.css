@@ -98,3 +98,53 @@
    full width like a comment thread. */
 .issue-activity-timeline .timeline-item.agent-session{display:block;padding:8px 0}
 .issue-activity-timeline .timeline-item.agent-session .issue-agent-threads.is-standalone{margin-top:0;background:var(--agent-thread-surface);border-color:var(--agent-thread-border)}
+/* In a document's comment card (the reference app's inline thread), the agent's replies read like the card's other replies:
+   18px avatar header, the body flush under it (no avatar indent), 12px apart, no hairlines; the reply row spans the
+   card like its own "Reply…" row. */
+.issue-agent-threads.is-document-card{margin:0;border:0;background:transparent}
+.issue-agent-threads.is-document-card .issue-agent-thread+.issue-agent-thread{border-top:0}
+.issue-agent-threads.is-document-card .issue-agent-message{gap:6px;margin-top:12px;padding:0}
+.issue-agent-threads.is-document-card .issue-agent-message:before,.issue-agent-threads.is-document-card .issue-agent-working:before{content:none}
+.issue-agent-threads.is-document-card .issue-agent-message-header strong{color:var(--document-comment-name);line-height:18px}
+.issue-agent-threads.is-document-card .issue-agent-message-header time{margin-left:-3px;color:var(--document-comment-time);line-height:18px}
+.issue-agent-threads.is-document-card .issue-agent-message-body{padding:0;color:var(--document-comment-text);letter-spacing:-.00666667em}
+.issue-agent-threads.is-document-card .issue-agent-message-actions{top:-5px;right:-4px;padding:0;background:var(--document-comment-card-bg)}
+.issue-agent-threads.is-document-card .issue-agent-message-actions button{color:var(--theme-text-primary)}
+.issue-agent-threads.is-document-card .issue-agent-working{min-height:18px;margin-top:12px;padding:0}
+.issue-agent-threads.is-document-card .issue-agent-session-details{padding:12px 0 0}
+.issue-agent-threads.is-document-card .issue-agent-approval,.issue-agent-threads.is-document-card .issue-agent-thread-error{margin-left:0;margin-right:0;padding-left:0;padding-right:0}
+.issue-agent-threads.is-document-card .issue-agent-thread-footer{width:calc(100% + 24px);min-height:0;margin:12px -12px -12px;border-top:.5px solid var(--document-comment-card-border)}
+.issue-agent-threads.is-document-card .issue-agent-start-reply{min-height:48px;padding:12px 56px 12px 12px;color:var(--theme-text-tertiary)}
+.issue-agent-threads.is-document-card .issue-agent-start-reply .avatar,.issue-agent-threads.is-document-card .issue-agent-thread-footer .avatar{background:var(--theme-surface-active);color:var(--theme-text-secondary);font-weight:600}
+.issue-agent-threads.is-document-card .issue-agent-idle-tools{right:12px;top:12px;gap:4px}
+.issue-agent-threads.is-document-card .issue-agent-idle-tools button{width:24px;height:24px}
+.issue-agent-threads.is-document-card .issue-agent-thread-footer form{padding:12px}
+.issue-agent-threads.is-document-card .issue-agent-reply-tools{padding-left:27px}
+.document-inline-gutter.is-popover .issue-agent-threads.is-document-card .issue-agent-thread-footer{border-top-color:var(--document-popover-border)}
+.document-inline-gutter.is-popover .issue-agent-threads.is-document-card .issue-agent-message-actions{background:var(--document-popover-bg)}
+/* Project activity: in a project comment or update thread the agent's replies read like the thread's other replies
+   (flat rows, the body under the 18px avatar's name); the session's reply row ends the thread. */
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-threads.is-comment-thread{margin:0;border:0;background:transparent}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-thread{display:grid;gap:12px}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-thread+.issue-agent-thread{border-top:0;margin-top:12px}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-message{padding:0}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-message~.issue-agent-message:before,:is(.project-activity__thread,.project-activity__comments) .issue-agent-working:before{content:none}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-message-header{gap:8px}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-message-body{padding-left:26px}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-message-actions{top:-5px;right:-5px;padding-left:0;background:var(--pd-bg,var(--agent-thread-surface))}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-working{min-height:18px;padding:0}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-session-details{padding:0 0 0 26px}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-thread-footer{border:.5px solid var(--agent-thread-border);border-radius:8px;background:var(--agent-thread-surface)}
+:is(.project-activity__thread,.project-activity__comments) .issue-agent-thread-error,:is(.project-activity__thread,.project-activity__comments) .issue-agent-approval{margin-left:26px;padding-left:0}
+/* A project update's comments are compact rows (11px text): the agent's replies and its reply box follow them. */
+.project-activity__comments .issue-agent-thread{gap:9px}
+.project-activity__comments .issue-agent-message{gap:2px}
+.project-activity__comments .issue-agent-message-header strong{color:var(--theme-text-secondary);font-size:11px;line-height:18px}
+.project-activity__comments .issue-agent-message-header time{color:var(--theme-text-tertiary);font-size:10px}
+.project-activity__comments .issue-agent-message-body,.project-activity__comments .issue-agent-thread .agent-rich-text :is(p,li),.project-activity__comments .issue-agent-thread .issue-agent-message-body .issue-agent-markdown :is(p,li){color:var(--theme-text-secondary);font-size:11px;line-height:17px}
+.project-activity__comments .issue-agent-working-text{font-size:11px}
+.project-activity__comments .issue-agent-thread-footer{min-height:29px;border-radius:5px}
+.project-activity__comments .issue-agent-start-reply{min-height:29px;padding:5px 72px 5px 8px;font-size:11px;line-height:17px}
+.project-activity__comments .issue-agent-idle-tools{top:0;right:6px;gap:2px}
+.project-activity__comments .issue-agent-thread-footer form{padding:8px}
+.project-activity__comments .issue-agent-thread-footer textarea{min-height:34px;font-size:11px;line-height:17px}

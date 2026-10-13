@@ -98,7 +98,8 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
   placeholderRef.current = t(placeholder)
   const hintRef = useRef('Type / for commands…')
   hintRef.current = t('Type / for commands…')
-  const descriptionLabel = ariaLabel ?? t('Issue description')
+  // The editor is contenteditable, which the page translator leaves alone: its label is translated here.
+  const descriptionLabel = t(ariaLabel ?? 'Issue description')
   const initial = useMemo(() => parseDescriptionContent(value, state), []) // eslint-disable-line react-hooks/exhaustive-deps
   const rootRef = useRef<HTMLDivElement>(null)
   const commandsRef = useRef<EditorCommand[]>([])

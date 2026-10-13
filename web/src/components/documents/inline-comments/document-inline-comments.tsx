@@ -20,7 +20,9 @@ import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { documentPath } from '@/lib/app-routes'
-import { createDocumentComment, deleteDocumentComment, resolveDocumentComment, setDocumentThreadSubscription, toggleDocumentCommentReaction, updateDocumentComment } from '@/lib/api'
+import { createDocumentComment, deleteDocumentComment, resolveDocumentComment, setDocumentThreadSubscription, toggleDocumentCommentReaction, updateDocumentComment, uploadDocumentAttachment } from '@/lib/api'
+import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
+import type { AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import type { BootstrapData, Comment, FlowDocument } from '@/types/flow'
 import { findMarkRanges, findQuoteRange, INLINE_COMMENT_MARK, layoutGutter, type AnchorRange, type InlineThread } from './inline-comments-model'
 import { createInlineCommentsPlugin, inlineCommentsPluginKey, type InlineCommentsMeta, type InlineCommentsPluginState } from './inline-comments-plugin'
@@ -48,6 +50,11 @@ function newAnchorId() {
 
 function threadMuted(data: BootstrapData, document: FlowDocument, thread: InlineThread) {
   return (data.threadSubscriptions ?? []).some(item => item.userId === data.viewer.id && item.issueId === document.id && item.commentId === thread.root.id && item.state === 'muted')
+}
+
+/** An agent mentioned in a document comment answers inside the comment's card. */
+function useAgentThreadRenderer(data: BootstrapData, document: FlowDocument) {
+  return useCallback((threadIds: string[], controls: AgentThreadControls) => <IssueAgentTasks commentId={threadIds} data={data} issue={{ id: document.id }} onUpload={async file => (await uploadDocumentAttachment(document.id, file)).url} resourceType="document" teamId={document.teamIds[0]} threadControls={controls} variant="document"/>, [data, document.id, document.teamIds])
 }
 
 function useThreadActions({ data, document, editor, canEdit, onReload, onResolved }: { data: BootstrapData; document: FlowDocument; editor: Editor | null; canEdit: boolean; onReload: () => Promise<void>; onResolved?: (thread: InlineThread, resolved: boolean) => void }): ThreadActions {
@@ -159,6 +166,7 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
   const observer = useRef<ResizeObserver | null>(null)
   const cards = useRef(new Map<string, HTMLDivElement>())
   const actions = useThreadActions({ data, document, editor, canEdit, onReload, onResolved: (thread, resolved) => { if (resolved && active === thread.root.id) setActive(undefined) } })
+  const renderAgentThread = useAgentThreadRenderer(data, document)
   const canModerate = data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
   const threadKey = (thread: InlineThread) => thread.root.id
 
@@ -400,6 +408,7 @@ export function DocumentInlineComments({ data, document, comments, editor, shell
       muted={threadMuted(data, document, thread)}
       actions={actions}
       onActivate={() => setActive(thread.root.id)}
+      renderAgentThread={renderAgentThread}
       style={popover ? popoverStyle(thread.anchorId ? anchors.get(thread.anchorId) : undefined) : { top: tops.get(threadKey(thread)) ?? 0 }}
     />)}
   </div></TooltipProvider>
@@ -418,6 +427,7 @@ export function ResolvedCommentsPanel({ data, document, comments, editor, canCom
   const { t } = useI18n()
   const { resolved } = useInlineThreads(comments)
   const actions = useThreadActions({ data, document, editor, canEdit, onReload })
+  const renderAgentThread = useAgentThreadRenderer(data, document)
   const canModerate = data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
   useEffect(() => { if (!resolved.length) onClose() }, [onClose, resolved.length])
   // Selecting a resolved thread reveals the text it was written on.
@@ -443,6 +453,7 @@ export function ResolvedCommentsPanel({ data, document, comments, editor, canCom
         muted={threadMuted(data, document, thread)}
         actions={actions}
         onActivate={() => reveal(thread)}
+      renderAgentThread={renderAgentThread}
         variant="resolved"
       />)}
     </div>

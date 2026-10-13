@@ -83,6 +83,7 @@ export type ProjectDetailProps = {
     projectId: string,
     updateId: string,
     body: string,
+    bodyData?: Record<string, unknown>,
   ) => Promise<ProjectUpdate>;
   onReactProjectUpdate: (
     projectId: string,

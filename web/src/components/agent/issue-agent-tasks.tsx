@@ -70,7 +70,7 @@ function useTaskDirectory(issue: Resource, data: BootstrapData, resourceType: Re
       window.removeEventListener('flow-issue-history-changed', changed)
     }
   }, [enabled, available, data.workspace.urlKey, issue.id, issue.agentSessionId, resourceType, revision])
-  return { key, tasks, error, refresh: () => setRevision(value => value + 1) }
+  return { key, workspace: data.workspace.urlKey, tasks, error, refresh: () => setRevision(value => value + 1) }
 }
 
 export function IssueAgentTasksProvider({ issue, data, resourceType = 'issue', children, onUpload }: { issue: Resource; data: BootstrapData; resourceType?: ResourceType; children: ReactNode; onUpload?: (file: File) => Promise<string> }) {
@@ -88,20 +88,24 @@ function byCreation(tasks: ApplicationTask[]) {
   return [...tasks].sort((a, b) => (Date.parse(taskCreatedAt(a)) || 0) - (Date.parse(taskCreatedAt(b)) || 0) || a.id.localeCompare(b.id))
 }
 
-export function IssueAgentTasks({ issue, data, resourceType = 'issue', commentId, taskId, standalone = false, onUpload, threadControls, teamId }: { issue: Resource; data: BootstrapData; resourceType?: ResourceType; commentId?: string; /** Show only this session (the activity timeline places standalone sessions one by one). */ taskId?: string; standalone?: boolean; onUpload?: (file: File) => Promise<string>; /** The comment thread's own controls (subscription, resolve, sub-issues) for the agent replies' menu. */ threadControls?: AgentThreadControls; /** Team used by "New issue from comment". */ teamId?: string }) {
+/** Where a thread's sessions render: an activity comment thread (issue, project, project update) or a document's comment card. */
+export type AgentThreadVariant = 'thread' | 'document'
+
+export function IssueAgentTasks({ issue, data, resourceType = 'issue', commentId, taskId, standalone = false, onUpload, threadControls, teamId, variant = 'thread' }: { issue: Resource; data: BootstrapData; resourceType?: ResourceType; /** The thread's comment, or all of its comments (a session started from a reply in the thread belongs to it too). */ commentId?: string | readonly string[]; /** Show only this session (the activity timeline places standalone sessions one by one). */ taskId?: string; standalone?: boolean; onUpload?: (file: File) => Promise<string>; /** The comment thread's own controls (subscription, resolve, sub-issues) for the agent replies' menu. */ threadControls?: AgentThreadControls; /** Team used by "New issue from comment". */ teamId?: string; variant?: AgentThreadVariant }) {
   const { t } = useI18n()
   const shared = useContext(TaskDirectory)
   const matches = shared?.key === `${data.workspace.urlKey}:${resourceType}:${issue.id}`
   const own = useTaskDirectory(issue, data, resourceType, !matches)
   const directory = matches ? shared : own
-  const tasks = byCreation(directory.tasks.filter(task => taskId ? task.id === taskId : commentId ? task.commentId === commentId : !standalone || !task.commentId))
-  if (!tasks.length) return directory.error && !commentId ? <p role="alert">{directory.error}</p> : null
-  return <div className={`issue-agent-threads${commentId ? ' is-comment-thread' : ' is-standalone'}`} aria-label={t('Agent sessions')}>
-    {tasks.map(task => <AgentTaskThread key={task.id} task={task} data={data} onChanged={directory.refresh} onUpload={onUpload ?? directory.onUpload} threadControls={threadControls} teamId={teamId}/>) }
+  const threadIds = commentId === undefined ? undefined : typeof commentId === 'string' ? [commentId] : commentId
+  const tasks = byCreation(directory.tasks.filter(task => taskId ? task.id === taskId : threadIds ? Boolean(task.commentId && threadIds.includes(task.commentId)) : !standalone || !task.commentId))
+  if (!tasks.length) return directory.error && !threadIds ? <p role="alert">{directory.error}</p> : null
+  return <div className={`issue-agent-threads${threadIds ? ' is-comment-thread' : ' is-standalone'}${variant === 'document' ? ' is-document-card' : ''}`} aria-label={t('Agent sessions')}>
+    {tasks.map(task => <AgentTaskThread key={task.id} task={task} data={data} onChanged={directory.refresh} onUpload={onUpload ?? directory.onUpload} threadControls={threadControls} teamId={teamId} variant={variant}/>) }
   </div>
 }
 
-function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, teamId }: { task: ApplicationTask; data: BootstrapData; onChanged: () => void; onUpload?: (file: File) => Promise<string>; threadControls?: AgentThreadControls; teamId?: string }) {
+function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, teamId, variant }: { task: ApplicationTask; data: BootstrapData; onChanged: () => void; onUpload?: (file: File) => Promise<string>; threadControls?: AgentThreadControls; teamId?: string; variant: AgentThreadVariant }) {
   const { t } = useI18n()
   const [activities, setActivities] = useState<ApplicationActivity[]>([])
   const [reply, setReply] = useState('')
@@ -196,6 +200,8 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
   const phase = generating ? agentWorkingPhase(activities, t) : ''
   const canDelete = data.viewer.id === task.creatorId || data.viewerRole === 'admin' || data.viewerRole === 'owner'
   const delegator = task.trigger === 'delegation' && !task.commentId ? data.users.find(user => user.id === task.creatorId) : undefined
+  // A document's comment card says "Reply…", like its own reply row.
+  const replyPlaceholder = t(variant === 'document' ? 'Reply…' : 'Leave a reply…')
   return <section className="issue-agent-thread" id={`agent-session-${task.id}`} data-agent-task-id={task.id} data-status={current.status} data-unresponsive={unresponsive || undefined} aria-label={`${name} ${t('Agent session')}`}>
     {/* AIG: a delegated issue names the responsible human ("Delegated to Flow by Skyler"). */}
     {delegator && <div className="issue-agent-delegation"><AgentMessageHeader user={agent} name={t('Delegated to {name} by {user}').replace('{name}', name).replace('{user}', delegator.displayName || delegator.name)} time={taskCreatedAt(task)}/></div>}
@@ -215,7 +221,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         <AgentMessageHeader user={user} name={human ? user?.displayName || t('User') : name} time={activity.createdAt} anchor={`agent-activity-${item.id}`}/>
         {!human && !item.output && <div className="issue-agent-message-actions">
           <EmojiPicker align="end" onSelect={emoji => react(activity.id, emoji)}><button type="button" aria-label={t('Add reaction')} disabled={busy || generating}><AgentCommentGlyph name="reaction"/></button></EmojiPicker>
-          <span className="issue-agent-votes">{(['👍', '👎'] as const).map(emoji => <button key={emoji} type="button" aria-label={`${t(emoji === '👍' ? 'React with thumbs up' : 'React with thumbs down')}. ${t('Reaction count')}: ${reactions[activity.id]?.[emoji]?.length ?? 0}.`} aria-pressed={reactions[activity.id]?.[emoji]?.includes(data.viewer.id) ?? false} disabled={busy || generating} onClick={() => void react(activity.id, emoji)}><AgentCommentGlyph name={emoji === '👍' ? 'up' : 'down'}/></button>)}</span>
+          {variant !== 'document' && <span className="issue-agent-votes">{(['👍', '👎'] as const).map(emoji => <button key={emoji} type="button" aria-label={`${t(emoji === '👍' ? 'React with thumbs up' : 'React with thumbs down')}. ${t('Reaction count')}: ${reactions[activity.id]?.[emoji]?.length ?? 0}.`} aria-pressed={reactions[activity.id]?.[emoji]?.includes(data.viewer.id) ?? false} disabled={busy || generating} onClick={() => void react(activity.id, emoji)}><AgentCommentGlyph name={emoji === '👍' ? 'up' : 'down'}/></button>)}</span>}
           <AgentReplyCommentMenu
             body={item.body}
             controls={threadControls}
@@ -250,10 +256,10 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
         }}/>
       )}
       {replying || reply ? (
-        <form onSubmit={event => { event.preventDefault(); if (replyBody) void submit('prompt', replyBody) }}>
+        <form onSubmit={event => { event.preventDefault(); if (replyBody) void submit('prompt', replyBody) }} data-tooltip-elevated="">
           <div className="issue-agent-reply-input">
             <UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/>
-            <textarea autoFocus={replying} aria-label={t('Reply to agent')} placeholder={t('Leave a reply…')} value={reply} disabled={busy} onChange={event => setReply(event.target.value)} onKeyDown={event => {
+            <textarea autoFocus={replying} aria-label={t('Reply to agent')} placeholder={replyPlaceholder} value={reply} disabled={busy} onChange={event => setReply(event.target.value)} onKeyDown={event => {
               if (event.key === 'Escape' && !reply.trim()) setReplying(false)
               if (commentShortcutMatches(event) && replyBody) { event.preventDefault(); void submit('prompt', replyBody) }
             }}/>
@@ -265,7 +271,7 @@ function AgentTaskThread({ task, data, onChanged, onUpload, threadControls, team
           </div>
         </form>
       ) : <>
-        <button type="button" className="issue-agent-start-reply" onClick={() => setReplying(true)}><UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/><span>{t('Leave a reply…')}</span></button>
+        <button type="button" className="issue-agent-start-reply" onClick={() => setReplying(true)}><UserAvatar name={data.viewer.displayName} avatarUrl={data.viewer.avatarUrl} className="avatar"/><span>{replyPlaceholder}</span></button>
         <div className="issue-agent-idle-tools">
           {onUpload && <button type="button" aria-label={t('Attach images, files, or videos')} disabled={busy} onClick={() => fileInput.current?.click()}><Paperclip size={14}/></button>}
           <button type="button" aria-label={t('Send reply')} disabled><ArrowUp size={14}/></button>
