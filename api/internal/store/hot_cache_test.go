@@ -295,3 +295,53 @@ func TestHotCacheQueryGenerationBumpsOnWrite(t *testing.T) {
 		t.Fatalf("query generation was not bumped: before=%d after=%d", before, after)
 	}
 }
+
+// A read that races an update can write the old record back into the cache
+// after the update dropped it. Reads by id and by identifier must still
+// return the stored version, not the stale copy.
+func TestHotCacheIgnoresStaleIssueCopy(t *testing.T) {
+	repo := openCachedStore(t)
+	ctx := t.Context()
+	data := repo.Bootstrap()
+	key, issue := data.Workspace.URLKey, data.Issues[0]
+	query := IssueRecordQuery{Workspace: key}
+	if _, err := repo.AuthorizedIssueRecord(ctx, query, issue.Identifier); err != nil {
+		t.Fatal(err)
+	}
+	cache := repo.hotCache()
+	stale, err := cache.CacheGet(ctx, cache.CacheKey(key, "issue", issue.Identifier))
+	if err != nil || len(stale) == 0 {
+		t.Fatal("issue record was not cached under its identifier")
+	}
+	if err := repo.MutateWorkspace(ctx, key, "issue.updated", issue.ID, map[string]string{"title": "stale-race-new"}, func(next *domain.Bootstrap) error {
+		for i := range next.Issues {
+			if next.Issues[i].ID == issue.ID {
+				next.Issues[i].Title = "stale-race-new"
+				next.Issues[i].Version++
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The racing reader puts the old record back under every key.
+	for _, id := range []string{issue.ID, issue.Identifier} {
+		if err := cache.CacheSet(ctx, cache.CacheKey(key, "issue", id), stale, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []string{issue.Identifier, issue.ID} {
+		got, err := repo.AuthorizedIssueRecord(ctx, query, id)
+		if err != nil || got.Title != "stale-race-new" {
+			t.Fatalf("AuthorizedIssueRecord(%s) served the stale copy: %q %v", id, got.Title, err)
+		}
+		// The fresh read replaced the stale copy; put it back for the next read.
+		for _, cacheID := range []string{issue.ID, issue.Identifier} {
+			_ = cache.CacheSet(ctx, cache.CacheKey(key, "issue", cacheID), stale, time.Minute)
+		}
+		got, err = repo.IssueRecord(ctx, key, id)
+		if err != nil || got.Title != "stale-race-new" {
+			t.Fatalf("IssueRecord(%s) served the stale copy: %q %v", id, got.Title, err)
+		}
+	}
+}

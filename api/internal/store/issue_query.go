@@ -962,7 +962,12 @@ func (s *SQLiteStore) QueryIssueGroups(ctx context.Context, query IssueRecordQue
 func (s *SQLiteStore) IssueRecord(ctx context.Context, workspace, id string) (domain.Issue, error) {
 	if raw, ok := s.cacheGetIssue(ctx, workspace, id); ok {
 		issue, err := unmarshalIssueRecord(raw)
+		var version int64
+		// Serve the cached copy only while it is the stored version.
 		if err == nil {
+			err = s.db.QueryRowContext(ctx, `SELECT version FROM issue_records WHERE workspace_key=? AND id=?`, workspace, issue.ID).Scan(&version)
+		}
+		if err == nil && version == issue.Version {
 			items := []domain.Issue{issue}
 			err = s.resolveIssueReferences(ctx, workspace, items)
 			return items[0], err
