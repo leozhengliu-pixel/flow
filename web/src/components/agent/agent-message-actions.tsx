@@ -119,7 +119,7 @@ export function AgentFeedbackDialog({ open, onOpenChange, onSubmit }: { open: bo
   return <Dialog.Root open={open} onOpenChange={onOpenChange}>
     <Dialog.Portal>
       <Dialog.Overlay className={styles.overlay} data-flow-motion="backdrop"/>
-      <Dialog.Content aria-describedby={undefined} className={styles.dialog} data-flow-motion="dialog" onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => document.getElementById('agent-feedback-note')?.focus()) }}>
+      <Dialog.Content aria-describedby={undefined} className={styles.dialog} data-flow-motion="dialog" data-tooltip-raised="" onOpenAutoFocus={event => { event.preventDefault(); requestAnimationFrame(() => document.getElementById('agent-feedback-note')?.focus()) }}>
         <form onSubmit={event => { event.preventDefault(); void send() }}>
           <div className={styles.dialogBody}>
             <div className={styles.dialogHeading}>

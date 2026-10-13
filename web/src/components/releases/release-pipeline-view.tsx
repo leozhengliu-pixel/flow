@@ -14,7 +14,7 @@ import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { DisplayIcon } from '@/components/ui/view-action-icons'
 import { toggleFavoriteFor } from '@/lib/favorites'
 import { canCreateReleasePipeline } from '@/lib/settings-access'
-import { purgeTrashEntry, restoreTrashEntry, updateRelease } from '@/lib/api'
+import { restoreTrashEntry, updateRelease } from '@/lib/api'
 import { releasePath, releasePipelinePath, releasePipelineSettingsPath, releasePipelinesPath, type ReleasePipelineTab } from '@/lib/app-routes'
 import { useI18n } from '@/i18n/i18n'
 import { AgentChatPanel } from '@/lib/route-pages'
@@ -290,7 +290,6 @@ function DeletedReleasesList({ items, onReload }: { items: TrashEntry[]; onReloa
       </div>
       <DropdownMenu.Portal><FlowDropdownMenuContent align="end" label={t('Release options')} className="flow-release-actions-menu">
         <FlowMenuItem icon={<FlowGlyph name="moveTop"/>} label="Restore" onSelect={() => { void restoreTrashEntry(item.id).then(onReload).catch(error => toast.error(error instanceof Error ? error.message : t('Could not restore release'))) }}/>
-        <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete permanently" onSelect={() => { void purgeTrashEntry(item.id).then(onReload).catch(error => toast.error(error instanceof Error ? error.message : t('Could not delete release'))) }}/>
       </FlowDropdownMenuContent></DropdownMenu.Portal>
     </DropdownMenu.Root>)}
   </div>

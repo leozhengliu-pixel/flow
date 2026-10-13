@@ -63,11 +63,7 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 		if json.Unmarshal(event.Payload, &payload) != nil || payload.TaskID == "" {
 			return event, false, nil
 		}
-		_, _, err := s.authorizedAgentTask(r, payload.TaskID, false)
-		if err != nil {
-			return event, false, nil
-		}
-		return event, true, nil
+		return event, s.agentTaskRealtimeVisible(r, payload.TaskID), nil
 	}
 	if event.Type == "workspace_preferences.updated" {
 		metadata, ok := s.store.WorkspaceSettingsMetadata(workspaceKey(r))
@@ -241,4 +237,44 @@ func enrichNotificationEvent(raw json.RawMessage, notification domain.Notificati
 	payload["entity"] = notification
 	encoded, _ := json.Marshal(payload)
 	return encoded
+}
+
+// agentTaskRealtimeVisible reports whether the stream's viewer may see a push
+// for an agent session. The stream's projection carries issue access only, so
+// a document or project session is checked against its resource directly
+// (cheaply: chunks of a streamed reply each push one event).
+func (s *server) agentTaskRealtimeVisible(r *http.Request, taskID string) bool {
+	workspace := workspaceKey(r)
+	if workspace == "" {
+		if metadata, ok := s.store.WorkspaceMetadata(""); ok {
+			workspace = metadata.Workspace.URLKey
+		}
+	}
+	task, err := s.store.AgentTask(r.Context(), workspace, taskID)
+	if err != nil {
+		return false
+	}
+	switch task.ResourceType {
+	case "document":
+		if viewer := authUser(r); viewer.App && task.AppUserID != viewer.ID {
+			return false
+		}
+		return s.documentPresenceAllowed(r, task.ResourceID)
+	case "project":
+		if viewer := authUser(r); viewer.App && task.AppUserID != viewer.ID {
+			return false
+		}
+		project, ok := s.store.ProjectByID(workspace, task.ResourceID)
+		if !ok {
+			return false
+		}
+		_, query, err := s.pagedRealtimeMetadata(r)
+		if err != nil {
+			return false
+		}
+		access := query.Access
+		return access == nil || access.Admin || len(project.TeamIDs) == 0 || slices.ContainsFunc(project.TeamIDs, func(id string) bool { return slices.Contains(access.VisibleTeamIDs, id) })
+	}
+	_, _, err = s.authorizedAgentTask(r, taskID, false)
+	return err == nil
 }

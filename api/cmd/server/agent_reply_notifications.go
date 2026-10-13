@@ -18,12 +18,18 @@ import (
 // the session and the thread's participants and subscribers get one
 // notification per thread — "Flow replied: <first line>" — that is updated in
 // place and marked unread again on every new reply instead of piling up.
+// Threads on issues, documents and projects (the project's own comments)
+// work the same way; only the record the notification points at differs.
 
 const agentReplyNotificationType = "agentReply"
 
 // notifyAgentReply is the store's agent reply listener.
 func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, activity domain.AgentActivity) {
-	if task.ResourceType != "" && task.ResourceType != "issue" || task.IssueID == "" {
+	resourceType, resourceID := firstNonEmpty(task.ResourceType, "issue"), task.ResourceID
+	if resourceType == "issue" {
+		resourceID = task.IssueID
+	}
+	if resourceID == "" || resourceType != "issue" && resourceType != "document" && resourceType != "project" {
 		return
 	}
 	app, err := s.store.ApplicationByUser(ctx, task.AppUserID)
@@ -47,16 +53,26 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 		}
 		after = history[len(history)-1].ID
 	}
-	// The write is the agent's own, scoped to the issue's records; it must not
-	// be cut short by the agent run's request ending.
-	write := store.ContextWithActor(store.WithIssueRecordMutations(context.WithoutCancel(ctx), task.IssueID), agent)
+	// The write is the agent's own, scoped to the resource's records; it must
+	// not be cut short by the agent run's request ending.
+	write := context.WithoutCancel(ctx)
+	if resourceType == "issue" {
+		write = store.WithIssueRecordMutations(write, resourceID)
+	} else {
+		write = store.WithMutationScope(write, store.MutationScope{Resources: []string{resourceID}})
+	}
+	write = store.ContextWithActor(write, agent)
+	directory := memberDirectory{}
+	if resourceType != "issue" {
+		directory = s.workspaceMemberDirectory(write, task.WorkspaceKey)
+	}
 	now := time.Now().UTC()
-	err = s.store.MutateWorkspace(write, task.WorkspaceKey, "agent_task.replied", task.IssueID, map[string]string{"taskId": task.ID, "activityId": activity.ID}, func(data *domain.Bootstrap) error {
-		issue, err := issueByID(data, task.IssueID)
+	err = s.store.MutateWorkspace(write, task.WorkspaceKey, "agent_task.replied", resourceID, map[string]string{"taskId": task.ID, "activityId": activity.ID}, func(data *domain.Bootstrap) error {
+		thread, err := agentReplyThreadFor(s, data, directory, resourceType, resourceID, task.CommentID)
 		if err != nil {
 			return err
 		}
-		appendAgentReplyNotifications(data, *issue, task, activity, agent, prompters, now)
+		appendAgentReplyNotifications(data, thread, task, activity, agent, prompters, now)
 		return nil
 	})
 	if err != nil {
@@ -66,28 +82,95 @@ func (s *server) notifyAgentReply(ctx context.Context, task domain.AgentTask, ac
 	s.dispatchNotificationEmails(write, task.WorkspaceKey)
 }
 
-// appendAgentReplyNotifications writes or refreshes each recipient's
-// notification for the session's thread.
-func appendAgentReplyNotifications(data *domain.Bootstrap, issue domain.Issue, task domain.AgentTask, activity domain.AgentActivity, agent domain.User, prompters []string, now time.Time) {
-	recipients := append([]string{task.CreatorID}, prompters...)
-	muted := map[string]bool{}
-	if task.CommentID != "" {
-		if rootID, ok := threadRootID(data.Comments[issue.ID], task.CommentID); ok {
-			var watchers []string
-			watchers, muted = threadAudience(data, issue.ID, rootID)
-			recipients = append(recipients, watchers...)
+// agentReplyThread is where an agent session's thread lives, as its Inbox
+// notification records it: the issue, or the document or project that owns
+// the notification (IssueID empty), plus the thread's audience.
+type agentReplyThread struct {
+	issueID, sourceType, sourceID, projectID string
+	title, documentSlugID                    string
+	watchers                                 []string
+	muted                                    map[string]bool
+	// user resolves a recipient; canOpen reports whether they can open the
+	// resource (documents carry their own access list).
+	user    func(id string) *domain.User
+	canOpen func(id string) bool
+}
+
+func agentReplyThreadFor(s *server, data *domain.Bootstrap, directory memberDirectory, resourceType, resourceID, commentID string) (agentReplyThread, error) {
+	thread := agentReplyThread{muted: map[string]bool{}, user: func(id string) *domain.User { return directory.user(data, id) }, canOpen: func(string) bool { return true }}
+	switch resourceType {
+	case "document":
+		document, err := documentByID(data, resourceID)
+		if err != nil {
+			return thread, err
+		}
+		thread.sourceType, thread.sourceID = "document", document.ID
+		thread.title, thread.documentSlugID = documentDisplayTitle(document.Title), document.SlugID
+		comments := data.Comments[document.ID]
+		if rootID, ok := threadRootID(comments, commentID); ok && commentID != "" {
+			thread.watchers, thread.muted = documentThreadAudience(data, document.ID, comments, rootID)
+		}
+		thread.canOpen = func(id string) bool { return documentRoleFor(s, data, directory, *document, id) != "none" }
+	case "project":
+		project, err := fullProjectByID(data, resourceID)
+		if err != nil {
+			return thread, err
+		}
+		thread.sourceType, thread.sourceID, thread.projectID, thread.title = "project", project.ID, project.ID, project.Name
+		if rootID, ok := threadRootID(project.Comments, commentID); ok && commentID != "" {
+			thread.watchers, thread.muted = projectThreadAudience(data, *project, rootID)
+		}
+	default:
+		issue, err := issueByID(data, resourceID)
+		if err != nil {
+			return thread, err
+		}
+		thread.issueID, thread.sourceType = issue.ID, "agentSession"
+		thread.title = strings.TrimSpace(issue.Identifier + " " + issue.Title)
+		if rootID, ok := threadRootID(data.Comments[issue.ID], commentID); ok && commentID != "" {
+			thread.watchers, thread.muted = threadAudience(data, issue.ID, rootID)
+		}
+		thread.user = func(id string) *domain.User { return userByID(data, id) }
+	}
+	return thread, nil
+}
+
+// projectThreadAudience is threadAudience for a project comment thread: its
+// participants and explicit subscribers, minus the users who muted it.
+func projectThreadAudience(data *domain.Bootstrap, project domain.Project, rootID string) (watchers []string, muted map[string]bool) {
+	muted = map[string]bool{}
+	for _, item := range data.ThreadSubscriptions {
+		if item.ProjectID == project.ID && item.IssueID == "" && item.CommentID == rootID && item.State == "muted" {
+			muted[item.UserID] = true
 		}
 	}
+	for _, comment := range project.Comments {
+		if root, ok := threadRootID(project.Comments, comment.ID); ok && root == rootID && !muted[comment.User.ID] {
+			watchers = appendUnique(watchers, comment.User.ID)
+		}
+	}
+	for _, item := range data.ThreadSubscriptions {
+		if item.ProjectID == project.ID && item.IssueID == "" && item.CommentID == rootID && item.State == "subscribed" && !muted[item.UserID] {
+			watchers = appendUnique(watchers, item.UserID)
+		}
+	}
+	return watchers, muted
+}
+
+// appendAgentReplyNotifications writes or refreshes each recipient's
+// notification for the session's thread.
+func appendAgentReplyNotifications(data *domain.Bootstrap, thread agentReplyThread, task domain.AgentTask, activity domain.AgentActivity, agent domain.User, prompters []string, now time.Time) {
+	recipients := append(append([]string{task.CreatorID}, prompters...), thread.watchers...)
 	excerpt := agentReplyExcerpt(activity.Body)
 	agentName := firstNonEmpty(agent.DisplayName, agent.Name, "Agent")
 	seen := map[string]bool{}
 	for _, recipientID := range recipients {
-		if recipientID == "" || seen[recipientID] || muted[recipientID] || recipientID == agent.ID {
+		if recipientID == "" || seen[recipientID] || thread.muted[recipientID] || recipientID == agent.ID {
 			continue
 		}
 		seen[recipientID] = true
-		recipient := userByID(data, recipientID)
-		if recipient == nil || recipient.App {
+		recipient := thread.user(recipientID)
+		if recipient == nil || recipient.App || !thread.canOpen(recipientID) {
 			continue
 		}
 		preferences, ok := data.NotificationPreferences[recipientID]
@@ -101,20 +184,20 @@ func appendAgentReplyNotifications(data *domain.Bootstrap, issue domain.Issue, t
 		index := slices.IndexFunc(data.Notifications, func(item domain.Notification) bool { return item.GroupKey == groupKey })
 		if index < 0 {
 			data.Notifications = append(data.Notifications, domain.Notification{
-				ID: "notification_agent_" + task.ID + "_" + recipientID, RecipientID: recipientID, IssueID: issue.ID,
+				ID: "notification_agent_" + task.ID + "_" + recipientID, RecipientID: recipientID, IssueID: thread.issueID, ProjectID: thread.projectID,
 				Category: "comments", GroupKey: groupKey, CreatedAt: now,
 			})
 			index = len(data.Notifications) - 1
 		}
 		notification := &data.Notifications[index]
 		notification.Type = agentReplyNotificationType
-		notification.SourceType, notification.SourceID = "agentSession", task.ID
+		notification.SourceType, notification.SourceID = thread.sourceType, firstNonEmpty(thread.sourceID, task.ID)
 		notification.CommentID, notification.ActivityID = task.CommentID, activity.ID
 		notification.Actor, notification.LatestActorIDs = agent, []string{agent.ID}
 		notification.OccurrenceCount++
-		notification.Title = strings.TrimSpace(issue.Identifier + " " + issue.Title)
+		notification.Title = thread.title
 		notification.Text = agentReplyNotificationText(agentName, activity.Type, excerpt)
-		notification.Payload = &domain.NotificationPayload{Excerpt: excerpt, AgentActivity: activity.Type}
+		notification.Payload = &domain.NotificationPayload{Excerpt: excerpt, AgentActivity: activity.Type, DocumentSlugID: thread.documentSlugID}
 		// Every new reply brings the thread back to the top of the Inbox, unread.
 		notification.ReadAt, notification.ArchivedAt, notification.DeletedAt, notification.SnoozedUntil = nil, nil, nil, nil
 		notification.UpdatedAt = now

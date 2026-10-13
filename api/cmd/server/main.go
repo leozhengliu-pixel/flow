@@ -713,6 +713,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/application-installations", s.listApplicationInstallations)
 	mux.HandleFunc("POST /api/application-installations", s.configureApplicationInstallation)
 	mux.HandleFunc("PATCH /api/application-installations/{id}", s.configureApplicationInstallation)
+	mux.HandleFunc("DELETE /api/application-installations/{id}", s.uninstallApplicationInstallation)
 	mux.HandleFunc("GET /api/oauth/installation-teams", s.applicationConsentTeams)
 	mux.HandleFunc("GET /api/agent-tasks", s.listApplicationAgentTasks)
 	mux.HandleFunc("GET /api/agent-tasks/{id}", s.getApplicationAgentTask)
@@ -1963,12 +1964,18 @@ func (s *server) deleteCustomer(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		removed := data.Customers[index]
-		if err := appendTrash(data, "customer", removed.ID, removed.Name, removed); err != nil {
-			return err
-		}
+		// Like the reference app, deleting a customer is permanent and deletes its
+		// requests with it.
 		data.Customers = slices.Delete(data.Customers, index, index+1)
+		appendAudit(data, "deleted", "customer", removed.ID, map[string]any{"title": removed.Name, "permanent": true})
 		removeResourcePreferences(data, "customer", removed.ID)
 		data.CustomerRequests = slices.DeleteFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.CustomerID == id })
+		// Its requests already in the trash can no longer be restored.
+		data.Trash = slices.DeleteFunc(data.Trash, func(entry domain.TrashEntry) bool {
+			var request domain.CustomerRequest
+			return entry.ResourceType == "customer_request" && json.Unmarshal(entry.Payload, &request) == nil && request.CustomerID == id
+		})
+		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "customer", id) })
 		for projectIndex := range data.Projects {
 			data.Projects[projectIndex].Customers = slices.DeleteFunc(data.Projects[projectIndex].Customers, func(value string) bool { return value == id })
 		}
@@ -3104,7 +3111,7 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		removed := data.Projects[index]
-		if err := appendTrash(data, "project", removed.ID, removed.Name, deletedProjectPayload{Project: removed, Updates: data.ProjectUpdates[id]}); err != nil {
+		if err := appendTrashWithLinks(data, "project", removed.ID, removed.Name, deletedProjectPayload{Project: removed, Updates: data.ProjectUpdates[id]}, captureProjectLinks(data, id)); err != nil {
 			return err
 		}
 		data.Projects = slices.Delete(data.Projects, index, index+1)
@@ -3118,7 +3125,14 @@ func (s *server) deleteProject(w http.ResponseWriter, r *http.Request) {
 		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool { return draftBelongsToResource(item, "project", id) })
 		for i := range data.Issues {
 			if data.Issues[i].Project != nil && data.Issues[i].Project.ID == id {
-				data.Issues[i].Project = nil
+				// Like the reference app, the deleted project's issues are archived and
+				// leave the project; restoring it brings them back.
+				data.Issues[i].Project, data.Issues[i].ProjectMilestoneID = nil, nil
+				if data.Issues[i].ArchivedAt == nil {
+					now := time.Now().UTC()
+					data.Issues[i].ArchivedAt, data.Issues[i].UpdatedAt = &now, now
+					appendActivity(data, data.Issues[i].ID, "issue.updated", data.Viewer, map[string]string{"archived": "true", "project": id})
+				}
 			}
 		}
 		delete(data.ProjectUpdates, id)
@@ -3193,7 +3207,7 @@ func (s *server) deleteInitiative(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		removed := data.Initiatives[index]
-		if err := appendTrash(data, "initiative", removed.ID, removed.Name, deletedInitiativePayload{Initiative: removed, Updates: data.InitiativeUpdates[id]}); err != nil {
+		if err := appendTrashWithLinks(data, "initiative", removed.ID, removed.Name, deletedInitiativePayload{Initiative: removed, Updates: data.InitiativeUpdates[id]}, captureInitiativeLinks(data, id)); err != nil {
 			return err
 		}
 		for i := range data.Projects {
@@ -3499,7 +3513,8 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	id := r.PathValue("id")
 	var created domain.InitiativeUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_created", id, input, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: input, Child: &webhookChild{}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_created", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3518,6 +3533,7 @@ func (s *server) createInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 			data.InitiativeUpdates = map[string][]domain.InitiativeUpdate{}
 		}
 		data.InitiativeUpdates[id] = append([]domain.InitiativeUpdate{created}, data.InitiativeUpdates[id]...)
+		payload.Child.ID = created.ID
 		initiative.Health = health
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
@@ -3533,7 +3549,8 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.InitiativeUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_updated", id, input, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_updated", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3578,7 +3595,8 @@ func (s *server) updateInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) {
 	id, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_deleted", id, map[string]string{"id": updateID}, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.update_deleted", id, payload, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3594,6 +3612,9 @@ func (s *server) deleteInitiativeUpdate(w http.ResponseWriter, r *http.Request) 
 		for _, attachment := range updates[index].Attachments {
 			objectKeys = append(objectKeys, filepath.Base(attachment.URL))
 		}
+		removed := updates[index]
+		removed.Snapshot = nil
+		payload.Child.Entity = removed
 		updates = slices.Delete(updates, index, index+1)
 		data.InitiativeUpdates[id] = updates
 		initiative.Health = "noUpdate"
@@ -3803,7 +3824,8 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID := r.PathValue("id")
 	var created domain.ProjectMilestone
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_created", projectID, input, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: input, Child: &webhookChild{}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_created", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -3818,6 +3840,7 @@ func (s *server) createProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		}
 		project.Milestones = append(project.Milestones, created)
 		project.UpdatedAt = now
+		payload.Child.ID = created.ID
 		appendAudit(data, "milestone_created", "project", projectID, map[string]any{"milestoneId": created.ID, "milestoneName": created.Name})
 		return nil
 	})
@@ -3831,7 +3854,8 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	}
 	projectID, milestoneID := r.PathValue("id"), r.PathValue("milestoneId")
 	var updated domain.ProjectMilestone
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_updated", projectID, input, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: input, Child: &webhookChild{ID: milestoneID}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.milestone_updated", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -3866,9 +3890,7 @@ func (s *server) updateProjectMilestone(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) reorderProjectMilestones(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		IDs []string `json:"ids"`
-	}
+	var input publicapi.ProjectMilestoneReorderInput
 	if !decodeJSON(w, r, &input) {
 		return
 	}
@@ -3909,7 +3931,8 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{IssueAttributes: []store.IssueColumnScope{{Column: "projectMilestoneId", Values: []string{milestoneID}}}, IssueFilter: func(issue domain.Issue) bool {
 		return issue.ProjectMilestoneID != nil && *issue.ProjectMilestoneID == milestoneID
 	}})
-	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.milestone_deleted", projectID, map[string]string{"id": milestoneID}, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: map[string]string{"id": milestoneID}, Child: &webhookChild{ID: milestoneID}}
+	err := s.store.MutateWorkspace(ctx, workspaceKey(r), "project.milestone_deleted", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -3918,6 +3941,12 @@ func (s *server) deleteProjectMilestone(w http.ResponseWriter, r *http.Request) 
 		removedName := ""
 		if index := slices.IndexFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == milestoneID }); index >= 0 {
 			removedName = project.Milestones[index].Name
+			removed := project.Milestones[index]
+			removed.DescriptionRevisions = nil
+			payload.Child.Entity = struct {
+				domain.ProjectMilestone
+				SortOrder int `json:"sortOrder"`
+			}{removed, index}
 		}
 		project.Milestones = slices.DeleteFunc(project.Milestones, func(milestone domain.ProjectMilestone) bool { return milestone.ID == milestoneID })
 		if len(project.Milestones) == before {
@@ -4128,7 +4157,8 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	// Posting an update archives the project's pending update reminders,
 	// which are notifications owned by the project.
 	ctx := store.WithMutationScope(r.Context(), store.MutationScope{Resources: []string{id}})
-	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.update_created", input, func(data *domain.Bootstrap) (string, error) {
+	payload := childEventPayload{Input: input, Child: &webhookChild{}}
+	err := s.store.MutateWorkspaceWithAggregate(ctx, workspaceKey(r), "project.update_created", payload, func(data *domain.Bootstrap) (string, error) {
 		project, err := fullProjectByID(data, id)
 		if err != nil {
 			return "", err
@@ -4162,6 +4192,7 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 			data.ProjectUpdates = map[string][]domain.ProjectUpdate{}
 		}
 		data.ProjectUpdates[id] = append([]domain.ProjectUpdate{created}, data.ProjectUpdates[id]...)
+		payload.Child.ID = created.ID
 		project.Health = health
 		project.UpdatedAt = now
 		for index := range data.Notifications {
@@ -4181,7 +4212,8 @@ func (s *server) createProjectUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var objectKeys []string
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_deleted", projectID, map[string]string{"id": updateID}, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: map[string]string{"id": updateID}, Child: &webhookChild{ID: updateID}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_deleted", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4197,6 +4229,9 @@ func (s *server) deleteProjectUpdate(w http.ResponseWriter, r *http.Request) {
 		for _, attachment := range updates[index].Attachments {
 			objectKeys = append(objectKeys, filepath.Base(attachment.URL))
 		}
+		removed := updates[index]
+		removed.Snapshot = nil // stored for diffs only
+		payload.Child.Entity = removed
 		remaining := slices.Delete(updates, index, index+1)
 		data.ProjectUpdates[projectID] = remaining
 		if index == 0 {
@@ -4237,7 +4272,8 @@ func (s *server) updateProjectUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	projectID, updateID := r.PathValue("id"), r.PathValue("updateId")
 	var updated domain.ProjectUpdate
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_updated", projectID, input, func(data *domain.Bootstrap) error {
+	payload := childEventPayload{Input: input, Child: &webhookChild{ID: updateID}}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.update_updated", projectID, payload, func(data *domain.Bootstrap) error {
 		project, err := fullProjectByID(data, projectID)
 		if err != nil {
 			return err
@@ -4442,78 +4478,50 @@ func (s *server) deleteIssue(w http.ResponseWriter, r *http.Request) {
 	if workspace == "" {
 		workspace = s.store.Bootstrap().Workspace.URLKey
 	}
-	documentID := "document_content_" + id
+	trashed := []string{}
+	documentIDs := []string{}
 	err := s.store.MutateWorkspace(r.Context(), workspace, "issue.deleted", id, map[string]string{"id": id}, func(data *domain.Bootstrap) error {
-		index := slices.IndexFunc(data.Issues, func(issue domain.Issue) bool { return issue.ID == id })
-		if index < 0 {
+		if issueIndexByID(data, id) < 0 {
 			return errNotFound
 		}
-		removed := data.Issues[index]
-		if removed.DocumentContent != nil && removed.DocumentContent.ID != "" {
-			documentID = removed.DocumentContent.ID
+		// Like the reference app, deleting an issue deletes its sub-issues with it
+		// (deepest first, so each keeps its parent link in the trash), and
+		// restoring the issue brings them back.
+		// ?subIssues=keep (converting an issue to a project) keeps them,
+		// detached from the deleted issue.
+		descendants := []string{}
+		if r.URL.Query().Get("subIssues") != "keep" {
+			descendants = issueDescendants(data, id)
 		}
-		if err := appendTrash(data, "issue", removed.ID, removed.Identifier+" "+removed.Title, deletedIssuePayload{Issue: removed, Comments: data.Comments[id], Activities: data.Activities[id]}); err != nil {
+		children := []string{}
+		for _, issue := range data.Issues {
+			if len(descendants) > 0 && issue.ParentID != nil && *issue.ParentID == id {
+				children = append(children, issue.ID)
+			}
+		}
+		trashed, documentIDs = nil, nil
+		for index := len(descendants) - 1; index >= 0; index-- {
+			documentID, err := trashIssue(data, descendants[index], id, nil)
+			if err != nil {
+				return err
+			}
+			trashed, documentIDs = append(trashed, descendants[index]), append(documentIDs, documentID)
+		}
+		documentID, err := trashIssue(data, id, "", children)
+		if err != nil {
 			return err
 		}
-		data.Issues = slices.Delete(data.Issues, index, index+1)
-		data.IssueSuggestions = slices.DeleteFunc(data.IssueSuggestions, func(item domain.IssueSuggestion) bool { return item.IssueID == id })
-		delete(data.Comments, id)
-		delete(data.Activities, id)
-		removedNotificationIDs := map[string]bool{}
-		for _, notification := range data.Notifications {
-			if notification.IssueID == id || (notification.SourceType == "issue" && notification.SourceID == id) {
-				removedNotificationIDs[notification.ID] = true
-			}
-		}
-		data.Notifications = slices.DeleteFunc(data.Notifications, func(item domain.Notification) bool {
-			return removedNotificationIDs[item.ID]
-		})
-		data.NotificationDeliveries = slices.DeleteFunc(data.NotificationDeliveries, func(item domain.NotificationDelivery) bool {
-			return removedNotificationIDs[item.NotificationID]
-		})
-		data.Asks = slices.DeleteFunc(data.Asks, func(item domain.Ask) bool { return item.IssueID == id })
-		data.IssueSLAs = slices.DeleteFunc(data.IssueSLAs, func(item domain.IssueSLA) bool { return item.IssueID == id })
-		data.SLAEvents = slices.DeleteFunc(data.SLAEvents, func(item domain.SLAEvent) bool { return item.IssueID == id })
-		data.Drafts = slices.DeleteFunc(data.Drafts, func(item domain.Draft) bool {
-			return draftBelongsToResource(item, "issue", id)
-		})
-		data.Favorites = slices.DeleteFunc(data.Favorites, func(item domain.Favorite) bool {
-			return item.ResourceType == "issue" && item.ResourceID == id
-		})
-		data.Subscriptions = slices.DeleteFunc(data.Subscriptions, func(item domain.Subscription) bool {
-			return item.ResourceType == "issue" && item.ResourceID == id
-		})
-		for i := range data.Releases {
-			data.Releases[i].IssueIDs = removeString(data.Releases[i].IssueIDs, id)
-		}
-		for i := range data.ProjectTemplates {
-			data.ProjectTemplates[i].IssueIDs = removeString(data.ProjectTemplates[i].IssueIDs, id)
-		}
-		for i := range data.CustomerRequests {
-			if data.CustomerRequests[i].IssueID == id {
-				data.CustomerRequests[i].IssueID = ""
-			}
-		}
-		for i := range data.Documents {
-			if data.Documents[i].IssueID == id {
-				data.Documents[i].IssueID = ""
-			}
-		}
-		for i := range data.Issues {
-			data.Issues[i].SubIssueIDs = removeString(data.Issues[i].SubIssueIDs, id)
-			data.Issues[i].Relations = slices.DeleteFunc(data.Issues[i].Relations, func(rel domain.IssueRelation) bool { return rel.RelatedIssueID == id || rel.IssueID == id })
-			if data.Issues[i].ParentID != nil && *data.Issues[i].ParentID == id {
-				data.Issues[i].ParentID = nil
-			}
-		}
+		trashed, documentIDs = append(trashed, id), append(documentIDs, documentID)
 		return nil
 	})
 	if err == nil {
-		if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, documentID); deleteErr != nil {
-			log.Printf("delete collaboration document=%s: %v", documentID, deleteErr)
+		for _, documentID := range documentIDs {
+			if deleteErr := s.store.DeleteDocumentCollaborationDocument(r.Context(), workspace, documentID); deleteErr != nil {
+				log.Printf("delete collaboration document=%s: %v", documentID, deleteErr)
+			}
 		}
 		s.pruneIssueSuggestionTargets(r.Context(), workspace, func(item domain.IssueSuggestion) bool {
-			return (item.Type == "similarIssue" || item.Type == "relatedIssue") && item.SuggestedIssueID == id
+			return (item.Type == "similarIssue" || item.Type == "relatedIssue") && slices.Contains(trashed, item.SuggestedIssueID)
 		})
 	}
 	if err != nil {

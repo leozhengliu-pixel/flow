@@ -33,6 +33,7 @@ func (s *SQLiteStore) dataMigrations() []struct {
 		apply   func(context.Context) error
 	}{
 		{version: documentDefaultAccessMigrationVersion, name: "default document access grants", apply: s.migrateDocumentDefaultAccess},
+		{version: agentWebAccessMigrationVersion, name: "explicit agent web access", apply: s.migrateAgentWebAccess},
 	}
 }
 

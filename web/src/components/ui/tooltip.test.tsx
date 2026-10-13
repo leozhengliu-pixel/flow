@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import { FlowTooltip, TOOLTIP_DELAY, TOOLTIP_OFFSET, TOOLTIP_SKIP_DELAY, TooltipProvider } from './tooltip'
-import { tooltipShortcutKeys } from './tooltip-shortcut'
+import { tooltipShortcutKeys, tooltipTone } from './tooltip-shortcut'
 
 function renderTooltip(props: Partial<Parameters<typeof FlowTooltip>[0]> = {}, wrapper?: (node: React.ReactElement) => React.ReactElement) {
   const button = <FlowTooltip label="Copy issue URL" shortcut="⌘ ⇧ ," {...props}><button type="button">Copy</button></FlowTooltip>
@@ -45,6 +45,35 @@ describe('FlowTooltip', () => {
     await userEvent.hover(screen.getByRole('button', { name: 'Copy' }))
     const surface = (await screen.findAllByText('Send message'))[0].closest('.flow-tooltip-content')!
     expect(surface).toHaveClass('flow-tooltip-content--elevated')
+  })
+
+  it('uses the raised palette over dialogs and floating panels, and the nearest marked surface wins', async () => {
+    renderTooltip({ label: 'Minimize', shortcut: 'Esc' }, node => <div data-tooltip-raised>{node}</div>)
+    await userEvent.hover(screen.getByRole('button', { name: 'Copy' }))
+    const surface = (await screen.findAllByText('Minimize'))[0].closest('.flow-tooltip-content')!
+    expect(surface).toHaveClass('flow-tooltip-content--raised')
+    expect(surface).not.toHaveClass('flow-tooltip-content--elevated')
+  })
+
+  it('prefers the composer\'s elevated palette inside a raised panel', async () => {
+    renderTooltip({ label: 'Attach' }, node => <section data-tooltip-raised><div data-tooltip-elevated>{node}</div></section>)
+    await userEvent.hover(screen.getByRole('button', { name: 'Copy' }))
+    const surface = (await screen.findAllByText('Attach'))[0].closest('.flow-tooltip-content')!
+    expect(surface).toHaveClass('flow-tooltip-content--elevated')
+    expect(surface).not.toHaveClass('flow-tooltip-content--raised')
+  })
+
+  it('lets the elevated and raised props override the surroundings', async () => {
+    renderTooltip({ label: 'Forced', elevated: true })
+    await userEvent.hover(screen.getByRole('button', { name: 'Copy' }))
+    expect((await screen.findAllByText('Forced'))[0].closest('.flow-tooltip-content')).toHaveClass('flow-tooltip-content--elevated')
+  })
+
+  it('reports the tone of a trigger\'s surroundings', () => {
+    const { container } = render(<div data-tooltip-raised><div data-tooltip-elevated><i id="a"/></div><i id="b"/></div>)
+    expect(tooltipTone(container.querySelector('#a'))).toBe('elevated')
+    expect(tooltipTone(container.querySelector('#b'))).toBe('raised')
+    expect(tooltipTone(container)).toBeUndefined()
   })
 
   it('renders nothing extra without a label or shortcut', () => {

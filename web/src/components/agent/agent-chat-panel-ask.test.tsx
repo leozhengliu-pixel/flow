@@ -41,10 +41,10 @@ describe('Agent chat panel opened from the command menu', () => {
     expect(streams.streamAgentSessionMessage).not.toHaveBeenCalled()
   })
 
-  it('shows an initiative as context and links it from the first message', async () => {
-    render(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open autoSubmit initialPrompt="What is the status?" pageContext={{ type: 'initiative', id: 'initiative-1', label: 'Q4 push', href: '/ws/initiative/q4-push/overview' }}/></I18nProvider>)
+  it('shows an initiative as context and sends it as initiativeIds', async () => {
+    render(<I18nProvider><AgentChatPanel issues={[]} onClose={vi.fn()} open autoSubmit initialPrompt="What is the status?" pageContext={{ type: 'initiative', id: 'initiative-1', label: 'Q4 push' }}/></I18nProvider>)
     expect(screen.getByText('Q4 push')).toBeVisible()
     await waitFor(() => expect(streams.streamNewAgentSession).toHaveBeenCalledTimes(1))
-    expect(streams.streamNewAgentSession).toHaveBeenCalledWith(expect.objectContaining({ message: 'What is the status?\n\n[Q4 push](/ws/initiative/q4-push/overview)', projectIds: [], documentIds: [] }), expect.any(Function), expect.any(AbortSignal))
+    expect(streams.streamNewAgentSession).toHaveBeenCalledWith(expect.objectContaining({ message: 'What is the status?', initiativeIds: ['initiative-1'], projectIds: [], documentIds: [] }), expect.any(Function), expect.any(AbortSignal))
   })
 })

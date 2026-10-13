@@ -21,26 +21,29 @@ type agentChatInput struct {
 }
 
 type agentSessionInput struct {
-	Message     string                `json:"message"`
-	IssueIDs    []string              `json:"issueIds"`
-	ProjectIDs  []string              `json:"projectIds"`
-	DocumentIDs []string              `json:"documentIds"`
-	UserIDs     []string              `json:"userIds"`
-	SkillIDs    []string              `json:"skillIds"`
-	LoopIDs     []string              `json:"loopIds"`
-	Location    string                `json:"location"`
-	Mentions    []domain.AgentMention `json:"mentions"`
+	Message     string   `json:"message"`
+	IssueIDs    []string `json:"issueIds"`
+	ProjectIDs  []string `json:"projectIds"`
+	DocumentIDs []string `json:"documentIds"`
+	// InitiativeIDs puts initiatives in context (the initiative page a chat opens on, or @-mentions).
+	InitiativeIDs []string              `json:"initiativeIds"`
+	UserIDs       []string              `json:"userIds"`
+	SkillIDs      []string              `json:"skillIds"`
+	LoopIDs       []string              `json:"loopIds"`
+	Location      string                `json:"location"`
+	Mentions      []domain.AgentMention `json:"mentions"`
 }
 
 // agentMessageInput is a follow-up message plus anything @-mentioned in it.
 type agentMessageInput struct {
-	Message     string                `json:"message"`
-	IssueIDs    []string              `json:"issueIds"`
-	ProjectIDs  []string              `json:"projectIds"`
-	DocumentIDs []string              `json:"documentIds"`
-	UserIDs     []string              `json:"userIds"`
-	LoopIDs     []string              `json:"loopIds"`
-	Mentions    []domain.AgentMention `json:"mentions"`
+	Message       string                `json:"message"`
+	IssueIDs      []string              `json:"issueIds"`
+	ProjectIDs    []string              `json:"projectIds"`
+	DocumentIDs   []string              `json:"documentIds"`
+	InitiativeIDs []string              `json:"initiativeIds"`
+	UserIDs       []string              `json:"userIds"`
+	LoopIDs       []string              `json:"loopIds"`
+	Mentions      []domain.AgentMention `json:"mentions"`
 	// Answer picks an option of the reply's pending question (ask_user); the message carries its label.
 	Answer *agentQuestionAnswer `json:"answer,omitempty"`
 }
@@ -95,43 +98,52 @@ func (s *server) decodeAgentMessageInput(w http.ResponseWriter, r *http.Request)
 	if input.Message, ok = validAgentMessage(w, input.Message); !ok {
 		return input, false
 	}
-	if !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) || !validAgentMentionList(w, input.Mentions, input.UserIDs) {
+	if !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.InitiativeIDs) || !validAgentMentionList(w, input.Mentions, input.UserIDs) {
 		return input, false
 	}
-	if err := s.checkAgentMentions(r, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.UserIDs); err != nil {
+	if err := s.checkAgentMentions(r, agentMentionIDs{Issues: input.IssueIDs, Projects: input.ProjectIDs, Documents: input.DocumentIDs, Initiatives: input.InitiativeIDs, Users: input.UserIDs}); err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return input, false
 	}
 	return input, true
 }
 
-func validAgentMentionCounts(w http.ResponseWriter, issueIDs, projectIDs, documentIDs []string) bool {
+func validAgentMentionCounts(w http.ResponseWriter, issueIDs, projectIDs, documentIDs, initiativeIDs []string) bool {
 	if !validAgentIssueCount(w, issueIDs) {
 		return false
 	}
-	if len(projectIDs) > 25 || len(documentIDs) > 25 {
-		writeError(w, http.StatusBadRequest, "no more than 25 projectIds or documentIds are allowed")
+	if len(projectIDs) > 25 || len(documentIDs) > 25 || len(initiativeIDs) > 25 {
+		writeError(w, http.StatusBadRequest, "no more than 25 projectIds, documentIds or initiativeIds are allowed")
 		return false
 	}
 	return true
 }
 
-// checkAgentMentions confirms the viewer can read every mentioned issue, project and document.
-func (s *server) checkAgentMentions(r *http.Request, issueIDs, projectIDs, documentIDs, userIDs []string) error {
-	if _, err := s.agentIssueContext(r, issueIDs); err != nil {
+// agentMentionIDs are the resources a chat request puts in context.
+type agentMentionIDs struct {
+	Issues, Projects, Documents, Initiatives, Users []string
+}
+
+// checkAgentMentions confirms the viewer can read every mentioned issue, project, document and initiative.
+// The workspace data is already narrowed to what the viewer can see, so a hidden resource reads as not found.
+func (s *server) checkAgentMentions(r *http.Request, ids agentMentionIDs) error {
+	if _, err := s.agentIssueContext(r, ids.Issues); err != nil {
 		return err
 	}
-	if len(projectIDs) == 0 && len(documentIDs) == 0 && len(userIDs) == 0 {
+	if len(ids.Projects) == 0 && len(ids.Documents) == 0 && len(ids.Initiatives) == 0 && len(ids.Users) == 0 {
 		return nil
 	}
 	data := s.workspaceData(r)
-	if len(selectedAgentProjects(data.Projects, projectIDs)) != len(uniqueAgentIDs(projectIDs)) {
+	if len(selectedAgentProjects(data.Projects, ids.Projects)) != len(uniqueAgentIDs(ids.Projects)) {
 		return fmt.Errorf("%w: one or more mentioned projects were not found", errInvalid)
 	}
-	if len(selectedAgentDocuments(data.Documents, documentIDs)) != len(uniqueAgentIDs(documentIDs)) {
+	if len(selectedAgentDocuments(data.Documents, ids.Documents)) != len(uniqueAgentIDs(ids.Documents)) {
 		return fmt.Errorf("%w: one or more mentioned documents were not found", errInvalid)
 	}
-	if len(selectedAgentUsers(data.Users, userIDs)) != len(uniqueAgentIDs(userIDs)) {
+	if len(selectedAgentInitiatives(data.Initiatives, ids.Initiatives)) != len(uniqueAgentIDs(ids.Initiatives)) {
+		return fmt.Errorf("%w: one or more mentioned initiatives were not found", errInvalid)
+	}
+	if len(selectedAgentUsers(data.Users, ids.Users)) != len(uniqueAgentIDs(ids.Users)) {
 		return fmt.Errorf("%w: one or more mentioned people were not found", errInvalid)
 	}
 	return nil
@@ -144,9 +156,9 @@ func agentMentionListError(mentions []domain.AgentMention, userIDs []string) err
 	}
 	for _, mention := range mentions {
 		switch mention.Type {
-		case "issue", "project", "document", "user":
+		case "issue", "project", "document", "initiative", "user":
 		default:
-			return fmt.Errorf("%w: mention type must be issue, project, document or user", errInvalid)
+			return fmt.Errorf("%w: mention type must be issue, project, document, initiative or user", errInvalid)
 		}
 		if mention.ID == "" || len(mention.Label) > 200 {
 			return fmt.Errorf("%w: mentions need an id and a short label", errInvalid)
@@ -352,7 +364,7 @@ func (s *server) createAgentSession(w http.ResponseWriter, r *http.Request) {
 	if input.Message, ok = validAgentMessage(w, input.Message); !ok {
 		return
 	}
-	if !validAgentIssueCount(w, input.IssueIDs) {
+	if !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.InitiativeIDs) {
 		return
 	}
 	if input.Location == "" {
@@ -374,13 +386,13 @@ func (s *server) beginAgentSession(r *http.Request, input agentSessionInput) (do
 	if err := agentMentionListError(input.Mentions, input.UserIDs); err != nil {
 		return domain.AgentSession{}, err
 	}
-	if err := s.checkAgentMentions(r, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.UserIDs); err != nil {
+	if err := s.checkAgentMentions(r, agentMentionIDs{Issues: input.IssueIDs, Projects: input.ProjectIDs, Documents: input.DocumentIDs, Initiatives: input.InitiativeIDs, Users: input.UserIDs}); err != nil {
 		return domain.AgentSession{}, err
 	}
 	now := time.Now().UTC()
 	sessionID := fmt.Sprintf("agent_session_%d", now.UnixNano())
 	title := agentSessionTitle(input.Message)
-	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
+	session := domain.AgentSession{ID: sessionID, SlugID: agentSessionSlug(title, now), Title: title, Location: input.Location, IssueIDs: uniqueAgentIDs(input.IssueIDs), ProjectIDs: uniqueAgentIDs(input.ProjectIDs), DocumentIDs: uniqueAgentIDs(input.DocumentIDs), InitiativeIDs: uniqueAgentIDs(input.InitiativeIDs), UserIDs: uniqueAgentIDs(input.UserIDs), LoopIDs: uniqueAgentIDs(input.LoopIDs), SkillIDs: uniqueAgentIDs(input.SkillIDs), Messages: []domain.AgentMessage{{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: input.Message, Mentions: input.Mentions, CreatedAt: now}}, CreatedAt: now, UpdatedAt: now, LastReadAt: agentReadStamp(now)}
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_created", sessionID, input, func(data *domain.Bootstrap) error {
 		session.UserID = data.Viewer.ID
 		if len(selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)) != len(session.SkillIDs) {
@@ -423,13 +435,14 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		session.IssueIDs = mergeAgentIDs(session.IssueIDs, input.IssueIDs)
 		session.ProjectIDs = mergeAgentIDs(session.ProjectIDs, input.ProjectIDs)
 		session.DocumentIDs = mergeAgentIDs(session.DocumentIDs, input.DocumentIDs)
+		session.InitiativeIDs = mergeAgentIDs(session.InitiativeIDs, input.InitiativeIDs)
 		session.UserIDs = mergeAgentIDs(session.UserIDs, input.UserIDs)
 		session.LoopIDs = mergeAgentIDs(session.LoopIDs, input.LoopIDs)
 		if err := checkAgentLoops(data, session.LoopIDs); err != nil {
 			return err
 		}
-		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 || len(session.UserIDs) > 25 {
-			return fmt.Errorf("%w: a conversation can reference at most 25 issues, projects and documents each", errInvalid)
+		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 || len(session.InitiativeIDs) > 25 || len(session.UserIDs) > 25 {
+			return fmt.Errorf("%w: a conversation can reference at most 25 issues, projects, documents and initiatives each", errInvalid)
 		}
 		// The next message answers a question the agent stopped on: a picked option or free text.
 		answerTo, err := answerAgentQuestion(session, message, input.Answer)

@@ -140,11 +140,9 @@ function LightboxEditorProviderInner({
       setComment(undefined)
       return
     }
-    setComment(resolveComment?.(commentHash.target.id) ?? {
-      id: commentHash.target.id,
-      body: `Comment ${commentHash.target.id}`,
-      authorName: 'Comment',
-    })
+    // Only a comment the host can resolve gets the popover: pages that handle `#comment-` links themselves (issue,
+    // document and project activity threads) must not also get a placeholder popover.
+    setComment(resolveComment?.(commentHash.target.id))
   }, [commentHash.target, resolveComment])
 
   useEffect(() => {

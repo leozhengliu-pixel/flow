@@ -11,7 +11,19 @@ export function tooltipShortcutKeys(value: string): string[][] {
   })).filter(step => step.length > 0)
 }
 
+/**
+ * Which lighter tooltip palette a trigger's surroundings call for: `elevated` over the agent composer card
+ * (`data-tooltip-elevated`), `raised` over dialogs and floating panels (`data-tooltip-raised`); the nearest marked
+ * ancestor wins, and plain surfaces get the standard tooltip.
+ */
+export type TooltipTone = 'elevated' | 'raised'
+export function tooltipTone(element: Element | null | undefined): TooltipTone | undefined {
+  const surface = element?.closest('[data-tooltip-elevated],[data-tooltip-raised]')
+  if (!surface) return undefined
+  return surface.hasAttribute('data-tooltip-elevated') ? 'elevated' : 'raised'
+}
+
 /** Whether a tooltip for this trigger sits over an elevated surface. */
 export function isElevatedTrigger(element: Element | null | undefined) {
-  return Boolean(element?.closest('[data-tooltip-elevated]'))
+  return tooltipTone(element) === 'elevated'
 }

@@ -5,11 +5,12 @@ import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { useIssueCandidates } from '@/components/issue/use-issue-candidates'
 import { avatarColor } from '@/components/issue/avatar-color'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
 import styles from './agent-mention-input.module.css'
 
-export type AgentMention = { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }
+export type AgentMention = { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: string; label: string }
 
 type MentionOption = AgentMention & { key: string; detail?: string; icon: ReactNode; group: string }
 
@@ -20,7 +21,7 @@ type MentionIssue = { id: string; identifier: string; title: string; state: Pick
 const GROUP_LIMIT = 5
 
 /**
- * Agent composer with @-mentions: "@" opens a grouped picker of issues, projects and documents,
+ * Agent composer with @-mentions: "@" opens a grouped picker of issues, projects, initiatives and documents,
  * and a choice becomes an inline chip. The plain-text value keeps "@identifier" / "@name" so the
  * message reads naturally, and the chosen resources are reported separately.
  */
@@ -69,9 +70,10 @@ export function AgentMentionInput({
     const users = data.users.filter(item => item.active && !item.app && matches(`${item.displayName} ${item.name} ${item.email}`)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `user:${item.id}`, type: 'user', id: item.id, label: item.displayName, icon: <UserAvatar className={styles.avatar} avatarUrl={item.avatarUrl} color={avatarColor(item.id)} name={item.displayName}/>, group: 'Users' }))
     const issues = candidates.filter(item => !pageIds.has(item.id) && !item.archivedAt && matches(`${item.identifier} ${item.title}`)).slice(0, GROUP_LIMIT).map(item => issue(item, 'Issues'))
     const projects = needle ? data.projects.filter(item => !item.archivedAt && matches(item.name)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `project:${item.id}`, type: 'project', id: item.id, label: item.name, icon: <ProjectIcon size={14} style={{ color: item.color }}/>, group: 'Projects' })) : []
+    const initiatives = needle ? (data.initiatives ?? []).filter(item => matches(item.name)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `initiative:${item.id}`, type: 'initiative', id: item.id, label: item.name, icon: <ViewGlyph color={item.color} icon={item.icon || 'Initiative'}/>, group: 'Initiatives' })) : []
     const documents = needle ? (data.documents ?? []).filter(item => matches(item.title)).slice(0, GROUP_LIMIT).map((item): MentionOption => ({ key: `document:${item.id}`, type: 'document', id: item.id, label: item.title, icon: <FileText size={14}/>, group: 'Documents' })) : []
-    return [...page, ...users, ...issues, ...projects, ...documents]
-  }, [candidates, data.documents, data.projects, data.users, pageIssues, query])
+    return [...page, ...users, ...issues, ...projects, ...initiatives, ...documents]
+  }, [candidates, data.documents, data.initiatives, data.projects, data.users, pageIssues, query])
 
   useEffect(() => { setActiveIndex(0) }, [query])
 

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { ProjectIcon } from '@/components/issue/issue-icons'
+import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { fetchAgentStatus, getAgentSession, listAgentSessions, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
+import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '@/types/flow'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
 import { useI18n } from '@/i18n/i18n'
@@ -190,6 +192,8 @@ export function EntityAgentPanel({
     setError(undefined)
     setLoading(true)
     setStreamParts([])
+    // The work shown while streaming, kept for a stopped reply (it folds to "Worked for N seconds").
+    const liveWork = new Map<string, AgentMessagePart>()
     try {
       const controller = new AbortController()
       abortRef.current = controller
@@ -231,6 +235,7 @@ export function EntityAgentPanel({
           event.part
         ) {
           const nextPart = event.part
+          liveWork.set(nextPart.id, nextPart)
           setStreamParts(current => {
             const index = current.findIndex(part => part.id === nextPart.id)
             return index >= 0
@@ -253,6 +258,7 @@ export function EntityAgentPanel({
               // Give the model the entity this panel belongs to, not only its issues.
               ...(target.type === 'document' ? { documentIds: [target.id] } : {}),
               ...(target.type === 'project' ? { projectIds: [target.id] } : {}),
+              ...(target.type === 'initiative' ? { initiativeIds: [target.id] } : {}),
               location: 'toolbar',
             },
             onEvent,
@@ -265,9 +271,9 @@ export function EntityAgentPanel({
       if (followUp === undefined) clearEntityThreadDraft(conversationDraftKey)
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') {
-        setStreamParts(current =>
-          current.map(part => (part.status === 'running' ? { ...part, status: 'error' } : part)),
-        )
+        // Like the reference app: the message you sent stays, the partial answer is dropped, and only the work is kept.
+        setStreamParts([])
+        setMessages(current => markStoppedAgentReply(current, [...liveWork.values()].filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')))
         return
       }
       setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
@@ -301,9 +307,9 @@ export function EntityAgentPanel({
       >
         <EntityAgentThread
           addedContext={
-            // Projects and documents are attached to new sessions (projectIds / documentIds).
-            target.type === 'project' || target.type === 'document'
-              ? [{ key: entityKey, icon: target.type === 'project' ? <ProjectIcon size={14}/> : <FileText size={14}/>, label: target.title }]
+            // Projects, initiatives and documents are attached to new sessions (projectIds / initiativeIds / documentIds).
+            target.type === 'project' || target.type === 'document' || target.type === 'initiative'
+              ? [{ key: entityKey, icon: target.type === 'project' ? <ProjectIcon size={14}/> : target.type === 'initiative' ? <ViewGlyph icon="Initiative"/> : <FileText size={14}/>, label: target.title }]
               : undefined
           }
           approvalBusy={approvalBusy}
@@ -346,6 +352,13 @@ function pickEntitySession(
   if (issueIds.size) {
     const matched = sessions
       .filter(session => session.issueIds.some(id => issueIds.has(id)))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    if (matched[0]) return matched[0]
+  }
+  // An initiative's chat is the latest one that has it in context.
+  if (target.type === 'initiative') {
+    const matched = sessions
+      .filter(session => session.initiativeIds?.includes(target.id))
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     if (matched[0]) return matched[0]
   }

@@ -344,7 +344,9 @@ func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			removedReleaseIDs = append(removedReleaseIDs, release.ID)
-			if err := appendTrash(data, "release", release.ID, release.Name, release); err != nil {
+			releaseLinks := domain.TrashLinks{}
+			captureResourcePreferences(data, "release", release.ID, &releaseLinks)
+			if err := appendTrashWithLinks(data, "release", release.ID, release.Name, release, releaseLinks); err != nil {
 				return err
 			}
 		}
@@ -353,7 +355,9 @@ func (s *server) deleteReleasePipeline(w http.ResponseWriter, r *http.Request) {
 			removeResourcePreferences(data, "release", releaseID)
 		}
 		item := publicReleasePipeline(data.ReleasePipelines[index])
-		if err := appendTrash(data, "release_pipeline", item.ID, item.Name, item); err != nil {
+		links := domain.TrashLinks{PipelineReleaseIDs: removedReleaseIDs}
+		captureResourcePreferences(data, "release_pipeline", item.ID, &links)
+		if err := appendTrashWithLinks(data, "release_pipeline", item.ID, item.Name, item, links); err != nil {
 			return err
 		}
 		data.ReleasePipelines = slices.Delete(data.ReleasePipelines, index, index+1)

@@ -90,6 +90,10 @@ func (s *server) issueRecordsQuery(r *http.Request) (domain.Bootstrap, store.Iss
 }
 
 func (s *server) listIssueRecords(w http.ResponseWriter, r *http.Request) {
+	if connectionRequested(r) {
+		s.listIssueRecordsConnection(w, r)
+		return
+	}
 	metadata, query, err := s.issueRecordsQuery(r)
 	if err != nil {
 		issueRecordsError(w, err)

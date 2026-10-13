@@ -5,6 +5,7 @@ import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
 import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
+import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
 import { AgentChevronDownIcon, AgentSkillsIcon } from './agent-icons'
@@ -21,7 +22,7 @@ import { conversationDraftKeyFor } from './agent-drafts'
 import { useMarkAgentSessionRead } from './agent-read-state'
 
 /** The entity the user is looking at; attached to the first message of a new conversation. */
-export type AgentPageContext = { type: 'project' | 'document' | 'issue' | 'initiative'; id: string; label: string; /** Initiatives have no id field in a new session, so the first message links them by this path. */ href?: string }
+export type AgentPageContext = { type: 'project' | 'document' | 'issue' | 'initiative'; id: string; label: string }
 
 export function AgentChatPanel({
   data,
@@ -54,7 +55,7 @@ export function AgentChatPanel({
   onUseResponse?: (content: string) => void
   useResponseLabel?: string
   open: boolean
-  /** Current page entity (project, document, issue) shown as a removable context chip for new conversations; a list selection passes several. */
+  /** Current page entity (project, initiative, document, issue) shown as a removable context chip for new conversations; a list selection passes several. */
   pageContext?: AgentPageContext | AgentPageContext[]
   /** Send `initialPrompt` as soon as the panel opens (the reference app's "Write with Agent"). */
   autoSubmit?: boolean
@@ -181,11 +182,8 @@ export function AgentChatPanel({
    * `answer` picks that option of the reply's pending question: it shows as the chosen pill, not as a message.
    */
   const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
-    const typed = (followUp ?? input).trim()
-    if (!typed || loading || !status?.enabled) return
-    // A new chat has no initiative field, so an initiative on the page rides along as a link the agent can open.
-    const initiativeLinks = activePageContexts.filter(context => context.type === 'initiative' && context.href).map(context => `[${context.label}](${context.href})`)
-    const message = !session && initiativeLinks.length ? `${typed}\n\n${initiativeLinks.join(' ')}` : typed
+    const message = (followUp ?? input).trim()
+    if (!message || loading || !status?.enabled) return
     const sentMentions = followUp === undefined ? mentions : []
     const sentIdsOf = (type: AgentMention['type']) => followUp === undefined ? idsOf(type) : []
     setMessages(current => [
@@ -194,7 +192,7 @@ export function AgentChatPanel({
         : item),
       { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, answerTo: answer?.partId, createdAt: new Date().toISOString() },
     ])
-    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), userIds: sentIdsOf('user'), mentions: sentMentions, ...(answer ? { answer } : {}) }
+    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), initiativeIds: sentIdsOf('initiative'), userIds: sentIdsOf('user'), mentions: sentMentions, ...(answer ? { answer } : {}) }
     const pageIdsOf = (type: AgentPageContext['type']) => activePageContexts.filter(context => context.type === type).map(context => context.id)
     if (!session) {
       setAttachedContext([
@@ -209,6 +207,8 @@ export function AgentChatPanel({
     setError(undefined)
     setLoading(true)
     setStreamParts([])
+    // The work shown while streaming, kept for a stopped reply (it folds to "Worked for N seconds").
+    const liveWork = new Map<string, AgentMessagePart>()
     try {
       const controller = new AbortController()
       abortRef.current = controller
@@ -250,6 +250,7 @@ export function AgentChatPanel({
           event.part
         ) {
           const nextPart = event.part
+          liveWork.set(nextPart.id, nextPart)
           setStreamParts(current => {
             const index = current.findIndex(part => part.id === nextPart.id)
             return index >= 0
@@ -273,6 +274,7 @@ export function AgentChatPanel({
               issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...pageIdsOf('issue'), ...mentioned.issueIds])],
               projectIds: [...new Set([...pageIdsOf('project'), ...mentioned.projectIds])],
               documentIds: [...new Set([...pageIdsOf('document'), ...mentioned.documentIds])],
+              initiativeIds: [...new Set([...pageIdsOf('initiative'), ...mentioned.initiativeIds])],
               userIds: mentioned.userIds,
               mentions: sentMentions,
               skillIds,
@@ -288,9 +290,9 @@ export function AgentChatPanel({
       if (followUp === undefined) clearEntityThreadDraft(draftKey)
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') {
-        setStreamParts(current =>
-          current.map(part => (part.status === 'running' ? { ...part, status: 'error' } : part)),
-        )
+        // Like the reference app: the message you sent stays, the partial answer is dropped, and only the work is kept.
+        setStreamParts([])
+        setMessages(current => markStoppedAgentReply(current, [...liveWork.values()].filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')))
         return
       }
       setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable'))
@@ -406,7 +408,6 @@ function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { dat
 }
 
 function pageContextIcon(context: AgentPageContext, data?: BootstrapData) {
-  if (context.type === 'initiative') return <Lightbulb size={14}/>
   if (data) return mentionIcon({ type: context.type, id: context.id }, data)
-  return context.type === 'project' ? <ProjectIcon size={14}/> : context.type === 'document' ? <FileText size={14}/> : null
+  return context.type === 'project' ? <ProjectIcon size={14}/> : context.type === 'document' ? <FileText size={14}/> : context.type === 'initiative' ? <Lightbulb size={14}/> : null
 }

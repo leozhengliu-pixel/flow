@@ -322,3 +322,44 @@ func TestAgentChangeTargetIsDataDriven(t *testing.T) {
 		t.Fatal("agentValuesEqual")
 	}
 }
+
+// Customers have no trash: undoing the agent's create deletes the customer for good, the card then
+// offers no Restore, and the agent's own customer delete cannot be undone.
+func TestAgentChangeSetCustomerUndoIsPermanent(t *testing.T) {
+	handler, repository := newAgentChangeTestServer(t, func() []scriptedAgentCall {
+		return []scriptedAgentCall{
+			{"save_customer", map[string]any{"name": "QA fix – Agent customer"}},
+			{"save_customer", map[string]any{"name": "QA fix – Doomed customer"}},
+			{"delete_customer", map[string]any{"id": "QA fix – Doomed customer"}},
+		}
+	})
+	session, reply := runAgentChangeChat(t, handler, "Add customers")
+	if deleted := findAgentChangePart(t, reply, "deleted", "customer"); deleted.ToolCall.Change.Undoable {
+		t.Fatalf("a permanent customer delete is undoable: %#v", deleted.ToolCall.Change)
+	}
+	var created domain.AgentMessagePart
+	for _, part := range agentChangeParts(reply) {
+		if change := part.ToolCall.Change; change.Action == "created" && change.EntityType == "customer" && change.Label == "QA fix – Agent customer" {
+			created = part
+		}
+	}
+	if created.ToolCall == nil || !created.ToolCall.Change.Undoable {
+		t.Fatalf("customer create is not undoable: %#v", reply.Parts)
+	}
+	base := "/api/agent/sessions/" + session.ID + "/messages/" + reply.ID
+	undone := requestJSON[domain.AgentSession](t, handler, http.MethodPost, base+"/undo", map[string]any{"partIds": []string{created.ID}}, http.StatusOK)
+	data, _ := repository.WorkspaceMetadata("")
+	if slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.Name == "QA fix – Agent customer" }) || slices.ContainsFunc(data.Trash, func(entry domain.TrashEntry) bool { return entry.ResourceType == "customer" }) {
+		t.Fatal("undo did not delete the customer permanently")
+	}
+	var change *domain.AgentChange
+	for _, part := range undone.Messages[len(undone.Messages)-1].Parts {
+		if part.ID == created.ID {
+			change = part.ToolCall.Change
+		}
+	}
+	if change == nil || change.State != "undone" || change.Undoable || !strings.Contains(change.Note, "permanently") {
+		t.Fatalf("undone customer change = %#v", change)
+	}
+	requestJSON[any](t, handler, http.MethodPost, base+"/restore", map[string]any{"partIds": []string{created.ID}}, http.StatusConflict)
+}

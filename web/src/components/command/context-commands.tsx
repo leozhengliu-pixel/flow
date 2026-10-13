@@ -37,6 +37,7 @@ import type { BootstrapData, Issue, IssueRelationType, IssueUpdateInput, Workflo
 import type { CommandContext, CommandIssueRef, IssueCommandContext } from './command-context'
 import { useI18n } from '@/i18n/i18n'
 import { issueReleaseCommands } from './release-commands'
+import { ISSUE_DELETE_DESCRIPTION, issueDeleteConfirmation } from '@/lib/issue-delete-confirmation'
 
 export type CommandPageId =
   | 'status' | 'assignee' | 'priority' | 'labels' | 'dueDate' | 'project' | 'cycle' | 'estimate' | 'team'
@@ -257,8 +258,8 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     { id: 'ctx-team', label: 'Move to team…', icon: <Users/>, keywords: 'transfer', page: { id: 'team', label: 'Move to team…' } },
     { id: 'ctx-archive', label: 'Archive', icon: <Archive/>, keywords: 'close', run: choose(() => apply({ archived: true })) },
     ...(handlers.onDeleteIssues || (single && context.onDelete) ? [{ id: 'ctx-delete', label: 'Delete', icon: <Trash2/>, shortcut: ['⌘', '⌫'], keywords: 'remove', run: choose(async () => {
-      const title = single ? `${t('Delete')} ${refs[0].identifier}?` : `${t('Delete')} ${ids.length} ${t('issues')}?`
-      if (!await confirmAction(title, { description: t('This cannot be undone.'), confirmLabel: t('Delete') })) return
+      const title = single && first ? issueDeleteConfirmation(first, t).title : `${t('Delete')} ${ids.length} ${t('issues')}?`
+      if (!await confirmAction(title, { description: t(ISSUE_DELETE_DESCRIPTION), confirmLabel: t('Delete') })) return
       if (single && context.onDelete) await context.onDelete().catch(() => undefined)
       else await handlers.onDeleteIssues?.(ids).catch(() => undefined)
     }) }] : []),

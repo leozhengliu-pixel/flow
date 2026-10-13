@@ -51,13 +51,13 @@ describe('Ask agent on a project and an initiative description', () => {
     expect(chat.mock.calls.at(-1)![0]).not.toHaveProperty('autoSubmit', true)
   })
 
-  it('opens the chat on the initiative with a link to it', () => {
+  it('opens the chat on the initiative as its context', () => {
     const initiative = data.initiatives[0] as Initiative
     render(<MentionShell data={data}><InitiativeDescriptionField initiative={initiative} workspace={data.workspace.urlKey} data={data} label="Initiative description" value="" onCommit={vi.fn()}/></MentionShell>)
     fireEvent.click(screen.getByRole('button', { name: 'Ask agent in Initiative description' }))
     expect(chat).toHaveBeenLastCalledWith(expect.objectContaining({
       initialPrompt: 'About this selection from the initiative description:\n\n> Ship the beta\n> by Friday\n\n',
-      pageContext: { type: 'initiative', id: initiative.id, label: initiative.name, href: expect.stringContaining(`/initiative/${initiative.slugId}/`) },
+      pageContext: { type: 'initiative', id: initiative.id, label: initiative.name },
     }))
   })
 

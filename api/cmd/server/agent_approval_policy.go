@@ -185,6 +185,9 @@ func (s *server) agentApprovalTarget(r *http.Request, data domain.Bootstrap, too
 			if affected, ok := preview["affected"].(map[string]int); ok && len(affected) > 0 {
 				target.Affected = affected
 			}
+			if restorable, ok := preview["restorable"].(bool); ok && !restorable {
+				target.Permanent = true
+			}
 		}
 	}
 	switch kind {
@@ -246,9 +249,17 @@ func agentApprovalPreview(approval domain.AgentApproval) string {
 		return fmt.Sprintf("[%s](%s)", strings.NewReplacer("[", `\[`, "]", `\]`).Replace(label), target.Href)
 	}
 	if len(approval.Targets) > 0 {
-		fmt.Fprintf(&text, "Delete these %d items? They go to the trash and can be restored.\n", len(approval.Targets))
+		permanent := slices.ContainsFunc(approval.Targets, func(target domain.AgentApprovalTarget) bool { return target.Permanent })
+		if permanent {
+			fmt.Fprintf(&text, "Delete these %d items? Items marked permanent can't be restored.\n", len(approval.Targets))
+		} else {
+			fmt.Fprintf(&text, "Delete these %d items? They go to the trash and can be restored.\n", len(approval.Targets))
+		}
 		for _, target := range approval.Targets {
 			text.WriteString("- " + link(target))
+			if target.Permanent {
+				text.WriteString(" (permanent)")
+			}
 			if target.SubIssues > 0 {
 				fmt.Fprintf(&text, " (has %d sub-issues)", target.SubIssues)
 			}

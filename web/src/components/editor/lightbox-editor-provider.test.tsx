@@ -112,6 +112,23 @@ describe('LightboxEditorProvider (LS-0382)', () => {
     expect(screen.getByText('Hello from hash')).toBeVisible()
     expect(screen.getByText(/Comment from/)).toBeVisible()
   })
+
+  it('shows no placeholder popover for a #comment- hash the host does not resolve', async () => {
+    window.location.hash = '#comment-unknown'
+    render(
+      <>
+        <LightboxEditorProvider resolveComment={() => undefined}>
+          <span>host</span>
+        </LightboxEditorProvider>
+        <LightboxEditorProvider>
+          <span>plain host</span>
+        </LightboxEditorProvider>
+      </>,
+    )
+    await screen.findByText('plain host')
+    expect(screen.queryByRole('dialog', { name: 'Comment' })).toBeNull()
+    window.location.hash = ''
+  })
 })
 
 describe('comment hash helpers', () => {

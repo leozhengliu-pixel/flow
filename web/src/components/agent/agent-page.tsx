@@ -40,6 +40,7 @@ import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button
 import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
 import { AgentSkillsPicker } from './agent-skills-picker'
 import { applyAgentStreamEvent, markAgentSessionFailed, markAgentSessionStopped } from './agent-stream-state'
+import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
 import { clearLiveAgentSession, liveAgentSession, setLiveAgentSession, useLiveAgentSessionsVersion } from './agent-live-sessions'
 import { AgentElicitation } from './agent-elicitation';
 import {
@@ -54,6 +55,7 @@ import { AgentErrorDetail } from './agent-error-detail';
 import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory, useMarkAgentSessionRead } from './agent-read-state';
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
+import { isMacPlatform } from '@/components/project-detail/project-detail-shortcuts'
 import { AgentToolbarGlyph } from '@/components/ui/agent-glyph'
 import { AgentReplyActions, AgentSessionFeedbackDialog, AgentUserMessageActions } from './agent-message-actions'
 import { toast } from '@/lib/toast'
@@ -191,6 +193,7 @@ export function AgentPage({
     };
   }, [awaitingReply, currentId]);
   const replyRunning = busy || Boolean(live) || awaitingReply;
+  const attachShortcut = isMacPlatform() ? "⌘⇧U" : "Ctrl Shift U";
   // Seeing a chat (once its reply has settled) clears its unread dot here and in the history list.
   useMarkAgentSessionRead(current, replyRunning, (read, lastReadAt) => {
     const listed = sessions.find((item) => item.id === read.id);
@@ -292,6 +295,7 @@ export function AgentPage({
         issueIds: mentions.filter((item) => item.type === "issue").map((item) => item.id),
         projectIds: mentions.filter((item) => item.type === "project").map((item) => item.id),
         documentIds: mentions.filter((item) => item.type === "document").map((item) => item.id),
+        initiativeIds: mentions.filter((item) => item.type === "initiative").map((item) => item.id),
         userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
         mentions,
         ...(answer ? { answer } : {}),
@@ -314,8 +318,11 @@ export function AgentPage({
       setPending(undefined);
       // When the server reported the failure it had already saved the question and its error row (shown with Retry),
       // so putting the text back in the composer would only invite a second copy of it.
-      if (!retrying && !answer && !failedInChat) writeInput(message);
-      if (reason instanceof DOMException && reason.name === "AbortError") {
+      // A stopped reply leaves the message in the chat and the composer empty; only a send that never
+      // reached the server (nothing to show yet) puts the text back.
+      const stopped = reason instanceof DOMException && reason.name === "AbortError";
+      if (!retrying && !answer && !failedInChat && !(stopped && started)) writeInput(message);
+      if (stopped) {
         // Keep the stopped chat (the server already saved the message) in the workspace data too.
         if (started && streamed) saveSession(markAgentSessionStopped(streamed));
         return;
@@ -607,6 +614,14 @@ export function AgentPage({
         <div
           className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}
           data-editing={editingId ? "" : undefined}
+          data-tooltip-elevated=""
+          // The reference app's ⌘⇧U (Ctrl Shift U) opens the file picker from the composer.
+          onKeyDown={(event) => {
+            if (event.key.toLowerCase() === "u" && event.shiftKey && (isMacPlatform() ? event.metaKey : event.ctrlKey) && !event.altKey) {
+              event.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           // The editor is one line tall inside a taller box: a press on the box's empty space focuses it too.
           onMouseDown={(event) => {
             const editor = editorRef.current;
@@ -681,13 +696,15 @@ export function AgentPage({
           <footer>
             <AgentSkillsPicker data={data} selectedIds={selectedSkills} onChange={setSelectedSkills} onNavigate={onNavigate} />
             <span />
-            <button
-              aria-label={t("Attach images, files, or videos")}
-              onClick={() => fileInputRef.current?.click()}
-              type="button"
-            >
-              <AgentAttachIcon />
-            </button>
+            <FlowTooltip label={t("Attach images, files, or videos")} shortcut={attachShortcut} sideOffset={8}>
+              <button
+                aria-label={t("Attach images, files, or videos")}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+              >
+                <AgentAttachIcon />
+              </button>
+            </FlowTooltip>
             <input
               ref={fileInputRef}
               accept={AGENT_ATTACHMENT_ACCEPT}
@@ -700,7 +717,7 @@ export function AgentPage({
               }}
               type="file"
             />
-            {replyRunning ? <button
+            {replyRunning ? <FlowTooltip label={t("Stop responding")} sideOffset={8}><button
               aria-label={t("Stop responding")}
               className={styles.sendButton}
               data-state="working"
@@ -710,7 +727,7 @@ export function AgentPage({
                 streamAbortRef.current?.abort();
               }}
               type="button"
-            ><AgentStopIcon /></button> : <button
+            ><AgentStopIcon /></button></FlowTooltip> : <FlowTooltip label={t("Send message")} shortcut="Enter" sideOffset={8}><button
               aria-label={t("Submit comment")}
               className={styles.sendButton}
               // Like the reference app, an empty composer keeps the quiet send button (hover included); text turns it accent.
@@ -718,7 +735,7 @@ export function AgentPage({
               disabled={!input.trim() || !status?.enabled}
               onClick={() => void send()}
               type="button"
-            ><AgentSubmitIcon /></button>}
+            ><AgentSubmitIcon /></button></FlowTooltip>}
           </footer>
           {error && (
             <span className={styles.error} role="alert">
@@ -862,7 +879,9 @@ function Conversation({
       role="group"
     >
       <div className={styles.conversationInner}>
-        {visibleAgentMessages(session.messages, editingId).map((message, index) => {
+        {visibleAgentMessages(session.messages, editingId).map((savedMessage, index) => {
+          // A stopped reply keeps only its work: no partial text, "stopped" row, Retry or rating.
+          const message = settleStoppedAgentReply(savedMessage);
           // Retry runs the question again, so only the newest reply offers it (never an older error in the history).
           const retryTarget = message.role === "assistant" ? lastUserMessage(session.messages, index) : undefined;
           const waiting = busy && index === session.messages.length - 1 && message.role === "assistant" && !message.content && !message.parts?.length;
@@ -871,6 +890,7 @@ function Conversation({
             : {};
           // An option picked on a question shows as the chosen pill there, not as a separate message.
           if (message.role === "user" && message.answerTo) return null;
+          if (message.role === "assistant" && isBlankStoppedReply(savedMessage)) return null;
           return (
           <Fragment key={message.id}>
             {shouldShowAgentTime(session.messages, index) && (
@@ -891,7 +911,7 @@ function Conversation({
               </div>
               {message.role === "user"
                 ? <AgentUserMessageActions className={styles.messageActions} content={message.content} onEdit={message.id.startsWith("pending-") ? undefined : () => onEdit(message)} />
-                : !waiting && !(busy && index === session.messages.length - 1) && (message.content.trim() || message.parts?.some(part => part.type === "text" && part.text?.trim())) && (
+                : !waiting && !(busy && index === session.messages.length - 1) && !message.parts?.some(part => part.type === "question" && part.question) && (message.content.trim() || message.parts?.some(part => part.type === "text" && part.text?.trim())) && (
                   <AgentReplyActions
                     className={`${styles.replyActions}${index === latestAssistantIndex ? ` ${styles.latestReplyActions}` : ""}`}
                     content={splitAgentSuggestions(message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content).prose}

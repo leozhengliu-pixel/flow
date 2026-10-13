@@ -179,7 +179,7 @@ func (s *server) createAgentSessionStream(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var ok bool
-	if input.Message, ok = validAgentMessage(w, input.Message); !ok || !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs) || !validAgentMentionList(w, input.Mentions, input.UserIDs) {
+	if input.Message, ok = validAgentMessage(w, input.Message); !ok || !validAgentMentionCounts(w, input.IssueIDs, input.ProjectIDs, input.DocumentIDs, input.InitiativeIDs) || !validAgentMentionList(w, input.Mentions, input.UserIDs) {
 		return
 	}
 	if input.Location == "" {
@@ -273,7 +273,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	data.Issues = contextData.Issues
 	issues := selectedAgentIssues(data.Issues, session.IssueIDs)
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
-	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs))
+	initiatives := selectedAgentInitiatives(data.Initiatives, session.InitiativeIDs)
+	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs)) + agentInitiativeTitleContext(initiatives)
 	webNote := ""
 	if agentWebAccess(data.WorkspaceSettings) {
 		r = r.WithContext(withAgentWebTools(r.Context()))
@@ -286,7 +287,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// Chat offers a tool subset picked for this request (see agent_chat_tools.go) and shares a prompt cache per user.
 	r = r.WithContext(withAgentChatToolset(r.Context(), newAgentChatToolset(*session)))
 	r = r.WithContext(context.WithValue(r.Context(), agentPromptCacheKey{}, agentChatCacheKey(workspaceKey(r), data.Viewer.ID)))
-	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session), agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects))...)
+	contextMentions += agentInitiativePrompt(data, initiatives)
+	contextTeams := append(agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects)), agentInitiativeTeamIDs(initiatives)...)
+	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session), contextTeams...)
 	messages := agentProviderHistory(*session, system, agentIssueTitles(contextIssues))
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
 	s.rememberAgentOrigin(r)

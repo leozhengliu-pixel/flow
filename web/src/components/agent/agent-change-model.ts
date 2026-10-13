@@ -26,6 +26,8 @@ export type AgentChangeCard = {
   undone: boolean
   /** Fields the last Undo / Restore left alone (they changed after the agent's edit). */
   skipped?: string[]
+  /** Why an undone change has no Restore (e.g. a customer the Undo deleted permanently). */
+  finalNote?: string
   /** Extra preview data the write returned (status update body and health, skill instructions). */
   preview?: { body?: string; health?: string; parent?: string; instructions?: string }
 }
@@ -172,6 +174,7 @@ export function agentChangeCards(message: Pick<AgentMessage, 'parts'>): AgentCha
       undoable: change.undoable,
       undone: change.state === 'undone',
       skipped: change.skipped?.length ? change.skipped : undefined,
+      finalNote: change.state === 'undone' && !change.undoable && change.note ? change.note : undefined,
       preview: previewOf(change, call.arguments, call.result),
     }
     byEntity.set(entityKey, card)

@@ -192,10 +192,8 @@ func TestIssueRecordsCreateUpdateAndContext(t *testing.T) {
 	requestJSON[any](t, handler, "DELETE", "/api/issue-records/"+created.ID+"/comments/"+comment.ID, nil, 204)
 	requestJSON[any](t, handler, "DELETE", "/api/issue-records/"+created.ID, nil, 204)
 	requestJSON[any](t, handler, "GET", "/api/issue-records/"+created.ID, nil, 404)
-	child = requestJSON[domain.Issue](t, handler, "GET", "/api/issue-records/"+child.ID, nil, 200)
-	if child.ParentID != nil {
-		t.Fatal("deleted parent left a dangling child reference")
-	}
+	// Like the reference app, the sub-issue is deleted (trashed) with its parent.
+	requestJSON[any](t, handler, "GET", "/api/issue-records/"+child.ID, nil, 404)
 }
 
 func TestIssueRecordNoopPatchDoesNotBumpVersion(t *testing.T) {

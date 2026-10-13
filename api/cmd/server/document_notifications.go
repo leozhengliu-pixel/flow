@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -106,11 +107,17 @@ type cachedMemberDirectory struct {
 var memberDirectories sync.Map // workspace id -> cachedMemberDirectory
 
 func (s *server) documentMemberDirectory(r *http.Request) memberDirectory {
+	return s.workspaceMemberDirectory(r.Context(), workspaceKey(r))
+}
+
+// workspaceMemberDirectory is documentMemberDirectory outside a request (for
+// example the agent reply listener).
+func (s *server) workspaceMemberDirectory(ctx context.Context, workspace string) memberDirectory {
 	directory := memberDirectory{users: map[string]domain.User{}, roles: map[string]string{}}
 	if s.authDisabled {
 		return directory
 	}
-	metadata, ok := s.store.WorkspaceMetadataFields(workspaceKey(r), "workspace")
+	metadata, ok := s.store.WorkspaceMetadataFields(workspace, "workspace")
 	if !ok || metadata.Workspace.ID == "" {
 		return directory
 	}
@@ -118,7 +125,7 @@ func (s *server) documentMemberDirectory(r *http.Request) memberDirectory {
 	if cached, ok := memberDirectories.Load(key); ok && time.Since(cached.(cachedMemberDirectory).loadedAt) < memberDirectoryTTL {
 		return cached.(cachedMemberDirectory).directory
 	}
-	members, err := s.store.ListMembers(r.Context(), metadata.Workspace.ID)
+	members, err := s.store.ListMembers(ctx, metadata.Workspace.ID)
 	if err != nil {
 		return directory
 	}
