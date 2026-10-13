@@ -63,6 +63,7 @@ function wrapUnion(type) {
 function schemaType(schema, indent = '') {
   if (!schema || typeof schema !== 'object' || Object.keys(schema).length === 0) return 'unknown'
   if (schema.$ref) return typeName(schema.$ref.split('/').pop())
+  if ('const' in schema) return JSON.stringify(schema.const)
   if (schema.enum) return schema.enum.map(value => JSON.stringify(value)).join(' | ')
   const variants = schema.anyOf ?? schema.oneOf
   if (variants) return unique(variants.map(variant => schemaType(variant, indent))).join(' | ')
@@ -168,11 +169,14 @@ function successResponses(operation) {
     .sort(([left], [right]) => left.localeCompare(right))
 }
 
+const connectionOnly = new Set(['connection'])
+const pagingParameters = new Set(['first', 'last', 'after', 'before', 'orderBy', 'connection'])
+
 const operations = []
 for (const [routePath, item] of Object.entries(spec.paths ?? {})) {
   for (const [method, operation] of Object.entries(item)) {
     if (!operation || typeof operation !== 'object' || !operation.responses) continue
-    if (!referencesSchema({ responses: operation.responses, requestBody: operation.requestBody })) continue
+    if (!operation['x-flow-typed'] && !referencesSchema({ responses: operation.responses, requestBody: operation.requestBody })) continue
     const parameters = (operation.parameters ?? []).map(resolveParameter).filter(Boolean)
     const successes = successResponses(operation)
     const responseSchemas = unique(
@@ -182,7 +186,7 @@ for (const [routePath, item] of Object.entries(spec.paths ?? {})) {
         .map(schema => schemaType(schema)),
     )
     const body = operation.requestBody?.content?.['application/json']
-    operations.push({
+    const base = {
       method: method.toUpperCase(),
       path: routePath,
       id: operation.operationId,
@@ -197,6 +201,28 @@ for (const [routePath, item] of Object.entries(spec.paths ?? {})) {
       responseType: responseSchemas.length ? responseSchemas.join(' | ') : 'void',
       statuses: successes.map(([status]) => Number(status)),
       tags: operation.tags ?? [],
+    }
+    const shapes = operation['x-flow-response-shapes']
+    if (!shapes) {
+      operations.push(base)
+      continue
+    }
+    // A list route that answers with a connection or with its original
+    // response depending on the arguments: one method per shape.
+    operations.push({
+      ...base,
+      responseType: schemaType(shapes.connection),
+      queryParameters: base.queryParameters.filter(parameter => !connectionOnly.has(parameter.name) && parameter['x-flow-form'] !== 'legacy'),
+      forcedQuery: { connection: '1' },
+      description: `${base.description}\nReturns the connection form; \`${base.name}Legacy\` returns the original response.`.trim(),
+    })
+    operations.push({
+      ...base,
+      name: `${base.name}Legacy`,
+      id: `${base.id}_legacy`,
+      responseType: schemaType(shapes.legacy),
+      queryParameters: base.queryParameters.filter(parameter => !pagingParameters.has(parameter.name) && parameter['x-flow-form'] !== 'connection'),
+      description: `${base.description}\nReturns the original response (no pagination arguments); \`${base.name}\` returns the connection form.`.trim(),
     })
   }
 }
@@ -258,7 +284,10 @@ function emitOperations() {
     method += `  ${operation.name}(${requestParam}options?: RequestOptions): Promise<${operation.responseType}> {\n`
     const parts = [`method: ${JSON.stringify(operation.method)}`, `path: ${JSON.stringify(operation.path)}`]
     if (operation.pathParameters.length) parts.push('pathParams: request.path')
-    if (query) parts.push(query.required ? 'query: request.query' : 'query: request?.query')
+    if (operation.forcedQuery) {
+      const forced = Object.entries(operation.forcedQuery).map(([key, value]) => `${propertyKey(key)}: ${JSON.stringify(value)}`).join(', ')
+      parts.push(query ? `query: { ...${query.required ? 'request.query' : 'request?.query'}, ${forced} }` : `query: { ${forced} }`)
+    } else if (query) parts.push(query.required ? 'query: request.query' : 'query: request?.query')
     if (operation.bodyType) parts.push(operation.bodyRequired ? 'body: request.body' : 'body: request?.body')
     if (operation.responseType === 'void') parts.push("expect: 'none'")
     method += `    return this.transport.request({ ${parts.join(', ')}, ...options })\n  }\n`
@@ -278,8 +307,25 @@ function emitOperations() {
   return out
 }
 
+// The `webhooks` section of the OpenAPI document: the payloads Flow sends.
+function emitWebhooks() {
+  const events = Object.entries(spec.webhooks ?? {})
+    .filter(([name]) => name !== 'Legacy')
+    .map(([name, item]) => ({ name, model: typeName(item.post.requestBody.content['application/json'].schema.$ref.split('/').pop()) }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+  let out = `${banner}\n`
+  out += `import type {\n${events.map(event => `  ${event.model},`).join('\n')}\n} from './models.js'\n\n`
+  out += '/** Every payload Flow sends to a webhook, discriminated by `type` (the `Flow-Event` header). */\n'
+  out += `export type WebhookEvent =\n${events.map(event => `  | ${event.model}`).join('\n')}\n\n`
+  out += '/** The payload `type` values. */\nexport type WebhookEventType = WebhookEvent[\'type\']\n\n'
+  out += '/** The event of one payload type, for example `WebhookEventOf<\'Issue\'>`. */\n'
+  out += 'export type WebhookEventOf<T extends WebhookEventType> = Extract<WebhookEvent, { type: T }>\n\n'
+  out += `/** The payload types this version of the SDK knows. */\nexport const webhookEventTypes = [${events.map(event => JSON.stringify(event.name)).join(', ')}] as const satisfies readonly WebhookEventType[]\n`
+  return out
+}
+
 function emitIndex() {
-  return `${banner}\nexport * from './models.js'\nexport * from './operations.js'\n`
+  return `${banner}\nexport * from './models.js'\nexport * from './operations.js'\nexport * from './webhooks.js'\n`
 }
 
 // ---------------------------------------------------------------------------
@@ -287,6 +333,7 @@ function emitIndex() {
 const files = {
   'models.ts': emitModels(),
   'operations.ts': emitOperations(),
+  'webhooks.ts': emitWebhooks(),
   'index.ts': emitIndex(),
 }
 

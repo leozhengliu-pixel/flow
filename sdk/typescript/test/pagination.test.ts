@@ -135,46 +135,87 @@ describe('connections', () => {
   })
 })
 
-describe('issues (cursor API)', () => {
+describe('issues (connection API)', () => {
+  /** A server over issue_0 … issue_{total-1} with index cursors, newest (last index) first like the real one. */
   function issueServer(total: number) {
     return mockFetch(request => {
-      const limit = Number(request.query.get('limit'))
-      const start = request.query.get('cursor') ? Number(request.query.get('cursor')) : 0
-      const end = Math.min(total, start + limit)
+      const first = request.query.get('first')
+      const last = request.query.get('last')
+      const after = request.query.get('after')
+      const before = request.query.get('before')
+      let from = 0
+      let to = total
+      if (after !== null) from = Number(after) + 1
+      if (before !== null) to = Number(before)
+      if (last !== null) from = Math.max(from, to - Number(last))
+      else to = Math.min(to, from + Number(first))
+      const nodes = Array.from({ length: Math.max(0, to - from) }, (_, i) => ({ id: `issue_${from + i}`, identifier: `ENG-${from + i}` }))
       return json({
-        items: Array.from({ length: end - start }, (_, i) => ({ id: `issue_${start + i}`, identifier: `ENG-${start + i}` })),
-        hasMore: end < total,
-        nextCursor: end < total ? String(end) : '',
-        total,
+        nodes,
+        pageInfo: { hasNextPage: to < total, hasPreviousPage: from > 0, startCursor: nodes.length ? String(from) : null, endCursor: nodes.length ? String(to - 1) : null },
+        totalCount: total,
       })
     })
   }
 
-  it('adapts items/nextCursor to a connection', async () => {
+  it('pages forward with first and after', async () => {
     const mock = issueServer(5)
     const issues = await flowFor(mock).issues({ first: 2 })
-    expect(issues.nodes).toHaveLength(2)
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_0', 'issue_1'])
     expect(issues.totalCount).toBe(5)
-    expect(issues.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: false, endCursor: '2' })
+    expect(issues.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: false, endCursor: '1' })
     await issues.fetchNext()
     expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_0', 'issue_1', 'issue_2', 'issue_3'])
     await issues.fetchNext()
     expect(issues.pageInfo.hasNextPage).toBe(false)
     expect(issues.nodes).toHaveLength(5)
+    expect(mock.calls.map(call => call.query.get('after'))).toEqual([null, '1', '3'])
   })
 
-  it('iterates all issues and ignores fetchPrevious', async () => {
+  it('fetchPrevious pages backward and prepends', async () => {
+    const mock = issueServer(7)
+    const issues = await flowFor(mock).issues({ first: 2, after: '2' })
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_3', 'issue_4'])
+    expect(issues.pageInfo).toMatchObject({ hasNextPage: true, hasPreviousPage: true, startCursor: '3' })
+    await issues.fetchPrevious()
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_1', 'issue_2', 'issue_3', 'issue_4'])
+    expect(mock.calls[1].query.get('last')).toBe('2')
+    expect(mock.calls[1].query.get('before')).toBe('3')
+    await issues.fetchPrevious()
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_0', 'issue_1', 'issue_2', 'issue_3', 'issue_4'])
+    expect(issues.pageInfo.hasPreviousPage).toBe(false)
+    const calls = mock.calls.length
+    await issues.fetchPrevious()
+    expect(mock.calls).toHaveLength(calls)
+  })
+
+  it('starts at the final page with last and walks back to the start', async () => {
+    const mock = issueServer(5)
+    const issues = await flowFor(mock).issues({ last: 2 })
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_3', 'issue_4'])
+    expect(issues.pageInfo).toMatchObject({ hasNextPage: false, hasPreviousPage: true })
+    while (issues.pageInfo.hasPreviousPage) await issues.fetchPrevious()
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_0', 'issue_1', 'issue_2', 'issue_3', 'issue_4'])
+  })
+
+  it('iterates every page from a first page', async () => {
     const mock = issueServer(5)
     const issues = await flowFor(mock).issues({ first: 2 })
-    await issues.fetchPrevious()
-    expect(issues.nodes).toHaveLength(2)
     expect((await issues.all()).map(issue => issue.id)).toEqual(['issue_0', 'issue_1', 'issue_2', 'issue_3', 'issue_4'])
   })
 
   it('starts after a given cursor', async () => {
     const mock = issueServer(5)
-    const issues = await flowFor(mock).issues({ first: 2, after: '3' })
+    const issues = await flowFor(mock).issues({ first: 2, after: '2' })
     expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_3', 'issue_4'])
     expect(issues.pageInfo.hasNextPage).toBe(false)
+  })
+
+  it('treats before without a size as a backward page', async () => {
+    const mock = issueServer(5)
+    const issues = await flowFor(mock).issues({ before: '3' })
+    expect(issues.nodes.map(issue => issue.id)).toEqual(['issue_0', 'issue_1', 'issue_2'])
+    expect(mock.calls[0].query.get('last')).toBe('50')
+    expect(mock.calls[0].query.get('first')).toBeNull()
   })
 })

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
 
@@ -29,24 +30,9 @@ import (
 // inbox notifications of the application's user are sent as
 // AppUserNotification events.
 
-type applicationWebhookInput struct {
-	Enabled       *bool     `json:"enabled,omitempty"`
-	URL           *string   `json:"url,omitempty"`
-	ResourceTypes *[]string `json:"resourceTypes,omitempty"`
-}
+type applicationWebhookInput = publicapi.ApplicationWebhookInput
 
-type applicationWebhookSettings struct {
-	ApplicationID  string   `json:"applicationId"`
-	ClientID       string   `json:"clientId"`
-	Enabled        bool     `json:"enabled"`
-	URL            string   `json:"url"`
-	ResourceTypes  []string `json:"resourceTypes"`
-	SecretPrefix   string   `json:"secretPrefix,omitempty"`
-	SigningEnabled bool     `json:"signingEnabled"`
-	Secret         string   `json:"secret,omitempty"`
-	// Installations counts the workspaces with a managed webhook.
-	Installations int `json:"installations"`
-}
+type applicationWebhookSettings = publicapi.ApplicationWebhookSettings
 
 func (s *server) applicationWebhookSettings(ctx context.Context, app domain.OAuthApplication) applicationWebhookSettings {
 	_, signing, _ := s.store.WebhookSigningSecret(ctx, store.ApplicationWebhookSecretRef(app.ClientID))

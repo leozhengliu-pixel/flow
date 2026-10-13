@@ -1,6 +1,6 @@
 {
   "name": "@flow/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TypeScript SDK for the Flow REST API: typed client, pagination, errors, webhooks and OAuth helpers",
   "license": "Apache-2.0",
   "type": "module",

@@ -28,7 +28,13 @@ type Connection[T any] struct {
 	// Nodes are ordered newest first by the requested orderBy field.
 	Nodes    []T      `json:"nodes"`
 	PageInfo PageInfo `json:"pageInfo"`
+	// TotalCount is the number of matching nodes, on endpoints that report it
+	// (issues, with includeTotal=true).
+	TotalCount *int64 `json:"totalCount,omitempty"`
 }
+
+// MaxIssuePageSize is the largest page of the issue query API.
+const MaxIssuePageSize = 100
 
 // Error is the error envelope returned with every 4xx/5xx under /api/.
 type Error struct {
@@ -118,6 +124,11 @@ type LinkAttachmentInput struct {
 	Subtitle *string        `json:"subtitle,omitempty"`
 	IconURL  *string        `json:"iconUrl,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+	// CreateAsUser names the external person an actor=app token acts for
+	// ("<name> via <App>", at most 100 characters). Rejected for user tokens.
+	CreateAsUser *string `json:"createAsUser,omitempty"`
+	// DisplayIconURL is that person's avatar; requires createAsUser.
+	DisplayIconURL *string `json:"displayIconUrl,omitempty"`
 }
 
 // CustomerInput creates or updates a customer.

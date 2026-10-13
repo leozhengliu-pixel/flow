@@ -1,4 +1,4 @@
-import type { Webhook } from './generated/models.js'
+import type { IssueFilter } from './generated/models.js'
 
 /** Comparators every field supports. */
 export interface BaseComparator<T> {
@@ -54,44 +54,40 @@ export interface FlowFilter {
   [field: string]: unknown
 }
 
-/** The view filter tree of the issue query API (`and`, `or`, `not`, or a `field` / `operator` / `values` condition). */
-export interface IssueFilter {
-  and?: IssueFilter[]
-  or?: IssueFilter[]
-  not?: IssueFilter
-  field?: string
-  operator?: string
-  value?: unknown
-  values?: unknown[]
-}
-
 export type IssueOrderBy = 'createdAt' | 'updatedAt' | 'priority' | 'title' | 'sortOrder'
 
 export interface IssuesArgs {
-  /** Page size, 1-100 (default 50). */
+  /** Page size forward, 1-100 (default 50). */
   first?: number
-  /** Continue after this cursor (`pageInfo.endCursor`). Issues page forward only. */
+  /** Continue after this cursor (`pageInfo.endCursor`). */
   after?: string
-  /** View filter tree, or its JSON text. */
+  /** Page size backward, 1-100. Without `before` this is the final page. */
+  last?: number
+  /** Continue backward from this cursor (`pageInfo.startCursor`). */
+  before?: string
+  /** View filter tree (`IssueFilter`), or its JSON text. */
   filter?: IssueFilter | string
   /** Default `createdAt`. */
   orderBy?: IssueOrderBy
-  /** Default `desc` for `createdAt` and `updatedAt`, the server default otherwise. */
+  /** Default `desc` for `createdAt` and `updatedAt`, `asc` otherwise. */
   orderDirection?: 'asc' | 'desc'
   /** Include archived issues. */
   includeArchived?: boolean
-  /** Text search over title and description. */
+  /** Fill `totalCount` with the number of matching issues. */
+  includeTotal?: boolean
+  /** Text search over title and identifier. */
   query?: string
   /** Team id, key or name; several comma separated or as an array. */
   teamId?: string | string[]
   projectId?: string | string[]
-  /** Workflow state id, type or name. */
+  /** Workflow state id. */
   stateId?: string | string[]
 }
 
 /**
  * Attribution for OAuth `actor=app` tokens: records show "<createAsUser> via
- * <application>". Rejected for user tokens.
+ * <application>". Rejected for user tokens. The generated create inputs carry
+ * these fields themselves; this type is for your own wrappers.
  */
 export interface AppAttribution {
   /** Name of the person in your system on whose behalf the application acts (at most 100 characters). */
@@ -100,45 +96,11 @@ export interface AppAttribution {
   displayIconUrl?: string
 }
 
-export interface WebhookCreateInput {
-  /** Name shown in the webhook list; `label` is accepted as an alias by the server. */
-  name?: string
-  label?: string
-  /** Public HTTPS endpoint. */
-  url: string
-  /** Payload type names (`Issue`, `Comment`) or Flow ids (`issues`, `comments`). */
-  resourceTypes: string[]
-  /** Restrict to one team, several teams, or (default) every team you can access. */
-  teamId?: string
-  teamIds?: string[]
-  allPublicTeams?: boolean
-  enabled?: boolean
-}
-
-export interface WebhookUpdateInput {
-  name?: string
-  url?: string
-  resourceTypes?: string[]
-  teamIds?: string[]
-  enabled?: boolean
-  /** `2` switches a legacy webhook to the current envelope. */
-  payloadVersion?: number
-}
-
-/** The secret is returned only when it is created or rotated. */
-export type WebhookWithSecret = Webhook & { secret: string }
-
 export interface WebhookDeliveriesArgs {
-  /** `Pending`, `Retrying`, `Delivered`, `Failed` or `Canceled` (case as the server reports it). */
-  status?: string
+  /** `failed` also lists deliveries that are retrying. */
+  status?: 'pending' | 'delivering' | 'retrying' | 'succeeded' | 'failed' | 'canceled'
   first?: number
   after?: string
-}
-
-export interface WebhookDelivery {
-  id: string
-  status?: string
-  [field: string]: unknown
 }
 
 export type LinkAttachmentResult<T> = { attachment: T; created: boolean }

@@ -172,6 +172,14 @@ type webhookEvent struct {
 	extra     map[string]any
 	payload   json.RawMessage // raw mutation input (version 1 data)
 	previous  json.RawMessage
+	// version1Only marks an event whose subject cannot be described by the
+	// current envelope (a reordering of milestones); only legacy webhooks get it.
+	version1Only bool
+	// version2Only marks events that legacy webhooks never receive.
+	version2Only bool
+	// noVersion1URL keeps `url` out of version 1 bodies of nested entity
+	// events, which never carried one.
+	noVersion1URL bool
 }
 
 // classifyWebhookEvent maps a Flow domain event to the webhook resource type
@@ -418,6 +426,18 @@ func (s *server) dispatchWebhookEvent(workspace string, event domain.DomainEvent
 	ctx := context.Background()
 	classified := s.describeWebhookEvent(ctx, workspace, event, resource, action, legacy)
 	s.enqueueWebhookEvent(ctx, workspace, hooks.Webhooks, classified)
+	if event.Type == "project.milestones_reordered" {
+		if parent := snapshotEntity(event); parent != nil {
+			metadata, _ := s.store.WorkspaceMetadataFields(workspace, "users")
+			root := s.appBaseURL() + "/" + url.PathEscape(metadata.Workspace.URLKey)
+			if s.appBaseURL() == "" {
+				root = ""
+			}
+			for _, moved := range s.describeMilestoneReorder(event, classified, parent, root) {
+				s.enqueueWebhookEvent(ctx, workspace, hooks.Webhooks, moved)
+			}
+		}
+	}
 }
 
 // enqueueWebhookEvent queues the event for every matching webhook and starts
@@ -428,6 +448,9 @@ func (s *server) enqueueWebhookEvent(ctx context.Context, workspace string, hook
 	organizationID := metadata.Workspace.ID
 	for _, webhook := range hooks {
 		if webhook.AuditLog || !webhook.Enabled || webhook.URL == "" || !webhookMatches(webhook, event) {
+			continue
+		}
+		if event.version1Only && webhookPayloadVersion(webhook) != 1 || event.version2Only && webhookPayloadVersion(webhook) == 1 {
 			continue
 		}
 		if webhook.TeamRestriction == "selected" && len(webhook.TeamIDs) > 0 {
@@ -492,6 +515,13 @@ func webhookDeliveryID(webhookID, eventKey string) string {
 	return "whd_" + hex.EncodeToString(sum[:16])
 }
 
+func legacyEventURL(event webhookEvent) string {
+	if event.noVersion1URL {
+		return ""
+	}
+	return event.url
+}
+
 func webhookEnvelopeBody(webhook domain.Webhook, organizationID string, event webhookEvent) (json.RawMessage, error) {
 	createdAt := event.createdAt.UTC().Format("2006-01-02T15:04:05.000Z07:00")
 	if webhookPayloadVersion(webhook) == 1 && event.legacy != "" && event.resource != "reactions" {
@@ -501,7 +531,7 @@ func webhookEnvelopeBody(webhook domain.Webhook, organizationID string, event we
 		}
 		return json.Marshal(legacyWebhookEnvelope{
 			ID: event.eventID, Type: event.legacy, Action: webhookAction(event.eventType), Data: data, PreviousValues: event.previous,
-			CreatedAt: event.createdAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), Actor: event.actor, URL: event.url,
+			CreatedAt: event.createdAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), Actor: event.actor, URL: legacyEventURL(event),
 			UpdatedFrom: event.updated, OrganizationID: organizationID, WebhookID: webhook.ID, EventType: event.eventType,
 		})
 	}
@@ -694,6 +724,29 @@ func (s *server) describeWebhookEvent(ctx context.Context, workspace string, eve
 			}
 		}
 		setData(data)
+	case resource == "project_updates" || resource == "milestones" || resource == "initiative_updates":
+		// The nested entity is the subject; its project or initiative gives
+		// the teams and the page.
+		if entity != nil {
+			result.teamIDs = webhookEntityTeams(entity)
+		} else {
+			result.teamIDs = webhookEntityTeams(input)
+		}
+		result.noVersion1URL = true
+		child, found, stripped := webhookChildOf(event.Payload)
+		result.payload = stripped
+		var childEntity map[string]any
+		if found && entity != nil {
+			childEntity, result.url = s.webhookChildEntity(ctx, workspace, event, resource, child, entity, root)
+		}
+		if childEntity == nil {
+			result.version1Only = true
+		} else {
+			setData(childEntity)
+		}
+		if base == "" {
+			result.url = ""
+		}
 	default:
 		if entity != nil {
 			setData(entity)

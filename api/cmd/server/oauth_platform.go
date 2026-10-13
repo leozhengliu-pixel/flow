@@ -71,7 +71,7 @@ func oauthAttributionRequest(r *http.Request) bool {
 	case len(parts) == 2:
 		return parts[1] == "issues" || parts[1] == "issue-records" || parts[1] == "documents"
 	case len(parts) == 4:
-		return (parts[1] == "issues" || parts[1] == "issue-records" || parts[1] == "documents") && (parts[3] == "comments" || parts[3] == "attachments" || parts[3] == "links")
+		return (parts[1] == "issues" || parts[1] == "issue-records" || parts[1] == "documents") && (parts[3] == "comments" || parts[3] == "attachments" || parts[3] == "links" || parts[3] == "link-attachments")
 	case len(parts) == 5:
 		return (parts[1] == "issues" || parts[1] == "issue-records") && parts[3] == "attachments" && parts[4] == "from-url"
 	}

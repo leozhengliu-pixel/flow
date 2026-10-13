@@ -7,6 +7,21 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Typed public contract for webhook management and deliveries, documents,
+  project milestones, project and initiative updates, deletes and single-record
+  reads (`GET /api/teams/{id}`, users, workflow states, labels, cycles,
+  projects, initiatives, customers); JSON Schemas of every webhook payload in
+  the OpenAPI `webhooks` section; `createAsUser` / `displayIconUrl` on issue,
+  comment, document and link attachment inputs.
+- `GET /api/issue-records` pages backward (`last` / `before`) and answers with a
+  connection (`totalCount`, `pageInfo`) when asked with first / last / after /
+  before / orderBy / `connection=1`; list routes with two response shapes
+  document both and accept `connection=1`.
+- `@flow/sdk` 0.3.0: `fetchPrevious()` for issues, generated webhook event
+  types, writes for documents, milestones and updates, single-record getters.
+
 ## [0.2.0] - 2026-10-04
 
 ### Added

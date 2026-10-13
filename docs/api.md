@@ -88,13 +88,30 @@ that existed when the cursor was issued. A cursor only works with the
 
 ¹ Older list routes keep their original response (an array, or the project
 directory page) unless a pagination argument (`first`, `last`, `after`,
-`before` or `orderBy`) is present.
+`before` or `orderBy`) or `connection=1` is present. The OpenAPI document
+describes both shapes (`oneOf`, and `x-flow-response-shapes` for generators).
 
-Issues use the issue query API, which predates connections:
-`GET /api/issue-records?limit=50&cursor=…&sort=updatedAt&direction=desc`
-returns `items`, `hasMore` and `nextCursor`, and `filter` takes the view
-filter tree used by saved views. `GET /api/issue-records/{id}` accepts an id
-or an identifier such as `ENG-123`.
+Issues are queried with `GET /api/issue-records`, an indexed keyset query of at
+most 100 issues per page. With `first`/`after`, `last`/`before`, `orderBy`
+(`createdAt` default, `updatedAt`, `priority`, `title`, `sortOrder`),
+`orderDirection` or `connection=1` it answers with a connection that pages in
+both directions (`totalCount` with `includeTotal=true`); `last` without
+`before` returns the final page. Without them it returns the original page,
+`{items, hasMore, nextCursor, total}`, paged forward with `limit` and `cursor`
+(`sort`, `direction`). `archived` is `false` (default), `true` (only archived)
+or `all`; `includeArchived=true` means `all`. `filter` takes the view filter
+tree used by saved views (`IssueFilter` in the OpenAPI document). A cursor is
+bound to the filter and ordering it was issued for. `GET /api/issue-records/{id}`
+accepts an id or an identifier such as `ENG-123`.
+
+### Single records
+
+`GET /api/teams/{id}` (id or key), `/api/users/{id}` (id or `me`),
+`/api/workflow-states/{id}`, `/api/issue-labels/{id}`, `/api/cycles/{id}`,
+`/api/projects/{id}` (id or `slugId`), `/api/initiatives/{id}` (id or
+`slugId`) and `/api/customers/{id}` return one record with the visibility of
+the matching list (a record you cannot see is a `NOT_FOUND`). Archived records
+are returned.
 
 Comments on issues and documents are read from an index and are ordered by
 `createdAt` only; they do not accept `filter`.

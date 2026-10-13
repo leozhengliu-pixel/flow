@@ -63,7 +63,7 @@ signing secret, which is never returned again.
 | `relations` | `IssueRelation` | An issue relation is added or removed |
 | `projects` | `Project` | A project is created, updated or deleted |
 | `project_updates` | `ProjectUpdate` | A project update is posted, edited or deleted |
-| `milestones` | `ProjectMilestone` | A project milestone is created, updated, reordered or deleted |
+| `milestones` | `ProjectMilestone` | A project milestone is created, updated, deleted or moved by a reordering |
 | `documents` | `Document` | A document is created, updated or deleted |
 | `initiatives` | `Initiative` | An initiative is created, updated or deleted |
 | `initiative_updates` | `InitiativeUpdate` | An initiative update is posted, edited or deleted |
@@ -74,6 +74,15 @@ signing secret, which is never returned again.
 | `releases` | `Release` | A release is created, updated, completed or deleted |
 | `release_notes` | `ReleaseNote` | A release note is created, updated or deleted |
 | `issue_sla` | `IssueSLA` | An SLA is set on an issue (`set`), is close to breaching (`highRisk`), or breached (`breached`) |
+
+For `ProjectUpdate`, `ProjectMilestone` and `InitiativeUpdate` events, `data`
+is the update or milestone itself (with `projectId` or `initiativeId`; for
+`remove`, as it was before it was deleted) and `url` points to it. Milestones
+also carry `sortOrder`, their position in the project (from 0). Reordering a
+project's milestones sends one `update` event per milestone whose position
+changed (`eventType` `project.milestone_reordered`, `updatedFrom` `{"sortOrder":
+<old position>}`) to current-format webhooks; webhooks still on the version 1
+format receive the single `project.milestones_reordered` event as before.
 
 Application webhooks can additionally subscribe to `agent_session_events`
 (`AgentSessionEvent`), `app_user_notifications` (`AppUserNotification`),
@@ -108,6 +117,11 @@ Flow-Signature: 766e1d90a96e2f5ecec342a99c5552999dd95d49250171b902d703fd674f5086
 | `X-Flow-Delivery`, `X-Flow-Event`, `X-Flow-Signature` | Older names of the same values, kept for existing receivers. |
 
 ## Payload
+
+Every payload type is described as a JSON Schema in the `webhooks` section of
+[`openapi.json`](openapi.json) (OpenAPI 3.1), generated from the Go types the
+server's deliveries are tested against; entity `data` is a `*Partial` schema
+because only `id` is guaranteed.
 
 ### Data change events
 

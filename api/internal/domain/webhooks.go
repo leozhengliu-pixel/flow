@@ -38,13 +38,13 @@ type WebhookDelivery struct {
 	WorkspaceKey   string                   `json:"-"`
 	WebhookID      string                   `json:"webhookId"`
 	SecretRef      string                   `json:"-"`
-	Kind           string                   `json:"kind"`
+	Kind           string                   `json:"kind" enum:"event,test,lifecycle"`
 	EventID        string                   `json:"eventId"`
 	EventType      string                   `json:"eventType"`
 	Action         string                   `json:"action"`
 	URL            string                   `json:"url"`
 	Payload        json.RawMessage          `json:"payload,omitempty"`
-	Status         string                   `json:"status"`
+	Status         string                   `json:"status" enum:"pending,delivering,retrying,succeeded,failed,canceled"`
 	Attempt        int                      `json:"attempt"`
 	MaxAttempts    int                      `json:"maxAttempts"`
 	NextAttemptAt  *time.Time               `json:"nextAttemptAt,omitempty"`
