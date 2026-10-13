@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Minimize2, PanelLeft, PanelRight, Plus } from 'lucide-react'
 import { useI18n } from '@/i18n/i18n'
 import { AgentPanelLayout } from './agent-panel-layout'
+import { clampFloatSize, FLOAT_DEFAULT_SIZE } from './agent-float-size'
 import styles from './agent-panel.module.css'
 import { GridLoader } from '@/components/ui/grid-loader'
 import { AgentCloseGlyph, AgentCursorGlyph, AgentFullPageGlyph, AgentMinimizeGlyph } from '@/components/ui/agent-glyph'
@@ -23,6 +25,18 @@ function readWidth() {
     /* ignore */
   }
   return DEFAULT_WIDTH
+}
+
+const FLOAT_SIZE_KEY = 'flow:agent-float-size'
+
+function readFloatSize() {
+  try {
+    const value = JSON.parse(localStorage.getItem(FLOAT_SIZE_KEY) ?? 'null') as { width?: unknown; height?: unknown } | null
+    if (value && typeof value.width === 'number' && typeof value.height === 'number') return { width: value.width, height: value.height }
+  } catch {
+    /* ignore */
+  }
+  return FLOAT_DEFAULT_SIZE
 }
 
 function readDock(): AgentPanelDock {
@@ -52,6 +66,8 @@ export function AgentPanel({
   loading = false,
   children,
   headerExtra,
+  titleExtra,
+  unread = false,
   'aria-label': ariaLabel,
 }: {
   title: string
@@ -71,6 +87,10 @@ export function AgentPanel({
   loading?: boolean
   children?: ReactNode
   headerExtra?: ReactNode
+  /** Controls right after the title (the reference app's "…" chat menu in the floating chat). */
+  titleExtra?: ReactNode
+  /** A reply arrived while the floating chat was minimized: its bottom-bar pill shows a dot. */
+  unread?: boolean
   'aria-label'?: string
 }) {
   const { t } = useI18n()
@@ -80,6 +100,10 @@ export function AgentPanel({
   const [fullscreenState, setFullscreenState] = useState(false)
   const [resizing, setResizing] = useState(false)
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const [floatSize, setFloatSize] = useState(readFloatSize)
+  const [floatResize, setFloatResize] = useState<{ edge: 'top' | 'left' | 'corner'; x: number; y: number; width: number; height: number }>()
+  const [viewportHeight, setViewportHeight] = useState(() => window.innerHeight)
+  const [dockSlot, setDockSlot] = useState<Element | null>(null)
 
   const dock = dockProp ?? dockState
   const width = widthProp ?? widthState
@@ -148,6 +172,46 @@ export function AgentPanel({
   }, [dock, resizing, setWidth])
 
   useEffect(() => {
+    if (variant !== 'floating') return
+    const onResize = () => setViewportHeight(window.innerHeight)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [variant])
+
+  // The minimized chat lives in the bottom bar, next to the Agent button (the reference app's chat pill).
+  useEffect(() => {
+    if (variant !== 'floating' || !open) return
+    setDockSlot(document.querySelector('[data-agent-dock-slot]'))
+  }, [open, variant])
+
+  useEffect(() => {
+    if (!floatResize) return
+    const onMove = (event: PointerEvent) => {
+      const { edge, x, y, width, height } = floatResize
+      setFloatSize(clampFloatSize({
+        width: edge === 'top' ? width : width + x - event.clientX,
+        height: edge === 'left' ? height : height + y - event.clientY,
+      }))
+    }
+    const onUp = () => setFloatResize(undefined)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+    }
+  }, [floatResize])
+
+  useEffect(() => {
+    if (variant !== 'floating' || floatResize) return
+    try {
+      localStorage.setItem(FLOAT_SIZE_KEY, JSON.stringify(floatSize))
+    } catch {
+      /* ignore */
+    }
+  }, [floatResize, floatSize, variant])
+
+  useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !event.defaultPrevented) {
@@ -163,6 +227,29 @@ export function AgentPanel({
 
   const actionCount =
     1 + (onNewChat ? 1 : 0) + (variant === 'floating' || onOpenFullPage ? 1 : 0) + (variant === 'sidebar' ? 1 : 0) + (variant === 'floating' ? 1 : 0)
+  const floating = variant === 'floating'
+  const shownSize = clampFloatSize(floatSize, viewportHeight)
+  const floatStyle = floating ? ({ '--agent-float-width': `${shownSize.width}px`, '--agent-float-height': `${shownSize.height}px` } as CSSProperties) : undefined
+  const startFloatResize = (edge: 'top' | 'left' | 'corner') => (event: ReactPointerEvent) => {
+    event.preventDefault()
+    setFloatResize({ edge, x: event.clientX, y: event.clientY, ...shownSize })
+  }
+
+  // Minimized, the reference app keeps only a pill with the chat's title in the bottom bar; clicking it brings the chat back.
+  if (floating && minimized && !fullscreen) {
+    const pill = (
+      <div className={styles.chatPill} data-unread={unread || undefined}>
+        <button aria-label={t('Restore chat')} className={styles.chatPillOpen} onClick={() => setMinimized(false)} type="button">
+          {unread && <span aria-hidden className={styles.chatPillDot}/>}
+          <span data-i18n-ignore={title !== t('New chat') || undefined}>{title}</span>
+        </button>
+        <button aria-label={t('Close chat')} className={styles.chatPillClose} onClick={onRequestClose} type="button">
+          <AgentCloseGlyph size={12} />
+        </button>
+      </div>
+    )
+    return dockSlot ? createPortal(pill, dockSlot) : <div className={styles.chatPillFallback}>{pill}</div>
+  }
 
   return (
     <AgentPanelLayout name="AgentPanel" onRequestClose={onRequestClose}>
@@ -176,8 +263,15 @@ export function AgentPanel({
         data-tooltip-raised={variant === 'floating' ? '' : undefined}
         data-variant={variant}
         role={variant === 'floating' ? 'dialog' : 'complementary'}
-        style={variant === 'sidebar' ? { width } : undefined}
+        style={variant === 'sidebar' ? { width } : floatStyle}
       >
+        {floating && !fullscreen && (
+          <>
+            <div aria-hidden className={styles.floatResize} data-edge="top" onPointerDown={startFloatResize('top')} />
+            <div aria-hidden className={styles.floatResize} data-edge="left" onPointerDown={startFloatResize('left')} />
+            <div aria-hidden className={styles.floatResize} data-edge="corner" onPointerDown={startFloatResize('corner')} />
+          </>
+        )}
         {variant === 'sidebar' && (
           <div
             aria-hidden
@@ -193,7 +287,12 @@ export function AgentPanel({
           />
         )}
         <header className={styles.header} data-actions={String(Math.min(4, actionCount))}>
-          <strong data-i18n-ignore={title !== t('New chat') || undefined}>{title}</strong>
+          {titleExtra ? (
+            <span className={styles.titleRow}>
+              <strong data-i18n-ignore={title !== t('New chat') || undefined}>{title}</strong>
+              {titleExtra}
+            </span>
+          ) : <strong data-i18n-ignore={title !== t('New chat') || undefined}>{title}</strong>}
           <span />
           {headerExtra}
           {onNewChat && (

@@ -20,10 +20,13 @@ describe('document selection actions', () => {
     expect(detail).toMatchObject({ teamId: 'team-2', projectId: 'project-9' })
   })
 
-  it('asks the document agent with the selection quoted as context and falls back to the first team', () => {
+  it('hands the selected text to the agent as-is (a chip, not prefilled prose) and falls back to the first team', () => {
     const onAskAgent = vi.fn()
-    documentSelectionActions({ data, document: { ...document, teamIds: [], projectIds: [] }, t, onAskAgent }).onAskAgent?.({ text: 'line one\nline two', from: 1, to: 18 })
-    expect(onAskAgent).toHaveBeenCalledWith('About this selection from the document:\n\n> line one\n> line two\n\n')
+    const actions = documentSelectionActions({ data, document: { ...document, teamIds: [], projectIds: [] }, t, onAskAgent })
+    actions.onAskAgent?.({ text: 'line one\nline two', from: 1, to: 18 })
+    expect(onAskAgent).toHaveBeenCalledWith('line one\nline two')
+    actions.onAskAgent?.({ text: '   ', from: 1, to: 4 })
+    expect(onAskAgent).toHaveBeenCalledTimes(1)
     const listener = vi.fn()
     window.addEventListener(CREATE_ISSUE_FROM_SELECTION, listener)
     documentSelectionActions({ data, document: { ...document, teamIds: [] }, t, onAskAgent }).onCreateIssue?.({ text: 'x', from: 1, to: 2 })

@@ -25,7 +25,7 @@ const BILLING_SETTINGS = new Set<string>([
 export type RouteInfoData = Pick<
   BootstrapData,
   "workspace" | "issues" | "projects" | "teams" | "notifications"
-> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases">> & {
+> & Partial<Pick<BootstrapData, "savedViews" | "customers" | "documents" | "trash" | "releasePipelines" | "releases" | "oauthApplications">> & {
   issue?: Issue;
   project?: Project;
 };
@@ -146,6 +146,15 @@ export function routeInfo(
         pinnedTitle: team?.name || route.teamKey,
         icon: "settings",
       };
+    }
+    // OAuth application developer pages are titled: "Create new application", "<App>", "Edit <App>".
+    if (route.page === "api" && route.applicationId) {
+      if (route.applicationId === "new") return { title: t("Create new application"), pinnedTitle: t("Create new application"), icon: "settings" };
+      const app = data?.oauthApplications?.find((item) => item.id === route.applicationId);
+      if (app) {
+        const title = route.applicationMode === "edit" ? `${t("Edit")} ${app.name}` : app.name;
+        return { title, pinnedTitle: app.name, icon: "settings" };
+      }
     }
     const label = t(
       SETTINGS_TITLE.get(route.page as SettingsPageId) ||

@@ -383,11 +383,12 @@ describe('prefilled new-issue routes', () => {
 describe("new OAuth application route", () => {
   it("parses both settings locations to the create page and keeps pre-fill params in the path", async () => {
     const { applicationNewPath, parseAppRoute: parse } = await import("./app-routes");
-    for (const path of ["/acme/settings/applications/new", "/acme/settings/api/applications/new"]) {
-      expect(parse(path)).toMatchObject({ kind: "settings", page: "applications", applicationId: "new" });
-    }
-    expect(applicationNewPath("acme")).toBe("/acme/settings/applications/new");
-    expect(applicationNewPath("acme", "oauth.client_name=A")).toBe("/acme/settings/applications/new?oauth.client_name=A");
+    // Like the reference app, OAuth application developer pages live under Settings › API; the old location still parses.
+    expect(parse("/acme/settings/api/applications/new")).toMatchObject({ kind: "settings", page: "api", applicationId: "new", applicationMode: "edit" });
+    expect(parse("/acme/settings/applications/new")).toMatchObject({ kind: "settings", page: "applications", applicationId: "new" });
+    expect(applicationNewPath("acme")).toBe("/acme/settings/api/applications/new");
+    expect(applicationNewPath("acme", "oauth.client_name=A")).toBe("/acme/settings/api/applications/new?oauth.client_name=A");
+    expect(parse("/acme/settings/api/applications/app-1/edit")).toMatchObject({ page: "api", applicationId: "app-1", applicationMode: "edit" });
     expect(parse("/acme/settings/applications/app-1/edit")).toMatchObject({ applicationId: "app-1", applicationMode: "edit" });
   });
 });

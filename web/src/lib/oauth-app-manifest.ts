@@ -251,7 +251,8 @@ export function manifestFromFormState(state: ApplicationFormState): OAuthAppMani
       grant_types: state.clientCredentials ? ["authorization_code", "client_credentials"] : ["authorization_code"],
       scopes,
     },
-    webhook: { enabled: state.webhookEnabled, url: state.webhookUrl.trim(), resourceTypes: state.webhookResourceTypes },
+    // Webhooks switched off: the manifest leaves the block out, which clears the application's webhook.
+    ...(state.webhookEnabled ? { webhook: { enabled: true, url: state.webhookUrl.trim(), resourceTypes: state.webhookResourceTypes } } : {}),
     agent: { assignable: state.assignable, mentionable: state.mentionable },
   };
 }
@@ -265,4 +266,59 @@ export function applyManifestToForm(state: ApplicationFormState, manifest: OAuth
 export function manifestFileName(name: string) {
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return `${slug || "oauth-app"}.manifest.json`;
+}
+
+/** The reference app's webhook event groups (label → the payload type the manifest stores). */
+export const APPLICATION_WEBHOOK_EVENT_GROUPS: { title: string; hint?: string; events: { type: string; label: string }[] }[] = [
+  {
+    title: "Data change events",
+    hint: "Whenever selected data types are created or updated",
+    events: [
+      { type: "Comment", label: "Comments" },
+      { type: "CustomerNeed", label: "Customer requests" },
+      { type: "Customer", label: "Customers" },
+      { type: "Cycle", label: "Cycles" },
+      { type: "Document", label: "Documents" },
+      { type: "Reaction", label: "Emoji reactions" },
+      { type: "InitiativeUpdate", label: "Initiative updates" },
+      { type: "Initiative", label: "Initiatives" },
+      { type: "IssueLabel", label: "Issue Labels" },
+      { type: "Attachment", label: "Issue attachments" },
+      { type: "Issue", label: "Issues" },
+      { type: "ProjectLabel", label: "Project Labels" },
+      { type: "ProjectUpdate", label: "Project updates" },
+      { type: "Project", label: "Projects" },
+      { type: "ReleaseNote", label: "Release notes" },
+      { type: "Release", label: "Releases" },
+      { type: "User", label: "Users" },
+    ],
+  },
+  { title: "Other events", events: [{ type: "IssueSLA", label: "Issue SLA" }] },
+  {
+    title: "App events",
+    hint: "Whenever your app is triggered or has a change in permissions (for {code} only)",
+    events: [
+      { type: "AgentSessionEvent", label: "Agent session events" },
+      { type: "AppUserNotification", label: "Inbox notifications" },
+      { type: "PermissionChange", label: "Permission changes" },
+    ],
+  },
+  {
+    title: "Authorization events",
+    hint: "Whenever a user authorizes or revokes access to your application",
+    events: [{ type: "OAuthAuthorization", label: "OAuth authorization events" }],
+  },
+];
+
+export type ApplicationFormErrors = Partial<Record<"name" | "developerName" | "developerUrl" | "redirectUris" | "webhookUrl", string>>;
+
+/** The reference app's required fields: application name, developer name and redirect URIs (and the developer URL for public apps). */
+export function validateApplicationForm(state: ApplicationFormState): ApplicationFormErrors {
+  const errors: ApplicationFormErrors = {};
+  if (!state.name.trim()) errors.name = "Required";
+  if (!state.developerName.trim()) errors.developerName = "Required";
+  if (state.distribution === "public" && !state.developerUrl.trim()) errors.developerUrl = "Required";
+  if (!state.redirectUris.split(/\s+/).some(Boolean)) errors.redirectUris = "Required";
+  if (state.webhookEnabled && !state.webhookUrl.trim()) errors.webhookUrl = "Required";
+  return errors;
 }

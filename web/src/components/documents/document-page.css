@@ -21,8 +21,8 @@
   background: var(--bg-panel);
   display: flex;
   align-items: center;
-  padding: 0 12px 0 14px;
-  gap: 4px;
+  padding: 0 8px;
+  gap: 6px;
   font-size: 13px;
   color: var(--theme-text-secondary);
 }
@@ -38,46 +38,55 @@
   color: var(--theme-text-primary);
   padding: 0;
 }
+/* Breadcrumb, measured in the reference app (1470px wide, dark and light): the 34px row is inset 10px,
+   each crumb link is a 24px pill padded 4px left / 5px right with matching negative margins, 13px/500;
+   the glyph is 16px with a 6px gap; the separator sits 8px from both neighbours. */
 .document-breadcrumbs {
+  height: 34px;
   min-width: 0;
   flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  padding-left: 10px;
+  color: var(--issue-breadcrumb-text);
+  font: 500 13px/normal var(--font);
 }
 .document-breadcrumb-link {
-  height: 28px;
+  height: 24px;
   min-width: 0;
-  max-width: min(320px, 28vw);
+  flex: 0 1 auto;
   display: flex;
   align-items: center;
-  gap: 7px;
+  margin: 0 -5px 0 -4px;
+  padding: 0 5px 0 4px;
   border: 0;
-  background: transparent;
-  color: var(--theme-text-primary);
-  padding: 0 6px;
   border-radius: 8px;
-  font: 450 13px/normal var(--font);
+  background: transparent;
+  color: var(--issue-breadcrumb-text);
+  font: inherit;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
+  transition: background .15s, color .15s;
 }
-.document-breadcrumb-link:hover { background: var(--theme-surface-hover); }
-.document-breadcrumb-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-breadcrumb-link:hover { background: var(--issue-breadcrumb-hover); color: var(--bright); }
+.document-breadcrumb-link > span:not(.document-breadcrumb-glyph) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-breadcrumb-link > svg { width: 16px; height: 16px; flex: 0 0 16px; margin-right: 6px; color: var(--issue-header-icon); }
 .document-breadcrumb-documents { flex: 0 0 auto; }
-.document-breadcrumb-separator { flex: 0 0 auto; color: var(--theme-text-tertiary); }
+/* The reference draws the team's name a touch lighter and brighter than the other crumbs. */
+.document-breadcrumb-team > span:not(.document-breadcrumb-glyph) { color: var(--bright); font-weight: 450; }
+.document-breadcrumb-glyph { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; margin-right: 6px; }
+.document-breadcrumb-glyph > svg { width: 16px; height: 16px; }
+.document-breadcrumb-separator { flex: 0 0 auto; margin: -2px 8px 0; color: var(--issue-header-icon); }
 .document-breadcrumb-current {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 6px;
-  font: 450 13px/16px var(--font);
-  color: var(--theme-text-primary);
+  color: var(--issue-breadcrumb-text);
+  font-weight: 500;
   white-space: nowrap;
 }
-.document-breadcrumb-current span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.document-breadcrumb-current svg,
-.document-breadcrumb-link svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--theme-text-secondary); }
+.document-breadcrumb-current > span:not(.document-breadcrumb-glyph) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .document-deleted-badge {
   height: 20px;
   flex: 0 0 auto;
@@ -89,7 +98,8 @@
   color: var(--theme-text-secondary);
   font: 500 12px/normal var(--font);
 }
-.document-title-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; }
+/* Favorite and options sit 6px apart; the right cluster is Edited, link and bell 4px apart. */
+.document-title-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; }
 .document-header-actions {
   margin-left: auto;
   display: flex;
@@ -97,27 +107,38 @@
   align-items: center;
   gap: 4px;
 }
+/* 28px round icon buttons with 14px glyphs: dim at rest, brighter on a hovered or open (menu/popover) button. */
 .document-icon-button {
+  position: relative;
   width: 28px;
   height: 28px;
   flex: 0 0 28px;
-  border: 0;
+  border: .5px solid transparent;
   background: transparent;
-  color: var(--theme-text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  color: var(--issue-header-fg);
+  display: grid;
+  place-items: center;
   border-radius: 9999px;
-  padding: 0;
+  padding: 0 2px;
   cursor: pointer;
 }
+.document-icon-button svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
 .document-icon-button:hover,
 .document-icon-button[data-state="open"],
 .document-icon-button.is-active {
-  background: var(--theme-surface-hover);
+  background: var(--issue-header-hover-bg);
 }
-.document-icon-button[aria-checked="true"] { color: var(--theme-text-primary); }
+.document-icon-button:hover svg,
+.document-icon-button[data-state="open"] svg,
+.document-icon-button.is-active svg,
+.document-icon-button[aria-checked="true"] svg { color: var(--issue-header-icon-hover); }
+/* A favorited document: the reference's filled yellow star, at rest and on hover. */
+.document-icon-button svg.document-favorite-filled { color: var(--issue-header-favorite); }
 .document-icon-button:disabled { opacity: .5; cursor: default; }
+/* The bell cross-fades between the plain bell and the bell with a check mark (150ms ease-in-out, 0.95 scale). */
+.document-bell { position: relative; width: 16px; height: 16px; display: flex; }
+.document-bell__layer { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transform: scale(.95); transition: opacity .15s ease-in-out, transform .15s ease-in-out; }
+.document-bell__layer[data-visible="true"] { opacity: 1; transform: none; }
 .document-header :is(button, a):focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
 .document-save-state { display: flex; align-items: center; gap: 4px; margin-right: 5px; font-size: 11px; }
 .document-save-state.error { color: var(--semantic-danger); }
@@ -128,22 +149,23 @@
   height: 28px;
   display: flex;
   align-items: center;
-  gap: 6px;
   padding: 0 10px 0 8px;
-  border: 0;
+  border: .5px solid transparent;
   border-radius: 9999px;
   background: transparent;
-  color: var(--theme-text-secondary);
+  color: var(--issue-header-icon);
   font: 500 12px/normal var(--font);
   white-space: nowrap;
   cursor: pointer;
 }
+.document-edited > svg { width: 14px; height: 14px; flex: 0 0 14px; margin-right: 6px; }
 .document-edited:hover,
-.document-edited[data-state="open"] { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
+.document-edited[data-state="open"] { background: var(--issue-header-hover-bg); color: var(--issue-header-fg); }
 .document-edited-popover {
   z-index: 900;
   box-sizing: border-box;
-  width: 350px;
+  width: max-content;
+  min-width: 300px;
   max-width: calc(100vw - 20px);
   overflow: hidden;
   padding: 0;
@@ -162,19 +184,22 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 0 16px;
+  padding: 4px 16px 8px;
   color: var(--theme-text-secondary);
 }
 .document-owner-row,
 .document-last-edit-row {
   box-sizing: border-box;
-  height: 44px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 16px;
+  padding: 8px 16px;
   border-top: .5px solid var(--theme-border);
 }
+.document-owner-row { height: 44px; }
+.document-last-edit-row { height: 40px; }
+.document-owner-row > span:first-child,
+.document-last-edit-row > span:first-child { flex: 0 0 71.4px; }
 .document-owner-row > span:first-child,
 .document-last-edit-row > span:first-child,
 .document-last-edit-row time { color: var(--theme-text-secondary); }
@@ -188,8 +213,8 @@
 }
 .document-person--button {
   height: 28px;
-  margin-left: -8px;
-  padding: 0 8px;
+  margin-left: -6px;
+  padding: 0 6px;
   border: 0;
   border-radius: 9999px;
   background: transparent;
@@ -216,7 +241,7 @@
 .document-meta-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .document-history-action {
   box-sizing: border-box;
-  padding: 5px 8px 8px;
+  padding: 8px;
   border-top: .5px solid var(--theme-border);
 }
 .document-history-action button {
@@ -242,9 +267,9 @@
 .document-subscribers {
   z-index: 900;
   box-sizing: border-box;
-  min-width: 220px;
+  min-width: 181px;
   max-width: calc(100vw - 20px);
-  padding: 6px;
+  padding: 0;
   border: .5px solid var(--popover-border);
   border-radius: 12px;
   outline: 0;
@@ -256,9 +281,9 @@
 .document-subscribers__filter {
   box-sizing: border-box;
   width: 100%;
-  height: 32px;
-  margin-bottom: 4px;
-  padding: 0 8px;
+  height: 36px;
+  margin: 0;
+  padding: 0 14px;
   border: 0;
   border-bottom: .5px solid var(--theme-border);
   outline: 0;
@@ -267,24 +292,29 @@
   font: inherit;
 }
 .document-subscribers__filter::placeholder { color: var(--theme-text-tertiary); }
-.document-subscribers__list { max-height: 320px; overflow: auto; }
+.document-subscribers__list { position: relative; z-index: 0; max-height: 320px; overflow: auto; padding: 6px 0; }
 .document-subscribers__row {
   width: 100%;
   height: 32px;
   display: flex;
+  position: relative;
   align-items: center;
-  gap: 8px;
-  padding: 0 8px;
+  gap: 7px;
+  padding: 0 18px 0 14px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.document-subscribers__row:hover,
-.document-subscribers__row:focus-visible { background: var(--theme-surface-hover); outline: 0; }
+.document-subscribers__row::before { content: ""; position: absolute; inset: 0 6px; z-index: -1; border-radius: 8px; }
+.document-subscribers__row:hover::before,
+.document-subscribers__row:focus-visible::before { background: var(--theme-surface-hover); }
+.document-subscribers__row:focus-visible { outline: 0; }
+.document-subscribers__row .document-meta-avatar { width: 16px; height: 16px; flex-basis: 16px; font-size: 9px; line-height: 16px; }
+.document-subscribers__name { margin-left: 1px; }
 .document-subscribers__row:disabled { opacity: .6; cursor: default; }
 .document-subscribers__check {
   box-sizing: border-box;
@@ -294,7 +324,7 @@
   display: grid;
   place-items: center;
   border: 1px solid var(--theme-border-strong);
-  border-radius: 4px;
+  border-radius: 3px;
   color: var(--on-accent);
 }
 .document-subscribers__check[data-checked="true"] { border-color: var(--accent-primary); background: var(--accent-primary); }
@@ -446,30 +476,6 @@ button.document-icon.is-empty:hover,
 .document-access-team-mark { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; border-radius: 5px; background: var(--theme-surface-active); color: var(--theme-text-secondary); font-size: 10px; font-weight: 600; }
 .document-access-row .select-control { flex: 0 0 132px; min-width: 132px; }
 
-/* ---------- agent rail ---------- */
-.document-page.has-agent {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 400px;
-  grid-template-rows: auto 1fr;
-}
-.document-page.has-agent > .document-header { grid-column: 1 / -1; }
-.document-page.has-agent > .document-canvas { grid-column: 1; min-width: 0; }
-.document-agent-rail {
-  grid-column: 2;
-  grid-row: 2;
-  width: 400px;
-  min-width: 300px;
-  max-width: 560px;
-  height: 100%;
-  min-height: 0;
-  border-left: .5px solid var(--theme-border);
-  background: var(--theme-surface-0);
-}
-@media (max-width: 900px) {
-  .document-page.has-agent { display: block; }
-  .document-agent-rail { position: fixed; z-index: 40; top: 48px; right: 0; bottom: 0; width: min(400px, 100%); box-shadow: var(--menu-shadow); }
-}
-
 /* ---------- mobile ---------- */
 @media (max-width: 800px) {
   .document-header { padding: 0 8px 0 6px; }
@@ -481,6 +487,7 @@ button.document-icon.is-empty:hover,
   .document-breadcrumb-current { flex: 1 1 auto; padding: 0 4px; }
   .document-title-actions { gap: 0; }
   .document-edited { width: 28px; padding: 0; justify-content: center; }
+  .document-edited > svg { margin-right: 0; }
   .document-edited__label,
   .document-save-state,
   .document-presence__avatar { display: none; }

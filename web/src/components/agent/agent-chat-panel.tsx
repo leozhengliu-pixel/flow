@@ -1,14 +1,23 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Box, FileText, Lightbulb, Plus, Search, Users } from 'lucide-react'
+import { FileText, Lightbulb, Plus } from 'lucide-react'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
-import { fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { deleteAgentSession, fetchAgentStatus, resolveAgentApproval } from '@/lib/api'
+import { toast } from '@/lib/toast'
+import { FlowDropdownMenuContent, FlowMenuItem } from '@/components/ui/row-context-menu'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
 import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, BootstrapData } from '@/types/flow'
 import { PropertyMenu } from '@/components/property/property-menu'
-import { AgentChevronDownIcon, AgentSkillsIcon } from './agent-icons'
+import { AgentAttachIcon, AgentChevronDownIcon, AgentPageContextIcon, AgentSkillsIcon } from './agent-icons'
+import { AGENT_ATTACHMENT_ACCEPT, addAgentAttachments, agentFileContext } from './agent-attachments'
+import { quoteAgentMessage } from './agent-floating-request'
+import threadStyles from './entity-agent-thread.module.css'
+import { ScopedFlowTooltip } from '@/components/ui/tooltip'
+import { AttachmentRemoveButton } from '@/components/ui/attachment-remove-button'
 import { mentionIcon } from './agent-mention-icon'
 import type { AgentMention } from './agent-mention-input'
 import { ProjectIcon, StatusIcon } from '@/components/issue/issue-icons'
@@ -28,6 +37,7 @@ export function AgentChatPanel({
   data,
   onCreateSkill,
   initialPrompt = '',
+  initialQuote,
   initialSession,
   issues,
   onClose,
@@ -46,6 +56,8 @@ export function AgentChatPanel({
   data?: BootstrapData
   onCreateSkill?: () => void
   initialPrompt?: string
+  /** Text selected on the page ("Ask agent" on a selection): a chip at the start of the composer, sent as a quote. */
+  initialQuote?: string
   initialSession?: AgentSession
   issues: MyIssuesRowData[]
   onClose: () => void
@@ -69,11 +81,19 @@ export function AgentChatPanel({
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [session, setSession] = useState<AgentSession>()
   const [input, setInput] = useState(initialPrompt)
+  const [quote, setQuote] = useState(initialQuote)
+  const [attachments, setAttachments] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<AgentStatus>()
   const [loading, setLoading] = useState(false)
   const [streamParts, setStreamParts] = useState<AgentMessagePart[]>([])
   const [error, setError] = useState<string>()
   const [minimized, setMinimized] = useState(false)
+  // A reply that finishes while the chat is minimized marks its bottom-bar pill with a dot.
+  const [unread, setUnread] = useState(false)
+  const minimizedRef = useRef(minimized)
+  minimizedRef.current = minimized
+  useEffect(() => { if (!minimized) setUnread(false) }, [minimized])
   const [fullscreen, setFullscreen] = useState(false)
   const [approvalBusy, setApprovalBusy] = useState<string>()
   const abortRef = useRef<AbortController | undefined>(undefined)
@@ -110,6 +130,14 @@ export function AgentChatPanel({
     label: context.label,
     onRemove: () => setRemovedContext(current => [...current, contextKeyOf(context)]),
   }))
+  // The reference app's "Use document as context" toggle (Tab in the composer): the page's entities ride along until switched off.
+  const pageContextKeys = [...pageContexts.map(contextKeyOf), ...issues.map(issue => issue.id)]
+  const canTogglePageContext = !session && !messages.length && pageContextKeys.length > 0
+  const pageContextOn = canTogglePageContext && pageContextKeys.some(key => !removedContext.includes(key))
+  const togglePageContext = () => setRemovedContext(current => pageContextOn
+    ? [...new Set([...current, ...pageContextKeys])]
+    : current.filter(key => !pageContextKeys.includes(key)))
+  const pageContextLabel = t(PAGE_CONTEXT_LABELS[pageContexts[0]?.type ?? 'issue'])
   const idsOf = (type: AgentMention['type']) => mentions.filter(item => item.type === type).map(item => item.id)
   const draftKey = conversationDraftKeyFor(session?.id ?? `toolbar:${issues.map(issue => issue.id).join(',') || 'new'}`)
 
@@ -142,11 +170,17 @@ export function AgentChatPanel({
     if (initialPrompt) setInput(initialPrompt)
   }, [initialPrompt])
 
+  useEffect(() => {
+    if (initialQuote) setQuote(initialQuote)
+  }, [initialQuote])
+
   const close = () => {
     autoSubmitted.current = false
     setMessages([])
     setSession(undefined)
     setInput('')
+    setQuote(undefined)
+    setAttachments([])
     setStatus(undefined)
     setError(undefined)
     setLoading(false)
@@ -182,8 +216,12 @@ export function AgentChatPanel({
    * `answer` picks that option of the reply's pending question: it shows as the chosen pill, not as a message.
    */
   const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
-    const message = (followUp ?? input).trim()
+    // Like the reference app, a quoted selection goes first (the model reads it as a quote, the chat shows it as a chip).
+    const message = followUp !== undefined ? followUp.trim() : quoteAgentMessage(quote, input).trim()
     if (!message || loading || !status?.enabled) return
+    const sentFiles = followUp === undefined ? attachments : []
+    const fileContext = sentFiles.length ? (await Promise.all(sentFiles.map(agentFileContext))).join('\n\n') : ''
+    const providerMessage = fileContext ? `${message}\n\n${fileContext}` : message
     const sentMentions = followUp === undefined ? mentions : []
     const sentIdsOf = (type: AgentMention['type']) => followUp === undefined ? idsOf(type) : []
     setMessages(current => [
@@ -202,6 +240,8 @@ export function AgentChatPanel({
     }
     if (followUp === undefined) {
       setInput('')
+      setQuote(undefined)
+      setAttachments([])
       setMentions([])
     }
     setError(undefined)
@@ -259,6 +299,7 @@ export function AgentChatPanel({
           })
         }
         if (event.type === 'session.completed' && event.session) {
+          if (minimizedRef.current) setUnread(true)
           setMessages(event.session.messages)
           setStreamParts([])
           const reply = event.session.messages.filter(item => item.role === 'assistant').at(-1)
@@ -267,10 +308,10 @@ export function AgentChatPanel({
         }
       }
       next = session
-        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, mentioned)
+        ? await streamAgentSessionMessage(session.id, providerMessage, onEvent, controller.signal, mentioned)
         : await streamNewAgentSession(
             {
-              message,
+              message: providerMessage,
               issueIds: [...new Set([...contextIssues.map(issue => issue.id), ...pageIdsOf('issue'), ...mentioned.issueIds])],
               projectIds: [...new Set([...pageIdsOf('project'), ...mentioned.projectIds])],
               documentIds: [...new Set([...pageIdsOf('document'), ...mentioned.documentIds])],
@@ -323,6 +364,27 @@ export function AgentChatPanel({
       onRequestClose={close}
       open={open}
       title={session?.title ?? t('New chat')}
+      titleExtra={session ? (
+        // The reference app's chat menu, right after the title once the chat exists.
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button aria-label={t('Chat options')} type="button"><FlowGlyph name="ellipsis" size={14}/></button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <FlowDropdownMenuContent label={t('Chat options')}>
+              <FlowMenuItem icon={<FlowGlyph name="copy"/>} label="Copy as markdown" onSelect={() => void navigator.clipboard.writeText(conversationMarkdown(messages)).then(
+                () => toast.info(t('Copied conversation'), { description: t('Conversation copied to clipboard as Markdown') }),
+                () => toast.error(t('Could not copy to clipboard')),
+              )}/>
+              <FlowMenuItem icon={<FlowGlyph name="delete"/>} label="Delete" shortcut="⌘ ⌫" onSelect={() => void deleteAgentSession(session.id).then(
+                () => { toast.success(t('Chat deleted')); close() },
+                reason => setError(reason instanceof Error ? reason.message : t('Flow Agent is unavailable')),
+              )}/>
+            </FlowDropdownMenuContent>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+      ) : undefined}
+      unread={unread}
       variant="floating"
     >
       <EntityAgentThread
@@ -349,17 +411,47 @@ export function AgentChatPanel({
         onRemoveContext={id => setRemovedContext(current => [...current, id])}
         footerStart={data ? <SkillsPicker data={data} disabled={Boolean(session)} selectedIds={skillIds} onChange={setSkillIds} onCreate={onCreateSkill}/> : undefined}
         conversationDraftKey={draftKey}
-        emptyLabel={t('Ask Flow about the selected issues')}
-        placeholder={status && !status.enabled ? t('Flow Agent is not configured') : data ? t('@ to mention any issue, project, or document') : t('Ask Flow…')}
-        welcome={{
-          title: t('Welcome to Flow'),
-          subtitle: t('Ask anything or tell Flow what you need'),
-          suggestions: [
-            { label: t('Create a new project'), icon: <Box size={14} aria-hidden="true"/>, prompt: t('Create a new project for ') },
-            { label: t('Research a topic'), icon: <Search size={14} aria-hidden="true"/>, prompt: t('Research ') },
-            { label: t('Set up new team'), icon: <Users size={14} aria-hidden="true"/>, prompt: t('Set up a new team for ') },
-          ],
-        }}
+        // The reference app's floating chat is blank until you write: no greeting, no suggestions.
+        blankEmpty
+        placeholder={status && !status.enabled ? t('Flow Agent is not configured') : t('Ask Flow…')}
+        quote={quote}
+        onQuoteRemove={() => setQuote(undefined)}
+        canSend={Boolean(input.trim() || quote)}
+        onComposerTab={canTogglePageContext ? () => { togglePageContext(); return true } : undefined}
+        composerHeader={attachments.length > 0 ? (
+          <div className={threadStyles.attachments}>
+            {attachments.map((file, index) => (
+              <span key={`${file.name}-${file.lastModified}-${index}`}>
+                <b data-i18n-ignore>{file.name}</b>
+                <AttachmentRemoveButton label={`${t('Remove attachment')} ${file.name}`} onClick={() => setAttachments(items => items.filter((_, itemIndex) => itemIndex !== index))}/>
+              </span>
+            ))}
+          </div>
+        ) : undefined}
+        composerTools={<>
+          {canTogglePageContext && (
+            <ScopedFlowTooltip label={pageContextLabel} shortcut="Tab" sideOffset={8}>
+              <button aria-label={pageContextLabel} aria-pressed={pageContextOn} className={threadStyles.composerTool} onClick={togglePageContext} type="button">
+                <AgentPageContextIcon/>
+              </button>
+            </ScopedFlowTooltip>
+          )}
+          <ScopedFlowTooltip label={t('Attach images, files, or videos')} sideOffset={8}>
+            <button aria-label={t('Attach images, files, or videos')} className={threadStyles.composerTool} onClick={() => fileInputRef.current?.click()} type="button">
+              <AgentAttachIcon size={14}/>
+            </button>
+          </ScopedFlowTooltip>
+          <input
+            ref={fileInputRef}
+            accept={AGENT_ATTACHMENT_ACCEPT}
+            aria-hidden="true"
+            className={threadStyles.fileInput}
+            multiple
+            onChange={event => { const files = event.target.files; setAttachments(items => addAgentAttachments(items, files)); event.target.value = '' }}
+            tabIndex={-1}
+            type="file"
+          />
+        </>}
         enabled={Boolean(status?.enabled)}
         error={error}
         input={input}
@@ -405,6 +497,18 @@ function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { dat
       onChange(selectedIds.includes(id) ? selectedIds.filter(item => item !== id) : [...selectedIds, id])
     }}
   />
+}
+
+/** The conversation as Markdown ("Copy as markdown" in the chat menu). */
+function conversationMarkdown(messages: AgentMessage[]) {
+  return messages.map(message => `**${message.role === 'user' ? 'You' : 'Flow Agent'}**\n\n${message.role === 'user' ? message.content : splitAgentSuggestions(message.content).prose}`).join('\n\n')
+}
+
+const PAGE_CONTEXT_LABELS: Record<AgentPageContext['type'], string> = {
+  document: 'Use document as context',
+  project: 'Use project as context',
+  issue: 'Use issue as context',
+  initiative: 'Use initiative as context',
 }
 
 function pageContextIcon(context: AgentPageContext, data?: BootstrapData) {

@@ -1,0 +1,117 @@
+/* Settings › API › OAuth applications (list rows, create/edit form, developer page) and Settings › Applications,
+   measured against the reference app at 1470×702. Shared by application-form.tsx, application-pages.tsx and
+   installed-applications-section.tsx. */
+
+/* Create / edit form card. */
+.oauth-app-form{box-sizing:border-box;display:flex;flex-direction:column;gap:24px;padding:16px;color:var(--oauth-title)}
+.oauth-app-icon-row{display:flex;align-items:center;gap:12px}
+.oauth-app-icon-tile{box-sizing:border-box;width:50px;height:50px;flex:none;display:grid;place-items:center;overflow:hidden;padding:0;border:1px solid var(--oauth-icon-tile-border);border-radius:8px;background:var(--oauth-input-bg);cursor:default}
+.oauth-app-icon-tile img{width:100%;height:100%;object-fit:cover}
+.oauth-app-icon-tile:not(:disabled):hover{border-color:var(--oauth-input-border)}
+.oauth-app-icon-copy{display:flex;flex-direction:column;gap:1.5px}
+.oauth-app-icon-hint{color:var(--theme-text-secondary);font-size:12px;font-weight:450}
+.oauth-app-field{display:flex;flex-direction:column;gap:4px;min-width:0;padding-top:1px}
+.oauth-app-field-heading{display:block;line-height:23px}
+.oauth-app-field-label{color:var(--oauth-settings-label);font-size:13px;font-weight:500}
+.oauth-app-field-hint{margin-left:4px;color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:20px}
+.oauth-app-field-hint>span[aria-hidden]{margin-right:2px;color:var(--oauth-placeholder)}
+.oauth-app-field-control{position:relative}
+.oauth-app-input{box-sizing:border-box;width:100%;height:32px;display:block;margin:0;padding:6px 12px;border:.5px solid var(--oauth-input-border);border-radius:8px;outline:0;background:var(--oauth-input-bg);color:var(--oauth-title);font:400 13px/normal var(--font)}
+.oauth-app-input.is-multiline{height:64px;min-height:64px;resize:none}
+.oauth-app-input::placeholder{color:var(--oauth-placeholder)}
+.oauth-app-input:focus{outline:1px solid var(--oauth-primary-bg)}
+.oauth-app-input:disabled{opacity:.6}
+.oauth-app-required{position:absolute;top:4px;right:4px;height:24px;display:flex;align-items:center;padding:0 6px;border-radius:4px;background:var(--oauth-input-bg);pointer-events:none}
+.oauth-app-required>span,.oauth-app-required.is-below>span{color:var(--oauth-danger);font-size:11px;font-weight:450;line-height:13px}
+.oauth-app-required.is-below{position:static;height:auto;margin-top:4px;padding:0;background:none}
+.oauth-app-switch{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.oauth-app-switch>div{min-width:0;display:flex;flex-direction:column;gap:3.5px}
+.oauth-app-switch-title{color:var(--oauth-title);font-size:13px;font-weight:500;line-height:15.5px}
+.oauth-app-switch-description{color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:16.8px}
+.oauth-app-code{padding:.5px 2.8px;border-radius:2.25px;background:var(--oauth-code-bg);box-shadow:inset 0 0 0 .5px var(--oauth-input-border);color:var(--theme-text-secondary);font:450 11.25px/14.6px var(--font-mono)}
+.oauth-app-events{min-width:0;margin:0;padding:0;border:0}
+.oauth-app-events legend{margin:0 0 7px;padding:0;line-height:15.5px}
+.oauth-app-event-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px}
+.oauth-app-event-grid label{min-width:0;display:flex;align-items:center;gap:8px;color:var(--oauth-settings-label);font-size:13px;font-weight:450;line-height:16px}
+.oauth-app-event-grid input{width:14px;height:14px;flex:none;margin:0;accent-color:var(--oauth-primary-bg)}
+.oauth-app-form-actions{display:flex;justify-content:flex-end;gap:12px}
+
+/* Buttons. */
+.oauth-app-button{height:32px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;border:.5px solid transparent;border-radius:9999px;background:var(--oauth-settings-button-bg);color:var(--oauth-settings-label);font:500 13px var(--font);white-space:nowrap;cursor:default}
+.oauth-app-button:not(:disabled):hover{background:var(--oauth-settings-button-hover)}
+.oauth-app-button.is-primary{background:var(--oauth-primary-bg);color:var(--oauth-primary-text);box-shadow:var(--oauth-card-shadow)}
+.oauth-app-button.is-primary:not(:disabled):hover{background:var(--oauth-primary-hover)}
+.oauth-app-button.is-ghost{background:transparent}
+.oauth-app-button.is-ghost:not(:disabled):hover{background:var(--theme-surface-hover)}
+.oauth-app-button:disabled{opacity:.6}
+.oauth-app-button:focus-visible,.oauth-app-icon-button:focus-visible{outline:1px solid var(--oauth-primary-bg);outline-offset:1px}
+.oauth-app-icon-button{width:32px;height:32px;display:grid;place-items:center;flex:none;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--oauth-settings-label)}
+.oauth-app-icon-button.is-small{width:24px;height:24px}
+.oauth-app-icon-button.is-medium{width:28px;height:28px}
+.oauth-app-icon-button:not(:disabled):hover,.oauth-app-icon-button[data-state=open]{background:var(--theme-surface-hover)}
+.oauth-app-icon-button svg{width:16px;height:16px}
+.oauth-app-icon-button.is-small svg,.oauth-app-icon-button.is-medium svg{width:14px;height:14px}
+.oauth-app-actions{display:flex;align-items:center;gap:0}
+.oauth-app-actions>*+*{margin-left:-4px}
+/* The reference app's settings rows on these pages: 13px title over a 12px line, 65px tall. */
+:root .settings-main .oauth-app-section .settings-row .settings-row-copy>strong{line-height:15.5px}
+html:root .settings-app .settings-main .oauth-app-section .settings-row .settings-row-copy>span{line-height:14.5px}
+.oauth-app-section .settings-row .oauth-app-icon-button:last-child,.oauth-app-section .settings-row .oauth-app-actions:last-child{margin-right:-4px}
+
+/* Application icon (lists 32px, page header 48px). */
+.oauth-app-avatar{box-sizing:border-box;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:6px}
+.oauth-app-avatar img{width:100%;height:100%;object-fit:cover}
+.oauth-app-avatar.is-placeholder{border:.5px solid var(--oauth-icon-tile-border);background:var(--oauth-input-bg)}
+
+/* OAuth application rows (Settings › API) and authorized application rows (Settings › Applications). */
+.oauth-app-list{margin:0;padding:0;list-style:none}
+.oauth-app-list-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;border-bottom:.5px solid var(--set-sep)}
+.oauth-app-list-header>span{color:var(--oauth-title);font-size:13px;font-weight:500}
+.oauth-app-list-header>button{margin-right:-6px}
+.oauth-app-list-row{display:flex;align-items:center;gap:12px;padding:16px;color:inherit;text-decoration:none;cursor:default}
+.oauth-app-list-row:hover{background:var(--oauth-row-hover)}
+.oauth-app-list-row+.oauth-app-list-row{border-top:.5px solid var(--set-sep)}
+.oauth-app-list li:last-child>.oauth-app-list-row{border-radius:0 0 10px 10px}
+.oauth-app-list li:first-child>.oauth-app-list-row:only-child{border-radius:10px}
+.oauth-app-list-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+.oauth-app-list-copy>strong{overflow:hidden;color:var(--oauth-title);font-size:13px;font-weight:500;line-height:15.5px;text-overflow:ellipsis;white-space:nowrap}
+.oauth-app-list-copy>span{overflow:hidden;color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:14.5px;text-overflow:ellipsis;white-space:nowrap}
+.oauth-app-empty{padding:16px 16px 16px;color:var(--oauth-title);font-size:13px;font-weight:500;line-height:16px}
+
+/* Developer / installed application page header. */
+.oauth-app-page-header{display:flex;align-items:center;gap:16px;margin:0 0 32px}
+.oauth-app-page-header-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px}
+.oauth-app-page-header h1{margin:0;overflow:hidden;color:var(--oauth-title);font-size:18px;font-weight:500;line-height:22px;text-overflow:ellipsis;white-space:nowrap}
+.oauth-app-page-header p{margin:0;color:var(--theme-text-secondary);font-size:13px;font-weight:450;line-height:15.5px}
+.oauth-app-page-header p strong{color:var(--oauth-title);font-weight:450}
+.oauth-app-mono{font-family:var(--font-mono);font-size:12px;overflow-wrap:anywhere}
+.oauth-app-secret{letter-spacing:.5px}
+.oauth-app-permission{display:flex;align-items:center;gap:12px;padding:16px 0;border-bottom:.5px solid var(--set-sep);color:var(--oauth-title);font-size:13px;font-weight:450;line-height:16px}
+.oauth-app-permission:last-child{border-bottom:0}
+.oauth-app-permissions{padding:0 16px}
+.oauth-app-permission svg{width:16px;height:16px;flex:none;color:var(--theme-text-secondary)}
+.oauth-app-member{display:flex;align-items:center;gap:12px;padding:12px 16px}
+.oauth-app-member+.oauth-app-member{border-top:.5px solid var(--set-sep)}
+.oauth-app-member-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:6px}
+.oauth-app-member-copy>span:first-child{color:var(--oauth-title);font-size:13px;font-weight:500;line-height:15.5px}
+.oauth-app-member-copy>span:first-child em{margin-left:4px;color:var(--oauth-member-muted);font-style:normal;font-weight:450}
+.oauth-app-member-copy>span:last-child{display:flex;align-items:center;gap:12px;color:var(--theme-text-secondary);font-size:12px;font-weight:450;line-height:14.5px}
+.oauth-app-badge{margin-left:4px;padding:2px 6px;border:.5px solid var(--oauth-input-border);border-radius:6px;color:var(--theme-text-secondary);font-size:11px;font-weight:500;line-height:16px;vertical-align:1px}
+.oauth-app-team-access{display:flex;flex-direction:column;gap:12px;padding:16px;border-top:.5px solid var(--set-sep)}
+.oauth-app-team-access>strong{color:var(--oauth-title);font-size:13px;font-weight:500}
+.oauth-app-team-access label{display:flex;align-items:center;gap:8px;color:var(--oauth-settings-label);font-size:13px;font-weight:450;line-height:16px}
+.oauth-app-team-access input[type=radio]{appearance:none;box-sizing:border-box;width:16px;height:16px;flex:none;display:grid;place-items:center;margin:0;border:1px solid var(--oauth-radio-border);border-radius:50%;background:transparent}
+.oauth-app-team-access input[type=radio]:checked{border-color:var(--oauth-primary-bg);background:var(--oauth-primary-bg)}
+.oauth-app-team-access input[type=radio]:checked::after{content:"";width:4px;height:4px;border-radius:50%;background:var(--oauth-primary-text)}
+.oauth-app-team-access>footer{display:flex;justify-content:flex-end}
+.oauth-app-team-access .oauth-team-picker{padding:0 0 0 24px}
+.oauth-app-team-access .oauth-team-menu{left:24px}
+
+/* The reference app's menu on the page header (Edit application / Download manifest / Delete application / View in workspace). */
+.oauth-app-menu{min-width:176px;padding:4px}
+.oauth-app-menu .menu-item{height:32px;gap:10px;padding:0 10px;border-radius:6px;font-size:13px}
+.oauth-app-menu .menu-item svg{width:14px;height:14px;color:var(--theme-text-secondary)}
+
+/* Type-to-confirm delete dialog. */
+.oauth-app-confirm-label{margin:4px 0 0;color:var(--theme-text-secondary);font-size:15px;line-height:23px}
+.oauth-app-confirm-label strong{color:var(--oauth-title);font-weight:600}

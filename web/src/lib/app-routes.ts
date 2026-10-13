@@ -454,8 +454,12 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     (segments.length === 5 || (segments.length === 6 && sixth === "edit" && fifth !== "new"))
   )
     return { kind: "settings", workspaceSlug, page: "api", webhookId: fifth };
+  // The reference app: OAuth application developer pages live under Settings › API: /settings/api/applications/new,
+  // /settings/api/applications/<id> and /settings/api/applications/<id>/edit.
   if (section === "settings" && third === "api" && fourth === "applications" && fifth === "new" && segments.length === 5)
-    return { kind: "settings", workspaceSlug, page: "applications", applicationId: "new", applicationMode: "edit" };
+    return { kind: "settings", workspaceSlug, page: "api", applicationId: "new", applicationMode: "edit" };
+  if (section === "settings" && third === "api" && fourth === "applications" && fifth && (segments.length === 5 || (segments.length === 6 && sixth === "edit")))
+    return { kind: "settings", workspaceSlug, page: "api", applicationId: fifth, applicationMode: segments.length === 6 ? "edit" : "detail" };
   if (section === "new" && segments.length === 2)
     return { kind: "new-issue", workspaceSlug };
   if (section === "team" && third && fourth === "new" && segments.length === 4)
@@ -1942,11 +1946,17 @@ export function identityProviderSettingsPath(
   return `${workspaceRootPath(workspaceSlug)}/settings/identity-providers/${encode(providerId)}`;
 }
 
+/** An OAuth application's developer page (Settings › API › OAuth applications), as the reference app routes it. */
 export function applicationSettingsPath(
   workspaceSlug: string,
   applicationId: string,
 ) {
-  return `${workspaceRootPath(workspaceSlug)}/settings/applications/${encode(applicationId)}`;
+  return `${workspaceRootPath(workspaceSlug)}/settings/api/applications/${encode(applicationId)}`;
+}
+
+/** An application authorized in or installed into the workspace (Settings › Applications › <app>), keyed by client ID. */
+export function installedApplicationPath(workspaceSlug: string, clientId: string) {
+  return `${workspaceRootPath(workspaceSlug)}/settings/applications/${encode(clientId)}`;
 }
 
 /** Full-page "New OAuth application" form; `search` pre-fills it from manifest URL params. */

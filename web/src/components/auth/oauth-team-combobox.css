@@ -1,0 +1,17 @@
+/* The reference app's "Select teams…" multi-select field (OAuth consent and Settings › Applications › App user). */
+.oauth-team-picker{position:relative;padding:0 10px 10px 32px}
+.oauth-team-control{box-sizing:border-box;min-height:33px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:4px;border:.5px solid var(--oauth-input-border);border-radius:8px;background:var(--oauth-input-bg)}
+.oauth-team-control:focus-within{border-color:var(--oauth-primary-bg)}
+.oauth-team-control input{min-width:80px;height:24px;flex:1;padding:0 5px;border:0;outline:0;background:transparent;color:var(--oauth-row-text);font:400 13px/24px var(--font)}
+.oauth-team-control input::placeholder{color:var(--oauth-placeholder)}
+.oauth-team-toggle{width:24px;height:24px;display:grid;place-items:center;flex:none;margin-left:auto;padding:0;border:0;border-radius:4px;background:transparent;color:var(--oauth-chip-text)}
+.oauth-team-toggle svg{width:12px;height:12px}
+.oauth-team-chip{height:24px;display:inline-flex;align-items:center;max-width:100%;padding-left:8px;border-radius:4px;background:var(--oauth-chip-bg);color:var(--oauth-chip-text)}
+.oauth-team-chip-label{min-width:0;display:flex;align-items:center;gap:4px;font-size:13px;font-weight:450;line-height:18px}
+.oauth-team-chip-label>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--oauth-row-text)}
+.oauth-team-chip>button{width:24px;height:24px;display:grid;place-items:center;flex:none;padding:1px 6px;border:0;border-radius:0 4px 4px 0;background:transparent;color:var(--oauth-chip-text)}
+.oauth-team-chip>button:hover{background:var(--oauth-menu-hover)}
+.oauth-team-chip>button svg{width:11px;height:11px}
+.oauth-team-menu{position:absolute;z-index:3;top:37px;left:32px;min-width:149px;max-width:calc(100% - 42px);max-height:220px;box-sizing:border-box;overflow:auto;padding:4px;border:.5px solid var(--oauth-menu-border);border-radius:8px;background:var(--oauth-menu-bg);box-shadow:var(--menu-shadow)}
+.oauth-team-menu [role=option]{width:100%;height:32px;display:flex;align-items:center;gap:8px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--oauth-row-text);font:450 13px var(--font);text-align:left}
+.oauth-team-menu [role=option][data-highlighted]{background:var(--oauth-menu-hover)}

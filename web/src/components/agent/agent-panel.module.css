@@ -219,3 +219,135 @@
 }
 .panel[data-variant='floating']:not(#_) .header { height: 48px; padding-left: 13px; }
 .panel[data-variant='floating']:not(#_) .header strong { color: var(--pk-text-strong); font-size: 13px; font-weight: 500; }
+/*
+ * Floating chat, measured in the reference app: fixed 32px from the right and 34px from the bottom, 400×365 by default and
+ * resizable from the top edge, the left edge and the top-left corner; 12/12/16/16 radius, .5px border, three soft
+ * shadows. The header is 48px (title at 18px, three 28px buttons 6px from the edge); the content never shows a
+ * scrollbar track.
+ */
+.panel[data-variant='floating']:not(#_):not(#_) {
+  /* The reference app's z-index 99: its own menus and the app's popovers open above it, dialogs cover it. */
+  z-index: 99;
+  width: var(--agent-float-width, 400px);
+  height: min(var(--agent-float-height, 365px), round(down, 80vh, 1px));
+  max-height: none;
+  overflow: visible;
+  border: .5px solid var(--agent-float-border);
+  background: var(--agent-float-bg);
+  box-shadow: var(--pk-shadow);
+}
+.panel[data-variant='floating']:not(#_):not(#_) > .header,
+.panel[data-variant='floating']:not(#_):not(#_) > .body {
+  overflow: hidden;
+}
+.panel[data-variant='floating']:not(#_):not(#_) > .header {
+  height: 48px;
+  flex-basis: 48px;
+  padding: 0 6px 0 18px;
+  border-radius: 12px 12px 0 0;
+}
+.panel[data-variant='floating']:not(#_):not(#_) > .body {
+  border-radius: 0 0 16px 16px;
+}
+.panel[data-variant='floating']:not(#_):not(#_) .header strong {
+  color: var(--agent-float-title);
+}
+.panel[data-variant='floating']:not(#_):not(#_) .header button {
+  color: var(--agent-float-icon);
+}
+.panel[data-fullscreen='true'][data-variant='floating']:not(#_):not(#_) {
+  width: auto;
+  height: auto;
+}
+@media (max-width: 700px) {
+  .panel[data-variant='floating']:not(#_):not(#_) { width: auto; height: auto; }
+}
+.floatResize {
+  position: absolute;
+  z-index: 3;
+}
+.floatResize[data-edge='top'] { top: -7px; left: -1px; right: -1px; height: 11px; cursor: row-resize; }
+.floatResize[data-edge='left'] { top: -1px; bottom: -1px; left: -7px; width: 11px; cursor: col-resize; }
+.floatResize[data-edge='corner'] { top: -7px; left: -7px; width: 18px; height: 18px; cursor: nwse-resize; z-index: 4; }
+@media (max-width: 700px) {
+  .floatResize { display: none; }
+}
+
+/* The minimized chat: a pill in the bottom bar (12px/450 title, 8px radius, 28px tall), × on hover. */
+.chatPill {
+  position: relative;
+  height: 28px;
+  max-width: 240px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  color: var(--agent-float-pill-fg);
+}
+.chatPill:hover,
+.chatPill:focus-within {
+  background: var(--agent-float-pill-active-bg);
+  color: var(--agent-float-pill-active-fg);
+}
+.chatPillOpen {
+  min-width: 0;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 24px 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: 450 12px/normal var(--font);
+  cursor: pointer;
+}
+.chatPillOpen > span:last-child {
+  min-width: 0;
+  color: var(--agent-float-pill-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chatPillDot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--agent-float-pill-dot);
+}
+.chatPillClose {
+  position: absolute;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--agent-float-pill-fg);
+  opacity: 0;
+  cursor: pointer;
+}
+.chatPill:hover .chatPillClose,
+.chatPillClose:focus-visible {
+  opacity: 1;
+}
+.chatPillFallback {
+  position: fixed;
+  right: 120px;
+  bottom: 4px;
+  z-index: 900;
+}
+.chatPill:hover .chatPillOpen > span:last-child,
+.chatPill:focus-within .chatPillOpen > span:last-child {
+  color: inherit;
+}
+.titleRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

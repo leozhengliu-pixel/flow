@@ -962,6 +962,29 @@ export function createApplicationDeveloperToken(id: string, actor: 'user' | 'app
 export function rotateOAuthApplicationSecret(id: string): Promise<{ clientSecret: string }> {
   return request(`/api/oauth-applications/${encodeURIComponent(id)}/rotate-secret`, { method: 'POST' })
 }
+/** The application's current client secret, for the (masked) Client secret row's copy button. */
+export function fetchOAuthApplicationClientSecret(id: string): Promise<{ clientSecret: string }> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/client-secret`)
+}
+/** Uploads an application icon picked on the create/edit page; the URL goes in the manifest's display.iconUrl. */
+export function uploadOAuthApplicationIcon(file: File): Promise<{ url: string }> {
+  const body = new FormData()
+  body.append('file', file)
+  return request('/api/oauth-applications/icon', { method: 'POST', body })
+}
+/** An application with access to the workspace (Settings › Applications) and its members' active authorizations. */
+export interface AuthorizedApplication {
+  clientId: string;
+  name: string;
+  description?: string;
+  logoUrl?: string;
+  developerName?: string;
+  developerUrl?: string;
+  authorizations: OAuthAuthorization[];
+}
+export function fetchAuthorizedApplications(signal?: AbortSignal): Promise<AuthorizedApplication[]> {
+  return request('/api/oauth/authorized-applications', { signal })
+}
 export interface OAuthAuthorizationRequest {
   actor?: 'user' | 'app';
   client: {

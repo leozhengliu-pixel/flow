@@ -80,3 +80,23 @@ export function AgentStopIcon({ size = 16, ...props }: IconProps) {
 export function AgentWriteIcon({ size = 16, ...props }: IconProps) {
   return <AgentWriteGlyph size={size} {...props} />;
 }
+/** The reference app's "selected text" chip icon: an "A" in an open box. */
+export function AgentSelectedTextIcon({ size = 13, ...props }: IconProps) {
+  return (
+    <svg {...props} width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      <path d="M1 2.25C1 1.56 1.56 1 2.25 1h11.5c.69 0 1.25.56 1.25 1.25V5.5h-1.5v-3h-11v3H1zM13.5 10v3.5h-11V10H1v3.75c0 .69.56 1.25 1.25 1.25h11.5c.69 0 1.25-.56 1.25-1.25V10z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M5.944 12a.4.4 0 0 0 .386-.295l.456-1.68h2.43l.458 1.68a.4.4 0 0 0 .386.295h.41a.4.4 0 0 0 .385-.51l-2.047-7.2A.4.4 0 0 0 8.423 4H7.58a.4.4 0 0 0-.384.29l-2.052 7.2a.4.4 0 0 0 .385.51zm2.958-3.136-.876-3.221h-.052l-.873 3.221z" />
+    </svg>
+  );
+}
+/** The reference app's "Use … as context" toggle: four corner brackets. */
+export function AgentPageContextIcon({ size = 14, ...props }: IconProps) {
+  return (
+    <svg {...props} width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" fill="currentColor">
+      <path fillRule="evenodd" clipRule="evenodd" d="M1 4.75V4.25C1 2.45507 2.45507 1 4.25 1H4.75C5.16421 1 5.5 1.33579 5.5 1.75C5.5 2.16421 5.16421 2.5 4.75 2.5H4.25C3.2835 2.5 2.5 3.2835 2.5 4.25V4.75C2.5 5.16421 2.16421 5.5 1.75 5.5C1.33579 5.5 1 5.16421 1 4.75Z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M11.25 1L11.75 1C13.5449 1 15 2.45507 15 4.25V4.75L14.9961 4.82715C14.9575 5.20512 14.6382 5.5 14.25 5.5C13.8618 5.5 13.5425 5.20512 13.5039 4.82715L13.5 4.75V4.25C13.5 3.2835 12.7165 2.5 11.75 2.5H11.25C10.8358 2.5 10.5 2.16421 10.5 1.75C10.5 1.33579 10.8358 1 11.25 1Z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M4.75 14.9951H4.25C2.45507 14.9951 1 13.54 1 11.7451L1 11.2451L1.00391 11.168C1.04253 10.79 1.36183 10.4951 1.75 10.4951C2.13817 10.4951 2.45747 10.79 2.49609 11.168L2.5 11.2451V11.7451C2.5 12.7116 3.2835 13.4951 4.25 13.4951H4.75C5.16421 13.4951 5.5 13.8309 5.5 14.2451C5.5 14.6593 5.16421 14.9951 4.75 14.9951Z" />
+      <path fillRule="evenodd" clipRule="evenodd" d="M11.25 15H11.75C13.5449 15 15 13.5449 15 11.75V11.25L14.9961 11.1729C14.9575 10.7949 14.6382 10.5 14.25 10.5C13.8618 10.5 13.5425 10.7949 13.5039 11.1729L13.5 11.25V11.75C13.5 12.7165 12.7165 13.5 11.75 13.5H11.25C10.8358 13.5 10.5 13.8358 10.5 14.25C10.5 14.6642 10.8358 15 11.25 15Z" />
+    </svg>
+  );
+}

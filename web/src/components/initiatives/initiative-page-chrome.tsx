@@ -100,7 +100,8 @@ export function InitiativePageChromeActions({
 }: {
   agentOpen: boolean
   updatesOpen: boolean
-  onToggleAgent: () => void
+  /** Without it there is no agent button (the reference app's initiative page has none; the floating chat is the agent). */
+  onToggleAgent?: () => void
   onToggleUpdates: () => void
 }) {
   return (
@@ -115,7 +116,7 @@ export function InitiativePageChromeActions({
       >
         <Send size={14} />
       </button>
-      <button
+      {onToggleAgent && <button
         aria-expanded={agentOpen}
         aria-label={agentOpen ? 'Close agent sidebar' : 'Open agent sidebar'}
         className={agentOpen ? 'is-agent-active is-active' : undefined}
@@ -124,7 +125,7 @@ export function InitiativePageChromeActions({
         type="button"
       >
         <AgentCursorGlyph size={14} />
-      </button>
+      </button>}
     </>
   )
 }

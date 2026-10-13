@@ -3,8 +3,9 @@
  * picker), Last edit by and Show document history — the reference app's metadata popover.
  */
 import * as Popover from '@radix-ui/react-popover'
-import { History, SlidersHorizontal } from 'lucide-react'
+import { History } from 'lucide-react'
 
+import { FlowSlidersIcon } from '@/components/issue/flow-header-icons'
 import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
@@ -12,6 +13,7 @@ import { ViaApp } from '@/components/ui/via-app'
 import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import type { ActorBot, FlowDocument, User } from '@/types/flow'
 import { documentOwner, type DocumentActionContext } from './document-actions'
+import { documentEditedDate } from './document-edited-date'
 import { DocumentOwnerPicker } from './document-owner-picker'
 
 export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot, lastEditedAt, showAuthorNames, onShowAuthorNames, onShowHistory, open, onOpenChange, ownerOpen, onOwnerOpenChange, readOnly }: {
@@ -33,7 +35,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
 }) {
   const { t, formatDate } = useI18n()
   const owner = documentOwner(document, ctx.data.users)
-  const editedLabel = t('Edited {date}').replace('{date}', formatDate(lastEditedAt, { month: 'short', day: 'numeric' }))
+  const editedLabel = t('Edited {date}').replace('{date}', documentEditedDate(lastEditedAt, formatDate))
   const ownerName = owner ? owner.displayName || owner.name : t('No owner')
   const ownerValue = <>
     {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="document-meta-avatar" name={ownerName}/> : null}
@@ -44,8 +46,8 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot
   const editorName = attributedActorName(lastEditor, editorBot)
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
-      <button aria-label={editedLabel} className="document-edited" title={formatDate(lastEditedAt, { dateStyle: 'medium', timeStyle: 'short' })} type="button">
-        <SlidersHorizontal size={14}/><span className="document-edited__label">{editedLabel}</span>
+      <button aria-label={t('Document display options and metadata; {edited}').replace('{edited}', editedLabel)} className="document-edited" type="button">
+        <FlowSlidersIcon/><span className="document-edited__label">{editedLabel}</span>
       </button>
     </Popover.Trigger>
     <Popover.Portal>

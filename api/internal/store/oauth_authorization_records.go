@@ -321,11 +321,11 @@ func (s *SQLiteStore) RevokeOAuthAuthorizationRecords(ctx context.Context, works
 		if err := json.Unmarshal(raw, &authorization); err != nil {
 			return current, err
 		}
+		// Members revoke their own authorizations; workspace owners and
+		// admins can revoke any member's (the reference app: "Owners and admins can
+		// revoke this connection at any time in Settings") and app installs.
 		if authorization.UserID != userID {
 			var role, status string
-			if authorization.Actor != "app" {
-				return current, ErrAuthForbidden
-			}
 			if err := tx.QueryRowContext(ctx, `SELECT role,status FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, current.Workspace.ID, userID).Scan(&role, &status); err != nil || status != "active" || !isWorkspaceAdminRole(role) {
 				return current, ErrAuthForbidden
 			}

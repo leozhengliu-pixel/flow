@@ -23,6 +23,22 @@ func (s *server) registerOAuthPlatformRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/oauth-applications/{id}/manifest", s.exportOAuthApplicationManifest)
 	mux.HandleFunc("PUT /api/oauth-applications/{id}/manifest", s.updateOAuthApplicationFromManifest)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/installs", s.listOAuthApplicationInstalls)
+	mux.HandleFunc("GET /api/oauth-applications/{id}/client-secret", s.getOAuthApplicationClientSecret)
+	mux.HandleFunc("GET /api/oauth/authorized-applications", s.listAuthorizedApplications)
+	mux.HandleFunc("POST /api/oauth-applications/icon", s.uploadOAuthApplicationIcon)
+}
+
+// GET /api/oauth-applications/{id}/client-secret returns the application's
+// current client secret for the settings page's copy button (the reference app keeps the
+// secret masked but copyable). Workspace admins only, never with an API key.
+func (s *server) getOAuthApplicationClientSecret(w http.ResponseWriter, r *http.Request) {
+	secret, ok := s.store.OAuthApplicationSecret(workspaceKey(r), r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "Application not found")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"clientSecret": secret})
 }
 
 // GET /api/oauth-applications/{id}/installs lists this workspace's grants of

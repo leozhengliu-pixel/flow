@@ -72,10 +72,10 @@
 .suggestions button{height:29px;display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:0;border-radius:9999px;background:var(--chip-bg);box-shadow:var(--chip-ring);color:var(--pk-text-strong);font:500 13px/normal var(--font)}
 .suggestions button:hover:not(:disabled){background:var(--pk-hover)}
 .suggestions button svg{color:var(--chip-text)}
-.thread>.context{max-height:82px;margin:0 8px;padding:4px 4px 4px 8px;display:flex;flex-direction:column;gap:2px}
-.thread>.context>span{height:15px;display:flex;align-items:center;gap:5px;padding:0;background:transparent;color:var(--chip-text)}
-.thread>.context small{font-size:12px;font-weight:500;color:var(--chip-text)}
-.thread>.context b{font-size:12px;font-weight:500;color:var(--pk-text)}
+.composerArea>.context{max-height:82px;margin:0 8px;padding:4px 4px 4px 8px;display:flex;flex-direction:column;gap:2px}
+.composerArea>.context>span{height:15px;display:flex;align-items:center;gap:5px;padding:0;background:transparent;color:var(--chip-text)}
+.composerArea>.context small{font-size:12px;font-weight:500;color:var(--chip-text)}
+.composerArea>.context b{font-size:12px;font-weight:500;color:var(--pk-text)}
 .composer:not(#_){margin:6px 8px 8px;padding:8px 10px 6px;border:0;border-radius:8px;background:var(--chip-bg);box-shadow:var(--chip-ring)}
 .composer:not(#_) textarea{min-height:21px;padding:2px 0;font:450 13px/21px var(--font)}
 .composer:not(#_) textarea::placeholder{color:var(--pk-faint)}
@@ -83,10 +83,10 @@
 .composer:not(#_) footer button{width:24px;height:24px;background:var(--pk-text-strong);color:var(--pk-surface)}
 .composer:not(#_) footer button:disabled{opacity:1;background:var(--pk-hover);color:var(--pk-faint)}
 .composer:not(#_) textarea{height:21px;field-sizing:content}
-.thread>.context:not(#_)>span{height:15px;padding:0;border-radius:0;background:transparent}
-.thread>.context>span{position:relative}
+.composerArea>.context:not(#_)>span{height:15px;padding:0;border-radius:0;background:transparent}
+.composerArea>.context>span{position:relative}
 .contextRemove{margin-left:auto;width:20px;height:20px;display:grid;place-items:center;padding:0;border:0;border-radius:4px;background:transparent;color:var(--pk-muted);opacity:0}
-.thread>.context>span:hover .contextRemove,.contextRemove:focus-visible{opacity:1}
+.composerArea>.context>span:hover .contextRemove,.contextRemove:focus-visible{opacity:1}
 .contextRemove:hover{background:var(--pk-hover);color:var(--pk-text)}
 .composer:not(#_) footer>span:empty{flex:1}
 .sentMention{display:inline-flex;align-items:center;gap:4px;margin:0 1px;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--pk-border);border-radius:4px;background:var(--chip-bg);font:450 13px/16px var(--font);vertical-align:baseline}
@@ -101,3 +101,46 @@
 .userMessage:hover .userActions,.userMessage:focus-within .userActions{opacity:1}
 .replyActions{align-self:stretch;margin-top:12px;margin-left:-10px;opacity:0;transition:opacity 100ms ease}
 .latestReplyActions,.agentMessage:hover .replyActions,.agentMessage:focus-within .replyActions{opacity:1}
+/* Context chips and the composer travel together at the bottom of the thread. */
+.composerArea{position:relative;flex:0 0 auto;display:flex;flex-direction:column}
+.composerTool{width:24px;height:24px;display:grid;place-items:center;padding:0 2px;border:.5px solid transparent;border-radius:9999px;background:transparent;color:var(--agent-float-tool-fg);cursor:pointer}
+.composerTool svg{width:14px;height:14px}
+.sentQuote{display:inline;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--agent-chip-border);border-radius:4px;background:var(--agent-chip-bg);color:var(--pk-text);font:450 13px/20.8px var(--font);white-space:pre-wrap;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.sentQuoteIcon{display:inline-block;margin-right:3.5px;vertical-align:-2px;color:var(--chip-text)}
+.attachments{display:flex;flex-wrap:wrap;gap:4px;padding:0 0 4px}
+.attachments>span{max-width:100%;height:22px;display:inline-flex;align-items:center;gap:4px;padding:0 2px 0 8px;border-radius:6px;background:var(--agent-float-composer-bg);color:var(--agent-float-context-text);font:500 12px/normal var(--font)}
+.attachments b{min-width:0;overflow:hidden;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.fileInput{display:none}
+
+/*
+ * The reference app's floating chat, measured: the conversation is inset 8px (4px top, 20px bottom) with no visible scrollbar,
+ * the time 12px down, messages 26px apart, your message in a bubble up to 75% wide, replies inset 10px. The
+ * composer area is a 4px frame (a 12px-radius gradient behind it) 4px in from the panel, holding the context row
+ * (12px/500 labels, × on hover) and the raised composer (7px radius, 6px 4px padding, 24px footer buttons).
+ */
+:global([data-variant='floating']) .conversation:not(#_){padding:4px 8px 20px;scrollbar-width:auto;scrollbar-color:transparent transparent}
+:global([data-variant='floating']) .messageTime:not(#_){margin:8px auto 20px;line-height:14.5px}
+:global([data-variant='floating']) .conversation article:not(#_){margin:0 0 26px}
+:global([data-variant='floating']) .userMessage:not(#_){max-width:75%}
+:global([data-variant='floating']) .agentMessage>.messageDocument:not(#_),:global([data-variant='floating']) .agentMessage>.work:not(#_){padding:0 10px}
+:global([data-variant='floating']) .composerArea:not(#_){margin:0 4px 4px;padding:4px;border-radius:8px;isolation:isolate}
+:global([data-variant='floating']) .composerArea:not(#_)::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:12px;background:linear-gradient(var(--agent-editing-frame-top),var(--agent-editing-frame-bottom))}
+:global([data-variant='floating']) .composerArea>.context:not(#_){max-height:82px;margin:0;padding:0 0 4px;gap:0}
+:global([data-variant='floating']) .composerArea>.context:not(#_)>span{height:22.5px;gap:6px;padding:4px 4px 4px 8px;color:var(--agent-float-context-text)}
+:global([data-variant='floating']) .composerArea>.context:not(#_) b,:global([data-variant='floating']) .composerArea>.context:not(#_) small{color:var(--agent-float-context-text);font-size:12px;font-weight:500;line-height:14.5px}
+:global([data-variant='floating']) .composerArea>.context:not(#_) svg{width:14px;height:14px;flex:0 0 14px}
+:global([data-variant='floating']) .contextRemove:not(#_){width:20px;height:20px;margin-right:4px;border-radius:9999px;color:var(--agent-float-context-remove)}
+:global([data-variant='floating']) .composer:not(#_):not(#_){margin:0;padding:6px 4px;border:0;border-radius:7px;background:var(--agent-float-composer-bg);box-shadow:var(--agent-float-composer-shadow)}
+:global([data-variant='floating']) .composer:not(#_)>:first-child{max-height:160px;overflow-y:auto;padding:2px 6px;scrollbar-color:transparent transparent}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer{height:28px;gap:8px;padding:0 6px 4px 2px;margin-top:8px}
+:global([data-variant='floating']) .composer:not(#_) footer>span:empty{flex:1}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer :global(.agent-skills-trigger){height:24px;padding:0 6px 0 4px;color:var(--agent-float-skills-fg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool{background:transparent;color:var(--agent-float-tool-fg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool:hover{background:var(--agent-float-tool-hover-bg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer .composerTool[aria-pressed=true]{background:var(--agent-float-tool-on-bg);color:var(--agent-float-tool-on-fg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer>button:last-child{width:24px;height:24px;border:.5px solid transparent;border-radius:12px;background:var(--agent-float-send-bg);color:var(--agent-float-send-fg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer>button[data-state=ready]:last-child{background:var(--agent-send-ready-bg);color:var(--agent-send-ready-fg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer>button[data-state=ready]:last-child:hover{background:var(--agent-send-ready-hover-bg)}
+:global([data-variant='floating']) .composer:not(#_):not(#_) footer>button:last-child:disabled{opacity:1}
+:global([data-variant='floating']) .agentMessage :global(.agent-chat-document):not(#_){padding:0 10px}
+:global([data-variant='floating']) .replyActions:not(#_){margin-left:0}

@@ -1,10 +1,8 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { Link2, Menu, MoreHorizontal, Star } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
-import { DocumentAgentPanel } from '@/components/agent/document-agent-panel'
+import { requestFloatingAgent } from '@/components/agent/agent-floating-request'
 import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
-import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
-import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { toast } from '@/lib/toast'
@@ -16,6 +14,7 @@ import { useDocumentReminder } from '@/components/documents/use-document-reminde
 import { DocumentContentProvider } from '@/components/documents/document-content-context'
 import { clearDocumentContent, setDocumentContent } from '@/components/documents/document-content-editor-state'
 import { IssueDescriptionEditor } from '@/components/issue/issue-description-editor'
+import { FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowOptionsIcon, FlowUrlIcon } from '@/components/issue/flow-header-icons'
 import { FlowDropdownMenuContent } from '@/components/ui/row-context-menu'
 import { queueFlowMenuShortcut } from '@/components/ui/menu-shortcuts'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
@@ -41,11 +40,10 @@ import { DocumentHistoryDialog } from './document-history-dialog'
 import { DocumentMenuItems } from './document-menu'
 import { DocumentSubscribersPopover } from './document-subscribers-popover'
 import { DocumentTemplateChip } from './document-template-chip'
-import { useDocumentPageShortcuts, useDocumentUiActions } from './use-document-page-shortcuts'
+import { DOCUMENT_PAGE_SHORTCUTS, useDocumentPageShortcuts, useDocumentUiActions } from './use-document-page-shortcuts'
 import { canCommentOnDocument, canEditDocument, documentViewerRole } from './document-role'
 import { DocumentInlineComments, DocumentResolvedCommentsButton, ResolvedCommentsPanel, type CommentDraft } from './inline-comments/document-inline-comments'
 import { useInlineThreads } from './inline-comments/use-inline-threads'
-import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
 
 export interface DocumentPageProps {
   origin?: DocumentOrigin
@@ -88,8 +86,6 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const [resolvedOpen, setResolvedOpen] = useState(false)
   const [commentGutter, setCommentGutter] = useState(false)
   const [liveEditor, setLiveEditor] = useState<Editor | null>(null)
-  const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`document:${document.id}`, false)
-  const [agentPrompt, setAgentPrompt] = useState<string>()
   const [authorNamesOpen, setAuthorNamesOpen] = useState(() => readDocumentViewOption(document.id, 'authors', false))
   const [presence, setPresenceState] = useState<User[]>([])
   // Awareness changes on every cursor move; re-render only when the set of
@@ -138,6 +134,11 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     setCommentDraft({ from: selection.from, to: selection.to, text: selection.text })
     // Keystrokes go to the comment, never over the selected text.
     if (liveEditor && !liveEditor.isDestroyed) { liveEditor.commands.setTextSelection(selection.to); liveEditor.view.dom.blur(); window.getSelection()?.removeAllRanges() }
+  }
+  // Like the reference app: the selection goes to the floating chat as a chip and the editor lets go of it (the toolbar closes).
+  const askAgent = (quote: string) => {
+    if (liveEditor && !liveEditor.isDestroyed) liveEditor.commands.setTextSelection(liveEditor.state.selection.to)
+    requestFloatingAgent({ quote })
   }
   const defaultDocumentIcon = !document.icon
   const lastRevision = document.revisions.length ? latestRevision(document) : undefined
@@ -237,20 +238,20 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     changeOwner: openOwnerPicker,
   }, !deleted)
 
-  const issue = data.issues.find(item => item.id === document.issueId)
-  const linkedIssue = issue ? issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data) : undefined
   const documentUrlLabel = t('Copy document URL')
 
   // One agent task directory for the page: comment cards show their own sessions (the reference app answers inside the thread).
-  return <IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${agentOpen && !deleted ? ' has-agent' : ''}${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
+  return <IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
     <header className="document-header">
       <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><Menu size={18}/></button>
       <DocumentBreadcrumb data={data} document={{ ...document, title }} origin={origin} onBack={onBack}/>
       {deleted && <span className="document-deleted-badge">{t('Deleted')}</span>}
       <div className="document-title-actions">
-        {!deleted && <button aria-checked={favorite} aria-label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} className="document-icon-button" onClick={() => void toggleDocumentFavorite(ctx, document)} role="switch" type="button"><Star size={15} fill={favorite ? 'currentColor' : 'none'}/></button>}
+        {!deleted && <ScopedFlowTooltip label={t(favorite ? 'Unfavorite document' : 'Favorite document')} shortcut={DOCUMENT_PAGE_SHORTCUTS.favorite}>
+          <button aria-checked={favorite} aria-label={t(favorite ? 'Remove from favorites' : 'Add to favorites')} className="document-icon-button" onClick={() => void toggleDocumentFavorite(ctx, document)} role="switch" type="button">{favorite ? <FlowFavoriteFilledIcon className="document-favorite-filled"/> : <FlowFavoriteIcon/>}</button>
+        </ScopedFlowTooltip>}
         <DropdownMenu.Root open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenu.Trigger asChild><button aria-label={t('Document options')} className="document-icon-button" type="button"><MoreHorizontal size={16}/></button></DropdownMenu.Trigger>
+          <DropdownMenu.Trigger asChild><button aria-label={t('Document options')} className="document-icon-button" type="button"><FlowOptionsIcon/></button></DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <FlowDropdownMenuContent label={t('Document actions')}>
               {deleted && deletedEntry
@@ -265,10 +266,9 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         {collaborators.slice(0, 4).map(user => { const name = user.displayName || user.name || '?'; return <span className="document-presence__avatar" key={user.id} title={t('{name} is editing').replace('{name}', name)}>{name.slice(0, 2).toUpperCase()}</span> })}
         <DocumentEditedPopover ctx={ctx} document={document} lastEditor={lastEditor} lastEditorBot={lastEditorBot} lastEditedAt={lastEditedAt} showAuthorNames={authorNamesOpen} onShowAuthorNames={setAuthorNames} onShowHistory={openHistory} open={editedOpen} onOpenChange={next => { setEditedOpen(next); if (!next) setOwnerOpen(false) }} ownerOpen={ownerOpen} onOwnerOpenChange={setOwnerOpen} readOnly={deleted}/>
         {!deleted && <DocumentResolvedCommentsButton count={resolvedThreads.length} open={resolvedOpen} onToggle={() => setResolvedOpen(open => !open)}/>}
-        <ScopedFlowTooltip label={documentUrlLabel} shortcut="⌘ ⇧ ,">
-          <button aria-label={documentUrlLabel} className="document-icon-button" onClick={() => void copyDocumentUrl(ctx, document)} type="button"><Link2 size={16}/></button>
+        <ScopedFlowTooltip label={documentUrlLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.copyUrl}>
+          <button aria-label={documentUrlLabel} className="document-icon-button" onClick={() => void copyDocumentUrl(ctx, document)} type="button"><FlowUrlIcon/></button>
         </ScopedFlowTooltip>
-        {!deleted && <button aria-expanded={agentOpen} aria-label={t(agentOpen ? 'Close chat' : 'Open chat')} className={`document-icon-button${agentOpen ? ' is-active' : ''}`} data-active={agentOpen || undefined} onClick={() => setAgentOpen(open => !open)} type="button"><AgentCursorGlyph size={14}/></button>}
         {!deleted && <DocumentSubscribersPopover ctx={ctx} document={document} subscribed={subscribed} busy={subscriptionBusy} onToggleViewer={toggleSubscription} open={subscribersOpen} onOpenChange={setSubscribersOpen}/>}
       </div>
     </header>
@@ -297,20 +297,17 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
             : <CollaborativeEditor data={data} document={document} value={body.value} state={body.state} editorKey={`${document.id}:${document.collaborationId ?? ''}:${editorVersion}`} className="document-editor" presence={presence} onPresence={setPresence} showPresence={false}
               readOnly={!canEdit} editorRef={setLiveEditor}
               onUploadFile={async file => (await uploadDocumentAttachment(document.id, file)).url}
-              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: prompt => { setAgentPrompt(prompt); setAgentOpen(true) }, onComment: canComment ? startComment : undefined })}
+              selectionActions={documentSelectionActions({ data, document, t, onAskAgent: askAgent, onComment: canComment ? startComment : undefined })}
               onChange={snapshot => { setBody({ value: snapshot.markdown, state: snapshot.documentJSON }); schedule({ content: snapshot.markdown, contentData: snapshot.document as Record<string, unknown> }) }}
               onPersist={async (snapshot, sync) => { const saved = await updateDocument(document.id, { content: snapshot.markdown, contentState: snapshot.contentState, contentData: snapshot.document as Record<string, unknown>, ...sync }); await onReload(); return saved }}/>}
         </DocumentContentProvider>
-        {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter} railOpen={agentOpen}/>}
+        {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter}/>}
       </div>
     </article>
     {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}
     {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
     {!deleted && <DocumentAccessDialog busy={accessBusy} data={data} document={document} onChangeRole={(type, id, role) => void updateAccess(type, id, role)} onOpenChange={setAccessOpen} open={accessOpen} permissions={permissions}/>}
     <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>
-    {agentOpen && !deleted && <aside className="document-agent-rail" aria-label={t('Entity agent panel')}>
-      <DocumentAgentPanel key={agentPrompt ?? 'default'} data={data} document={document} contextIssues={linkedIssue ? [linkedIssue] : []} initialPrompt={agentPrompt} onRequestClose={() => { setAgentOpen(false); setAgentPrompt(undefined) }} open={agentOpen}/>
-    </aside>}
   </main></IssueAgentTasksProvider>
 }
 

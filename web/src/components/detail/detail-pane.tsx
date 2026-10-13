@@ -5,7 +5,6 @@ import * as ContextMenu from '@radix-ui/react-context-menu'
 import { DocumentGlyph } from '@/components/documents/document-icon'
 import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { EntityAgentPanel } from '@/components/agent/entity-agent-panel'
-import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useDescriptionSelectionActions } from './description-selection-actions'
 import { fetchIssueRecord, setThreadSubscription } from '@/lib/api'
@@ -73,7 +72,8 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
   const{t}=useI18n(),[title,setTitle]=useState(issue.title),[subOpen,setSubOpen]=useState(false),[subEditorKey,setSubEditorKey]=useState(0),[linkOpen,setLinkOpen]=useState(false),[subCollapsed,setSubCollapsed]=useState(false),[subSelected,setSubSelected]=useState(new Set<string>()),[subDisplay,setSubDisplay]=useState<SubIssueDisplay>({ordering:'priority',direction:'asc',completed:'all',nested:true,properties:new Set(['status','labels','assignee'])}),[relationType,setRelationType]=useState<IssueRelationType|null>(null),[uploadState,setUploadState]=useState<AttachmentUploadState>()
   const peoplePresence=workspacePresence??presence
   useRegisterCommandContext({kind:'issues',source:'detail',issues:[issue],onUpdate,onDelete,onRelation})
-  const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`issue:${issue.id}`, false)
+  // Like the reference app, the issue page has no docked agent: a rail left open by an older build is not restored.
+  const [agentOpen, setAgentOpen] = useState(false)
   const fileRef=useRef<HTMLInputElement>(null)
   const uploadCommentFile=async(file:File)=>{const attachment=await onUpload(file,{embed:false});if(!attachment?.url)throw new Error('Upload failed');return attachment.url}
   const threadSummariesEnabled=Boolean(resolvedTeamSettings(data.teamSettings,issue.team.id)?.resolvedThreadSummaries)

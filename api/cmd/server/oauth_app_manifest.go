@@ -136,7 +136,9 @@ func (m *oauthAppManifest) validate(webhookURL func(string) (string, error)) ([]
 		if utf8.RuneCountInString(m.Display.Description) > 1000 {
 			add("display.description", "description must be at most 1000 characters")
 		}
-		if m.Display.IconURL != "" && !absoluteHTTPURL(m.Display.IconURL, true) {
+		// An icon uploaded on the settings page is served by Flow itself
+		// (/uploads/oauth_app_icon_…); any other icon must be HTTPS.
+		if m.Display.IconURL != "" && !absoluteHTTPURL(m.Display.IconURL, true) && !uploadedOAuthAppIcon(m.Display.IconURL) {
 			add("display.iconUrl", "iconUrl must be an absolute HTTPS URL")
 		}
 	}
@@ -159,7 +161,13 @@ func (m *oauthAppManifest) validate(webhookURL func(string) (string, error)) ([]
 		if strings.Contains(strings.ToLower(name), "http://") || strings.Contains(strings.ToLower(name), "https://") {
 			add("oauth.client_name", "client_name must not contain a URL")
 		}
-		if !absoluteHTTPURL(m.OAuth.ClientURI, false) {
+		// Like the reference app's "Developer URL", the homepage is required only for
+		// public applications; when given it must be an HTTP(S) URL.
+		if strings.TrimSpace(m.OAuth.ClientURI) == "" {
+			if m.Distribution == "public" {
+				add("oauth.client_uri", "client_uri is required for public applications")
+			}
+		} else if !absoluteHTTPURL(m.OAuth.ClientURI, false) {
 			add("oauth.client_uri", "client_uri must be an absolute HTTP or HTTPS URL")
 		}
 		if len(m.OAuth.RedirectURIs) < 1 || len(m.OAuth.RedirectURIs) > 32 {
@@ -473,9 +481,9 @@ func (s *server) oauthAppManifestSchema(w http.ResponseWriter, r *http.Request) 
 			"developer": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"name"}, "properties": map[string]any{
 				"name": map[string]any{"type": "string", "minLength": 2, "maxLength": 80},
 			}},
-			"oauth": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"client_name", "client_uri", "redirect_uris"}, "properties": map[string]any{
+			"oauth": map[string]any{"type": "object", "additionalProperties": false, "required": []string{"client_name", "redirect_uris"}, "properties": map[string]any{
 				"client_name":   map[string]any{"type": "string", "minLength": 2, "maxLength": 80, "not": map[string]any{"pattern": "(?i)(\\bflow\\b|https?://)"}},
-				"client_uri":    urlProperty("Homepage or documentation URL", false),
+				"client_uri":    urlProperty("Homepage or documentation URL (required for public applications)", false),
 				"redirect_uris": unique(map[string]any{"type": "string", "format": "uri"}, 1, 32, "HTTPS redirect URIs (HTTP only on loopback hosts)"),
 				"grant_types":   map[string]any{"type": "array", "uniqueItems": true, "minItems": 1, "items": map[string]any{"enum": []string{"authorization_code", "client_credentials"}}, "contains": map[string]any{"const": "authorization_code"}, "default": []string{"authorization_code"}},
 				"scopes":        map[string]any{"type": "array", "uniqueItems": true, "items": map[string]any{"enum": scopes}, "description": "Flow extension: scopes the application may request (read is always included)"},

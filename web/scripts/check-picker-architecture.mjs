@@ -25,6 +25,10 @@ const dedicated = new Set([
   'filter/universal-custom-filter-panel.tsx',
   // Document history: arrow-key single-select list of dated versions (a version navigator, not a property picker).
   'documents/document-history-dialog.tsx',
+  // OAuth app team access (consent page and Settings › Applications): the reference app's "Select teams…" multi-select combobox with chips.
+  'auth/oauth-team-combobox.tsx',
+  // Bottom-right chat history: a search field over time-grouped chats (aria-activedescendant listbox), opens a chat rather than picking a property value.
+  'agent/agent-chat-history-popover.tsx',
 ])
 
 const files = await collect(root)

@@ -16,3 +16,7 @@
 .none button{padding:0;border:0;background:transparent;color:var(--pk-faint);font:inherit;cursor:pointer}
 .avatar{width:14px;height:14px;display:inline-grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--avatar,var(--pk-hover));color:var(--on-accent);font:600 7px/1 var(--font)}
 .avatar img{width:100%;height:100%;object-fit:cover}
+/* The reference app's "selected text" chip (Ask agent on a selection): measured 13px/20.8px text, 13px icon, 4px radius. */
+.quoteChip{display:inline;margin:0 1px 0 0;padding:1.5px 3.9px 1.5px 2.6px;border:.5px solid var(--agent-quote-chip-border);border-radius:4px;background:var(--agent-quote-chip-bg);color:var(--pk-text);font:450 13px/20.8px var(--font);white-space:pre-wrap;-webkit-box-decoration-break:clone;box-decoration-break:clone;cursor:default;user-select:none}
+.quoteIcon{display:inline-block;margin:0 3.5px 0 0;vertical-align:-2px;color:var(--chip-text)}
+.quoteText{color:var(--pk-text)}
