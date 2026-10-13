@@ -32,6 +32,17 @@ describe('AgentMentionInput', () => {
     expect(screen.getByRole('textbox', { name: 'Ask' })).toHaveTextContent('Payments Q4')
   })
 
+  it('lists the exact issue identifier first, ahead of longer identifiers that contain it', async () => {
+    const state = { id: 's', name: 'Backlog', color: '#999', type: 'backlog' }
+    const issueData = { ...data, issues: ['206', '20', '200'].map(number => ({ id: `issue_${number}`, identifier: `DEV-${number}`, title: `Issue ${number}`, state })) } as unknown as BootstrapData
+    const user = userEvent.setup()
+    render(<I18nProvider><AgentMentionInput ariaLabel="Ask" data={issueData} onChange={vi.fn()} onSubmit={vi.fn()} placeholder="Ask" value=""/></I18nProvider>)
+    await user.click(screen.getByRole('textbox', { name: 'Ask' }))
+    await user.keyboard('@DEV-20')
+    await screen.findByRole('listbox', { name: 'Mention' })
+    expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([expect.stringContaining('DEV-20Issue 20'), expect.stringContaining('DEV-206'), expect.stringContaining('DEV-200')])
+  })
+
   it('draws an initiative chip with its glyph', () => {
     const { container } = render(<>{mentionIcon({ type: 'initiative', id: 'initiative-1' }, data)}</>)
     expect(container.querySelector('svg')).not.toBeNull()

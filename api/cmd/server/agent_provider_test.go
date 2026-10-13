@@ -99,6 +99,12 @@ func TestAgentProviderStreamingProtocols(t *testing.T) {
 			if len(events) < 2 {
 				t.Fatalf("events=%#v", events)
 			}
+			// The call's row is announced with its name, so it reads "Looking up issues…" from the start.
+			for _, event := range events {
+				if event.Type == "tool.started" && (event.ToolCall == nil || event.ToolCall.Name != "list_issues") {
+					t.Fatalf("tool.started without the tool name: %#v", event.ToolCall)
+				}
+			}
 			if test.protocol == "openai-responses" && turn.Reasoning != "Checked the workspace." {
 				t.Fatalf("reasoning=%q events=%#v", turn.Reasoning, events)
 			}

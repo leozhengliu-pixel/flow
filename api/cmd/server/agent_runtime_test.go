@@ -197,6 +197,38 @@ func TestAgentChatContinuesAfterStopDuringToolCall(t *testing.T) {
 	}
 }
 
+// A long chat keeps its first messages: older replies reach the model as text only, the latest keep their tools.
+func TestAgentProviderHistoryKeepsLongChatsAsTextBeyondRecentTools(t *testing.T) {
+	session := domain.AgentSession{}
+	for turn := 1; turn <= 25; turn++ {
+		session.Messages = append(session.Messages,
+			domain.AgentMessage{Role: "user", Content: fmt.Sprintf("QA agent – request %d", turn)},
+			domain.AgentMessage{Role: "assistant", Content: fmt.Sprintf("Done %d", turn), Parts: []domain.AgentMessagePart{
+				{Type: "toolCall", Status: "completed", ToolCall: &domain.AgentToolCall{ID: fmt.Sprintf("call_%d_a", turn), Name: "get_issue", Arguments: json.RawMessage(`{}`), Result: json.RawMessage(`{"ok":true}`), Status: "completed"}},
+				{Type: "toolCall", Status: "completed", ToolCall: &domain.AgentToolCall{ID: fmt.Sprintf("call_%d_b", turn), Name: "save_issue", Arguments: json.RawMessage(`{}`), Result: json.RawMessage(`{"ok":true}`), Status: "completed"}},
+			}})
+	}
+	messages := agentProviderHistory(session, "System", nil)
+	if messages[1].Role != "user" || messages[1].Content != "QA agent – request 1" {
+		t.Fatalf("the first request must stay in a 25-turn chat: %+v", messages[1])
+	}
+	withTools := 0
+	for _, message := range messages {
+		if len(message.ToolCalls) > 0 {
+			withTools++
+			if !strings.HasPrefix(message.Content, "Done 2") {
+				t.Fatalf("only the latest replies keep tool calls, got %q", message.Content)
+			}
+		}
+	}
+	if withTools != agentHistoryToolReplies {
+		t.Fatalf("replies with tools = %d, want %d", withTools, agentHistoryToolReplies)
+	}
+	if len(messages) != 1+50+agentHistoryToolReplies*2 {
+		t.Fatalf("messages = %d", len(messages))
+	}
+}
+
 // Stored chats from before the fix (calls saved without results, open questions) are repaired on the way out.
 func TestAgentProviderHistoryRepairsUnansweredCalls(t *testing.T) {
 	session := domain.AgentSession{Messages: []domain.AgentMessage{

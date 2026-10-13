@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	appconfig "flow/api/internal/config"
+	"flow/api/internal/domain"
 )
 
 func TestAIIssueFilterValidatesModelChoices(t *testing.T) {
@@ -51,6 +53,17 @@ func TestAIIssueFilterValidatesModelChoices(t *testing.T) {
 	}
 	if !strings.Contains(prompt, `"bug"=Bug`) || !strings.Contains(prompt, "Current user: Ada") {
 		t.Fatalf("prompt missing vocabulary: %s", prompt)
+	}
+
+	// Without viewerName the signed-in person is the current user, and their assignee option is marked "(me)", so
+	// "assigned to me" / "分配给我" resolve on every page.
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPost, "/api/ai/issue-filter", strings.NewReader(`{"query":"分配给我的高优先级 Bug","fields":{"assignee":[{"id":"usr_dev","label":"Dev User"},{"id":"usr_qa","label":"QA member"}]}}`))
+	request.Header.Set("Content-Type", "application/json")
+	request = request.WithContext(context.WithValue(request.Context(), authUserContextKey{}, domain.User{ID: "usr_dev", Name: "Dev User", DisplayName: "Dev User"}))
+	s.aiIssueFilter(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(prompt, "Current user: Dev User") || !strings.Contains(prompt, `"usr_dev"=Dev User (me)`) || strings.Contains(prompt, "QA member (me)") {
+		t.Fatalf("status %d, prompt: %s", recorder.Code, prompt)
 	}
 
 	disabled := &server{}

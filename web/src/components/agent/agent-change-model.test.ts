@@ -53,6 +53,10 @@ describe('agent result cards', () => {
     expect(agentChangeEntityKeys({ parts: [part('a', 'save_document', { action: 'created', entityType: 'document', entityId: 'd1', undoable: true })] })).toEqual(['document:d1'])
   })
 
+  it('keys created issues by identifier too, so references to issues the page has not loaded skip them', () => {
+    expect(agentChangeEntityKeys({ parts: [part('a', 'save_issue', { action: 'created', entityType: 'issue', entityId: 'issue_203', label: 'DEV-203', undoable: true })] })).toEqual(['issue:issue_203', 'issue:DEV-203'])
+  })
+
   it('summarises fields in the viewer’s language', () => {
     expect(agentChangeSummary({ fields: ['description', 'state', 'priority'] }, identity)).toBe('Changed the description, status and priority.')
     expect(agentChangeSummary({ fields: ['description', 'state'] }, translateToChinese, 'zh-CN')).toBe('更改了描述、状态。')

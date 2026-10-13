@@ -376,6 +376,16 @@ func TestMCPSaveDocument(t *testing.T) {
 	if document = find(); !strings.Contains(document.Content, "**safely**") || len(document.ProjectIDs) != 0 {
 		t.Fatalf("patch/detach: %q %v", document.Content, document.ProjectIDs)
 	}
+	// A new body that opens by repeating the title as a heading drops that heading (the page shows the title).
+	titled := mcpObject(t, f, "save_document", map[string]any{"title": "QA agent – Release checklist", "content": "# QA agent –  release checklist\n\n- [ ] one"})
+	for _, item := range f.repository.Bootstrap().Documents {
+		if item.ID == titled["id"] && item.Content != "- [ ] one" {
+			t.Fatalf("title heading kept: %q", item.Content)
+		}
+	}
+	if got := stripLeadingTitleHeading("## Goals\n\nBody", "Launch spec"); got != "## Goals\n\nBody" {
+		t.Fatalf("other headings must stay: %q", got)
+	}
 	if message := mcpToolError(t, f, "save_document", map[string]any{"content": "body"}); !strings.Contains(message, "title is required") {
 		t.Fatalf("missing title: %s", message)
 	}

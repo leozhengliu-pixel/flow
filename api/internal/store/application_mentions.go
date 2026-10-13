@@ -70,11 +70,24 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 		var metadata struct {
 			TeamIDs    []string `json:"teamIds"`
 			ProjectIDs []string `json:"projectIds"`
+			IssueID    string   `json:"issueId"`
 		}
 		if err := json.Unmarshal(issueRaw, &metadata); err != nil {
 			return err
 		}
 		teamIDs = metadata.TeamIDs
+		if metadata.IssueID != "" {
+			// A document attached to an issue belongs to the issue's team.
+			var raw []byte
+			if err := tx.QueryRowContext(ctx, `SELECT list_data FROM issue_records WHERE workspace_key=? AND id=?`, workspace, metadata.IssueID).Scan(&raw); err == nil {
+				var issue domain.Issue
+				if json.Unmarshal(raw, &issue) == nil && issue.Team.ID != "" {
+					teamIDs = append(teamIDs, issue.Team.ID)
+				}
+			} else if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+		}
 		if len(metadata.ProjectIDs) > 0 {
 			clause, args := bindList("record_key", metadata.ProjectIDs)
 			args = append([]any{workspace}, args...)
@@ -105,6 +118,27 @@ func syncApplicationMentions(ctx context.Context, tx *sqlTx, workspace, resource
 			resourceType = "document"
 		} else {
 			resourceType = "project"
+		}
+		if resourceType == "document" && len(teamIDs) == 0 {
+			// A workspace document (no team, project or issue) is open to every member: an agent that can work in
+			// any of the workspace's teams answers there.
+			rows, err := tx.QueryContext(ctx, `SELECT record_key FROM workspace_metadata_records WHERE workspace_key=? AND field='teams' ORDER BY record_key`, workspace)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+				var id string
+				if err := rows.Scan(&id); err != nil {
+					rows.Close()
+					return err
+				}
+				teamIDs = append(teamIDs, id)
+			}
+			err = rows.Err()
+			rows.Close()
+			if err != nil {
+				return err
+			}
 		}
 	} else if err != nil {
 		return err

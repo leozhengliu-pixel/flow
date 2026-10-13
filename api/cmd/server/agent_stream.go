@@ -399,8 +399,10 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				return writer.send(agentStreamEvent{Type: event.Type, MessageID: messageID, Delta: event.Delta, Part: &part})
 			}
 		case "tool.started", "tool.delta":
-			// load_tools is bookkeeping, not work the user needs to see.
-			if event.ToolCall == nil || event.ToolCall.Name == agentLoadToolsTool {
+			// load_tools is bookkeeping, not work the user needs to see. A streamed call whose name has not arrived
+			// yet (some providers send the id first) gets its row once the name does, so a call that turns out to be
+			// load_tools never leaves a nameless row behind.
+			if event.ToolCall == nil || event.ToolCall.Name == "" || event.ToolCall.Name == agentLoadToolsTool {
 				return nil
 			}
 			key := "tool:" + event.ToolCall.ID
@@ -645,6 +647,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					available, _ := s.agentToolDefinitions()
 					content, isError = toolset.load(call.Arguments, available)
 				}
+				if placeholder, ok := partIndex["tool:"+call.ID]; ok && parts[placeholder].Type == "toolCall" {
+					parts = removeAgentPart(parts, partIndex, placeholder)
+				}
 				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: content, IsError: isError}})
 				continue
 			}
@@ -802,6 +807,21 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	}
 	if strings.TrimSpace(finalText) == "" {
 		return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent provider returned an empty response"))
+	}
+	// Links to this workspace's pages under a made-up host point at the app instead.
+	linkBase := agentLinkBaseURL(r)
+	if rebased := rebaseAgentWorkspaceLinks(finalText, data.Workspace.URLKey, linkBase); rebased != finalText {
+		finalText = rebased
+		for index := range parts {
+			if parts[index].Type == "text" {
+				parts[index].Text = rebaseAgentWorkspaceLinks(parts[index].Text, data.Workspace.URLKey, linkBase)
+			}
+		}
+		if textIndex, ok := partIndex["text"]; ok && writer != nil && textIndex < len(parts) {
+			if err := writer.send(agentStreamEvent{Type: "text.replaced", MessageID: messageID, Delta: parts[textIndex].Text}); err != nil {
+				return domain.AgentSession{}, err
+			}
+		}
 	}
 	// Give the parallel title request a moment so the completed session usually carries it.
 	if titleDone != nil {
@@ -1032,10 +1052,7 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	}
 	// "DEV-42 Fix login", "[DEV-42](…/issue/DEV-42)" and app URLs in id arguments become the reference they name.
 	normalizeAgentToolArgs(call.Name, args)
-	args["__flowBaseURL"] = externalBaseURL(r)
-	if base, ok := r.Context().Value(agentBaseURLKey{}).(string); ok {
-		args["__flowBaseURL"] = base
-	}
+	args["__flowBaseURL"] = agentLinkBaseURL(r)
 	// History reads "Flow <did X> on behalf of <User>" for what the tool writes.
 	withAgentAttribution(r, &data)
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
@@ -1062,11 +1079,20 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	return raw, nil
 }
 
+// agentHistoryMessages is how many stored chat messages (user and assistant) a reply sees; agentHistoryToolReplies is
+// how many of the latest replies keep their tool calls and results. Older replies reach the model as their text only
+// ("Created DEV-12 …"), so a long chat remembers what was asked and done without replaying every tool result, and
+// the model never loses the start of the conversation to a window counted in tool messages.
+const (
+	agentHistoryMessages    = 80
+	agentHistoryToolReplies = 6
+)
+
 func agentProviderHistory(session domain.AgentSession, system string, issueTitle func(string) string) []agentProviderMessage {
 	messages := []agentProviderMessage{{Role: "system", Content: system}}
 	start := len(session.Messages)
 	bytes := len(system)
-	for start > 0 && len(session.Messages)-start < 32 {
+	for start > 0 && len(session.Messages)-start < agentHistoryMessages {
 		raw, _ := json.Marshal(session.Messages[start-1])
 		if start < len(session.Messages) && bytes+len(raw) > 8<<20 {
 			break
@@ -1077,13 +1103,25 @@ func agentProviderHistory(session domain.AgentSession, system string, issueTitle
 	if issueTitle == nil {
 		issueTitle = func(string) string { return "" }
 	}
-	for _, message := range session.Messages[start:] {
+	// The index from which assistant replies keep their tool calls and results.
+	toolsFrom, replies := len(session.Messages), 0
+	for toolsFrom > start && replies < agentHistoryToolReplies {
+		toolsFrom--
+		if session.Messages[toolsFrom].Role == "assistant" {
+			replies++
+		}
+	}
+	for offset, message := range session.Messages[start:] {
 		content := message.Content
 		if message.Role == "user" {
 			// Chips reach the model as copyable references (DEV-42 ("Title")), never as glued chip text.
 			content = agentModelUserText(content, message.Mentions, issueTitle)
 		}
 		providerMessage := agentProviderMessage{Role: message.Role, Content: content}
+		if start+offset < toolsFrom {
+			messages = append(messages, providerMessage)
+			continue
+		}
 		for _, part := range message.Parts {
 			if part.ToolCall != nil && !strings.HasPrefix(part.ToolCall.ID, agentHostedToolPrefix) {
 				providerMessage.ToolCalls = append(providerMessage.ToolCalls, *part.ToolCall)
@@ -1097,8 +1135,8 @@ func agentProviderHistory(session domain.AgentSession, system string, issueTitle
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: part.ToolCall.ID, Content: string(part.ToolCall.Result), IsError: part.ToolCall.Status == "error"}})
 		}
 	}
-	if len(messages) > 41 {
-		start := len(messages) - 40
+	if len(messages) > 241 {
+		start := len(messages) - 240
 		for start < len(messages) && messages[start].ToolResult != nil {
 			start++
 		}

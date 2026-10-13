@@ -4,6 +4,7 @@ import { ProjectIcon } from '@/components/issue/issue-icons'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { fetchAgentStatus, getAgentSession, listAgentSessions, resolveAgentApproval } from '@/lib/api'
 import { streamAgentSessionMessage, streamNewAgentSession, type AgentStreamEvent } from '@/lib/agent-stream'
+import { markAgentSessionDocked } from './agent-docked-sessions'
 import { markStoppedAgentReply } from './agent-stopped-reply'
 import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus } from '@/types/flow'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
@@ -118,8 +119,22 @@ export function EntityAgentPanel({
     }
   }, [observeHydrationState, open, t])
 
+  // This chat is docked in the page's sidebar; the app must not also open it as the floating toolbar chat.
+  useEffect(() => {
+    if (session?.id) markAgentSessionDocked(session.id)
+  }, [session?.id])
+
+  // Hosts pass `target`, `agentSidebarTarget` and `onSessionChange` inline, so they are new on every render. The chat
+  // is (re)loaded only when the entity or the requested conversation changes: reloading on every parent render sent
+  // a burst of session-list requests on each workspace update and could replace a reply while it streamed.
+  const latest = useRef({ target, agentSidebarTarget, onSessionChange })
+  latest.current = { target, agentSidebarTarget, onSessionChange }
+  const issueKey = (target.issueIds ?? []).join(',')
+  const conversationKey = agentSidebarTarget?.type === 'aiConversationMention' ? agentSidebarTarget.aiConversationId : ''
+
   useEffect(() => {
     if (!open) return
+    const { target, agentSidebarTarget, onSessionChange } = latest.current
     let active = true
     setHydration({ isHydrated: false, observing: true })
     const hydrate = async () => {
@@ -147,7 +162,8 @@ export function EntityAgentPanel({
     return () => {
       active = false
     }
-  }, [agentSidebarTarget, entityKey, onSessionChange, open, t, target])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload per entity / conversation, see `latest`
+  }, [conversationKey, entityKey, issueKey, open])
 
   useEffect(() => {
     if (initialPrompt) setInput(initialPrompt)
@@ -181,12 +197,15 @@ export function EntityAgentPanel({
   }
 
   /** Sends the composer text, or `followUp` (a suggestion chip) without touching the composer. */
-  const submit = async (followUp?: string) => {
+  const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
     const message = (followUp ?? input).trim()
     if (!message || loading || !status?.enabled) return
     setMessages(current => [
-      ...current,
-      { id: `pending-${Date.now()}`, role: 'user', content: message, createdAt: new Date().toISOString() },
+      // A picked option shows as the chosen pill on its question until the server's copy arrives.
+      ...current.map(item => answer && item.parts?.some(part => part.id === answer.partId)
+        ? { ...item, parts: item.parts.map(part => part.id === answer.partId && part.question ? { ...part, status: 'completed' as const, question: { ...part.question, selected: answer.value } } : part) }
+        : item),
+      { id: `pending-${Date.now()}`, role: 'user', content: message, answerTo: answer?.partId, createdAt: new Date().toISOString() },
     ])
     if (followUp === undefined) setInput('')
     setError(undefined)
@@ -250,7 +269,7 @@ export function EntityAgentPanel({
       }
       const issueIds = target.issueIds ?? contextIssues.map(issue => issue.id)
       next = session
-        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal)
+        ? await streamAgentSessionMessage(session.id, message, onEvent, controller.signal, answer ? { answer } : undefined)
         : await streamNewAgentSession(
             {
               message,
@@ -315,7 +334,7 @@ export function EntityAgentPanel({
           approvalBusy={approvalBusy}
           contextIssues={contextIssues}
           conversationDraftKey={conversationDraftKey}
-          emptyLabel={emptyLabel ?? `${t('Ask anything about this')} ${contextTypeLabel}`}
+          emptyLabel={emptyLabel ?? t('Ask anything about this {type}').replace('{type}', contextTypeLabel)}
           enabled={Boolean(status?.enabled)}
           error={error}
           input={input}
@@ -325,12 +344,13 @@ export function EntityAgentPanel({
           onStop={() => abortRef.current?.abort()}
           onSubmit={() => void submit()}
           onSendSuggestion={message => void submit(message)}
+          onAnswer={(part, choice) => void submit(choice.label, { partId: part.id, value: choice.value })}
           onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
           sessionId={session?.id}
           onSessionChange={next => { setSession(next); setMessages(next.messages) }}
           placeholder={
             status?.enabled
-              ? `${t('Ask about this')} ${contextTypeLabel}…`
+              ? t('Ask about this {type}…').replace('{type}', contextTypeLabel)
               : t('Flow Agent is not configured')
           }
           streamParts={streamParts}
@@ -355,16 +375,11 @@ function pickEntitySession(
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     if (matched[0]) return matched[0]
   }
-  // An initiative's chat is the latest one that has it in context.
-  if (target.type === 'initiative') {
-    const matched = sessions
-      .filter(session => session.initiativeIds?.includes(target.id))
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    if (matched[0]) return matched[0]
-  }
-  // Document / initiative: match by title prefix heuristic when no issue linkage.
-  const needle = target.identifier ?? target.title
+  // A project's, document's or initiative's chat is the latest one that has it in context. Matching by title or
+  // slug opened unrelated chats (every "…create-a-document…" slug matched any document).
+  const contextIds = (session: AgentSession) =>
+    target.type === 'initiative' ? session.initiativeIds : target.type === 'project' ? session.projectIds : target.type === 'document' ? session.documentIds : undefined
   return sessions
-    .filter(session => session.title.includes(needle) || session.slugId.includes(target.id.slice(0, 8)))
+    .filter(session => contextIds(session)?.includes(target.id))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
 }

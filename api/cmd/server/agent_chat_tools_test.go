@@ -266,6 +266,50 @@ func TestAgentChatLoadsReferencedIssuesAndToolsOnDemand(t *testing.T) {
 	}
 }
 
+// Chat Completions providers (DeepSeek) can send a tool call's id before its name. When that call is load_tools,
+// no nameless "running" tool row may be streamed or saved.
+func TestAgentChatCompletionsLoadToolsWithLateNameLeavesNoRow(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		calls++
+		call := calls
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/event-stream")
+		if call == 1 {
+			_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"function\":{\"name\":\"\",\"arguments\":\"\"}}]}}]}\n\n"+
+				"data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"load_tools\",\"arguments\":\"{\\\"groups\\\":[\\\"issue_changes\\\"]}\"}}]}}]}\n\n"+
+				"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\ndata: [DONE]\n\n")
+			return
+		}
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Done.\"}}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer provider.Close()
+	repository, err := store.OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	handler := newHandler(&server{store: repository, uploadPath: t.TempDir(), authDisabled: true, agent: appconfig.AgentConfig{Enabled: true, Protocol: "openai-chat-completions", BaseURL: provider.URL, Model: "flow-test", MaxOutputTokens: 256, ToolsEnabled: true, WriteTools: true}, agentClient: provider.Client()})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/sessions/stream", strings.NewReader(`{"message":"Create an issue","location":"page"}`))
+	request.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "event: session.completed") {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), `"toolCall":{"id":"call_1"`) {
+		t.Fatalf("a row for the load_tools call was streamed: %s", recorder.Body.String())
+	}
+	sessions := requestJSON[[]domain.AgentSession](t, handler, http.MethodGet, "/api/agent/sessions", nil, http.StatusOK)
+	for _, part := range sessions[0].Messages[1].Parts {
+		if part.ToolCall != nil {
+			t.Fatalf("load_tools left a tool row: %#v", part.ToolCall)
+		}
+	}
+}
+
 // A gateway that rejects prompt_cache_key keeps working: the field is dropped and the request repeated.
 func TestAgentPromptCacheKeyFallsBackWhenRejected(t *testing.T) {
 	calls := 0
