@@ -167,6 +167,9 @@ export function EntityAgentThread({
   const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
   // Steps render in the work group above (their plan text as markdown), never again as a plain row.
   const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'step' && part.type !== 'toolCall')
+  // Once the reply has started (its text streams into the last message), its live work goes above that text, like
+  // The reference app's "Worked for…" group above the answer — not after it, where text written after the tools ran read first.
+  const liveWorkInReply = loading && streamWork.length > 0 && savedMessages.at(-1)?.role === 'assistant' && !renderAssistantBody
   const lastMessage = messages.at(-1)
   // The reference app's composer reads "Something else…" while the newest reply offers choices (question options or suggestions).
   const offersChoices = !loading && lastMessage?.role === 'assistant' && (Boolean(lastMessage.parts?.some(part => part.type === 'question' && part.status === 'pending')) || parseAgentAnswer(lastMessage.content, entityData).suggestions.length > 0)
@@ -230,7 +233,16 @@ export function EntityAgentThread({
               >
                 {!isUser && renderAssistantBody ? renderAssistantBody(message, { index, streaming }) : !isUser && (
                   <>
-                    {work.length > 0 && (
+                    {streaming && liveWorkInReply ? (
+                      <AgentWorkGroup
+                        approvalBusy={approvalBusy}
+                        className={styles.work}
+                        message={{}}
+                        onToolApproval={decide}
+                        parts={streamWork}
+                        running
+                      />
+                    ) : work.length > 0 && (
                       <AgentWorkGroup
                         approvalBusy={approvalBusy}
                         className={styles.work}
@@ -305,7 +317,7 @@ export function EntityAgentThread({
             </Fragment>
           )
         })}
-        {loading && streamWork.length > 0 && (
+        {loading && streamWork.length > 0 && !liveWorkInReply && (
           <AgentWorkGroup
             approvalBusy={approvalBusy}
             className={styles.work}
