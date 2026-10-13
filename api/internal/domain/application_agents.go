@@ -98,4 +98,50 @@ type AgentTask struct {
 	Version       int64          `json:"version"`
 	CreatedAt     time.Time      `json:"createdAt"`
 	UpdatedAt     time.Time      `json:"updatedAt"`
+	// ExternalURLs link the session to the agent's own surfaces (a pull
+	// request, a run page). Setting one acknowledges the session.
+	ExternalURLs []AgentExternalURL `json:"externalUrls,omitempty"`
+	// Plan is the agent's checklist; it is replaced as a whole.
+	Plan []AgentPlanStep `json:"plan,omitempty"`
+	// DeliveredAt is when the latest created/prompted event reached the
+	// agent; LastActivityAt is the agent's latest activity or acknowledgement.
+	DeliveredAt    *time.Time `json:"deliveredAt,omitempty"`
+	LastActivityAt *time.Time `json:"lastActivityAt,omitempty"`
+	// Unresponsive is derived when read: the agent did not acknowledge a
+	// delivered event within AgentAcknowledgementWindow.
+	Unresponsive bool `json:"unresponsive,omitempty"`
+	// EphemeralActivityID is the agent's latest ephemeral activity, replaced
+	// by the next agent activity.
+	EphemeralActivityID string `json:"ephemeralActivityId,omitempty"`
+}
+
+// Agent session timing, as in the agent interaction guidelines: an agent
+// acknowledges a session within 10 seconds (an activity or an external URL)
+// or it is shown as unresponsive; a session with no agent activity for 30
+// minutes is stale until the agent emits another activity.
+const (
+	AgentAcknowledgementWindow = 10 * time.Second
+	AgentStaleAfter            = 30 * time.Minute
+)
+
+// DeriveTimedState sets the read-only unresponsive flag and the "stale"
+// status from the session's timestamps. Stored status is unchanged, so a
+// new agent activity recovers the session.
+func (t *AgentTask) DeriveTimedState(now time.Time) {
+	if t.Status != "pending" && t.Status != "active" {
+		return
+	}
+	if t.DeliveredAt != nil && (t.LastActivityAt == nil || t.LastActivityAt.Before(*t.DeliveredAt)) && now.Sub(*t.DeliveredAt) > AgentAcknowledgementWindow {
+		t.Unresponsive = true
+	}
+	last := t.LastActivityAt
+	if t.DeliveredAt != nil && (last == nil || last.Before(*t.DeliveredAt)) {
+		last = t.DeliveredAt
+	}
+	if last == nil && t.Status == "active" {
+		last = &t.UpdatedAt
+	}
+	if last != nil && now.Sub(*last) > AgentStaleAfter {
+		t.Status = "stale"
+	}
 }

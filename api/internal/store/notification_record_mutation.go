@@ -79,7 +79,7 @@ func (s *SQLiteStore) UpdateNotificationRecord(ctx context.Context, workspace, u
 		return result, err
 	}
 	if sink := s.webhook(); sink != nil {
-		sink(workspace, event)
+		sink(workspace, webhookEvent(ctx, event, realtime))
 	}
 	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)

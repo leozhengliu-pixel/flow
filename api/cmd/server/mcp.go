@@ -333,7 +333,13 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		return mcpActor{}, false
 	}
 	_ = s.store.RecordAPIKeyUse(r.Context(), authentication.Workspace.URLKey, key.ID, key.AuthorizationID)
-	return mcpActor{WorkspaceKey: authentication.Workspace.URLKey, User: authentication.User, APIKey: key}, true
+	user := authentication.User
+	if key.OAuthClientID != "" && key.Actor != "app" {
+		// MCP clients authorized as the user: "<User> via <client>".
+		name, icon := s.oauthClientDisplay(r, key.OAuthClientID)
+		user.Via = &domain.ActorBot{ID: key.OAuthClientID, Type: domain.ActorBotTypeOAuthApplication, Name: name, AvatarURL: icon}
+	}
+	return mcpActor{WorkspaceKey: authentication.Workspace.URLKey, User: user, APIKey: key}, true
 }
 
 func (s *server) mcpUnauthorized(w http.ResponseWriter, r *http.Request, message string) {

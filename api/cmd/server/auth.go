@@ -144,6 +144,15 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, "Personal account security requires an interactive session")
 			return
 		}
+		if apiKey != nil {
+			// OAuth tokens attribute what they create to "<User> via <App>".
+			via, err := s.oauthRequestAttribution(r, *apiKey)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err.Error())
+				return
+			}
+			user.Via = via
+		}
 		ctx := context.WithValue(r.Context(), authUserContextKey{}, user)
 		if apiKey != nil {
 			ctx = context.WithValue(ctx, apiKeyContextKey{}, *apiKey)
@@ -406,7 +415,7 @@ func publicAuthPath(path string) bool {
 	if strings.HasPrefix(path, "/api/release-pipelines/") && strings.HasSuffix(path, "/events") || strings.HasPrefix(path, "/api/release-ci/") {
 		return true
 	}
-	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") {
+	if path == "/api/connector-oauth/callback" || path == "/api/connector-oauth/client-metadata" || path == "/mcp" || path == "/mcp/readonly" || path == "/oauth/register" || path == "/oauth/token" || path == "/oauth/revoke" || path == "/oauth/introspect" || strings.HasPrefix(path, "/.well-known/oauth-") || strings.HasPrefix(path, "/api/mcp/uploads/") || strings.HasPrefix(path, "/api/files/uploads/") || strings.HasPrefix(path, "/api/files/signed/") {
 		return true
 	}
 	return path == "/api/health" || path == "/api/oauth/token" || path == "/api/auth/register" || path == "/api/auth/verify-email" || path == "/api/auth/resend-verification" || path == "/api/auth/login" || path == "/api/auth/logout" || path == "/api/auth/session" || path == "/api/auth/forgot-password" || path == "/api/auth/reset-password" || path == "/api/auth/providers" || path == "/api/auth/discovery" || strings.HasPrefix(path, "/api/auth/enterprise/") || strings.HasPrefix(path, "/api/auth/google/") || strings.HasPrefix(path, "/api/auth/oidc/") || strings.HasPrefix(path, "/api/auth/saml/") || strings.HasPrefix(path, "/api/invitations/preview/") || strings.HasPrefix(path, "/api/invite-links/preview/") || strings.HasPrefix(path, "/api/calendar/cycles/") || strings.HasPrefix(path, "/api/email-intake/") || strings.HasPrefix(path, "/api/integrations/") && (strings.HasSuffix(path, "/webhook") || strings.HasSuffix(path, "/oauth/callback")) || strings.HasPrefix(path, "/api/shared/views/") || strings.HasPrefix(path, "/api/shared/dashboards/") || strings.HasPrefix(path, "/api/shared/issues/") || path == "/api/auth/token-login" || path == "/api/auth/magic-link"

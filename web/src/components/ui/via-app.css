@@ -1,0 +1,4 @@
+.via-app {
+  color: var(--theme-text-secondary, var(--muted));
+  font-weight: 400;
+}

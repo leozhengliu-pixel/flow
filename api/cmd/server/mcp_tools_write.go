@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,22 +21,6 @@ import (
 	"flow/api/internal/domain"
 	"flow/api/internal/store"
 )
-
-type mcpPendingUpload struct {
-	WorkspaceKey string
-	UserID       string
-	IssueID      string
-	Filename     string
-	ContentType  string
-	Title        string
-	Subtitle     string
-	ExpectedSize int64
-	ObjectKey    string
-	ActualSize   int64
-	Completed    bool
-	Busy         bool
-	ExpiresAt    time.Time
-}
 
 func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data domain.Bootstrap, name string, args map[string]any) (any, error) {
 	switch name {
@@ -61,6 +46,8 @@ func (s *server) callFlowWriteTool(ctx context.Context, actor mcpActor, data dom
 		return s.createMCPAttachment(ctx, actor, data, args)
 	case "create_attachment_from_upload":
 		return s.finalizeMCPAttachmentUpload(ctx, actor, data, args)
+	case "save_attachment":
+		return s.saveMCPLinkAttachment(ctx, actor, data, args)
 	case "delete_attachment":
 		return s.deleteMCPAttachment(ctx, actor, data, stringArg(args, "id"))
 	case "merge_diff":
@@ -1236,122 +1223,37 @@ func mcpReviewEvent(data domain.Bootstrap, id string) (string, domain.ReviewEven
 	return "", domain.ReviewEvent{}, errNotFound
 }
 
+// MCP uploads share the durable REST upload records (files_api.go), so the
+// PUT and the finalizing tool call may reach different API instances.
 func (s *server) prepareMCPAttachmentUpload(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
 	issue, err := mcpFindIssue(data, stringArg(args, "issue"))
 	if err != nil {
 		return nil, err
 	}
 	size := int64(intArg(args, "size", 0))
-	if size < 0 || size > 20<<20 {
+	if size < 0 || size > maxUploadBytes {
 		return nil, fmt.Errorf("Flow attachments must be 20 MB or smaller")
 	}
-	token, err := randomSecret("upload_")
-	if err != nil {
+	filename := cleanUploadFilename(stringArg(args, "filename"))
+	if filename == "" {
+		filename = "upload"
+	}
+	upload := store.FileUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, Filename: filename, ContentType: stringArg(args, "contentType"), ExpectedSize: size, Purpose: "issue:" + issue.ID, Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle")}
+	payload, err := s.prepareFileUpload(ctx, upload, stringArg(args, "__flowBaseURL"), "/api/mcp/uploads/")
+	if errors.Is(err, store.ErrFileUploadQuota) {
 		return nil, err
 	}
-	pending := &mcpPendingUpload{WorkspaceKey: actor.WorkspaceKey, UserID: actor.User.ID, IssueID: issue.ID, Filename: filepath.Base(stringArg(args, "filename")), ContentType: stringArg(args, "contentType"), Title: stringArg(args, "title"), Subtitle: stringArg(args, "subtitle"), ExpectedSize: size, ExpiresAt: time.Now().UTC().Add(15 * time.Minute)}
-	s.cleanupMCPUploads(ctx)
-	s.mcpUploadMu.Lock()
-	if s.mcpUploads == nil {
-		s.mcpUploads = map[string]*mcpPendingUpload{}
+	if err != nil {
+		return nil, fmt.Errorf("could not prepare the upload: %w", err)
 	}
-	var totalBytes, workspaceBytes int64
-	var ownerCount int
-	for _, upload := range s.mcpUploads {
-		totalBytes += upload.ExpectedSize
-		if upload.WorkspaceKey == actor.WorkspaceKey {
-			workspaceBytes += upload.ExpectedSize
-			if upload.UserID == actor.User.ID {
-				ownerCount++
-			}
-		}
-	}
-	if len(s.mcpUploads) >= 1024 || ownerCount >= 32 || totalBytes+size > 256<<20 || workspaceBytes+size > 64<<20 {
-		s.mcpUploadMu.Unlock()
-		return nil, fmt.Errorf("too many pending uploads; finish existing uploads first")
-	}
-	s.mcpUploads[token] = pending
-	s.mcpUploadMu.Unlock()
-	assetURL := strings.TrimRight(stringArg(args, "__flowBaseURL"), "/") + "/api/mcp/uploads/" + token
-	return map[string]any{"uploadUrl": assetURL, "assetUrl": assetURL, "headers": map[string]string{"Content-Type": pending.ContentType}, "expiresAt": pending.ExpiresAt}, nil
+	headers := map[string]string{"Content-Type": upload.ContentType}
+	return map[string]any{"uploadUrl": payload.UploadURL, "assetUrl": payload.UploadURL, "headers": headers, "expiresAt": payload.ExpiresAt}, nil
 }
 
-func (s *server) cleanupMCPUploads(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	expired := map[string]*mcpPendingUpload{}
-	s.mcpUploadMu.Lock()
-	for token, pending := range s.mcpUploads {
-		if pending.Busy || time.Now().Before(pending.ExpiresAt) {
-			continue
-		}
-		if pending.ObjectKey == "" {
-			delete(s.mcpUploads, token)
-		} else if len(expired) < 16 {
-			pending.Busy = true
-			expired[token] = pending
-		}
-	}
-	s.mcpUploadMu.Unlock()
-	for token, pending := range expired {
-		storage, err := s.storage()
-		if err == nil {
-			err = storage.Delete(ctx, pending.ObjectKey)
-		}
-		s.mcpUploadMu.Lock()
-		pending.Busy = false
-		if err == nil {
-			delete(s.mcpUploads, token)
-		}
-		s.mcpUploadMu.Unlock()
-	}
-}
+func (s *server) cleanupMCPUploads(ctx context.Context) { s.cleanupFileUploads(ctx) }
 
 func (s *server) putMCPUpload(w http.ResponseWriter, r *http.Request) {
-	token := r.PathValue("token")
-	s.mcpUploadMu.Lock()
-	pending := s.mcpUploads[token]
-	if pending == nil || time.Now().UTC().After(pending.ExpiresAt) {
-		s.mcpUploadMu.Unlock()
-		writeError(w, http.StatusNotFound, "upload token is invalid or expired")
-		return
-	}
-	if pending.Busy || pending.Completed {
-		s.mcpUploadMu.Unlock()
-		writeError(w, http.StatusConflict, "upload is already in progress or completed")
-		return
-	}
-	pending.Busy = true
-	s.mcpUploadMu.Unlock()
-	defer func() {
-		s.mcpUploadMu.Lock()
-		pending.Busy = false
-		s.mcpUploadMu.Unlock()
-	}()
-	r.Body = http.MaxBytesReader(w, r.Body, (20<<20)+1)
-	objectKey := fmt.Sprintf("mcp_%d_%s", time.Now().UnixNano(), pending.Filename)
-	storage, err := s.storage()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "storage unavailable")
-		return
-	}
-	upload, policyErr := s.checkUploadPolicy(pending.WorkspaceKey, pending.Filename, r.Body)
-	if policyErr != nil {
-		writeError(w, http.StatusForbidden, policyErr.Error())
-		return
-	}
-	size, err := storage.Put(r.Context(), objectKey, upload, pending.ContentType)
-	if err != nil || size > 20<<20 || size != pending.ExpectedSize {
-		_ = storage.Delete(r.Context(), objectKey)
-		writeError(w, http.StatusBadRequest, "uploaded size does not match the prepared upload")
-		return
-	}
-	s.mcpUploadMu.Lock()
-	pending.ObjectKey = objectKey
-	pending.ActualSize = size
-	pending.Completed = true
-	s.mcpUploadMu.Unlock()
-	w.WriteHeader(http.StatusNoContent)
+	s.receiveFileUpload(w, r, r.PathValue("token"), "issue")
 }
 
 func (s *server) finalizeMCPAttachmentUpload(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -1365,18 +1267,25 @@ func (s *server) finalizeMCPAttachmentUpload(ctx context.Context, actor mcpActor
 	if err != nil {
 		return nil, err
 	}
-	s.mcpUploadMu.Lock()
-	pending := s.mcpUploads[token]
-	if pending == nil || !pending.Completed || pending.Busy || time.Now().After(pending.ExpiresAt) || pending.WorkspaceKey != actor.WorkspaceKey || pending.UserID != actor.User.ID {
-		s.mcpUploadMu.Unlock()
+	id := secretHash(token)
+	pending, err := s.store.FileUpload(ctx, id)
+	now := fileUploadNow()
+	if err != nil || pending.Status != store.FileUploadCompleted || !pending.ExpiresAt.After(now) || pending.WorkspaceKey != actor.WorkspaceKey || pending.UserID != actor.User.ID {
+		if err != nil && !errors.Is(err, store.ErrFileUploadNotFound) {
+			return nil, err
+		}
 		return nil, fmt.Errorf("assetUrl is not a completed Flow upload")
 	}
-	if issue.ID != pending.IssueID {
-		s.mcpUploadMu.Unlock()
+	if pending.Purpose != "issue:"+issue.ID {
 		return nil, fmt.Errorf("upload was prepared for a different issue")
 	}
-	pending.Busy = true
-	s.mcpUploadMu.Unlock()
+	claimed, err := s.store.ClaimCompletedFileUpload(ctx, id, now)
+	if err != nil {
+		return nil, err
+	}
+	if !claimed {
+		return nil, fmt.Errorf("assetUrl is not a completed Flow upload")
+	}
 	title := stringArg(args, "title")
 	if title == "" {
 		title = pending.Title
@@ -1385,13 +1294,12 @@ func (s *server) finalizeMCPAttachmentUpload(ctx context.Context, actor mcpActor
 		title = pending.Filename
 	}
 	result, err := s.attachStoredObject(ctx, actor, issue.ID, title, pending.ContentType, pending.ObjectKey, pending.ActualSize)
-	s.mcpUploadMu.Lock()
-	pending.Busy = false
-	if err == nil {
-		delete(s.mcpUploads, token)
+	if err != nil {
+		_ = s.store.ReleaseFileUpload(context.WithoutCancel(ctx), id, fileUploadNow())
+		return nil, err
 	}
-	s.mcpUploadMu.Unlock()
-	return result, err
+	_ = s.store.DeleteFileUpload(context.WithoutCancel(ctx), id)
+	return result, nil
 }
 
 func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
@@ -1442,7 +1350,7 @@ func (s *server) createMCPAttachment(ctx context.Context, actor mcpActor, data d
 
 func (s *server) attachStoredObject(ctx context.Context, actor mcpActor, issueID, title, contentType, key string, size int64) (any, error) {
 	ctx = store.WithIssueRecordMutations(ctx, issueID)
-	attachment := domain.Attachment{ID: fmt.Sprintf("attachment_%d", time.Now().UnixNano()), IssueID: issueID, Title: title, URL: "/uploads/" + key, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: actor.User}
+	attachment := domain.Attachment{ID: fmt.Sprintf("attachment_%d", time.Now().UnixNano()), IssueID: issueID, Title: title, URL: "/uploads/" + key, ContentType: contentType, Size: size, CreatedAt: time.Now().UTC(), Creator: actor.User, BotActor: actor.User.Via}
 	err := s.store.MutateWorkspace(ctx, actor.WorkspaceKey, "attachment.created", issueID, nil, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, issueID)
 		if err != nil {

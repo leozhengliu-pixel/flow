@@ -17,6 +17,8 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import type { Comment, User } from '@/types/flow'
 import { commentMarkdown, type InlineThread } from './inline-comments-model'
+import { ViaApp } from '@/components/ui/via-app'
+import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 
 export interface ThreadActions {
   reply: (thread: InlineThread, body: string, bodyData?: Record<string, unknown>) => Promise<void>
@@ -106,15 +108,15 @@ function ThreadComment({ comment, viewer, users, canComment, canModerate, action
   const [editing, setEditing] = useState(false)
   const own = comment.user.id === viewer.id
   const canManage = own || canModerate
-  const name = comment.user.displayName || comment.user.name
+  const name = attributedActorName(comment.user, comment.botActor)
   const copyMarkdown = async () => {
     try { await navigator.clipboard.writeText(commentMarkdown(comment)); toast.success(t('Copied comment to clipboard')) }
     catch { toast.error(t('Could not copy comment')) }
   }
   return <div className={`document-thread-comment${root ? ' is-root' : ''}`} id={`comment-${comment.id}`}>
     <header>
-      <UserAvatar avatarUrl={comment.user.avatarUrl} className="document-thread-avatar" name={name}/>
-      <strong data-i18n-ignore>{name}</strong>
+      <UserAvatar avatarUrl={attributedActorAvatar(comment.user, comment.botActor)} className="document-thread-avatar" name={name}/>
+      <strong data-i18n-ignore>{name}</strong><ViaApp user={comment.user} botActor={comment.botActor}/>
       <time dateTime={comment.createdAt} title={formatDate(comment.createdAt, { dateStyle: 'full', timeStyle: 'short' })}>{formatRelative(comment.createdAt)}</time>
       {comment.editedAt && <span className="document-thread-edited">{t('(edited)')}</span>}
       <span className="document-thread-actions">

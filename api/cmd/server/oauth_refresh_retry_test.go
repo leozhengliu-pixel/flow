@@ -58,5 +58,13 @@ func TestOAuthRefreshHTTPFailedAttemptCanRetry(t *testing.T) {
 	if issued["refresh_token"] == "" || issued["access_token"] == "" {
 		t.Fatal("successful retry omitted tokens")
 	}
+	// Replaying inside the rotation grace window returns the same successor.
+	replayed := postOAuthForm[map[string]any](t, host.URL+"/oauth/token", form, http.StatusOK)
+	if replayed["refresh_token"] != issued["refresh_token"] || replayed["access_token"] == issued["access_token"] {
+		t.Fatalf("grace replay = %v, first = %v", replayed, issued)
+	}
+	form.Set("refresh_token", issued["refresh_token"].(string))
+	postOAuthForm[map[string]any](t, host.URL+"/oauth/token", form, http.StatusOK)
+	form.Set("refresh_token", "retry-refresh")
 	postOAuthForm[map[string]any](t, host.URL+"/oauth/token", form, http.StatusBadRequest)
 }

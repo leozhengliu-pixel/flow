@@ -17,6 +17,7 @@ import { templatesZhCN } from './translations-templates';
 import { settingsAccessZhCN } from './translations-settings-access';
 import { agentHistoryZhCN } from './translations-agent-history';
 import { gitlabSettingsZhCN } from './translations-gitlab-settings';
+import { webhookSettingsZhCN } from './translations-webhook-settings';
 import { agentMentionsZhCN } from './translations-agent-mentions';
 import { loopRunsZhCN } from './translations-loop-runs';
 import { agentStepsZhCN } from './translations-agent-steps';
@@ -32,7 +33,11 @@ import { editorZhCN } from './translations-editor';
 import { favoriteTabsZhCN } from './translations-favorite-tabs';
 import { dateFiltersZhCN } from './translations-date-filters';
 import { toastsZhCN } from './translations-toasts';
+import { prefilledIssueZhCN } from './translations-prefilled-issue';
 import { projectTemplatesZhCN } from './translations-project-templates';
+import { issueRelationsZhCN } from './translations-issue-relations';
+import { oauthAppsZhCN } from './translations-oauth-apps';
+import { issueHeaderZhCN } from './translations-issue-header';
 
 export const zhCN: Record<string, string> = {
   "Allow installation in other workspaces": "允许安装到其他工作区",
@@ -5822,6 +5827,7 @@ Object.assign(zhCN, templatesZhCN);
 Object.assign(zhCN, settingsAccessZhCN);
 Object.assign(zhCN, agentHistoryZhCN);
 Object.assign(zhCN, gitlabSettingsZhCN);
+Object.assign(zhCN, webhookSettingsZhCN);
 Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
 // Release pipeline settings copy, and one zh term (发布管线) for "pipeline" there.
@@ -5842,4 +5848,11 @@ for (const [source, translation] of Object.entries(favoriteTabsZhCN)) zhCN[sourc
 // Date filter presets (Released date, No completed date, typed durations) fill gaps only.
 for (const [source, translation] of Object.entries(dateFiltersZhCN)) zhCN[source] ??= translation;
 for (const [source, translation] of Object.entries(toastsZhCN)) zhCN[source] ??= translation;
+Object.assign(zhCN, prefilledIssueZhCN);
 for (const [source, translation] of Object.entries(projectTemplatesZhCN)) zhCN[source] ??= translation;
+// Issue sidebar relation sections fill gaps only.
+for (const [source, translation] of Object.entries(issueRelationsZhCN)) zhCN[source] ??= translation;
+// Issue detail header (command strip, list position, presence) fills gaps only.
+for (const [source, translation] of Object.entries(issueHeaderZhCN)) zhCN[source] ??= translation;
+// OAuth application pages, manifests and "via <App>" attribution fill gaps only.
+for (const [source, translation] of Object.entries(oauthAppsZhCN)) zhCN[source] ??= translation;

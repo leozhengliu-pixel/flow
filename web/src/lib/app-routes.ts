@@ -115,6 +115,8 @@ export type AppRoute =
   | { kind: "workspace-root"; workspaceSlug: string }
   | { kind: "inbox"; workspaceSlug: string; tab?: InboxRouteTab }
   | { kind: "search"; workspaceSlug: string }
+  /** Prefilled create-issue link: `/:ws/new?…` or `/:ws/team/:KEY/new?…`. */
+  | { kind: "new-issue"; workspaceSlug: string; teamKey?: string }
   | { kind: "diary"; workspaceSlug: string }
   | { kind: "welcome"; workspaceSlug: string }
   | { kind: "meetings"; workspaceSlug: string }
@@ -452,6 +454,12 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
     (segments.length === 5 || (segments.length === 6 && sixth === "edit" && fifth !== "new"))
   )
     return { kind: "settings", workspaceSlug, page: "api", webhookId: fifth };
+  if (section === "settings" && third === "api" && fourth === "applications" && fifth === "new" && segments.length === 5)
+    return { kind: "settings", workspaceSlug, page: "applications", applicationId: "new", applicationMode: "edit" };
+  if (section === "new" && segments.length === 2)
+    return { kind: "new-issue", workspaceSlug };
+  if (section === "team" && third && fourth === "new" && segments.length === 4)
+    return { kind: "new-issue", workspaceSlug, teamKey: third };
   if (section === "inbox" && segments.length === 2)
     return { kind: "inbox", workspaceSlug };
   if (section === "inbox" && (third === "priority" || third === "other") && segments.length === 3)
@@ -1554,6 +1562,12 @@ export function parseAppRoute(pathname: string, search = ""): AppRoute {
 export function workspaceRootPath(workspaceSlug: string) {
   return `/${encode(workspaceSlug)}`;
 }
+/** The prefilled create-issue entry point (see lib/prefilled-issue-url). */
+export function newIssuePath(workspaceSlug: string, teamKey?: string) {
+  return teamKey
+    ? `${workspaceRootPath(workspaceSlug)}/team/${encode(teamKey)}/new`
+    : `${workspaceRootPath(workspaceSlug)}/new`;
+}
 export function workspaceOnboardingPath() {
   return "/join";
 }
@@ -1933,6 +1947,11 @@ export function applicationSettingsPath(
   applicationId: string,
 ) {
   return `${workspaceRootPath(workspaceSlug)}/settings/applications/${encode(applicationId)}`;
+}
+
+/** Full-page "New OAuth application" form; `search` pre-fills it from manifest URL params. */
+export function applicationNewPath(workspaceSlug: string, search = "") {
+  return `${applicationSettingsPath(workspaceSlug, "new")}${search ? (search.startsWith("?") ? search : `?${search}`) : ""}`;
 }
 
 export function applicationEditPath(

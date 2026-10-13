@@ -1,12 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -250,6 +245,7 @@ func (s *server) listApplicationAgentTasks(w http.ResponseWriter, r *http.Reques
 	visible := []domain.AgentTask{}
 	for _, task := range tasks {
 		if _, _, err := s.authorizedAgentTask(r, task.ID, false); err == nil {
+			task.DeriveTimedState(time.Now())
 			visible = append(visible, task)
 		}
 	}
@@ -267,6 +263,7 @@ func (s *server) getApplicationAgentTask(w http.ResponseWriter, r *http.Request)
 		respondMutation(w, err, 200, nil)
 		return
 	}
+	task.DeriveTimedState(time.Now())
 	writeJSON(w, 200, map[string]any{"session": task, "activities": activities})
 }
 
@@ -277,13 +274,15 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 		return
 	}
 	var input struct {
-		Version        int64          `json:"expectedVersion"`
-		Type           string         `json:"type"`
-		Body           string         `json:"body"`
-		ActivityID     string         `json:"activityId"`
-		Enabled        *bool          `json:"enabled"`
-		URL            string         `json:"url"`
-		Approve        *bool          `json:"approve,omitempty"`
+		Version    int64  `json:"expectedVersion"`
+		Type       string `json:"type"`
+		Body       string `json:"body"`
+		ActivityID string `json:"activityId"`
+		Enabled    *bool  `json:"enabled"`
+		URL        string `json:"url"`
+		Approve    *bool  `json:"approve,omitempty"`
+		// Ephemeral thought or action activities are replaced by the next one.
+		Ephemeral      bool           `json:"ephemeral,omitempty"`
 		Signal         string         `json:"signal,omitempty"`
 		SignalMetadata map[string]any `json:"signalMetadata,omitempty"`
 		Content        *struct {
@@ -321,7 +320,11 @@ func (s *server) appendApplicationAgentActivity(w http.ResponseWriter, r *http.R
 		writeError(w, 400, "Activity links must use HTTPS")
 		return
 	}
-	activity := domain.AgentActivity{ActorID: data.Viewer.ID, Type: input.Type, Body: input.Body, URL: input.URL, Signal: input.Signal, SignalMetadata: input.SignalMetadata}
+	if input.Ephemeral && input.Type != "thought" && input.Type != "action" {
+		writeError(w, 400, "Only thought and action activities can be ephemeral")
+		return
+	}
+	activity := domain.AgentActivity{ActorID: data.Viewer.ID, Type: input.Type, Body: input.Body, URL: input.URL, Signal: input.Signal, SignalMetadata: input.SignalMetadata, Ephemeral: input.Ephemeral}
 	if input.Type == "feedback" {
 		if input.ActivityID == "" || input.Enabled == nil || input.Signal != "" || input.URL != "" {
 			writeError(w, 400, "Feedback requires an activity ID and an explicit enabled value")
@@ -469,44 +472,19 @@ func (s *server) deliverApplicationTask(ctx context.Context, task domain.AgentTa
 		_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, true)
 		return
 	}
-	if app.WebhookURL == "" {
-		_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, true)
-		return
-	}
-	secret, err := s.store.ApplicationWebhookSecret(ctx, app.ID)
+	target, err := s.agentSessionTarget(ctx, app)
 	if err != nil {
 		return
 	}
-	action := "created"
-	if task.Version > 1 {
-		action = "prompted"
+	if target.url == "" {
+		_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, true)
+		return
 	}
-	payload := map[string]any{"type": "AgentSessionEvent", "action": action, "eventId": fmt.Sprintf("%s:%d", task.ID, task.Version), "agentSession": task}
-	if len(data.Issues) == 1 {
-		payload["issue"] = data.Issues[0]
-	} else if task.ResourceType == "document" && len(data.Documents) == 1 {
-		payload["document"] = data.Documents[0]
-	} else if task.ResourceType == "project" && len(data.Projects) == 1 {
-		payload["project"] = data.Projects[0]
-	}
-	body, _ := json.Marshal(payload)
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write(body)
-	success := false
-	if integrationEndpointSafe(ctx, app.WebhookURL, s.authDisabled) {
-		req, _ := http.NewRequestWithContext(ctx, "POST", app.WebhookURL, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Flow-Signature", hex.EncodeToString(mac.Sum(nil)))
-		req.Header.Set("X-Flow-Delivery", fmt.Sprintf("%s:%d", task.ID, task.Version))
-		client := secureOutboundClient(10 * time.Second)
-		if s.authDisabled && safeLocalDevelopmentURL(app.WebhookURL) {
-			client = &http.Client{Timeout: 10 * time.Second}
-		}
-		resp, err := client.Do(req)
-		if err == nil {
-			success = resp.StatusCode >= 200 && resp.StatusCode < 300
-			resp.Body.Close()
-		}
+	success := s.sendAgentSessionEvent(ctx, app, task, data, target)
+	if success {
+		// The agent now has 10 seconds to acknowledge (an activity or an
+		// external URL) before the session shows as unresponsive.
+		_ = s.store.MarkAgentTaskDelivered(ctx, task.WorkspaceKey, task.ID, task.Version, time.Now())
 	}
 	_ = s.store.FinishApplicationDelivery(ctx, task.ID, task.Version, success)
 }

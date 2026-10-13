@@ -5,8 +5,10 @@ import { OAuthAuthorizePage } from './oauth-authorize-page'
 import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
 import type { AccountBootstrap } from '@/types/flow'
 import { viewer } from '@/test/fixtures'
+import { I18nProvider } from '@/i18n/i18n'
 
 vi.mock('@/lib/api',()=>({decideOAuthAuthorization:vi.fn(),fetchOAuthAuthorizationRequest:vi.fn(),fetchUserSettings:vi.fn()}))
+vi.mock('@/lib/api-client',async importOriginal=>({...(await importOriginal<typeof import('@/lib/api-client')>()),request:vi.fn().mockResolvedValue([])}))
 vi.mock('@/lib/theme',()=>({applyAccountTheme:vi.fn(),applyTheme:vi.fn()}))
 const account:AccountBootstrap={viewer,workspaces:[{workspace:{id:'workspace-1',name:'Workspace',urlKey:'workspace'},role:'Admin',joinedAt:'2026-09-11T00:00:00Z',issueCount:75675}],lastWorkspaceKey:'workspace',workspaceRegionSelectorEnabled:false,workspaceDefaultRegion:'global'}
 const authorization:OAuthAuthorizationRequest={client:{client_id:'client-1',client_name:'First client'},redirectUri:'http://127.0.0.1/callback',scopes:['read'],scopeLabels:['Read workspace'],workspaces:account.workspaces,viewer}
@@ -62,5 +64,57 @@ describe('OAuth consent request lifecycle',()=>{
     render(<App/>)
     expect(await screen.findByText('S256 PKCE code challenge is required')).toBeInTheDocument()
     expect(screen.queryByText('This authorization link is incomplete or has expired.')).not.toBeInTheDocument()
+  })
+  it('approves straight away for a workspace the user already authorized, without showing consent',async()=>{
+    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,previouslyAuthorizedWorkspaceKey:'workspace',prompt:''})
+    vi.mocked(decideOAuthAuthorization).mockImplementation(()=>new Promise(()=>{}))
+    render(<App/>)
+    await waitFor(()=>expect(decideOAuthAuthorization).toHaveBeenCalledTimes(1))
+    expect(decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({clientId:'client-1',workspaceKey:'workspace',approve:true}))
+    expect(screen.queryByRole('button',{name:'Approve'})).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Loading authorization request')).toBeInTheDocument()
+  })
+
+  it('asks for consent when no previous authorization exists, and when consent is forced',async()=>{
+    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,previouslyAuthorizedWorkspaceKey:''})
+    const view=render(<App/>)
+    await screen.findByRole('button',{name:'Approve'})
+    expect(decideOAuthAuthorization).not.toHaveBeenCalled()
+    view.unmount()
+    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,previouslyAuthorizedWorkspaceKey:'workspace',prompt:'consent'})
+    render(<App/>)
+    await screen.findByRole('button',{name:'Approve'})
+    expect(decideOAuthAuthorization).not.toHaveBeenCalled()
+  })
+
+  it('shows the app-install consent even if the workspace was authorized before',async()=>{
+    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,actor:'app',previouslyAuthorizedWorkspaceKey:'workspace'})
+    render(<I18nProvider><MemoryRouter initialEntries={[initial+'&actor=app']}><OAuthAuthorizePage account={account}/></MemoryRouter></I18nProvider>)
+    await screen.findByRole('button',{name:'Install application'})
+    expect(decideOAuthAuthorization).not.toHaveBeenCalled()
+  })
+
+  it('shows the client logo and developer link, and ignores non-http URLs',async()=>{
+    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,client:{...authorization.client,logo_uri:'https://cdn.example.com/logo.png',client_uri:'https://example.com'}})
+    const view=render(<App/>)
+    await screen.findByRole('button',{name:'Approve'})
+    expect(view.container.querySelector('img.oauth-client-logo')).toHaveAttribute('src','https://cdn.example.com/logo.png')
+    expect(screen.getByRole('link',{name:'https://example.com'})).toHaveAttribute('href','https://example.com/')
+    view.unmount()
+    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,client:{...authorization.client,logo_uri:'javascript:alert(1)',client_uri:'javascript:alert(1)'}})
+    const unsafe=render(<App/>)
+    await screen.findByRole('button',{name:'Approve'})
+    expect(unsafe.container.querySelector('img.oauth-client-logo')).toBeNull()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['invalid_scope','This application requested a permission that Flow does not support.'],
+    ['invalid_client','This application is not registered or is no longer available.'],
+  ])('maps the %s error code to a friendly message',async(code,message)=>{
+    vi.mocked(fetchOAuthAuthorizationRequest).mockRejectedValueOnce(Object.assign(new Error('raw description'),{code}))
+    render(<App/>)
+    expect(await screen.findByText(message)).toBeInTheDocument()
+    expect(screen.queryByText('raw description')).not.toBeInTheDocument()
   })
 })

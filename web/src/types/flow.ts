@@ -174,6 +174,8 @@ export interface Customer {
   annualRevenue?: number;
   size?: number;
   domains: string[];
+  /** Identifiers of the customer in other systems (CRM, support desk). */
+  externalIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -274,6 +276,7 @@ export interface FlowDocument {
   contentState?: string;
   contentData?: Record<string, unknown>;
   creator: User;
+  botActor?: ActorBot;
   projectIds: UUID[];
   teamIds: UUID[];
   issueId?: UUID;
@@ -366,6 +369,7 @@ export interface Issue {
   assignee?: User;
   delegate?: User;
   creator: User;
+  botActor?: ActorBot;
   labels: IssueLabel[];
   project?: ProjectSummary;
   projectMilestoneId?: UUID;
@@ -488,6 +492,12 @@ export interface Attachment {
   providerUrl?: string;
   linkbackUrl?: string;
   syncStatus?: string;
+  botActor?: ActorBot;
+  /** Link attachments: secondary line, icon and key/value metadata (API/integrations). */
+  subtitle?: string;
+  iconUrl?: string;
+  metadata?: Record<string, unknown>;
+  updatedAt?: string;
 }
 export interface CommentThreadSummary {
   content: string;
@@ -509,6 +519,7 @@ export interface Comment {
   anchorId?: string;
   /** Document inline threads: the selected text the thread was started on. */
   quotedText?: string;
+  botActor?: ActorBot;
 }
 export interface ActivityEvent {
   id: UUID;
@@ -516,6 +527,7 @@ export interface ActivityEvent {
   createdAt: string;
   actor: User;
   metadata: Record<string, string>;
+  botActor?: ActorBot;
 }
 export interface Notification {
   id: UUID;
@@ -1532,9 +1544,50 @@ export interface OAuthApplication {
   scopes: string[];
   supportsClientCredentials?: boolean;
   publicEnabled?: boolean;
+  developerName?: string;
+  developerUrl?: string;
+  webhookEnabled?: boolean;
+  webhookUrl?: string;
+  webhookResourceTypes?: string[];
+  webhookSecretPrefix?: string;
   creatorId: UUID;
   createdAt: string;
   updatedAt: string;
+}
+/** OAuth app manifest (plus Flow's `oauth.scopes` and `agent` extensions). */
+export interface OAuthAppManifest {
+  $schema?: string;
+  schemaVersion?: string;
+  distribution?: "private" | "public";
+  display?: { description?: string; iconUrl?: string };
+  developer?: { name?: string };
+  oauth?: {
+    client_name?: string;
+    client_uri?: string;
+    redirect_uris?: string[];
+    grant_types?: string[];
+    scopes?: string[];
+  };
+  webhook?: { enabled?: boolean; url?: string; resourceTypes?: string[] };
+  agent?: { assignable?: boolean; mentionable?: boolean };
+}
+export interface OAuthAppManifestIssue {
+  path: string;
+  message: string;
+}
+export interface OAuthAppManifestValidation {
+  valid: boolean;
+  issues: OAuthAppManifestIssue[];
+  application?: Partial<OAuthApplication>;
+}
+/** The bot application a record was created through ("<User> via <App>"). */
+export interface ActorBot {
+  id?: string;
+  type: string;
+  name?: string;
+  avatarUrl?: string;
+  userDisplayName?: string;
+  userAvatarUrl?: string;
 }
 export interface OAuthAuthorization {
   id: UUID;
@@ -1727,8 +1780,80 @@ export interface Webhook {
   auditLog?: boolean;
   failingSince?: string;
   disabledReason?: string;
+  disabledAt?: string;
+  /** Delivery envelope: 2 (current) or 1 (legacy webhooks created before signing). */
+  payloadVersion?: number;
+  /** active, rotationRequired (legacy hashed secret) or revoked. */
+  signingStatus?: "active" | "rotationRequired" | "revoked";
+  signingEnabled?: boolean;
+  /** "application" for a webhook an installed OAuth application manages. */
+  managedBy?: string;
+  applicationClientId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WebhookDeliveryAttempt {
+  attempt: number;
+  at: string;
+  responseStatus?: number;
+  durationMs: number;
+  error?: string;
+  succeeded: boolean;
+}
+
+export type WebhookDeliveryStatus =
+  | "pending"
+  | "delivering"
+  | "retrying"
+  | "succeeded"
+  | "failed"
+  | "canceled";
+
+/** One delivery of an event to a webhook endpoint (Settings › API › Webhooks › delivery log). */
+export interface WebhookDelivery {
+  id: string;
+  webhookId: string;
+  kind: "event" | "test" | "lifecycle";
+  eventId: string;
+  eventType: string;
+  action: string;
+  url: string;
+  /** Request body without webhookTimestamp; only on the detail endpoint. */
+  payload?: unknown;
+  status: WebhookDeliveryStatus;
+  attempt: number;
+  maxAttempts: number;
+  nextAttemptAt?: string;
+  responseStatus?: number;
+  responseBody?: string;
+  error?: string;
+  durationMs: number;
+  attempts: WebhookDeliveryAttempt[];
+  redeliveryOf?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+export interface WebhookDeliveryPage {
+  items: WebhookDelivery[];
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+/** An OAuth application's developer-side webhook (created in every installing workspace). */
+export interface ApplicationWebhookSettings {
+  applicationId: string;
+  clientId: string;
+  enabled: boolean;
+  url: string;
+  resourceTypes: string[];
+  secretPrefix?: string;
+  signingEnabled: boolean;
+  /** The signing secret, returned once after it is created or rotated. */
+  secret?: string;
+  installations: number;
 }
 
 /** Create/rotate responses may include the raw secret once (LS-0711). */

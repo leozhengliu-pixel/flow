@@ -2,6 +2,8 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Bell, BellOff, CheckCircle2, Copy, Edit3, Ellipsis, Link2, Paperclip, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import type { ActivityEvent, Comment, ThreadSubscription, ThreadSubscriptionState, WorkflowState } from '@/types/flow'
 import { Avatar } from '@/components/issue/issue-row'
+import { ViaApp } from '@/components/ui/via-app'
+import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import { Composer } from '@/components/editor/composer'
 import { useRef, useState, type ReactNode } from 'react'
 import { useAgentCommentThreadIds } from '@/components/agent/issue-agent-task-context'
@@ -167,8 +169,8 @@ export function ActivityTimeline({
                 <div className="comment-thread" data-has-replies={(replies.get(item.id) ?? []).length > 0 || undefined}>
                   <article className="comment-card" data-activity-anchor={`comment-${item.id}`}>
                     <header>
-                      <Avatar name={item.user.displayName} />
-                      <strong data-i18n-ignore>{item.user.displayName}</strong>
+                      <Avatar name={attributedActorName(item.user, item.botActor)} avatarUrl={attributedActorAvatar(item.user, item.botActor)} />
+                      <strong data-i18n-ignore>{attributedActorName(item.user, item.botActor)}</strong><ViaApp user={item.user} botActor={item.botActor} />
                       <a href={`#comment-${item.id}`} title={format(new Date(item.createdAt), 'PPpp')}>
                         {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
                       </a>
@@ -233,8 +235,8 @@ export function ActivityTimeline({
                   {(replies.get(item.id) ?? []).map((reply) => (
                     <article className="comment-card comment-reply" id={`comment-${reply.id}`} data-activity-anchor={`comment-${reply.id}`} key={reply.id}>
                       <header>
-                        <Avatar name={reply.user.displayName} />
-                        <strong data-i18n-ignore>{reply.user.displayName}</strong>
+                        <Avatar name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)} />
+                        <strong data-i18n-ignore>{attributedActorName(reply.user, reply.botActor)}</strong><ViaApp user={reply.user} botActor={reply.botActor} />
                         <a href={`#comment-${reply.id}`} title={format(new Date(reply.createdAt), 'PPpp')}>
                           {formatDistanceToNow(new Date(reply.createdAt), { addSuffix: true })}
                         </a>
@@ -317,7 +319,7 @@ function ActivityRow({ event, description }: { event: ActivityEvent; description
   const { locale } = useI18n()
   return (
     <p className="activity-row" data-i18n-ignore>
-      <strong>{event.actor.displayName}</strong>{' '}{description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)}
+      <strong>{attributedActorName(event.actor, event.botActor)}</strong><ViaApp user={event.actor} botActor={event.botActor} />{' '}{description.map((part, index) => typeof part === 'string' ? part : <MentionReference key={`${index}-${part.type}-${part.id}`} id={part.id} label={part.label} type={part.type}/>)}
       <span className="activity-time">
         <span className="activity-dot">·</span>
         <a href={`#activity-${event.id}`} title={format(new Date(event.createdAt), 'PPpp')}>
@@ -354,7 +356,7 @@ function ActivityEventIcon({ event, context }: { event: ActivityEvent; context?:
   }
   if (event.type.startsWith('attachment.')) return <Paperclip size={14} />
   if (event.type.includes('relation') || event.type.includes('review')) return <Link2 size={14} />
-  return <Avatar name={event.actor.displayName} />
+  return <Avatar name={attributedActorName(event.actor, event.botActor)} avatarUrl={attributedActorAvatar(event.actor, event.botActor)} />
 }
 
 export function CommentMenu({

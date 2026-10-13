@@ -142,6 +142,12 @@ func TestMCPAllToolsThroughRealSDK(t *testing.T) {
 		t.Fatalf("create_attachment did not embed into the description: %v %v", attached, err)
 	}
 	call("delete_attachment", map[string]any{"id": attachment["id"]})
+	linked := object("save_attachment", map[string]any{"issue": issue, "url": "https://support.example.com/tickets/42", "title": "Ticket 42", "subtitle": "Open", "metadata": map[string]any{"priority": "high"}})
+	relinked := object("save_attachment", map[string]any{"issue": issue, "url": "https://support.example.com/tickets/42", "subtitle": "Solved"})
+	if linked["id"] != relinked["id"] || relinked["subtitle"] != "Solved" || relinked["title"] != "Ticket 42" {
+		t.Fatalf("save_attachment did not upsert by URL: %v %v", linked, relinked)
+	}
+	call("delete_attachment", map[string]any{"id": linked["id"]})
 	prepared := object("prepare_attachment_upload", map[string]any{"issue": issue, "filename": "uploaded.txt", "contentType": "text/plain", "size": len(body)})
 	req, _ := http.NewRequest("PUT", prepared["uploadUrl"].(string), bytes.NewReader(body))
 	resp, err := http.DefaultClient.Do(req)
@@ -279,16 +285,18 @@ func TestMCPUploadOwnershipRetryExpiryAndConcurrency(t *testing.T) {
 	if put(token, body) != 204 {
 		t.Fatal("PUT failed")
 	}
-	s.mcpUploadMu.Lock()
-	s.mcpUploads[token].ExpiresAt = time.Now().Add(-time.Second)
-	s.mcpUploadMu.Unlock()
-	if _, err := s.finalizeMCPAttachmentUpload(ctx, actor, data, map[string]any{"assetUrl": url, "issue": data.Issues[0].ID}); err == nil {
+	restoreClock := fileUploadNow
+	fileUploadNow = func() time.Time { return time.Now().UTC().Add(fileUploadTTL + time.Second) }
+	_, finalizeErr := s.finalizeMCPAttachmentUpload(ctx, actor, data, map[string]any{"assetUrl": url, "issue": data.Issues[0].ID})
+	fileUploadNow = restoreClock
+	if finalizeErr == nil {
 		t.Fatal("expired upload finalized")
 	}
-	_, token = prepare()
-	s.mcpUploadMu.Lock()
-	s.mcpUploads[token].ExpectedSize = 0
-	s.mcpUploadMu.Unlock()
+	emptyUpload, err := s.prepareMCPAttachmentUpload(ctx, actor, data, map[string]any{"issue": data.Issues[0].ID, "filename": "empty.txt", "contentType": "text/plain", "size": float64(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token = filepath.Base(emptyUpload.(map[string]any)["assetUrl"].(string))
 	if put(token, body) != 400 {
 		t.Fatal("nonempty content accepted for zero-byte upload")
 	}

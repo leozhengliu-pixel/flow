@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 func expectMCPFailure(t *testing.T, response map[string]any) {
@@ -190,9 +191,12 @@ func TestMCPAttachmentStorageFailureCleansPartialObject(t *testing.T) {
 	args["base64Content"] = base64.StdEncoding.EncodeToString([]byte("content"))
 	args["sha256"] = strings.Repeat("0", 64)
 	expectMCPFailure(t, f.call(t, "create_attachment", args))
-	f.service.mcpUploads = map[string]*mcpPendingUpload{"expired": {ExpiresAt: time.Now().Add(-time.Hour)}}
+	expired := store.FileUpload{ID: secretHash("expired"), WorkspaceKey: f.data.Workspace.URLKey, UserID: f.data.Viewer.ID, ObjectKey: "asset_expired.txt", Filename: "expired.txt", ContentType: "text/plain", Purpose: "issue:" + f.data.Issues[0].ID, ExpiresAt: time.Now().Add(-time.Hour)}
+	if err := f.repository.CreateFileUpload(t.Context(), expired, store.FileUploadQuota{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 	f.service.cleanupMCPUploads(t.Context())
-	if len(f.service.mcpUploads) != 0 {
-		t.Fatal("expired unused upload retained")
+	if _, err := f.repository.FileUpload(t.Context(), expired.ID); !errors.Is(err, store.ErrFileUploadNotFound) {
+		t.Fatalf("expired unused upload retained: %v", err)
 	}
 }

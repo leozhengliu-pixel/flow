@@ -245,6 +245,25 @@ The standard `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
 `AWS_REGION`, `AWS_S3_BUCKET_NAME`, and `AWS_S3_ENDPOINT_URL` names are also
 accepted. Flow-specific names take precedence.
 
+## API rate limits
+
+Public API requests are rate limited per credential subject with leaky
+buckets (see [api.md](api.md#rate-limits)). Buckets are kept in memory, or in
+Redis when Redis coordination is enabled so limits hold across instances.
+Browser sessions are exempt unless a session budget is set. Set
+`FLOW_TRUST_PROXY_HEADERS=true` behind a trusted proxy so unauthenticated
+budgets apply per client address rather than to the proxy.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `FLOW_API_RATE_LIMIT` | on | `off` disables API rate limiting. |
+| `FLOW_API_RATE_LIMIT_API_KEY_REQUESTS` / `_COMPLEXITY` | `2500` / `3000000` | Hourly budgets per user for personal API keys. |
+| `FLOW_API_RATE_LIMIT_OAUTH_REQUESTS` / `_COMPLEXITY` | `5000` / `2000000` | Hourly budgets per user (or app user) and OAuth application. |
+| `FLOW_API_RATE_LIMIT_UNAUTHENTICATED_REQUESTS` / `_COMPLEXITY` | `600` / `100000` | Hourly budgets per client address. |
+| `FLOW_API_RATE_LIMIT_SESSION_REQUESTS` / `_COMPLEXITY` | `0` / `0` | Hourly budgets for browser sessions; `0` means unlimited. |
+| `FLOW_API_MAX_COMPLEXITY` | `10000` | Largest complexity a single request may have. |
+| `FLOW_FILE_URL_SIGNING_KEY` | generated | HMAC key for signed file URLs. When unset, Flow generates one and stores it in the database (shared by all instances). Changing it invalidates outstanding signed URLs. |
+
 ## Authentication
 
 Email/password remains enabled by default. Login buttons are obtained from

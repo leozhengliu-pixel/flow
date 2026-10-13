@@ -39,6 +39,8 @@ export interface FlowTooltipProps {
   disabled?: boolean
   /** Extra class on the tooltip surface, e.g. `flow-tooltip-content--title` for multi-line content. */
   contentClassName?: string
+  /** Gap between the trigger and the tooltip (6px by default). */
+  sideOffset?: number
   children: React.ReactElement
 }
 
@@ -50,14 +52,14 @@ export function TooltipShortcut({ value }: { value: React.ReactNode }) {
 }
 
 /** Convenience wrapper for icon buttons and compact controls. */
-export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false, contentClassName }: FlowTooltipProps) {
+export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false, contentClassName, sideOffset }: FlowTooltipProps) {
   const [open, setOpen] = React.useState(false)
   React.useEffect(() => { if (disabled) setOpen(false) }, [disabled])
   if (!label && !shortcut) return children
   return (
     <TooltipRoot open={open && !disabled} onOpenChange={next => setOpen(next && !disabled)}>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent align={align} className={contentClassName} side={side}>
+      <TooltipContent align={align} className={contentClassName} side={side} sideOffset={sideOffset}>
         <span className="flow-tooltip-copy">{label}</span>
         {shortcut ? <kbd className="flow-tooltip-shortcut"><TooltipShortcut value={shortcut}/></kbd> : null}
       </TooltipContent>

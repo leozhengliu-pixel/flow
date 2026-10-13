@@ -1559,6 +1559,8 @@ type oauthInput struct {
 	Scopes                    *[]string `json:"scopes,omitempty"`
 	SupportsClientCredentials *bool     `json:"supportsClientCredentials,omitempty"`
 	PublicEnabled             *bool     `json:"publicEnabled,omitempty"`
+	DeveloperName             *string   `json:"developerName,omitempty"`
+	DeveloperURL              *string   `json:"developerUrl,omitempty"`
 }
 
 func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) {
@@ -1581,6 +1583,10 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		data.OAuthApplications = append([]domain.OAuthApplication{created}, data.OAuthApplications...)
 		return created.ID, nil
 	})
+	if err == nil {
+		// Keep each workspace's managed app webhook in step, as manifest saves do.
+		go s.reconcileAllApplicationWebhooks(context.Background())
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
@@ -1605,6 +1611,12 @@ func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
 	}
 	if input.PublicEnabled != nil {
 		app.PublicEnabled = *input.PublicEnabled
+	}
+	if input.DeveloperName != nil {
+		app.DeveloperName = strings.TrimSpace(*input.DeveloperName)
+	}
+	if input.DeveloperURL != nil {
+		app.DeveloperURL = strings.TrimSpace(*input.DeveloperURL)
 	}
 	app.UpdatedAt = time.Now().UTC()
 }
@@ -1633,6 +1645,10 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		updated.ClientSecret = ""
 		return nil
 	})
+	if err == nil {
+		// Keep each workspace's managed app webhook in step, as manifest saves do.
+		go s.reconcileAllApplicationWebhooks(context.Background())
+	}
 	respondMutation(w, err, http.StatusOK, updated)
 }
 

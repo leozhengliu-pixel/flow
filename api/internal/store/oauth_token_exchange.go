@@ -14,6 +14,12 @@ import (
 
 // ExchangeOAuthGrant commits replacement credentials and consumption together.
 // Invalid client/PKCE requests and storage failures leave the original usable.
+//
+// A consumed refresh token can be replayed for OAuthRefreshReplayGrace while
+// its successor is unused: the replay issues a new access token and returns
+// the same successor in grant.ReplayedRefreshToken. validateCode checks the
+// authorization code; for refresh tokens it is optional and receives the
+// stored grant decoded as a code (client and PKCE metadata only).
 func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clientID, refreshToken string, key domain.APIKey, validateCode func(domain.OAuthAuthorizationCode) bool, approved func(*domain.Bootstrap, string, []string) bool) (domain.OAuthRefreshGrant, error) {
 	table, identity, consumed := "oauth_refresh_tokens", "token_hash", "revoked_at"
 	if kind == "authorization_code" {
@@ -35,7 +41,9 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 	}
 	workspace := grant.WorkspaceKey
 	var event domain.DomainEvent
+	replayed := ""
 	apply := func() error {
+		replayed = ""
 		s.lockWorkspaceWrites()
 		defer s.unlockWorkspaceWrites()
 		current, ok := s.workspaces[workspace]
@@ -64,16 +72,29 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 			return err
 		}
 		expires, err := time.Parse(time.RFC3339Nano, expiration)
-		if err != nil || used.Valid || !time.Now().UTC().Before(expires) {
+		if err != nil || !time.Now().UTC().Before(expires) {
 			return ErrAuthForbidden
+		}
+		if used.Valid {
+			if kind != "refresh_token" {
+				return ErrAuthForbidden
+			}
+			successor, ok, err := oauthRefreshReplay(ctx, tx, token, lock)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return ErrAuthForbidden
+			}
+			replayed = successor
 		}
 		if err := json.Unmarshal(raw, &grant); err != nil {
 			return err
 		}
-		if grant.ClientID != clientID || grant.WorkspaceKey != workspace {
+		if grant.ClientID == "" || grant.ClientID != clientID || grant.WorkspaceKey != workspace {
 			return ErrAuthForbidden
 		}
-		if kind == "authorization_code" {
+		if kind == "authorization_code" || validateCode != nil {
 			var code domain.OAuthAuthorizationCode
 			if err := json.Unmarshal(raw, &code); err != nil {
 				return err
@@ -121,6 +142,12 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 		key.Scopes = slices.Clone(grant.Scopes)
 		key.OAuthClientID = grant.ClientID
 		key.AuthorizationID = grant.AuthorizationID
+		if grant.FamilyID == "" {
+			// A code exchange (or a refresh token minted before families
+			// existed) starts a new chain.
+			grant.FamilyID = "family_" + tokenHash(hash + key.ID)[:24]
+		}
+		key.RefreshFamilyID = grant.FamilyID
 		if grant.Actor == "app" {
 			key.IssuedByUserID = grant.InstallerID
 			key.Actor = "app"
@@ -158,24 +185,31 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 			return err
 		}
 		grant.ExpiresAt = time.Now().UTC().Add(30 * 24 * time.Hour)
-		refreshRaw, err := json.Marshal(grant)
-		if err != nil {
-			return err
-		}
 		now := time.Now().UTC()
-		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(refreshToken), refreshRaw, grant.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
-			return err
-		}
-		result, err := tx.ExecContext(ctx, "UPDATE "+table+" SET "+consumed+"=? WHERE "+identity+"=? AND "+consumed+" IS NULL", now.Format(time.RFC3339Nano), hash)
-		if err != nil {
-			return err
-		}
-		count, err := result.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if count != 1 {
-			return ErrAuthForbidden
+		if replayed == "" {
+			refreshRaw, err := json.Marshal(grant)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_refresh_tokens(token_hash,data,expires_at,created_at) VALUES(?,?,?,?)`, tokenHash(refreshToken), refreshRaw, grant.ExpiresAt.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano)); err != nil {
+				return err
+			}
+			result, err := tx.ExecContext(ctx, "UPDATE "+table+" SET "+consumed+"=? WHERE "+identity+"=? AND "+consumed+" IS NULL", now.Format(time.RFC3339Nano), hash)
+			if err != nil {
+				return err
+			}
+			count, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if count != 1 {
+				return ErrAuthForbidden
+			}
+			if kind == "refresh_token" {
+				if err := storeOAuthRefreshReplay(ctx, tx, token, refreshToken, now); err != nil {
+					return err
+				}
+			}
 		}
 		event = domain.DomainEvent{ID: fmt.Sprintf("evt_%d", now.UnixNano()), Type: "oauth_token.created", AggregateID: grant.AuthorizationID, Payload: json.RawMessage(`null`), CreatedAt: now}
 		if _, err := tx.ExecContext(ctx, `INSERT INTO domain_events(id,event_type,aggregate_id,payload,previous_values,created_at) VALUES(?,?,?,?,?,?)`, event.ID, event.Type, event.AggregateID, []byte(event.Payload), []byte(nil), now.Format(time.RFC3339Nano)); err != nil {
@@ -197,6 +231,7 @@ func (s *SQLiteStore) ExchangeOAuthGrant(ctx context.Context, kind, token, clien
 	if err != nil {
 		return grant, err
 	}
+	grant.ReplayedRefreshToken = replayed
 	if sink := s.webhook(); sink != nil {
 		sink(workspace, event)
 	}

@@ -104,8 +104,11 @@ type AgentActivity struct {
 	Status         string         `json:"status"`
 	Body           string         `json:"body,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
-	CreatedAt      time.Time      `json:"createdAt"`
-	UpdatedAt      time.Time      `json:"updatedAt"`
+	// Ephemeral thought and action activities are replaced by the agent's
+	// next activity.
+	Ephemeral bool      `json:"ephemeral,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 type AIConversation struct {
 	ID        string         `json:"id"`

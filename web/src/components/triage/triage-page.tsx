@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { ViaApp } from '@/components/ui/via-app'
+import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import * as ContextMenu from '@radix-ui/react-context-menu'
 import * as Popover from '@radix-ui/react-popover'
 import { ArrowDownNarrowWide, ArrowDownWideNarrow, ChevronRight, CircleCheck, CircleX, Clock3, Copy, Link2, Settings2, UserRoundCog } from 'lucide-react'
@@ -242,7 +244,7 @@ function TriageRow({ issue, data, selected, showId, showDue, formatDate, t, onOp
 }) {
   const href = issuePath(data.workspace.urlKey, issue)
   const added = addedToTriageAt(issue)
-  const creator = issue.creator?.displayName || issue.creator?.name || t('Unknown')
+  const creator = attributedActorName(issue.creator, issue.botActor) || t('Unknown')
   const click = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
@@ -258,8 +260,8 @@ function TriageRow({ issue, data, selected, showId, showDue, formatDate, t, onOp
           {showId ? <span className="flow-triage-row__id" data-i18n-ignore>{issue.identifier}</span> : null}
         </span>
         <span className="flow-triage-row__line is-meta">
-          <UserAvatar className="flow-triage-row__avatar" name={creator} avatarUrl={issue.creator?.avatarUrl}/>
-          <span className="flow-triage-row__creator" data-i18n-ignore>{creator}</span>
+          <UserAvatar className="flow-triage-row__avatar" name={creator} avatarUrl={attributedActorAvatar(issue.creator, issue.botActor)}/>
+          <span className="flow-triage-row__creator" data-i18n-ignore>{creator}<ViaApp user={issue.creator} botActor={issue.botActor}/></span>
           {showDue && issue.dueDate ? <span className="flow-triage-row__due"><CalendarIcon/>{formatDate(issue.dueDate.length === 10 ? `${issue.dueDate}T00:00:00` : issue.dueDate, { month: 'short', day: 'numeric' })}</span> : null}
           {snoozed && issue.snoozedUntil ? <span className="flow-triage-row__snoozed"><Clock3 size={12}/>{formatSnoozeDate(new Date(issue.snoozedUntil))}</span> : null}
           <FlowTooltip label={`${t('Added to triage at')} ${formatDate(added, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}>

@@ -34,6 +34,9 @@ import type {
   InvitationPreview,
   SCIMToken,
   WebhookFailureEvent,
+  WebhookDelivery,
+  WebhookDeliveryPage,
+  ApplicationWebhookSettings,
   OAuthSyncGroupRequest,
   WorkspaceInviteLink,
   InviteLinkPreview,
@@ -63,6 +66,10 @@ import type {
   NotificationMutationInput,
   NotificationPreferences,
   OAuthApplication,
+  OAuthAppManifest,
+  OAuthAppManifestIssue,
+  OAuthAppManifestValidation,
+  OAuthAuthorization,
   Passkey,
   Presence,
   Project,
@@ -97,6 +104,7 @@ import type {
   WorkspaceRole,
   WorkspaceSettings,
 } from "@/types/flow";
+import type { ApplicationInstallation } from "@/lib/application-agents";
 import { apiFetch, ApiError as PulseApiError, jsonRequest, request } from "@/lib/api-client";
 
 export { ApiError, realtimeClientId } from "@/lib/api-client";
@@ -863,7 +871,7 @@ export function removeCommitSigningKey(): Promise<void> {
 export function fetchOAuthApplications(): Promise<OAuthApplication[]> {
   return request("/api/oauth-applications");
 }
-export function createOAuthApplication(input: {
+export type OAuthApplicationInput = {
   name: string;
   description?: string;
   logoUrl?: string;
@@ -871,16 +879,78 @@ export function createOAuthApplication(input: {
   scopes: string[];
   supportsClientCredentials?: boolean;
   publicEnabled?: boolean;
-}): Promise<OAuthApplication> {
+  developerName?: string;
+  developerUrl?: string;
+  webhookEnabled?: boolean;
+  webhookUrl?: string;
+  webhookResourceTypes?: string[];
+};
+export function createOAuthApplication(input: OAuthApplicationInput): Promise<OAuthApplication> {
   return request("/api/oauth-applications", jsonRequest("POST", input));
 }
 export function updateOAuthApplication(
   id: string,
-  input: Partial<
-    Pick<OAuthApplication, "name" | "description" | "logoUrl" | "redirectUris" | "scopes" | "supportsClientCredentials" | "publicEnabled">
-  >,
+  input: Partial<OAuthApplicationInput>,
 ): Promise<OAuthApplication> {
   return request(`/api/oauth-applications/${id}`, jsonRequest("PATCH", input));
+}
+/** A manifest save the server rejected, with the per-field issues from the 400 body. */
+export class OAuthManifestError extends Error {
+  issues: OAuthAppManifestIssue[];
+  constructor(message: string, issues: OAuthAppManifestIssue[]) {
+    super(message);
+    this.name = "OAuthManifestError";
+    this.issues = issues;
+  }
+}
+async function manifestRequest<T>(url: string, init: RequestInit): Promise<T> {
+  const response = await apiFetch(url, init);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const issues: OAuthAppManifestIssue[] = Array.isArray(payload?.issues) ? payload.issues : [];
+    throw new OAuthManifestError(
+      payload?.error_description || payload?.error || `Request failed: ${response.status}`,
+      issues,
+    );
+  }
+  return response.json();
+}
+export function validateOAuthAppManifest(manifest: OAuthAppManifest): Promise<OAuthAppManifestValidation> {
+  return request("/api/oauth-applications/manifest/validate", jsonRequest("POST", manifest));
+}
+/** A manifest save; webhookSecret is the webhook signing secret, returned once when the webhook is first enabled. */
+export type OAuthManifestSaveResult = OAuthApplication & { webhookSecret?: string };
+export function createOAuthApplicationFromManifest(manifest: OAuthAppManifest): Promise<OAuthManifestSaveResult> {
+  return manifestRequest("/api/oauth-applications/manifest", jsonRequest("POST", manifest));
+}
+export function updateOAuthApplicationFromManifest(id: string, manifest: OAuthAppManifest): Promise<OAuthManifestSaveResult> {
+  return manifestRequest(`/api/oauth-applications/${encodeURIComponent(id)}/manifest`, jsonRequest("PUT", manifest));
+}
+export function exportOAuthApplicationManifest(id: string): Promise<OAuthAppManifest> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/manifest`);
+}
+export interface OAuthApplicationInstalls {
+  authorizations: OAuthAuthorization[];
+  installations: ApplicationInstallation[];
+}
+export function fetchOAuthApplicationInstalls(id: string): Promise<OAuthApplicationInstalls> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/installs`);
+}
+export interface Viewer {
+  user: Pick<User, "id" | "name" | "displayName" | "email" | "avatarUrl" | "app">;
+  workspace: { id: string; name: string; urlKey: string };
+  role: string;
+  authentication: "session" | "apiKey" | "oauth";
+  actor: "user" | "app";
+  application?: { clientId: string; name: string; iconUrl?: string };
+  scopes?: string[];
+  tokenExpiresAt?: string;
+  appUserId?: string;
+  teamIds?: string[];
+  grantType?: string;
+}
+export function fetchViewer(): Promise<Viewer> {
+  return request("/api/viewer");
 }
 export function deleteOAuthApplication(id: string): Promise<void> {
   return request(`/api/oauth-applications/${id}`, { method: "DELETE" });
@@ -899,7 +969,13 @@ export interface OAuthAuthorizationRequest {
     client_name: string;
     client_uri?: string;
     logo_uri?: string;
+    /** "none" = public/MCP client, "client_secret_basic" = registered application. */
+    token_endpoint_auth_method?: string;
   };
+  /** OAuth `prompt` parameter echoed back by the server. */
+  prompt?: string;
+  /** Workspace the user already approved this client for; empty when consent is needed. */
+  previouslyAuthorizedWorkspaceKey?: string;
   redirectUri: string;
   scopes: string[];
   scopeLabels: string[];
@@ -1208,7 +1284,16 @@ export function createWebhook(
 export function updateWebhook(
   id: string,
   input: Partial<
-    Pick<Webhook, "name" | "url" | "resourceTypes" | "teamIds" | "enabled" | "applicationId">
+    Pick<
+      Webhook,
+      | "name"
+      | "url"
+      | "resourceTypes"
+      | "teamIds"
+      | "enabled"
+      | "applicationId"
+      | "payloadVersion"
+    >
   >,
 ): Promise<Webhook> {
   return request(`/api/webhooks/${id}`, jsonRequest("PATCH", input));
@@ -1232,6 +1317,69 @@ export function rotateWebhookSecret(
 /** LS-0711 — revoke signing secret. */
 export function revokeWebhookSecret(id: string): Promise<void> {
   return request(`/api/webhooks/${id}/revoke-secret`, { method: "POST" });
+}
+
+/** Delivery log of a webhook, newest first. */
+export function fetchWebhookDeliveries(
+  id: string,
+  options: { cursor?: string; status?: string; limit?: number } = {},
+): Promise<WebhookDeliveryPage> {
+  const params = new URLSearchParams();
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.status) params.set("status", options.status);
+  if (options.limit) params.set("limit", String(options.limit));
+  const query = params.toString();
+  return request(
+    `/api/webhooks/${encodeURIComponent(id)}/deliveries${query ? `?${query}` : ""}`,
+  );
+}
+export function fetchWebhookDelivery(
+  id: string,
+  deliveryId: string,
+): Promise<WebhookDelivery> {
+  return request(
+    `/api/webhooks/${encodeURIComponent(id)}/deliveries/${encodeURIComponent(deliveryId)}`,
+  );
+}
+/** Sends the delivery's payload again (new id, timestamp and signature). */
+export function redeliverWebhookDelivery(
+  id: string,
+  deliveryId: string,
+): Promise<WebhookDelivery> {
+  return request(
+    `/api/webhooks/${encodeURIComponent(id)}/deliveries/${encodeURIComponent(deliveryId)}/redeliver`,
+    { method: "POST" },
+  );
+}
+/** Sends a WebhookTest event and returns the attempt. */
+export function sendWebhookTestEvent(id: string): Promise<WebhookDelivery> {
+  return request(`/api/webhooks/${encodeURIComponent(id)}/test`, {
+    method: "POST",
+  });
+}
+export function fetchApplicationWebhook(
+  applicationId: string,
+): Promise<ApplicationWebhookSettings> {
+  return request(
+    `/api/oauth-applications/${encodeURIComponent(applicationId)}/webhook`,
+  );
+}
+export function updateApplicationWebhook(
+  applicationId: string,
+  input: { enabled?: boolean; url?: string; resourceTypes?: string[] },
+): Promise<ApplicationWebhookSettings> {
+  return request(
+    `/api/oauth-applications/${encodeURIComponent(applicationId)}/webhook`,
+    jsonRequest("PUT", input),
+  );
+}
+export function rotateApplicationWebhookSecret(
+  applicationId: string,
+): Promise<ApplicationWebhookSettings> {
+  return request(
+    `/api/oauth-applications/${encodeURIComponent(applicationId)}/webhook/rotate-secret`,
+    { method: "POST" },
+  );
 }
 export function createTeam(
   workspaceKey: string,

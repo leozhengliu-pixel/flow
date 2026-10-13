@@ -8,6 +8,8 @@ import { History, SlidersHorizontal } from 'lucide-react'
 import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
+import { ViaApp } from '@/components/ui/via-app'
+import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import type { FlowDocument, User } from '@/types/flow'
 import { documentOwner, type DocumentActionContext } from './document-actions'
 import { DocumentOwnerPicker } from './document-owner-picker'
@@ -35,7 +37,9 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditedAt,
     {owner ? <UserAvatar avatarUrl={owner.avatarUrl} className="document-meta-avatar" name={ownerName}/> : null}
     <strong data-i18n-ignore>{ownerName}</strong>
   </>
-  const editorName = lastEditor.displayName || lastEditor.name
+  // A document created through an application keeps its "via <App>" attribution while its creator is the last editor.
+  const editorBot = lastEditor.id === document.creator.id ? document.botActor : undefined
+  const editorName = attributedActorName(lastEditor, editorBot)
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>
       <button aria-label={editedLabel} className="document-edited" title={formatDate(lastEditedAt, { dateStyle: 'medium', timeStyle: 'short' })} type="button">
@@ -56,7 +60,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditedAt,
         </div>
         <div className="document-last-edit-row">
           <span>{t('Last edit by')}</span>
-          <span className="document-person"><UserAvatar avatarUrl={lastEditor.avatarUrl} className="document-meta-avatar" name={editorName}/><strong data-i18n-ignore>{editorName}</strong></span>
+          <span className="document-person"><UserAvatar avatarUrl={attributedActorAvatar(lastEditor, editorBot)} className="document-meta-avatar" name={editorName}/><strong data-i18n-ignore>{editorName}</strong><ViaApp user={lastEditor} botActor={editorBot}/></span>
           <time dateTime={lastEditedAt}>{formatDate(lastEditedAt, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</time>
         </div>
         <div className="document-history-action">

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
 
@@ -150,20 +151,7 @@ func (s *server) listDocuments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-type customerRequestInput struct {
-	// CustomerID links the request to a customer; "" on update removes the
-	// customer (an "Unknown customer" request, like the reference app).
-	CustomerID *string `json:"customerId,omitempty"`
-	// CustomerName creates a new customer with this name for the request in
-	// the same write (the composer's deferred "Create new customer" option).
-	CustomerName *string  `json:"customerName,omitempty"`
-	Body         *string  `json:"body,omitempty"`
-	Source       *string  `json:"source,omitempty"`
-	SourceURL    *string  `json:"sourceUrl,omitempty"`
-	IssueID      *string  `json:"issueId,omitempty"`
-	ProjectID    *string  `json:"projectId,omitempty"`
-	Priority     *float64 `json:"priority,omitempty"`
-}
+type customerRequestInput = publicapi.CustomerRequestInput
 
 type releaseInput struct {
 	Name          *string                   `json:"name,omitempty"`
@@ -430,7 +418,7 @@ func (s *server) createDocument(w http.ResponseWriter, r *http.Request) {
 				return "", errInvalid
 			}
 		}
-		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
+		created = domain.Document{ID: fmt.Sprintf("document_%d", now.UnixNano()), SlugID: documentSlugID(title, newDocumentSlugSuffix()), Title: title, Color: "#8b8b90", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ProjectIDs: projects, TeamIDs: teams, IssueID: issueID, SubscriberIDs: []string{data.Viewer.ID}, ContentData: map[string]any{"type": "doc", "content": []any{}}, CreatedAt: now, UpdatedAt: now, Revisions: []domain.DocumentRevision{}, Permissions: []domain.DocumentPermission{{ID: fmt.Sprintf("document_permission_%d", now.UnixNano()), DocumentID: "", SubjectType: "user", SubjectID: data.Viewer.ID, Role: "owner", CreatedAt: now, UpdatedAt: now}}}
 		created.Permissions[0].DocumentID = created.ID
 		created.Permissions = append(created.Permissions, defaultDocumentGrants(created, now)...)
 		if template != nil {
@@ -766,7 +754,7 @@ func (s *server) createDocumentComment(w http.ResponseWriter, r *http.Request) {
 			return errConflict
 		}
 		now := time.Now().UTC()
-		created = domain.Comment{ID: fmt.Sprintf("document_comment_%d", now.UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, AnchorID: input.AnchorID, QuotedText: input.QuotedText}
+		created = domain.Comment{ID: fmt.Sprintf("document_comment_%d", now.UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		data.Comments[document.ID] = append(comments, created)
 		mentioned := commentMentionIDs(data, created)
 		excerpt := notificationExcerpt(created.Body)
@@ -950,10 +938,17 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		customerName = ""
 	}
 	body, sourceURL := trimmedValue(input.Body), trimmedValue(input.SourceURL)
+	externalID, attachmentURL, ok := s.customerRequestAPIInputs(w, input)
+	if !ok {
+		return
+	}
+	if sourceURL == "" {
+		sourceURL = attachmentURL
+	}
 	// The reference composer accepts a request with any one of a customer, a
 	// body or a source: "Please select a customer, provide a request, or
 	// specify a source."
-	if customerID == "" && customerName == "" && body == "" && sourceURL == "" {
+	if customerID == "" && customerName == "" && externalID == "" && body == "" && sourceURL == "" {
 		writeError(w, http.StatusBadRequest, "select a customer, provide a request, or specify a source")
 		return
 	}
@@ -968,6 +963,13 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 			data.Customers = append(data.Customers, customer)
 			appendAudit(data, "created", "customer", customer.ID, map[string]any{"name": customer.Name})
 			customerID = customer.ID
+		}
+		if customerID == "" && externalID != "" {
+			index := customerByExternalID(data, externalID)
+			if index < 0 {
+				return "", fmt.Errorf("%w: no customer has external id %q", errNotFound, externalID)
+			}
+			customerID = data.Customers[index].ID
 		}
 		if customerID != "" && !slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == customerID }) {
 			return "", errNotFound
@@ -999,6 +1001,9 @@ func (s *server) createCustomerRequest(w http.ResponseWriter, r *http.Request) {
 		appendAudit(data, "created", "customer_request", created.ID, map[string]any{"customerId": created.CustomerID})
 		return created.ID, nil
 	})
+	if err == nil && attachmentURL != "" && created.IssueID != "" {
+		s.attachCustomerRequestLink(r, created, attachmentURL)
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 

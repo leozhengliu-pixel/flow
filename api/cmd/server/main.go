@@ -29,6 +29,7 @@ import (
 	"flow/api/internal/coordination"
 	"flow/api/internal/domain"
 	"flow/api/internal/objectstore"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 	"flow/api/internal/websearch"
 )
@@ -77,8 +78,6 @@ type server struct {
 	allowedOrigin                  string
 	workspaceRegionSelectorEnabled bool
 	workspaceDefaultRegion         string
-	mcpUploadMu                    sync.Mutex
-	mcpUploads                     map[string]*mcpPendingUpload
 	agentApprovalsMu               sync.Mutex
 	agentApprovals                 map[string]*agentApproval
 	agentElicitations              map[string]*agentElicitation
@@ -91,6 +90,9 @@ type server struct {
 	loopInstanceOnce      sync.Once
 	loopInstance          string
 	loopReconcilerStarted atomic.Bool
+	// Public API request/complexity budgets (api_rate_limit.go).
+	apiRateLimiter     *apiRateLimiter
+	apiRateLimiterOnce sync.Once
 }
 
 func main() {
@@ -246,6 +248,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/oauth/authorization-request", s.getOAuthAuthorizationRequest)
 	mux.HandleFunc("POST /api/oauth/authorization-request", s.decideOAuthAuthorization)
 	mux.HandleFunc("DELETE /api/oauth/authorizations/{id}", s.revokeOAuthAuthorization)
+	s.registerOAuthPlatformRoutes(mux)
 	mux.Handle("POST /api/auth/register", s.requireEmailAuth(s.limitAuth("register", 5, 15*time.Minute, http.HandlerFunc(s.register))))
 	mux.Handle("POST /api/auth/verify-email", s.requireEmailAuth(s.limitAuth("verify-email", 10, 15*time.Minute, http.HandlerFunc(s.verifyEmail))))
 	mux.Handle("POST /api/auth/resend-verification", s.requireEmailAuth(s.limitAuth("resend-verification", 5, 15*time.Minute, http.HandlerFunc(s.resendVerification))))
@@ -332,6 +335,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/workspaces/{workspaceKey}/teams/{teamId}", s.deleteTeam)
 	mux.HandleFunc("GET /api/workspaces/{workspaceKey}/deleted-teams", s.listDeletedTeams)
 	mux.HandleFunc("GET /api/workspace/audit-log", s.listAuditLog)
+	mux.HandleFunc("GET /api/workspace/audit-log/types", s.listAuditEntryTypes)
 	mux.HandleFunc("GET /api/workspace/audit-log-stream", s.getAuditStream)
 	mux.HandleFunc("POST /api/workspace/audit-log-stream", s.createAuditStream)
 	mux.HandleFunc("PATCH /api/workspace/audit-log-stream", s.updateAuditStream)
@@ -359,7 +363,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/customer-requests/{id}", s.deleteCustomerRequest)
 	mux.HandleFunc("POST /api/customer-requests/{id}/attachments", s.createCustomerRequestAttachment)
 	mux.HandleFunc("DELETE /api/customer-requests/{id}/attachments/{attachmentId}", s.deleteCustomerRequestAttachment)
-	mux.HandleFunc("GET /api/documents", s.listDocuments)
+	mux.HandleFunc("GET /api/documents", connectionOr(s.listDocuments, s.listDocumentsConnection))
 	mux.HandleFunc("POST /api/documents", s.createDocument)
 	mux.HandleFunc("GET /api/documents/{id}", s.getDocument)
 	mux.HandleFunc("PATCH /api/documents/{id}", s.updateDocument)
@@ -382,7 +386,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/documents/{id}/comments/{commentId}/subscription", s.setDocumentThreadSubscription)
 	mux.HandleFunc("POST /api/documents/{id}/restore/{revisionId}", s.restoreDocumentRevision)
 	mux.HandleFunc("POST /api/releases", s.createRelease)
-	mux.HandleFunc("GET /api/releases", s.listReleases)
+	mux.HandleFunc("GET /api/releases", connectionOr(s.listReleases, s.listReleasesConnection))
 	mux.HandleFunc("GET /api/releases/{id}", s.getRelease)
 	mux.HandleFunc("POST /api/releases/reorder", s.reorderReleases)
 	mux.HandleFunc("PATCH /api/releases/{id}", s.updateRelease)
@@ -471,13 +475,21 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/oauth-applications/{id}/failures", s.listOAuthAppFailures)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/sync-groups", s.listOAuthSyncGroupRequests)
 	mux.HandleFunc("POST /api/oauth-applications/{id}/sync-groups/{requestId}", s.decideOAuthSyncGroupRequest)
-	mux.HandleFunc("GET /api/webhooks", s.listWebhooks)
+	mux.HandleFunc("GET /api/webhooks", connectionOr(s.listWebhooks, s.listWebhooksConnection))
 	mux.HandleFunc("POST /api/webhooks", s.createWebhook)
 	mux.HandleFunc("PATCH /api/webhooks/{id}", s.updateWebhook)
 	mux.HandleFunc("DELETE /api/webhooks/{id}", s.deleteWebhook)
 	mux.HandleFunc("GET /api/webhooks/{id}/failures", s.listWebhookFailures)
 	mux.HandleFunc("POST /api/webhooks/{id}/rotate-secret", s.rotateWebhookSecret)
 	mux.HandleFunc("POST /api/webhooks/{id}/revoke-secret", s.revokeWebhookSecret)
+	mux.HandleFunc("GET /api/webhooks/{id}", s.getWebhook)
+	mux.HandleFunc("GET /api/webhooks/{id}/deliveries", s.listWebhookDeliveries)
+	mux.HandleFunc("GET /api/webhooks/{id}/deliveries/{deliveryId}", s.getWebhookDelivery)
+	mux.HandleFunc("POST /api/webhooks/{id}/deliveries/{deliveryId}/redeliver", s.redeliverWebhookDelivery)
+	mux.HandleFunc("POST /api/webhooks/{id}/test", s.testWebhook)
+	mux.HandleFunc("GET /api/oauth-applications/{id}/webhook", s.getApplicationWebhook)
+	mux.HandleFunc("PUT /api/oauth-applications/{id}/webhook", s.updateApplicationWebhook)
+	mux.HandleFunc("POST /api/oauth-applications/{id}/webhook/rotate-secret", s.rotateApplicationWebhookSecret)
 	mux.HandleFunc("POST /api/oauth/token", s.exchangeOAuthToken)
 	mux.HandleFunc("GET /api/integrations", s.listIntegrations)
 	mux.HandleFunc("GET /api/integrations/file-preview", s.filePreview)
@@ -699,6 +711,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("GET /api/agent-tasks", s.listApplicationAgentTasks)
 	mux.HandleFunc("GET /api/agent-tasks/{id}", s.getApplicationAgentTask)
 	mux.HandleFunc("POST /api/agent-tasks/{id}/activities", s.appendApplicationAgentActivity)
+	mux.HandleFunc("POST /api/agent-tasks", s.createApplicationAgentTask)
+	mux.HandleFunc("PATCH /api/agent-tasks/{id}", s.updateApplicationAgentTask)
 	mux.HandleFunc("GET /api/issue-records", s.listIssueRecords)
 	mux.HandleFunc("POST /api/issue-records", s.createIssueRecord)
 	mux.HandleFunc("POST /api/issue-records/batch", s.issueRecordAlias(s.batchUpdate))
@@ -792,7 +806,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("DELETE /api/cycles/{id}/resources/{resourceId}", s.deleteCycleResource)
 	mux.HandleFunc("POST /api/cycles/{id}/calendar-token", s.cycleCalendarToken)
 	mux.HandleFunc("GET /api/calendar/cycles/{id}", s.cycleCalendar)
-	mux.HandleFunc("GET /api/projects", s.listProjectRecords)
+	mux.HandleFunc("GET /api/projects", connectionOr(s.listProjectRecords, s.listProjectsConnection))
 	mux.HandleFunc("POST /api/projects", s.createProject)
 	mux.HandleFunc("PATCH /api/projects/{id}", s.updateProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.deleteProject)
@@ -874,10 +888,11 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("POST /api/issues/{id}/loop-runs", s.createIssueLoopRun)
 	mux.HandleFunc("DELETE /api/issues/{id}/attachments/{attachmentId}", s.deleteAttachment)
 	mux.HandleFunc("GET /api/events", s.events)
-	mux.HandleFunc("GET /uploads/{name}", s.serveUpload)
+	mux.HandleFunc("GET /uploads/{name}", s.serveUploadOrAsset)
+	s.registerPublicAPIRoutes(mux)
 
-	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.authenticate(mux)))
-	return requestLog(s.cors(compressAPIResponses(requestBodyBudget(handler))))
+	handler := s.withStaticFiles(boundedLegacyIssueWrites(s.limitFailedAuthentication(s.authenticate(s.limitAuthenticatedAPI(mux)))))
+	return requestLog(s.cors(compressAPIResponses(s.signedFileURLs(apiErrorEnvelope(requestBodyBudget(handler))))))
 }
 
 func (s *server) withStaticFiles(next http.Handler) http.Handler {
@@ -1854,16 +1869,7 @@ func (s *server) purgeTeam(ctx context.Context, workspaceKey, teamID string) err
 	return err
 }
 
-type customerInput struct {
-	Name          *string   `json:"name"`
-	LogoURL       *string   `json:"logoUrl"`
-	OwnerID       *string   `json:"ownerId"`
-	Status        *string   `json:"status"`
-	Tier          *string   `json:"tier"`
-	AnnualRevenue *float64  `json:"annualRevenue"`
-	Size          *int      `json:"size"`
-	Domains       *[]string `json:"domains"`
-}
+type customerInput = publicapi.CustomerInput
 
 func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 	if !s.allowManualCustomerEdit(w, r) {
@@ -1892,6 +1898,9 @@ func (s *server) createCustomer(w http.ResponseWriter, r *http.Request) {
 			if customerDomainMatches(value, data.WorkspaceSettings.FeatureSettings.CustomerGenericDomains) {
 				return fmt.Errorf("%w: generic domains cannot identify a customer", errInvalid)
 			}
+		}
+		if err := validateCustomerIdentity(data, customer); err != nil {
+			return err
 		}
 		data.Customers = append(data.Customers, customer)
 		return nil
@@ -1929,6 +1938,9 @@ func (s *server) updateCustomer(w http.ResponseWriter, r *http.Request) {
 		}
 		if strings.TrimSpace(data.Customers[index].Name) == "" {
 			return errInvalid
+		}
+		if err := validateCustomerIdentity(data, data.Customers[index]); err != nil {
+			return err
 		}
 		data.Customers[index].UpdatedAt = time.Now().UTC()
 		updated = data.Customers[index]
@@ -2014,6 +2026,9 @@ func applyCustomerInput(customer *domain.Customer, input customerInput) {
 	}
 	if input.Domains != nil {
 		customer.Domains = normalizedStrings(*input.Domains)
+	}
+	if input.ExternalIDs != nil {
+		customer.ExternalIDs = normalizedStrings(*input.ExternalIDs)
 	}
 }
 
@@ -2797,7 +2812,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 			}
 			defaultState = stateForTeam(data, team.ID, states[0].ID)
 		}
-		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Creator: data.Viewer, Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}, TemplateID: input.TemplateID, SuggestedLabelIDs: []string{}}
+		created = domain.Issue{ID: fmt.Sprintf("issue_%d", number), Version: 1, Identifier: fmt.Sprintf("%s-%d", team.Key, number), Number: number, Title: strings.TrimSpace(input.Title), Description: strings.TrimSpace(input.Description), Priority: settings.DefaultPriority, PriorityLabel: priorityLabel(settings.DefaultPriority), SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: *defaultState, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), Labels: []domain.IssueLabel{}, ParentID: input.ParentID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}, TemplateID: input.TemplateID, SuggestedLabelIDs: []string{}}
 		if preferences := data.UserSettings[data.Viewer.ID]; preferences.AutoAssign && input.AssigneeID == nil {
 			// Personal assignment preferences also apply to provider imports.
 			input.AssigneeID = &data.Viewer.ID
@@ -2842,7 +2857,7 @@ func (s *server) createIssue(w http.ResponseWriter, r *http.Request) {
 				childState = &states[0]
 			}
 			childNumber := number + childIndex + 1
-			child := domain.Issue{ID: fmt.Sprintf("issue_%d", childNumber), Version: 1, Identifier: fmt.Sprintf("%s-%d", childTeam.Key, childNumber), Number: childNumber, Title: strings.TrimSpace(templateChild.Title), Description: strings.TrimSpace(templateChild.Description), Priority: templateChild.Priority, PriorityLabel: priorityLabel(templateChild.Priority), SortOrder: float64(childNumber), CreatedAt: now, UpdatedAt: now, Team: childTeam, State: *childState, Creator: data.Viewer, Labels: labelsByID(data, templateChild.LabelIDs), ParentID: &created.ID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
+			child := domain.Issue{ID: fmt.Sprintf("issue_%d", childNumber), Version: 1, Identifier: fmt.Sprintf("%s-%d", childTeam.Key, childNumber), Number: childNumber, Title: strings.TrimSpace(templateChild.Title), Description: strings.TrimSpace(templateChild.Description), Priority: templateChild.Priority, PriorityLabel: priorityLabel(templateChild.Priority), SortOrder: float64(childNumber), CreatedAt: now, UpdatedAt: now, Team: childTeam, State: *childState, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), Labels: labelsByID(data, templateChild.LabelIDs), ParentID: &created.ID, SubscriberIDs: []string{data.Viewer.ID}, Reactions: map[string][]string{}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
 			if templateChild.AssigneeID != "" {
 				child.Assignee = userByID(data, templateChild.AssigneeID)
 			}
@@ -3365,7 +3380,7 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return err
 		}
-		created = domain.Comment{ID: fmt.Sprintf("initiative_comment_%d", time.Now().UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
+		created = domain.Comment{ID: fmt.Sprintf("initiative_comment_%d", time.Now().UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		initiative.Comments = append(initiative.Comments, created)
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
@@ -3610,7 +3625,7 @@ func (s *server) createInitiativeUpdateComment(w http.ResponseWriter, r *http.Re
 			return errNotFound
 		}
 		now := time.Now().UTC()
-		comment := domain.Comment{ID: fmt.Sprintf("initiative_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer}
+		comment := domain.Comment{ID: fmt.Sprintf("initiative_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.InitiativeUpdates[initiativeID] = updates
 		updated = updates[index]
@@ -3933,7 +3948,7 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 				input.ParentID = root
 			}
 		}
-		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
+		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		project.Comments = append(project.Comments, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
@@ -4261,7 +4276,7 @@ func (s *server) createProjectUpdateComment(w http.ResponseWriter, r *http.Reque
 			return errNotFound
 		}
 		now := time.Now().UTC()
-		comment := domain.Comment{ID: fmt.Sprintf("project_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer}
+		comment := domain.Comment{ID: fmt.Sprintf("project_update_comment_%d", now.UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: now, User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		updates[index].Comments = append(updates[index].Comments, comment)
 		data.ProjectUpdates[projectID] = updates
 		updated = updates[index]
@@ -4583,7 +4598,7 @@ func (s *server) createComment(w http.ResponseWriter, r *http.Request) {
 				return errNotFound
 			}
 		}
-		comment = domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer}
+		comment = domain.Comment{ID: fmt.Sprintf("comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		data.Comments[id] = append(data.Comments[id], comment)
 		activity := appendActivity(data, id, "comment.created", data.Viewer, map[string]string{"commentId": comment.ID})
 		appendIssueNotifications(data, *issue, activity, &comment)
@@ -4674,7 +4689,10 @@ func (s *server) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
 	}
 	issueID, commentID := r.PathValue("id"), r.PathValue("commentId")
 	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.reaction_toggled", issueID, input, func(data *domain.Bootstrap) error {
+	// The event payload records the comment and whether the reaction was
+	// added (webhooks send it as a Reaction create or remove).
+	input.CommentID, input.Added = commentID, nil
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "comment.reaction_toggled", issueID, &input, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.Comments[issueID], func(comment domain.Comment) bool { return comment.ID == commentID })
 		if index < 0 {
 			return errNotFound
@@ -4684,7 +4702,9 @@ func (s *server) toggleCommentReaction(w http.ResponseWriter, r *http.Request) {
 			comment.Reactions = map[string][]string{}
 		}
 		users := comment.Reactions[input.Emoji]
-		if slices.Contains(users, data.Viewer.ID) {
+		added := !slices.Contains(users, data.Viewer.ID)
+		input.Added = &added
+		if !added {
 			users = removeString(users, data.Viewer.ID)
 		} else {
 			users = append(users, data.Viewer.ID)
@@ -4708,7 +4728,8 @@ func (s *server) toggleIssueReaction(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	var updated domain.Issue
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.reaction_toggled", id, input, func(data *domain.Bootstrap) error {
+	input.CommentID, input.Added = "", nil
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "issue.reaction_toggled", id, &input, func(data *domain.Bootstrap) error {
 		issue, err := issueByID(data, id)
 		if err != nil {
 			return err
@@ -4717,7 +4738,9 @@ func (s *server) toggleIssueReaction(w http.ResponseWriter, r *http.Request) {
 			issue.Reactions = map[string][]string{}
 		}
 		users := issue.Reactions[input.Emoji]
-		if slices.Contains(users, data.Viewer.ID) {
+		added := !slices.Contains(users, data.Viewer.ID)
+		input.Added = &added
+		if !added {
 			users = removeString(users, data.Viewer.ID)
 		} else {
 			users = append(users, data.Viewer.ID)
@@ -4855,7 +4878,7 @@ func (s *server) createAttachment(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer}
+		attachment = domain.Attachment{ID: attachmentID, IssueID: id, Title: header.Filename, URL: "/uploads/" + safeName, ContentType: header.Header.Get("Content-Type"), Size: size, CreatedAt: time.Now().UTC(), Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		issue.Attachments = append(issue.Attachments, attachment)
 		appendActivity(data, id, "attachment.created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title})
 		if formEmbedEnabled(r) {
@@ -4891,7 +4914,7 @@ func (s *server) createIssueLink(w http.ResponseWriter, r *http.Request) {
 			return issueErr
 		}
 		now := time.Now().UTC()
-		attachment = domain.Attachment{ID: fmt.Sprintf("link_%d", now.UnixNano()), IssueID: id, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer}
+		attachment = domain.Attachment{ID: fmt.Sprintf("link_%d", now.UnixNano()), IssueID: id, Title: title, URL: parsed.String(), ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
 		issue.Attachments = append(issue.Attachments, attachment)
 		appendActivity(data, id, "issue.link_created", data.Viewer, map[string]string{"attachmentId": attachment.ID, "title": attachment.Title, "url": attachment.URL})
 		return nil
@@ -6435,7 +6458,7 @@ func validLabelGroupSelection(labels []domain.IssueLabel) bool {
 	return true
 }
 func appendActivity(data *domain.Bootstrap, issueID, eventType string, actor domain.User, metadata map[string]string) domain.ActivityEvent {
-	activity := domain.ActivityEvent{ID: fmt.Sprintf("activity_%d", time.Now().UnixNano()), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, Metadata: metadata}
+	activity := domain.ActivityEvent{ID: fmt.Sprintf("activity_%d", time.Now().UnixNano()), Type: eventType, CreatedAt: time.Now().UTC(), Actor: actor, BotActor: viewerBotActor(data, actor), Metadata: metadata}
 	data.Activities[issueID] = append(data.Activities[issueID], activity)
 	return activity
 }

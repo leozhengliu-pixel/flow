@@ -198,7 +198,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
       setServerDraftId(remoteDraft?.id ?? '')
     } else {
       setTitle(initialContext?.title ?? ''); setDescription(initialContext?.description ? {markdown:initialContext.description,document:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]},documentJSON:JSON.stringify({type:'doc',content:[{type:'paragraph',content:[{type:'text',text:initialContext.description}]}]}),contentState:''} : null); setFiles([]); setError(undefined); setServerDraftId(''); setTeamId(requestedTeamId || data.teams[0]?.id || '')
-      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
+      setStateId(requestedStateId || defaultState.id); setPriority(initialContext?.priority ?? 0); setEstimate(initialContext?.estimate ?? NO_ESTIMATE); setAssigneeId(initialContext?.assigneeId ?? data.viewer.id); setProjectId(initialContext?.projectId ?? ''); setProjectMilestoneId(initialContext?.projectMilestoneId ?? ''); setCycleId(initialContext?.cycleId ?? ''); setDueDate(initialContext?.dueDate ?? ''); setLabelIds(initialContext?.labelIds ?? []); setTemplateId(initialContext?.templateId ?? ''); setTemplateId(''); setRecurrence(''); setCreateMore(false); setExpanded(false)
       const textDocument = (text: string) => ({type:'doc',content:[{type:'paragraph',...(text ? {content:[{type:'text',text}]} : {})}]})
       titleEditorRef.current?.commands.setContent(textDocument(initialContext?.title ?? '')); descriptionEditorRef.current?.commands.setContent(textDocument(initialContext?.description ?? ''))
       if (requestedStateId && availableStates.some(state => state.id === requestedStateId)) setStateId(requestedStateId)
@@ -304,7 +304,7 @@ export function CreateIssueDialog({ data, draftId, initialContext, initialProjec
   const isTeamMember = data.teamMembers.some(member => member.teamId === teamId && member.userId === data.viewer.id)
   const defaultTemplateId = (isTeamMember ? teamDefaults?.defaultIssueTemplateForMembersId : teamDefaults?.defaultIssueTemplateForNonMembersId) ?? ''
   useEffect(() => {
-    if (!open || initialTemplateId || templateId || title.trim() || description?.markdown?.trim()) return
+    if (!open || initialTemplateId || initialContext?.templateId || templateId || title.trim() || description?.markdown?.trim()) return
     if (defaultTemplateId && templateOptions.some(item => item.id === defaultTemplateId)) applyTemplate(defaultTemplateId)
     // Only re-evaluate when the dialog opens or the team changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

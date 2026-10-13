@@ -189,15 +189,15 @@ func TestWebhookDeliveryIncludesPreviousValues(t *testing.T) {
 	for updated == nil {
 		select {
 		case envelope := <-events:
-			if envelope["action"] == "updated" {
+			if envelope["type"] == "Issue" && envelope["action"] == "update" {
 				updated = envelope
 			}
 		case <-deadline:
 			t.Fatal("timed out waiting for issue.updated webhook")
 		}
 	}
-	previous, ok := updated["previousValues"].(map[string]any)
+	previous, ok := updated["updatedFrom"].(map[string]any)
 	if !ok || previous["title"] != "before title" {
-		t.Fatalf("webhook previousValues = %#v", updated["previousValues"])
+		t.Fatalf("webhook updatedFrom = %#v", updated["updatedFrom"])
 	}
 }

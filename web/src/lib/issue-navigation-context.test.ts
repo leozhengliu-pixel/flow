@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeBootstrap, makeIssue, project } from '@/test/fixtures'
-import { issueBreadcrumbs, issueReturnPath } from './issue-navigation-context'
+import { issueBreadcrumbs, issueListContextPath, issueReturnPath } from './issue-navigation-context'
 import { parseAppRoute, teamIssuesPath } from './app-routes'
 
 describe('issue navigation context', () => {
@@ -17,7 +17,7 @@ describe('issue navigation context', () => {
     const linked = { ...issue, project }
     expect(issueReturnPath({ returnTo: path }, 'workspace', linked)).toBe(path)
     expect(issueBreadcrumbs(data, linked, path)).toEqual([
-      { label: 'Test team', href: '/workspace/team/TST/overview', entity: true },
+      { label: 'Test team', href: '/workspace/team/TST/overview', entity: true, team: expect.objectContaining({ color: expect.any(String) }) },
       { label: 'Issues', href: path },
     ])
   })
@@ -35,6 +35,15 @@ describe('issue navigation context', () => {
     expect(issueBreadcrumbs(data, issue, '/workspace/my-issues/created')).toEqual([{ label: 'My issues', href: '/workspace/my-issues/created' }])
     expect(issueReturnPath(undefined, 'workspace', issue)).toBe('/workspace/team/TST/all')
     expect(issueBreadcrumbs(data, issue)).not.toContainEqual(expect.objectContaining({ label: 'My issues' }))
+  })
+
+  it('has no breadcrumb context when the issue was opened directly or from another issue', () => {
+    expect(issueListContextPath(undefined, 'workspace')).toBeUndefined()
+    expect(issueListContextPath({ returnTo: '/workspace/issue/TST-2/other' }, 'workspace')).toBeUndefined()
+    expect(issueListContextPath({ returnTo: '/workspace/team/TST/all' }, 'workspace')).toBe('/workspace/team/TST/all')
+    expect(issueBreadcrumbs(data, issue)).toEqual([])
+    expect(issueBreadcrumbs(data, { ...issue, project }, undefined)).toEqual([])
+    expect(issueBreadcrumbs(data, issue, '/workspace/issue/TST-2/other')).toEqual([])
   })
 
   it('rejects external, other-workspace and issue-detail return targets', () => {

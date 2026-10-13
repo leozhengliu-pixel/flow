@@ -59,6 +59,10 @@ export interface MyIssuesCreateContext {
   cycleId?: string
   labelIds?: string[]
   parentId?: string
+  /** Prefilled-link extras (see lib/prefilled-issue-url). */
+  estimate?: number
+  dueDate?: string
+  templateId?: string
   /** Relate the new issue to an existing one once it is created. */
   related?: { issueId: string; kind: 'related' | 'parent' | 'blocked' | 'blocking' }
 }

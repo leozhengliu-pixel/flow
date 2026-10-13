@@ -10,7 +10,12 @@ Use the REST API for issues, projects, documents, comments and other resources.
 Use OAuth for authorization. An Agent additionally consumes tasks and emits
 activities so people can see progress and reply in Flow.
 
-The [OpenAPI inventory](openapi.json) lists HTTP routes. The
+The [OAuth reference](oauth.md) covers the authorization code flow with and
+without PKCE, client credentials, `actor=app`, scopes, refresh-token rotation,
+revocation, introspection, "via App" attribution and application manifests.
+[Webhooks](webhooks.md) covers data change events, payloads, signature
+verification, retries, the delivery log, application webhooks and agent session
+events. The [OpenAPI inventory](openapi.json) lists HTTP routes. The
 [domain model](domain-model.md) describes resources. This guide describes the
 application authorization and execution contract; it does not require a
 particular model provider or Agent framework.
@@ -78,7 +83,10 @@ clients use PKCE; they cannot use `client_credentials`.
 
 Generate a random `state` and PKCE verifier on the server handling installation.
 Retain them for the callback. The challenge is the base64url encoding of
-`SHA256(verifier)`, without padding. Flow requires `S256`.
+`SHA256(verifier)`, without padding. Flow supports `S256` only. PKCE is
+required for public clients and optional for registered (confidential)
+applications, which can instead authenticate the code exchange with their
+client secret (see [OAuth](oauth.md#3-exchange-the-code)).
 
 Send the administrator to this URL on the target Flow deployment, replacing
 the example values with properly URL-encoded values:
@@ -119,7 +127,9 @@ curl --fail-with-body "$FLOW_BASE_URL/oauth/token" \
 The response contains `access_token`, `refresh_token`, `token_type`,
 `expires_in` and a space-separated `scope`. Access tokens last one hour.
 Refresh grants last 30 days. Save replacements atomically because consuming a
-refresh token rotates it; concurrent reuse is rejected.
+refresh token rotates it. For 30 minutes a replay of the same refresh request
+returns the same new refresh token, so a lost response can be retried; see
+[Refresh tokens](oauth.md#refresh-tokens).
 
 ```bash
 curl --fail-with-body "$FLOW_BASE_URL/oauth/token" \
@@ -197,7 +207,9 @@ an API token cannot use those endpoints to mint another credential.
 | `release:create` | Create releases |
 | `releaseStage:update` | Change a release's stage |
 
-Applications cannot request `admin`, `owner`, `openid` or `email`. Customer,
+App actors (`actor=app`, client credentials) cannot request `admin`, `owner`,
+`openid` or `email`; a user-actor authorization may request `admin` when the
+application is configured with it (see [Scopes](oauth.md#scopes)). Customer,
 initiative and release access requires the corresponding explicit scopes, even
 when `write` is granted. Mentions and delegation do not automatically grant
 general write access. An Agent with the relevant Agent scope may report its own
@@ -212,13 +224,18 @@ application's full team grant.
 
 ## Call the REST API
 
+The full REST reference (pagination, filtering, errors, rate limits, file
+uploads, link attachments, customers, audit log, prefilled issue links, MCP
+client setup) is in [api.md](api.md); the typed contract is
+[openapi.json](openapi.json).
+
 Send `Authorization: Bearer ACCESS_TOKEN` on API requests. Flow's credential
 lookup resolves the token's workspace; `X-Workspace-Key` can select that same
 workspace explicitly, but cannot switch the token to another workspace.
 
 ```bash
 # Verify the authenticated identity.
-curl --fail-with-body "$FLOW_BASE_URL/api/bootstrap" \
+curl --fail-with-body "$FLOW_BASE_URL/api/viewer" \
   -H "Authorization: Bearer $FLOW_ACCESS_TOKEN"
 
 # Read a bounded issue page, rather than importing the whole workspace.
@@ -237,7 +254,9 @@ Pass the cursor back with the same filters and sort. Do not assume a bootstrap
 response contains every issue in a large workspace.
 
 Application-created issues, comments and activity are attributed to the
-application user. Credential metadata separates `subjectUserId` from
+application user (with `createAsUser`, to "<person> via <App>"); user-actor
+OAuth tokens are shown as "<person> via <App>". See
+["via App" attribution](oauth.md#via-app-attribution). Credential metadata separates `subjectUserId` from
 `issuedByUserId`; `creatorId` remains a compatibility representation of the
 credential subject. Audit events contain identities and grant types, not secrets.
 
@@ -289,10 +308,19 @@ owned by that app. An administrator can also configure an HTTPS webhook in
 receiver when saving rotates that secret.
 
 An `AgentSessionEvent` delivery includes `action=created` for a new task and
-`action=prompted` for follow-up input, an `agentSession`, and its issue, project
-or document context. `eventId` and `X-Flow-Delivery` identify the delivery.
+`action=prompted` for follow-up input, an `agentSession`, its issue, project
+or document context, `promptContext`, `previousComments`, `guidance`, the
+triggering `agentActivity` and a signed `webhookTimestamp`. `eventId` and
+`Flow-Delivery` identify the delivery. An application can instead configure one
+application-level webhook for every installing workspace. Acknowledge a session
+within 10 seconds (an activity or an external URL); a session without agent
+activity for 30 minutes reports `stale`. Sessions also take external URLs, a
+plan and ephemeral activities, and an agent can open a session itself; see
+[Agent session events](webhooks.md#agent-session-events).
 
-Verify `X-Flow-Signature` against a hex HMAC-SHA256 of the raw request body:
+Verify `Flow-Signature` (also sent as `X-Flow-Signature`) against a hex
+HMAC-SHA256 of the raw request body, then check that `webhookTimestamp` is
+within 60 seconds:
 
 ```js
 import { createHmac, timingSafeEqual } from 'node:crypto'
@@ -382,7 +410,8 @@ version reserved for the worker. Applications cannot submit human feedback.
 ## Revoke and Operate
 
 Revoke an individual opaque access or refresh token using
-`POST /oauth/revoke` with a form field `token`. Repeated revocation is safe.
+`POST /oauth/revoke` with a form field `token` (RFC 7009; see
+[Revoking tokens](oauth.md#revoking-tokens-rfc-7009)). Repeated revocation is safe.
 Suspend the installation to revoke its current credentials and authorizations;
 re-enabling it requires newly issued credentials. Removing or changing team
 access affects existing tokens immediately. Deleting an administrator-created

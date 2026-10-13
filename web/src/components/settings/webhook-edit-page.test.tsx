@@ -11,6 +11,10 @@ const api = vi.hoisted(() => ({
   rotateWebhookSecret: vi.fn(),
   revokeWebhookSecret: vi.fn(),
   fetchWebhookFailures: vi.fn().mockResolvedValue([]),
+  fetchWebhookDeliveries: vi
+    .fn()
+    .mockResolvedValue({ items: [], hasMore: false }),
+  sendWebhookTestEvent: vi.fn(),
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -78,4 +82,96 @@ it("renders full-page chrome (not dialog) with HTTPS + show-once secret (LS-0648
 
   await user.click(screen.getByRole("button", { name: /API settings/i }));
   expect(onClose).toHaveBeenCalled();
+});
+
+const existing = {
+  id: "wh_2",
+  name: "Builds",
+  url: "https://ci.example.com/flow",
+  resourceTypes: ["issues"],
+  teamIds: [],
+  enabled: true,
+  creatorId: "user",
+  createdAt: "2026-09-22T00:00:00Z",
+  updatedAt: "2026-09-22T00:00:00Z",
+};
+
+it("asks legacy webhooks to rotate for signing and to switch payload format", async () => {
+  const user = userEvent.setup();
+  api.updateWebhook.mockResolvedValue({ ...existing, payloadVersion: 2 });
+  render(
+    <WebhookEditPage
+      data={makeBootstrap({ teams: [], webhooks: [] })}
+      webhook={existing}
+      onClose={vi.fn()}
+      onSaved={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+  expect(
+    screen.getByText(/Deliveries are not signed yet/),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/legacy payload format/)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Use current format" }));
+  expect(api.updateWebhook).toHaveBeenCalledWith("wh_2", { payloadVersion: 2 });
+  expect(await screen.findByText("No deliveries yet")).toBeInTheDocument();
+});
+
+it("sends a test event and shows the response", async () => {
+  const user = userEvent.setup();
+  api.sendWebhookTestEvent.mockResolvedValue({
+    id: "whd_1",
+    webhookId: "wh_2",
+    kind: "test",
+    eventId: "evt",
+    eventType: "WebhookTest",
+    action: "test",
+    url: existing.url,
+    status: "succeeded",
+    attempt: 1,
+    maxAttempts: 1,
+    responseStatus: 200,
+    durationMs: 42,
+    attempts: [],
+    createdAt: "2026-09-22T00:00:00Z",
+    updatedAt: "2026-09-22T00:00:00Z",
+  });
+  render(
+    <WebhookEditPage
+      data={makeBootstrap({ teams: [], webhooks: [] })}
+      webhook={{ ...existing, payloadVersion: 2, signingEnabled: true, secretPrefix: "flow_wh_x" }}
+      onClose={vi.fn()}
+      onSaved={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Send test event" }));
+  expect(api.sendWebhookTestEvent).toHaveBeenCalledWith("wh_2");
+  expect(await screen.findByText("Test event delivered")).toBeInTheDocument();
+  expect(screen.getByText("HTTP 200 · 42 ms")).toBeInTheDocument();
+  // The delivery log reloads after the test.
+  expect(api.fetchWebhookDeliveries.mock.calls.length).toBeGreaterThanOrEqual(2);
+});
+
+it("locks application-managed webhooks and offers re-enabling after failures", async () => {
+  const user = userEvent.setup();
+  api.updateWebhook.mockResolvedValue({ ...existing, enabled: true });
+  render(
+    <WebhookEditPage
+      data={makeBootstrap({ teams: [], webhooks: [] })}
+      webhook={{
+        ...existing,
+        managedBy: "application",
+        payloadVersion: 2,
+        enabled: false,
+        disabledReason: "deliveryFailures",
+      }}
+      onClose={vi.fn()}
+      onSaved={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+  expect(screen.getByText(/managed by an installed application/)).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Endpoint URL" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Rotate" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Enable webhook" }));
+  expect(api.updateWebhook).toHaveBeenCalledWith("wh_2", { enabled: true });
 });

@@ -310,7 +310,8 @@ export function IssueExplorerPage({ boardRoute = false, preferenceScope, resourc
     if (!issue) { void fetchIssueRecord(row.id, undefined, data.workspace.urlKey).then(issue => onOpenIssue(issue, boundedIssueSequence(rows.map(row => row.id), issue.id))).catch(() => toast.error('Could not load issue')); return }
     // A custom details panel (profile aside) is not an issue preview pane: rows open the issue.
     if ((detailsOpen && !detailsPanel) || split) setPreviewIssueId(issue.id)
-    else onOpenIssue(issue, boundedIssueSequence(groups.find(group => group.issues.some(row => row.id === issue.id))?.issues.map(row => row.id) ?? [issue.id], issue.id))
+    // Like the reference app, the issue's `3 / 19` position (and J / K) spans the whole visible list, not just its group.
+    else onOpenIssue(issue, boundedIssueSequence(listGroups.flatMap(group => group.issues.map(row => row.id)), issue.id))
   }
   const splitOrigin = savedView
     ? { type: 'customView' as const, customViewId: savedView.id, label: savedView.name }
