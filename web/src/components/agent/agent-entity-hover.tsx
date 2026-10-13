@@ -79,9 +79,20 @@ function IssueCard({ issue }: { issue: Issue }) {
     <div className={styles.props}>
       <Prop icon={<StatusIcon size={16} state={issue.state}/>}>{t(issue.state.name)}</Prop>
       <Prop icon={<PriorityIcon priority={issue.priority} size={16}/>}>{t(issue.priorityLabel)}</Prop>
-      {issue.assignee && <Person user={issue.assignee}/>}
+      {issue.delegate ? <DelegateStack assignee={issue.assignee} delegate={issue.delegate}/> : issue.assignee && <Person user={issue.assignee}/>}
     </div>
   </>
+}
+
+/** The reference app's issue hover card with a delegate: 16px avatars overlapping a quarter — the agent, then the human (or the unassigned glyph); no names. */
+function DelegateStack({ assignee, delegate }: { assignee?: Issue['assignee']; delegate: NonNullable<Issue['delegate']> }) {
+  const { t } = useI18n()
+  const agentName = delegate.displayName || delegate.name
+  const label = assignee ? `${assignee.displayName || assignee.name} · ${t('Delegated to {name}').replace('{name}', agentName)}` : t('Delegated to {name}').replace('{name}', agentName)
+  return <span aria-label={label} className={styles.facepile} data-i18n-ignore role="img">
+    <UserAvatar avatarUrl={delegate.avatarUrl} className={styles.avatar} name={agentName}/>
+    {assignee ? <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} name={assignee.displayName || assignee.name}/> : <NoAssigneeIcon className={styles.dim} size={16}/>}
+  </span>
 }
 
 function ProjectCard({ data, project }: { data: BootstrapData; project: Project }) {

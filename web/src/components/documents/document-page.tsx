@@ -143,6 +143,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const defaultDocumentIcon = !document.icon
   const lastRevision = document.revisions.length ? latestRevision(document) : undefined
   const lastEditor = lastRevision?.author ?? document.creator
+  // The latest version's own attribution ("via Flow" when the agent wrote it); without versions, the creation's.
+  const lastEditorBot = lastRevision ? lastRevision.botActor ?? null : document.botActor
   const lastEditedAt = lastRevision?.createdAt ?? document.updatedAt
   const reminder = useDocumentReminder(document.id)
 
@@ -262,7 +264,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
       <div className="document-header-actions">
         {saveState === 'error' && <span className="document-save-state error">{t('Could not save')}</span>}
         {collaborators.slice(0, 4).map(user => { const name = user.displayName || user.name || '?'; return <span className="document-presence__avatar" key={user.id} title={t('{name} is editing').replace('{name}', name)}>{name.slice(0, 2).toUpperCase()}</span> })}
-        <DocumentEditedPopover ctx={ctx} document={document} lastEditor={lastEditor} lastEditedAt={lastEditedAt} showAuthorNames={authorNamesOpen} onShowAuthorNames={setAuthorNames} onShowHistory={openHistory} open={editedOpen} onOpenChange={next => { setEditedOpen(next); if (!next) setOwnerOpen(false) }} ownerOpen={ownerOpen} onOwnerOpenChange={setOwnerOpen} readOnly={deleted}/>
+        <DocumentEditedPopover ctx={ctx} document={document} lastEditor={lastEditor} lastEditorBot={lastEditorBot} lastEditedAt={lastEditedAt} showAuthorNames={authorNamesOpen} onShowAuthorNames={setAuthorNames} onShowHistory={openHistory} open={editedOpen} onOpenChange={next => { setEditedOpen(next); if (!next) setOwnerOpen(false) }} ownerOpen={ownerOpen} onOwnerOpenChange={setOwnerOpen} readOnly={deleted}/>
         {!deleted && <DocumentResolvedCommentsButton count={resolvedThreads.length} open={resolvedOpen} onToggle={() => setResolvedOpen(open => !open)}/>}
         <ScopedFlowTooltip label={documentUrlLabel} shortcut="⌘ ⇧ ,">
           <button aria-label={documentUrlLabel} className="document-icon-button" onClick={() => void copyDocumentUrl(ctx, document)} type="button"><Link2 size={16}/></button>

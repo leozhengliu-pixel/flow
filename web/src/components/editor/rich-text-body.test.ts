@@ -294,7 +294,7 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
   })
 
   it('keeps an assistant answer as wide as the column so its code blocks span it', () => {
-    expect(flat(read('../agent/agent-page.module.css'))).toMatch(/\.assistant \.messageContent \{ width: 100%; max-width: 100%; \}/)
+    expect(flat(read('../agent/agent-page.module.css'))).toMatch(/\.assistant \.messageContent \{ width: 100%; max-width: 100%; box-sizing: border-box; padding: 0 10px; \}/)
   })
 })
 

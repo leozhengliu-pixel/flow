@@ -6,7 +6,8 @@ import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso'
 import { useI18n } from '@/i18n/i18n'
 import './searchable-menu-items.css'
 
-export interface SearchableMenuOption { id: string; label: string; keywords?: string; entity?: boolean }
+/** `shortcut` is a number key (0-9) that picks the row while the search is empty; `groupLabel` heads a run of rows. */
+export interface SearchableMenuOption { id: string; label: string; keywords?: string; entity?: boolean; shortcut?: string; groupLabel?: string }
 
 // Radix owns menu dismissal and selection; only the visible rows join its
 // collection. Keyboard traversal uses the complete filtered data set.
@@ -32,14 +33,20 @@ export function SearchableMenuItems<T extends SearchableMenuOption>({ options, r
   const createActive = canCreate && activeIndex === filtered.length
   const virtual = filtered.length > 60
   const Item = contextMenu ? ContextMenu.Item : DropdownMenu.Item
+  const Label = contextMenu ? ContextMenu.Label : DropdownMenu.Label
   const row = (index: number, option: T) => {
     const item = <Item className={itemClassName} id={`${prefix}-${option.id}`} textValue={option.label} data-menu-active={index === activeIndex || undefined} onPointerMove={event => { event.preventDefault(); setActive(index) }} onSelect={() => onSelect(option)}>{renderOption(option)}</Item>
-    return wrapOption ? wrapOption(option, item) : item
+    const wrapped = wrapOption ? wrapOption(option, item) : item
+    return option.groupLabel && filtered[index - 1]?.groupLabel !== option.groupLabel ? <><Label className="searchable-menu-group">{t(option.groupLabel)}</Label>{wrapped}</> : wrapped
   }
   const createRow = canCreate ? <Item className={`${itemClassName ?? ''} searchable-menu-create`.trim()} id={`${prefix}-create`} textValue={`${createLabel} ${createName}`} data-menu-active={createActive || undefined} onPointerMove={event => { event.preventDefault(); setActive(filtered.length) }} onSelect={() => { void onCreate?.(createName) }}><Plus size={16}/><span data-i18n-ignore>{createLabel}: <strong data-i18n-ignore>"{createName}"</strong></span></Item> : null
   return <div className={`searchable-menu-body ${className}`} onKeyDownCapture={event => {
     if (event.key === 'Escape' || event.key === 'ArrowLeft' || event.key === 'Tab') return
     event.stopPropagation()
+    if (!query && !event.metaKey && !event.ctrlKey && !event.altKey && /^\d$/.test(event.key)) {
+      const match = options.find(option => option.shortcut === event.key)
+      if (match) { event.preventDefault(); document.getElementById(`${prefix}-${match.id}`)?.click(); return }
+    }
     let next = activeIndex
     if (event.key === 'ArrowDown') next = (activeIndex + 1) % Math.max(1, itemCount)
     else if (event.key === 'ArrowUp') next = (activeIndex + itemCount - 1) % Math.max(1, itemCount)

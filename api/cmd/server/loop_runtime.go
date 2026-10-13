@@ -1249,6 +1249,8 @@ func loopSystemPrompt(data domain.Bootstrap, loop domain.Loop, trigger loopTrigg
 	if guidance := strings.TrimSpace(data.WorkspaceSettings.AgentInstructions); guidance != "" {
 		fmt.Fprintf(&prompt, "\nWorkspace guidance:\n%s\n", truncateSettingsText(guidance, 8000))
 	}
+	// A team loop follows its team's agent guidance (with parent teams), like the team's chat and threads.
+	prompt.WriteString(agentTeamGuidancePrompt(teamsAgentGuidance(data, []string{loop.TeamID})))
 	fmt.Fprintf(&prompt, "\nLoop instructions:\n%s\n", truncateSettingsText(loopModelInstructions(loop), 12000))
 	if references != "" {
 		fmt.Fprintf(&prompt, "\nReferenced in the instructions:\n%s", references)

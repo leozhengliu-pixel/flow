@@ -139,3 +139,20 @@ func BenchmarkIssueAccessMetadataLargeDirectory(b *testing.B) {
 		})
 	}
 }
+
+// Agents (including third-party application agents) receive the trimmed issue
+// context, which must keep the team's guidance and skills.
+func TestIssueAccessMetadataKeepsTeamAgentContext(t *testing.T) {
+	skills := []domain.TeamAgentSkill{{ID: "skill_1", Name: "Triage", Instructions: "Label bugs."}}
+	data := domain.Bootstrap{Teams: []domain.Team{{ID: "team"}}, TeamSettings: map[string]domain.TeamSettings{
+		"team": {AgentGuidance: "Answer briefly.", AgentSkills: skills},
+	}}
+	got := issueAccessMetadata(data).TeamSettings["team"]
+	if got.AgentGuidance != "Answer briefly." || !reflect.DeepEqual(got.AgentSkills, skills) {
+		t.Fatalf("team agent context lost: %+v", got)
+	}
+	got.AgentSkills[0].Name = "changed"
+	if data.TeamSettings["team"].AgentSkills[0].Name != "Triage" {
+		t.Fatal("metadata shares the skills slice with the workspace state")
+	}
+}

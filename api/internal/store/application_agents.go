@@ -34,8 +34,9 @@ func (s *SQLiteStore) ensureApplicationAgents(ctx context.Context) error {
 		}
 	}
 	// merged_at records when a pull request linked to the session's issue was
-	// merged (the reference app's "Merged" agent session state).
-	for _, column := range []string{"created_at", "merged_at"} {
+	// merged (the reference app's "Merged" agent session state); stale_at is when a pending
+	// or active session goes stale without agent activity (agentTaskStaleAt).
+	for _, column := range []string{"created_at", "merged_at", "stale_at"} {
 		if _, err := s.db.ExecContext(ctx, `ALTER TABLE application_agent_tasks ADD COLUMN `+column+` VARCHAR(64) NOT NULL DEFAULT ''`); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") && !strings.Contains(strings.ToLower(err.Error()), "already exists") {
 			return err
 		}

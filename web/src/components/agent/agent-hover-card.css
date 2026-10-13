@@ -1,0 +1,68 @@
+/* The hover card an agent row opens in assignee pickers: the reference app's 193px card (6px padding, 4px inner). */
+html:root body .agent-hover-surface {
+  box-sizing: border-box;
+  width: 193px;
+  padding: 6px;
+  border: .5px solid var(--pk-border);
+  border-radius: 8px;
+  background: var(--pk-surface);
+  box-shadow: var(--pk-card-shadow);
+  color: var(--pk-text);
+}
+.agent-hover-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px;
+}
+.agent-hover-card__avatar {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--avatar, var(--avatar-fallback));
+  color: var(--on-accent);
+  font: 450 13px/1 var(--font);
+}
+.agent-hover-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.agent-hover-card__name {
+  overflow: hidden;
+  color: var(--pk-text-strong);
+  font: 500 13px/normal var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-hover-card__meta {
+  height: 16px;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+.agent-hover-card__handle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pk-muted);
+  font: 450 12px/normal var(--font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-hover-card__pill {
+  box-sizing: border-box;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  padding: 2px 6px;
+  border: .5px solid var(--pk-pill-border);
+  border-radius: 6px;
+  color: var(--pk-muted);
+  font: 500 11px/16px var(--font);
+}

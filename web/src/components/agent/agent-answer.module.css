@@ -17,9 +17,9 @@ a.entityMissing:hover{color:var(--theme-text-secondary)}
 .labelDot{display:inline-block;width:9px;height:9px;margin:0 3px;border-radius:50%;vertical-align:0}
 .updateGlyph{color:var(--theme-text-secondary)}
 /* The reference app's referenced-issues list: one bordered 8px container, 32px rows on a shared grid (priority, id, status, title, assignee). */
-.references{align-self:stretch;display:grid;grid-template-columns:16px max-content 16px minmax(0,1fr) 16px;column-gap:6px;margin:8px 0 0;padding:4px;border:.5px solid var(--theme-border);border-radius:8px;list-style:none}
+.references{align-self:stretch;display:grid;grid-template-columns:14px max-content 14px minmax(0,1fr) 16px;column-gap:6px;margin:12px 0 0;padding:4px;border:.5px solid var(--agent-chip-border);border-radius:8px;list-style:none}
 .references li{display:contents}
-a.referenceRow{grid-column:1/-1;height:32px;display:grid;grid-template-columns:subgrid;column-gap:6px;align-items:center;padding:0 8px;border-radius:6px;color:var(--text);font-size:12px;font-weight:450;text-decoration:none;white-space:nowrap}
+a.referenceRow{grid-column:1/-1;height:32px;display:grid;grid-template-columns:subgrid;column-gap:6px;align-items:center;padding:0 10px;border-radius:6px;color:var(--text);font-size:12px;font-weight:450;text-decoration:none;white-space:nowrap}
 a.referenceRow:hover,a.referenceRow:focus-visible{background:var(--theme-surface-hover);outline:0}
 a.referenceRow:focus-visible{outline:2px solid var(--focus-ring);outline-offset:-2px}
 .referenceTitle{min-width:0;overflow:hidden;color:var(--text);font-weight:500;text-overflow:ellipsis}
@@ -34,13 +34,24 @@ a.referenceCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset
 .dim{color:var(--theme-text-secondary)}
 .referenceCardMeta{display:flex;flex-direction:column;gap:8px}
 .referenceCardRow{display:flex;align-items:center;gap:8px;min-width:0}
-.suggestions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.suggestion{height:28px;display:inline-flex;align-items:center;max-width:100%;padding:0 10px;border:.5px solid var(--theme-border);border-radius:9999px;background:transparent;color:var(--text);font:500 12px/16px var(--font);text-align:left;cursor:pointer}
-.suggestion:hover:not(:disabled),.suggestion:focus-visible{background:var(--theme-surface-hover);outline:0}
-.suggestion:disabled{opacity:.5;cursor:default}
 /* Inside an editor the generic link style (blue, underlined) must not leak into the chip. */
 :global(.ProseMirror) a.entityChip[data-agent-entity]{color:var(--theme-text-primary);text-decoration:none}
 :global(.ProseMirror) a.entityChip[data-agent-entity]:hover{text-decoration:none}
 :global(.ProseMirror) a.entityMention[data-agent-entity]{color:var(--text)}
 :global(.ProseMirror) a.entityMention[data-agent-entity]:hover{text-decoration:underline}
 :global(.ProseMirror) a.entityMissing[data-agent-entity]{color:var(--theme-text-tertiary);text-decoration:line-through}
+/* The reference app's option pills ("Choose an option"): 32px pills 6px apart, 10px in, 2px above and below; the chosen one keeps a check. */
+.choices{align-self:stretch;margin-top:12px;padding:2px 0}
+.choiceGroup{display:flex;flex-wrap:wrap;gap:6px}
+.choice{height:32px;display:inline-flex;max-width:100%;padding:0;border:.5px solid transparent;border-radius:9999px;background:var(--agent-send-bg);color:var(--agent-thread-text);font:500 13px/normal var(--font);text-align:left;cursor:default;transition:background-color .15s,color .15s,opacity .15s}
+.choiceLabel{min-width:0;display:flex;align-items:center;padding:0 12px;border-radius:9999px;font-weight:450}
+.choiceLabel>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.choiceCheck{width:0;height:14px;display:inline-flex;align-items:center;overflow:visible;opacity:0;color:var(--agent-thread-muted)}
+.choiceCheck svg{flex:none;margin-left:6px}
+.choice[data-selected] .choiceCheck{width:20px;opacity:1}
+.choice:hover:not(:disabled),.choice:focus-visible{background:var(--agent-send-hover-bg);outline:0}
+.choice:disabled:not([data-selected]){opacity:.5}
+.references .entityIdentifier{color:var(--agent-thread-muted);letter-spacing:-.24px}
+.references a.referenceRow>svg:first-child{width:14px;height:14px}
+.references a.referenceRow>svg:nth-child(3){width:14px;height:14px}
+.references a.referenceRow>:last-child{color:var(--agent-action-icon)}

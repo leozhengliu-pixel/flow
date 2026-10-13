@@ -18,7 +18,8 @@
 [data-flow-motion="backdrop"] { animation: flow-fade-enter 150ms ease-out both !important; }
 [data-flow-motion="backdrop"][data-state="closed"] { animation: flow-fade-exit 200ms ease-out both !important; pointer-events: none; }
 [data-flow-motion="tooltip"] { animation: flow-floating-enter 150ms ease-out both !important; transform-origin: var(--radix-popper-transform-origin, center); }
-[data-flow-motion="tooltip"][data-state="closed"] { animation: flow-floating-exit 100ms ease-out both !important; }
+/* Tooltips close at once, like the reference (no exit animation). */
+[data-flow-motion="tooltip"][data-state="closed"] { animation: none !important; }
 
 [data-flow-motion="create"] {
   animation: flow-create-enter var(--flow-create-enter-duration,300ms) var(--flow-surface-ease) both !important;

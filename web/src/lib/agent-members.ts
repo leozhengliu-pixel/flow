@@ -1,7 +1,17 @@
 import type { Issue, User } from '@/types/flow'
 
-/** Agents get their own section in assignee pickers (the reference app lists them after people with an "Agent" badge). */
-export const AGENT_OPTION_GROUP = { groupId: 'agents', groupLabel: 'Agents' } as const
+/** The "Invite and assign…" action row of an assignee picker (the reference app lists it under a "New user" label). */
+export const ASSIGNEE_INVITE_ID = '__invite-assignee__'
+
+/** Number keys 1-9 pick rows of an assignee picker; "No assignee" is 0 and rows past 9 have no key. */
+export function assigneeShortcut(position: number) {
+  return position >= 0 && position <= 9 ? String(position) : undefined
+}
+
+/** Guests may be barred from agents by the workspace (`preventGuestAgents`); then no picker offers them. */
+export function agentsAvailable(data: { viewerRole?: string; workspaceSettings?: { preventGuestAgents?: boolean } }) {
+  return !(data.viewerRole === 'guest' && data.workspaceSettings?.preventGuestAgents)
+}
 
 /** An agent member that accepts delegation, optionally in a given team (server: `User.CanDelegateTo`). */
 export function isAssignableAgent(user: Pick<User, 'app' | 'active' | 'appScopes' | 'appTeamIds'>, teamId?: string) {
@@ -19,8 +29,8 @@ export function assigneeUpdate(id: string): { assigneeId: string } | { delegateI
 }
 
 /** People for an assignee picker: humans, then the agents that can take the issue's team. */
-export function assigneeCandidates(users: User[], teamId?: string) {
-  return [...users.filter(user => !user.app), ...users.filter(user => isAssignableAgent(user, teamId))]
+export function assigneeCandidates(users: User[], teamId?: string, { agents = true }: { agents?: boolean } = {}) {
+  return [...users.filter(user => !user.app), ...(agents ? users.filter(user => isAssignableAgent(user, teamId)) : [])]
 }
 
 export type AgentSessionState = NonNullable<Issue['agentSessionState']>
@@ -28,13 +38,15 @@ export type AgentSessionState = NonNullable<Issue['agentSessionState']>
 /**
  * The reference app's Agent Session filter values mapped onto Flow session states (values are `state:<id>`):
  * Active (pending, working or awaiting input), Error, Dismissed (canceled) and Merged (a pull request
- * linked to the issue merged; the server reports it over the task status).
+ * linked to the issue merged; the server reports it over the task status), plus Stale: an agent silent for
+ * 30 minutes while pending or working (the agent interaction guidelines' "stale" session state).
  */
 export const AGENT_SESSION_STATE_FILTERS: { id: string; label: string; glyph: 'agentSessionActive' | 'agentSessionError' | 'agentSessionDismissed' | 'agentSessionMerged'; states: AgentSessionState[] }[] = [
   { id: 'state:active', label: 'Active', glyph: 'agentSessionActive', states: ['pending', 'active', 'awaitingInput'] },
   { id: 'state:error', label: 'Error', glyph: 'agentSessionError', states: ['error'] },
   { id: 'state:canceled', label: 'Dismissed', glyph: 'agentSessionDismissed', states: ['canceled'] },
   { id: 'state:merged', label: 'Merged', glyph: 'agentSessionMerged', states: ['merged'] },
+  { id: 'state:stale', label: 'Stale', glyph: 'agentSessionDismissed', states: ['stale'] },
 ]
 
 /** Values saved by earlier Flow versions: "Awaiting input" is now part of Active; "Complete" has no the reference app equivalent. */

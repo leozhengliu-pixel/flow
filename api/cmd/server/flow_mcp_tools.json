@@ -58,6 +58,18 @@
     }
   },
   {
+    "name": "mcp__flow.delete_initiative",
+    "access": "write",
+    "description": "Delete a Flow initiative. It moves to the workspace trash for 30 days, where it can be restored with its updates; its projects and sub-initiatives are kept but unlinked from it (restoring may not link them again). The receipt's `affected` counts linked projects, sub-initiatives and updates.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Initiative ID, name, or slug" }
+      }
+    }
+  },
+  {
     "name": "mcp__flow.create_initiative_label",
     "access": "write",
     "description": "Create a new Flow initiative label",
@@ -132,6 +144,18 @@
         "summary": { "type": "string" },
         "targetDate": { "type": "string" },
         "targetDateResolution": { "type": "string", "enum": ["halfYear", "month", "quarter", "year"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_project",
+    "access": "write",
+    "description": "Delete a Flow project. It moves to the workspace trash for 30 days, where it can be restored (Team settings › Archive › Recently deleted projects). Its issues are kept but removed from the project (restoring does not add them back); milestones and updates are restored with it. The receipt's `affected` counts issues, milestones and updates. Only use when the user asked to delete it.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Project ID, name, or slug" }
       }
     }
   },
@@ -353,6 +377,22 @@
       "properties": {
         "teamId": { "type": "string", "description": "Team ID" },
         "type": { "type": "string", "description": "Filter: current, previous, next, or all", "enum": ["current", "previous", "next"] }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_cycle",
+    "access": "write",
+    "description": "Edit a team's cycle: rename it, set its description, or add links. Cycles cannot be created or scheduled here: teams generate them from their cycle settings (Team settings › Cycles), so explain that when asked to create one.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Cycle ID, number (e.g. 12), or name; or current, next, previous with `team`" },
+        "team": { "type": "string", "description": "Team ID, key, or name (needed for numbers shared by several teams and for current/next/previous)" },
+        "name": { "type": "string", "description": "New cycle name" },
+        "description": { "type": ["string", "null"], "description": "Cycle description; null to clear" },
+        "links": { "type": "array", "description": "Links to add to the cycle", "items": { "type": "object", "required": ["url"], "properties": { "url": { "type": "string" }, "title": { "type": "string" }}}}
       }
     }
   },
@@ -934,6 +974,81 @@
     }
   },
   {
+    "name": "mcp__flow.get_customer",
+    "access": "read",
+    "description": "Retrieve a customer with status, tier, owner, domains, revenue, size, and its customer requests (needs) with the linked issue or project.",
+    "input_schema": {
+      "type": "object",
+      "required": ["query"],
+      "properties": {
+        "query": { "type": "string", "description": "Customer ID, name, domain, or external ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_customer",
+    "access": "write",
+    "description": "Create or update a customer. If `id` is provided, updates that customer; otherwise creates one (`name` required). Status and tier accept the workspace's status and tier names. Fields left out or empty are unchanged; pass null to clear owner, tier, revenue, size, domains or external IDs.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": { "type": "string", "description": "Customer ID, name, or domain to update. Omit to create." },
+        "name": { "type": "string", "description": "Customer name" },
+        "domains": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Domains that identify the customer (e.g. acme.com); replaces the current list" },
+        "externalIds": { "type": ["array", "null"], "items": { "type": "string" }, "description": "IDs of the customer in other systems (CRM, support desk); replaces the current list" },
+        "owner": { "type": ["string", "null"], "description": "Customer owner: user name, email, ID, or \"me\"; null to clear" },
+        "status": { "type": "string", "description": "Customer status name (e.g. Active, Prospect, Churned)" },
+        "tier": { "type": ["string", "null"], "description": "Customer tier name; null to clear" },
+        "annualRevenue": { "type": ["number", "null"], "minimum": 0, "description": "Annual revenue in the workspace currency" },
+        "size": { "type": ["integer", "null"], "minimum": 0, "description": "Company size (number of employees)" },
+        "logoUrl": { "type": "string", "description": "Logo image URL" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.save_customer_request",
+    "access": "write",
+    "description": "Log or update a customer request (a customer need): what a customer asked for, linked to an issue or a project. Without `id`, logs a new request (`customer` and `issue` or `project` required; create a missing customer with save_customer first). `important` marks it as important.",
+    "input_schema": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "id": { "type": "string", "description": "Customer request ID to update. Omit to log a new request." },
+        "customer": { "type": "string", "description": "Customer ID, name, domain, or external ID" },
+        "body": { "type": "string", "description": "What the customer needs, as Markdown" },
+        "issue": { "type": ["string", "null"], "description": "Issue ID or identifier (e.g., ENG-123) the request is about; null to unlink" },
+        "project": { "type": ["string", "null"], "description": "Project ID, name, or slug, for a request about a project rather than an issue; null to unlink" },
+        "important": { "type": "boolean", "description": "Mark the request as important" },
+        "sourceUrl": { "type": "string", "description": "Link to where the request came from (support ticket, call notes)" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_customer",
+    "access": "write",
+    "description": "Delete a customer. It moves to the workspace trash for 30 days and can be restored; its customer requests are deleted with it and are not restored (the receipt's `affected.requests` counts them).",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Customer ID, name, domain, or external ID" }
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_customer_request",
+    "access": "write",
+    "description": "Delete a customer request. It moves to the workspace trash for 30 days and can be restored.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Customer request ID (from get_customer or list_customers)" }
+      }
+    }
+  },
+  {
     "name": "mcp__flow.save_status_update",
     "access": "write",
     "description": "Create or update a project or initiative status update. If `id` is provided, updates that update (only its author or an admin may); otherwise posts a new update, which also sets the project's or initiative's health.",
@@ -1069,6 +1184,18 @@
         "layout": {"type": "string", "description": "Issue set shown", "enum": ["all", "active", "backlog"]},
         "filters": {"type": "array", "items": {"type": "object", "required": ["field", "values"], "properties": {"field": {"type": "string", "enum": ["addedToCycle", "agent", "agentSession", "assignee", "autoClosed", "content", "creator", "customers", "cycle", "dates", "externalSource", "initiative", "labels", "links", "priority", "project", "projectMilestone", "projectProperties", "relations", "releases", "status", "subscribers", "suggestedLabel", "template"]}, "operator": {"type": "string", "enum": ["is", "isNot", "includesAll", "excludesAll"], "description": "includesAll / excludesAll (labels only): the issue has all / not all of the values"}, "values": {"type": "array", "items": {"type": "string"}}}}, "description": "Filters, combined with AND"}, "advancedFilters": {"type": "array", "description": "Advanced filters: each is a group {conjunction: \"and\"|\"or\", items: [condition {field, operator, values} | nested group]}, at most three levels deep; each group is ANDed with the other filters. Omit to keep the view's existing advanced filters.", "items": {"type": "object", "properties": {"conjunction": {"type": "string", "enum": ["and", "or"]}, "items": {"type": "array", "items": {"type": "object"}}}}},
         "shared": {"type": "boolean", "description": "Create (true) or revoke (false) the view's public share link"}
+      }
+    }
+  },
+  {
+    "name": "mcp__flow.delete_view",
+    "access": "write",
+    "description": "Delete a saved (custom) view. Views are deleted permanently: Flow cannot restore them. Personal views of other people cannot be deleted.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "View ID, slug, or name" }
       }
     }
   },
@@ -1311,5 +1438,30 @@
       }
     }
   },
-  {"name": "mcp__flow.save_loop", "access": "write", "description": "Create or update a Flow loop (an automation the agent runs on a schedule or when issues, projects, initiatives, releases, teams, or cycles change). Without `id` it creates a draft (`name` or `templateId` required); pass `publish: true` (or `status: \"published\"`) to create or publish it, which also enables it. Schedules use `interval`/`unit`/`time`/`startDate`/`weekdays`/`timezone`; event triggers use `event`, optional `value` (what the property was set to; null = none), `teams`, and `filters`. `instructions` is the prompt the agent follows on every run.", "input_schema": {"type": "object", "required": [], "properties": {"id": {"type": "string", "description": "Loop ID or name to update. Omit to create a draft."}, "name": {"type": "string", "description": "Loop name"}, "description": {"type": "string", "description": "One-line summary; generated automatically when omitted"}, "instructions": {"type": "string", "description": "What the agent should do on each run"}, "templateId": {"type": "string", "description": "Start a new draft from a template", "enum": ["autofix-bugs", "triage-agent", "slack-qa", "weekly-wrap", "feature-request-report", "security-alerts"]}, "status": {"type": "string", "description": "draft or published; a published loop cannot return to draft", "enum": ["draft", "published"]}, "publish": {"type": "boolean", "description": "Publish (create) the loop and enable it"}, "trigger": {"type": "string", "description": "When the loop runs", "enum": ["schedule", "issue", "project", "initiative", "release", "team", "cycle"]}, "interval": {"type": "integer", "minimum": 1, "maximum": 30, "description": "schedule: every N units"}, "unit": {"type": "string", "description": "schedule: interval unit", "enum": ["hour", "day", "week", "month"]}, "time": {"type": "string", "description": "schedule: time of day HH:MM"}, "startDate": {"type": "string", "description": "schedule: first run date YYYY-MM-DD"}, "weekdays": {"type": "array", "items": {"type": "string", "enum": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]}, "description": "schedule: only run on these weekdays (day or week units)"}, "timezone": {"type": "string", "description": "schedule: IANA timezone (defaults to UTC)"}, "event": {"type": "string", "description": "event triggers: issue: created, updated, triage (enters triage), status, priority, assignee, agent, project, team, labels, comment, customerRequest; project/initiative: created, updated, status, update; release: created, updated, status; team: created, updated; cycle: created, started, completed", "enum": ["created", "updated", "triage", "status", "priority", "assignee", "agent", "project", "team", "labels", "comment", "customerRequest", "update", "started", "completed"]}, "value": {"type": ["string", "null"], "description": "event triggers: the value the property changed to (status name, priority 0-4 or label, person, project, team, label name); \"any\" or omitted for any; null for none (No assignee)"}, "teams": {"type": "array", "items": {"type": "string"}, "description": "Event triggers: only react to these teams (ID, key, or name); empty for all. Schedules: with teamAccess \"selected\", the teams whose data the loop may use."}, "filters": {"type": "array", "description": "event triggers: extra conditions on the issue", "items": {"type": "object", "required": ["field", "value"], "properties": {"field": {"type": "string", "enum": ["status", "priority", "assignee", "label", "project", "team", "creator"]}, "operator": {"type": "string", "enum": ["is", "isNot"]}, "value": {"type": ["string", "null"], "description": "null = none (No assignee / No project)"}}}}, "action": {"type": "string", "description": "deprecated: use event", "enum": ["created", "created or updated"]}, "level": {"type": "string", "description": "Loop level", "enum": ["workspace", "team"]}, "team": {"type": "string", "description": "Owning team for team-level loops (ID, key, or name)"}, "teamAccess": {"type": "string", "description": "Teams the loop may touch", "enum": ["allPublic", "selected"]}, "allowChangesOutsideTrigger": {"type": "boolean", "description": "Allow the loop to change resources other than the one that triggered it"}, "allowExternalSync": {"type": "boolean", "description": "Allow changes to issues and comments synced from other tools"}, "webSearch": {"type": "boolean", "description": "Allow web search"}, "codeAccess": {"type": "string", "description": "Code access", "enum": ["disabled", "read", "readWrite"]}, "owner": {"type": "string", "description": "User the loop runs as (name, email, ID, or \"me\")"}, "icon": {"type": "string", "description": "Icon name"}, "color": {"type": "string", "description": "Color as #RRGGBB"}, "enabled": {"type": "boolean", "description": "Whether a published loop runs"}}}}
+  {
+    "name": "mcp__flow.delete_agent_skill",
+    "access": "write",
+    "description": "Delete a Flow Agent skill permanently (skills cannot be restored). Without `team`, deletes one of the viewer's personal skills; with `team`, removes a team skill from that team's settings (team settings permission applies).",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Skill ID or name" },
+        "team": { "type": "string", "description": "Team ID, key, or name for a team skill" }
+      }
+    }
+  },
+  {"name": "mcp__flow.save_loop", "access": "write", "description": "Create or update a Flow loop (an automation the agent runs on a schedule or when issues, projects, initiatives, releases, teams, or cycles change). Without `id` it creates a draft (`name` or `templateId` required); pass `publish: true` (or `status: \"published\"`) to create or publish it, which also enables it. Schedules use `interval`/`unit`/`time`/`startDate`/`weekdays`/`timezone`; event triggers use `event`, optional `value` (what the property was set to; null = none), `teams`, and `filters`. `instructions` is the prompt the agent follows on every run.", "input_schema": {"type": "object", "required": [], "properties": {"id": {"type": "string", "description": "Loop ID or name to update. Omit to create a draft."}, "name": {"type": "string", "description": "Loop name"}, "description": {"type": "string", "description": "One-line summary; generated automatically when omitted"}, "instructions": {"type": "string", "description": "What the agent should do on each run"}, "templateId": {"type": "string", "description": "Start a new draft from a template", "enum": ["autofix-bugs", "triage-agent", "slack-qa", "weekly-wrap", "feature-request-report", "security-alerts"]}, "status": {"type": "string", "description": "draft or published; a published loop cannot return to draft", "enum": ["draft", "published"]}, "publish": {"type": "boolean", "description": "Publish (create) the loop and enable it"}, "trigger": {"type": "string", "description": "When the loop runs", "enum": ["schedule", "issue", "project", "initiative", "release", "team", "cycle"]}, "interval": {"type": "integer", "minimum": 1, "maximum": 30, "description": "schedule: every N units"}, "unit": {"type": "string", "description": "schedule: interval unit", "enum": ["hour", "day", "week", "month"]}, "time": {"type": "string", "description": "schedule: time of day HH:MM"}, "startDate": {"type": "string", "description": "schedule: first run date YYYY-MM-DD"}, "weekdays": {"type": "array", "items": {"type": "string", "enum": ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]}, "description": "schedule: only run on these weekdays (day or week units)"}, "timezone": {"type": "string", "description": "schedule: IANA timezone (defaults to UTC)"}, "event": {"type": "string", "description": "event triggers: issue: created, updated, triage (enters triage), status, priority, assignee, agent, project, team, labels, comment, customerRequest; project/initiative: created, updated, status, update; release: created, updated, status; team: created, updated; cycle: created, started, completed", "enum": ["created", "updated", "triage", "status", "priority", "assignee", "agent", "project", "team", "labels", "comment", "customerRequest", "update", "started", "completed"]}, "value": {"type": ["string", "null"], "description": "event triggers: the value the property changed to (status name, priority 0-4 or label, person, project, team, label name); \"any\" or omitted for any; null for none (No assignee)"}, "teams": {"type": "array", "items": {"type": "string"}, "description": "Event triggers: only react to these teams (ID, key, or name); empty for all. Schedules: with teamAccess \"selected\", the teams whose data the loop may use."}, "filters": {"type": "array", "description": "event triggers: extra conditions on the issue", "items": {"type": "object", "required": ["field", "value"], "properties": {"field": {"type": "string", "enum": ["status", "priority", "assignee", "label", "project", "team", "creator"]}, "operator": {"type": "string", "enum": ["is", "isNot"]}, "value": {"type": ["string", "null"], "description": "null = none (No assignee / No project)"}}}}, "action": {"type": "string", "description": "deprecated: use event", "enum": ["created", "created or updated"]}, "level": {"type": "string", "description": "Loop level", "enum": ["workspace", "team"]}, "team": {"type": "string", "description": "Owning team for team-level loops (ID, key, or name)"}, "teamAccess": {"type": "string", "description": "Teams the loop may touch", "enum": ["allPublic", "selected"]}, "allowChangesOutsideTrigger": {"type": "boolean", "description": "Allow the loop to change resources other than the one that triggered it"}, "allowExternalSync": {"type": "boolean", "description": "Allow changes to issues and comments synced from other tools"}, "webSearch": {"type": "boolean", "description": "Allow web search"}, "codeAccess": {"type": "string", "description": "Code access", "enum": ["disabled", "read", "readWrite"]}, "owner": {"type": "string", "description": "User the loop runs as (name, email, ID, or \"me\")"}, "icon": {"type": "string", "description": "Icon name"}, "color": {"type": "string", "description": "Color as #RRGGBB"}, "enabled": {"type": "boolean", "description": "Whether a published loop runs"}}}},
+  {
+    "name": "mcp__flow.delete_loop",
+    "access": "write",
+    "description": "Delete a Flow loop (automation). The loop moves to the workspace trash for 30 days and can be restored; its run history and saved versions are deleted with it. Only the loop's editors can delete it.",
+    "input_schema": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "description": "Loop ID or name" }
+      }
+    }
+  }
 ]

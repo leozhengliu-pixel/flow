@@ -5,7 +5,7 @@ import type { AgentMessage } from '@/types/flow'
 import { AgentErrorDetail, classifyAgentError } from './agent-error-detail'
 import { AgentWorkGroup } from './agent-work-group'
 import { applyAgentStreamEvent } from './agent-stream-state'
-import { translatePhaseTitle, workingLabel } from './agent-step-labels'
+import { toolStatusLabel, translatePhaseTitle, workingLabel } from './agent-step-labels'
 import { translateToChinese } from '@/i18n/translate'
 
 type Parts = NonNullable<AgentMessage['parts']>
@@ -18,9 +18,40 @@ function renderGroup(parts: Parts, locale: 'en-US' | 'zh-CN' = 'en-US') {
 afterEach(() => localStorage.removeItem('flow:locale'))
 
 describe('AgentWorkGroup', () => {
+  it('hides raw provider reasoning, also in older chats, but keeps the agent\'s own narration and step labels', () => {
+    const { container } = renderGroup([
+      { id: 'agent_message_1_reasoning', type: 'reasoning', text: 'Figuring out query filters — I need to look into the priority filter', status: 'completed' },
+      { id: 'agent_message_1_narration_0', type: 'reasoning', text: '我先查看相关事项。', status: 'completed' },
+      { id: 't1', type: 'toolCall', status: 'completed', toolCall: { id: 't1', name: 'search_issues', arguments: { query: 'export' }, status: 'completed' } },
+    ], 'zh-CN')
+    expect(container.textContent).not.toContain('Figuring out')
+    expect(container.textContent).toContain('我先查看相关事项。')
+    expect(container.textContent).toContain('已搜索事项')
+  })
+
+  it('labels a save_* call as an update when it has an id, and neutrally while its arguments stream in', () => {
+    expect(toolStatusLabel('save_project', true, translateToChinese, { id: 'project_1', name: 'Export' })).toBe('正在更新项目…')
+    expect(toolStatusLabel('save_project', true, translateToChinese, { name: 'Export' })).toBe('正在创建项目…')
+    expect(toolStatusLabel('save_project', true, translateToChinese, undefined, true)).toBe('正在保存项目…')
+    expect(toolStatusLabel('save_project', false, translateToChinese, { id: 'project_1' })).toBe('已更新项目')
+    expect(toolStatusLabel('save_milestone', false, translateToChinese, { id: 'm1' })).toBe('已更新里程碑')
+  })
+
+  it('shows nothing for a finished reply whose only work was provider reasoning', () => {
+    const { container } = renderGroup([{ id: 'agent_message_1_reasoning', type: 'reasoning', text: 'Thinking about it', status: 'completed' }])
+    expect(container.querySelector('details')).toBeNull()
+  })
+
+  it('translates the result of a step a stopped reply never finished', () => {
+    const { container } = renderGroup([
+      { id: 't1', type: 'toolCall', status: 'error', toolCall: { id: 't1', name: 'list_issues', status: 'error', error: 'Stopped before this step finished.' } },
+    ], 'zh-CN')
+    expect(container.textContent).toContain('此步骤完成前已停止。')
+  })
+
   it('renders reasoning and step narration as markdown, without literal asterisks', async () => {
     const { container } = renderGroup([
-      { id: 'reasoning', type: 'reasoning', text: '**Planning** the work', status: 'completed' },
+      { id: 'msg_narration_0', type: 'reasoning', text: '**Planning** the work', status: 'completed' },
       { id: 'step', type: 'step', title: 'Reviewing issues', text: 'Check the _open_ issues first', status: 'completed' },
     ])
     container.querySelector('details')!.open = true

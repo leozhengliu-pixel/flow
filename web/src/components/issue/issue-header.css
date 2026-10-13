@@ -18,6 +18,8 @@
 .issue-header-icon > svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
 .issue-header-icon:hover, .issue-header-icon[data-state=open] { background: var(--issue-header-hover-bg); }
 .issue-header-icon:hover > svg, .issue-header-icon[data-state=open] > svg, .issue-header-icon[aria-checked=true] > svg { color: var(--issue-header-icon-hover); }
+/* A favorited issue: the reference's filled yellow star, at rest and on hover. */
+.issue-header-icon > svg.issue-header-favorite-filled { color: var(--issue-header-favorite); }
 .issue-header-icon:focus-visible, .issue-sequence-buttons button:focus-visible, .issue-command-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .issue-header > .save-state { margin-left: 8px; }
 
@@ -91,9 +93,3 @@
   .issue-header .issue-sequence, .issue-header .issue-command-strip { display: none; }
 }
 
-/* Header tooltips (copy / work / navigation): the reference app's tooltip with bordered key caps. */
-.flow-tooltip-content.issue-header-tooltip { height: 27.5px; min-height: 27.5px; gap: 8px; border-color: var(--work-menu-border); background: var(--work-menu-bg); color: var(--work-menu-text); font: 450 11px/16.5px var(--font); }
-.issue-header-tooltip .flow-tooltip-shortcut { display: inline-flex; align-items: center; gap: 3px; color: var(--work-menu-muted); font: 400 11px/12.1px var(--font); }
-.issue-header-keys { display: inline-flex; align-items: center; gap: 3px; }
-.issue-header-keys kbd { height: 17.1px; min-width: 18px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--work-menu-separator); border-radius: 4px; color: var(--work-menu-muted); font: 400 11px/12.1px var(--font); }
-.issue-header-keys-then { color: var(--work-menu-muted); font: 450 10px/16.5px var(--font); }

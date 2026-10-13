@@ -1,13 +1,7 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Popover from "@radix-ui/react-popover";
-import {
-  AlertCircle,
-  Copy,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 import {
   deleteAgentSession,
   fetchAgentStatus,
@@ -18,7 +12,7 @@ import {
 } from "@/lib/api";
 import { streamAgentSessionMessage, streamAgentSessionMessageEdit, streamNewAgentSession, type AgentStreamEvent } from "@/lib/agent-stream";
 import { agentPath } from "@/lib/app-routes";
-import type { AgentMessage, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
+import type { AgentMessage, AgentMessagePart, AgentSession, AgentStatus, AgentToolCall, BootstrapData, Project } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { usePropertyCommand } from "@/components/property/use-property-command";
 import {
@@ -33,8 +27,11 @@ import { HealthGlyph } from "@/components/project-detail/health-glyph";
 import { healthColor } from "@/components/project-detail/health-color";
 import { splitAgentDraft } from "./agent-draft";
 import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from "./agent-answer";
+import { AgentChangeCards } from "./agent-change-cards";
+import { agentChangeEntityKeys } from "./agent-change-model";
 import { parseAgentAnswer, splitAgentSuggestions } from "./agent-answer-content";
 import { AgentWorkGroup } from "./agent-work-group";
+import { AgentQuestionPrompt } from "./agent-approval-question";
 import { formatAgentTime, shouldShowAgentTime } from "./agent-time";
 import { clearAgentDraft, readAgentDraft, writeAgentDraft } from "./agent-drafts";
 import styles from "./agent-page.module.css";
@@ -56,7 +53,11 @@ import { AgentHistoryList } from './agent-history-list';
 import { AgentErrorDetail } from './agent-error-detail';
 import { agentSessionUnread, formatAgentHistoryTime, groupAgentHistory, useMarkAgentSessionRead } from './agent-read-state';
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
-import { AgentCopyGlyph, AgentToolbarGlyph } from '@/components/ui/agent-glyph'
+import { ScopedFlowTooltip as FlowTooltip } from '@/components/ui/tooltip'
+import { AgentToolbarGlyph } from '@/components/ui/agent-glyph'
+import { AgentReplyActions, AgentSessionFeedbackDialog, AgentUserMessageActions } from './agent-message-actions'
+import { toast } from '@/lib/toast'
+import { AGENT_PAGE_ASK_EVENT, type AgentPageAskDetail } from './agent-ask-request'
 
 export function AgentPage({
   chatSlug,
@@ -87,7 +88,10 @@ export function AgentPage({
     [activeStreamId, setActiveStreamId] = useState<string>(),
     // The message just sent, shown with a working indicator until the server's stream catches up.
     [pending, setPending] = useState<AgentSession>(),
-    [attachments, setAttachments] = useState<File[]>([]);
+    [attachments, setAttachments] = useState<File[]>([]),
+    [awayFromLatest, setAwayFromLatest] = useState(false),
+    [sessionFeedbackOpen, setSessionFeedbackOpen] = useState(false);
+  const scrollToLatestRef = useRef<(() => void) | undefined>(undefined);
   const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const streamAbortRef = useRef<AbortController | undefined>(undefined);
@@ -152,8 +156,9 @@ export function AgentPage({
     return asPersistedConversation(currentSummary, async (id) => {
       const full = await getAgentSession(id);
       hydratedIdsRef.current.add(id);
+      // A reply streamed meanwhile (an answer sent right after opening) is newer than this read: keep it.
       setSessions((list) =>
-        list.map((item) => (item.id === full.id ? full : item)),
+        list.map((item) => (item.id === full.id && Date.parse(full.updatedAt) >= Date.parse(item.updatedAt) ? full : item)),
       );
       return full;
     });
@@ -239,14 +244,15 @@ export function AgentPage({
    * Sends `message`, or with `retryOf` runs the user message that already failed again: the server keeps that message,
    * drops the failed reply after it and answers again, so the chat never gets a second copy of the question.
    */
-  const send = async (message = input, retryOf?: AgentMessage) => {
+  const send = async (message = input, retryOf?: AgentMessage, answer?: { partId: string; value: string }) => {
     message = message.trim();
     if (!message || replyRunning || !status?.enabled) return;
     const retrying = Boolean(retryOf && current);
     setBusy(true);
     setError(undefined);
     // The reference app shows the sent message and its working state at once; the stream replaces this copy when it starts.
-    setPending(optimisticAgentTurn(current, message, retrying ? retryOf!.id : editingId, retrying ? retryOf!.mentions : mentions));
+    // Picking a question's option shows it as the chosen pill straight away, not as a message bubble.
+    setPending(optimisticAgentTurn(current, message, retrying ? retryOf!.id : editingId, retrying ? retryOf!.mentions : mentions, answer));
     let streamed = current, started = false, failedInChat = false;
     try {
       // A retry resends the saved message as it is (attachment text included), leaving the composer alone.
@@ -288,9 +294,10 @@ export function AgentPage({
         documentIds: mentions.filter((item) => item.type === "document").map((item) => item.id),
         userIds: mentions.filter((item) => item.type === "user").map((item) => item.id),
         mentions,
+        ...(answer ? { answer } : {}),
       };
       // The reference app clears the composer as soon as the message is sent; restore it below if sending fails.
-      if (!retrying) {
+      if (!retrying && !answer) {
         setMentions([]);
         writeInput("");
         setAttachments([]);
@@ -307,7 +314,7 @@ export function AgentPage({
       setPending(undefined);
       // When the server reported the failure it had already saved the question and its error row (shown with Retry),
       // so putting the text back in the composer would only invite a second copy of it.
-      if (!retrying && !failedInChat) writeInput(message);
+      if (!retrying && !answer && !failedInChat) writeInput(message);
       if (reason instanceof DOMException && reason.name === "AbortError") {
         // Keep the stopped chat (the server already saved the message) in the workspace data too.
         if (started && streamed) saveSession(markAgentSessionStopped(streamed));
@@ -329,6 +336,17 @@ export function AgentPage({
       requestAnimationFrame(() => editorRef.current?.focus());
     }
   };
+  // ⌘K "Ask Flow" (Tab) on this page sends the typed question in the chat shown here.
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  useEffect(() => {
+    const ask = (event: Event) => {
+      const prompt = (event as CustomEvent<AgentPageAskDetail>).detail?.prompt;
+      if (prompt?.trim()) void sendRef.current(prompt);
+    };
+    window.addEventListener(AGENT_PAGE_ASK_EVENT, ask);
+    return () => window.removeEventListener(AGENT_PAGE_ASK_EVENT, ask);
+  }, []);
   const decideToolApproval = async (call: AgentToolCall | undefined, decision: "approve" | "reject") => {
     if (!current || !call?.approvalId || approvalBusy) return;
     setApprovalBusy(call.approvalId);
@@ -513,19 +531,24 @@ export function AgentPage({
                 >
                   <DropdownMenu.Item
                     onSelect={() =>
-                      void navigator.clipboard.writeText(markdown(current))
+                      void navigator.clipboard.writeText(markdown(current)).then(
+                        () => toast.info(t("Copied conversation"), { description: t("Conversation copied to clipboard as Markdown") }),
+                        () => toast.error(t("Could not copy to clipboard")),
+                      )
                     }
                   >
-                    <Copy />
-                    {t("Copy as markdown")}
+                    <FlowGlyph name="copy" />
+                    <span>{t("Copy as markdown")}</span>
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item onSelect={() => setSessionFeedbackOpen(true)}>
+                    <FlowGlyph name="thumbsDown" />
+                    <span>{t("Leave feedback…")}</span>
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
-                  <DropdownMenu.Item
-                    className={styles.danger}
-                    onSelect={() => setDeleteTarget(current)}
-                  >
-                    <Trash2 />
-                    {t("Delete")}
+                  <DropdownMenu.Item onSelect={() => setDeleteTarget(current)}>
+                    <FlowGlyph name="delete" />
+                    <span>{t("Delete")}</span>
+                    <span className={styles.menuShortcut} aria-label={t("Command Backspace")}><kbd>⌘</kbd><kbd>⌫</kbd></span>
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>
@@ -555,6 +578,7 @@ export function AgentPage({
             busy={replyRunning}
             data={data}
             onSuggestion={status?.enabled ? (message) => void send(message) : undefined}
+            onAnswer={status?.enabled ? (part, choice) => void send(choice.label, undefined, { partId: part.id, value: choice.value }) : undefined}
             draftProject={data.projects.find((project) => shown.projectIds?.includes(project.id))}
             draftContext={data.projects.find((project) => shown.projectIds?.includes(project.id))?.name ?? shown.title}
             session={shown}
@@ -562,6 +586,12 @@ export function AgentPage({
             onRetry={(message) => void send(message.content, message)}
             onToolApproval={decideToolApproval}
             approvalBusy={approvalBusy}
+            onSessionChange={(next) => {
+              setSessions((list) => list.map((item) => (item.id === next.id ? next : item)));
+              onSessionChange(next.id, next);
+            }}
+            onLatestChange={setAwayFromLatest}
+            latestRef={scrollToLatestRef}
             onEdit={(message) => {
               setEditingId(message.id);
               writeInput(message.content);
@@ -569,21 +599,6 @@ export function AgentPage({
             }}
           />
         ) : null}
-        {editingId && (
-          <div className={styles.editing}>
-            <span>{t("Editing message")}</span>
-            <button
-              aria-label={t("Cancel editing")}
-              onClick={() => {
-                setEditingId(undefined);
-                writeInput("");
-              }}
-              type="button"
-            >
-              <X />
-            </button>
-          </div>
-        )}
         {/* Before a chat starts, the reference app stacks its faint mark, the composer and the recent chats in one centred column. */}
         <div className={shown ? styles.stagePassthrough : styles.emptyStage}>
         <div className={shown ? styles.stagePassthrough : styles.emptyColumn}>
@@ -591,6 +606,7 @@ export function AgentPage({
         {!shown && <FlowLogo className={styles.emptyLogo} variant="outline" />}
         <div
           className={`${styles.composer}${shown ? ` ${styles.conversationComposer}` : ""}`}
+          data-editing={editingId ? "" : undefined}
           // The editor is one line tall inside a taller box: a press on the box's empty space focuses it too.
           onMouseDown={(event) => {
             const editor = editorRef.current;
@@ -601,6 +617,37 @@ export function AgentPage({
             placeCaretAtEnd(editor);
           }}
         >
+          {editingId && (
+            <div className={styles.editingBanner}>
+              <span>
+                <FlowGlyph name="edit" size={12} />
+                <span>{t("Editing message")}</span>
+              </span>
+              <FlowTooltip label={t("Cancel editing")} sideOffset={8}>
+                <button
+                  aria-label={t("Cancel editing")}
+                  onClick={() => {
+                    setEditingId(undefined);
+                    writeInput("");
+                  }}
+                  type="button"
+                >
+                  <FlowGlyph name="closeChat" size={14} />
+                </button>
+              </FlowTooltip>
+            </div>
+          )}
+          {shown && !editingId && awayFromLatest && (
+            <button
+              aria-label={t("Latest — Scroll to latest")}
+              className={styles.latestButton}
+              onClick={() => scrollToLatestRef.current?.()}
+              type="button"
+            >
+              <FlowGlyph name="arrowDown" size={14} />
+              <span>{t("Latest")}</span>
+            </button>
+          )}
           {attachments.length > 0 && (
             <div className={styles.attachments}>
               {attachments.map((file, index) => (
@@ -625,7 +672,7 @@ export function AgentPage({
               ariaLabel={t("Send a message to Flow AI")}
               data={data}
               disabled={replyRunning}
-              placeholder={shown ? t("Reply…") : t("Ask Flow…")}
+              placeholder={shown ? t(offersChoices(shown, replyRunning) ? "Something else…" : "Reply…") : t("Ask Flow…")}
               value={input}
               onChange={(value, next) => { setInput(value); setMentions(next); }}
               onSubmit={() => void send()}
@@ -689,6 +736,17 @@ export function AgentPage({
         </div>
         </div>
       </section>
+      {current && (
+        <AgentSessionFeedbackDialog
+          open={sessionFeedbackOpen}
+          onOpenChange={setSessionFeedbackOpen}
+          sessionId={current.id}
+          onSessionChange={(next) => {
+            setSessions((list) => list.map((item) => (item.id === next.id ? next : item)));
+            onSessionChange(next.id, next);
+          }}
+        />
+      )}
       {deleteTarget && (
         <div className={styles.confirmOverlay} role="presentation">
           <section aria-label={t("Delete chat")} role="dialog">
@@ -733,9 +791,21 @@ function Conversation({
   onRetry,
   onToolApproval,
   approvalBusy,
+  onAnswer,
+  onSessionChange,
+  onLatestChange,
+  latestRef,
   session,
 }: {
   busy: boolean;
+  /** Answers the reply's pending question with one of its options. */
+  onAnswer?: (part: AgentMessagePart, choice: { label: string; value: string }) => void;
+  /** Whether the newest message is scrolled out of view (shows the "Latest" pill). */
+  onLatestChange?: (away: boolean) => void;
+  /** Receives a function that scrolls to the newest message. */
+  latestRef?: RefObject<(() => void) | undefined>;
+  /** A reply's rating changed on the server. */
+  onSessionChange: (session: AgentSession) => void;
   data: BootstrapData;
   /** Sends a follow-up suggestion chip as the next message. */
   onSuggestion?: (message: string) => void;
@@ -758,6 +828,31 @@ function Conversation({
       else viewport.scrollTop = viewport.scrollHeight;
     });
   }, [session.messages.length, session.updatedAt]);
+  // The reference app's "Latest" pill shows once the newest message is out of view.
+  useEffect(() => {
+    const viewport = scrollRef.current;
+    if (!viewport) return;
+    const update = () => onLatestChange?.(viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight > 48);
+    update();
+    viewport.addEventListener("scroll", update, { passive: true });
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(update) : undefined;
+    observer?.observe(viewport);
+    if (viewport.firstElementChild) observer?.observe(viewport.firstElementChild);
+    return () => {
+      viewport.removeEventListener("scroll", update);
+      observer?.disconnect();
+      onLatestChange?.(false);
+    };
+  }, [onLatestChange]);
+  useEffect(() => {
+    if (!latestRef) return;
+    latestRef.current = () => {
+      const viewport = scrollRef.current;
+      if (viewport && typeof viewport.scrollTo === "function") viewport.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
+      else if (viewport) viewport.scrollTop = viewport.scrollHeight;
+    };
+    return () => { latestRef.current = undefined; };
+  }, [latestRef]);
   const latestAssistantIndex = session.messages.findLastIndex((message) => message.role === "assistant");
   return (
     <div
@@ -767,13 +862,15 @@ function Conversation({
       role="group"
     >
       <div className={styles.conversationInner}>
-        {session.messages.map((message, index) => {
+        {visibleAgentMessages(session.messages, editingId).map((message, index) => {
           // Retry runs the question again, so only the newest reply offers it (never an older error in the history).
           const retryTarget = message.role === "assistant" ? lastUserMessage(session.messages, index) : undefined;
           const waiting = busy && index === session.messages.length - 1 && message.role === "assistant" && !message.content && !message.parts?.length;
           const answer: AnswerProps = message.role === "assistant"
             ? { data, onSuggestion: index === latestAssistantIndex && !busy ? onSuggestion : undefined, streaming: busy && index === session.messages.length - 1 }
             : {};
+          // An option picked on a question shows as the chosen pill there, not as a separate message.
+          if (message.role === "user" && message.answerTo) return null;
           return (
           <Fragment key={message.id}>
             {shouldShowAgentTime(session.messages, index) && (
@@ -789,27 +886,20 @@ function Conversation({
                 {waiting
                   ? <div aria-live="polite" className={styles.thinkingPlaceholder}><span className={styles.workShimmer}>{t("Thinking…")}</span></div>
                   : message.parts?.length
-                    ? <AgentMessageParts {...answer} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
+                    ? <AgentMessageParts {...answer} changes={{ sessionId: session.id.startsWith("pending-") ? undefined : session.id, onSessionChange }} onAnswer={index === latestAssistantIndex ? onAnswer : undefined} answerDisabled={busy} draftContext={draftContext} draftProject={draftProject} message={message} onRetry={retryTarget && !busy && index === session.messages.length - 1 ? () => onRetry(retryTarget) : undefined} onToolApproval={onToolApproval} approvalBusy={approvalBusy}/>
                     : <AgentMessageText {...answer} content={message.content} draftContext={draftContext} draftProject={draftProject}/>}
               </div>
-              <div className={styles.messageActions}>
-                <button
-                  aria-label={t("Copy message")}
-                  onClick={() => void navigator.clipboard.writeText(message.role === "assistant" ? splitAgentSuggestions(message.content).prose : message.content)}
-                  type="button"
-                >
-                  <AgentCopyGlyph size={14} />
-                </button>
-                {message.role === "user" && (
-                  <button
-                    aria-label={t("Edit message")}
-                    onClick={() => onEdit(message)}
-                    type="button"
-                  >
-                    <span>{t("Edit")}</span>
-                  </button>
+              {message.role === "user"
+                ? <AgentUserMessageActions className={styles.messageActions} content={message.content} onEdit={message.id.startsWith("pending-") ? undefined : () => onEdit(message)} />
+                : !waiting && !(busy && index === session.messages.length - 1) && (message.content.trim() || message.parts?.some(part => part.type === "text" && part.text?.trim())) && (
+                  <AgentReplyActions
+                    className={`${styles.replyActions}${index === latestAssistantIndex ? ` ${styles.latestReplyActions}` : ""}`}
+                    content={splitAgentSuggestions(message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content).prose}
+                    message={message}
+                    onSessionChange={onSessionChange}
+                    sessionId={session.id.startsWith("pending-") ? undefined : session.id}
+                  />
                 )}
-              </div>
             </article>
           </Fragment>
         )})}
@@ -821,13 +911,18 @@ function Conversation({
 /** Answer chrome for an assistant reply: entity chips need `data`; suggestion chips show only when `onSuggestion` is set. */
 type AnswerProps = { data?: BootstrapData; onSuggestion?: (message: string) => void; streaming?: boolean };
 
-function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy, ...answer }: AnswerProps & { draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string }) {
+function AgentMessageParts({ changes, draftContext, draftProject, message, onRetry, onToolApproval, approvalBusy, onAnswer, answerDisabled, ...answer }: AnswerProps & { changes?: { sessionId?: string; onSessionChange?: (session: AgentSession) => void }; draftContext: string; draftProject?: Project; message: AgentMessage; onRetry?: () => void; onToolApproval: (call: AgentToolCall | undefined, decision: "approve" | "reject") => void; approvalBusy?: string; onAnswer?: (part: AgentMessagePart, choice: { label: string; value: string }) => void; answerDisabled?: boolean }) {
   const { t } = useI18n();
-  const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || message.content;
+  const question = message.parts?.find(part => part.type === "question" && part.question);
+  // A reply that stopped on a question keeps its text in the text part; its content also ends with the question.
+  const text = message.parts?.filter(part => part.type === "text").map(part => part.text ?? "").join("") || (question ? "" : message.content);
   const work = message.parts?.filter(part => part.type === "reasoning" || part.type === "step" || part.type === "toolCall") ?? [];
-  const other = message.parts?.filter(part => !["text", "reasoning", "step", "toolCall"].includes(part.type)) ?? [];
+  const other = message.parts?.filter(part => !["text", "reasoning", "step", "toolCall", "question"].includes(part.type)) ?? [];
   const queue = summarizeElicitationQueue(other);
   const submitting = other.some(part => part.type === "elicitation" && part.status === "running");
+  // The reference app's result cards for what the reply did ("Created DEV-50", "Updated project" with Undo).
+  const changeCards = <AgentChangeCards data={answer.data} message={message} onSessionChange={changes?.onSessionChange} sessionId={changes?.sessionId}/>;
+  const changedKeys = useMemo(() => agentChangeEntityKeys(message), [message]);
   return <div className={styles.messageParts}>
     {/* Like the reference app, the work folds to "Worked for N seconds ▸" once the answer starts. */}
     {work.length > 0 && <AgentWorkGroup message={message} parts={work} onToolApproval={onToolApproval} approvalBusy={approvalBusy} running={Boolean(answer.streaming) && !text} collapseWhenDone/>}
@@ -835,7 +930,10 @@ function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToo
     {other.map(part => part.type === "elicitation" ? <AgentElicitation key={part.id} part={part}/> : part.type === "error"
       ? <div className={styles.partError} key={part.id} role="alert"><AlertCircle/><AgentErrorDetail error={part.text ?? ""}/>{onRetry && <button onClick={onRetry} type="button">{t("Retry")}</button>}</div>
       : <div className={styles.eventPart} key={part.id}><span>{part.text}</span></div>)}
-    {text && <AgentMessageText {...answer} content={text} draftContext={draftContext} draftProject={draftProject}/>}
+    {text ? <AgentMessageText {...answer} changeCards={changeCards} changedKeys={changedKeys} onSuggestion={question ? undefined : answer.onSuggestion} content={text} draftContext={draftContext} draftProject={draftProject}/> : changeCards}
+    {question?.question && <div className={styles.question}>
+      <AgentQuestionPrompt className={`${styles.messageDocument} agent-chat-document`} data={answer.data} disabled={Boolean(answerDisabled) || question.status !== "pending"} onSelect={choice => onAnswer?.(question, choice)} part={question}/>
+    </div>}
   </div>;
 }
 
@@ -843,17 +941,19 @@ function AgentMessageParts({ draftContext, draftProject, message, onRetry, onToo
  * Message text with any ```update block shown as the reference app's "Created draft" card instead of raw code. Assistant replies
  * (`data` set) also get the reference app's answer chrome: inline entity chips, referenced issues and follow-up suggestions.
  */
-function AgentMessageText({ content, data, draftContext, draftProject, onSuggestion, streaming = false }: AnswerProps & { content: string; draftContext: string; draftProject?: Project }) {
+function AgentMessageText({ changeCards, changedKeys, content, data, draftContext, draftProject, onSuggestion, streaming = false }: AnswerProps & { changeCards?: ReactNode; changedKeys?: string[]; content: string; draftContext: string; draftProject?: Project }) {
   const { prose, draft } = splitAgentDraft(content, "update");
   const answer = useMemo(() => data ? parseAgentAnswer(prose, data) : undefined, [data, prose]);
   const draftCard = draft && <AgentDraftCard context={draftContext} draft={draft} icon={draftProject ? <span style={{ color: healthColor(draftProject.health), display: "inline-flex" }}><HealthGlyph health={draftProject.health}/></span> : undefined} title="Update draft"/>;
   if (!answer) return <>
-    {prose && <AgentRichText className={styles.messageDocument} content={prose}/>}
+    {prose && <AgentRichText className={`${styles.messageDocument} agent-chat-document`} content={prose}/>}
+    {changeCards}
     {draftCard}
   </>;
   return <>
-    {answer.markdown && <AgentAnswerText className={styles.messageDocument} data={data} markdown={answer.markdown}/>}
-    {!streaming && <AgentReferencedResources data={data} references={answer.references}/>}
+    {answer.markdown && <AgentAnswerText className={`${styles.messageDocument} agent-chat-document`} data={data} markdown={answer.markdown}/>}
+    {!streaming && <AgentReferencedResources data={data} exclude={changedKeys} references={answer.references}/>}
+    {changeCards}
     {draftCard}
     {onSuggestion && <AgentSuggestionChips onSelect={onSuggestion} suggestions={answer.suggestions}/>}
   </>;
@@ -866,18 +966,37 @@ const titleRetryDelays = [1500, 5000, 12000, 25000];
  * The conversation as it looks the moment a message is sent: the user's message (replacing the edited one and
  * everything after it) followed by an empty assistant reply, which renders as the working indicator.
  */
-function optimisticAgentTurn(session: AgentSession | undefined, message: string, editingId?: string, mentions: AgentMention[] = []): AgentSession {
+function optimisticAgentTurn(session: AgentSession | undefined, message: string, editingId?: string, mentions: AgentMention[] = [], answer?: { partId: string; value: string }): AgentSession {
   const now = new Date().toISOString();
-  const earlier = session?.messages ?? [];
+  const earlier = (session?.messages ?? []).map((item) => answer && item.parts?.some((part) => part.id === answer.partId)
+    ? { ...item, parts: item.parts.map((part) => part.id === answer.partId && part.question ? { ...part, status: "completed" as const, question: { ...part.question, selected: answer.value } } : part) }
+    : item);
   const kept = editingId && earlier.some((item) => item.id === editingId) ? earlier.slice(0, earlier.findIndex((item) => item.id === editingId)) : earlier;
   const stamp = Date.now();
   const messages: AgentMessage[] = [
     ...kept,
-    { id: `pending-user-${stamp}`, role: "user", content: message, mentions: mentions.length ? mentions.map(({ type, id, label }) => ({ type, id, label })) : undefined, createdAt: now },
+    { id: `pending-user-${stamp}`, role: "user", content: message, mentions: mentions.length ? mentions.map(({ type, id, label }) => ({ type, id, label })) : undefined, answerTo: answer?.partId, createdAt: now },
     { id: `pending-reply-${stamp}`, role: "assistant", content: "", parts: [], createdAt: now },
   ];
   if (session) return { ...session, messages, updatedAt: now };
   return { id: `pending-${stamp}`, slugId: "", userId: "", title: message.split("\n")[0].slice(0, 80), favorite: false, location: "page", issueIds: [], skillIds: [], messages, createdAt: now, updatedAt: now };
+}
+
+/**
+ * The reference app's composer reads "Something else…" while the newest reply offers choices (a pending question's options or
+ * follow-up suggestions), since typing then answers instead of picking.
+ */
+function offersChoices(session: AgentSession, busy: boolean) {
+  const last = session.messages.at(-1);
+  if (busy || last?.role !== "assistant") return false;
+  if (last.parts?.some((part) => part.type === "question" && part.status === "pending")) return true;
+  return splitAgentSuggestions(last.content).suggestions.length > 0;
+}
+
+/** While a message is being edited the reference app hides it and everything after it (the composer holds its text). */
+function visibleAgentMessages(messages: AgentMessage[], editingId?: string) {
+  const index = editingId ? messages.findIndex((message) => message.id === editingId) : -1;
+  return index < 0 ? messages : messages.slice(0, index);
 }
 
 /** The saved user message a reply answers (never a not-yet-saved local copy). */

@@ -189,6 +189,7 @@ import type {
 import type { NewProjectDraft } from "@/components/projects-page/new-project-dialog";
 import { LabelActions } from "@/components/workspace/label-page-toolbar";
 import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
+import { AGENT_PAGE_ASK_EVENT } from "@/components/agent/agent-ask-request";
 import { documentsRedirectPath } from "@/lib/documents-redirect";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
 import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-list";
@@ -518,8 +519,8 @@ function App() {
   usePrefilledIssueRoute({ route, data, location, navigateTo, openCreateIssue });
   useEffect(() => {
     const createFromSelection = (event: Event) => {
-      const { text, teamId, projectId } = (event as CustomEvent<{text:string;teamId:string;projectId?:string}>).detail;
-      if (text?.trim()) openCreateIssue({ title: text.trim().split('\n')[0].slice(0,255), description: text, teamId, projectId });
+      const { text, teamId, projectId, parentId } = (event as CustomEvent<{text:string;teamId:string;projectId?:string;parentId?:string}>).detail;
+      if (text?.trim()) openCreateIssue({ title: text.trim().split('\n')[0].slice(0,255), description: text, teamId, projectId, parentId });
     };
     window.addEventListener('flow-create-issue-from-selection', createFromSelection);
     return () => window.removeEventListener('flow-create-issue-from-selection', createFromSelection);
@@ -960,6 +961,8 @@ function App() {
       setCreateOpen(true);
   }, [location.pathname, location.search]);
   const [floatingAgentOpen, setFloatingAgentOpen] = useState(false);
+  // "Ask Flow" with a typed question (⌘K Tab): the floating chat opens on a fresh conversation that sends it at once.
+  const [floatingAgentRequest, setFloatingAgentRequest] = useState<{ id: number; prompt: string }>();
   const selectedIssue =
     route.kind === "issue"
       ? data?.issues.find(
@@ -6794,6 +6797,10 @@ function App() {
             onOpenCustomer={(customer) => navigateTo(customerPath(data.workspace.urlKey, customer))}
             onNavigateAgent={() => navigateTo(agentPath(data.workspace.urlKey))}
             onAskAgent={() => { if (route.kind !== "agent") setFloatingAgentOpen(true) }}
+            onAskAgentQuery={(question) => {
+              if (route.kind === "agent") window.dispatchEvent(new CustomEvent(AGENT_PAGE_ASK_EVENT, { detail: { prompt: question } }));
+              else { setFloatingAgentRequest({ id: Date.now(), prompt: question }); setFloatingAgentOpen(true); }
+            }}
             agentSessions={data.agentSessions}
             onOpenAgentSession={(session) => navigateTo(agentPath(data.workspace.urlKey, session.slugId))}
             onNavigateReviews={() => navigateTo(reviewsPath(data.workspace.urlKey))}
@@ -6939,17 +6946,22 @@ function App() {
         data={data}
         onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
         issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
+        key={floatingAgentRequest?.id ?? "floating"}
+        initialPrompt={floatingAgentRequest?.prompt}
+        autoSubmit={Boolean(floatingAgentRequest)}
         pageContext={
-          // Issues ride along through `issues`; projects and documents attach as the page entity.
+          // Issues ride along through `issues`; projects, initiatives and documents attach as the page entity.
           page === "project-detail" && selectedProject
             ? { type: "project", id: selectedProject.id, label: selectedProject.name }
-            : page === "document-detail" && selectedDocument
-              ? { type: "document", id: selectedDocument.id, label: selectedDocument.title || "Untitled" }
-              : undefined
+            : page === "initiative-detail" && selectedInitiative
+              ? { type: "initiative", id: selectedInitiative.id, label: selectedInitiative.name, href: initiativePath(data.workspace.urlKey, selectedInitiative) }
+              : page === "document-detail" && selectedDocument
+                ? { type: "document", id: selectedDocument.id, label: selectedDocument.title || "Untitled" }
+                : undefined
         }
         open={floatingAgentOpen}
         onSessionChange={(next) => setClosedAgentSessionIds((current) => new Set(current).add(next.id))}
-        onClose={() => setFloatingAgentOpen(false)}
+        onClose={() => { setFloatingAgentOpen(false); setFloatingAgentRequest(undefined); }}
         onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
       />
       <div className="bottom-agent">

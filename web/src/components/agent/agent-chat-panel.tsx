@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Box, FileText, Plus, Search, Users } from 'lucide-react'
+import { Box, FileText, Lightbulb, Plus, Search, Users } from 'lucide-react'
 import { AgentDraftCard } from './agent-draft-card'
 import { splitAgentDraft } from './agent-draft'
 import { splitAgentSuggestions } from './agent-answer-content'
@@ -21,7 +21,7 @@ import { conversationDraftKeyFor } from './agent-drafts'
 import { useMarkAgentSessionRead } from './agent-read-state'
 
 /** The entity the user is looking at; attached to the first message of a new conversation. */
-export type AgentPageContext = { type: 'project' | 'document' | 'issue'; id: string; label: string }
+export type AgentPageContext = { type: 'project' | 'document' | 'issue' | 'initiative'; id: string; label: string; /** Initiatives have no id field in a new session, so the first message links them by this path. */ href?: string }
 
 export function AgentChatPanel({
   data,
@@ -176,17 +176,25 @@ export function AgentChatPanel({
     }
   }
 
-  /** Sends the composer text, or `followUp` (a suggestion chip) without touching the composer. */
-  const submit = async (followUp?: string) => {
-    const message = (followUp ?? input).trim()
-    if (!message || loading || !status?.enabled) return
+  /**
+   * Sends the composer text, or `followUp` (a suggestion chip or a question's option) without touching the composer.
+   * `answer` picks that option of the reply's pending question: it shows as the chosen pill, not as a message.
+   */
+  const submit = async (followUp?: string, answer?: { partId: string; value: string }) => {
+    const typed = (followUp ?? input).trim()
+    if (!typed || loading || !status?.enabled) return
+    // A new chat has no initiative field, so an initiative on the page rides along as a link the agent can open.
+    const initiativeLinks = activePageContexts.filter(context => context.type === 'initiative' && context.href).map(context => `[${context.label}](${context.href})`)
+    const message = !session && initiativeLinks.length ? `${typed}\n\n${initiativeLinks.join(' ')}` : typed
     const sentMentions = followUp === undefined ? mentions : []
     const sentIdsOf = (type: AgentMention['type']) => followUp === undefined ? idsOf(type) : []
     setMessages(current => [
-      ...current,
-      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, createdAt: new Date().toISOString() },
+      ...current.map(item => answer && item.parts?.some(part => part.id === answer.partId)
+        ? { ...item, parts: item.parts.map(part => part.id === answer.partId && part.question ? { ...part, status: 'completed' as const, question: { ...part.question, selected: answer.value } } : part) }
+        : item),
+      { id: `pending-${Date.now()}`, role: 'user', content: message, mentions: sentMentions, answerTo: answer?.partId, createdAt: new Date().toISOString() },
     ])
-    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), userIds: sentIdsOf('user'), mentions: sentMentions }
+    const mentioned = { issueIds: sentIdsOf('issue'), projectIds: sentIdsOf('project'), documentIds: sentIdsOf('document'), userIds: sentIdsOf('user'), mentions: sentMentions, ...(answer ? { answer } : {}) }
     const pageIdsOf = (type: AgentPageContext['type']) => activePageContexts.filter(context => context.type === type).map(context => context.id)
     if (!session) {
       setAttachedContext([
@@ -359,6 +367,9 @@ export function AgentChatPanel({
         onStop={() => abortRef.current?.abort()}
         onSubmit={() => void submit()}
         onSendSuggestion={message => void submit(message)}
+        onAnswer={(part, choice) => void submit(choice.label, { partId: part.id, value: choice.value })}
+        sessionId={session?.id}
+        onSessionChange={next => { setSession(next); setMessages(next.messages); onSessionChange?.(next) }}
         onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
         streamParts={streamParts}
       />
@@ -395,6 +406,7 @@ function SkillsPicker({ data, disabled, selectedIds, onChange, onCreate }: { dat
 }
 
 function pageContextIcon(context: AgentPageContext, data?: BootstrapData) {
-  if (data) return mentionIcon(context, data)
+  if (context.type === 'initiative') return <Lightbulb size={14}/>
+  if (data) return mentionIcon({ type: context.type, id: context.id }, data)
   return context.type === 'project' ? <ProjectIcon size={14}/> : context.type === 'document' ? <FileText size={14}/> : null
 }

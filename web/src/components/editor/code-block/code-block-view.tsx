@@ -1,5 +1,6 @@
 import * as Popover from '@radix-ui/react-popover'
-import { Check, ChevronDown, ChevronUp, Copy, SlidersHorizontal } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { toast } from '@/lib/toast'
 import { NodeViewContent, NodeViewWrapper, useEditorState, type ReactNodeViewProps } from '@tiptap/react'
@@ -77,7 +78,7 @@ function SettingsMenu({ lineNumbers, wrap }: { lineNumbers: boolean; wrap: boole
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
-        <button aria-label={t('Code block settings')} className="flow-code-block__icon" title={t('Code block settings')} type="button"><SlidersHorizontal size={14}/></button>
+        <button aria-label={t('Code block settings')} className="flow-code-block__icon" title={t('Code block settings')} type="button"><FlowGlyph name="displayOptions" size={14}/></button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content align="end" className="flow-code-block__popover flow-code-block__settings" collisionPadding={8} data-flow-motion="floating" data-i18n-ignore sideOffset={4}>
@@ -107,7 +108,7 @@ function CopyButton({ text }: { text: string }) {
     timer.current = setTimeout(() => setCopied(false), 1500)
   }
   const label = copied ? t('Copied') : t('Copy code')
-  return <button aria-label={label} className="flow-code-block__icon" data-copied={copied || undefined} onClick={() => void copy()} title={label} type="button">{copied ? <Check size={14}/> : <Copy size={14}/>}</button>
+  return <button aria-label={label} className="flow-code-block__icon" data-copied={copied || undefined} onClick={() => void copy()} title={label} type="button">{copied ? <Check size={14}/> : <FlowGlyph name="copyMessage" size={14}/>}</button>
 }
 
 /** A fenced code block with the reference app's chrome: language picker, settings, copy, line numbers and a collapsed long-block view. */

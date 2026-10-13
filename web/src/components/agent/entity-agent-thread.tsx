@@ -1,17 +1,21 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
-import { ArrowUp, Check, Copy, ThumbsDown, ThumbsUp, X } from 'lucide-react'
+import { ArrowUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue'
 import { summarizeElicitationQueue } from './agent-elicitation-queue-model'
 import { AgentRichText } from './agent-rich-text'
 import { AgentAnswerText, AgentReferencedResources, AgentSuggestionChips } from './agent-answer'
+import { AgentChangeCards } from './agent-change-cards'
+import { agentChangeEntityKeys } from './agent-change-model'
+import { AgentReplyActions, AgentUserMessageActions } from './agent-message-actions'
 import { parseAgentAnswer } from './agent-answer-content'
 import { useAgentEntityData } from './agent-entity-data'
+import { AgentQuestionPrompt } from './agent-approval-question'
 import { AgentWorkGroup } from './agent-work-group'
 import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
 import { useI18n } from '@/i18n/i18n'
-import type { AgentMessage, AgentMessagePart, BootstrapData } from '@/types/flow'
+import type { AgentMessage, AgentMessagePart, AgentSession, BootstrapData } from '@/types/flow'
 import { AgentMentionInput, type AgentMention } from './agent-mention-input'
 import { mentionIcon } from './agent-mention-icon'
 import type { MyIssuesRowData } from '@/components/my-issues/my-issues-list'
@@ -67,6 +71,11 @@ export type EntityAgentThreadProps = {
    * questions, answers and tool cards out in order. Feedback buttons still follow.
    */
   renderAssistantBody?: (message: AgentMessage, state: { index: number; streaming: boolean }) => ReactNode
+  /** Answers the latest reply's pending question (ask_user) with one of its options. */
+  onAnswer?: (part: AgentMessagePart, choice: { label: string; value: string }) => void
+  /** The saved chat, so reply ratings are kept on the server. */
+  sessionId?: string
+  onSessionChange?: (session: AgentSession) => void
 }
 
 export type AgentContextEntity = { key: string; icon?: ReactNode; label: string; onRemove?: () => void }
@@ -101,6 +110,9 @@ export function EntityAgentThread({
   renderMessageActions,
   renderMessageAttachment,
   renderAssistantBody,
+  onAnswer,
+  sessionId,
+  onSessionChange,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -151,8 +163,11 @@ export function EntityAgentThread({
   const streamWork = streamParts.filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
   // Steps render in the work group above (their plan text as markdown), never again as a plain row.
   const streamOther = streamParts.filter(part => part.type !== 'reasoning' && part.type !== 'step' && part.type !== 'toolCall')
+  const lastMessage = messages.at(-1)
+  // The reference app's composer reads "Something else…" while the newest reply offers choices (question options or suggestions).
+  const offersChoices = !loading && lastMessage?.role === 'assistant' && (Boolean(lastMessage.parts?.some(part => part.type === 'question' && part.status === 'pending')) || parseAgentAnswer(lastMessage.content, entityData).suggestions.length > 0)
   const composerPlaceholder = messages.length && enabled
-    ? t('Reply…')
+    ? t(offersChoices ? 'Something else…' : 'Reply…')
     : placeholder ?? (enabled ? t('Ask a question…') : t('Flow Agent is not configured'))
 
   return (
@@ -188,11 +203,15 @@ export function EntityAgentThread({
         )}
         {messages.map((message, index) => {
           const isUser = message.role === 'user'
+          // An option picked on a question shows as the chosen pill there, not as a separate message.
+          if (isUser && message.answerTo) return null
+          const question = isUser ? undefined : message.parts?.find(part => part.type === 'question' && part.question)
+          const replyText = question ? (message.parts ?? []).filter(part => part.type === 'text').map(part => part.text ?? '').join('') : message.content
           const time = shouldShowAgentTime(messages, index) ? formatAgentTime(message.createdAt, t('Today')) : ''
           const work = isUser ? [] : (message.parts ?? []).filter(part => part.type === 'reasoning' || part.type === 'step' || part.type === 'toolCall')
           const streaming = loading && index === messages.length - 1
           const extraActions = renderMessageActions?.(message, index)
-          const answer = isUser ? undefined : parseAgentAnswer(message.content, entityData)
+          const answer = isUser ? undefined : parseAgentAnswer(replyText, entityData)
           const showFeedback = !isUser && Boolean(answer?.prose.trim()) && !streaming
           const suggestions = answer && index === latestAssistantIndex && !loading ? answer.suggestions : []
           return (
@@ -230,24 +249,37 @@ export function EntityAgentThread({
                   </>
                 )}
                 {!isUser && renderAssistantBody ? null : message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
-                  <p className={styles.messageDocument} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
+                  <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
                 ) : answer ? answer.markdown && (
                   <AgentAnswerText
                     ariaLabel={t('AI message')}
-                    className={styles.messageDocument}
+                    className={`${styles.messageDocument} agent-chat-document`}
                     data={entityData}
                     markdown={answer.markdown}
                   />
                 ) : message.content && (
                   <AgentRichText
                     ariaLabel={t('Your message')}
-                    className={styles.messageDocument}
+                    className={`${styles.messageDocument} agent-chat-document`}
                     content={message.content}
                   />
                 )}
-                {answer && !streaming && !renderAssistantBody && <AgentReferencedResources data={entityData} references={answer.references} />}
+                {answer && !streaming && !renderAssistantBody && <AgentReferencedResources data={entityData} exclude={agentChangeEntityKeys(message)} references={answer.references} />}
+                {!isUser && !renderAssistantBody && <AgentChangeCards data={entityData} message={message} onSessionChange={onSessionChange} sessionId={sessionId} />}
                 {!isUser && !streaming && !renderAssistantBody && renderMessageAttachment?.(message, index)}
-                <AgentSuggestionChips disabled={!enabled || composerDisabled} onSelect={sendSuggestion} suggestions={suggestions} />
+                {question?.question && !renderAssistantBody && (
+                  <div className={styles.question}>
+                    <AgentQuestionPrompt
+                      ariaLabel={t('AI message')}
+                      className={`${styles.messageDocument} agent-chat-document`}
+                      data={entityData}
+                      disabled={!enabled || composerDisabled || loading || question.status !== 'pending' || index !== latestAssistantIndex}
+                      onSelect={choice => onAnswer?.(question, choice)}
+                      part={question}
+                    />
+                  </div>
+                )}
+                {!question && <AgentSuggestionChips disabled={!enabled || composerDisabled} onSelect={sendSuggestion} suggestions={suggestions} />}
                 {isUser && index === firstUserIndex && addedContext.length > 0 && (
                   <div className={styles.addedContext}>
                     {addedContext.map(item => (
@@ -259,12 +291,9 @@ export function EntityAgentThread({
                     ))}
                   </div>
                 )}
-                {(showFeedback || extraActions) && (
-                  <div className={styles.messageActions}>
-                    {showFeedback && <MessageFeedback content={answer?.prose ?? message.content} />}
-                    {extraActions}
-                  </div>
-                )}
+                {isUser && <AgentUserMessageActions className={styles.userActions} content={message.content}/>}
+                {showFeedback && <AgentReplyActions className={`${styles.replyActions}${index === latestAssistantIndex ? ` ${styles.latestReplyActions}` : ''}`} content={answer?.prose ?? message.content} message={message} onSessionChange={onSessionChange} sessionId={sessionId}/>}
+                {extraActions && <div className={styles.messageActions}>{extraActions}</div>}
               </article>
             </Fragment>
           )
@@ -361,34 +390,6 @@ export function EntityAgentThread({
         </footer>
       </div>
     </div>
-  )
-}
-
-/** Thumbs up / down and copy for a finished assistant reply. */
-function MessageFeedback({ content }: { content: string }) {
-  const { t } = useI18n()
-  const [rating, setRating] = useState<'up' | 'down'>()
-  const [copied, setCopied] = useState(false)
-  useEffect(() => {
-    if (!copied) return
-    const timer = window.setTimeout(() => setCopied(false), 1500)
-    return () => window.clearTimeout(timer)
-  }, [copied])
-  const copy = () => {
-    void navigator.clipboard?.writeText(content).then(() => setCopied(true), () => undefined)
-  }
-  return (
-    <>
-      <button className={styles.feedbackButton} aria-label={t('Good response')} aria-pressed={rating === 'up'} onClick={() => setRating(current => current === 'up' ? undefined : 'up')} type="button">
-        <ThumbsUp />
-      </button>
-      <button className={styles.feedbackButton} aria-label={t('Bad response')} aria-pressed={rating === 'down'} onClick={() => setRating(current => current === 'down' ? undefined : 'down')} type="button">
-        <ThumbsDown />
-      </button>
-      <button className={styles.feedbackButton} aria-label={copied ? t('Copied to clipboard') : t('Copy message')} onClick={copy} type="button">
-        {copied ? <Check /> : <Copy />}
-      </button>
-    </>
   )
 }
 

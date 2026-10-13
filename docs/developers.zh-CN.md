@@ -15,6 +15,10 @@ OAuth 授权码流程（含/不含 PKCE）、client credentials、`actor=app`、
 
 [Webhook](webhooks.md) 文档介绍数据变更事件、负载、签名校验、重试、投递日志、应用级 Webhook 与 Agent 会话事件。
 
+[TypeScript SDK](sdk.md)（`@flow/sdk`，英文）封装了 REST API、Webhook 签名校验与 OAuth 流程：
+`new FlowClient({ apiKey, apiUrl })`，支持类型化模型、分页连接（`fetchNext()`、`for await`）、
+类型化错误与限流信息、自动重试、文件上传和 Webhook 处理器；示例见 [examples/sdk-quickstart.ts](examples/sdk-quickstart.ts)。
+
 ## 选择执行身份
 
 | 场景 | 执行身份 | 凭据 |

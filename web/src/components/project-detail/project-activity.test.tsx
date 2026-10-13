@@ -504,4 +504,23 @@ describe('ProjectActivity mentions in update edits and update comments', () => {
     await user.click(within(box.closest('.project-activity__comment-box') as HTMLElement).getByRole('button', { name: 'Comment' }))
     await waitFor(() => expect(onCommentProjectUpdate).toHaveBeenCalledWith(props.project.id, 'update-1', 'Plan [Launch plan](/workspace/document/plan-abc)'))
   })
+
+  it('shows what Flow did on behalf of a person: the creation and folded property changes', async () => {
+    const props = activityProps()
+    const agent = { id: 'builtin-flow-agent', type: 'agent', name: 'Flow', avatarUrl: '/favicon.svg', onBehalfOfId: props.viewer.id, onBehalfOfName: props.viewer.displayName }
+    const at = (seconds: number) => new Date(Date.UTC(2026, 9, 12, 9, 0, seconds)).toISOString()
+    const history: AuditLogEntry[] = [
+      { id: 'h1', actor: props.viewer, botActor: agent, action: 'updated', resourceType: 'project', resourceId: props.project.id, metadata: { changes: [{ field: 'priority', from: '', to: 'High' }] }, createdAt: at(10) },
+      { id: 'h2', actor: props.viewer, botActor: agent, action: 'milestone_created', resourceType: 'project', resourceId: props.project.id, metadata: { milestoneId: 'm1', milestoneName: 'Beta' }, createdAt: at(12) },
+      { id: 'h3', actor: props.viewer, botActor: agent, action: 'updated', resourceType: 'project', resourceId: props.project.id, metadata: { changes: [{ field: 'targetDate', from: '', to: '2026-10-26' }] }, createdAt: at(11) },
+    ]
+    apiMocks.listProjectHistory.mockResolvedValueOnce({ nodes: history, nextCursor: '', total: 3 })
+    const { container } = render(<I18nProvider><ProjectActivity {...props} project={{ ...props.project, creator: props.viewer, creatorId: props.viewer.id, botActor: agent, createdAt: at(0) }} /></I18nProvider>)
+    const feed = container.querySelector('.project-activity__feed')!
+    await waitFor(() => expect(feed).toHaveTextContent(`Flow set priority to High and set the target date to Oct 26 on behalf of ${props.viewer.displayName}`))
+    expect(feed).toHaveTextContent(`Flow added milestone Beta on behalf of ${props.viewer.displayName}`)
+    expect(feed).toHaveTextContent(`Flow created the project on behalf of ${props.viewer.displayName}`)
+    expect(feed.querySelectorAll('.project-activity__event')).toHaveLength(3)
+    expect(feed.querySelector('.project-activity__event-avatar [data-agent-avatar-slot]')).toBeInTheDocument()
+  })
 })

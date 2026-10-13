@@ -43,6 +43,10 @@ func TestAgentPhaseTitleNamesTheWorkFromToolCalls(t *testing.T) {
 		{[]domain.AgentToolCall{phaseCall("list_projects", `{}`, ""), phaseCall("list_users", `{}`, ""), phaseCall("list_projects", `{"state":"started"}`, "")}, "Looking at projects, users"},
 		{[]domain.AgentToolCall{phaseCall("list_comments", `{"issueId":"DEV-3"}`, ""), phaseCall("list_issue_history", `{"id":"DEV-3"}`, "")}, "Reading comments on DEV-3"},
 		{[]domain.AgentToolCall{phaseCall("get_issue", `{"id":"A-1"}`, ""), phaseCall("get_issue", `{"id":"A-2"}`, ""), phaseCall("get_issue", `{"id":"A-3"}`, ""), phaseCall("get_issue", `{"id":"A-4"}`, "")}, "Looking up A-1, A-2, A-3, …"},
+		// Deletes name what they removed from their receipts ("Deleting QA – Roadmap, QA – Board").
+		{[]domain.AgentToolCall{phaseCall("delete_project", `{"id":"project_1790"}`, `{"deleted":true,"name":"QA – Roadmap"}`), phaseCall("delete_view", `{"id":"QA – Board"}`, `{"deleted":true,"name":"QA – Board"}`)}, "Deleting QA – Roadmap, QA – Board"},
+		{[]domain.AgentToolCall{phaseCall("save_customer", `{"name":"Acme"}`, `{"name":"Acme"}`), phaseCall("save_customer_request", `{"customer":"Acme","issue":"DEV-4"}`, `{"name":"Acme"}`)}, "Creating customer, customer request"},
+		{[]domain.AgentToolCall{phaseCall("get_customer", `{"query":"acme.com"}`, `{"name":"Acme"}`), phaseCall("list_customers", `{}`, "")}, "Looking up Acme"},
 	}
 	for _, test := range cases {
 		if got := agentPhaseTitle(test.calls); got != test.want {

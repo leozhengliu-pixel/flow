@@ -397,3 +397,31 @@ func newMCPToolTestContext(t *testing.T) (*store.SQLiteStore, mcpActor, context.
 	ctx = store.ContextWithActor(ctx, actor.User)
 	return repository, actor, ctx
 }
+
+// An edit that never names the status still reports the live status, so the
+// agent cannot guess it (it once said "Backlog" for a Triage issue).
+func TestMCPSaveIssueReceiptAlwaysReportsLiveStatus(t *testing.T) {
+	repository, actor, ctx := newMCPToolTestContext(t)
+	service := &server{store: repository, uploadPath: t.TempDir()}
+	data := repository.Bootstrap()
+	created, err := service.callFlowTool(ctx, actor, "save_issue", map[string]any{"title": "Receipt status", "team": data.Teams[0].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var issue domain.Issue
+	if err := jsonClone(created, &issue); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := service.callFlowTool(ctx, actor, "save_issue", map[string]any{"id": issue.ID, "priority": 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, ok := updated.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected receipt %T", updated)
+	}
+	state, ok := receipt["state"].(domain.WorkflowState)
+	if !ok || state.ID == "" || state.Name == "" {
+		t.Fatalf("receipt lacks the live status: %#v", receipt["state"])
+	}
+}

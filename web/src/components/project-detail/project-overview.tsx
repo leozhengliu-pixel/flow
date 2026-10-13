@@ -36,6 +36,8 @@ import { projectShortcutLabels, useProjectPickerOpen, type ProjectPickerRequest 
 import { ProjectMilestoneMenu } from './project-milestone-menu'
 import { DescriptionHistoryDialog } from './project-header-menus'
 import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
+import { useEntityDescriptionSelectionActions } from '@/components/detail/description-selection-actions'
+import { projectPath } from '@/lib/app-routes'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
@@ -62,7 +64,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
   const [labelsOpen, setLabelsOpen] = useProjectPickerOpen('labels', pickerRequest, onPickerRequestHandled)
   const teamNames = projectTeams.map(team => team.name).join(', ')
 
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><div className="project-overview">
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className="project-overview">
     {outline.length > 1 && <ProjectOutlineRail items={outline}/>}
     <section className="project-overview__intro">
       <ViewIconPicker surface="page" color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
@@ -94,7 +96,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     <section className="project-overview__description" id="project-overview-description">
       <h3>Description</h3>
-      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })}/>
+      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })} selection={{ entity: { kind: 'project', id: project.id, name: project.name, href: issueData ? projectPath(issueData.workspace.urlKey, project) : undefined }, data: issueData, teamId: project.teamIds?.[0] ?? teams[0]?.id }}/>
     </section>
 
     <section className="project-overview__milestones" id="project-overview-milestones">
@@ -216,10 +218,15 @@ function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCom
   return <input aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} onKeyDown={onDone ? event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { cancelled.current = true; setDraft(value); event.currentTarget.blur() } } : undefined} placeholder={placeholder} value={draft}/>
 }
 
-function ProjectDescriptionEditor({ users, value, onCommit }: { users: Props['users']; value: string; onCommit: (value: string) => Promise<void> }) {
+function ProjectDescriptionEditor({ users, value, onCommit, selection }: { users: Props['users']; value: string; onCommit: (value: string) => Promise<void>; selection: Parameters<typeof useEntityDescriptionSelectionActions>[0] }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
-  return <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
+  // Selecting text offers "Ask agent" and "Create issue from selection", as in an issue description.
+  const { actions, panels } = useEntityDescriptionSelectionActions(selection)
+  return <>
+    <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} selectionActions={actions} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
+    {panels}
+  </>
 }
 
 type OutlineItem = { key: string; label: string; level: 0 | 1; target: () => Element | null; userText?: boolean }

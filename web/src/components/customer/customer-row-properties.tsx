@@ -38,7 +38,7 @@ export function CustomersRowChip({ customers, customerCount, importantCustomerId
   const sorted = sortedCustomers(customers, important)
   const known = sorted.length
   const importantCount = important.size
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><TooltipRoot>
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><TooltipRoot>
     <TooltipTrigger asChild>
       <span className="customer-row-chip" data-variant={variant} data-customer-chip="" aria-label={`${customerCount} ${t(customerCount === 1 ? 'customer' : 'customers')}`}>
         {importantCount > 0 && <><span className="customer-row-chip__important"><ImportantCustomerGlyph size={14}/><span>{importantCount}</span></span><span className="customer-row-chip__divider" aria-hidden="true"/></>}
@@ -97,7 +97,7 @@ export function CustomerRevenueRowChip({ customers, settings, variant = 'rounded
   if (revenue <= 0) return null
   const amount = formatCompactRevenue(displayRevenue(revenue, settings), settings)
   const byRevenue = [...customers].filter(customer => (customer.annualRevenue ?? 0) > 0).sort((a, b) => (b.annualRevenue ?? 0) - (a.annualRevenue ?? 0))
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><TooltipRoot>
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><TooltipRoot>
     <TooltipTrigger asChild>
       <span className="customer-row-chip" data-variant={variant} data-customer-revenue-chip="" aria-label={`${t('Customer revenue')} ${amount}${revenueSuffix(settings)}`}>
         {variant !== 'plain' && <CustomerRevenueGlyph size={14} className="customer-row-chip__revenue-icon"/>}

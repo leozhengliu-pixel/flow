@@ -266,7 +266,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	if writer != nil {
 		writer.lenient = true
 	}
-	contextData, err := s.agentIssueContext(r, session.IssueIDs)
+	contextData, err := s.agentAvailableIssueContext(r, session.IssueIDs)
 	if err != nil {
 		return domain.AgentSession{}, err
 	}
@@ -275,9 +275,9 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	skills := selectedAgentSkills(data.AgentSkills, session.SkillIDs, session.UserID)
 	mentions := agentMentionPrompt(selectedAgentProjects(data.Projects, session.ProjectIDs), selectedAgentDocuments(data.Documents, session.DocumentIDs), selectedAgentUsers(data.Users, session.UserIDs))
 	webNote := ""
-	if data.WorkspaceSettings.AgentWebSearch && s.webSearchAvailable() {
+	if agentWebAccess(data.WorkspaceSettings) {
 		r = r.WithContext(withAgentWebTools(r.Context()))
-		webNote = agentWebSearchNote
+		webNote = s.agentWebNote()
 	}
 	// Resources the request names in plain text are loaded up front, so a simple question needs one model call.
 	refs := findAgentMessageReferences(data, agentLatestUserMessage(*session))
@@ -286,8 +286,8 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 	// Chat offers a tool subset picked for this request (see agent_chat_tools.go) and shares a prompt cache per user.
 	r = r.WithContext(withAgentChatToolset(r.Context(), newAgentChatToolset(*session)))
 	r = r.WithContext(context.WithValue(r.Context(), agentPromptCacheKey{}, agentChatCacheKey(workspaceKey(r), data.Viewer.ID)))
-	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session))
-	messages := agentProviderHistory(*session, system)
+	system := buildWorkspaceAgentPrompt(data, contextIssues, skills, agentChatToolRule, s.agentWriteAccessNote()+webNote, contextMentions+loopBuilderPrompt(data, *session), agentProjectTeamIDs(mergeAgentProjects(selectedAgentProjects(data.Projects, session.ProjectIDs), refs.Projects))...)
+	messages := agentProviderHistory(*session, system, agentIssueTitles(contextIssues))
 	s.addLoopAttachmentInputs(r.Context(), data, *session, messages)
 	s.rememberAgentOrigin(r)
 	titleDone := s.startAgentSessionTitle(r, *session, mentions)
@@ -316,9 +316,12 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		}
 	}
 	r = r.WithContext(context.WithValue(r.Context(), connectorContextKey{}, connectorContext))
+	// Chat can stop on a question with options (ask_user); a loop draft adds the loop builder's own question tool.
+	extraTools := []agentProviderTool{askUserToolDefinition}
 	if writer != nil && sessionHasDraftLoop(data, *session) {
-		r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, []agentProviderTool{loopQuestionToolDefinition}))
+		extraTools = append(extraTools, loopQuestionToolDefinition)
 	}
+	r = r.WithContext(context.WithValue(r.Context(), agentExtraToolsKey{}, extraTools))
 	if writer != nil {
 		snapshot := *session
 		if err := writer.send(agentStreamEvent{Type: "session.started", Session: &snapshot, MessageID: messageID}); err != nil {
@@ -337,8 +340,41 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			return fmt.Errorf("agent response exceeds the stream budget")
 		}
 		switch event.Type {
-		case "text.delta", "reasoning.delta":
-			partType := strings.TrimSuffix(event.Type, ".delta")
+		case "reasoning.delta":
+			// Provider reasoning is the model's scratchpad (often English in a Chinese UI). Like the reference app, the user
+			// sees status labels ("Thinking…", the running step) instead; it is neither streamed nor saved.
+			return nil
+		case "tool.hosted":
+			// A provider-hosted tool (web search) shows as a step row; there is nothing to execute.
+			if event.ToolCall == nil {
+				return nil
+			}
+			key := "tool:" + event.ToolCall.ID
+			index, ok := partIndex[key]
+			call := cloneToolCall(event.ToolCall)
+			if call.Status == "completed" && len(call.Result) == 0 {
+				call.Result = json.RawMessage(`{"hosted":true}`)
+			}
+			if !ok {
+				index = len(parts)
+				partIndex[key] = index
+				parts = append(parts, domain.AgentMessagePart{ID: fmt.Sprintf("%s_tool_%d", messageID, index), Type: "toolCall", Status: call.Status, ToolCall: call})
+			} else {
+				if len(call.Arguments) == 0 || string(call.Arguments) == `{"query":""}` {
+					call.Arguments = parts[index].ToolCall.Arguments
+				}
+				parts[index].Status, parts[index].ToolCall = call.Status, call
+			}
+			if writer != nil {
+				part := parts[index]
+				kind := "tool.started"
+				if call.Status == "completed" {
+					kind = "tool.completed"
+				}
+				return writer.send(agentStreamEvent{Type: kind, MessageID: messageID, Part: &part})
+			}
+		case "text.delta":
+			partType := "text"
 			index, ok := partIndex[partType]
 			if !ok {
 				index = len(parts)
@@ -381,7 +417,15 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		return nil
 	}
 
+	// The user answered an approval the previous reply stopped on: run the held calls (or drop them) first.
+	if resumed, err := s.resumeAgentApproval(r, data, session, messageID, writer, &parts, partIndex); err != nil {
+		return s.persistAgentFailure(r, *session, messageID, "", parts, started, err)
+	} else {
+		messages = append(messages, resumed...)
+	}
 	finalText := ""
+	// The question the reply stopped on (ask_user), which becomes the end of the reply.
+	asked := ""
 	seenNarration := map[string]bool{}
 	for turnIndex := 0; turnIndex < maxAgentToolTurns; turnIndex++ {
 		turnStart := len(parts)
@@ -429,6 +473,10 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		keepVisible := len(session.LoopIDs) > 0 && !repeated && slices.ContainsFunc(turn.ToolCalls, func(call domain.AgentToolCall) bool {
 			return strings.TrimPrefix(call.Name, "mcp__flow.") == "ask_question"
 		})
+		// Text written with a question (for example the update awaiting approval) is part of the reply, not narration.
+		if !repeated && slices.ContainsFunc(turn.ToolCalls, func(call domain.AgentToolCall) bool { return call.Name == askUserTool }) {
+			keepVisible = true
+		}
 		if keepVisible {
 			// Stays in the reply; separated from earlier text before the turn started.
 		} else if len(turn.ToolCalls) > 0 && strings.TrimSpace(turn.Text) != "" {
@@ -494,8 +542,60 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 			}
 		}
 		executed := make([]domain.AgentToolCall, 0, len(turn.ToolCalls))
+		// Bulk deletes and publishing an update the agent wrote itself wait for the user's approval.
+		var approval *domain.AgentApproval
+		if asked == "" && len(session.LoopIDs) == 0 {
+			approval = s.agentApprovalForTurn(r, data, turn.ToolCalls, agentLatestUserMessage(*session))
+		}
+		held := map[string]bool{}
+		if approval != nil {
+			for _, call := range approval.Calls {
+				held[call.ID] = true
+			}
+		}
 		for _, toolCall := range turn.ToolCalls {
 			call := toolCall
+			if held[call.ID] {
+				if placeholder, ok := partIndex["tool:"+call.ID]; ok && parts[placeholder].Type == "toolCall" {
+					parts = removeAgentPart(parts, partIndex, placeholder)
+				}
+				messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: agentHeldCallResult}})
+				continue
+			}
+			if call.Name == askUserTool {
+				question, options, parseErr := parseAskUser(call)
+				placeholder, hasPlaceholder := partIndex["tool:"+call.ID]
+				if parseErr != nil || asked != "" {
+					if hasPlaceholder && parts[placeholder].Type == "toolCall" {
+						parts = removeAgentPart(parts, partIndex, placeholder)
+						delete(partIndex, "tool:"+call.ID)
+					}
+					message := "Ask one question at a time."
+					if parseErr != nil {
+						message = parseErr.Error()
+					}
+					messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: call.ID, Content: message, IsError: true}})
+					continue
+				}
+				call.Status = "pending"
+				part := domain.AgentMessagePart{ID: fmt.Sprintf("%s_question_%d", messageID, turnIndex), Type: "question", Text: question, Status: "pending", ToolCall: cloneToolCall(&call), Question: &options}
+				if hasPlaceholder {
+					part.ID = parts[placeholder].ID
+					parts[placeholder] = part
+					delete(partIndex, "tool:"+call.ID)
+					partIndex[part.ID] = placeholder
+				} else {
+					partIndex[part.ID] = len(parts)
+					parts = append(parts, part)
+				}
+				asked = question
+				if writer != nil {
+					if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+						return domain.AgentSession{}, err
+					}
+				}
+				continue
+			}
 			if call.Name == agentProgressTool {
 				var progress struct {
 					Title   string `json:"title"`
@@ -606,7 +706,7 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 					}
 				}
 			}
-			result, callErr := s.executeAgentTool(r, data, call)
+			result, callErr := s.executeAgentToolRecordingChange(r, data, &call) // records the change for result cards and Undo
 			call.Status = "completed"
 			if callErr != nil {
 				call.Status, call.Error = "error", callErr.Error()
@@ -656,6 +756,23 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 				}
 			}
 		}
+		if approval != nil && asked == "" {
+			// The held calls end the reply on an approval question; the user's answer runs or drops them.
+			preview := agentApprovalPreview(*approval)
+			part := domain.AgentMessagePart{ID: fmt.Sprintf("%s_approval_%d", messageID, turnIndex), Type: "question", Text: preview, Status: "pending", Question: &domain.AgentQuestion{Options: slices.Clone(agentApprovalOptions), AllowFreeText: true, Approval: approval}}
+			partIndex[part.ID] = len(parts)
+			parts = append(parts, part)
+			asked = preview
+			if writer != nil {
+				if err := writer.send(agentStreamEvent{Type: "tool.completed", MessageID: messageID, Part: &part}); err != nil {
+					return domain.AgentSession{}, err
+				}
+			}
+		}
+		// Like the reference app, a question ends the reply: the run stops until the user answers with their next message.
+		if asked != "" {
+			break
+		}
 		if turnIndex == maxAgentToolTurns-1 {
 			return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent exceeded the tool turn limit"))
 		}
@@ -664,6 +781,13 @@ func (s *server) runAgentSession(r *http.Request, id string, writer *agentEventW
 		if parts[index].Status == "running" {
 			parts[index].Status = "completed"
 		}
+		if call := parts[index].ToolCall; call != nil && call.Status == "running" && strings.HasPrefix(call.ID, agentHostedToolPrefix) {
+			call.Status = "completed"
+		}
+	}
+	if asked != "" {
+		// The reply's text (and what the model sees of it later) ends with the question; the part draws its options.
+		finalText = strings.TrimSpace(strings.TrimSpace(finalText) + "\n\n" + asked)
 	}
 	if strings.TrimSpace(finalText) == "" {
 		return s.persistAgentFailure(r, *session, messageID, finalText, parts, started, fmt.Errorf("Flow Agent provider returned an empty response"))
@@ -890,10 +1014,14 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	if args == nil {
 		args = map[string]any{}
 	}
+	// "DEV-42 Fix login", "[DEV-42](…/issue/DEV-42)" and app URLs in id arguments become the reference they name.
+	normalizeAgentToolArgs(call.Name, args)
 	args["__flowBaseURL"] = externalBaseURL(r)
 	if base, ok := r.Context().Value(agentBaseURLKey{}).(string); ok {
 		args["__flowBaseURL"] = base
 	}
+	// History reads "Flow <did X> on behalf of <User>" for what the tool writes.
+	withAgentAttribution(r, &data)
 	actor := mcpActor{WorkspaceKey: workspaceKey(r), User: data.Viewer, APIKey: domain.APIKey{Scopes: []string{"read", "write"}}}
 	if key, ok := r.Context().Value(apiKeyContextKey{}).(domain.APIKey); ok {
 		actor.APIKey = key
@@ -918,7 +1046,7 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 	return raw, nil
 }
 
-func agentProviderHistory(session domain.AgentSession, system string) []agentProviderMessage {
+func agentProviderHistory(session domain.AgentSession, system string, issueTitle func(string) string) []agentProviderMessage {
 	messages := []agentProviderMessage{{Role: "system", Content: system}}
 	start := len(session.Messages)
 	bytes := len(system)
@@ -930,16 +1058,24 @@ func agentProviderHistory(session domain.AgentSession, system string) []agentPro
 		bytes += len(raw)
 		start--
 	}
+	if issueTitle == nil {
+		issueTitle = func(string) string { return "" }
+	}
 	for _, message := range session.Messages[start:] {
-		providerMessage := agentProviderMessage{Role: message.Role, Content: message.Content}
+		content := message.Content
+		if message.Role == "user" {
+			// Chips reach the model as copyable references (DEV-42 ("Title")), never as glued chip text.
+			content = agentModelUserText(content, message.Mentions, issueTitle)
+		}
+		providerMessage := agentProviderMessage{Role: message.Role, Content: content}
 		for _, part := range message.Parts {
-			if part.ToolCall != nil {
+			if part.ToolCall != nil && !strings.HasPrefix(part.ToolCall.ID, agentHostedToolPrefix) {
 				providerMessage.ToolCalls = append(providerMessage.ToolCalls, *part.ToolCall)
 			}
 		}
 		messages = append(messages, providerMessage)
 		for _, part := range message.Parts {
-			if part.ToolCall == nil || len(part.ToolCall.Result) == 0 {
+			if part.ToolCall == nil || len(part.ToolCall.Result) == 0 || strings.HasPrefix(part.ToolCall.ID, agentHostedToolPrefix) {
 				continue
 			}
 			messages = append(messages, agentProviderMessage{Role: "tool", ToolResult: &agentProviderToolResult{CallID: part.ToolCall.ID, Content: string(part.ToolCall.Result), IsError: part.ToolCall.Status == "error"}})
@@ -952,7 +1088,20 @@ func agentProviderHistory(session domain.AgentSession, system string) []agentPro
 		}
 		messages = append(messages[:1], messages[start:]...)
 	}
-	return messages
+	// Calls without results (a stopped or failed reply, an unanswered question) get a "cancelled" result.
+	return sanitizeAgentProviderMessages(messages)
+}
+
+// agentIssueTitles looks up loaded issues' titles by identifier, for agentModelUserText.
+func agentIssueTitles(issues []domain.Issue) func(string) string {
+	return func(identifier string) string {
+		for _, issue := range issues {
+			if strings.EqualFold(issue.Identifier, identifier) {
+				return issue.Title
+			}
+		}
+		return ""
+	}
 }
 
 func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSession, message domain.AgentMessage) (domain.AgentSession, error) {
@@ -973,6 +1122,8 @@ func (s *server) persistAgentCompletion(r *http.Request, session domain.AgentSes
 }
 
 func (s *server) persistAgentFailure(r *http.Request, session domain.AgentSession, messageID, text string, parts []domain.AgentMessagePart, started time.Time, cause error) (domain.AgentSession, error) {
+	// Tool calls that never finished get a result, so the next message in this chat is a valid conversation.
+	settleInterruptedAgentParts(parts, errors.Is(cause, context.Canceled))
 	for index := range parts {
 		if parts[index].Status == "running" {
 			parts[index].Status = "error"

@@ -118,7 +118,7 @@ export function ProjectDependencyPicker({
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
   const menuTrigger = value.length ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger
 
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root>
     <Popover.Root onOpenChange={setOpen} open={open}>
     {menuTrigger}
     <Popover.Portal>
@@ -322,7 +322,7 @@ function ProjectOptionRow({ active = false, checked, disabled = false, id, onAct
   </button>
   const preview = renderPreview?.(project) ?? (project.previewData ? <ProjectDependencyPreview project={project}/> : undefined)
   if (!preview) return row
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root><Tooltip.Trigger asChild>{row}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className="project-dependency-picker__preview" collisionPadding={8} side="left" sideOffset={6}>{preview}</Tooltip.Content></Tooltip.Portal></Tooltip.Root></Tooltip.Provider>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root><Tooltip.Trigger asChild>{row}</Tooltip.Trigger><Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className="project-dependency-picker__preview" collisionPadding={8} side="left" sideOffset={6}>{preview}</Tooltip.Content></Tooltip.Portal></Tooltip.Root></Tooltip.Provider>
 }
 
 function ProjectDependencyIcon({ project, size }: { project?: ProjectDependencyOption; size: number }) {

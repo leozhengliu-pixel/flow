@@ -149,10 +149,10 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, ErrIssueVersion
 	}
 	terminal := task.Status == "complete" || task.Status == "error" || task.Status == "canceled"
-	if terminal && activity.Type != "retry" && activity.Type != "prompt" && activity.Type != "feedback" || !terminal && activity.Type == "retry" {
+	if terminal && activity.Type != "retry" && activity.Type != "prompt" && activity.Type != "feedback" && activity.Type != "deleted" || !terminal && activity.Type == "retry" {
 		return task, ErrIssueVersion
 	}
-	if task.Status == "awaitingInput" && activity.Type != "prompt" && activity.Type != "canceled" && activity.Type != "feedback" && (activity.Type != "thought" || task.PendingTool != nil) {
+	if task.Status == "awaitingInput" && activity.Type != "prompt" && activity.Type != "canceled" && activity.Type != "feedback" && activity.Type != "deleted" && (activity.Type != "thought" || task.PendingTool != nil) {
 		return task, ErrIssueVersion
 	}
 	switch activity.Type {
@@ -162,6 +162,27 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		}
 		targetID, _ := activity.Metadata["activityId"].(string)
 		if _, ok := activity.Metadata["enabled"].(bool); !ok {
+			return task, ErrIssueQuery
+		}
+		var raw []byte
+		var target domain.AgentActivity
+		if err := s.db.QueryRowContext(ctx, `SELECT data FROM application_agent_activities WHERE session_id=? AND id=?`, id, targetID).Scan(&raw); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return task, ErrIssueQuery
+			}
+			return task, err
+		}
+		if err := json.Unmarshal(raw, &target); err != nil {
+			return task, err
+		}
+		if target.Type != "response" && target.Type != "elicitation" && target.Type != "error" {
+			return task, ErrIssueQuery
+		}
+	case "deleted":
+		// A person removes one of the agent's replies from the thread (the reference app's comment menu "Delete").
+		// It is a marker activity: the reply stays in the log but is no longer shown, and the session state is unchanged.
+		targetID, _ := activity.Metadata["activityId"].(string)
+		if activity.ActorID == "" || targetID == "" {
 			return task, ErrIssueQuery
 		}
 		var raw []byte
@@ -251,7 +272,7 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	if task.Status == "active" {
 		lease = task.UpdatedAt.Add(5 * time.Minute).Format(time.RFC3339Nano)
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt='',lease_until=? WHERE workspace_key=? AND id=? AND version=?`, task.Status, task.Version, taskRaw, lease, workspace, id, expected)
+	result, err := tx.ExecContext(ctx, `UPDATE application_agent_tasks SET status=?,version=?,data=?,next_attempt='',lease_until=?,stale_at=? WHERE workspace_key=? AND id=? AND version=?`, task.Status, task.Version, taskRaw, lease, agentTaskStaleAt(task), workspace, id, expected)
 	if err != nil {
 		return task, err
 	}
@@ -280,7 +301,43 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		payload, _ := json.Marshal(map[string]any{"taskId": task.ID, "resourceId": resourceID, "resourceType": task.ResourceType, "version": task.Version})
 		sink(workspace, domain.RealtimeEvent{ID: fmt.Sprintf("agent_%s_%d", id, task.Version), Type: "agent_task.updated", AggregateID: resourceID, Payload: payload, CreatedAt: task.UpdatedAt})
 	}
+	if listener := s.agentReplies.Load(); listener != nil && agentReplyActivity(activity.Type) {
+		(*listener)(ctx, task, activity)
+	}
 	return task, nil
+}
+
+// AgentReplyListener hears every reply an agent posts to a session — a
+// response, a question (elicitation) or an error, the activities that show as
+// a reply in the thread — after it is committed. The server uses it to put the
+// reply in the Inbox of the people in the thread.
+type AgentReplyListener func(ctx context.Context, task domain.AgentTask, activity domain.AgentActivity)
+
+// SetAgentReplyListener installs (or, with nil, removes) the reply listener.
+func (s *SQLiteStore) SetAgentReplyListener(listener AgentReplyListener) {
+	if listener == nil {
+		s.agentReplies.Store(nil)
+		return
+	}
+	s.agentReplies.Store(&listener)
+}
+
+// agentTaskStaleAt is the stale_at column: when the pending or active session
+// goes stale (domain.AgentTask.StaleAt) in a fixed-width UTC format that
+// compares as text on every dialect, or empty.
+func agentTaskStaleAt(task domain.AgentTask) string {
+	if at := task.StaleAt(); at != nil {
+		return agentTaskTimeColumn(*at)
+	}
+	return ""
+}
+
+func agentTaskTimeColumn(at time.Time) string {
+	return at.UTC().Format("2006-01-02T15:04:05.000000000Z")
+}
+
+func agentReplyActivity(kind string) bool {
+	return kind == "response" || kind == "elicitation" || kind == "error"
 }
 
 func (s *SQLiteStore) PendingApplicationTasks(ctx context.Context) ([]domain.AgentTask, error) {

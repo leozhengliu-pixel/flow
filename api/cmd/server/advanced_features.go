@@ -264,7 +264,7 @@ type deletedInitiativePayload struct {
 
 func appendAudit(data *domain.Bootstrap, action, resourceType, resourceID string, metadata map[string]any) {
 	now := time.Now().UTC()
-	data.AuditLog = append([]domain.AuditLogEntry{{ID: fmt.Sprintf("audit_%d", now.UnixNano()), Actor: data.Viewer, Action: action, ResourceType: resourceType, ResourceID: resourceID, Metadata: metadata, CreatedAt: now}}, data.AuditLog...)
+	data.AuditLog = append([]domain.AuditLogEntry{{ID: fmt.Sprintf("audit_%d", now.UnixNano()), Actor: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), Action: action, ResourceType: resourceType, ResourceID: resourceID, Metadata: metadata, CreatedAt: now}}, data.AuditLog...)
 	if len(data.AuditLog) > 1000 {
 		data.AuditLog = data.AuditLog[:1000]
 	}
@@ -2883,6 +2883,18 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			data.InitiativeUpdates[value.Initiative.ID] = value.Updates
 			syncInitiativeProjects(data, value.Initiative.ID, nil, value.Initiative.ProjectIDs)
 			restored = value.Initiative
+		case "loop":
+			var value domain.Loop
+			if json.Unmarshal(entry.Payload, &value) != nil {
+				return errInvalid
+			}
+			if slices.ContainsFunc(data.Loops, func(item domain.Loop) bool { return item.ID == value.ID }) {
+				return errConflict
+			}
+			// The schedule restarts from now rather than catching up on runs missed while deleted.
+			value.NextRunAt = nil
+			data.Loops = append(data.Loops, value)
+			restored = value
 		default:
 			return errInvalid
 		}

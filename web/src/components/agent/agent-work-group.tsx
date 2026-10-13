@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { AgentMessage, AgentToolCall } from "@/types/flow";
 import { useI18n } from "@/i18n/i18n";
 import { AgentRichText } from "./agent-rich-text";
-import { toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
+import { isProviderReasoning, toolStatusLabel, translatePhaseTitle, translateToolTitle, workingLabel } from "./agent-step-labels";
 import styles from "./agent-page.module.css";
 import workStyles from "./agent-work-group.module.css";
 
@@ -12,8 +12,11 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
   // Older chats stored an unnamed placeholder for report_progress next to its step; it is not a real tool row.
   const settled = Boolean(message.durationMs) && !forceRunning;
   // The loop builder's ask_question calls render as answer chips, never as tool rows.
-  const parts = allParts.filter(part => (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
-  const running = forceRunning || parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
+  // Provider reasoning is the model's scratchpad (often English in a Chinese UI):, only step labels and the
+  // agent's own narration show. Older chats stored it; it stays hidden.
+  const parts = allParts.filter(part => !isProviderReasoning(part) && (part.type !== "toolCall" || Boolean(part.toolCall?.name) || !settled) && part.toolCall?.name !== "ask_question");
+  // A finished reply (older stopped chats saved calls as still running) is never "working…".
+  const running = forceRunning || !settled && parts.some(part => part.status === "running" || part.status === "pending" || part.toolCall?.status === "running" || part.toolCall?.status === "pending");
   const failed = parts.some(part => part.status === "error" || part.toolCall?.status === "error");
   const [open, setOpen] = useState(running || failed);
   useEffect(() => {
@@ -29,6 +32,7 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
       : toolCount > 2
         ? `${t("Used")} ${toolCount} ${t("tools")}`
         : t("Work completed");
+  if (!parts.length && !running) return null;
   return <details className={`${styles.workGroup}${failed ? ` ${styles.workFailed}` : ""}${className ? ` ${className}` : ""}`} open={open} onToggle={event => setOpen(event.currentTarget.open)}>
     {/* The reference app: label plus a small disclosure triangle; steps are flat 12px rows, narration is a quote with a 2px bar. */}
     <summary><span className={running ? styles.workShimmer : undefined}>{label}</span><WorkDisclosureIcon/></summary>
@@ -37,7 +41,7 @@ export function AgentWorkGroup({ message, parts: allParts, onToolApproval, appro
         ? <div className={styles.stepRow} key={part.id}><span data-i18n-ignore>{translatePhaseTitle(part.title ?? "", t)}</span>{part.text && <div className={styles.reasoningRow}><AgentReasoningText text={part.text}/></div>}</div>
         : part.type === "reasoning"
         ? <div className={styles.reasoningRow} key={part.id}>{part.status === "running" && !part.text && <span className={styles.workShimmer}>{t("Thinking…")}</span>}{part.text && <AgentReasoningText text={part.text}/>}</div>
-        : part.toolCall ? <AgentToolCallItem key={part.id} part={part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
+        : part.toolCall ? <AgentToolCallItem key={part.id} part={settled ? settledToolPart(part) : part} onApproval={onToolApproval} approvalBusy={approvalBusy}/> : null)}
     </div>
   </details>;
 }
@@ -60,10 +64,17 @@ function AgentToolCallItem({ part, onApproval, approvalBusy }: { part: NonNullab
   const detail = readableToolDetail(call.arguments, call.result);
   const approvalPending = call.status === "pending" && Boolean(call.approvalId);
   return <div className={`${styles.toolCall} ${call.status === "error" ? styles.toolCallError : ""}`}>
-    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t) : toolStatusLabel(call.name, running, t, call.arguments)}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
+    <div className={styles.toolCallRow} title={call.error || undefined}><span className={running ? styles.workShimmer : undefined} data-i18n-ignore>{call.title && !running ? translateToolTitle(call.title, t) : toolStatusLabel(call.name, running, t, call.arguments, call.status === "running")}</span>{detail && <span data-i18n-ignore>{detail}</span>}</div>
     {approvalPending && <div className={styles.approvalPrompt}><span>{t("Waiting for approval")}</span><span className={styles.approvalActions}><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "reject")} type="button">{t("Reject tool")}</button><button disabled={approvalBusy === call.approvalId} onClick={() => onApproval(call, "approve")} type="button">{t("Approve tool")}</button></span></div>}
-    {call.error && <p className={styles.toolCallErrorText} role="alert">{call.error}</p>}
+    {call.error && <p className={styles.toolCallErrorText} role="alert">{t(call.error)}</p>}
   </div>;
+}
+
+/** A step a finished reply never completed (stopped mid-call in an older chat) reads as stopped, not as running. */
+function settledToolPart(part: NonNullable<AgentMessage["parts"]>[number]) {
+  const call = part.toolCall;
+  if (!call || (call.status !== "running" && call.status !== "pending") || call.approvalId) return part;
+  return { ...part, status: "error" as const, toolCall: { ...call, status: "error" as const, error: call.error || "Stopped before this step finished." } };
 }
 
 /** Step subtitle: the looked-up entity's name when the result has one, never a bare internal id (project_123…). */

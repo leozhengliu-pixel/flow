@@ -3149,7 +3149,14 @@ function SecurityPage({
       <ApplicationPolicySettings admin={data.viewerRole === "admin" || data.viewerRole === "owner"} />
       <Section grouped title="AI & Agents">
         <Group title="Web search" description="Let Flow Agent use current public information">
-          {toggle("Enable Flow Agent web search", "agentWebSearch", "Allow Flow Agent to search the public web for current information and cite sources")}
+          {/* Web access is on unless an admin turns it off (like the reference app's "Enable web access"). */}
+          <Row title="Enable Flow Agent web search" description="Allow Flow Agent to search the public web for current information and cite sources">
+            <Toggle
+              label="Enable Flow Agent web search"
+              checked={!settings.agentWebSearchDisabled}
+              onChange={(value) => void save({ ...settings, agentWebSearch: value, agentWebSearchDisabled: !value })}
+            />
+          </Row>
         </Group>
         <Group title="Trusted external sources">
           <Row title="External sources" description="Manage allowed sources in Loops settings">

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { User } from '@/types/flow'
@@ -6,29 +6,155 @@ import { I18nProvider } from '@/i18n/i18n'
 import { AssigneePicker } from '@/components/issue/core-property-pickers'
 import { MyIssuesFilterMenu } from '@/components/my-issues/my-issues-filter-menu'
 import { explorerFilterOptions, explorerPropertyOptions } from '@/components/issue-explorer/issue-explorer-model'
+import { BUILTIN_AGENT_AVATAR_URL } from '@/components/ui/agent-avatar-url'
 import { makeBootstrap, makeIssue, teammate, viewer } from '@/test/fixtures'
 
 class TestResizeObserver { observe() {} unobserve() {} disconnect() {} }
 Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, value: TestResizeObserver })
 
-const flow = { id: 'app_flow', name: 'Flow', displayName: 'Flow', email: '', active: true, app: true, builtinAgent: true, appScopes: ['read', 'write', 'app:assignable'], appTeamIds: ['team-1'] } as User
+const flow = { id: 'app_flow', name: 'Flow', displayName: 'Flow', avatarUrl: BUILTIN_AGENT_AVATAR_URL, email: '', active: true, app: true, builtinAgent: true, appScopes: ['read', 'write', 'app:assignable'], appTeamIds: ['team-1'] } as User
 const elsewhere = { ...flow, id: 'app_other', name: 'Other agent', displayName: 'Other agent', appTeamIds: ['team-2'] } as User
 
 beforeEach(() => localStorage.setItem('flow:locale', 'en-US'))
 
+const openPicker = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole('combobox', { name: /Change assignee/ }))
+  const search = await screen.findByRole('textbox', { name: 'Assign to…' })
+  await waitFor(() => expect(search).toHaveFocus())
+  return search
+}
+const names = () => within(screen.getByRole('listbox', { name: 'Assignee' })).getAllByRole('option').map(option => option.querySelector('.property-command-label')?.textContent)
+const shortcuts = () => within(screen.getByRole('listbox', { name: 'Assignee' })).getAllByRole('option').map(option => option.querySelector('kbd')?.textContent ?? '')
+
 describe('assignee picker agents', () => {
-  it('lists the agents that can work in the team in their own section with the Agent pill and delegates on select', async () => {
-    const user = userEvent.setup(), onChange = vi.fn(), onDelegate = vi.fn()
-    render(<I18nProvider><AssigneePicker value={viewer} users={[viewer, teammate, flow, elsewhere]} teamId="team-1" onChange={onChange} onDelegate={onDelegate}/></I18nProvider>)
-    await user.click(screen.getByRole('combobox', { name: /Change assignee/ }))
-    const option = await screen.findByRole('option', { name: /Flow/ })
-    expect(within(option).getByText('Agent')).toHaveAttribute('data-agent-badge')
-    expect(screen.getByText('Agents')).toBeInTheDocument()
+  const people = [viewer, teammate, flow, elsewhere]
+  const mount = (props: Partial<Parameters<typeof AssigneePicker>[0]> = {}) => {
+    const handlers = { onChange: vi.fn(), onDelegate: vi.fn(), onInvite: vi.fn() }
+    render(<I18nProvider><AssigneePicker value={viewer} users={people} teamId="team-1" {...handlers} {...props}/></I18nProvider>)
+    return handlers
+  }
+
+  it('lists No assignee, people, then the team\'s agents in one list with number keys, no Agents header and no pill', async () => {
+    const user = userEvent.setup()
+    mount()
+    await openPicker(user)
+    expect(names()).toEqual(['No assignee', viewer.displayName, teammate.displayName, 'Flow', 'Invite and assign…'])
+    expect(shortcuts()).toEqual(['0', '1', '2', '3', ''])
+    expect(screen.queryByText('Agents')).not.toBeInTheDocument()
+    expect(document.querySelector('.property-command-options [data-agent-badge]')).toBeNull()
     expect(screen.queryByRole('option', { name: /Other agent/ })).not.toBeInTheDocument()
-    expect(within(screen.getByRole('option', { name: /Teammate/ })).queryByText('Agent')).not.toBeInTheDocument()
-    await user.click(option)
+    expect(screen.getByRole('textbox', { name: 'Assign to…' }).parentElement?.querySelector('kbd')).toHaveTextContent('A')
+  })
+
+  it('shows the agent avatar (logo tile) at 16px and the invite action under "New user"', async () => {
+    const user = userEvent.setup()
+    mount()
+    await openPicker(user)
+    const row = screen.getByRole('option', { name: /Flow/ })
+    expect(row.querySelector('[data-agent-avatar]')).not.toBeNull()
+    expect(screen.getByText('New user')).toBeInTheDocument()
+    const invite = screen.getByRole('option', { name: 'Invite and assign…' })
+    expect(invite.querySelector('[data-flow-glyph="invitePlane"]')).not.toBeNull()
+    expect(invite.querySelector('kbd')).toBeNull()
+  })
+
+  it('delegates on select and keeps the human assignee', async () => {
+    const user = userEvent.setup()
+    const { onChange, onDelegate } = mount()
+    await openPicker(user)
+    await user.click(screen.getByRole('option', { name: /Flow/ }))
     expect(onDelegate).toHaveBeenCalledWith(flow.id)
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('selects the row whose number key is pressed while the search is empty', async () => {
+    const user = userEvent.setup()
+    const { onChange, onDelegate } = mount()
+    await openPicker(user)
+    await user.keyboard('3')
+    expect(onDelegate).toHaveBeenCalledWith(flow.id)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('0 picks No assignee and 2 assigns the second person', async () => {
+    const user = userEvent.setup()
+    const { onChange } = mount()
+    await openPicker(user)
+    await user.keyboard('2')
+    expect(onChange).toHaveBeenCalledWith(teammate.id)
+    await openPicker(user)
+    await user.keyboard('0')
+    expect(onChange).toHaveBeenLastCalledWith('')
+  })
+
+  it('a digit typed after other characters stays in the search', async () => {
+    const user = userEvent.setup()
+    const { onChange, onDelegate } = mount()
+    const search = await openPicker(user)
+    await user.type(search, 'Fl1')
+    expect(search).toHaveValue('Fl1')
+    expect(onChange).not.toHaveBeenCalled()
+    expect(onDelegate).not.toHaveBeenCalled()
+  })
+
+  it('opens the invite flow from "Invite and assign…"', async () => {
+    const user = userEvent.setup()
+    const { onChange, onDelegate, onInvite } = mount()
+    await openPicker(user)
+    await user.click(screen.getByRole('option', { name: 'Invite and assign…' }))
+    expect(onInvite).toHaveBeenCalledTimes(1)
+    expect(onChange).not.toHaveBeenCalled()
+    expect(onDelegate).not.toHaveBeenCalled()
+  })
+
+  it('shows the delegate in the trigger with both avatars, marks it selected and removes it when picked again', async () => {
+    const user = userEvent.setup()
+    const { onChange, onDelegate } = mount({ delegate: flow })
+    const trigger = screen.getByRole('combobox', { name: /Change assignee/ })
+    expect(trigger).toHaveTextContent('Flow')
+    expect(trigger.querySelectorAll('.core-assignee-stack > .avatar, .core-assignee-stack > [data-agent-avatar-slot]')).toHaveLength(2)
+    await openPicker(user)
+    expect(screen.getByRole('option', { name: /Flow/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('option', { name: new RegExp(viewer.displayName) })).toHaveAttribute('aria-checked', 'true')
+    await user.click(screen.getByRole('option', { name: /Flow/ }))
+    expect(onDelegate).toHaveBeenCalledWith('')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('"No assignee" clears the assignee, or removes the delegate when only a delegate is set', async () => {
+    const user = userEvent.setup()
+    const first = mount({ delegate: flow })
+    await openPicker(user)
+    await user.click(screen.getByRole('option', { name: /No assignee/ }))
+    expect(first.onChange).toHaveBeenCalledWith('')
+    expect(first.onDelegate).not.toHaveBeenCalled()
+    cleanup()
+    const second = mount({ value: undefined, delegate: flow })
+    expect(screen.getByRole('combobox', { name: 'Change assignee. Flow is delegated' })).toHaveTextContent('Flow')
+    await openPicker(user)
+    await user.click(screen.getByRole('option', { name: /No assignee/ }))
+    expect(second.onDelegate).toHaveBeenCalledWith('')
+    expect(second.onChange).not.toHaveBeenCalled()
+  })
+
+  it('offers no agents when the workspace keeps guests away from them', async () => {
+    const user = userEvent.setup()
+    mount({ allowAgents: false })
+    await openPicker(user)
+    expect(names()).toEqual(['No assignee', viewer.displayName, teammate.displayName, 'Invite and assign…'])
+  })
+
+  it('the agent hover card has the 32px avatar, name, lowercase handle and the Agent pill', async () => {
+    const user = userEvent.setup()
+    mount()
+    await openPicker(user)
+    await user.hover(screen.getByRole('option', { name: /Flow/ }))
+    const card = await screen.findByRole('tooltip', undefined, { timeout: 3000 })
+    expect(card).toHaveClass('agent-hover-surface')
+    expect(within(card).getByText('Flow')).toBeInTheDocument()
+    expect(within(card).getByText('flow')).toBeInTheDocument()
+    expect(within(card).getByText('Agent')).toHaveAttribute('data-agent-badge')
+    expect(card.querySelector('.agent-hover-card__avatar [data-agent-avatar]')).not.toBeNull()
   })
 })
 
@@ -63,14 +189,14 @@ describe('filter menu Agent Session submenu', () => {
     return (field: Parameters<typeof explorerFilterOptions>[0]) => explorerFilterOptions(field, options)
   }
 
-  it("lists exactly the reference app's four session states with their glyphs and a search band", async () => {
+  it("lists the reference app's four session states plus Stale with their glyphs and a search band", async () => {
     const onToggle = vi.fn()
     render(<I18nProvider><MyIssuesFilterMenu open onOpenChange={vi.fn()} onToggle={onToggle} options={sessions()} trigger={<button type="button">Filter</button>}/></I18nProvider>)
     fireEvent.mouseMove(screen.getByRole('option', { name: 'Agent Session' }))
     const submenu = await screen.findByRole('listbox', { name: 'Agent Session' })
     const rows = within(submenu).getAllByRole('option')
-    expect(rows.map(row => row.querySelector('[data-i18n-ignore]')?.textContent)).toEqual(['Active', 'Error', 'Dismissed', 'Merged'])
-    expect(rows.map(row => row.querySelector('[data-flow-glyph]')?.getAttribute('data-flow-glyph'))).toEqual(['agentSessionActive', 'agentSessionError', 'agentSessionDismissed', 'agentSessionMerged'])
+    expect(rows.map(row => row.querySelector('[data-i18n-ignore]')?.textContent)).toEqual(['Active', 'Error', 'Dismissed', 'Merged', 'Stale'])
+    expect(rows.map(row => row.querySelector('[data-flow-glyph]')?.getAttribute('data-flow-glyph'))).toEqual(['agentSessionActive', 'agentSessionError', 'agentSessionDismissed', 'agentSessionMerged', 'agentSessionDismissed'])
     expect(rows[0].querySelector('svg')).toHaveStyle({ color: 'var(--agent-session-active)' })
     for (const row of rows) expect(row).toHaveAttribute('data-row-kind', 'check')
     expect(rows[3]).toHaveTextContent('1 issue')
@@ -84,6 +210,6 @@ describe('filter menu Agent Session submenu', () => {
     render(<I18nProvider><MyIssuesFilterMenu open onOpenChange={vi.fn()} onToggle={vi.fn()} options={sessions()} trigger={<button type="button">Filter</button>}/></I18nProvider>)
     fireEvent.mouseMove(screen.getByRole('option', { name: 'Agent 会话' }))
     const submenu = await screen.findByRole('listbox', { name: 'Agent 会话' })
-    expect(within(submenu).getAllByRole('option').map(row => row.querySelector('[data-i18n-ignore]')?.textContent)).toEqual(['进行中', '错误', '已忽略', '已合并'])
+    expect(within(submenu).getAllByRole('option').map(row => row.querySelector('[data-i18n-ignore]')?.textContent)).toEqual(['进行中', '错误', '已忽略', '已合并', '已停滞'])
   })
 })

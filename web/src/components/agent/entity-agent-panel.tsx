@@ -320,6 +320,8 @@ export function EntityAgentPanel({
           onSubmit={() => void submit()}
           onSendSuggestion={message => void submit(message)}
           onToolApproval={(call, decision) => void decideToolApproval(call, decision)}
+          sessionId={session?.id}
+          onSessionChange={next => { setSession(next); setMessages(next.messages) }}
           placeholder={
             status?.enabled
               ? `${t('Ask about this')} ${contextTypeLabel}…`

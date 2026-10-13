@@ -1,4 +1,4 @@
-import * as Tooltip from '@radix-ui/react-tooltip'
+import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { revenueSuffix } from '@/components/issue-explorer/customer-filter'
 import { currencySymbol } from '@/lib/customer-settings'
@@ -669,16 +669,7 @@ function LeadPropertyButton({ lead, onChange, options }: {
 }) {
   const property = <ProjectPropertyPicker label={lead?.name ?? 'No lead'} onChange={onChange} options={options ?? PROPERTY_OPTIONS.lead} property="lead" value={lead?.id ?? ''}><ProjectAvatar lead={lead} /></ProjectPropertyPicker>
   if (lead) return property
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>
-    <Tooltip.Root>
-      <Tooltip.Trigger asChild><span className="lp-project-lead-trigger">{property}</span></Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content data-flow-motion="tooltip" className="lp-project-lead-tooltip" side="bottom" sideOffset={6}>
-          <span>Set project lead</span><span className="lp-project-lead-tooltip__shortcut"><kbd>P</kbd><span>then</span><kbd>A</kbd></span>
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  </Tooltip.Provider>
+  return <ScopedFlowTooltip label="Set project lead" shortcut="P then A"><span className="lp-project-lead-trigger">{property}</span></ScopedFlowTooltip>
 }
 
 function HealthIcon({ value }: { value: ProjectPageItem['health'] }) {

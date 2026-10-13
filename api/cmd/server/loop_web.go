@@ -7,12 +7,15 @@ import (
 	"strings"
 	"time"
 
+	"flow/api/internal/domain"
 	"flow/api/internal/websearch"
 )
 
 // Web tools: provider-agnostic search plus an SSRF-safe page fetch. Loops get
-// them with webSearch on; Flow Agent chat gets them when the workspace enables
-// agent web search. They are offered only when a provider is configured.
+// them with webSearch on when a provider is configured. Flow Agent chat and
+// comment threads have web access unless the workspace turns it off (like
+// The reference app): fetch_url always, web_search through the configured provider or the
+// model provider's hosted search.
 
 const (
 	webSearchToolName = "web_search"
@@ -64,9 +67,44 @@ func isWebTool(name string) bool {
 
 const loopWebSearchUnavailable = "Web search is enabled for this loop, but no web search provider is configured on this server."
 
+// agentWebAccess reports whether Flow Agent may use the web in a workspace: on unless an admin turned it off.
+func agentWebAccess(settings domain.WorkspaceSettings) bool {
+	return !settings.AgentWebSearchDisabled && !settings.HIPAACompliance
+}
+
+// agentNativeWebSearch reports whether model turns can use the provider's hosted web search instead of a
+// configured search provider (OpenAI Responses "web_search", Anthropic "web_search" server tool).
+func (s *server) agentNativeWebSearch() bool {
+	if !s.agent.NativeWebSearch || s.webSearchAvailable() || s.agentNativeWebSearchOff.Load() {
+		return false
+	}
+	return s.agent.Protocol == "openai-responses" || s.agent.Protocol == "anthropic-messages"
+}
+
+// agentWebSearchUsable reports whether Flow Agent chat can search the web (a provider or hosted search).
+func (s *server) agentWebSearchUsable() bool {
+	return s.webSearchAvailable() || s.agentNativeWebSearch()
+}
+
+// agentWebToolList is the function tools a web-enabled turn gets: fetch_url always, web_search with a provider.
+func (s *server) agentWebToolList() []agentProviderTool {
+	if s.webSearchAvailable() {
+		return webToolDefinitions
+	}
+	return []agentProviderTool{webToolDefinitions[1]}
+}
+
+// agentWebNote tells the model which web tools it has, and to say so honestly when search is unavailable.
+func (s *server) agentWebNote() string {
+	if s.agentWebSearchUsable() {
+		return agentWebSearchNote
+	}
+	return agentWebFetchOnlyNote
+}
+
 // executeWebTool runs web_search or fetch_url.
 func (s *server) executeWebTool(ctx context.Context, name string, arguments json.RawMessage) ([]byte, error) {
-	if !s.webSearchAvailable() || !agentWebToolsEnabled(ctx) {
+	if !agentWebToolsEnabled(ctx) || strings.TrimPrefix(name, "mcp__flow.") == webSearchToolName && !s.webSearchAvailable() {
 		return nil, fmt.Errorf("Web search is not available")
 	}
 	var args struct {
@@ -110,4 +148,6 @@ func (s *server) executeWebTool(ctx context.Context, name string, arguments json
 	return nil, fmt.Errorf("unknown web tool %s", name)
 }
 
-const agentWebSearchNote = "\n\nWeb search: you can use web_search and fetch_url for public information that is not in the workspace. When you use web results, cite the URLs you relied on as markdown links.\n"
+const agentWebSearchNote = "\n\nWeb access: you can search the web and read pages with fetch_url for public or current information that is not in the workspace (versions, docs, best practices, news). Use it instead of answering such questions from memory. Cite every source you relied on as a markdown link whose text is the site's hostname, for example [nodejs.org](https://nodejs.org/en/download).\n"
+
+const agentWebFetchOnlyNote = "\n\nWeb access: you can read a public web page with fetch_url when you know its URL (cite it as a markdown link whose text is the hostname, for example [nodejs.org](https://nodejs.org/en/download)), but web search is not configured on this server. When a question needs a search, say plainly that you cannot search the web here and answer from what you know, marked as possibly out of date.\n"

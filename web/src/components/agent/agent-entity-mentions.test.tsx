@@ -288,6 +288,20 @@ describe('agent entity chips', () => {
     await waitFor(() => expect(document.querySelector('[data-agent-entity-card="issue"]')).toHaveTextContent('Second issue'))
   })
 
+  it('leaves issues that already have a result card out of the referenced list', async () => {
+    const data = fixture({ issues: [makeIssue(), makeIssue({ id: 'issue-2', identifier: 'TST-2', number: 2, title: 'Second issue' }), makeIssue({ id: 'issue-3', identifier: 'TST-3', number: 3, title: 'Third issue' })] })
+    const answer = parseAgentAnswer('Created TST-2 and TST-3 under TST-1.', data)
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <AgentReferencedResources data={data} exclude={['issue:issue-2', 'issue:issue-3']} references={answer.references}/>
+        </MemoryRouter>
+      </I18nProvider>,
+    )
+    // Only TST-1 is left, and a single issue is not listed.
+    expect(screen.queryByRole('list', { name: 'Referenced issues' })).toBeNull()
+  })
+
   describe('records created after the page loaded (non-paged workspace data lacks them)', () => {
     it('fetches an issue the agent just created by identifier and renders its chip', async () => {
       api.fetchIssueRecord.mockResolvedValue(makeIssue({ id: 'issue-25', identifier: 'TST-25', title: 'Fresh issue' }))

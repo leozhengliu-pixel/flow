@@ -52,6 +52,10 @@ func (s *server) pagedRealtimeEvent(r *http.Request, event domain.RealtimeEvent)
 	if domain.RoutineCredentialEvent(event.Type) {
 		return event, false, nil
 	}
+	if event.Type == "agent_task.replied" {
+		// An agent replied in an issue thread; viewers of the issue refresh their Inbox.
+		return event, s.pagedIssueVisible(r, event.AggregateID), nil
+	}
 	if event.Type == "agent_task.updated" {
 		var payload struct {
 			TaskID string `json:"taskId"`

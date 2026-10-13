@@ -18,7 +18,7 @@ import { usePeopleDirectory } from './people-context'
 import { PersonInfo } from './person-info'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { displayUserName } from '@/lib/runtime-preferences'
-import { TooltipShortcut } from '@/components/ui/tooltip'
+import { TooltipBody } from '@/components/ui/tooltip'
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 
 export interface PropertyOption {
@@ -107,7 +107,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
   const [hoverOpen, setHoverOpen] = useState(false)
   const [openLabelGroupId, setOpenLabelGroupId] = useState<string>()
   const listboxId = useId()
-  const selected = multiple ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
+  const selected = multiple || selectedIds.length ? selectedIds : [selectedId ?? options.find(option => option.label === value)?.id ?? '']
   const selectionKey = JSON.stringify(selected)
   const selectedSet = useMemo(() => new Set<string>(JSON.parse(selectionKey)), [selectionKey])
   const selectedPerson = selected.length === 1 ? menuOptions.find(option => option.id === selected[0])?.person : undefined
@@ -158,7 +158,7 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
       </button>
   const popoverTrigger = <Popover.Trigger asChild>{triggerButton}</Popover.Trigger>
   const plainTooltip = !hoverContent && Boolean(tooltip)
-  const tooltipContent = hoverContent ?? (tooltip ? <><span className="flow-tooltip-copy">{tooltip}</span>{tooltipShortcut && <kbd className="flow-tooltip-shortcut"><TooltipShortcut value={tooltipShortcut}/></kbd>}</> : undefined)
+  const tooltipContent = hoverContent ?? (tooltip ? <TooltipBody label={tooltip} shortcut={tooltipShortcut}/> : undefined)
   const menuTrigger = customTrigger
     ? <Popover.Anchor asChild>{customTrigger({ open, activeTrigger, openMenu: triggerId => { setActiveTrigger(triggerId); setHoverOpen(false); setOpen(true) } })}</Popover.Anchor>
     : tooltipContent ? <Tooltip.Trigger asChild>{popoverTrigger}</Tooltip.Trigger> : popoverTrigger
@@ -176,15 +176,15 @@ export function PropertyMenu({ label, value, icon, options, onChange, onCreate, 
             {!command.filteredOptions.length && !canCreateLabel && !canCreateMilestone && !canCreateStandard && !showLabelCreateHint && <div className="core-property-empty">{t(emptyLabel ?? 'No results')}</div>}
           </div>}
         </div>
-  if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>{content}</Tooltip.Provider>
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined) } }}>
+  if (embedded) return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}>{content}</Tooltip.Provider>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}><Tooltip.Root open={Boolean(tooltipContent) && !open && hoverOpen} onOpenChange={setHoverOpen}><Popover.Root open={open} onOpenChange={next => { setOpen(next); if (next) setHoverOpen(false); else { setActiveTrigger(undefined); setOpenLabelGroupId(undefined) } }}>
     {menuTrigger}
     <Popover.Portal>
       <Popover.Content data-flow-motion="floating" className={`property-command-surface property-command-${kind}${labelGroupId ? ' is-label-group' : ''}${surfaceClassName ? ` ${surfaceClassName}` : ''}`} role="dialog" aria-label={`Change ${label}`} align={align} alignOffset={alignOffset} side={side} sideOffset={4} collisionPadding={10} onClick={event => event.stopPropagation()} onOpenAutoFocus={event => event.preventDefault()}>
         {content}
       </Popover.Content>
     </Popover.Portal>
-  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={!plainTooltip && hoverPlacement === 'below' ? 14 : 6} collisionPadding={8}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
+  </Popover.Root>{tooltipContent&&<Tooltip.Portal><Tooltip.Content data-flow-motion="tooltip" className={plainTooltip ? 'flow-tooltip-content' : hoverClassName ?? 'property-hover-tooltip'} side={plainTooltip || hoverPlacement === 'below' ? 'bottom' : 'left'} align="center" sideOffset={plainTooltip ? 8 : hoverPlacement === 'below' ? 14 : 6} collisionPadding={8}>{tooltipContent}</Tooltip.Content></Tooltip.Portal>}</Tooltip.Root></Tooltip.Provider>
 }
 
 function VirtualStandardOptions({ sections, activeId, selected, label, multiple, listboxId, onChoose, onActive }: {

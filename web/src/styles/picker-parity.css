@@ -119,7 +119,7 @@ html:root body .property-command-surface .property-command-options [role=option]
   border: 0;
   background: transparent;
   color: var(--pk-muted);
-  font: 500 11px/1 var(--font);
+  font: 500 11px/1.1 var(--font);
   text-align: right;
 }
 html:root body .property-command-surface .property-command-group {
@@ -133,7 +133,34 @@ html:root body .property-command-surface .core-person-picker-avatar {
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
-  font-size: 7px;
+  font-size: 9px;
+  font-weight: 450;
+  box-shadow: none;
+}
+/* The avatar fills its 16px icon slot exactly (no inline line box pushing it down). */
+html:root body .property-command-surface .property-command-icon > span[aria-hidden] {
+  width: 16px;
+  height: 16px;
+  display: flex;
+}
+html:root body .property-command-surface .property-command-icon > svg[data-flow-glyph],
+html:root body .property-command-surface .property-command-icon > .no-assignee-icon {
+  width: 16px;
+  height: 16px;
+}
+/* "Invite and assign…" paper plane in the secondary text colour. */
+html:root body .property-command-surface .property-command-invite-icon {
+  color: var(--pk-muted);
+}
+/* The Assignee property shows the delegated agent's avatar after the human assignee's, overlapping it. */
+.core-assignee-stack {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+.core-assignee-stack > .avatar + .avatar {
+  margin-left: -4px;
+  box-shadow: 0 0 0 1.5px var(--bg-panel);
 }
 
 /* Checkboxes appear on hover, keyboard focus or when checked. Action rows
@@ -813,7 +840,11 @@ html:root body .issue-options-submenu:not(#_) {
 }
 html:root body .issue-options-popover:not(#_) {
   width: max-content;
-  min-width: 210px;
+  min-width: 242px;
+}
+/* Submenus float above the menu with the reference's heavier card shadow. */
+html:root body .issue-options-submenu:not(#_) {
+  box-shadow: var(--pk-card-shadow);
 }
 html:root body .issue-options-popover .issue-options-item:not(#_),
 html:root body .issue-options-submenu .issue-options-item:not(#_) {
@@ -821,15 +852,42 @@ html:root body .issue-options-submenu .issue-options-item:not(#_) {
   font-size: 13px;
   font-weight: 450;
 }
+/* Reference rows: muted icon and chevron at rest; icon and label turn bright on the highlighted row. */
 html:root body .issue-options-popover .issue-options-item:not(#_) .issue-options-icon,
 html:root body .issue-options-submenu .issue-options-item:not(#_) .issue-options-icon {
-  color: var(--pk-text);
+  color: var(--pk-muted);
+}
+html:root body .issue-options-popover .issue-options-item:not(#_) .issue-options-chevron,
+html:root body .issue-options-submenu .issue-options-item:not(#_) .issue-options-chevron {
+  height: auto;
+  color: var(--pk-faint);
+  line-height: normal;
+}
+html:root body .issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true]:not(#_),
+html:root body .issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true]:not(#_),
+html:root body .issue-options-popover .issue-options-item[data-submenu-open=true]:not(#_),
+html:root body .issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true]:not(#_) .issue-options-icon,
+html:root body .issue-options-submenu[data-highlight=true] .issue-options-item[data-selected=true]:not(#_) .issue-options-icon,
+html:root body .issue-options-popover .issue-options-item[data-submenu-open=true]:not(#_) .issue-options-icon {
+  color: var(--pk-text-strong);
+}
+html:root body .issue-options-popover[data-highlight=true] .issue-options-item[data-selected=true]:not(#_) .issue-options-chevron,
+html:root body .issue-options-popover .issue-options-item[data-submenu-open=true]:not(#_) .issue-options-chevron {
+  color: var(--pk-muted);
+}
+html:root body .issue-options-popover .issue-options-item:not(#_) .issue-options-shortcut,
+html:root body .issue-options-submenu .issue-options-item:not(#_) .issue-options-shortcut {
+  gap: 3px;
+  padding-left: 0;
+}
+html:root body .issue-options-popover .issue-options-item:not(#_) .issue-options-shortcut + .issue-options-chevron {
+  margin-left: -2px;
 }
 html:root body .issue-options-popover .issue-options-item:not(#_) kbd,
 html:root body .issue-options-submenu .issue-options-item:not(#_) kbd {
   min-width: 0;
   height: auto;
-  padding: 0 1px;
+  padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;

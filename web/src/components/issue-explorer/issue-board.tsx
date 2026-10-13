@@ -253,7 +253,7 @@ export function IssueBoardCard({ issue, properties, propertyOptions, selected, d
     </div>}
       {properties.has('assignee') && issue.delegate && <DelegateAvatar delegate={issue.delegate} className={styles.delegateAvatar}/>}
       {properties.has('assignee') && <RowCommandPicker
-        propertyLabel="Assignee" label={issue.assignee ? `Assign to. Current assignee is ${issue.assignee.name}` : 'Assign issue'} searchLabel="Assign to..."
+        propertyLabel="Assignee" label={issue.assignee ? `Assign to. Current assignee is ${issue.assignee.name}` : 'Assign issue'} searchLabel="Assign to…"
         selectedIds={[issue.assignee?.id ?? '']} options={propertyOptions.assignee} onSelect={value => change('assignee', value)} triggerClassName={styles.assigneeTrigger}
         trigger={issue.assignee ? <BoardAssigneeAvatar assignee={issue.assignee}/> : <span className={styles.noAssignee}><NoAssigneeIcon size={18}/></span>}
       />}

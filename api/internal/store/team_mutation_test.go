@@ -850,3 +850,38 @@ func TestTeamDeletedClearsChildParentAndIssues(t *testing.T) {
 		t.Fatalf("unrelated issue=%d err=%v", other, err)
 	}
 }
+
+// Settings that only change list fields (team agent connectors, triage action
+// members) must still be saved.
+func TestTeamSettingsListOnlyMutationsPersist(t *testing.T) {
+	repo, err := OpenSQLiteTestFixture(filepath.Join(t.TempDir(), "flow.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repo.Close()
+	key := seedBulkTeams(t, repo, 3)
+	child := "bulk-team-00000"
+	connectors := []domain.TeamAgentConnector{{ID: "conn_1", Name: "Docs", URL: "https://mcp.example.com", Enabled: true}}
+	mutate := func(change func(*domain.TeamSettings)) domain.TeamSettings {
+		t.Helper()
+		err := repo.MutateWorkspace(context.Background(), key, "team.settings_updated", child, nil, func(next *domain.Bootstrap) error {
+			settings := next.TeamSettings[child]
+			change(&settings)
+			next.TeamSettings[child] = settings
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := repo.ReloadAllWorkspaces(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		return repo.Bootstrap().TeamSettings[child]
+	}
+	if saved := mutate(func(settings *domain.TeamSettings) { settings.AgentConnectors = connectors }); !slices.Equal(saved.AgentConnectors, connectors) {
+		t.Fatalf("team agent connectors were not persisted: %+v", saved.AgentConnectors)
+	}
+	if saved := mutate(func(settings *domain.TeamSettings) { settings.TriageActionUserIDs = []string{"user_triage"} }); !slices.Equal(saved.TriageActionUserIDs, []string{"user_triage"}) {
+		t.Fatalf("triage action members were not persisted: %+v", saved.TriageActionUserIDs)
+	}
+}

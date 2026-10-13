@@ -64,13 +64,13 @@ export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?
     </div>
     </>}
     {editable&&(actions?.onCreateIssue||actions?.onAskAgent||actions?.onComment)&&<span className="description-toolbar-separator"/>}
-    {actions?.onCreateIssue&&<FormatButton label="Create issue from selection" onPress={()=>actions.onCreateIssue?.(selection())}><SquarePlus size={16}/></FormatButton>}
-    {actions?.onAskAgent&&<FormatButton label="Ask agent" onPress={()=>actions.onAskAgent?.(selection())}><AgentCursorGlyph size={16}/></FormatButton>}
+    {actions?.onCreateIssue&&<FormatButton label="Create issue from selection" shortcut="⌘⇧O" onPress={()=>actions.onCreateIssue?.(selection())}><SquarePlus size={16}/></FormatButton>}
+    {actions?.onAskAgent&&<FormatButton label="Ask agent" shortcut="⌘J" onPress={()=>actions.onAskAgent?.(selection())}><AgentCursorGlyph size={16}/></FormatButton>}
     {actions?.onComment&&<FormatButton label="Comment" onPress={()=>actions.onComment?.(selection())}><MessageSquare size={16}/></FormatButton>}
   </div></TooltipProvider>
 }
 
-function FormatButton({ label, active = false, onPress, children }: { label: string; active?: boolean; onPress: () => void; children: React.ReactNode }) {
+function FormatButton({ label, shortcut, active = false, onPress, children }: { label: string; shortcut?: string; active?: boolean; onPress: () => void; children: React.ReactNode }) {
   const { t } = useI18n()
-  return <FlowTooltip label={t(label)}><button type="button" aria-label={t(label)} aria-pressed={active} onMouseDown={event => event.preventDefault()} onClick={onPress}>{children}</button></FlowTooltip>
+  return <FlowTooltip label={t(label)} shortcut={shortcut}><button type="button" aria-label={t(label)} aria-pressed={active} onMouseDown={event => event.preventDefault()} onClick={onPress}>{children}</button></FlowTooltip>
 }

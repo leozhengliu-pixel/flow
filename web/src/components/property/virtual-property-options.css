@@ -14,3 +14,5 @@
 [role=menu]:has(>.people-menu-body){max-height:min(380px,calc(100dvh - 16px),var(--radix-popper-available-height,100dvh));overflow:hidden}
 [role=menu][data-side=right]:has(>.people-menu-body){translate:min(0px,calc(var(--radix-popper-available-width,100vw) - 100%)) 0}
 [role=menu][data-side=left]:has(>.people-menu-body){translate:max(0px,calc(100% - var(--radix-popper-available-width,100vw))) 0}
+
+.people-menu-body .people-menu-avatar.is-compact{flex:0 0 16px;font-size:9px;font-weight:450}

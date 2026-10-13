@@ -898,6 +898,13 @@ func (s *server) updateStructuredTeamSettings(w http.ResponseWriter, r *http.Req
 		if input.ProjectUpdatePrompt != nil {
 			settings.ProjectUpdatePrompt = strings.TrimSpace(*input.ProjectUpdatePrompt)
 		}
+		if input.AgentGuidance != nil {
+			guidance := strings.TrimSpace(*input.AgentGuidance)
+			if len([]rune(guidance)) > teamAgentGuidanceLimit {
+				return fmt.Errorf("%w: team guidance must not exceed %d characters", errInvalid, teamAgentGuidanceLimit)
+			}
+			settings.AgentGuidance = guidance
+		}
 		if input.ResolvedSummaries != nil {
 			settings.ResolvedSummaries = *input.ResolvedSummaries
 		}

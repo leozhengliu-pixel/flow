@@ -2,6 +2,7 @@ import { pulseZhCN } from './translations-pulse';
 import { viewFiltersZhCN } from './translations-view-filters';
 import { insightsZhCN } from './translations-insights';
 import { agentTriageZhCN } from './translations-agent-triage';
+import { agentThreadsZhCN } from './translations-agent-threads';
 import { releaseIntakeZhCN } from './translations-release-intake';
 import { releasePipelinesZhCN } from './translations-release-pipelines';
 import { releaseViewsZhCN } from './translations-release-views';
@@ -37,7 +38,13 @@ import { prefilledIssueZhCN } from './translations-prefilled-issue';
 import { projectTemplatesZhCN } from './translations-project-templates';
 import { issueRelationsZhCN } from './translations-issue-relations';
 import { oauthAppsZhCN } from './translations-oauth-apps';
+import { issueDelegateZhCN } from './translations-issue-delegate';
+import { agentAttributionZhCN } from './translations-agent-attribution';
 import { issueHeaderZhCN } from './translations-issue-header';
+import { issueOptionsZhCN } from './translations-issue-options';
+import { teamAgentGuidanceZhCN } from './translations-team-agent-guidance';
+import { agentChangesZhCN } from './translations-agent-changes';
+import { agentRuntimeZhCN } from './translations-agent-runtime';
 
 export const zhCN: Record<string, string> = {
   "Allow installation in other workspaces": "允许安装到其他工作区",
@@ -5830,6 +5837,7 @@ Object.assign(zhCN, gitlabSettingsZhCN);
 Object.assign(zhCN, webhookSettingsZhCN);
 Object.assign(zhCN, loopRunsZhCN);
 Object.assign(zhCN, agentMentionsZhCN);
+Object.assign(zhCN, agentThreadsZhCN);
 // Release pipeline settings copy, and one zh term (发布管线) for "pipeline" there.
 Object.assign(zhCN, releasePipelinesZhCN);
 Object.assign(zhCN, releaseViewsZhCN);
@@ -5854,5 +5862,14 @@ for (const [source, translation] of Object.entries(projectTemplatesZhCN)) zhCN[s
 for (const [source, translation] of Object.entries(issueRelationsZhCN)) zhCN[source] ??= translation;
 // Issue detail header (command strip, list position, presence) fills gaps only.
 for (const [source, translation] of Object.entries(issueHeaderZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(issueOptionsZhCN)) zhCN[source] ??= translation;
 // OAuth application pages, manifests and "via <App>" attribution fill gaps only.
 for (const [source, translation] of Object.entries(oauthAppsZhCN)) zhCN[source] ??= translation;
+// Issue sidebar assignee + delegated agent rows fill gaps only.
+for (const [source, translation] of Object.entries(issueDelegateZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(agentAttributionZhCN)) zhCN[source] ??= translation;
+// Team-level agent guidance (Team settings › Team agents) fills gaps only.
+for (const [source, translation] of Object.entries(teamAgentGuidanceZhCN)) zhCN[source] ??= translation;
+for (const [source, translation] of Object.entries(agentChangesZhCN)) zhCN[source] ??= translation;
+// Agent approvals (bulk deletes, agent-written updates), interrupted steps and web access fill gaps only.
+for (const [source, translation] of Object.entries(agentRuntimeZhCN)) zhCN[source] ??= translation;

@@ -35,6 +35,8 @@ export type AgentMessageMentions = {
   userIds?: string[]
   loopIds?: string[]
   mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: string; label: string }[]
+  /** Picks an option of the reply's pending question (ask_user). */
+  answer?: { partId: string; value: string }
 }
 
 export function streamNewAgentSession(input: AgentStreamInput, onEvent: (event: AgentStreamEvent) => void, signal?: AbortSignal) {

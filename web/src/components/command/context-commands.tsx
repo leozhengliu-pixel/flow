@@ -13,13 +13,15 @@ import { toast } from '@/lib/toast'
 
 import { CalendarIcon, CycleIcon, LabelIcon, NoAssigneeIcon, NoProjectIcon, PriorityIcon, ProjectIcon, ProjectStatusIcon, StatusIcon, TeamIcon } from '@/components/issue/issue-icons'
 import { UserAvatar } from '@/components/ui/user-avatar'
-import { AgentBadge } from '@/components/agent/agent-badge'
-import { assigneeCandidates } from '@/lib/agent-members'
+import { agentsAvailable, ASSIGNEE_INVITE_ID, assigneeCandidates, assigneeShortcut } from '@/lib/agent-members'
+import { openMemberInvite } from '@/lib/invite-navigation'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import { confirmAction } from '@/components/ui/action-dialog-service'
 import { useIssueSearch } from '@/components/issue/use-issue-search'
 import { useIssuesById } from '@/components/issue/use-issues-by-id'
 import type { MyIssuesCreateContext } from '@/components/my-issues/my-issues-list'
 import { issuePath, projectPath } from '@/lib/app-routes'
+import { buildPrefilledIssueURL } from '@/lib/prefilled-issue-url'
 import { workspaceFeatureEnabled } from '@/components/layout/sidebar-customization-state'
 import { IssueActionGlyph } from '@/components/issue/issue-action-glyphs'
 import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
@@ -78,6 +80,8 @@ export interface PageOption {
   current?: boolean
   detail?: ReactNode
   entity?: boolean
+  /** A number key (0-9) that picks the row while the search is empty, shown at the row end. */
+  shortcut?: string
   /** Always rendered regardless of the query (typed custom dates). */
   forceMount?: boolean
   /** Section heading inside a page (My teams / Projects / Initiatives); options of one group must be adjacent. */
@@ -248,6 +252,7 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
     { id: 'ctx-copy-url', label: 'Copy issue URL', icon: <Link2/>, shortcut: ['⌘', '⇧', ','], keywords: 'link', run: choose(() => copyIssues(url, 'Copied issue URL')) },
     { id: 'ctx-copy-branch', label: 'Copy git branch name', icon: <GitBranch/>, shortcut: ['⌘', '⇧', '.'], keywords: 'git', run: choose(copyBranch) },
     { id: 'ctx-copy-title', label: 'Copy issue title', icon: <Copy/>, shortcut: ['⌘', '⇧', "'"], run: choose(() => copyIssues(issue => issue.title, 'Copied issue title')) },
+    ...(single && first ? [{ id: 'ctx-copy-prefilled-url', label: 'Copy prefilled create issue URL', icon: <Link2/>, keywords: 'new template link prefill create', run: choose(() => copyText(buildPrefilledIssueURL(first, data, location.origin), t('Copied prefilled create issue URL'))) }] : []),
     ...(single && first && handlers.onCreateIssueWith ? [{ id: 'ctx-make-copy', label: 'Make a copy…', icon: <CopyPlus/>, keywords: 'duplicate clone', run: () => { close(); handlers.onCreateIssueWith?.(copyContext(first)) } }] : []),
     { id: 'ctx-team', label: 'Move to team…', icon: <Users/>, keywords: 'transfer', page: { id: 'team', label: 'Move to team…' } },
     { id: 'ctx-archive', label: 'Archive', icon: <Archive/>, keywords: 'close', run: choose(() => apply({ archived: true })) },
@@ -274,10 +279,17 @@ function issueCommands({ context, data, page, query, handlers, close, t, refs, i
       return PRIORITIES.map(priority => ({ id: String(priority.value), label: priority.label, icon: <PriorityIcon priority={priority.value}/>, current: current === priority.value, select: choose(() => apply({ priority: priority.value })) }))
     }
     if (page.id === 'assignee') {
+      // The reference app's "Assign to…" page: "No assignee" (0), people (1-9), agents continuing the numbering (no pill), then "New user / Invite and assign…".
+      // Picking an agent delegates; picking the delegated agent again, or "No assignee" while only a delegate is set, removes the delegate.
       const current = same(issue => issue.assignee?.id ?? '')
+      const delegateOnly = issues.every(issue => !issue.assignee) && issues.some(issue => issue.delegate)
       return [
-        { id: '', label: 'No assignee', icon: <NoAssigneeIcon/>, keywords: 'unassign none', current: current === '', select: choose(() => apply({ assigneeId: '' })) },
-        ...assigneeCandidates(data.users.filter(user => user.active !== false), oneTeam).map(user => ({ id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}${user.app ? ' agent' : ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/>, ...(user.app ? { detail: <AgentBadge/> } : {}), current: user.app ? issues.every(issue => issue.delegate?.id === user.id) : current === user.id, select: choose(() => apply(user.app ? { delegateId: user.id } : { assigneeId: user.id })) })),
+        { id: '', label: 'No assignee', icon: <NoAssigneeIcon/>, keywords: 'unassign none', shortcut: '0', current: current === '' && !delegateOnly, select: choose(() => apply(delegateOnly ? { delegateId: '' } : { assigneeId: '' })) },
+        ...assigneeCandidates(data.users.filter(user => user.active !== false), oneTeam, { agents: agentsAvailable(data) }).map((user, index) => {
+          const delegated = Boolean(user.app) && issues.every(issue => issue.delegate?.id === user.id)
+          return { id: user.id, label: user.displayName || user.name, entity: true, keywords: `${user.name} ${user.email ?? ''}${user.app ? ' agent' : ''}`, icon: <UserAvatar className="command-avatar" avatarUrl={user.avatarUrl} name={user.displayName || user.name}/>, shortcut: assigneeShortcut(index + 1), current: user.app ? delegated : current === user.id, select: choose(() => apply(user.app ? { delegateId: delegated ? '' : user.id } : { assigneeId: user.id })) }
+        }),
+        { id: ASSIGNEE_INVITE_ID, label: 'Invite and assign…', icon: <FlowGlyph className="command-invite-icon" name="invitePlane" size={16}/>, keywords: 'invite member user new', group: 'New user', select: choose(async () => openMemberInvite()) },
       ]
     }
     if (page.id === 'labels') {

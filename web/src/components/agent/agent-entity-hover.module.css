@@ -26,3 +26,4 @@
 .ring{display:inline-block;flex:0 0 auto;width:14px;height:14px;border-radius:50%;background:conic-gradient(var(--theme-text-secondary) var(--progress),var(--theme-border-strong) 0);-webkit-mask:radial-gradient(circle,transparent 4px,black 4.5px);mask:radial-gradient(circle,transparent 4px,black 4.5px)}
 .logo{width:16px;height:16px;border-radius:4px;object-fit:cover}
 .embedded{margin:-5px -8px}
+.facepile .avatar+svg{margin-left:-4px}

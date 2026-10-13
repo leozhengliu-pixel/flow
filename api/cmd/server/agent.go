@@ -41,6 +41,8 @@ type agentMessageInput struct {
 	UserIDs     []string              `json:"userIds"`
 	LoopIDs     []string              `json:"loopIds"`
 	Mentions    []domain.AgentMention `json:"mentions"`
+	// Answer picks an option of the reply's pending question (ask_user); the message carries its label.
+	Answer *agentQuestionAnswer `json:"answer,omitempty"`
 }
 
 type agentSessionUpdate struct {
@@ -429,7 +431,12 @@ func (s *server) appendAgentSessionMessage(r *http.Request, id string, input age
 		if len(session.IssueIDs) > 25 || len(session.ProjectIDs) > 25 || len(session.DocumentIDs) > 25 || len(session.UserIDs) > 25 {
 			return fmt.Errorf("%w: a conversation can reference at most 25 issues, projects and documents each", errInvalid)
 		}
-		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, CreatedAt: now})
+		// The next message answers a question the agent stopped on: a picked option or free text.
+		answerTo, err := answerAgentQuestion(session, message, input.Answer)
+		if err != nil {
+			return err
+		}
+		session.Messages = append(session.Messages, domain.AgentMessage{ID: fmt.Sprintf("agent_message_%d", now.UnixNano()), Role: "user", Content: message, Mentions: input.Mentions, AnswerTo: answerTo, CreatedAt: now})
 		data.AgentActivities = append(data.AgentActivities, domain.AgentActivity{ID: fmt.Sprintf("agent_activity_%d", now.UnixNano()), SessionID: id, Type: "message", Status: "completed", Body: message, CreatedAt: now, UpdatedAt: now})
 		session.UpdatedAt = now
 		session.LastReadAt = agentReadStamp(now) // the owner is in the conversation they just wrote to
@@ -538,6 +545,108 @@ func (s *server) markAgentSessionRead(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	respondMutation(w, err, http.StatusOK, updated)
+}
+
+type agentFeedbackInput struct {
+	Rating  *string `json:"rating"`
+	Comment *string `json:"comment"`
+}
+
+const maxAgentFeedbackComment = 4000
+
+func (input agentFeedbackInput) validate() error {
+	if input.Rating != nil && *input.Rating != "" && *input.Rating != "positive" && *input.Rating != "negative" {
+		return fmt.Errorf("%w: rating must be positive, negative or empty", errInvalid)
+	}
+	if input.Comment != nil && len(*input.Comment) > maxAgentFeedbackComment {
+		return fmt.Errorf("%w: feedback must not exceed %d characters", errInvalid, maxAgentFeedbackComment)
+	}
+	return nil
+}
+
+// updateAgentMessageFeedback rates one assistant reply (the reference app's thumbs up / "Leave feedback…"):
+// a rating replaces the previous one, an empty rating removes it, and a comment is kept with it.
+// Rating never changes the conversation's read state or order.
+func (s *server) updateAgentMessageFeedback(w http.ResponseWriter, r *http.Request) {
+	var input agentFeedbackInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if err := input.validate(); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	id, messageID := r.PathValue("id"), r.PathValue("messageId")
+	var updated domain.AgentSession
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.message_feedback", id, input, func(data *domain.Bootstrap) error {
+		session, err := ownedAgentSession(data, id)
+		if err != nil {
+			return err
+		}
+		for index := range session.Messages {
+			message := &session.Messages[index]
+			if message.ID != messageID {
+				continue
+			}
+			if message.Role != "assistant" {
+				return fmt.Errorf("%w: only agent replies can be rated", errInvalid)
+			}
+			next := domain.AgentFeedback{UpdatedAt: time.Now().UTC()}
+			if message.Feedback != nil {
+				next.Rating, next.Comment = message.Feedback.Rating, message.Feedback.Comment
+			}
+			if input.Rating != nil {
+				next.Rating = *input.Rating
+				if next.Rating == "" {
+					next.Comment = ""
+				}
+			}
+			if input.Comment != nil {
+				next.Comment = strings.TrimSpace(*input.Comment)
+			}
+			if next.Rating == "" && next.Comment == "" {
+				message.Feedback = nil
+			} else {
+				message.Feedback = &next
+			}
+			updated = *session
+			return nil
+		}
+		return errNotFound
+	})
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// createAgentSessionFeedback records a note about the whole conversation (the chat menu's "Leave feedback…").
+func (s *server) createAgentSessionFeedback(w http.ResponseWriter, r *http.Request) {
+	var input agentFeedbackInput
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	if err := input.validate(); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	comment := ""
+	if input.Comment != nil {
+		comment = strings.TrimSpace(*input.Comment)
+	}
+	if comment == "" {
+		respondMutation(w, fmt.Errorf("%w: feedback must not be empty", errInvalid), http.StatusOK, nil)
+		return
+	}
+	id := r.PathValue("id")
+	var updated domain.AgentSession
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "agent.session_feedback", id, input, func(data *domain.Bootstrap) error {
+		session, err := ownedAgentSession(data, id)
+		if err != nil {
+			return err
+		}
+		session.Feedback = append(session.Feedback, domain.AgentFeedback{Comment: comment, UpdatedAt: time.Now().UTC()})
+		updated = *session
+		return nil
+	})
+	respondMutation(w, err, http.StatusCreated, updated)
 }
 
 // agentReadStamp copies the time so LastReadAt never aliases another field.
@@ -735,11 +844,18 @@ const agentProgressRule = "- When a request needs tool lookups, also call report
 
 // agentPromptRulesHead and agentPromptRulesTail are the static Flow Agent instructions around the tool rule. They
 // come first in the prompt so the provider can cache them; per-request context follows.
-const agentPromptRulesHead = "You are Flow Agent. Help with workspace tasks, including drafting projects when requested, using only the supplied workspace context. Be concise, distinguish facts from suggestions, and never invent issue or project state.\n\nGrounding rules:\n- Look facts up with the Flow tools before answering questions about issues, projects, people, cycles, or documents; if a tool result does not contain a value, say it is not set or unknown instead of guessing.\n- Refer to issues by identifier and title (for example ENG-12 Fix login), never by internal ids such as issue_1. Link it once as [ENG-12 Fix login](url) when a url is available and continue the sentence without repeating the title; the app renders it as a chip.\n- Priority values are 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low; prefer the priorityLabel field when present.\n- Reply in the language the user writes in.\n- When the user asks you to create or change something and you have enough to go on — or tells you to decide — pick sensible defaults, state them in one or two lines, and call the write tool right away; changes apply immediately without an approval step. Deleted items go to the trash — say they can be restored. Do not repeat a setup checklist or ask for details you can reasonably choose.\n- Before publishing a project or initiative update you wrote on your own initiative (the user did not explicitly ask you to post it), show the full update text and its health, ask \"Proceed?\", and post it only after the user agrees.\n- Answer style: lead with the conclusion in one or two sentences, then a few short paragraphs, using bold lead-ins such as **History:** or **Similar issues:** instead of headings; use bullets only for real lists, and stay under about 150 words unless the user asks for more.\n- When the user might want to dig deeper (investigations, summaries, comparisons), end with a fenced block tagged suggestions (```suggestions ... ```) holding one or two short follow-up requests they could send next, one per line, in the user's language; omit it for drafts, confirmations, and simple factual answers.\n"
+const agentPromptRulesHead = "You are Flow Agent. Help with workspace tasks, including drafting projects when requested, using only the supplied workspace context. Be concise, distinguish facts from suggestions, and never invent issue or project state.\n\nGrounding rules:\n- Look facts up with the Flow tools before answering questions about issues, projects, people, cycles, or documents; if a tool result does not contain a value, say it is not set or unknown instead of guessing.\n- Refer to issues by identifier and title (for example ENG-12 Fix login), never by internal ids such as issue_1. Link it once as [ENG-12 Fix login](url) when a url is available and continue the sentence without repeating the title; the app renders it as a chip.\n- Priority values are 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low; prefer the priorityLabel field when present.\n- Reply in the language the user writes in.\n- When the user asks you to create or change something and you have enough to go on — or tells you to decide — pick sensible defaults, state them in one or two lines, and call the write tool right away; changes apply immediately without an approval step. Deleted items go to the trash — say they can be restored. Do not repeat a setup checklist or ask for details you can reasonably choose.\n- Two kinds of writes pause for the user's approval on their own: deleting more than one item, and publishing a project or initiative update you wrote yourself (the user did not explicitly ask to post it). Just call the tools — put all deletes of one request in the same turn — and the app shows the user a preview with Approve and Reject; do not ask for that approval yourself, and do not call the tools again while they wait.\n- In tool arguments pass ids, slugs, or bare identifiers such as DEV-42 — never a title, chip text, or a link.\n- After writes, your answer names every item you created or changed (linked) and every action that failed with the error the tool returned. Report only what the tool results show (for example the status name they return), and never claim a change that did not succeed. When the reply only reports actions, keep the prose to one short line — the app shows a card for each created or changed item — but still name every item and every failure.\n- When a value you need is genuinely ambiguous and you cannot reasonably choose it yourself (for example which of several matching issues they mean, or a priority the user asked to be asked about), call ask_user with the question and two to six short options instead of asking in plain text. Do not use ask_user for choices you can make with sensible defaults.\n- Answer style: lead with the conclusion in one or two sentences, then a few short paragraphs, using bold lead-ins such as **History:** or **Similar issues:** instead of headings; use bullets only for real lists, and stay under about 150 words unless the user asks for more.\n"
+
+// agentChatSuggestionsRule asks for follow-up chips. Only the chat panel renders them; comment threads, loops and
+// other surfaces have no suggestion chips (like the reference app's threads), so the rule is added for chat only.
+const agentChatSuggestionsRule = "- When the user might want to dig deeper (investigations, summaries, comparisons), end with a fenced block tagged suggestions (```suggestions ... ```) holding one or two short follow-up requests they could send next, one per line, in the user's language; omit it for drafts, confirmations, and simple factual answers.\n"
 
 const agentPromptRulesTail = "- Selected issues listed below are already loaded; only call a tool for them when you need fields that are not shown.\n- Translate raw enum values (for example noUpdate, onTrack, atRisk, unstarted) into plain words.\n- Resolve relative dates such as \"in two weeks\" or \"next Friday\" against Today below.\n- When asked to write a project update: look up the project, its issues, milestones, recent comments, and earlier updates with the tools; then reply with one short sentence about what you drafted, followed by the update body in a fenced block tagged update (```update ... ```). Keep the body to a few short paragraphs or bullets covering progress, risks or blockers, and next steps; state only facts found in the workspace and say plainly when there is little to report.\n\nWhen drafting a project, do not create or mutate it without an explicit user request; return a concise explanation followed by a JSON object with optional keys name, summary, description, status, priority, startDate, targetDate, milestones, team, lead, members, initiatives, labels, and dependencies. Use display names for people and resources, use YYYY-MM-DD for dates, and give priority as one of No priority, Urgent, High, Medium, or Low.\n"
 
 func agentPromptRules(toolRule string) string {
+	if toolRule == agentChatToolRule {
+		return agentPromptRulesHead + agentChatSuggestionsRule + toolRule + agentPromptRulesTail
+	}
 	return agentPromptRulesHead + toolRule + agentPromptRulesTail
 }
 

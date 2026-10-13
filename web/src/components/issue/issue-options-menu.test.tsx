@@ -2,9 +2,14 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
+import * as api from '@/lib/api'
 import { makeBootstrap, makeIssue } from '@/test/fixtures'
 import type { ReleasePipeline } from '@/types/flow'
 import { IssueOptionsMenu, type IssueOptionsActions } from './issue-options-menu'
+
+function setupActions(): IssueOptionsActions {
+  return {addLink:vi.fn(),addCustomerRequest:vi.fn(),addDocument:vi.fn(),linkReview:vi.fn(),unlinkReview:vi.fn(),toggleRelease:vi.fn(),createRelated:vi.fn(),convert:vi.fn(),setRecurring:vi.fn(),toggleFavorite:vi.fn(),remind:vi.fn(),runLoop:vi.fn(),restoreDescription:vi.fn()}
+}
 
 function setup(releasePipelines: ReleasePipeline[] = []) {
   const actions: IssueOptionsActions = {addLink:vi.fn().mockResolvedValue(undefined),addCustomerRequest:vi.fn(),addDocument:vi.fn(),linkReview:vi.fn(),unlinkReview:vi.fn(),toggleRelease:vi.fn(),createRelated:vi.fn().mockResolvedValue(undefined),convert:vi.fn(),setRecurring:vi.fn(),configureRecurring:vi.fn(),toggleFavorite:vi.fn(),remind:vi.fn(),runLoop:vi.fn(),restoreDescription:vi.fn()}
@@ -70,8 +75,15 @@ describe('issue action menu', () => {
     await user.hover(screen.getByRole('option',{name:'Copy'}))
     const child = await screen.findByRole('dialog',{name:'Copy'})
     expect(within(child).getAllByRole('option')).toHaveLength(8)
-    await user.click(within(child).getByRole('option',{name:/Copy content as Markdown/}))
-    expect(copy).toHaveBeenCalledWith(`# ${issue.title}\n\n${issue.description}`)
+    expect(within(child).getAllByRole('option').map(option => option.querySelector('.issue-options-label')?.textContent)).toEqual(['Copy ID','Copy URL','Copy title','Copy title as link','Copy issue as Markdown','Copy everything as Markdown','Copy git branch name','Copy as prompt'])
+    await user.click(within(child).getByRole('option',{name:/Copy issue as Markdown/}))
+    expect(copy).toHaveBeenCalledWith(`# ${issue.title}\n\n${issue.description}\n\n`)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.hover(screen.getByRole('option',{name:'Copy'}))
+    await user.click(within(await screen.findByRole('dialog',{name:'Copy'})).getByRole('option',{name:/Copy everything as Markdown/}))
+    const everything = copy.mock.calls.at(-1)?.[0] ?? ''
+    expect(everything.startsWith(`# ${issue.title}\n\n${issue.description}\n\n## Metadata\n- URL: [`)).toBe(true)
+    expect(everything).toContain(`\n- Identifier: ${issue.identifier}\n- Status: ${issue.state.name}\n- Priority: `)
   })
 
   it('opens the shared release picker and its pipeline submenu on hover', async () => {
@@ -91,20 +103,20 @@ describe('issue action menu', () => {
     expect(screen.queryByRole('dialog',{name:'Issue options'})).not.toBeInTheDocument()
   })
 
-  it('labels the conversion submenu "Convert into"', async () => {
+  it('labels the conversion submenu "Convert to"', async () => {
     const user = userEvent.setup(); setup()
     await user.click(screen.getByRole('button',{name:'Issue options'}))
-    expect(screen.queryByRole('option',{name:'Convert to'})).not.toBeInTheDocument()
-    await user.hover(screen.getByRole('option',{name:'Convert into'}))
-    const child = await screen.findByRole('dialog',{name:'Convert into'})
+    expect(screen.queryByRole('option',{name:'Convert into'})).not.toBeInTheDocument()
+    await user.hover(screen.getByRole('option',{name:'Convert to'}))
+    const child = await screen.findByRole('dialog',{name:'Convert to'})
     expect(within(child).getByRole('option',{name:'Recurring issue…'})).toBeInTheDocument()
   })
 
   it('opens recurrence configuration rather than a replacement submenu', async () => {
     const user = userEvent.setup(); const {actions} = setup()
     await user.click(screen.getByRole('button',{name:'Issue options'}))
-    await user.hover(screen.getByRole('option',{name:'Convert into'}))
-    const child = await screen.findByRole('dialog',{name:'Convert into'})
+    await user.hover(screen.getByRole('option',{name:'Convert to'}))
+    const child = await screen.findByRole('dialog',{name:'Convert to'})
     const recurring = within(child).getByRole('option',{name:'Recurring issue…'})
     expect(recurring).not.toHaveAttribute('data-submenu')
     await user.click(recurring)
@@ -117,8 +129,8 @@ describe('issue action menu', () => {
     const issue = makeIssue({recurrence:'FREQ=WEEKLY;BYDAY=MO,FR',dueDate:'2099-01-02',nextOccurrenceAt:'2099-01-03T00:01:00Z'})
     render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({customers:[],reviews:[],releases:[]})} actions={actions} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
     await user.click(screen.getByRole('button',{name:'Issue options'}))
-    await user.hover(screen.getByRole('option',{name:'Convert into'}))
-    const child = await screen.findByRole('dialog',{name:'Convert into'})
+    await user.hover(screen.getByRole('option',{name:'Convert to'}))
+    const child = await screen.findByRole('dialog',{name:'Convert to'})
     expect(within(child).getByRole('option',{name:'Stop recurring'})).toBeInTheDocument()
     await user.click(within(child).getByRole('option',{name:'Recurring issue…'}))
     const dialog = await screen.findByRole('dialog',{name:'Recurring issue'})
@@ -153,5 +165,79 @@ describe('issue action menu', () => {
     const reminder = new Date(vi.mocked(actions.remind).mock.calls[0][0])
     expect(reminder.getTime()-Date.now()).toBeGreaterThan(47*60*60*1000)
     expect(reminder.getTime()-Date.now()).toBeLessThan(49*60*60*1000)
+  })
+
+  it('lists the reference items in order, with Ctrl spelled out and Find suggestions when Triage Intelligence is on', async () => {
+    const user = userEvent.setup()
+    const issue = makeIssue()
+    const base = makeBootstrap({customers:[],reviews:[],releases:[]})
+    const data = {...base, workspaceSettings:{...base.workspaceSettings, featureFlags:{...base.workspaceSettings.featureFlags, 'triage-intelligence':true}}}
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={data} actions={setupActions()} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    const root = screen.getByRole('dialog',{name:'Issue options'})
+    const labels = within(root).getAllByRole('option').map(option => option.querySelector('.issue-options-label')?.textContent)
+    expect(labels).toEqual(['Due date','Release','Add link…','Add customer request…','Add document…','Create related','Mark as','Copy','Convert to','Make a copy…','Favorite','Remind me','Unsubscribe','Find suggestions','Run loop…','Show description history','Delete'])
+    const addLink = within(root).getByRole('option',{name:/Add link/})
+    expect([...addLink.querySelectorAll('kbd')].map(key => key.textContent)).toEqual(['Ctrl','L'])
+    expect(within(root).getByRole('option',{name:/^Unsubscribe/}).querySelector('svg[data-action-glyph=unsubscribe]')).not.toBeNull()
+    expect(within(root).getByRole('option',{name:'Find suggestions'}).querySelector('svg[data-action-glyph=findSuggestions]')).not.toBeNull()
+  })
+
+  it('offers "Remove from favorites" with the filled star once favorited', async () => {
+    const user = userEvent.setup()
+    render(<I18nProvider><IssueOptionsMenu issue={makeIssue()} data={makeBootstrap({customers:[],reviews:[],releases:[]})} actions={setupActions()} favorited onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    expect(screen.queryByRole('option',{name:/^Favorite/})).toBeNull()
+    expect(screen.getByRole('option',{name:/^Remove from favorites/})).toBeInTheDocument()
+  })
+
+  it('removes the parent and relations from "Remove", grouped like the reference', async () => {
+    const user = userEvent.setup()
+    const remove = vi.spyOn(api,'deleteRelation').mockResolvedValue(undefined as never)
+    const parent = makeIssue({id:'parent',identifier:'TST-2',title:'Parent work'})
+    const blocked = makeIssue({id:'blocked',identifier:'TST-3',title:'Waits on us'})
+    const related = makeIssue({id:'related',identifier:'TST-4',title:'Nearby work'})
+    const blocker = makeIssue({id:'blocker',identifier:'TST-5',title:'Blocks us',relations:[{id:'rel-in',issueId:'blocker',relatedIssueId:'issue-1',type:'blocks'}] as never})
+    const issue = makeIssue({parentId:'parent',relations:[{id:'rel-related',issueId:'issue-1',relatedIssueId:'related',type:'related'},{id:'rel-blocks',issueId:'issue-1',relatedIssueId:'blocked',type:'blocks'}] as never})
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+    render(<I18nProvider><IssueOptionsMenu issue={issue} data={makeBootstrap({customers:[],reviews:[],releases:[],issues:[issue,parent,blocked,related,blocker]})} actions={setupActions()} onRelation={vi.fn()} onUpdate={onUpdate} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    const root = screen.getByRole('dialog',{name:'Issue options'})
+    const order = within(root).getAllByRole('option').map(option => option.querySelector('.issue-options-label')?.textContent)
+    expect(order.slice(5,9)).toEqual(['Create related','Mark as','Remove','Copy'])
+    await user.hover(within(root).getByRole('option',{name:'Remove'}))
+    const child = await screen.findByRole('dialog',{name:'Remove'})
+    expect(within(child).getAllByRole('option').map(option => option.textContent)).toEqual(['Parent issue TST-2Parent work','Blocked issue TST-3Waits on us','Related issue TST-4Nearby work','Blocking issue TST-5Blocks us'])
+    expect(child.querySelectorAll('[role=separator]')).toHaveLength(1)
+    await user.click(within(child).getByRole('option',{name:/Blocking issue TST-5/}))
+    expect(remove).toHaveBeenCalledWith('blocker','rel-in')
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.hover(screen.getByRole('option',{name:'Remove'}))
+    await user.click(within(await screen.findByRole('dialog',{name:'Remove'})).getByRole('option',{name:/Parent issue TST-2/}))
+    expect(onUpdate).toHaveBeenCalledWith({parentId:''})
+  })
+
+  it('has no Remove submenu without a parent or relations', async () => {
+    const user = userEvent.setup(); setup()
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    expect(screen.queryByRole('option',{name:'Remove'})).toBeNull()
+  })
+
+  it('starts Find suggestions through the open Triage Intelligence card, or the API without one', async () => {
+    const user = userEvent.setup()
+    const refresh = vi.spyOn(api,'refreshIssueSuggestions').mockResolvedValue([])
+    const base = makeBootstrap({customers:[],reviews:[],releases:[]})
+    const data = {...base, workspaceSettings:{...base.workspaceSettings, featureFlags:{...base.workspaceSettings.featureFlags, 'triage-intelligence':true}}}
+    render(<I18nProvider><IssueOptionsMenu issue={makeIssue()} data={data} actions={setupActions()} onRelation={vi.fn()} onUpdate={vi.fn()} onDelete={vi.fn()}/></I18nProvider>)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.click(screen.getByRole('option',{name:'Find suggestions'}))
+    await waitFor(()=>expect(refresh).toHaveBeenCalledWith('issue-1'))
+    const card = vi.fn((event: Event) => event.preventDefault())
+    window.addEventListener('flow:find-issue-suggestions', card)
+    await user.click(screen.getByRole('button',{name:'Issue options'}))
+    await user.click(screen.getByRole('option',{name:'Find suggestions'}))
+    expect(card).toHaveBeenCalledOnce()
+    expect(refresh).toHaveBeenCalledOnce()
+    window.removeEventListener('flow:find-issue-suggestions', card)
   })
 })

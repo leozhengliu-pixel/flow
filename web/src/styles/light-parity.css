@@ -150,19 +150,7 @@ html:root[data-theme="light"] body .dialog-content input:not([type="checkbox"]):
   background: var(--lx-surface);
 }
 
-/* ── Tooltips ──────────────────────────────────────────────────────────── */
-html:root[data-theme="light"] body .flow-tooltip-content {
-  height: 28px;
-  border: .5px solid var(--lx-popover-border);
-  border-radius: 8px;
-  background: var(--lx-surface);
-  box-shadow: var(--lx-small-shadow);
-  color: var(--lx-item-text);
-  font: 450 11px/16.5px var(--font);
-}
-/* Multi-line tooltips (titles, resource cards) grow with their content. */
-html:root[data-theme="light"] body .flow-tooltip-content--title,
-html:root[data-theme="light"] body .flow-tooltip-content--card { height: auto; }
+/* Tooltips take their light colours from the --tooltip-* tokens (components/ui/tooltip.css). */
 
 /* ── Buttons, select triggers and search fields ────────────────────────── */
 html:root[data-theme="light"] body .settings-action:not(.danger):not(.primary),

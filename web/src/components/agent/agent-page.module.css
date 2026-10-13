@@ -396,15 +396,17 @@
   width: min(821px, calc(100% - 40px));
   min-height: 100%;
   margin: 0 auto;
-  padding: 18px 0 44px;
+  padding: 12px 0 44px;
 }
+/* The reference app's day/time row: 8px above and below the label, then 12px to the first message. */
 .messageTime {
   display: block;
-  margin: 0 auto 16px;
-  color: var(--theme-text-tertiary);
+  margin: 0 auto 12px;
+  padding: 8px 0;
+  color: var(--agent-action-icon);
   font-size: 12px;
   font-weight: 500;
-  line-height: 15px;
+  line-height: normal;
   text-align: center;
 }
 .conversation article {
@@ -432,51 +434,36 @@
 .assistant {
   align-items: flex-start;
 }
-/* An answer spans the whole column (code blocks and tables included), not 85% of it. */
+/* An answer spans the whole column (code blocks and tables included), not 85% of it; the reference app insets it 10px. */
 .assistant .messageContent {
   width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 10px;
 }
 .isEditing .messageContent {
   box-shadow: 0 0 0 1px var(--accent-primary);
 }
+/* Under your message: copy / edit, shown on hover 4px below the bubble without taking room. */
 .messageActions {
-  height: 26px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
   margin: 4px 0 -30px;
   opacity: 0;
   transition: opacity 100ms ease;
-}
-.user .messageActions {
-  justify-content: flex-end;
 }
 .conversation article:hover .messageActions,
 .conversation article:focus-within .messageActions {
   opacity: 1;
 }
-.messageActions button {
-  min-width: 24px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  padding: 0 5px;
-  border: 0.5px solid transparent;
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--theme-text-secondary);
-  font-size: 12px;
+/* Under a reply (12px below it): thumbs up / down and copy; always shown on the newest reply, on hover elsewhere. */
+.replyActions {
+  margin-top: 12px;
+  opacity: 0;
+  transition: opacity 100ms ease;
 }
-.messageActions button:hover,
-.messageActions button:focus-visible {
-  background: var(--theme-surface-hover);
-  color: var(--theme-text-primary);
-  outline: 0;
-}
-.messageActions button svg {
-  width: 12px;
-  height: 12px;
+.latestReplyActions,
+.conversation article:hover .replyActions,
+.conversation article:focus-within .replyActions {
+  opacity: 1;
 }
 .messageDocument {
   color: inherit;
@@ -545,12 +532,14 @@
 }
 .thinkingPlaceholder svg { width: 14px; height: 14px; }
 .workGroup {
-  color: var(--theme-text-secondary);
+  color: var(--agent-thread-muted);
   font: 500 13px/15px var(--font);
 }
+/* The reference app: a 16px toggle ("Worked for N seconds ▸") with the label in a normal line box. */
 .workGroup > summary {
   width: max-content;
-  height: 15px;
+  height: 16px;
+  line-height: normal;
   display: flex;
   align-items: center;
   gap: 3px;
@@ -872,24 +861,41 @@
   width: 14px;
   height: 14px;
 }
+/* The reference app's chat options menu: picker surface, 6px top/bottom room, 32px rows with an inset 8px highlight. */
+.historyMenu.optionsMenu,
 .optionsMenu {
   width: 176px;
   padding: 6px 0;
+  border-color: var(--pk-border);
+  background: var(--pk-surface);
+  box-shadow: var(--pk-shadow);
+  color: var(--pk-text);
 }
 .optionsMenu [role="menuitem"] {
+  position: relative;
   height: 32px;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 14px;
+  padding: 0 18px 0 14px;
   outline: 0;
-  font-size: 12px;
+  color: var(--pk-text);
+  font: 450 13px/normal var(--font);
+  isolation: isolate;
 }
-.optionsMenu [role="menuitem"][data-highlighted] {
-  background: var(--theme-surface-hover);
+.optionsMenu [role="menuitem"][data-highlighted]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 6px;
+  border-radius: 8px;
+  background: var(--pk-hover);
 }
-.optionsMenu svg {
-  width: 13px;
+.optionsMenu [role="menuitem"] > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--pk-muted);
 }
 .optionsMenu [role="separator"] {
   height: 12px;
@@ -898,9 +904,9 @@
 .optionsMenu [role="separator"]:after {
   content: "";
   position: absolute;
-  inset: 5.5px 0 auto;
+  inset: 5.75px 0 auto;
   height: 0.5px;
-  background: var(--theme-border);
+  background: var(--pk-divider);
 }
 .danger {
   color: var(--semantic-danger);
@@ -1050,15 +1056,10 @@
 :global(:root[data-theme="light"]) .conversation article,
 :global(:root[data-theme="light"]) .messageDocument h2,
 :global(:root[data-theme="light"]) .messageDocument h3 { color: var(--theme-text-primary); }
-:global(:root[data-theme="light"]) .messageTime { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .user .messageContent { background: var(--theme-surface-2); }
-:global(:root[data-theme="light"]) .messageActions button { color: var(--theme-text-secondary); }
-:global(:root[data-theme="light"]) .messageActions button:hover,
-:global(:root[data-theme="light"]) .messageActions button:focus-visible { background: var(--theme-surface-hover); color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .messageDocument code,
 :global(:root[data-theme="light"]) .messageDocument pre { border-color: var(--theme-border); background: var(--theme-surface-1); }
-:global(:root[data-theme="light"]) .thinkingPlaceholder,
-:global(:root[data-theme="light"]) .workGroup { color: var(--theme-text-tertiary); }
+:global(:root[data-theme="light"]) .thinkingPlaceholder { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .workGroup > summary:hover { background: var(--theme-surface-hover); color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .workFailed > summary { color: var(--semantic-danger-text); }
 :global(:root[data-theme="light"]) .approvalActions button { border-color: var(--theme-border); background: var(--theme-surface-2); color: var(--theme-text-primary); }
@@ -1069,8 +1070,7 @@
 :global(:root[data-theme="light"]) .eventPart { border-color: var(--theme-border); background: var(--theme-surface-1); color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .partError > button:hover { background: var(--theme-surface-hover); }
 :global(:root[data-theme="light"]) .historyMenu,
-:global(:root[data-theme="light"]) .skillsMenu,
-:global(:root[data-theme="light"]) .optionsMenu {
+:global(:root[data-theme="light"]) .skillsMenu {
   border: 0.5px solid var(--popover-border);
   border-radius: 12px;
   background: var(--theme-surface-2);
@@ -1080,8 +1080,7 @@
 :global(:root[data-theme="light"]) .menuSearch { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .menuSearch input { color: var(--theme-text-primary); }
 :global(:root[data-theme="light"]) .historyMenu [role="option"],
-:global(:root[data-theme="light"]) .skillsMenu [role="option"],
-:global(:root[data-theme="light"]) .optionsMenu [role="menuitem"] {
+:global(:root[data-theme="light"]) .skillsMenu [role="option"] {
   height: 32px;
   padding: 0 18px 0 14px;
   color: var(--theme-text-primary);
@@ -1090,12 +1089,10 @@
 }
 :global(:root[data-theme="light"]) .historyMenu [role="option"]:hover,
 :global(:root[data-theme="light"]) .historyMenu [role="option"][aria-selected="true"],
-:global(:root[data-theme="light"]) .skillsMenu [role="option"]:hover,
-:global(:root[data-theme="light"]) .optionsMenu [role="menuitem"][data-highlighted] { background: var(--theme-surface-hover); }
+:global(:root[data-theme="light"]) .skillsMenu [role="option"]:hover { background: var(--theme-surface-hover); }
 :global(:root[data-theme="light"]) .historyMenu [role="option"] span { color: var(--theme-text-secondary); }
 :global(:root[data-theme="light"]) .historyMenu time { color: var(--theme-text-tertiary); }
 :global(:root[data-theme="light"]) .historyGroup { color: var(--theme-text-tertiary); }
-:global(:root[data-theme="light"]) .optionsMenu [role="separator"]:after { background: var(--theme-border); }
 :global(:root[data-theme="light"]) .danger { color: var(--semantic-danger); }
 :global(:root[data-theme="light"]) .confirmOverlay { background: var(--overlay-modal); }
 :global(:root[data-theme="light"]) .confirmOverlay > section { border-color: var(--popover-border); background: var(--theme-surface-2); box-shadow: var(--shadow-dialog); color: var(--theme-text-primary); }
@@ -1108,3 +1105,111 @@
 .messageDocument ol { list-style: decimal; }
 .messageDocument ul ul { list-style: circle; }
 .messageDocument li::marker { color: var(--theme-text-secondary); }
+/* The reference app's "Latest" pill: centred 17px above the composer while the newest message is out of view. */
+.latestButton {
+  position: absolute;
+  bottom: calc(100% + 17px);
+  left: 50%;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  border: .5px solid var(--agent-latest-border);
+  border-radius: 15px;
+  background: var(--agent-latest-bg);
+  color: var(--agent-thread-text);
+  font: 500 12px/normal var(--font);
+  white-space: nowrap;
+  transform: translateX(-50%);
+  transition: border-color .15s, background-color .15s, color .15s, opacity .15s;
+}
+.latestButton svg {
+  width: 14px;
+  height: 14px;
+  color: var(--agent-thread-muted);
+}
+.latestButton:hover {
+  background: var(--agent-action-hover-bg);
+}
+/* Editing a sent message: a 4px frame with a soft gradient wraps the composer and a banner row above it. */
+.composer[data-editing]::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -30.5px -4px -4px;
+  border-radius: 12px;
+  background: linear-gradient(var(--agent-editing-frame-top), var(--agent-editing-frame-bottom));
+  pointer-events: none;
+}
+.editingBanner {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  height: 22.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.editingBanner > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 8px;
+  color: var(--agent-thread-muted);
+  font: 450 12px/normal var(--font);
+}
+.editingBanner > span > svg {
+  width: 12px;
+  height: 12px;
+}
+.editingBanner > button {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  margin-right: 8px;
+  padding: 0 2px;
+  border: .5px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--agent-thread-muted);
+}
+.editingBanner > button:hover {
+  background: var(--agent-action-hover-bg);
+  color: var(--agent-action-hover-icon);
+}
+.editingBanner > button svg {
+  width: 14px;
+  height: 14px;
+}
+/* Chat options menu: 13px items with 16px glyphs and a right-aligned key hint. */
+.optionsMenu [role="menuitem"] > span:not(.menuShortcut) {
+  min-width: 0;
+  flex: 1;
+}
+.menuShortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+}
+.menuShortcut kbd {
+  color: var(--pk-muted);
+  font: 500 11px/12.1px var(--font);
+}
+/* The reply's blocks sit 12px apart (the grid gap), option pills included; a question is its text, then its pills. */
+.messageParts > [data-agent-choices],
+.question > [data-agent-choices] {
+  margin-top: 0;
+}
+.question {
+  display: grid;
+  gap: 12px;
+}
+/* Every block of a reply (text, referenced issues, cards, pills) is spaced by the 12px grid gap alone. */
+.messageParts > :is(ul, a, div, section, details) {
+  margin-top: 0;
+}

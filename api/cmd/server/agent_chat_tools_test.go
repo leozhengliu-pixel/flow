@@ -100,6 +100,23 @@ func TestAgentChatToolsetPicksToolsForTheRequest(t *testing.T) {
 	if english := chatToolNames(newAgentChatToolset(session("Assign ENG-4 to me")).tools(available)); !slices.Contains(english, "save_issue") {
 		t.Fatalf("english change tools = %v", english)
 	}
+	// Deletes and customer writes come with their groups (Chinese and English requests).
+	for request, want := range map[string][]string{
+		"把项目 QA fix – Roadmap 删掉":                     {"delete_project", "delete_initiative", "save_cycle"},
+		"删除目标 QA fix – Goals":                         {"delete_initiative"},
+		"Delete the view QA fix – Board":              {"delete_view"},
+		"删除 Loop QA fix – Weekly":                     {"delete_loop"},
+		"删除我的技能 QA fix – Tone":                        {"delete_agent_skill"},
+		"创建客户 QA fix – Acme，并在 DEV-4 上记录他们的需求":        {"save_customer", "save_customer_request", "get_customer", "delete_customer"},
+		"Rename the current cycle to QA fix – Sprint": {"save_cycle"},
+	} {
+		names := chatToolNames(newAgentChatToolset(session(request)).tools(available))
+		for _, name := range want {
+			if !slices.Contains(names, name) {
+				t.Errorf("%q: %s missing from %v", request, name, names)
+			}
+		}
+	}
 	if review := chatToolNames(newAgentChatToolset(session("summarize open pull requests")).tools(available)); !slices.Contains(review, "list_diffs") || slices.Contains(review, "save_issue") {
 		t.Fatalf("review tools = %v", review)
 	}
@@ -218,7 +235,9 @@ func TestAgentChatLoadsReferencedIssuesAndToolsOnDemand(t *testing.T) {
 		names := []string{}
 		tools, _ := payload["tools"].([]any)
 		for _, tool := range tools {
-			names = append(names, tool.(map[string]any)["name"].(string))
+			if name, ok := tool.(map[string]any)["name"].(string); ok { // hosted tools (web_search) have no name
+				names = append(names, name)
+			}
 		}
 		return names
 	}

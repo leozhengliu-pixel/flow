@@ -14,7 +14,7 @@ export interface LabelHoverPreviewData {
 }
 
 export function LabelHoverPreview({ label, children, side='left', align='start' }: { label: LabelHoverPreviewData; children: ReactElement; side?:'top'|'right'|'bottom'|'left'; align?:'start'|'center'|'end' }) {
-  return <Tooltip.Provider delayDuration={450} skipDelayDuration={300}>
+  return <Tooltip.Provider delayDuration={450} skipDelayDuration={400}>
     <Tooltip.Root>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>

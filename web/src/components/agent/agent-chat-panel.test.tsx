@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/i18n'
@@ -6,7 +6,7 @@ import { makeBootstrap } from '@/test/fixtures'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import type { AgentSession } from '@/types/flow'
 
-const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn() }))
+const api = vi.hoisted(() => ({ fetchAgentStatus: vi.fn(), markAgentSessionRead: vi.fn(), updateAgentMessageFeedback: vi.fn(), createAgentSessionFeedback: vi.fn() }))
 const streams = vi.hoisted(() => ({ streamNewAgentSession: vi.fn(), streamAgentSessionMessage: vi.fn() }))
 vi.mock('@/lib/api', () => api)
 vi.mock('@/lib/agent-stream', () => streams)
@@ -79,7 +79,7 @@ describe('Agent chat panel streaming', () => {
       ...session,
       messages: [{
         id: 'assistant-rich', role: 'assistant', content: '## Result\n\n- **Passed** checks', createdAt: '2026-08-31T00:00:01Z',
-        parts: [{ id: 'reasoning', type: 'reasoning', text: 'Inspected the workspace', status: 'completed' }],
+        parts: [{ id: 'msg_narration_0', type: 'reasoning', text: 'Inspected the workspace', status: 'completed' }],
       }],
     }
     const user = userEvent.setup()
@@ -133,19 +133,27 @@ describe('Agent chat panel streaming', () => {
     expect(screen.queryByText('added to context')).not.toBeInTheDocument()
   })
 
-  it('offers feedback and copy actions on finished replies', async () => {
+  it('offers the reference app\'s thumbs up, feedback and copy actions on finished replies and saves the rating', async () => {
     const user = userEvent.setup()
     // user-event installs its own clipboard stub, so replace it afterwards.
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    api.updateAgentMessageFeedback.mockImplementation(async (_id: string, messageId: string, input: { rating?: string; comment?: string }) => ({ ...session, messages: session.messages.map(message => message.id === messageId ? { ...message, feedback: input.rating ? { rating: input.rating, comment: input.comment, updatedAt: '' } : undefined } : message) }))
     render(<I18nProvider><AgentChatPanel initialSession={session} issues={[]} onClose={vi.fn()} open/></I18nProvider>)
-    const good = await screen.findByRole('button', { name: 'Good response' })
-    expect(good).toHaveAttribute('aria-pressed', 'false')
-    await user.click(good)
-    expect(good).toHaveAttribute('aria-pressed', 'true')
-    await user.click(screen.getByRole('button', { name: 'Copy message' }))
+    const helpful = await screen.findByRole('button', { name: 'This was helpful' })
+    await user.click(helpful)
+    expect(api.updateAgentMessageFeedback).toHaveBeenCalledWith('session-1', 'assistant-message', { rating: 'positive' })
+    expect(await screen.findByRole('button', { name: 'Remove feedback' })).toHaveAttribute('aria-pressed', 'true')
+    // Thumbs down opens the reference app's "Leave feedback" dialog; Send waits for a note.
+    await user.click(screen.getByRole('button', { name: 'Leave feedback…' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Leave feedback' })
+    expect(within(dialog).getByText('Send our team your feedback for the AI generated content')).toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled()
+    await user.type(within(dialog).getByRole('textbox', { name: 'Tell us more' }), 'Wrong numbers')
+    await user.click(within(dialog).getByRole('button', { name: 'Send' }))
+    await waitFor(() => expect(api.updateAgentMessageFeedback).toHaveBeenLastCalledWith('session-1', 'assistant-message', { rating: 'negative', comment: 'Wrong numbers' }))
+    await user.click(screen.getAllByRole('button', { name: 'Copy message' }).at(-1)!)
     expect(writeText).toHaveBeenCalledWith('Summary')
-    expect(await screen.findByRole('button', { name: 'Copied to clipboard' })).toBeVisible()
   })
 })
 

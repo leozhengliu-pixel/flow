@@ -101,7 +101,8 @@ export function usePropertyCommand<T extends PropertyCommandOption>({ autoFocus 
       onOpenChange(false)
       return
     }
-    if (!event.metaKey && !event.ctrlKey && !event.altKey && /^\d$/.test(event.key)) {
+    // A digit picks the numbered row only while the search is empty; otherwise it is part of the query ("EMP-1001").
+    if (!query && !event.metaKey && !event.ctrlKey && !event.altKey && /^\d$/.test(event.key)) {
       const option = options.find(item => item.shortcut === event.key)
       if (option) { event.preventDefault(); choose(option) }
     }

@@ -98,7 +98,7 @@ export function ProjectDetailsSidebar({ featureFlags, issueSummary, availableIss
     void onReorderMilestones(project.id, withoutSource)
   }
 
-  return <TooltipProvider delayDuration={450} skipDelayDuration={300}><aside aria-label="Project sidebar" className="project-details-sidebar">
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><aside aria-label="Project sidebar" className="project-details-sidebar">
     <SidebarSection compact onToggle={() => setPropertiesOpen(value => !value)} open={propertiesOpen} title="Properties" action={<ProjectDependencyMenu onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations} projects={projects} viewer={viewer}/> }>
       <SidebarPropertiesBoundary><SidebarProperties onPickerRequestHandled={onPickerRequestHandled} pickerRequest={pickerRequest} featureFlags={featureFlags} initiatives={initiatives} integrationConnections={integrationConnections} labelGroups={labelGroups} labels={labels} onCreateLabel={onCreateLabel} onUpdate={onUpdate} project={project} projects={projects} projectStatuses={projectStatuses} teams={teams} users={users}/></SidebarPropertiesBoundary>
       <ProjectDependencyRows blockedBy={blockedByProjects} blocking={blockingProjects} onUpdate={onUpdate} onUpdateProject={onUpdateProject} project={project} projectRelations={projectRelations}/>

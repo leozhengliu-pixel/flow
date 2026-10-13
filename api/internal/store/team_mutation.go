@@ -972,8 +972,9 @@ func metadataTeamSettingsEqual(a, b domain.TeamSettings) bool {
 		a.AutoArchiveMonths == b.AutoArchiveMonths && a.ProgressOrder == b.ProgressOrder &&
 		slices.Equal(a.ReleaseAutomations, b.ReleaseAutomations) && a.TriageEnabled == b.TriageEnabled &&
 		a.TriageRequirePriority == b.TriageRequirePriority && a.TriageAction == b.TriageAction &&
-		slices.Equal(a.TriageRules, b.TriageRules) && slices.Equal(a.AgentSkills, b.AgentSkills) &&
-		a.ProjectUpdatePrompt == b.ProjectUpdatePrompt && a.ResolvedSummaries == b.ResolvedSummaries &&
+		slices.Equal(a.TriageRules, b.TriageRules) && slices.Equal(a.TriageActionUserIDs, b.TriageActionUserIDs) &&
+		slices.Equal(a.AgentSkills, b.AgentSkills) && slices.Equal(a.AgentConnectors, b.AgentConnectors) &&
+		a.ProjectUpdatePrompt == b.ProjectUpdatePrompt && a.AgentGuidance == b.AgentGuidance && a.ResolvedSummaries == b.ResolvedSummaries &&
 		a.ShowInitiatives == b.ShowInitiatives && a.InheritIssueEstimation == b.InheritIssueEstimation &&
 		a.InheritWorkflowStatuses == b.InheritWorkflowStatuses && a.InheritProjectStatuses == b.InheritProjectStatuses &&
 		a.InheritCycles == b.InheritCycles && a.ParentTeamID == b.ParentTeamID &&

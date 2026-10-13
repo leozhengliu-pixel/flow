@@ -12,6 +12,7 @@ import { MyIssuesList, type MyIssuesContextAction, type MyIssuesCreateContext, t
 import { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 import { MyIssuesSurface, type MyIssuesDisplayOptions, type MyIssuesFilterKey, type MyIssuesFilterOption, type MyIssuesView } from './my-issues-surface'
 import { useMyIssuesController } from './use-my-issues-controller'
+import { assigneeUpdate } from '@/lib/agent-members'
 import { applyExplorerFilters, executeExplorerBulkAction, explorerBoardGroupUpdate, explorerFilterOptions, explorerPropertyOptions, issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useI18n } from '@/i18n/i18n'
 import { InsightHiddenNotice, SavedViewInsightsPanel, type SavedViewInsightsConfig } from '@/components/issue-explorer/saved-view-panels'
@@ -401,14 +402,14 @@ function bulkOptions(action: MyIssuesBulkAction, options: ReturnType<typeof expl
   if (action === 'project') return options.project
   if (action === 'labels') return options.labels
   if (action === 'dueDate') return dueDateOptions()
-  if (action === 'subscribers') return options.assignee.filter(option => option.id)
+  if (action === 'subscribers') return options.assignee.filter(option => option.id && !option.agent)
 }
 
 function updateForAction(action: MyIssuesBulkAction | MyIssuesContextAction, value?: string): IssueUpdateInput | undefined {
   if (value == null) return
   if (action === 'status') return { stateId: value }
   if (action === 'priority') return { priority: Number(value) }
-  if (action === 'assign' || action === 'assignee') return { assigneeId: value }
+  if (action === 'assign' || action === 'assignee') return assigneeUpdate(value)
   if (action === 'project') return { projectId: value }
   if (action === 'cycle') return { cycleId: value }
   if (action === 'dueDate') return { dueDate: value }
@@ -419,7 +420,7 @@ function updateForProperty(property: MyIssuesEditableProperty, value: string | s
   if (Array.isArray(value)) return
   if (property === 'status') return { stateId: value }
   if (property === 'priority') return { priority: Number(value) }
-  if (property === 'assignee') return { assigneeId: value }
+  if (property === 'assignee') return assigneeUpdate(value)
   if (property === 'project') return { projectId: value }
   if (property === 'cycle') return { cycleId: value }
   if (property === 'dueDate') return { dueDate: value }
@@ -431,6 +432,7 @@ function optimisticRow(row: MyIssuesRowData, input: IssueUpdateInput, data: Boot
     state: input.stateId === undefined ? row.state : data.states.find(state => state.id === input.stateId) ?? row.state,
     priority: input.priority === undefined ? row.priority : clampPriority(input.priority),
     assignee: input.assigneeId === undefined ? row.assignee : input.assigneeId ? (() => { const user = data.users.find(item => item.id === input.assigneeId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.assignee })() : undefined,
+    delegate: input.delegateId === undefined ? row.delegate : input.delegateId ? (() => { const user = data.users.find(item => item.id === input.delegateId); return user ? { id: user.id, name: user.displayName, avatarUrl: user.avatarUrl } : row.delegate })() : undefined,
     project: input.projectId === undefined ? row.project : input.projectId ? data.projects.find(project => project.id === input.projectId) : undefined,
     cycleId: input.cycleId === undefined ? row.cycleId : input.cycleId || undefined,
     cycleName: input.cycleId === undefined ? row.cycleName : data.cycles.find(cycle => cycle.id === input.cycleId)?.name,

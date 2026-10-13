@@ -9,6 +9,7 @@ import { toast } from '@/lib/toast'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Toggle } from '@/components/ui/toggle'
 import { UserAvatar } from '@/components/ui/user-avatar'
+import { ViaApp } from '@/components/ui/via-app'
 import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument } from '@/types/flow'
 
@@ -188,7 +189,7 @@ export function DocumentHistoryDialog({ open, onOpenChange, document, onRestore 
                         </span>
                         <span className="document-history-version-author">
                           <UserAvatar avatarUrl={entry.author?.avatarUrl} className="document-history-avatar" name={authorName(entry) || '?'}/>
-                          <span data-i18n-ignore>{authorName(entry)}</span>
+                          <span data-i18n-ignore>{authorName(entry)}</span><ViaApp user={entry.author} botActor={entry.botActor}/>
                         </span>
                       </div>
                     ))}

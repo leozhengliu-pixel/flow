@@ -13,7 +13,7 @@ import { labelsForResource, setGroupedLabelSelected, toggleGroupedLabelIds } fro
 import { milestoneIssueProgress } from '@/components/issue/milestone-progress'
 import { buildIssueGroups, groupMoveUpdate, nestIssueRows } from './issue-grouping'
 import { confirmAction } from '@/components/ui/action-dialog-service'
-import { AGENT_OPTION_GROUP, AGENT_SESSION_STATE_FILTERS, agentSessionStatesFor, assigneeCandidates, assigneeUpdate, isAssignableAgent } from '@/lib/agent-members'
+import { AGENT_SESSION_STATE_FILTERS, agentSessionStatesFor, agentsAvailable, assigneeCandidates, assigneeUpdate, isAssignableAgent } from '@/lib/agent-members'
 import { CUSTOMER_NUMBER_PREFIXES, isCustomerNumberComparison, matchesCustomerNumberValues, matchesCustomerValues } from './customer-filter'
 import { countTriageSuggestions, emptyTriageCounts, matchesTriageIntelligence, triageIntelligenceFilterOptions } from './triage-intelligence-filter'
 
@@ -286,8 +286,10 @@ export function explorerPropertyOptions(data: BootstrapData, issues = data.issue
   return {
     status: [...scopedStates].sort((a, b) => (a.position??0) - (b.position??0)).map(state => ({ id: state.id, teamId: state.teamId, label: state.name, color: state.color, count: statusCounts.get(state.id) ?? 0, kind: 'status' as const, stateType: state.type })),
     priority: PRIORITIES.map(priority => ({ ...priority, count: priorityCounts.get(priority.id) ?? 0 })),
-    // People, then the agents that accept delegation in their own section with the "Agent" pill.
-    assignee: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...assigneeCandidates(data.users.filter(user => user.active)).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: (user.app ? agentCounts : assigneeCounts).get(user.id) ?? 0, kind: 'assignee' as const, ...(user.app ? { agent: true, ...AGENT_OPTION_GROUP } : {}) }))],
+    // The Assignee filter lists people only; delegated agents are filtered under "Agent".
+    assigneeFilter: [{ id: '', label: 'No assignee', count: noAssignee, kind: 'assignee' as const }, ...data.users.filter(user => user.active && !user.app).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: assigneeCounts.get(user.id) ?? 0, kind: 'assignee' as const }))],
+    // What the assignee pickers and bulk "Assign to…" offer: people, then the agents that accept delegation.
+    assignee: assigneeContextOptions(data.users.filter(user => user.active), { allowAgents: agentsAvailable(data) }),
     creator: data.users.filter(user => user.active).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: creatorCounts.get(user.id) ?? 0, kind: 'creator' as const })),
     // Every agent that can take work, plus agents still delegated on loaded issues.
     agent: [{ id: '', label: 'No agent', count: noAgent }, { id: '*', label: 'Any agent', count: anyAgent }, ...data.users.filter(user => user.app && (isAssignableAgent(user) || agentCounts.has(user.id))).map(user => ({ id: user.id, label: user.displayName, avatarUrl: user.avatarUrl, count: agentCounts.get(user.id) ?? 0, kind: 'assignee', agent: true }))],
@@ -320,12 +322,21 @@ function incrementCount(counts: Map<string, number>, key: string, amount = 1) {
   counts.set(key, (counts.get(key) ?? 0) + amount)
 }
 
+/**
+ * Options for the assignee pickers (list/board cells, context menu, bulk bar): "No assignee", the people,
+ * then the agents that accept delegation, all in one list. Choosing an agent delegates (`assigneeUpdate`).
+ */
+export function assigneeContextOptions(users: BootstrapData['users'], { teamId, allowAgents = true }: { teamId?: string; allowAgents?: boolean } = {}): MyIssuesContextOption[] {
+  return [{ id: '', label: 'No assignee', kind: 'assignee' }, ...assigneeCandidates(users, teamId, { agents: allowAgents }).map(user => ({ id: user.id, label: user.displayName, handle: user.name, avatarUrl: user.avatarUrl, kind: 'assignee' as const, ...(user.app ? { agent: true } : {}) }))]
+}
+
 export type ExplorerPropertyOptions = ReturnType<typeof explorerPropertyOptions>
 
 export function explorerFilterOptions(field: MyIssuesFilterKey, options: ExplorerPropertyOptions): MyIssuesFilterOption[] | undefined {
   if (field === 'ai') return [{id:'assigned-to-me',label:'assigned to me'},{id:'completed-last-month',label:'completed in the last month'},{id:'due-next-two-weeks',label:'due in the next 2 weeks'}]
   if (field === 'labels') return [{ id: '', label: 'No labels', kind: 'labels' as const }, ...options.labels]
-  if (field === 'status'||field==='assignee'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
+  if (field === 'assignee') return options.assigneeFilter
+  if (field === 'status'||field==='agent'||field==='agentSession'||field==='creator'||field==='priority'||field==='relations'||field==='triageIntelligence'||field==='suggestedLabel'||field==='dates'||field==='projectMilestone'||field==='project'||field==='projectProperties'||field==='initiative'||field==='cycle'||field==='addedToCycle'||field==='releases'||field==='customers'||field==='subscribers'||field==='externalSource'||field==='autoClosed'||field==='content'||field==='links'||field==='template') return options[field]
 }
 
 export function explorerBulkOptions(action: MyIssuesBulkAction, options: ExplorerPropertyOptions): MyIssuesBulkActionOption[] | undefined {
@@ -435,7 +446,7 @@ export function matchesExplorerFilter(issue: MyIssuesRowData, filter: MyIssuesAp
   let matched = true
   if (filter.field === 'priority') matched = values.includes(String(issue.priority))
   else if (filter.field === 'status') matched = values.includes(issue.state.id) || values.includes(issue.state.type)
-  // An agent picked under Assignee matches the issues delegated to it (agents are never assignees).
+  // Older saved filters may hold an agent under Assignee: it matches the issues delegated to it (agents are never assignees).
   else if (filter.field === 'assignee') matched = values.includes(issue.assignee?.id ?? '') || Boolean(issue.delegate && values.includes(issue.delegate.id))
   else if (filter.field === 'agent') matched = values.includes('*') ? Boolean(issue.delegate) : values.includes(issue.delegate?.id ?? '')
   else if (filter.field === 'agentSession') matched = matchesAgentSessionFilter(issue, values)

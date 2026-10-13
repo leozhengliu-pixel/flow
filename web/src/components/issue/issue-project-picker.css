@@ -4,3 +4,5 @@
 :root[data-theme="light"] .issue-project-open:hover{background:var(--theme-surface-hover);color:var(--theme-text-primary)}
 :root[data-theme="light"] .issue-project-trigger>span,:root[data-theme="light"] .issue-milestone-trigger>span{color:var(--text)}
 @media(max-width:800px){:root[data-theme="light"] .issue-project-property .issue-project-trigger,:root[data-theme="light"] .issue-project-property .issue-milestone-trigger{border-color:var(--border);background:var(--theme-soft-overlay);color:var(--theme-text-primary)}}
+/* The reference app: the milestone hangs off the project on a NestingLine (left 14px, top -8px, 14px stem), on the sidebar's 32px row pitch. */
+.issue-project-group .issue-milestone-row{position:relative;margin-top:4px}.issue-milestone-nesting-line{left:14px;top:-8px}

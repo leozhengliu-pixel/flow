@@ -102,7 +102,7 @@ describe('Agent answer chrome in the floating panel', () => {
     expect(rows[0]).toHaveTextContent('TST-1Test issue')
     expect(rows[1]).toHaveTextContent('TST-2Second issue')
 
-    const chips = screen.getByRole('group', { name: 'Suggested follow-ups' })
+    const chips = screen.getByRole('group', { name: 'Choose an option' })
     expect(within(chips).getAllByRole('button').map(button => button.textContent)).toEqual(['Compare TST-1 and TST-2', 'Review migration steps'])
     await waitFor(() => expect(within(chips).getByRole('button', { name: 'Review migration steps' })).toBeEnabled())
     await user.click(within(chips).getByRole('button', { name: 'Review migration steps' }))

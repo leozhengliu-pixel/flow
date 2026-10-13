@@ -2204,6 +2204,11 @@ export function deleteProjectRelation(
     method: "DELETE",
   });
 }
+export function listInitiativeHistory(
+  id: string,
+): Promise<PageResult<import("@/types/flow").AuditLogEntry>> {
+  return request(`/api/initiatives/${encodeURIComponent(id)}/history?limit=200`);
+}
 export function listInitiativeRelations(
   id: string,
 ): Promise<PageResult<import("@/types/flow").InitiativeRelation>> {
@@ -2462,6 +2467,24 @@ export function getAgentSession(
 /** Records that the viewer has seen the chat up to its latest change (the reference app's unread dot clears). */
 export function markAgentSessionRead(id: string): Promise<import("@/types/flow").AgentSession> {
   return request(`/api/agent/sessions/${encodeURIComponent(id)}/read`, { method: "POST" });
+}
+/** Rates an assistant reply: `rating: ""` removes the rating (and its note). Returns the updated chat. */
+export function updateAgentMessageFeedback(id: string, messageId: string, input: { rating?: "positive" | "negative" | ""; comment?: string }): Promise<import("@/types/flow").AgentSession> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/feedback`, jsonRequest("PUT", input));
+}
+/** Leaves a note about the whole chat (its menu's "Leave feedback…"). */
+/** Reverts the Flow writes an agent reply made (all of them, or the given tool-call parts: one result card). */
+export function undoAgentMessageChanges(id: string, messageId: string, partIds?: string[]): Promise<import("@/types/flow").AgentSession> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/undo`, jsonRequest("POST", { partIds }));
+}
+
+/** Re-applies agent writes that were undone. */
+export function restoreAgentMessageChanges(id: string, messageId: string, partIds?: string[]): Promise<import("@/types/flow").AgentSession> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/messages/${encodeURIComponent(messageId)}/restore`, jsonRequest("POST", { partIds }));
+}
+
+export function createAgentSessionFeedback(id: string, comment: string): Promise<import("@/types/flow").AgentSession> {
+  return request(`/api/agent/sessions/${encodeURIComponent(id)}/feedback`, jsonRequest("POST", { comment }));
 }
 /** Stops the reply running for a chat (it keeps running on the server when the page goes away). */
 export function stopAgentSession(id: string): Promise<void> {

@@ -23,6 +23,7 @@ export type DialogRequest =
       title: string;
       description?: string;
       confirmLabel: string;
+      cancelLabel?: string;
       danger: boolean;
       resolve: (value: boolean) => void;
     }
@@ -102,13 +103,14 @@ const queue: DialogRequest[] = [];
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach(listener => listener());
 
-export function confirmAction(title: string, options: { description?: string; confirmLabel?: string; danger?: boolean } = {}) {
+export function confirmAction(title: string, options: { description?: string; confirmLabel?: string; cancelLabel?: string; danger?: boolean } = {}) {
   return new Promise<boolean>(resolve => {
     queue.push({
       kind: "confirm",
       title,
       description: options.description,
       confirmLabel: options.confirmLabel ?? "Confirm",
+      cancelLabel: options.cancelLabel,
       danger: options.danger ?? true,
       resolve,
     });

@@ -28,13 +28,14 @@ it('keeps trusted sources in the workspace Loops settings', async () => {
   expect(screen.getByTestId('agent-trusted-sources-settings')).toHaveTextContent('Trusted sources')
 })
 
-it('explains that web search is not configured and disables the chat toggle', async () => {
+it('explains that web search is not configured and keeps Flow Agent web access switchable', async () => {
   vi.mocked(getLoopConfig).mockResolvedValue(config)
   renderLoops()
   const section = document.getElementById('web-search')!
   expect(await within(section).findByText('Not configured')).toBeVisible()
   expect(section).toHaveTextContent("Web search isn't configured for this workspace.")
-  expect(within(section).getByRole('checkbox', { name: 'Web search in Flow Agent chat' })).toBeDisabled()
+  // Flow Agent still reads pages (and may search through the AI provider), so admins can switch web access off.
+  await waitFor(() => expect(within(section).getByRole('checkbox', { name: 'Web search in Flow Agent chat' })).toBeEnabled())
 })
 
 it('shows the provider and saves the chat web search setting when available', async () => {

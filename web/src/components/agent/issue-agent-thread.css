@@ -25,7 +25,6 @@
 .issue-agent-message-body{min-width:0;padding:2px 0 2px 27px;color:var(--agent-thread-text);font-size:15px;font-weight:450;line-height:24px;overflow-wrap:anywhere}
 .issue-agent-message-body .agent-rich-text{font-size:15px;font-weight:450;line-height:24px}
 .issue-agent-thread .agent-rich-text :is(p,li){color:inherit;font-size:15px;font-weight:450;line-height:24px}
-.issue-agent-thread .issue-agent-thinking .agent-rich-text :is(p,li){font-size:13px;line-height:20px}
 .issue-agent-message-body p{margin:0}
 .issue-agent-message-body p+p{margin-top:8px}
 .issue-agent-message:not([data-type=elicitation]) .issue-agent-message-body{padding-top:0;padding-bottom:0}
@@ -43,15 +42,6 @@
 .issue-agent-choices button[aria-pressed=true]:not(:disabled){color:var(--accent-primary);background:var(--theme-control-active)}
 .issue-agent-choices button:disabled{cursor:default}
 .issue-agent-choices svg{flex:none;color:inherit}
-.issue-agent-thinking,.issue-agent-action,.issue-agent-working{margin:0 16px 0 43px;color:var(--theme-text-secondary);font:450 13px/20px var(--font)}
-.issue-agent-thinking summary,.issue-agent-working{min-height:30px;display:flex;align-items:center;gap:6px;list-style:none}
-.issue-agent-thinking summary{cursor:pointer}
-.issue-agent-thinking summary::-webkit-details-marker{display:none}
-.issue-agent-thinking[open]>summary>svg:first-child{transform:rotate(90deg)}
-.issue-agent-thinking>.agent-rich-text{padding:4px 0 10px;font-size:13px;line-height:20px}
-.issue-agent-action{display:flex;align-items:center;flex-wrap:wrap;gap:6px;min-height:30px}
-.issue-agent-action small{font-size:12px}
-.issue-agent-action .agent-rich-text{width:100%}
 .issue-agent-spinner{animation:spin 1s linear infinite}
 .issue-agent-thread-footer{position:relative;border-top:.5px solid var(--agent-thread-border);min-height:46.5px}
 .issue-agent-start-reply{width:100%;min-height:46px;display:flex;align-items:center;gap:9px;padding:10px 92px 10px 16px;border:0;background:transparent;text-align:left;color:var(--agent-thread-placeholder);font:450 15px/24px var(--font);cursor:text}
@@ -72,3 +62,39 @@
 .issue-agent-approval button,.issue-agent-auth-link{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:0 9px;border:.5px solid var(--theme-border-strong);border-radius:6px;background:var(--theme-control);color:var(--theme-text-primary);font:450 13px var(--font);cursor:pointer;text-decoration:none}
 .issue-agent-auth-wait{color:var(--theme-text-secondary);font-size:13px}
 @media(prefers-reduced-motion:reduce){.issue-agent-spinner{animation:none}}
+/* The reference app: while the agent works, the thread ends with one row: its avatar and name, then the current phase in muted
+   text with a light sweeping across it (2.4s; the sweep crosses in 1.8s, then rests). Each new phase fades in. */
+.issue-agent-working{position:relative;min-height:46px;display:flex;align-items:center;gap:8px;padding:14px 16px;border-top:.5px solid transparent}
+.issue-agent-working:before{content:"";position:absolute;left:45px;right:0;top:-.5px;height:.5px;background:var(--agent-thread-border)}
+.issue-agent-working .issue-agent-message-header{flex:none}
+.issue-agent-working-label{min-width:0;display:block;overflow:hidden;animation:issue-agent-phase-in 150ms linear(0 0%,.1419 7.14%,.3799 14.29%,.5882 21.43%,.7399 28.57%,.8411 35.71%,.9052 42.86%,.9445 50%,.9679 57.14%,.9817 64.29%,.9896 71.43%,.9942 78.57%,.9967 85.71%,.9982 92.86%,1 100%) both}
+.issue-agent-working-text{position:relative;display:block;overflow:hidden;color:var(--agent-working-text);font:500 13px/normal var(--font);text-overflow:ellipsis;white-space:nowrap}
+.issue-agent-working-shine{position:absolute;inset:0;color:transparent;background:var(--agent-working-shine) no-repeat -180px center/180px 72px;-webkit-background-clip:text;background-clip:text;animation:issue-agent-shine 2.4s linear infinite;pointer-events:none}
+@keyframes issue-agent-shine{0%,100%{background-position:-180px center}75%,99.999%{background-position:calc(100% + 180px) center}}
+@keyframes issue-agent-phase-in{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.issue-agent-working-shine{animation:none;display:none}.issue-agent-working-label{animation:none}}
+/* Agent replies (questions included) use the comment body text, not the activity timeline's 12px rows. */
+.issue-agent-thread .issue-agent-message-body .issue-agent-markdown :is(p,li){color:inherit;font-size:15px;font-weight:450;line-height:24px}
+.issue-agent-message-body>[data-agent-choices]{margin-top:12px}
+/* Session details an agent attaches (the reference app's agentSessionUpdate): link chips and its plan, above the replies. */
+.issue-agent-session-details{display:flex;flex-direction:column;gap:8px;padding:12px 16px 0 43px}
+.issue-agent-external-links{display:flex;flex-wrap:wrap;gap:6px}
+.issue-agent-external-links a{min-height:24px;max-width:100%;display:inline-flex;align-items:center;gap:5px;padding:0 9px;border:.5px solid var(--agent-thread-border);border-radius:9999px;background:var(--agent-thread-option);color:var(--agent-thread-name);font:450 12px/normal var(--font);text-decoration:none}
+.issue-agent-external-links a:hover{background:var(--theme-control-hover)}
+.issue-agent-external-links a span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.issue-agent-external-links svg{flex:none;color:var(--agent-thread-muted)}
+.issue-agent-plan{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
+.issue-agent-plan li{display:flex;align-items:flex-start;gap:8px;color:var(--agent-thread-text);font:450 13px/20px var(--font)}
+.issue-agent-plan svg{flex:none;margin-top:3px;color:var(--agent-thread-muted)}
+.issue-agent-plan li[data-status=inProgress] svg{color:var(--accent-primary)}
+.issue-agent-plan li[data-status=completed] svg{color:var(--semantic-success)}
+.issue-agent-plan li[data-status=canceled]{color:var(--agent-thread-muted);text-decoration:line-through}
+/* A delegated session opens with who delegated it (AIG: the responsible human stays visible). */
+.issue-agent-delegation{padding:14px 16px 0}
+.issue-agent-delegation .issue-agent-message-header strong{color:var(--agent-thread-muted);font-weight:450}
+/* An unresponsive or stale session replaces the shimmering "Working…" row with a still, muted notice. */
+.issue-agent-session-state .issue-agent-working-text{color:var(--agent-thread-muted)}
+/* A session without a source comment (a delegation) sits in the activity timeline at its chronological position,
+   full width like a comment thread. */
+.issue-activity-timeline .timeline-item.agent-session{display:block;padding:8px 0}
+.issue-activity-timeline .timeline-item.agent-session .issue-agent-threads.is-standalone{margin-top:0;background:var(--agent-thread-surface);border-color:var(--agent-thread-border)}

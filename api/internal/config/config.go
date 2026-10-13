@@ -46,6 +46,9 @@ type AgentConfig struct {
 	// ReasoningEffort is the reasoning effort sent to OpenAI-compatible models
 	// (none|minimal|low|medium|high|xhigh); empty leaves the provider default.
 	ReasoningEffort string
+	// NativeWebSearch lets chat search the web with the model provider's hosted search tool (OpenAI Responses
+	// web_search, Anthropic web_search) when no FLOW_WEB_SEARCH_PROVIDER is configured. On by default.
+	NativeWebSearch bool
 }
 
 // TTSConfig configures text-to-speech for Pulse summaries ("Listen"). It
@@ -173,7 +176,7 @@ func Load() (Config, error) {
 			BaseURL: value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1"), APIKey: secret("FLOW_AGENT_API_KEY"), Model: value("FLOW_AGENT_MODEL", "gpt-5-mini"),
 			Timeout: duration("FLOW_AGENT_TIMEOUT", 60*time.Second), MaxOutputTokens: integer("FLOW_AGENT_MAX_OUTPUT_TOKENS", 4096),
 			AnthropicVersion: value("FLOW_AGENT_ANTHROPIC_VERSION", "2023-06-01"), ToolsEnabled: boolean("FLOW_AGENT_TOOLS_ENABLED", true), WriteTools: boolean("FLOW_AGENT_WRITE_TOOLS", false),
-			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")),
+			ReasoningEffort: strings.ToLower(value("FLOW_AGENT_REASONING_EFFORT", "")), NativeWebSearch: boolean("FLOW_AGENT_NATIVE_WEB_SEARCH", true),
 		},
 		TTS: TTSConfig{
 			Enabled: boolean("FLOW_TTS_ENABLED", false), BaseURL: strings.TrimRight(value("FLOW_TTS_BASE_URL", value("FLOW_AGENT_BASE_URL", "https://api.openai.com/v1")), "/"),

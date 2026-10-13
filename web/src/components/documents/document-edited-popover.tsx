@@ -10,14 +10,16 @@ import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { ViaApp } from '@/components/ui/via-app'
 import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
-import type { FlowDocument, User } from '@/types/flow'
+import type { ActorBot, FlowDocument, User } from '@/types/flow'
 import { documentOwner, type DocumentActionContext } from './document-actions'
 import { DocumentOwnerPicker } from './document-owner-picker'
 
-export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditedAt, showAuthorNames, onShowAuthorNames, onShowHistory, open, onOpenChange, ownerOpen, onOwnerOpenChange, readOnly }: {
+export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditorBot, lastEditedAt, showAuthorNames, onShowAuthorNames, onShowHistory, open, onOpenChange, ownerOpen, onOwnerOpenChange, readOnly }: {
   ctx: DocumentActionContext
   document: FlowDocument
   lastEditor: User
+  /** The latest edit's attribution ("Last edit by Dev User via Flow"); null when it had none. */
+  lastEditorBot?: ActorBot | null
   lastEditedAt: string
   showAuthorNames: boolean
   onShowAuthorNames: (value: boolean) => void
@@ -38,7 +40,7 @@ export function DocumentEditedPopover({ ctx, document, lastEditor, lastEditedAt,
     <strong data-i18n-ignore>{ownerName}</strong>
   </>
   // A document created through an application keeps its "via <App>" attribution while its creator is the last editor.
-  const editorBot = lastEditor.id === document.creator.id ? document.botActor : undefined
+  const editorBot = lastEditorBot !== undefined ? lastEditorBot ?? undefined : lastEditor.id === document.creator.id ? document.botActor : undefined
   const editorName = attributedActorName(lastEditor, editorBot)
   return <Popover.Root open={open} onOpenChange={onOpenChange}>
     <Popover.Trigger asChild>

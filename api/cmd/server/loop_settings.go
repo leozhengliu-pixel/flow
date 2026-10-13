@@ -21,9 +21,12 @@ type loopTrustedSourceOption struct {
 }
 
 type loopConfigResponse struct {
-	WebSearchAvailable      bool                      `json:"webSearchAvailable"`
-	WebSearchProvider       string                    `json:"webSearchProvider"`
-	AgentWebSearch          bool                      `json:"agentWebSearch"`
+	WebSearchAvailable bool   `json:"webSearchAvailable"`
+	WebSearchProvider  string `json:"webSearchProvider"`
+	// AgentWebSearch is whether Flow Agent has web access (on unless an admin turned it off).
+	AgentWebSearch bool `json:"agentWebSearch"`
+	// AgentNativeWebSearch: without a search provider, the model provider's hosted web search answers searches.
+	AgentNativeWebSearch    bool                      `json:"agentNativeWebSearch"`
 	CodeAccessAvailable     bool                      `json:"codeAccessAvailable"`
 	ExternalLoopTriggers    bool                      `json:"externalLoopTriggers"`
 	TrustedSourcesMode      string                    `json:"trustedSourcesMode"`
@@ -36,7 +39,7 @@ var integrationSourceLabels = map[string]string{"slack": "Slack", "email": "Emai
 func (s *server) loopConfig(data domain.Bootstrap) loopConfigResponse {
 	settings := data.WorkspaceSettings
 	response := loopConfigResponse{
-		WebSearchAvailable: s.webSearchAvailable(), WebSearchProvider: s.webSearchProviderName(), AgentWebSearch: settings.AgentWebSearch,
+		WebSearchAvailable: s.webSearchAvailable(), WebSearchProvider: s.webSearchProviderName(), AgentWebSearch: agentWebAccess(settings), AgentNativeWebSearch: s.agentNativeWebSearch(),
 		CodeAccessAvailable:  settings.FeatureSettings.RepositoryAccess != nil && settings.FeatureSettings.RepositoryAccess.AllowAutomationAccess,
 		ExternalLoopTriggers: settings.ExternalLoopTriggers, TrustedSourcesMode: firstNonEmpty(settings.TrustedSourcesMode, "none"),
 		TrustedSourcesAllowlist: slices.Clone(settings.TrustedSourcesAllowlist), TrustedSourceOptions: []loopTrustedSourceOption{},
@@ -147,6 +150,7 @@ func (s *server) updateLoopSettings(w http.ResponseWriter, r *http.Request) {
 		}
 		if input.AgentWebSearch != nil {
 			settings.AgentWebSearch = *input.AgentWebSearch
+			settings.AgentWebSearchDisabled = !*input.AgentWebSearch
 		}
 		settings.UpdatedAt = time.Now().UTC()
 		appendAudit(data, "updated", "workspace_settings", "loops", map[string]any{"fields": "loop settings"})

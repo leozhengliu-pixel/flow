@@ -1,0 +1,114 @@
+/*
+ * (Selectors are deliberately heavy: the shared rich-text body rules in editor/rich-text-body.css also list the
+ * agent message documents and are themselves :root + :is(…) chains.)
+ * The reference app's AI message typography (Agent page and floating chat), measured in the reference app. Sizes that the reference app
+ * scales with the message font (15px on the page, 13px in the floating chat) are in em; the rest are fixed.
+ */
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document { color: var(--agent-thread-text); }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document :is(h1, h2, h3, h4) { color: var(--agent-thread-name); }
+
+/* Inline code: no border, an inset hairline ring and a faint tint. */
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document code:not(pre code, .flow-code-block__code, .flow-code-block code) {
+  padding: .5px .25em;
+  border: 0;
+  border-radius: .2em;
+  background: var(--agent-inline-code-bg);
+  box-shadow: inset 0 0 0 .5px var(--agent-inline-code-ring);
+  color: inherit;
+  font-family: var(--font-monospace);
+  font-size: .9375em;
+  font-weight: 450;
+  line-height: 1.3;
+  letter-spacing: inherit;
+}
+
+/* Quotes: a 4px rounded bar in the left gutter, text 16px in. */
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document blockquote {
+  position: relative;
+  margin: 22px 0 0;
+  padding: 0 0 0 16px;
+  border: 0;
+  border-radius: 0;
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document blockquote::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--agent-quote-bar);
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document > :first-child { margin-top: 0; }
+/* Text after a quote or a code block starts 22px below it. */
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document :is(blockquote, .flow-code-block, pre) + :is(p, ul, ol, h1, h2, h3) { margin-top: 22px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document a[data-agent-entity] [class*="entityIdentifier"] { color: var(--agent-thread-muted); }
+
+/* Tables: one hairline box with rounded corners, a tinted header row, 24px kept free on the right. */
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .tableWrapper {
+  max-width: 100%;
+  margin: 22px 0 0;
+  padding: 0 0 23px;
+  overflow-x: auto;
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .tableWrapper + * { margin-top: 0; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document table {
+  width: calc(100% - 24px);
+  margin: 0;
+  border: .5px solid var(--agent-table-border);
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 6px;
+  background: var(--agent-table-bg);
+  table-layout: auto;
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document :is(th, td) {
+  padding: 5px 8px;
+  border: 0;
+  text-align: left;
+  vertical-align: top;
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document th {
+  background: var(--agent-table-head-bg);
+  font-weight: 450;
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document :is(th, td) + :is(th, td) { border-left: .5px solid var(--agent-table-border); }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document td { border-top: .5px solid var(--agent-table-border); }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document tr:first-child > :first-child { border-top-left-radius: 6px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document tr:first-child > :last-child { border-top-right-radius: 6px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document tr:last-child > :first-child { border-bottom-left-radius: 6px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document tr:last-child > :last-child { border-bottom-right-radius: 6px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document :is(th, td) p { margin: 0; }
+
+/* Code blocks: the reference app's 6px box and its pill toolbar (language, display options, copy) 10px in from the corner. */
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .flow-code-block {
+  margin: 22px 0 0;
+  border-color: var(--agent-code-border);
+  border-radius: 6px;
+  background: var(--agent-thread-surface);
+  letter-spacing: 0;
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .flow-code-block__controls {
+  top: 10px;
+  right: 10px;
+  height: 31.5px;
+  gap: 0;
+  padding: 2px;
+  border-color: var(--agent-code-border);
+  border-radius: 9999px;
+  background: var(--agent-thread-surface);
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document :is(.flow-code-block__language, .flow-code-block__icon) {
+  height: 26.5px;
+  border-radius: 9999px;
+  color: var(--agent-thread-muted);
+  font: 450 12px/normal var(--font);
+}
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .flow-code-block__language[data-readonly] { padding: 6px 6px 6px 8px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .flow-code-block__icon { width: 26px; height: 26px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document .flow-code-block__icon svg { width: 14px; height: 14px; }
+:root:root:root .agent-chat-document.agent-chat-document.agent-chat-document a[data-agent-entity]:not([data-agent-entity="user"]) {
+  border: .5px solid var(--agent-chip-border);
+  background: var(--agent-chip-bg);
+}

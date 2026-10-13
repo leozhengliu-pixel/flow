@@ -40,7 +40,7 @@ func (s *SQLiteStore) UpdateAgentTaskSession(ctx context.Context, workspace, id 
 		if err != nil {
 			return task, err
 		}
-		result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET data=? WHERE workspace_key=? AND id=? AND version=?`, raw, workspace, id, task.Version)
+		result, err := s.db.ExecContext(ctx, `UPDATE application_agent_tasks SET data=?,stale_at=? WHERE workspace_key=? AND id=? AND version=?`, raw, agentTaskStaleAt(task), workspace, id, task.Version)
 		if err != nil {
 			return task, err
 		}
@@ -101,7 +101,7 @@ func (s *SQLiteStore) CreateAgentInitiatedTask(ctx context.Context, task domain.
 	if resource == "" {
 		resource = task.ResourceID
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at,next_attempt) VALUES(?,?,?,?,?,1,?,?,?)`, task.ID, task.WorkspaceKey, resource, task.AppUserID, task.Status, raw, now.Format(time.RFC3339Nano), agentSessionNeverDue)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO application_agent_tasks(id,workspace_key,issue_id,app_user_id,status,version,data,created_at,next_attempt,stale_at) VALUES(?,?,?,?,?,1,?,?,?,?)`, task.ID, task.WorkspaceKey, resource, task.AppUserID, task.Status, raw, now.Format(time.RFC3339Nano), agentSessionNeverDue, agentTaskStaleAt(task))
 	if err != nil {
 		return task, err
 	}

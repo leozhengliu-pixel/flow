@@ -28,6 +28,7 @@ import { InboxPage, type InboxPageAdapter } from './inbox-page'
 import type { InboxDisplayOptions, InboxTab } from './inbox-page-shell'
 import type { InboxNotificationKind, InboxNotificationRowData, InboxSnoozePreset } from './notification-row'
 import { effectivePulseFrequency, isPulseSummaryNotification, pulseSummaryText, pulseSummaryTitle, type PulseFrequency } from './pulse-summary-model'
+import { agentReplyLine } from './agent-reply-notification'
 import { PulseSummaryView } from './pulse-summary-view'
 import { usePagedInbox } from './use-paged-inbox'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
@@ -691,7 +692,8 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
       }]
     }
     if (!issue || issue.archivedAt || notification.deletedAt || notification.archivedAt) return []
-    const comment = notification.commentId ? (data.comments[issue.id] ?? []).find(item => item.id === notification.commentId) : undefined
+    const agentReply = notification.type === 'agentReply' ? agentReplyLine(notification, t) : undefined
+    const comment = !agentReply && notification.commentId ? (data.comments[issue.id] ?? []).find(item => item.id === notification.commentId) : undefined
     const event = notification.activityId ? (data.activities[issue.id] ?? []).find(item => item.id === notification.activityId) : undefined
     const sourceType = notification.commentId || notification.sourceType === 'comment' ? 'comment' : 'activity'
     const sourceId = sourceType === 'comment' ? notification.commentId ?? notification.sourceId : notification.activityId ?? notification.sourceId
@@ -704,10 +706,10 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
       actorId: notification.actor.id,
       actor: notification.actor.displayName,
       actorAvatarUrl: notification.actor.avatarUrl,
-      kind: comment ? 'comment' : event ? activityKind(event) : notificationKind(notification),
+      kind: agentReply || comment ? 'comment' : event ? activityKind(event) : notificationKind(notification),
       identifier: issue.identifier,
       title: issue.title,
-      body: withOccurrence(comment ? `${notification.actor.displayName} commented: ${markdownPlainText(comment.body)}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
+      body: agentReply ?? withOccurrence(comment ? `${notification.actor.displayName} commented: ${markdownPlainText(comment.body)}` : event ? describeActivity(event, issue, data.viewer) : describeNotification(notification, issue), notification.occurrenceCount),
       timeLabel: relativeTime(notification.updatedAt),
       timestamp: notification.updatedAt,
       read: Boolean(notification.readAt),
