@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // API rate limiting follows the reference app's published model: a leaky bucket per
@@ -32,6 +33,10 @@ const (
 	apiRateOAuth           apiRateCategory = "oauth"
 	apiRateUnauthenticated apiRateCategory = "unauthenticated"
 	apiRateSession         apiRateCategory = "session"
+	// Agent run tokens (agent_run_tokens.go) spend two budgets on /mcp: their run's and their workspace's, so a
+	// runaway run is stopped early and one workspace cannot use the whole sidecar's share of the API.
+	apiRateAgentRun       apiRateCategory = "agentRun"
+	apiRateAgentWorkspace apiRateCategory = "agentWorkspace"
 )
 
 type apiRateBudget struct {
@@ -44,6 +49,9 @@ type apiRateLimitConfig struct {
 	Period        time.Duration
 	MaxComplexity int
 	Budgets       map[apiRateCategory]apiRateBudget
+	// AgentWorkspaceRequests overrides the agentWorkspace request budget per workspace URL key
+	// (FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_OVERRIDES="acme=100000,trial=2000").
+	AgentWorkspaceRequests map[string]int
 }
 
 // tokenBucketBackend is satisfied by the in-memory limiter and by the Redis
@@ -67,6 +75,12 @@ func defaultAPIRateLimitConfig() apiRateLimitConfig {
 			apiRateOAuth:           {Requests: 5_000, Complexity: 2_000_000},
 			apiRateUnauthenticated: {Requests: 600, Complexity: 100_000},
 			apiRateSession:         {},
+			// A chat run makes about 9 /mcp requests (5.5 tool calls, initialize and tools/list) and is capped at 24
+			// model turns of at most ~9 parallel calls, so 1,200 per hour stops only a runaway run.
+			apiRateAgentRun: {Requests: 1_200},
+			// About 0.65 requests/s per active run (eval mean); a workspace holds at most 4-8 runs at a time, so
+			// 36,000 per hour (10/s sustained, refilled continuously) is twice the steady load of 8 busy runs.
+			apiRateAgentWorkspace: {Requests: 36_000},
 		},
 	}
 }
@@ -85,13 +99,33 @@ func apiRateLimitConfigFromEnv() apiRateLimitConfig {
 		return value
 	}
 	config.MaxComplexity = read("FLOW_API_MAX_COMPLEXITY", config.MaxComplexity)
-	for category, prefix := range map[apiRateCategory]string{apiRateAPIKey: "API_KEY", apiRateOAuth: "OAUTH", apiRateUnauthenticated: "UNAUTHENTICATED", apiRateSession: "SESSION"} {
+	for category, prefix := range map[apiRateCategory]string{apiRateAPIKey: "API_KEY", apiRateOAuth: "OAUTH", apiRateUnauthenticated: "UNAUTHENTICATED", apiRateSession: "SESSION", apiRateAgentRun: "AGENT_RUN", apiRateAgentWorkspace: "AGENT_WORKSPACE"} {
 		budget := config.Budgets[category]
 		budget.Requests = read("FLOW_API_RATE_LIMIT_"+prefix+"_REQUESTS", budget.Requests)
 		budget.Complexity = read("FLOW_API_RATE_LIMIT_"+prefix+"_COMPLEXITY", budget.Complexity)
 		config.Budgets[category] = budget
 	}
+	config.AgentWorkspaceRequests = parseAgentWorkspaceRateOverrides(os.Getenv("FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_OVERRIDES"))
 	return config
+}
+
+// parseAgentWorkspaceRateOverrides reads "workspace=requests" pairs separated by commas; malformed pairs are
+// skipped (and logged), so a typo never removes the default limit.
+func parseAgentWorkspaceRateOverrides(value string) map[string]int {
+	overrides := map[string]int{}
+	for _, pair := range strings.Split(value, ",") {
+		if strings.TrimSpace(pair) == "" {
+			continue
+		}
+		key, raw, found := strings.Cut(pair, "=")
+		requests, err := strconv.Atoi(strings.TrimSpace(raw))
+		if key = strings.TrimSpace(key); !found || key == "" || err != nil || requests < 0 {
+			slog.Warn("ignoring malformed FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_OVERRIDES entry", "entry", pair)
+			continue
+		}
+		overrides[key] = requests
+	}
+	return overrides
 }
 
 func newAPIRateLimiter(config apiRateLimitConfig, backend tokenBucketBackend) *apiRateLimiter {
@@ -154,6 +188,15 @@ func (m *memoryTokenBuckets) TakeTokens(_ context.Context, key string, capacity 
 type apiRateSubject struct {
 	Category apiRateCategory
 	Key      string
+	// Budget replaces the category's budget (a per-workspace override).
+	Budget *apiRateBudget
+}
+
+func (l *apiRateLimiter) budget(subject apiRateSubject) apiRateBudget {
+	if subject.Budget != nil {
+		return *subject.Budget
+	}
+	return l.config.Budgets[subject.Category]
 }
 
 // subjectForAuthenticatedRequest runs after authentication. Personal API keys
@@ -183,6 +226,7 @@ func subjectForPublicRequest(r *http.Request) (apiRateSubject, bool) {
 	if !publicAPIRateLimitedPath(r.URL.Path) {
 		return apiRateSubject{}, false
 	}
+	path := r.URL.Path
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
 	if strings.HasPrefix(strings.ToLower(header), "bearer ") {
 		token := strings.TrimSpace(header[len("Bearer "):])
@@ -192,6 +236,9 @@ func subjectForPublicRequest(r *http.Request) (apiRateSubject, bool) {
 			return apiRateSubject{Category: apiRateAPIKey, Key: "token:" + hex.EncodeToString(digest[:16])}, true
 		case strings.HasPrefix(token, "flow_oauth_"):
 			return apiRateSubject{Category: apiRateOAuth, Key: "token:" + hex.EncodeToString(digest[:16])}, true
+		case strings.HasPrefix(token, agentRunTokenPrefix) && (path == "/mcp" || path == "/mcp/readonly"):
+			// Limited by run and workspace once the MCP handler resolved the token (limitAgentRun).
+			return apiRateSubject{}, false
 		}
 	}
 	return apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + authClientAddress(r)}, true
@@ -272,7 +319,7 @@ type apiRateDecision struct {
 // the headers to send. Backend failures fail open and are logged.
 func (l *apiRateLimiter) check(ctx context.Context, r *http.Request, subject apiRateSubject) apiRateDecision {
 	decision := apiRateDecision{header: http.Header{}}
-	budget := l.config.Budgets[subject.Category]
+	budget := l.budget(subject)
 	now := l.now()
 	period := l.config.Period
 	take := func(name string, limit int, cost float64) (bool, float64, bool) {
@@ -335,7 +382,7 @@ func (l *apiRateLimiter) check(ctx context.Context, r *http.Request, subject api
 }
 
 func (l *apiRateLimiter) exempt(subject apiRateSubject) bool {
-	budget := l.config.Budgets[subject.Category]
+	budget := l.budget(subject)
 	return l.config.Disabled || budget.Requests <= 0 && budget.Complexity <= 0
 }
 
@@ -345,7 +392,10 @@ func (d apiRateDecision) write(w http.ResponseWriter) bool {
 			w.Header().Set(name, value)
 		}
 	}
-	w.Header().Add("Access-Control-Expose-Headers", "X-RateLimit-Requests-Limit, X-RateLimit-Requests-Remaining, X-RateLimit-Requests-Reset, X-Complexity, X-RateLimit-Complexity-Limit, X-RateLimit-Complexity-Remaining, X-RateLimit-Complexity-Reset, Retry-After")
+	// Once per response, also when an agent run's request spends two budgets.
+	if !strings.Contains(strings.Join(w.Header().Values("Access-Control-Expose-Headers"), ","), "X-RateLimit-Requests-Limit") {
+		w.Header().Add("Access-Control-Expose-Headers", "X-RateLimit-Requests-Limit, X-RateLimit-Requests-Remaining, X-RateLimit-Requests-Reset, X-Complexity, X-RateLimit-Complexity-Limit, X-RateLimit-Complexity-Remaining, X-RateLimit-Complexity-Reset, Retry-After")
+	}
 	if d.status == 0 {
 		return true
 	}
@@ -398,6 +448,56 @@ func (s *server) limitAuthenticatedAPI(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// limitAgentRun spends an agent run token's /mcp budgets after the MCP handler resolved it: the run's own bucket,
+// then its workspace's (shared by every run of the workspace, on every worker). Headers name both: the run's as
+// X-RateLimit-Requests-*, the workspace's as X-RateLimit-Workspace-Requests-*. It reports false after writing a 429.
+func (s *server) limitAgentRun(w http.ResponseWriter, r *http.Request, run store.AgentRun) bool {
+	if s.authDisabled {
+		return true
+	}
+	limiter := s.apiRateLimits()
+	subjects := []apiRateSubject{{Category: apiRateAgentRun, Key: "run:" + run.ID}, {Category: apiRateAgentWorkspace, Key: "workspace:" + run.WorkspaceKey}}
+	if requests, ok := limiter.config.AgentWorkspaceRequests[run.WorkspaceKey]; ok {
+		budget := limiter.config.Budgets[apiRateAgentWorkspace]
+		budget.Requests = requests
+		subjects[1].Budget = &budget
+	}
+	for index, subject := range subjects {
+		if limiter.exempt(subject) {
+			continue
+		}
+		decision := limiter.check(r.Context(), r, subject)
+		if index == 1 {
+			renamed := http.Header{}
+			for name, values := range decision.header {
+				renamed[strings.Replace(name, "X-Ratelimit-", "X-Ratelimit-Workspace-", 1)] = values
+			}
+			decision.header = renamed
+			if decision.limited != "" {
+				decision.message = "Rate limit exceeded: this workspace's agent runs made too many requests. Retry after the X-RateLimit-Workspace-Requests-Reset time."
+			}
+		}
+		if !decision.write(w) {
+			return false
+		}
+	}
+	return true
+}
+
+// limitInvalidRunToken spends the caller address's unauthenticated budget on a rejected run token, so tokens cannot
+// be probed at full speed. It reports false after writing a 429.
+func (s *server) limitInvalidRunToken(w http.ResponseWriter, r *http.Request) bool {
+	if s.authDisabled {
+		return true
+	}
+	limiter := s.apiRateLimits()
+	subject := apiRateSubject{Category: apiRateUnauthenticated, Key: "ip:" + authClientAddress(r)}
+	if limiter.exempt(subject) {
+		return true
+	}
+	return limiter.check(r.Context(), r, subject).write(w)
 }
 
 // limitFailedAuthentication spends the unauthenticated (per address) budget on

@@ -1,6 +1,7 @@
 /**
  * The worker process loop on Flow's run queue (design doc §8.1, §10): claim runs for free slots (long poll),
- * mint a run token, run the session, heartbeat every 15 s (a `cancel` answer stops the run), finish the run.
+ * mint a run token, run the session, watch for stops (one long poll per worker; a stop arrives within ~50 ms),
+ * heartbeat every 15 s (its `cancel` answer is the fallback), finish the run.
  * A crashed worker simply stops heartbeating; Flow's reconciler requeues the run (nothing written) or marks it
  * interrupted (something written), and another worker picks it up.
  *
@@ -12,8 +13,8 @@
 import { formatActivity } from './activities.js'
 import { loadConfig, secret } from './config.js'
 import { flowSystemPrompt } from './prompt.js'
-import { FlowRuntimeClient, type AgentRun, type RunStatus } from './runtime-client.js'
-import { FlowAgentWorker, type TurnStatus } from './worker.js'
+import { CancelWatcher, FlowRuntimeClient, type AgentRun, type RunStatus } from './runtime-client.js'
+import { FlowAgentWorker, type FlowAgentSession, type TurnStatus } from './worker.js'
 
 const config = loadConfig({ flowToken: 'unused: each run mints its own token' })
 const slots = Number(process.env.FLOW_WORKER_SLOTS ?? 8)
@@ -21,7 +22,12 @@ const workerId = process.env.FLOW_WORKER_ID ?? `worker-${process.pid}`
 const client = new FlowRuntimeClient(config.flowUrl, secret('FLOW_WORKER_SECRET'), workerId)
 const worker = new FlowAgentWorker(config)
 const active = new Map<string, Promise<void>>()
+const sessions = new Map<string, FlowAgentSession>()
 const log = (line: string) => console.log(`${new Date().toISOString()} [${workerId}] ${line}`)
+const cancels = new CancelWatcher(client, () => sessions.keys(), runId => {
+  log(`${runId} cancel requested`)
+  sessions.get(runId)?.stop()
+})
 let stopping = false
 
 const statusOf: Record<TurnStatus, RunStatus> = { response: 'done', awaiting: 'awaiting', canceled: 'canceled', error: 'failed' }
@@ -34,10 +40,12 @@ async function execute(run: AgentRun) {
     flowToken: token,
     systemPrompt: payload.systemPrompt ?? flowSystemPrompt({ workspace: run.workspaceKey, userName: 'the requester', today: new Date().toISOString().slice(0, 10) }),
   })
+  sessions.set(run.id, session)
+  cancels.started()
   const heartbeat = setInterval(async () => {
     try {
       const beat = await client.heartbeat(run.id)
-      if (beat.cancel) { log(`${run.id} cancel requested`); session.stop() }
+      if (beat.cancel) { log(`${run.id} cancel requested (heartbeat)`); session.stop() }
     } catch (error) {
       // Lease lost (another worker has the run now): stop working on it.
       log(`${run.id} heartbeat failed: ${(error as Error).message}`)
@@ -55,6 +63,8 @@ async function execute(run: AgentRun) {
     await client.complete(run.id, 'failed', { error: String(error).slice(0, 2000) }).catch(() => {})
   } finally {
     clearInterval(heartbeat)
+    sessions.delete(run.id)
+    cancels.finished(run.id)
     await session.close()
   }
 }
@@ -79,8 +89,10 @@ async function loop() {
     }
   }
   await Promise.all(active.values())
+  cancels.close()
 }
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { stopping = true; log(`${signal}: draining ${active.size} run(s)`) })
 log(`claiming up to ${slots} runs from ${config.flowUrl} (${config.protocol} ${config.model})`)
+void cancels.run()
 await loop()

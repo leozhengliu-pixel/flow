@@ -464,10 +464,10 @@ func (m *mentionResolver) teamByKey(key string) *domain.Team {
 }
 
 func (m *mentionResolver) findProject(slugOrID string) *domain.Project {
-	for index := range m.data.Projects {
-		if m.data.Projects[index].SlugID == slugOrID || m.data.Projects[index].ID == slugOrID {
-			return &m.data.Projects[index]
-		}
+	// A link made before a rename (stale prefix, or the legacy name-only
+	// slug) still names the project; the chip links to the current slug.
+	if index := domain.ProjectIndexBySlugRef(m.data.Projects, slugOrID); index >= 0 {
+		return &m.data.Projects[index]
 	}
 	return nil
 }
@@ -590,10 +590,9 @@ func (m *mentionResolver) urlTarget(raw, text string, link bool) (mentionAttrs, 
 		if mentionUpdateAnchor.MatchString(hash) {
 			return linkOnly("update", "Update")
 		}
-		for _, initiative := range m.data.Initiatives {
-			if initiative.SlugID == third || initiative.ID == third {
-				return mentionAttrs{Kind: "initiative", ID: initiative.ID, Label: initiative.Name, Href: m.root() + "/initiative/" + encodeURIComponent(initiative.SlugID) + "/overview"}, true
-			}
+		if index := domain.InitiativeIndexBySlugRef(m.data.Initiatives, third); index >= 0 {
+			initiative := m.data.Initiatives[index]
+			return mentionAttrs{Kind: "initiative", ID: initiative.ID, Label: initiative.Name, Href: m.root() + "/initiative/" + encodeURIComponent(initiative.SlugID) + "/overview"}, true
 		}
 	case "document":
 		if third == "" || count != 3 {

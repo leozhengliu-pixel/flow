@@ -255,11 +255,17 @@ func (s *server) resolveLoopEntity(ctx context.Context, workspace string, data d
 				return item.ID, nil, nil
 			}
 		}
+		if index := domain.ProjectIndexBySlugRef(data.Projects, id); index >= 0 {
+			return data.Projects[index].ID, nil, nil
+		}
 	case "initiative":
 		for _, item := range data.Initiatives {
-			if item.ID == id || strings.EqualFold(item.Name, id) {
+			if item.ID == id || item.SlugID == id || strings.EqualFold(item.Name, id) {
 				return item.ID, nil, nil
 			}
+		}
+		if index := domain.InitiativeIndexBySlugRef(data.Initiatives, id); index >= 0 {
+			return data.Initiatives[index].ID, nil, nil
 		}
 	case "release":
 		for _, item := range data.Releases {

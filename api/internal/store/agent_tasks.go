@@ -292,6 +292,10 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	if err = tx.Commit(); err != nil {
 		return task, err
 	}
+	if task.Status == "canceled" {
+		// A worker running this session learns it at once (AgentRunsToCancel), not on its next heartbeat.
+		s.agentRunCancel.wake()
+	}
 	if sink := s.realtime(); sink != nil {
 		// Clients refresh the task panel of this resource on the push instead of polling.
 		resourceID := task.IssueID

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"regexp"
 	"slices"
 	"sort"
@@ -23,6 +24,11 @@ func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, 
 	if _, batch := args["ids"]; batch && mcpBatchDeleteTools()[name] {
 		return s.callFlowBatchDelete(ctx, actor, name, args)
 	}
+	ctx, release, err := s.toolCalls().acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	started := time.Now()
 	result, err := s.runFlowTool(ctx, actor, name, args)
 	if err != nil {
@@ -1173,6 +1179,10 @@ func mcpFindProject(data domain.Bootstrap, query string) (domain.Project, error)
 			return item, nil
 		}
 	}
+	// A slug with a stale prefix, a legacy name-only slug, or a project URL.
+	if index := domain.ProjectIndexBySlugRef(data.Projects, mcpSlugRef(query, "project")); index >= 0 {
+		return data.Projects[index], nil
+	}
 	return domain.Project{}, fmt.Errorf("project %q not found", query)
 }
 
@@ -1182,7 +1192,29 @@ func mcpFindInitiative(data domain.Bootstrap, query string) (domain.Initiative, 
 			return item, nil
 		}
 	}
+	if index := domain.InitiativeIndexBySlugRef(data.Initiatives, mcpSlugRef(query, "initiative")); index >= 0 {
+		return data.Initiatives[index], nil
+	}
 	return domain.Initiative{}, fmt.Errorf("initiative %q not found", query)
+}
+
+// mcpSlugRef is the slug a project / initiative URL (".../project/<slug>/...")
+// names, or the query itself when it is not such a URL.
+func mcpSlugRef(query, kind string) string {
+	query = strings.TrimSpace(query)
+	marker := "/" + kind + "/"
+	index := strings.Index(query, marker)
+	if index < 0 {
+		return query
+	}
+	rest := query[index+len(marker):]
+	if end := strings.IndexAny(rest, "/?#"); end >= 0 {
+		rest = rest[:end]
+	}
+	if unescaped, err := url.PathUnescape(rest); err == nil {
+		rest = unescaped
+	}
+	return rest
 }
 
 func mcpFindDocument(data domain.Bootstrap, query string) (domain.Document, error) {

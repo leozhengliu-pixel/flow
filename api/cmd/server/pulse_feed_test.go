@@ -179,7 +179,7 @@ func TestPulseFeedViewsFiltersSearchAndStableCursor(t *testing.T) {
 	if got := feedIDs(page); !slices.Equal(got, []string{"project:u5", "project:u4"}) || page.NextCursor == "" {
 		t.Fatalf("first page = %v next=%q", got, page.NextCursor)
 	}
-	if page.Items[0].Source.Name != "Test project" || !strings.HasSuffix(page.Items[0].Source.URL, "/project/test-project/overview") || page.Items[0].Kind != "project" {
+	if page.Items[0].Source.Name != "Test project" || !strings.HasSuffix(page.Items[0].Source.URL, "/project/test-project-4671e888a409/overview") || page.Items[0].Kind != "project" {
 		t.Fatalf("item source = %#v", page.Items[0])
 	}
 	// A new update posted while paging does not shift the next page.

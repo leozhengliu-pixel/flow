@@ -18,9 +18,11 @@ Status: design + spike, 2026-10-13. Owner: agent platform. Spike code: [`agent-w
   - **并发**：单个 worker 进程（无子进程）跑 400 个并发会话（读、写、stop、挂起/恢复混合），成功 396–398/400；800 并发时 DeepSeek 连接错误激增到 1,622 次，成功率降到 86%。每会话内存约 **2.5–6 MB**（Claude Agent SDK spike 是 200–260 MB），CPU 约 0.1–0.2 s/会话，事件循环 p99 延迟 ≤ 76 ms。瓶颈是上游连接和 Flow API 的 `/mcp` 延迟（400 并发时 p99 4.7 s），不是 worker。
   - **基线负载**：进程内 agent 在 200 并发时成功 183/200，Go API 内存涨到 8.8 GB；另一次 200 并发 API 直接失去响应（0/200）。
   - **功能**：并行工具调用在三种协议上都没有丢参数；`ask_user` 和批量删除审批都通过 `needsApproval` + `RunState` 实现。挂起的 run 序列化成 JSON（10–17 KB），可以在另一个进程里恢复（恢复到首个 activity约 40 ms）。stop 在 1–8 ms 内生效，之后追问正常。kill -9 worker 后，Flow 的租约回收按预期工作：没写过数据的 run 重新排队并由另一个 worker 完成，写过数据的 run 标记为 interrupted。
-- **必须修的问题**：
-  - run token 在 `/mcp` 上被当成“未认证”请求，按 IP 限流，每小时只有 600 次。整个 sidecar 共享这个额度，生产中会很快被打满。
-  - Flow MCP 把参数校验错误作为 JSON-RPC 错误返回，原因只放在 `data.detail` 里。
+- **必须修的问题**（前四项已修复）：
+  - ✅ run token 在 `/mcp` 上曾被当成“未认证”请求，按 IP 限流（每小时 600 次，整个 sidecar 共享）。现在按 run（每小时 1,200 次）和 workspace（每小时 36,000 次，可按 workspace 配置）分别限流，API key 和会话不受影响。
+  - ✅ Flow MCP 曾把参数校验错误作为 JSON-RPC 错误返回，原因只放在 `data.detail` 里。现在作为 `isError` 工具结果返回，原因写在文本里，模型能看到并自行修正。
+  - ✅ stop 曾只能通过心跳（最长 15 s）送达 worker。现在每个 worker 有一个取消长轮询：同进程 1–2 ms 送达，跨进程约 0.5 s，心跳作为兜底。
+  - ✅ 400 并发时 Go API 内存涨到 7.7 GB：每次工具调用都深拷贝一份 workspace 元数据（约 16 MB），且并发调用数没有上限。现在工具调用并发限制为每核 2 个，拷贝占用的内存上限约 0.3 GB（§16.7 第 10 条）。
   - SDK 不会自动保存中止或失败的 run 的输出，也不会重放已经开始流式输出的请求。worker 必须自己补全历史、自己重试（spike 已实现）。
 - **建议**：
   - **Go**：Chat Completions 作为默认路径（覆盖面最广），Responses 用于 OpenAI，Anthropic Messages 用于 Claude。三者都已在实测中达标。
@@ -319,6 +321,7 @@ sequenceDiagram
 
 - Workers never touch SQL. They call `POST /internal/agent-runtime/claim {free: {chat, thread, loop, background}, waitMs}` with the worker secret and `Flow-Worker-Id`; the Go API claims with the portable CAS pattern of `ClaimApplicationTask`, honouring `FLOW_AGENT_WORKSPACE_RUN_CONCURRENCY` (default 4).
 - Heartbeat every 15 s extends the 60 s lease; the response carries `cancel` (cancel requested, or the session was stopped).
+- Stops are pushed: each worker keeps one long-poll open, `POST /internal/agent-runtime/cancels {waitMs ≤ 25 000, ignore: [runIds already stopping]}`, answered `{cancel: [runIds]}` as soon as a run it holds is cancelled or its session is stopped (an in-process wake; it also re-checks SQL every second for stops recorded by another API process). The worker's `CancelWatcher` (`runtime-client.ts`) calls `session.stop()`; the heartbeat's `cancel` stays the fallback. Measured: 1–2 ms from the stop to the answer in-process, 0.5 s across processes (§16.6).
 - A reconciler runs every 30 s. Expired leases go back to `queued` if nothing was written (`wrote=0`, attempts < 2); otherwise the run is `interrupted` and an `error` activity tells the person (no silent repeat of writes). Measured: a killed worker's read-only run was requeued and finished by another worker 54 s after the kill; a run that had written was interrupted (§16.6).
 - Wake-up: `INSERT` calls a local `kick()`; the claim long-polls up to 20 s, so idle CPU is near zero and pickup latency is under 50 ms.
 - The spike's `queue-worker.ts` implements the worker side (claim loop, token, heartbeat with cancel, complete).
@@ -392,7 +395,7 @@ The claim still does the SQL CAS, which keeps it idempotent if the stream redeli
 | Model call fails before streaming (network, 408/429/5xx) | SDK runner retries twice with jittered backoff, honouring `retry-after`. At 400 sessions, 127 connection errors were all absorbed this way. |
 | Stream drops mid-response | The SDK never replays a stream that emitted events. The worker reruns the request once from stored history when no write ran; otherwise it keeps what ran in history and reports the error. |
 | Model call hangs | `timeoutMs` (240 s) per model call; then the rules above. Without it, a stalled provider held runs for 17–32 minutes in the gpt run. |
-| Tool argument errors | Passed to the model with Flow's detail; the model corrects (0.4 per case, nearly all `fields` enum misses on list tools). |
+| Tool argument errors | Flow returns schema failures as `isError` tool results whose text is the reason ("Invalid arguments for list_issues: … enum: identifier does not equal any of …"), so the model corrects (0.4 per case in the eval, nearly all `fields` enum misses on list tools). Malformed JSON-RPC and unknown tools stay protocol errors. |
 | Max turns | `MaxTurnsExceededError` → `error` activity. Seen on 1 of 200 read sessions under load (paging loops); keep `maxTurns` at 24 for chat. |
 | Duplicate delivery | The claim CAS makes it a no-op; activities are idempotent by `activityId`; write tools accept `Idempotency-Key: <runId>:<callId>` (phase 0 `agent_run_keys`). |
 | Stale or unresponsive sessions | `firstActivityAt` comes from the ack thought posted before any network call. |
@@ -466,7 +469,7 @@ lanes: { chat: flow-default, thread: flow-default, loop: flow-default }
 | Processes | `flow-api` plus a `flow-agent-worker` sidecar (same pod or compose project) | API Deployment; worker Deployment (HPA/KEDA on queue depth) |
 | Queue | SQL `agent_runs` with CAS leases, long-poll claim | Redis Streams or NATS JetStream for run ids; SQL for state |
 | Provider access | direct, keys in the sidecar | direct, keys in the worker Deployment (optional central gateway) |
-| Cancel and signals | heartbeat response | pub/sub control subject |
+| Cancel and signals | cancel long-poll per worker (heartbeat as fallback) | pub/sub control subject |
 | Scale | ~100 concurrent runs per pod (1 GiB, 1 CPU) | ~400 per 2-CPU / 2 GiB worker × N |
 
 **Capacity method.** Concurrency is driven by *active runs*, not users:
@@ -490,7 +493,7 @@ mcp_rps ≈ runs_per_second × (tool calls per run 5.5 + 3 per connection)
 | 5,000 online | ~110 + 60 = 170 | 220 | 1–2 cluster workers, ~1.3 GB, ~0.8 CPU | ~800 | ~16M | ~18 |
 | Load-test ceiling (one process) | 400 (800 with provider errors) | – | 1.0–1.3 GB, 0.4 CPU | – | – | ~18 at p95 0.6–1.4 s |
 
-**Load on the Go API.** At 100–200 concurrent worker sessions the lab API (SQLite) stayed at 0.4–0.8 GB and 2–3.4 cores peak, `/mcp` p95 56–563 ms. At 400 sessions `/mcp` p95/p99 reached 1.4 s / 4.7 s, and in one of two 400-session runs the API grew to 7.7 GB RSS (0.9 GB in the other) — to investigate before cluster mode. For comparison, today's in-process agent at 200 concurrent chats drove the same API to 8.8 GB and 5.8 cores (183/200 ok), and in another 200-chat run the API stopped answering (0/200). The binding constraints are the provider (connection errors: 1 at 20 sessions, 48–127 at 400, 1,622 at 800) and Flow's tool latency, not the worker. MySQL/Postgres and the `/mcp` hot paths (list tools) need their own load test.
+**Load on the Go API.** At 100–200 concurrent worker sessions the lab API (SQLite) stayed at 0.4–0.8 GB and 2–3.4 cores peak, `/mcp` p95 56–563 ms. At 400 sessions `/mcp` p95/p99 reached 1.4 s / 4.7 s, and in one of two 400-session runs the API grew to 7.7 GB RSS (0.9 GB in the other). Cause and fix: every tool call deep-copies the workspace metadata (about 16 MB on the dev database) and nothing bounded the calls in flight; Flow tool calls are now limited to 2 per CPU (§16.3). For comparison, today's in-process agent at 200 concurrent chats drove the same API to 8.8 GB and 5.8 cores (183/200 ok), and in another 200-chat run the API stopped answering (0/200). The binding constraints are the provider (connection errors: 1 at 20 sessions, 48–127 at 400, 1,622 at 800) and Flow's tool latency, not the worker. MySQL/Postgres and the `/mcp` hot paths (list tools) need their own load test.
 
 ## 16. Spike results
 
@@ -510,7 +513,7 @@ mcp_rps ≈ runs_per_second × (tool calls per run 5.5 + 3 per connection)
   | `src/runtime-client.ts`, `src/queue-worker.ts` | phase-0 internal runtime API client and the claim/heartbeat/complete loop |
   | `src/eval.ts`, `src/report.ts` | 38-prompt eval (4 arms) and its tables |
   | `src/load.ts`, `src/concurrency.ts`, `src/long.ts`, `src/checks.ts` | load step-up, concurrency, long conversation, targeted checks |
-  | `test/*.test.ts` | Anthropic and Chat Completions against mocked providers; policy; compaction; question streaming (11 tests) |
+  | `test/*.test.ts` | Anthropic and Chat Completions against mocked providers; policy; compaction; question streaming; cancel watcher (12 tests) |
 
 - **Model:** `deepseek-flash`, one provider serving all three protocols (`https://api.deepseek.com` Chat Completions and Responses, `/anthropic` Messages), no reasoning effort set (provider default thinking). A first round on `gpt-6.1-sol` (Responses upstream, effort medium) is kept as a secondary table (§16.2).
 - **Baseline:** today's in-process agent through `POST /api/agent/sessions/stream` with `FLOW_AGENT_PROTOCOL=openai-chat-completions`, the same model.
@@ -633,7 +636,8 @@ Notes:
 | Claim → run token → MCP (run token) → complete | `done`, 7 s; `wrote` stays 0 for a read |
 | `kill -9` the worker while a read-only run is mid-way (6 `get_issue` calls done) | lease expired; reconciler requeued it (`wrote=0`, attempt 1 < 2); a second worker claimed it 54 s after the kill and finished it (`done`, attempts 2) |
 | `kill -9` while a run that already created a sub-issue is mid-way | `interrupted` 54 s after the kill, error "The worker stopped responding (lease expired)"; not repeated |
-| Rate limit of run tokens on `/mcp` | 600 requests/hour, *unauthenticated* category keyed by IP (headers `X-RateLimit-Requests-Limit: 600`) — must change (§6.1) |
+| Rate limit of run tokens on `/mcp` | Was 600 requests/hour in the *unauthenticated* per-IP bucket. **Fixed:** run tokens spend two budgets of their own, per run (`X-RateLimit-Requests-Limit: 1200`) and per workspace (`X-RateLimit-Workspace-Requests-Limit: 36000`), refilled continuously over an hour; API keys and sessions are unchanged (2,500 / exempt). A rejected run token still spends the address's unauthenticated budget. |
+| Stop latency (push) | Cancel long-poll: 1.2 ms (cancel requested) and 2.0 ms (person's stop signal) from the stop to the worker's answer in the API test; 507 ms live on the lab API when another process recorded the stop (1 s re-check); heartbeat (≤ 15 s) only as fallback. |
 | Run with an invalid payload row | the claim response is empty (JSON encoding fails after the lease is taken), so the run is lost until its lease expires; only possible by writing the table directly (`EnqueueAgentRun` validates JSON) |
 
 ### 16.7 Findings: harness and Flow gaps (and fixes)
@@ -641,12 +645,13 @@ Notes:
 1. **The SDK drops an aborted or failed run's items.** After a stop or an error, the session held only the user's message: the follow-up said "I haven't looked anything up", and after a write it would deny the write. **Fix (in the worker):** append the produced items and close dangling calls on stop and on failure.
 2. **No replay of a stream that already emitted events.** A dropped connection mid-response (`TypeError: terminated`) fails the run (W3 in one repeat). **Fix:** the worker reruns the request once when nothing was written (implemented after that repeat); `timeoutMs` bounds stalled streams.
 3. **MCP tools have no `needsApproval`.** Set it on the converted tools in an `Agent` subclass (`getMcpTools`); the bulk rule needs the turn's calls, recorded by a model wrapper.
-4. **Hidden tool errors.** The SDK's default MCP error text is generic; Flow puts the validation reason only in JSON-RPC `data.detail`. Pass it through (`errorFunction`); Flow should return validation errors as `isError` tool results.
+4. **Hidden tool errors.** The SDK's default MCP error text is generic, and Flow put the validation reason only in JSON-RPC `data.detail`. **Fixed in Flow:** schema failures of `tools/call` are `isError` tool results with the reason as text (API keys and run tokens alike); the worker's `errorFunction` still passes `data.detail` of protocol errors through.
 5. **Flow MCP: array `structuredContent`** (`list_cycles`, `list_issue_statuses`) broke the strict MCP client ("expected record, received array"). Fixed in phase 0; the worker's fetch shim is now a no-op and can go.
 6. **Flow MCP: `save_issue` team default from `parentId`.** Fixed in phase 0.
-7. **Run-token rate limiting** (§16.6) and **heartbeat-borne cancel** (≤ 15 s; chat needs ≤ 1 s) need Flow changes before Phase 2.
+7. **Run-token rate limiting** (§16.6) and **heartbeat-borne cancel** (≤ 15 s; chat needs ≤ 1 s). **Fixed:** run and workspace budgets for run tokens; the cancel long-poll (§8.1) delivers stops in milliseconds.
 8. **Prompt caching.** Responses and Chat Completions on DeepSeek cached 86–98% of prompt tokens with `prompt_cache_key`; Anthropic via the AI SDK cached 64% (one request-level breakpoint). Tool-group changes between requests reset the cache (the tool list is part of the prefix).
 9. **SDK tracing** exports to OpenAI by default with the model key; disabled.
+10. **Flow API memory under load.** A heap profile of a 400-session run (alloc_space 17.1 GB) put 81% of all allocation in `store.cloneBootstrap`, reached from every tool call through `mcpWorkspaceData` → `PagedWorkspaceMetadata` → `WorkspaceMetadata` (a reflective deep copy of the workspace metadata, 16–17 MB per call measured on the dev database), held for the whole call. Calls in flight were unbounded, so a queue of slow `/mcp` calls (p99 4.7 s at 400) meant hundreds of live copies: 400 × 16 MB ≈ 6.4 GB plus GC headroom, the 7.7 GB seen (the in-process agent's 8.8 GB at 200 chats is the same path). **Fixed:** `callFlowTool` admits at most `FLOW_TOOL_CALL_CONCURRENCY` calls (default 2 per CPU, at least 4; nested calls do not wait again), so the copies in memory are bounded at about 20 × 16 MB ≈ 0.3 GB on a 10-core host whatever the number of sessions; waiting calls hold only their arguments. Measured after the fix: 10 sessions, API peak 152 MB, `/mcp` p95 15 ms. The 400-session rerun was not repeated; the 400-session run before the fix peaked at 245 MB because provider connection errors (179) kept `/mcp` concurrency low, so it did not reproduce the 7.7 GB. Follow-up: copy only what a tool needs (a shared read-only snapshot) to cut the 16 MB per call itself.
 
 ### 16.8 Why not the Claude Agent SDK (previous spike)
 
@@ -662,14 +667,14 @@ The previous spike ran the same eval on `@anthropic-ai/claude-agent-sdk` 0.3.296
 | **OpenAI Chat Completions** | **Go — default** | 99.1% (113/114; the one failure, a dropped stream, is retried since), p50 9.4 s, first activity 1.3 s, 86% cached, 396–398/400 concurrent sessions in one process (provider-bound at 800). Covers DeepSeek, Qwen, vLLM, OpenAI. Gate each provider on the eval (reasoning replay and caching differ). |
 | **OpenAI Responses** | **Go** (OpenAI models, stateless `store: false`) | 100% (114/114), p50 8.8 s, 87% cached, 200 concurrent 199/200. Verify encrypted-reasoning replay on OpenAI itself before enabling. |
 | **Anthropic Messages** (AI SDK adapter) | **Go** for Claude models; measured on DeepSeek's Messages endpoint | 100% (114/114), p50 8.8 s, first activity 1.3 s, 200 concurrent 199/200. Caching 64% — add per-message cache breakpoints. Re-run the eval on Claude before rollout. |
-| Overall runtime | **Go for Phase 1–3 behind flags** | Blockers: run-token rate limiting, ≤ 1 s cancel for chat, transcript store in Flow. |
+| Overall runtime | **Go for Phase 1–3 behind flags** | Resolved: run-token rate limiting, ≤ 1 s cancel (push), argument errors visible to the model, API memory bound. Remaining: transcript store in Flow. |
 
 ## 17. Migration plan
 
 | Phase | Scope | Flag | Rollback |
 |---|---|---|---|
 | 0 ✅ | `agent_runs`, internal runtime API, run tokens (allowlist, `RunID`, `Via`), change-set recording in `/mcp`, idempotency keys, suspended state, reconciler, MCP fixes. In `main`. | `FLOW_AGENT_WORKER_SECRET` (API off without it) | n/a (additive) |
-| 1 | Worker package to production quality (from `agent-worker/`): transcript store over the runtime API, activity posting, OTel, config file for model aliases. Flow: run-token rate-limit category, fast cancel for P0 (1 s heartbeat or long-poll control), `transcripts` routes, enqueue on thread/delegation. | `FLOW_AGENT_RUNTIME=worker\|inprocess` | `inprocess` |
+| 1 | Worker package to production quality (from `agent-worker/`): transcript store over the runtime API, activity posting, OTel, config file for model aliases. Flow: `transcripts` routes, enqueue on thread/delegation (run-token rate limits, the cancel long-poll, `isError` argument errors and the tool-call bound are in). | `FLOW_AGENT_RUNTIME=worker\|inprocess` | `inprocess` |
 | 2 | Built-in agent **threads and delegation** on the worker (they already use tasks and activities). | workspace flag `agent-runtime-v2:threads` | flag off: new runs go in-process; in-flight worker runs finish |
 | 3 | **Loops** on the worker (`finish_run` host tool, budgets). | `agent-runtime-v2:loops` | same |
 | 4 | **In-app chat** on the worker. Chat sessions move from the workspace blob to session rows plus activities: dual-write first, then a backfill migration. The SSE stream endpoint becomes a thin adapter over workspace SSE, so the old client keeps working. | `agent-runtime-v2:chat` | adapter keeps the old `/stream` contract; flag off reverts |
@@ -682,9 +687,9 @@ Each phase ships dark, then goes to internal workspaces, then 10%, then 100%. Th
 1. **SDK churn.** `@openai/agents` is pre-1.0 and releases often (0.20 in this spike); `RunState` has a schema version. Pin exact versions, run the eval on upgrades, and keep the Flow contracts (queue, tokens, activities, state) harness-neutral. Licence risk is gone (MIT; adapters Apache-2.0).
 2. **Gaps the worker fills itself** (§16.7): history repair on stop/failure, mid-stream retry, MCP approvals, error detail. Upstream fixes would remove code; until then they are covered by tests and the eval.
 3. **Provider differences.** Reasoning replay (DeepSeek `reasoning_content`, OpenAI encrypted reasoning, Claude thinking signatures), cache behaviour and tool-call quirks differ per provider and protocol. Every model alias is gated on the eval; Anthropic was measured only on DeepSeek's Messages endpoint, and Responses not on OpenAI itself in this round.
-4. **Flow as the bottleneck.** Under 200–400 concurrent sessions `/mcp` p99 reached 0.9–1.4 s and the lab API (SQLite) used up to 3 cores. Load-test MySQL/Postgres and the list tools before cluster mode; consider read caching per run.
+4. **Flow as the bottleneck.** Under 200–400 concurrent sessions `/mcp` p99 reached 0.9–1.4 s and the lab API (SQLite) used up to 3 cores. Each tool call copies the workspace metadata (~16 MB); calls in flight are now bounded (§16.7 item 10), which caps memory but queues calls under load. Load-test MySQL/Postgres and the list tools before cluster mode; share a read-only snapshot per call or cache reads per run.
 5. **Token overhead.** About 20k prompt tokens per call with ~41 tools (core + groups), 86–98% cached on OpenAI-protocol providers. Tool-group changes reset the cache; keep groups stable within a session.
-6. **Run-token rate limiting** must change before Phase 2 (§6.1).
+6. **Run-token quotas.** Resolved: per run 1,200 and per workspace 36,000 requests/hour (`FLOW_API_RATE_LIMIT_AGENT_RUN_REQUESTS`, `FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_REQUESTS`, per-workspace `FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_OVERRIDES="acme=100000"`; 0 means unlimited). Revisit the workspace default once loops run on the worker; the worker should back off on a 429 from `/mcp` (today it surfaces as a tool error).
 7. **Open questions.**
    - Transcript size limits and retention (`agent_transcripts` vs `agent_session_states`), and whether compaction should write a model summary.
    - Should the in-app SSE contract keep its event names, or should the web client switch to activities directly?

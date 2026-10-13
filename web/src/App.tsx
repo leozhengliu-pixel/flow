@@ -282,6 +282,7 @@ import {
   type AppRoute,
 } from "@/lib/app-routes";
 import { findDocumentBySlugSuffix } from "@/lib/document-slug";
+import { findBySlugRef } from "@/lib/resource-slug";
 import { findTrashedDocument } from "@/components/documents/document-trash";
 import { ISSUE_DELETE_DESCRIPTION } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
@@ -1044,9 +1045,8 @@ function App() {
   },[data?.issueCollectionPaged,data?.workspace.urlKey,data?.viewer.id,historyIssueId,historyIssueSummary,relatedIssueKey]);
   const selectedProject =
     !data?.resourceDetailsOmitted && (route.kind === "project" || route.kind === "project-saved-view")
-      ? data?.projects.find(
-          (project) => project.slugId === route.projectSlugId,
-        ) || null
+      ? // A stale-prefix or legacy slug (a link made before a rename) still resolves; the canonical-URL effect redirects.
+        findBySlugRef(data?.projects, route.projectSlugId) || null
       : null;
   useEffect(() => {
     let active:AbortController|undefined;
@@ -1090,9 +1090,7 @@ function App() {
       : null;
   const selectedInitiative =
     route.kind === "initiative"
-      ? data?.initiatives.find(
-          (initiative) => initiative.slugId === route.initiativeSlugId,
-        ) || null
+      ? findBySlugRef(data?.initiatives, route.initiativeSlugId) || null
       : null;
   // Paged workspaces load project/initiative updates per entity on demand.
   useEntityUpdatesLoader(data, setData);

@@ -784,7 +784,10 @@ export interface NotificationMutationInput {
 export interface Project {
   id: UUID;
   name: string;
+  /** URL slug, `<name-slug>-<12 hex>`: the hex suffix is stable, so links survive renames. */
   slugId: string;
+  /** Earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve. */
+  previousSlugIds?: string[];
   summary: string;
   description: string;
   icon?: string;
@@ -2080,7 +2083,10 @@ export type InitiativeStatus =
 export interface Initiative {
   id: UUID;
   name: string;
+  /** URL slug, `<name-slug>-<12 hex>`: the hex suffix is stable, so links survive renames. */
   slugId: string;
+  /** Earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve. */
+  previousSlugIds?: string[];
   summary: string;
   description: string;
   icon?: string;

@@ -122,14 +122,15 @@ func (s *server) getCycleRecord(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cycle)
 }
 
-// GET /api/projects/{id}: the id or the slugId.
+// GET /api/projects/{id}: the id or the slugId (a stale-prefix or legacy
+// name-only slug resolves too).
 func (s *server) getProjectRecord(w http.ResponseWriter, r *http.Request) {
 	data, ok := s.publicMetadata(w, r)
 	if !ok {
 		return
 	}
 	id := r.PathValue("id")
-	index := slices.IndexFunc(data.Projects, func(project domain.Project) bool { return project.ID == id || project.SlugID == id })
+	index := domain.ProjectIndexBySlugRef(data.Projects, id)
 	if index < 0 {
 		writePublicRecordNotFound(w, "project")
 		return
@@ -144,7 +145,7 @@ func (s *server) getInitiativeRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	index := slices.IndexFunc(data.Initiatives, func(initiative domain.Initiative) bool { return initiative.ID == id || initiative.SlugID == id })
+	index := domain.InitiativeIndexBySlugRef(data.Initiatives, id)
 	if index < 0 {
 		writePublicRecordNotFound(w, "initiative")
 		return

@@ -117,9 +117,14 @@ func TestMCPRejectsMalformedArgumentsBeforeAnyWrite(t *testing.T) {
 		{"title": "Invalid labels", "team": f.data.Teams[0].ID, "labels": "not-an-array"},
 		{"title": "Wrong assignee field", "team": f.data.Teams[0].ID, "assigneeId": f.data.Viewer.ID},
 	} {
+		// Schema failures are tool errors (isError) whose text tells the model what to fix, not JSON-RPC errors.
 		response := f.call(t, "save_issue", args)
-		if response["error"] == nil {
-			t.Errorf("invalid arguments accepted: %v", args)
+		if response["error"] != nil {
+			t.Errorf("invalid arguments answered with a protocol error: %v", response)
+			continue
+		}
+		if message := mcpToolErrorText(t, response); !strings.HasPrefix(message, "Invalid arguments for save_issue: ") {
+			t.Errorf("invalid arguments %v: tool error %q does not give the reason", args, message)
 		}
 	}
 	if got := len(f.repository.Bootstrap().Issues); got != before {
@@ -167,8 +172,10 @@ func TestMCPEveryToolRejectsWrongArgumentTypes(t *testing.T) {
 				return
 			}
 			response := f.call(t, tool.Name[len("mcp__flow."):], args)
-			if response["error"] == nil {
-				t.Errorf("tool did not enforce advertised input schema")
+			if result, _ := response["result"].(map[string]any); result == nil || result["isError"] != true {
+				t.Errorf("tool did not enforce advertised input schema: %v", response)
+			} else if text := result["content"].([]any)[0].(map[string]any)["text"].(string); !strings.Contains(text, "Invalid arguments for") {
+				t.Errorf("schema failure text = %q", text)
 			}
 		})
 	}

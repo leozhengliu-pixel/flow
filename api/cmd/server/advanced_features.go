@@ -2921,6 +2921,8 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(entry.Payload, &value) != nil {
 				return errInvalid
 			}
+			// A project deleted before slugs carried a stable suffix gets one.
+			value.Project.SlugID, value.Project.PreviousSlugIDs, _ = domain.StableSlug(value.Project.ID, value.Project.Name, value.Project.SlugID, value.Project.PreviousSlugIDs)
 			data.Projects = append([]domain.Project{value.Project}, data.Projects...)
 			data.ProjectUpdates[value.Project.ID] = value.Updates
 			restoreProjectLinks(data, value.Project, entry.Links)
@@ -2930,6 +2932,7 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(entry.Payload, &value) != nil {
 				return errInvalid
 			}
+			value.Initiative.SlugID, value.Initiative.PreviousSlugIDs, _ = domain.StableSlug(value.Initiative.ID, value.Initiative.Name, value.Initiative.SlugID, value.Initiative.PreviousSlugIDs)
 			data.Initiatives = append([]domain.Initiative{value.Initiative}, data.Initiatives...)
 			data.InitiativeUpdates[value.Initiative.ID] = value.Updates
 			restoreInitiativeLinks(data, value.Initiative.ID, entry.Links)

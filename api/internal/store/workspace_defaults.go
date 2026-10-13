@@ -70,9 +70,9 @@ func localSQLiteFixture() domain.Bootstrap {
 	team := domain.Team{ID: "team_test", Name: "Test team", Key: "TST", Color: "#5E6AD2"}
 	states := canonicalWorkflowStates()
 	labels := canonicalLabels()
-	project := domain.Project{ID: "project_aut", Name: "Test project", SlugID: "test-project", Summary: "Test project", Icon: "Project", Color: "#5E6AD2", Priority: 2, PriorityLabel: "High", Progress: .5, Health: "onTrack", Status: canonicalProjectStatuses()[2], Lead: &viewer, TeamIDs: []string{team.ID}, MemberIDs: []string{viewer.ID}, LabelIDs: []string{"label_product"}, CreatedAt: now, UpdatedAt: now, Milestones: []domain.ProjectMilestone{}}
+	project := domain.Project{ID: "project_aut", Name: "Test project", SlugID: "test-project-4671e888a409", Summary: "Test project", Icon: "Project", Color: "#5E6AD2", Priority: 2, PriorityLabel: "High", Progress: .5, Health: "onTrack", Status: canonicalProjectStatuses()[2], Lead: &viewer, TeamIDs: []string{team.ID}, MemberIDs: []string{viewer.ID}, LabelIDs: []string{"label_product"}, CreatedAt: now, UpdatedAt: now, Milestones: []domain.ProjectMilestone{}}
 	projectCruise := project
-	projectCruise.ID, projectCruise.Name, projectCruise.SlugID = "project_cruise", "Test project two", "test-project-two"
+	projectCruise.ID, projectCruise.Name, projectCruise.SlugID = "project_cruise", "Test project two", "test-project-two-83d61c6cc5e6"
 	issue := func(id string, number int, title string, state domain.WorkflowState) domain.Issue {
 		return domain.Issue{ID: id, Version: 1, Identifier: fmt.Sprintf("TST-%d", number), Number: number, Title: title, Description: "Test issue", Priority: 2, PriorityLabel: "High", SortOrder: float64(number), CreatedAt: now, UpdatedAt: now, Team: team, State: state, Assignee: &viewer, Creator: other, Labels: []domain.IssueLabel{labels[0]}, SubscriberIDs: []string{viewer.ID, other.ID}, SubIssueIDs: []string{}, Relations: []domain.IssueRelation{}, Attachments: []domain.Attachment{}}
 	}

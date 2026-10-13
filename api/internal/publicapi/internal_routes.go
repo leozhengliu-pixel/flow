@@ -693,6 +693,7 @@ var InternalRoutes = []string{
 	"GET /internal/agent-runtime/runs/{id}/changes",
 	"GET /internal/agent-runtime/runs/{id}/payload",
 	"GET /internal/agent-runtime/runs/{id}/state",
+	"POST /internal/agent-runtime/cancels",
 	"POST /internal/agent-runtime/claim",
 	"POST /internal/agent-runtime/runs/{id}/activities",
 	"POST /internal/agent-runtime/runs/{id}/complete",

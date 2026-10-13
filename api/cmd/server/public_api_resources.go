@@ -756,7 +756,7 @@ func (s *server) listCommentsConnection(w http.ResponseWriter, r *http.Request) 
 		if !ok {
 			return
 		}
-		index := slices.IndexFunc(data.Projects, func(p domain.Project) bool { return p.ID == id || p.SlugID == id })
+		index := domain.ProjectIndexBySlugRef(data.Projects, id)
 		if index < 0 {
 			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "project not found")
 			return
@@ -769,7 +769,7 @@ func (s *server) listCommentsConnection(w http.ResponseWriter, r *http.Request) 
 		if !ok {
 			return
 		}
-		index := slices.IndexFunc(data.Initiatives, func(i domain.Initiative) bool { return i.ID == id || i.SlugID == id })
+		index := domain.InitiativeIndexBySlugRef(data.Initiatives, id)
 		if index < 0 {
 			writeAPIError(w, http.StatusNotFound, apiErrorNotFound, "initiative not found")
 			return

@@ -1,5 +1,6 @@
 import { parseAppRoute, workspaceRootPath, type AppRoute } from './app-routes'
 import type { BootstrapData } from '@/types/flow'
+import { findBySlugRef } from './resource-slug'
 
 type LocationContext = { pathname: string; search: string; hash?: string; state: unknown }
 const maxAncestors = 12
@@ -135,8 +136,8 @@ export function navigationLabel(path: string, data: BootstrapData): { label: str
   const url = new URL(safe, 'https://flow.invalid'), route = parseAppRoute(url.pathname, url.search)
   let name: string | undefined
   if (route.kind === 'issue') name = data.issues.find(issue => issue.identifier.toUpperCase() === route.identifier.toUpperCase())?.identifier ?? route.identifier
-  else if (route.kind === 'project' || route.kind === 'project-saved-view') name = data.projects.find(project => project.slugId === route.projectSlugId || project.id === route.projectSlugId)?.name
-  else if (route.kind === 'initiative') name = data.initiatives.find(initiative => initiative.slugId === route.initiativeSlugId)?.name
+  else if (route.kind === 'project' || route.kind === 'project-saved-view') name = findBySlugRef(data.projects, route.projectSlugId)?.name
+  else if (route.kind === 'initiative') name = findBySlugRef(data.initiatives, route.initiativeSlugId)?.name
   else if (route.kind === 'document') name = data.documents.find(document => document.slugId === route.documentSlugId)?.title
   else if (route.kind === 'customer') name = data.customers.find(customer => route.customerSlugId.endsWith(customer.id.slice(-12)))?.name
   else if ('viewId' in route) name = data.savedViews.find(view => view.id === route.viewId || view.slugId === route.viewId)?.name

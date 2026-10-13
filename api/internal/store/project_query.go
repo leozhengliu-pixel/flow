@@ -512,7 +512,8 @@ func projectDirectoryValueMatches(project domain.Project, field, value string) b
 	case "teams":
 		return slices.Contains(project.TeamIDs, value)
 	case "project":
-		return project.ID == value || project.SlugID == value
+		// An id or slug; a stale-prefix or legacy slug (an old link) matches too.
+		return domain.MatchSlugRef(value, project.ID, project.SlugID, project.PreviousSlugIDs) != domain.SlugNoMatch
 	}
 	return false
 }
