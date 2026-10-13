@@ -1,9 +1,8 @@
-import { EntityActivityPanel } from '@/components/panel/entity-activity-panel'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { Link2, Menu, MoreHorizontal, Star } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
 import { DocumentAgentPanel } from '@/components/agent/document-agent-panel'
-import { IssueAgentTasks, IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
+import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
 import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import { issueToExplorerRow } from '@/components/issue-explorer/issue-explorer-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -30,7 +29,7 @@ import './document-print.css'
 import { useRegisterCommandContext } from '@/components/command/command-context'
 import { isActiveSubscription } from '@/lib/subscription-records'
 import {
-  copyDocumentMarkdown, copyDocumentTitle, copyDocumentUrl, DOCUMENT_TEMPLATE_APPLIED_EVENT, documentDisplayTitle, documentOwner, renameDocument, toggleDocumentFavorite,
+  copyDocumentMarkdown, copyDocumentTitle, copyDocumentUrl, DOCUMENT_TEMPLATE_APPLIED_EVENT, documentOwner, renameDocument, toggleDocumentFavorite,
   type DocumentActionContext, type DocumentTemplateAppliedDetail, type DocumentUiAction,
 } from './document-actions'
 import { DocumentAccessDialog } from './document-access-dialog'
@@ -240,7 +239,6 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
 
   const issue = data.issues.find(item => item.id === document.issueId)
   const linkedIssue = issue ? issueToExplorerRow(issue, data.workspace.urlKey, data.issues, data) : undefined
-  const displayTitle = documentDisplayTitle({ title }, t)
   const documentUrlLabel = t('Copy document URL')
 
   // One agent task directory for the page: comment cards show their own sessions (the reference app answers inside the thread).
@@ -305,7 +303,6 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
         </DocumentContentProvider>
         {!deleted && <DocumentInlineComments data={data} document={document} comments={comments} editor={liveEditor} shell={shell} draft={commentDraft} onDraftChange={setCommentDraft} canComment={canComment} canEdit={canEdit} visible onReload={onReload} onGutterChange={setCommentGutter} railOpen={agentOpen}/>}
       </div>
-      {!deleted && <EntityActivityPanel allowAgent entityId={document.id} entityTitle={displayTitle} entityType="document" emptyLabel="No activity yet"><IssueAgentTasks resourceType="document" issue={{ id: document.id }} data={data} standalone/></EntityActivityPanel>}
     </article>
     {resolvedOpen && !deleted && <ResolvedCommentsPanel data={data} document={document} comments={comments} editor={liveEditor} canComment={canComment} canEdit={canEdit} onReload={onReload} onClose={closeResolved}/>}
     {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
