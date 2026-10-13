@@ -2034,13 +2034,23 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 				}
 				now := time.Now().UTC()
 				workspace.Members = append(workspace.Members, domain.WorkspaceMember{User: user, Role: invitation.Role, Status: "active", JoinedAt: now, LastSeenAt: &now})
+				before := slices.Clone(workspace.TeamMembers)
 				for _, teamID := range invitation.TeamIDs {
 					teamRole := "member"
 					if invitation.Role == "owner" {
 						teamRole = "owner"
 					}
-					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: user.ID, Role: teamRole, JoinedAt: now})
+					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: user.ID, Role: teamRole, JoinedAt: now, Origin: domain.TeamMemberOriginInvitation})
 				}
+				invitationActor := requestTeamMemberActor(r, "")
+				invitationActor.actor, invitationActor.source = user, teamMemberSourceInvitation
+				names := teamMemberNames{users: map[string]domain.User{user.ID: user}, teams: map[string]domain.Team{}}
+				for _, team := range workspace.Teams {
+					names.teams[team.ID] = team
+				}
+				changes := teamMemberDiff(before, workspace.TeamMembers, user.ID, "")
+				names.decorate(changes)
+				appendTeamMemberAudit(workspace, invitationActor, names, teamMemberReasonInvitationAccepted, changes, map[string]any{"invitationId": invitation.ID, "inviterId": invitation.InviterID})
 				invitation.Status, invitation.AcceptedAt = "accepted", &now
 				membership = domain.WorkspaceMembership{Workspace: workspace.Workspace, Role: invitation.Role, JoinedAt: now, IssueCount: len(workspace.Issues)}
 				found = true
@@ -2054,8 +2064,12 @@ func (s *server) acceptInvitation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "This invitation is invalid or has expired")
 		return
 	}
-	membership, err := s.store.AcceptInvitation(r.Context(), input.Token, authUser(r).ID)
+	accepted, err := s.store.AcceptInvitationWithChanges(r.Context(), input.Token, authUser(r).ID)
+	membership := accepted.Membership
 	if err == nil {
+		actor := requestTeamMemberActor(r, "")
+		actor.source = teamMemberSourceInvitation
+		s.recordTeamMemberAudit(r.Context(), membership.Workspace.URLKey, actor, teamMemberReasonInvitationAccepted, accepted.Changes, map[string]any{"invitationId": accepted.InvitationID, "inviterId": accepted.InviterID})
 		s.sendWelcomeMessage(r.Context(), membership.Workspace.URLKey, authUser(r).ID)
 	}
 	respondMutation(w, err, http.StatusOK, membership)
@@ -2406,7 +2420,9 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			workspace.Members = slices.Delete(workspace.Members, index, index+1)
+			before := slices.Clone(workspace.TeamMembers)
 			workspace.TeamMembers = slices.DeleteFunc(workspace.TeamMembers, func(member domain.TeamMember) bool { return member.UserID == userID })
+			developmentTeamMemberAudit(workspace, r, teamMemberReasonWorkspaceMemberRemoved, teamMemberDiff(before, workspace.TeamMembers, userID, ""), nil)
 			return nil
 		})
 		if err != nil {
@@ -2417,8 +2433,9 @@ func (s *server) removeMember(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	err := s.store.RemoveMember(r.Context(), data.Workspace.ID, r.PathValue("userId"))
+	removed, err := s.store.RemoveMemberWithChanges(r.Context(), data.Workspace.ID, r.PathValue("userId"))
 	if err == nil {
+		s.recordTeamMemberAudit(r.Context(), r.PathValue("workspaceKey"), requestTeamMemberActor(r, ""), teamMemberReasonWorkspaceMemberRemoved, removed, nil)
 		s.pruneSuggestedAssignee(r, r.PathValue("workspaceKey"), r.PathValue("userId"))
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
@@ -2433,6 +2450,9 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Role   string `json:"role"`
 		Member *bool  `json:"member"`
+		// Origin (manual, api or sync) of a membership this adds; on an
+		// existing membership it replaces the stored origin.
+		Origin string `json:"origin,omitempty"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -2449,10 +2469,16 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "Team role must be owner or member")
 		return
 	}
+	origin, err := requestedTeamMemberOrigin(input.Origin)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if s.authDisabled {
 		teamID, userID := r.PathValue("teamId"), r.PathValue("userId")
 		err := s.store.MutateWorkspace(r.Context(), r.PathValue("workspaceKey"), "team_member.updated", userID, input, func(workspace *domain.Bootstrap) error {
 			materializeDevelopmentMembers(workspace)
+			before := slices.Clone(workspace.TeamMembers)
 			if !slices.ContainsFunc(workspace.Teams, func(team domain.Team) bool { return team.ID == teamID }) || !slices.ContainsFunc(workspace.Members, func(member domain.WorkspaceMember) bool { return member.User.ID == userID && member.Status == "active" }) || input.Role != "member" && input.Role != "owner" {
 				return errInvalid
 			}
@@ -2484,13 +2510,21 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 			if member {
 				if index >= 0 {
 					workspace.TeamMembers[index].Role = input.Role
+					if origin != "" {
+						workspace.TeamMembers[index].Origin = origin
+					}
 				} else {
-					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: userID, Role: input.Role, JoinedAt: time.Now().UTC()})
+					added := origin
+					if added == "" {
+						added = defaultTeamMemberOrigin(r)
+					}
+					workspace.TeamMembers = append(workspace.TeamMembers, domain.TeamMember{TeamID: teamID, UserID: userID, Role: input.Role, JoinedAt: time.Now().UTC(), Origin: added})
 				}
 			} else if index >= 0 {
 				workspace.TeamMembers = slices.Delete(workspace.TeamMembers, index, index+1)
 			}
 			domain.SyncTeamAncestorMembers(workspace)
+			developmentTeamMemberAudit(workspace, r, "", teamMemberDiff(before, workspace.TeamMembers, userID, teamID), nil)
 			return nil
 		})
 		if err != nil {
@@ -2500,25 +2534,19 @@ func (s *server) updateTeamMember(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	actorID := authUser(r).ID
-	workspaceRole, _, _ := s.store.WorkspaceRole(r.Context(), data.Workspace.ID, actorID)
-	actorTeamRole, _ := s.store.TeamRole(r.Context(), data.Workspace.ID, r.PathValue("teamId"), actorID)
-	targetMembership, targetIsMember, err := s.store.TeamMembership(r.Context(), data.Workspace.ID, r.PathValue("teamId"), r.PathValue("userId"))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "Could not verify team membership")
+	request := store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: r.PathValue("teamId"), UserID: r.PathValue("userId"), Member: member, Role: input.Role, Origin: origin, SetOrigin: origin != ""}
+	if origin == "" {
+		request.Origin = defaultTeamMemberOrigin(r)
+	}
+	if _, err := s.changeTeamMember(r, r.PathValue("workspaceKey"), data.Workspace.ID, request); err != nil {
+		if errors.Is(err, errTeamOwnerRequired) {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		writeTeamMemberError(w, err, nil)
 		return
 	}
-	currentRole := ""
-	if targetIsMember {
-		currentRole = targetMembership.Role
-	}
-	ownerRoleChange := member && input.Role == "owner" || currentRole == "owner" && (!member || input.Role != "owner")
-	if ownerRoleChange && !workspaceAdminRole(workspaceRole) && actorTeamRole != "owner" {
-		writeError(w, http.StatusForbidden, "Team owner access required to change owner roles")
-		return
-	}
-	err = s.store.SetTeamMembership(r.Context(), data.Workspace.ID, r.PathValue("teamId"), r.PathValue("userId"), input.Role, member)
-	respondMutation(w, err, http.StatusNoContent, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, expires time.Time) {

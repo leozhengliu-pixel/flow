@@ -342,7 +342,7 @@ func (s *server) scimGroups(w http.ResponseWriter, r *http.Request) {
 		}
 		group, _ = s.store.SCIMGroup(r.Context(), workspaceID, group.ID)
 		if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
-			if err = s.store.SyncSCIMGroupTeam(r.Context(), workspaceID, group.ID, teamID); err != nil {
+			if err = s.syncSCIMGroupTeam(r, workspaceKey, workspaceID, group, teamID); err != nil {
 				writeError(w, http.StatusUnprocessableEntity, err.Error())
 				return
 			}
@@ -393,7 +393,7 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Method == http.MethodDelete {
 		if teamID := s.scimTeamForGroup(workspaceKey, group); teamID != "" {
-			if err := s.store.SyncSCIMGroupTeam(r.Context(), workspaceID, group.ID, teamID); err != nil {
+			if err := s.syncSCIMGroupTeam(r, workspaceKey, workspaceID, group, teamID); err != nil {
 				writeError(w, http.StatusUnprocessableEntity, err.Error())
 				return
 			}
@@ -428,7 +428,7 @@ func (s *server) scimGroup(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if teamID := s.scimTeamForGroup(workspaceKey, updated); teamID != "" {
-		if err := s.store.SyncSCIMGroupTeam(r.Context(), workspaceID, updated.ID, teamID); err != nil {
+		if err := s.syncSCIMGroupTeam(r, workspaceKey, workspaceID, updated, teamID); err != nil {
 			writeError(w, http.StatusUnprocessableEntity, err.Error())
 			return
 		}

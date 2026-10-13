@@ -23915,6 +23915,421 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/teams/{id}/members": {
+      "get": {
+        "description": "The team's memberships with role and origin (manual, invitation, api, sync or scim; memberships from before origins were tracked are manual). By team id or key.",
+        "operationId": "get_teams_id_members",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TeamMember"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "read"
+            ]
+          }
+        ],
+        "summary": "List team members",
+        "tags": [
+          "teams"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "team_member_api.go"
+      }
+    },
+    "/api/teams/{id}/members/{userId}": {
+      "delete": {
+        "description": "Without origin, removes the member like team settings do (not the last owner, not SCIM-managed members). With origin, removes only a membership with that origin (409 TEAM_MEMBER_ORIGIN_MISMATCH with the actual `origin` otherwise) and never an owner (409 TEAM_OWNER_PROTECTED). dryRun=true writes nothing and returns what would be removed, or in kept why the member would stay.",
+        "operationId": "delete_teams_id_members_userId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Only remove a membership with one of these origins (repeat the parameter or comma-separate them).",
+            "in": "query",
+            "name": "origin",
+            "schema": {
+              "items": {
+                "enum": [
+                  "manual",
+                  "invitation",
+                  "api",
+                  "sync",
+                  "scim"
+                ],
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          {
+            "description": "Return what would be removed without removing anything.",
+            "in": "query",
+            "name": "dryRun",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMemberRemoval"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "summary": "Remove a team member",
+        "tags": [
+          "teams"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "team_member_api.go"
+      },
+      "put": {
+        "description": "Adds the user (role member or owner) or changes the role of an existing member. origin (manual, api or sync) is stored on the membership; without it, API keys and OAuth applications add members with origin api. Giving an origin for an existing member replaces it (audited as origin_changed). SCIM-managed memberships cannot be changed (409).",
+        "operationId": "put_teams_id_members_userId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMemberInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMember"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "summary": "Add a team member or change their role",
+        "tags": [
+          "teams"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "team_member_api.go"
+      }
+    },
+    "/api/teams/{id}/members/sync": {
+      "post": {
+        "description": "members lists the user ids or emails that belong on the team. Missing users are added with origin (default sync); members not listed are removed only when their origin is in removeOrigins (default: the sync's origin). Owners and SCIM-managed members are always kept, and manual members are never removed unless removeOrigins lists manual. dryRun writes nothing and returns the same lists.",
+        "operationId": "post_teams_id_members_sync",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMemberSyncInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMemberSyncResult"
+                }
+              }
+            },
+            "description": "Success",
+            "headers": {
+              "X-Complexity": {
+                "$ref": "#/components/headers/X-Complexity"
+              },
+              "X-RateLimit-Complexity-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Limit"
+              },
+              "X-RateLimit-Complexity-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Remaining"
+              },
+              "X-RateLimit-Complexity-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Complexity-Reset"
+              },
+              "X-RateLimit-Requests-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Limit"
+              },
+              "X-RateLimit-Requests-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Remaining"
+              },
+              "X-RateLimit-Requests-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Requests-Reset"
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/AuthenticationError"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "security": [
+          {
+            "sessionCookie": []
+          },
+          {
+            "bearerApiKey": []
+          },
+          {
+            "oauth2": [
+              "write"
+            ]
+          }
+        ],
+        "summary": "Sync a team's members with a directory",
+        "tags": [
+          "teams"
+        ],
+        "x-flow-typed": true,
+        "x-flow-source": "team_member_api.go"
+      }
+    },
     "/api/teams/{id}/recurring-issues": {
       "get": {
         "operationId": "get_teams_id_recurring_issues",
@@ -41224,6 +41639,263 @@
         "required": [
           "nodes",
           "pageInfo"
+        ],
+        "type": "object"
+      },
+      "TeamMember": {
+        "properties": {
+          "joinedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "managed": {
+            "type": "boolean"
+          },
+          "managedSource": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "Origin records what created the membership: manual, invitation, api, sync or scim (see team_membership.go). Rows from before origins were tracked read as manual.",
+            "enum": [
+              "manual",
+              "invitation",
+              "api",
+              "sync",
+              "scim"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "joinedAt",
+          "role",
+          "teamId",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "TeamMemberChange": {
+        "description": "TeamMemberChange is one team membership a write added, removed or changed (or, in a dry run, would).",
+        "properties": {
+          "action": {
+            "description": "Action is added, removed, role_changed or origin_changed.",
+            "enum": [
+              "added",
+              "removed",
+              "role_changed",
+              "origin_changed"
+            ],
+            "type": "string"
+          },
+          "inherited": {
+            "description": "Inherited marks a parent-team membership added because the user joined one of its sub-teams.",
+            "type": "boolean"
+          },
+          "origin": {
+            "description": "Origin is the membership's origin (for a removal, the origin it had).",
+            "enum": [
+              "manual",
+              "invitation",
+              "api",
+              "sync",
+              "scim"
+            ],
+            "type": "string"
+          },
+          "originBefore": {
+            "type": "string"
+          },
+          "roleAfter": {
+            "type": "string"
+          },
+          "roleBefore": {
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "teamKey": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "origin",
+          "teamId",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "TeamMemberInput": {
+        "description": "TeamMemberInput adds a member to a team or changes their role. Origin is manual, api or sync (invitation and scim are set by Flow); on an existing membership a given origin replaces the stored one.",
+        "properties": {
+          "origin": {
+            "enum": [
+              "manual",
+              "api",
+              "sync"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "member",
+              "owner"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "TeamMemberKept": {
+        "description": "TeamMemberKept is a member a removal or sync left in place (or did not add), and why.",
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "reason": {
+            "description": "Reason is owner, origin_mismatch, scim_managed, last_owner, sub_team_member, not_a_member or unknown_user.",
+            "enum": [
+              "owner",
+              "origin_mismatch",
+              "scim_managed",
+              "last_owner",
+              "sub_team_member",
+              "not_a_member",
+              "unknown_user"
+            ],
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "teamId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "teamId",
+          "userId"
+        ],
+        "type": "object"
+      },
+      "TeamMemberRemoval": {
+        "description": "TeamMemberRemoval is the result of removing a member from a team. With dryRun nothing was written and Removed lists what would be removed.",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "kept": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberKept"
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberChange"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "dryRun",
+          "kept",
+          "removed"
+        ],
+        "type": "object"
+      },
+      "TeamMemberSyncInput": {
+        "description": "TeamMemberSyncInput makes a team's membership match a directory. Members lists the user ids or emails that belong on the team. Users missing from the team are added with Origin (default sync); members not listed are removed only when their origin is in RemoveOrigins (default: Origin). Owners and SCIM-managed members are never removed, and manual members only when \"manual\" is listed explicitly.",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "members": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "origin": {
+            "enum": [
+              "manual",
+              "api",
+              "sync"
+            ],
+            "type": "string"
+          },
+          "removeOrigins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "type": "object"
+      },
+      "TeamMemberSyncResult": {
+        "description": "TeamMemberSyncResult lists what a sync added, removed and kept (with dryRun: what it would).",
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberChange"
+            },
+            "type": "array"
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "kept": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberKept"
+            },
+            "type": "array"
+          },
+          "removed": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberChange"
+            },
+            "type": "array"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberKept"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "added",
+          "dryRun",
+          "kept",
+          "removed",
+          "skipped"
         ],
         "type": "object"
       },

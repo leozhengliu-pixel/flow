@@ -57,6 +57,12 @@ export interface WorkspaceMember {
   joinedAt: string;
   lastSeenAt?: string;
 }
+/**
+ * What created a team membership. Syncs remove only memberships they added
+ * (SCIM: scim; API directory syncs: sync); manual and invitation members and
+ * team owners are kept. Memberships from before origins existed are manual.
+ */
+export type TeamMemberOrigin = "manual" | "invitation" | "api" | "sync" | "scim";
 export interface TeamMember {
   teamId: UUID;
   userId: UUID;
@@ -64,6 +70,7 @@ export interface TeamMember {
   joinedAt: string;
   managed?: boolean;
   managedSource?: "scim";
+  origin?: TeamMemberOrigin;
 }
 export interface Invitation {
   id: UUID;
@@ -2923,6 +2930,8 @@ export interface AgentSession {
   projectIds?: UUID[];
   /** Initiatives attached as context (the initiative page a chat opened on, or @-mentions). */
   initiativeIds?: UUID[];
+  /** Documents attached as context (the document a chat opened on, or @-mentions). */
+  documentIds?: UUID[];
   skillIds: UUID[];
   messages: AgentMessage[];
   /** Notes left about the whole conversation from the chat menu's "Leave feedback…". */

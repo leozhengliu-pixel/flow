@@ -6,6 +6,7 @@ import { listAuditLog } from "@/lib/api";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
 import { AuditLogStreaming } from "./audit-log-streaming";
 import { Toggle } from "@/components/ui/toggle";
+import { useI18n } from "@/i18n/i18n";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,7 +37,28 @@ function useAuditLog(data: BootstrapData) {
   return fetched ?? data.auditLog;
 }
 
+/** How a team membership change was made (metadata.source of team_member entries). */
+const TEAM_MEMBER_SOURCES: Record<string, string> = {
+  manual: "By hand",
+  api: "Via API",
+  agent: "Via agent",
+  sync: "Via sync",
+  invitation: "Via invitation",
+  scim: "Via SCIM",
+};
+
+/** "Ada · ENG", the member and team a team_member entry is about. */
+function teamMemberSubject(item: AuditLogEntry) {
+  if (item.resourceType !== "team_member") return "";
+  const metadata = item.metadata ?? {};
+  const text = (key: string) => (typeof metadata[key] === "string" ? (metadata[key] as string) : "");
+  return [text("userName") || text("userEmail") || item.resourceId, text("teamKey") || text("teamName")]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function AuditLogSettings({ data }: { data: BootstrapData }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState(""),
     [hideSessions, setHideSessions] = useState(false),
     [eventType, setEventType] = useState("all");
@@ -138,7 +160,19 @@ export function AuditLogSettings({ data }: { data: BootstrapData }) {
                 <small>{item.actor.email}</small>
               </div>
               <code>{item.action.replaceAll("_", " ")}</code>
-              <span>{item.resourceType.replaceAll("_", " ")}</span>
+              {item.resourceType === "team_member" ? (
+                <span className="settings-audit-resource">
+                  {item.resourceType.replaceAll("_", " ")}
+                  <small title={teamMemberSubject(item)}>
+                    <span data-i18n-ignore>{teamMemberSubject(item)}</span>
+                    {typeof item.metadata?.source === "string" && TEAM_MEMBER_SOURCES[item.metadata.source] && (
+                      <> · {t(TEAM_MEMBER_SOURCES[item.metadata.source])}</>
+                    )}
+                  </small>
+                </span>
+              ) : (
+                <span>{item.resourceType.replaceAll("_", " ")}</span>
+              )}
               <time>{new Date(item.createdAt).toLocaleString()}</time>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

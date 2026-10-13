@@ -287,6 +287,35 @@ html:root .settings-app .settings-main .settings-team-members-scim {
   font-size: 13px;
 }
 html:root .settings-app .settings-main .settings-team-members-scim span { color: var(--set-desc); }
+/* Sync removal rules and per-member origin notes ("Synced from SCIM", "Added by sync"). */
+html:root .settings-app .settings-main .settings-team-members-sync {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 48px 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--set-card);
+  box-shadow: var(--set-card-shadow);
+  font-size: 13px;
+}
+html:root .settings-app .settings-main .settings-team-members-sync span { color: var(--set-desc); line-height: 1.45; }
+html:root .settings-app .settings-main .settings-member-origin {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--theme-control);
+  color: var(--theme-text-secondary);
+  font-size: 10px;
+  line-height: 15px;
+  vertical-align: 1px;
+  cursor: default;
+}
+html:root .settings-app .settings-main .settings-member-origin:focus-visible { outline: 1px solid var(--theme-accent); outline-offset: 1px; }
+@media (max-width: 900px) {
+  html:root .settings-app .settings-main .settings-team-members-sync { margin-inline: 20px; }
+}
 html:root .settings-app .settings-main .settings-team-members-empty { padding: 14px 48px; color: var(--set-desc); font-size: 13px; }
 html:root .settings-app .settings-main > .settings-content:has(.settings-team-members-page) { padding-left: 8px; padding-right: 8px; }
 html:root .settings-app .settings-main .settings-team-members-page > .settings-page-header { margin-bottom: 24px; }

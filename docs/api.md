@@ -306,6 +306,43 @@ issue (`issueId`) and becomes the request's `sourceUrl`. Update with
 `PATCH /api/customer-requests/{id}`. Application tokens need `customer:read` /
 `customer:write`.
 
+## Team members
+
+Every team membership has an `origin`: `manual` (added by a person in Flow;
+memberships from before origins existed read as manual), `invitation`, `api`
+(an API key or OAuth application that named no origin), `sync` (a directory or
+HR sync that said so) or `scim` (a SCIM group mapped to the team).
+`GET /api/teams/{id}/members` lists them. `PUT /api/teams/{id}/members/{userId}`
+adds a member or changes their role; send `"origin":"sync"` from a sync.
+
+`DELETE /api/teams/{id}/members/{userId}` removes a member. With
+`origin=sync` it removes only a membership with that origin (`409
+TEAM_MEMBER_ORIGIN_MISMATCH` with the actual `origin` otherwise) and never an
+owner (`409 TEAM_OWNER_PROTECTED`). `dryRun=true` writes nothing and returns
+`{dryRun, removed, kept}`, where `kept` says why a member would stay.
+
+`POST /api/teams/{id}/members/sync` makes a team match a directory list
+(`members`: user ids or emails). It adds missing users with `origin` (default
+`sync`) and removes unlisted members only when their origin is in
+`removeOrigins` (default: the sync's origin). Owners and SCIM-managed members
+are always kept, and manual members unless `removeOrigins` lists `manual`.
+Run it with `"dryRun":true` first:
+
+```bash
+curl -X POST "$FLOW_BASE_URL/api/teams/$TEAM_ID/members/sync" -H "Authorization: Bearer $FLOW_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"members":["ada@example.com","grace@example.com"],"dryRun":true}'
+```
+
+Every add, removal, role change and origin change (from team settings, the
+API, MCP and the agent, invitations, workspace member removal and SCIM) is an
+audit log entry with resource type `team_member` and the affected user as
+`resourceId`; its metadata holds the team, the user, `roleBefore`/`roleAfter`,
+`origin`, `source` (`manual`, `api`, `agent`, `sync`, `invitation`, `scim`) and
+the API key or SCIM connection that made it.
+`GET /api/workspace/audit-log?resourceType=team_member&resourceId=<userId>`
+answers "who removed this person, when, and how".
+
 ## Audit log
 
 `GET /api/workspace/audit-log` (workspace admins or the `admin` scope) accepts

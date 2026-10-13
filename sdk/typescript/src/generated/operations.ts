@@ -60,6 +60,11 @@ import type {
   SignedFiles,
   Team,
   TeamConnection,
+  TeamMember,
+  TeamMemberInput,
+  TeamMemberRemoval,
+  TeamMemberSyncInput,
+  TeamMemberSyncResult,
   User,
   UserConnection,
   Viewer,
@@ -818,6 +823,37 @@ export interface GetTeamsIdRequest {
   path: { id: string }
 }
 
+/** Arguments of `getTeamsIdMembers`. */
+export interface GetTeamsIdMembersRequest {
+  path: { id: string }
+}
+
+/** Query parameters of `DELETE /api/teams/{id}/members/{userId}`. */
+export interface DeleteTeamsIdMembersUserIdQuery {
+  /** Only remove a membership with one of these origins (repeat the parameter or comma-separate them). */
+  origin?: ("manual" | "invitation" | "api" | "sync" | "scim")[]
+  /** Return what would be removed without removing anything. */
+  dryRun?: boolean
+}
+
+/** Arguments of `deleteTeamsIdMembersUserId`. */
+export interface DeleteTeamsIdMembersUserIdRequest {
+  path: { id: string; userId: string }
+  query?: DeleteTeamsIdMembersUserIdQuery
+}
+
+/** Arguments of `putTeamsIdMembersUserId`. */
+export interface PutTeamsIdMembersUserIdRequest {
+  path: { id: string; userId: string }
+  body: TeamMemberInput
+}
+
+/** Arguments of `postTeamsIdMembersSync`. */
+export interface PostTeamsIdMembersSyncRequest {
+  path: { id: string }
+  body: TeamMemberSyncInput
+}
+
 /** Query parameters of `GET /api/users`. */
 export interface GetUsersQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -1112,6 +1148,10 @@ export const operations = {
   getReleasesLegacy: { method: "GET", path: "/api/releases", operationId: "get_releases_legacy", successStatuses: [200] },
   getTeams: { method: "GET", path: "/api/teams", operationId: "get_teams", successStatuses: [200] },
   getTeamsId: { method: "GET", path: "/api/teams/{id}", operationId: "get_teams_id", successStatuses: [200] },
+  getTeamsIdMembers: { method: "GET", path: "/api/teams/{id}/members", operationId: "get_teams_id_members", successStatuses: [200] },
+  deleteTeamsIdMembersUserId: { method: "DELETE", path: "/api/teams/{id}/members/{userId}", operationId: "delete_teams_id_members_userId", successStatuses: [200] },
+  putTeamsIdMembersUserId: { method: "PUT", path: "/api/teams/{id}/members/{userId}", operationId: "put_teams_id_members_userId", successStatuses: [200] },
+  postTeamsIdMembersSync: { method: "POST", path: "/api/teams/{id}/members/sync", operationId: "post_teams_id_members_sync", successStatuses: [200] },
   getUsers: { method: "GET", path: "/api/users", operationId: "get_users", successStatuses: [200] },
   getUsersId: { method: "GET", path: "/api/users/{id}", operationId: "get_users_id", successStatuses: [200] },
   getViewer: { method: "GET", path: "/api/viewer", operationId: "get_viewer", successStatuses: [200] },
@@ -1739,6 +1779,42 @@ export class FlowApi {
    */
   getTeamsId(request: GetTeamsIdRequest, options?: RequestOptions): Promise<Team> {
     return this.transport.request({ method: "GET", path: "/api/teams/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `GET /api/teams/{id}/members`
+   * List team members
+   * The team's memberships with role and origin (manual, invitation, api, sync or scim; memberships from before origins were tracked are manual). By team id or key.
+   */
+  getTeamsIdMembers(request: GetTeamsIdMembersRequest, options?: RequestOptions): Promise<TeamMember[]> {
+    return this.transport.request({ method: "GET", path: "/api/teams/{id}/members", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `DELETE /api/teams/{id}/members/{userId}`
+   * Remove a team member
+   * Without origin, removes the member like team settings do (not the last owner, not SCIM-managed members). With origin, removes only a membership with that origin (409 TEAM_MEMBER_ORIGIN_MISMATCH with the actual `origin` otherwise) and never an owner (409 TEAM_OWNER_PROTECTED). dryRun=true writes nothing and returns what would be removed, or in kept why the member would stay.
+   */
+  deleteTeamsIdMembersUserId(request: DeleteTeamsIdMembersUserIdRequest, options?: RequestOptions): Promise<TeamMemberRemoval> {
+    return this.transport.request({ method: "DELETE", path: "/api/teams/{id}/members/{userId}", pathParams: request.path, query: request?.query, ...options })
+  }
+
+  /**
+   * `PUT /api/teams/{id}/members/{userId}`
+   * Add a team member or change their role
+   * Adds the user (role member or owner) or changes the role of an existing member. origin (manual, api or sync) is stored on the membership; without it, API keys and OAuth applications add members with origin api. Giving an origin for an existing member replaces it (audited as origin_changed). SCIM-managed memberships cannot be changed (409).
+   */
+  putTeamsIdMembersUserId(request: PutTeamsIdMembersUserIdRequest, options?: RequestOptions): Promise<TeamMember> {
+    return this.transport.request({ method: "PUT", path: "/api/teams/{id}/members/{userId}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `POST /api/teams/{id}/members/sync`
+   * Sync a team's members with a directory
+   * members lists the user ids or emails that belong on the team. Missing users are added with origin (default sync); members not listed are removed only when their origin is in removeOrigins (default: the sync's origin). Owners and SCIM-managed members are always kept, and manual members are never removed unless removeOrigins lists manual. dryRun writes nothing and returns the same lists.
+   */
+  postTeamsIdMembersSync(request: PostTeamsIdMembersSyncRequest, options?: RequestOptions): Promise<TeamMemberSyncResult> {
+    return this.transport.request({ method: "POST", path: "/api/teams/{id}/members/sync", pathParams: request.path, body: request.body, ...options })
   }
 
   /**

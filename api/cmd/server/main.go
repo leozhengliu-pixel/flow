@@ -1725,7 +1725,11 @@ func (s *server) createTeam(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil && !s.authDisabled {
 		data, _ := s.store.WorkspaceSettingsMetadata(workspaceKey)
-		err = s.store.SetTeamMembership(r.Context(), data.Workspace.ID, team.ID, authUser(r).ID, "owner", true)
+		var created store.TeamMembershipChangeResult
+		created, err = s.store.ChangeTeamMembership(r.Context(), store.TeamMembershipChangeRequest{WorkspaceID: data.Workspace.ID, TeamID: team.ID, UserID: authUser(r).ID, Member: true, Role: "owner", Origin: defaultTeamMemberOrigin(r)})
+		if err == nil {
+			s.recordTeamMemberAudit(r.Context(), workspaceKey, requestTeamMemberActor(r, ""), teamMemberReasonTeamCreated, created.Changes, nil)
+		}
 	}
 	if err == nil {
 		// The built-in Flow agent works in every team, including new ones.

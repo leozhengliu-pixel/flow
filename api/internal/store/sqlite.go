@@ -352,6 +352,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 4, name: "session authentication policy context", apply: s.createSessionSecuritySchema},
 		{version: 5, name: "encrypted connector credentials", apply: s.createConnectorSecretsSchema},
 		{version: 6, name: "team membership role index", apply: s.createTeamMembershipRoleIndex},
+		{version: 7, name: "team membership origin", apply: s.addTeamMembershipOrigin},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
