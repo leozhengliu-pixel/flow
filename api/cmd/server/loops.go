@@ -553,10 +553,10 @@ func (s *server) deleteLoop(w http.ResponseWriter, r *http.Request) {
 		if err := s.checkLoopEditor(data, item); err != nil {
 			return err
 		}
-		if err := appendTrash(data, "loop", item.ID, item.Name, item); err != nil {
-			return err
-		}
+		// Like the reference app ("Delete this loop?"), deleting a loop is permanent:
+		// its versions go now and its run history right after the write.
 		data.Loops = slices.Delete(data.Loops, index, index+1)
+		appendAudit(data, "deleted", "loop", item.ID, map[string]any{"title": item.Name, "permanent": true})
 		data.LoopVersions = slices.DeleteFunc(data.LoopVersions, func(version domain.LoopVersion) bool { return version.LoopID == id })
 		return nil
 	})

@@ -16,7 +16,9 @@ func (s *SQLiteStore) jsonPatchExpression(field string) string {
 	case "postgres":
 		return "convert_to((convert_from(data,'UTF8')::jsonb || jsonb_build_object('" + field + "',?::text,'updatedAt',?::text))::text,'UTF8')"
 	default:
-		return "json_set(data, '$." + field + "', ?, '$.updatedAt', ?)"
+		// SQLite's json_set returns TEXT; keep the column a BLOB like every
+		// other write (a TEXT row cannot be scanned into json.RawMessage).
+		return "CAST(json_set(data, '$." + field + "', ?, '$.updatedAt', ?) AS BLOB)"
 	}
 }
 

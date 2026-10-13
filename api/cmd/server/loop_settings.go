@@ -149,8 +149,7 @@ func (s *server) updateLoopSettings(w http.ResponseWriter, r *http.Request) {
 			settings.TrustedSourcesAllowlist = allowlist
 		}
 		if input.AgentWebSearch != nil {
-			settings.AgentWebSearch = *input.AgentWebSearch
-			settings.AgentWebSearchDisabled = !*input.AgentWebSearch
+			settings.SetAgentWebAccess(*input.AgentWebSearch)
 		}
 		settings.UpdatedAt = time.Now().UTC()
 		appendAudit(data, "updated", "workspace_settings", "loops", map[string]any{"fields": "loop settings"})

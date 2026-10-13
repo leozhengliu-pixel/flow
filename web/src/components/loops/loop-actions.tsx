@@ -105,8 +105,9 @@ export function LoopActionsMenu({
     }
   };
   const remove = async () => {
-    const confirmed = await confirmAction(t("Delete loop?"), {
-      description: t("This loop and its configuration will be permanently deleted."),
+    // The reference app's dialog: deleting a loop is permanent (its versions and run history go with it).
+    const confirmed = await confirmAction(t("Delete this loop?"), {
+      description: t("This action cannot be undone."),
       confirmLabel: t("Delete"),
       danger: true,
     });
@@ -279,7 +280,7 @@ export function LoopBulkActionsMenu({
   };
   const remove = async () => {
     const confirmed = await confirmAction(count("Delete {count} loops?", loops.length), {
-      description: t("These loops and their configuration will be permanently deleted."),
+      description: t("This action cannot be undone."),
       confirmLabel: t("Delete"),
       danger: true,
     });

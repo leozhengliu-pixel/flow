@@ -72,7 +72,7 @@ func TestMCPDeleteProjectMovesItToTrashWithItsCounts(t *testing.T) {
 	if affected := mcpAffected(t, deleted); affected["issues"] != float64(1) || affected["milestones"] != float64(1) {
 		t.Fatalf("affected: %v", affected)
 	}
-	if note, _ := deleted["note"].(string); !strings.Contains(note, "issues are kept") {
+	if note, _ := deleted["note"].(string); !strings.Contains(note, "issues are archived") {
 		t.Fatalf("note: %v", deleted["note"])
 	}
 	if slices.ContainsFunc(f.repository.Bootstrap().Projects, func(item domain.Project) bool { return item.ID == id }) {
@@ -127,15 +127,12 @@ func TestMCPDeleteViewLoopAndSkills(t *testing.T) {
 
 	loop := mcpObject(t, f, "save_loop", map[string]any{"name": "QA fix – Loop", "instructions": "Summarize the week."})
 	deletedLoop := mcpObject(t, f, "delete_loop", map[string]any{"id": "qa fix – loop"})
-	if deletedLoop["deleted"] != true || deletedLoop["restorable"] != true || deletedLoop["name"] != "QA fix – Loop" || deletedLoop["restorableUntil"] == nil {
+	// Like the reference app ("Delete this loop?"), deleting a loop is permanent.
+	if deletedLoop["deleted"] != true || deletedLoop["restorable"] != false || deletedLoop["name"] != "QA fix – Loop" || deletedLoop["restorableUntil"] != nil {
 		t.Fatalf("loop receipt: %v", deletedLoop)
 	}
-	if len(f.repository.Bootstrap().Loops) != 0 {
-		t.Fatal("loop still stored")
-	}
-	f.restoreFromTrash(t, "loop", loop["id"].(string))
-	if loops := f.repository.Bootstrap().Loops; len(loops) != 1 || loops[0].Name != "QA fix – Loop" || loops[0].NextRunAt != nil {
-		t.Fatalf("restored loops: %+v", loops)
+	if data := f.repository.Bootstrap(); len(data.Loops) != 0 || slices.ContainsFunc(data.Trash, func(entry domain.TrashEntry) bool { return entry.ResourceID == loop["id"] }) {
+		t.Fatal("loop still stored or in the trash")
 	}
 	if message := mcpToolError(t, f, "delete_loop", map[string]any{"id": "missing loop"}); !strings.Contains(message, "not found") {
 		t.Fatalf("missing loop: %s", message)

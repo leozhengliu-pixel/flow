@@ -1,0 +1,22 @@
+/** Recently deleted rows (Copy / Restore menus), issue delete confirmations and Settings › Applications installed applications. */
+export const recentlyDeletedZhCN: Record<string, string> = {
+  "Installed applications": "已安装的应用",
+  "Revoke access for {name}?": "撤销 {name} 的访问权限？",
+  "{name} will be removed from this workspace. Its access tokens are revoked, its active sessions are stopped and it can no longer be assigned or mentioned. Issues it worked on keep their history.": "{name} 将从此工作区移除。其访问令牌将被撤销，进行中的会话将停止，并且无法再被指派或提及。它处理过的议题会保留历史记录。",
+  "Access revoked for {name}": "已撤销 {name} 的访问权限",
+  "No installed applications": "没有已安装的应用",
+  "Applications installed in this workspace will appear here.": "此工作区中安装的应用将显示在这里。",
+  "installed": "安装于",
+  "Deleted issues are available in the \"Recently deleted\" view for 30 days, before they are permanently deleted.": "已删除的议题会在“最近删除”视图中保留 30 天，之后将被永久删除。",
+  "Delete \"{name}\"?": "删除“{name}”？",
+  "Delete \"{name}\" and 1 sub-issue?": "删除“{name}”及 1 个子议题？",
+  "Delete \"{name}\" and {count} sub-issues?": "删除“{name}”及 {count} 个子议题？",
+  "Delete this loop?": "删除此 Loop？",
+  "Restore project": "恢复项目",
+  "Restore initiative": "恢复目标",
+  "Restore document": "恢复文档",
+  "Options": "选项",
+  "Deleted permanently. It can’t be restored.": "已永久删除，无法恢复。",
+  "Delete these {count} items? Items marked permanent can’t be restored.": "删除这 {count} 项？标记为永久的项目无法恢复。",
+  "permanent": "永久",
+};
