@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { AppWindow, Download, Plus, Radio, Upload } from "lucide-react";
+import { Download, LayoutGrid, MoreHorizontal, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 import {
@@ -10,470 +10,68 @@ import {
   deleteOAuthApplication,
   exportOAuthApplicationManifest,
   fetchOAuthApplicationFailures,
-  fetchOAuthApplicationInstalls,
   fetchOAuthSyncGroupRequests,
-  revokeOAuthAuthorization,
+  rotateApplicationWebhookSecret,
   updateOAuthApplicationFromManifest,
-  updateWebhook,
-  type OAuthApplicationInstalls,
-  type OAuthManifestSaveResult,
 } from "@/lib/api";
-import { saveApplication } from "@/lib/application-agents";
-import { useOptionalTranslate } from "@/i18n/i18n";
+import { useI18n, useOptionalTranslate } from "@/i18n/i18n";
 import {
+  OAUTH_SCOPE_OPTIONS,
   applyManifestToForm,
   formStateFromApplication,
   formStateFromManifest,
   manifestFileName,
   manifestFromFormState,
   manifestFromSearch,
+  validateApplicationForm,
+  type ApplicationFormErrors,
+  type ApplicationFormState,
 } from "@/lib/oauth-app-manifest";
 import type {
   BootstrapData,
   OAuthAppManifestIssue,
-  OAuthApplication,
   OAuthSyncGroupRequest,
-  Webhook,
   WebhookFailureEvent,
 } from "@/types/flow";
-import {
-  applicationEditPath,
-  applicationSettingsPath,
-  webhookSettingsPath,
-} from "@/lib/app-routes";
+import { applicationEditPath, applicationSettingsPath, installedApplicationPath, settingsPath } from "@/lib/app-routes";
+import { confirmAction } from "@/components/ui/action-dialog-service";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { FlowTooltip } from "@/components/ui/tooltip";
 
-import { ApplicationHeader } from "./application-header";
-import { ApplicationCredentials } from './application-credentials';
-import { ApplicationWebhookSettingsSection } from "./application-webhook-settings";
+import { ApplicationCredentials } from "./application-credentials";
+import { OAuthAppAvatar } from "./oauth-applications-section";
+import { fillNodes } from "@/lib/fill-nodes";
 import {
-  ApplicationFormFields,
+  ApplicationForm,
   ClientSecretNotice,
   ManifestImportDialog,
   ManifestIssues,
 } from "./application-form";
 import {
+  SettingsCrumb,
   SettingsPageTitle as PageTitle,
   SettingsRow as Row,
   SettingsSection as Section,
-  SettingsToggle as Toggle,
 } from "./settings-primitives";
 import "./application-pages.css";
+import "./oauth-application-settings.css";
 
-function ActionButton({
-  children,
-  onClick,
-  primary,
-  danger,
-  disabled,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  primary?: boolean;
-  danger?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      className={`settings-action${primary ? " primary" : ""}${danger ? " danger" : ""}`}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
+/** Every scope an application can request:, a new application is not limited to a configured subset. */
+const ALL_APPLICATION_SCOPES = [...OAUTH_SCOPE_OPTIONS.map((option) => option.scope)];
 
-export function ApplicationDetailsPage({
-  data,
-  applicationId,
-  onReload,
-  onBack,
-}: {
-  data: BootstrapData;
-  applicationId: string;
-  onReload: () => Promise<void>;
-  onBack: () => void;
-}) {
-  const navigate = useNavigate();
-  const t = useOptionalTranslate();
-  const app = data.oauthApplications.find((item) => item.id === applicationId);
-  const [failures, setFailures] = useState<WebhookFailureEvent[]>([]);
-  const [syncGroups, setSyncGroups] = useState<OAuthSyncGroupRequest[]>([]);
-  const [installs, setInstalls] = useState<OAuthApplicationInstalls>({
-    authorizations: [],
-    installations: [],
-  });
-  const [loading, setLoading] = useState(true);
-
-  const loadInstalls = () =>
-    fetchOAuthApplicationInstalls(applicationId)
-      .then((value) =>
-        setInstalls({
-          authorizations: value.authorizations ?? [],
-          installations: value.installations ?? [],
-        }),
-      )
-      .catch((error) =>
-        toast.error(
-          error instanceof Error ? error.message : t("Could not load installs"),
-        ),
-      );
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void fetchOAuthApplicationInstalls(applicationId)
-      .then((value) => {
-        if (cancelled) return;
-        setInstalls({
-          authorizations: value.authorizations ?? [],
-          installations: value.installations ?? [],
-        });
-      })
-      .catch(() => undefined);
-    Promise.all([
-      fetchOAuthApplicationFailures(applicationId),
-      fetchOAuthSyncGroupRequests(applicationId),
-    ])
-      .then(([nextFailures, nextGroups]) => {
-        if (cancelled) return;
-        setFailures(nextFailures);
-        setSyncGroups(nextGroups);
-      })
-      .catch((error) =>
-        toast.error(
-          error instanceof Error ? error.message : "Could not load application",
-        ),
-      )
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [applicationId]);
-
-  if (!app) {
-    return (
-      <>
-        <PageTitle description="OAuth application details">
-          Application
-        </PageTitle>
-        <div className="settings-empty">
-          <AppWindow size={28} />
-          <h3>Application not found</h3>
-          <ActionButton onClick={onBack}>Back to applications</ActionButton>
-        </div>
-      </>
-    );
-  }
-
-  const pendingGroups = syncGroups.filter((item) => item.status === "pending");
-
-  return (
-    <div className="application-page">
-      <ApplicationHeader
-        app={app}
-        actions={
-          <>
-            <ActionButton onClick={onBack}>Back</ActionButton>
-            <ActionButton
-              primary
-              onClick={() =>
-                navigate(applicationEditPath(data.workspace.urlKey, app.id))
-              }
-            >
-              Edit
-            </ActionButton>
-          </>
-        }
-      />
-      <Section title="Client">
-        <Row title="Client ID" description={<span data-i18n-ignore>{app.clientId}</span>}>
-          <ActionButton
-            onClick={() => {
-              void navigator.clipboard.writeText(app.clientId);
-              toast.success("Copied client ID");
-            }}
-          >
-            Copy
-          </ActionButton>
-        </Row>
-        <Row
-          title="Developer"
-          description={
-            app.developerName || app.developerUrl ? (
-              <span data-i18n-ignore>
-                {app.developerName}
-                {app.developerName && app.developerUrl ? " · " : ""}
-                {app.developerUrl}
-              </span>
-            ) : (
-              t("No developer information")
-            )
-          }
-        />
-        <Row
-          title="Distribution"
-          description={
-            app.publicEnabled
-              ? t("Public: can be installed in other workspaces")
-              : t("Private: only this workspace")
-          }
-        />
-        <Row
-          title="Grant types"
-          description={
-            <Chips
-              values={
-                app.supportsClientCredentials
-                  ? ["authorization_code", "client_credentials"]
-                  : ["authorization_code"]
-              }
-            />
-          }
-        />
-        <Row
-          title="Scopes"
-          description={
-            app.scopes.length ? <Chips values={app.scopes} /> : t("No scopes")
-          }
-        />
-        <Row
-          title="Redirect URIs"
-          description={
-            app.redirectUris.length ? (
-              <span data-i18n-ignore>{app.redirectUris.join(" · ")}</span>
-            ) : (
-              t("No redirect URIs")
-            )
-          }
-        />
-        <Row title="Webhook" description={webhookSummary(app, t)} />
-      </Section>
-      <Section
-        title="Installs"
-        description="Authorizations and installations of this application in the workspace."
-      >
-        {installs.authorizations.filter((item) => !item.revokedAt).map((item) => (
-          <Row
-            key={item.id}
-            title={
-              <span data-i18n-ignore>
-                {data.users.find((user) => user.id === item.userId)
-                  ?.displayName ?? t("Unknown user")}
-              </span>
-            }
-            description={
-              <>
-                <Chips values={item.scopes} />
-                <span>
-                  {item.lastUsedAt
-                    ? `${t("Last used")} ${new Date(item.lastUsedAt).toLocaleDateString()}`
-                    : t("Never used")}
-                </span>
-              </>
-            }
-          >
-            <ActionButton
-              danger
-              onClick={() =>
-                void revokeOAuthAuthorization(item.id)
-                  .then(async () => {
-                    toast.success(t("Authorization revoked"));
-                    await loadInstalls();
-                  })
-                  .catch((error) =>
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : t("Could not revoke authorization"),
-                    ),
-                  )
-              }
-            >
-              Revoke
-            </ActionButton>
-          </Row>
-        ))}
-        {installs.installations.filter((item) => item.active).map((item) => (
-          <Row
-            key={item.id}
-            title={<span data-i18n-ignore>{item.name}</span>}
-            description={
-              <>
-                <span>{t("Application installation")}</span>
-                <Chips values={item.scopes} />
-              </>
-            }
-          >
-            <ActionButton
-              danger
-              onClick={() =>
-                void saveApplication(data.workspace.urlKey, {
-                  ...item,
-                  active: false,
-                })
-                  .then(async () => {
-                    toast.success(t("Installation revoked"));
-                    await loadInstalls();
-                  })
-                  .catch((error) =>
-                    toast.error(
-                      error instanceof Error
-                        ? error.message
-                        : t("Could not revoke installation"),
-                    ),
-                  )
-              }
-            >
-              Revoke
-            </ActionButton>
-          </Row>
-        ))}
-        {!loading &&
-          !installs.authorizations.some((item) => !item.revokedAt) &&
-          !installs.installations.some((item) => item.active) && (
-            <div className="settings-empty compact">
-              <AppWindow size={22} />
-              <h3>No installs yet</h3>
-              <p>People who authorize this application will appear here.</p>
-            </div>
-          )}
-      </Section>
-      <ApplicationCredentials app={app} onReload={onReload}/>
-      <ApplicationWebhookSettingsSection app={app} onReload={onReload} />
-      <Section title="Delivery failures">
-        {loading ? (
-          <p className="application-muted">Loading failures…</p>
-        ) : failures.length ? (
-          failures.map((item) => (
-            <Row
-              key={item.id}
-              title={item.executionId}
-              description={`${item.url} · ${item.httpStatus ?? "—"} · ${item.responseOrError.slice(0, 120)}`}
-            />
-          ))
-        ) : (
-          <div className="settings-empty compact">
-            <Radio size={22} />
-            <h3>No delivery failures</h3>
-            <p>Outbound webhook deliveries for this application are healthy.</p>
-          </div>
-        )}
-      </Section>
-      <Section title="Sync group requests">
-        {pendingGroups.length ? (
-          pendingGroups.map((item) => (
-            <Row
-              key={item.id}
-              title={item.groupName}
-              description={`Requested ${new Date(item.createdAt).toLocaleString()}`}
-            >
-              <div className="settings-inline-actions">
-                <ActionButton
-                  primary
-                  onClick={() =>
-                    void decideOAuthSyncGroupRequest(app.id, item.id, {
-                      status: "approved",
-                    })
-                      .then(async () => {
-                        toast.success("Sync group approved");
-                        await onReload();
-                        setSyncGroups((current) =>
-                          current.map((entry) =>
-                            entry.id === item.id
-                              ? { ...entry, status: "approved" }
-                              : entry,
-                          ),
-                        );
-                      })
-                      .catch((error) =>
-                        toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Could not approve request",
-                        ),
-                      )
-                  }
-                >
-                  Approve
-                </ActionButton>
-                <ActionButton
-                  danger
-                  onClick={() =>
-                    void decideOAuthSyncGroupRequest(app.id, item.id, {
-                      status: "denied",
-                    })
-                      .then(async () => {
-                        toast.success("Sync group denied");
-                        await onReload();
-                        setSyncGroups((current) =>
-                          current.map((entry) =>
-                            entry.id === item.id
-                              ? { ...entry, status: "denied" }
-                              : entry,
-                          ),
-                        );
-                      })
-                      .catch((error) =>
-                        toast.error(
-                          error instanceof Error
-                            ? error.message
-                            : "Could not deny request",
-                        ),
-                      )
-                  }
-                >
-                  Deny
-                </ActionButton>
-              </div>
-            </Row>
-          ))
-        ) : (
-          <div className="settings-empty compact">
-            <AppWindow size={22} />
-            <h3>No pending sync groups</h3>
-            <p>
-              Directory sync requests from this OAuth application will appear
-              here when the model is present.
-            </p>
-          </div>
-        )}
-      </Section>
-    </div>
-  );
-}
-
-function Chips({ values }: { values: string[] }) {
-  return (
-    <span className="application-chips" data-i18n-ignore>
-      {values.map((value) => (
-        <span key={value} className="application-chip">
-          {value}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function webhookSummary(app: OAuthApplication, t: (source: string) => string) {
-  if (!app.webhookEnabled || !app.webhookUrl) return t("Webhooks are off");
-  return (
-    <>
-      <span data-i18n-ignore>{app.webhookUrl}</span>
-      {app.webhookResourceTypes?.length ? (
-        <Chips values={app.webhookResourceTypes} />
-      ) : null}
-    </>
-  );
+function newApplicationState(search: string): ApplicationFormState {
+  const manifest = manifestFromSearch(search);
+  const state = formStateFromManifest(manifest);
+  if (manifest.oauth?.scopes || manifest.agent) return state;
+  return { ...state, scopes: ALL_APPLICATION_SCOPES, assignable: true, mentionable: true };
 }
 
 function errorIssues(error: unknown): OAuthAppManifestIssue[] {
   return error instanceof OAuthManifestError ? error.issues : [];
 }
 
+/** The reference app's "Create new application" page (Settings › API › New OAuth application). */
 export function ApplicationCreatePage({
   data,
   onReload,
@@ -486,107 +84,60 @@ export function ApplicationCreatePage({
   const t = useOptionalTranslate();
   const navigate = useNavigate();
   const location = useLocation();
-  const [state, setState] = useState(() =>
-    formStateFromManifest(manifestFromSearch(location.search)),
-  );
+  const [state, setState] = useState(() => newApplicationState(location.search));
   const [issues, setIssues] = useState<OAuthAppManifestIssue[]>([]);
-  const [importing, setImporting] = useState(false);
+  const [errors, setErrors] = useState<ApplicationFormErrors>({});
+  const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [created, setCreated] = useState<OAuthManifestSaveResult>();
 
+  const change = (next: ApplicationFormState) => {
+    setState(next);
+    if (attempted) setErrors(validateApplicationForm(next));
+  };
   const create = async () => {
+    setAttempted(true);
+    const found = validateApplicationForm(state);
+    setErrors(found);
+    if (Object.keys(found).length || busy) return;
     setBusy(true);
     setIssues([]);
     try {
-      const app = await createOAuthApplicationFromManifest(
-        manifestFromFormState(state),
-      );
-      setCreated(app);
+      const app = await createOAuthApplicationFromManifest(manifestFromFormState(state));
       await onReload();
+      toast.success(t("Application created"));
+      navigate(applicationSettingsPath(data.workspace.urlKey, app.id), { state: app.webhookSecret ? { webhookSecret: app.webhookSecret } : undefined });
     } catch (error) {
       const next = errorIssues(error);
       setIssues(next);
-      if (!next.length)
-        toast.error(
-          error instanceof Error ? error.message : t("Could not create application"),
-        );
+      if (!next.length) toast.error(error instanceof Error ? error.message : t("Could not create application"));
     } finally {
       setBusy(false);
     }
   };
 
-  if (created) {
-    return (
-      <div className="application-page">
-        <PageTitle description="Your OAuth application is ready.">
-          Application created
-        </PageTitle>
-        <Section title={created.name}>
-          <Row
-            title="Client ID"
-            description={<span data-i18n-ignore>{created.clientId}</span>}
-          />
-        </Section>
-        {created.clientSecret && (
-          <ClientSecretNotice secret={created.clientSecret} />
-        )}
-        {created.webhookSecret && (
-          <ClientSecretNotice kind="webhook" secret={created.webhookSecret} />
-        )}
-        <div className="settings-section-action">
-          <ActionButton
-            primary
-            onClick={() =>
-              navigate(applicationSettingsPath(data.workspace.urlKey, created.id))
-            }
-          >
-            Open application
-          </ActionButton>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="application-page">
-      <PageTitle
-        description="Register an application to use Flow's API with OAuth."
-        action={
-          <div className="settings-inline-actions">
-            <ActionButton onClick={() => setImporting(true)}>
-              <Upload size={14} />
-              Import manifest
-            </ActionButton>
-          </div>
-        }
-      >
-        New OAuth application
-      </PageTitle>
+      <SettingsCrumb pinned onClick={onBack}>{t("API settings")}</SettingsCrumb>
+      <PageTitle>{t("Create new application")}</PageTitle>
       <ManifestIssues issues={issues} />
-      <ApplicationFormFields state={state} onChange={setState} disabled={busy} />
-      <div className="settings-section-action application-form-actions">
-        <ActionButton onClick={onBack}>Cancel</ActionButton>
-        <ActionButton
-          primary
-          disabled={busy || !state.name.trim()}
-          onClick={() => void create()}
-        >
-          Create
-        </ActionButton>
-      </div>
-      <ManifestImportDialog
-        open={importing}
-        onClose={() => setImporting(false)}
-        onApply={(manifest, valid, found) => {
-          setState((current) => applyManifestToForm(current, manifest));
-          setIssues(found);
-          return valid;
-        }}
+      <ApplicationForm
+        state={state}
+        onChange={change}
+        errors={errors}
+        disabled={busy}
+        onSubmit={() => void create()}
+        actions={
+          <>
+            <button type="button" className="oauth-app-button" onClick={onBack}>{t("Cancel")}</button>
+            <button type="submit" className="oauth-app-button is-primary" disabled={busy}>{t("Create")}</button>
+          </>
+        }
       />
     </div>
   );
 }
 
+/** The reference app's "Edit application" page: the same form, with Save. */
 export function ApplicationEditPage({
   data,
   applicationId,
@@ -601,17 +152,11 @@ export function ApplicationEditPage({
   const t = useOptionalTranslate();
   const navigate = useNavigate();
   const app = data.oauthApplications.find((item) => item.id === applicationId);
-  const linkedWebhooks = useMemo(
-    () => data.webhooks.filter((item) => item.applicationId === applicationId),
-    [data.webhooks, applicationId],
-  );
-  const [state, setState] = useState(() =>
-    app ? formStateFromApplication(app) : formStateFromManifest({}),
-  );
+  const [state, setState] = useState(() => (app ? formStateFromApplication(app) : formStateFromManifest({})));
   const [issues, setIssues] = useState<OAuthAppManifestIssue[]>([]);
-  const [importing, setImporting] = useState(false);
+  const [errors, setErrors] = useState<ApplicationFormErrors>({});
+  const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [webhookSecret, setWebhookSecret] = useState("");
 
   useEffect(() => {
     if (app) setState(formStateFromApplication(app));
@@ -619,171 +164,300 @@ export function ApplicationEditPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app?.id, app?.updatedAt]);
 
-  if (!app) {
-    return (
-      <>
-        <PageTitle description="Edit OAuth application">Edit application</PageTitle>
-        <div className="settings-empty">
-          <AppWindow size={28} />
-          <h3>Application not found</h3>
-          <ActionButton onClick={onBack}>Back</ActionButton>
-        </div>
-      </>
-    );
-  }
+  if (!app) return <ApplicationNotFound onBack={onBack} />;
 
-  const save = async (manifest = manifestFromFormState(state)) => {
+  const change = (next: ApplicationFormState) => {
+    setState(next);
+    if (attempted) setErrors(validateApplicationForm(next));
+  };
+  const save = async () => {
+    setAttempted(true);
+    const found = validateApplicationForm(state);
+    setErrors(found);
+    if (Object.keys(found).length || busy) return;
     setBusy(true);
     setIssues([]);
     try {
-      const saved = await updateOAuthApplicationFromManifest(app.id, manifest);
-      if (saved?.webhookSecret) setWebhookSecret(saved.webhookSecret);
+      const saved = await updateOAuthApplicationFromManifest(app.id, manifestFromFormState(state));
       await onReload();
       toast.success(t("Application saved"));
-      return true;
+      // A newly enabled webhook gets its signing secret now; the application page shows it once.
+      navigate(applicationSettingsPath(data.workspace.urlKey, app.id), saved?.webhookSecret ? { state: { webhookSecret: saved.webhookSecret } } : undefined);
     } catch (error) {
       const next = errorIssues(error);
       setIssues(next);
-      if (!next.length)
-        toast.error(
-          error instanceof Error ? error.message : t("Could not save application"),
-        );
-      return false;
+      if (!next.length) toast.error(error instanceof Error ? error.message : t("Could not save application"));
     } finally {
       setBusy(false);
     }
   };
 
-  const exportManifest = async () => {
+  return (
+    <div className="application-page">
+      <SettingsCrumb pinned onClick={() => navigate(applicationSettingsPath(data.workspace.urlKey, app.id))}>{t("Back")}</SettingsCrumb>
+      <PageTitle>{t("Edit application")}</PageTitle>
+      <ManifestIssues issues={issues} />
+      <ApplicationForm
+        state={state}
+        onChange={change}
+        errors={errors}
+        disabled={busy}
+        onSubmit={() => void save()}
+        actions={<button type="submit" className="oauth-app-button is-primary" disabled={busy}>{t("Save")}</button>}
+      />
+    </div>
+  );
+}
+
+function ApplicationNotFound({ onBack }: { onBack: () => void }) {
+  const t = useOptionalTranslate();
+  return (
+    <div className="application-page">
+      <SettingsCrumb pinned onClick={onBack}>{t("API")}</SettingsCrumb>
+      <PageTitle>{t("Application not found")}</PageTitle>
+    </div>
+  );
+}
+
+/**
+ * The reference app's OAuth application page (Settings › API › <app>): icon, name, "Created <date> by <member>" and the menu;
+ * the developer, description, redirect URIs and availability; OAuth credentials. Webhook delivery failures and
+ * directory sync requests (Flow additions) follow when there are any.
+ */
+export function ApplicationDetailsPage({
+  data,
+  applicationId,
+  onReload,
+  onBack,
+}: {
+  data: BootstrapData;
+  applicationId: string;
+  onReload: () => Promise<void>;
+  onBack: () => void;
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { t, formatDate } = useI18n();
+  const app = data.oauthApplications.find((item) => item.id === applicationId);
+  const [failures, setFailures] = useState<WebhookFailureEvent[]>([]);
+  const [syncGroups, setSyncGroups] = useState<OAuthSyncGroupRequest[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [webhookSecret, setWebhookSecret] = useState(() => (location.state as { webhookSecret?: string } | null)?.webhookSecret ?? "");
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([fetchOAuthApplicationFailures(applicationId), fetchOAuthSyncGroupRequests(applicationId)])
+      .then(([nextFailures, nextGroups]) => {
+        if (cancelled) return;
+        setFailures(nextFailures);
+        setSyncGroups(nextGroups);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationId]);
+
+  if (!app) return <ApplicationNotFound onBack={onBack} />;
+
+  const creator = data.users.find((user) => user.id === app.creatorId);
+  const pendingGroups = syncGroups.filter((item) => item.status === "pending");
+  const workspace = data.workspace.urlKey;
+
+  const downloadManifest = async () => {
     try {
       const manifest = await exportOAuthApplicationManifest(app.id);
-      const text = JSON.stringify(manifest, null, 2);
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch {
-        // Clipboard access is optional; the file download below still happens.
-      }
-      const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      const url = URL.createObjectURL(new Blob([JSON.stringify(manifest, null, 2)], { type: "application/json" }));
       const link = document.createElement("a");
       link.href = url;
       link.download = manifestFileName(app.name);
       link.click();
       URL.revokeObjectURL(url);
-      toast.success(t("Manifest exported and copied"));
     } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : t("Could not export manifest"),
-      );
+      toast.error(error instanceof Error ? error.message : t("Could not export manifest"));
+    }
+  };
+  const rotateWebhookSecret = async () => {
+    if (!(await confirmAction(t("Rotate the webhook signing secret?"), { description: t("You cannot undo this action."), confirmLabel: t("Rotate") }))) return;
+    try {
+      const next = await rotateApplicationWebhookSecret(app.id);
+      setWebhookSecret(next.secret ?? "");
+      await onReload();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("Could not rotate secret"));
     }
   };
 
   return (
     <div className="application-page">
-      <ApplicationHeader
-        app={{ ...app, name: state.name || app.name, logoUrl: state.iconUrl || app.logoUrl }}
-        eyebrow="Edit application"
-        actions={
-          <>
-            <ActionButton onClick={() => void exportManifest()}>
-              <Download size={14} />
-              Export manifest
-            </ActionButton>
-            <ActionButton onClick={() => setImporting(true)}>
-              <Upload size={14} />
-              Import manifest
-            </ActionButton>
-            <ActionButton onClick={onBack}>Cancel</ActionButton>
-            <ActionButton primary disabled={busy || !state.name.trim()} onClick={() => void save()}>
-              Save
-            </ActionButton>
-          </>
-        }
-      />
-      <ManifestIssues issues={issues} />
+      <SettingsCrumb pinned onClick={onBack}>{t("API")}</SettingsCrumb>
+      <header className="oauth-app-page-header">
+        <OAuthAppAvatar logoUrl={app.logoUrl} size={48} />
+        <div className="oauth-app-page-header-copy">
+          <h1 data-i18n-ignore>{app.name}</h1>
+          <p data-i18n-ignore>
+            {fillNodes(t(creator ? "Created {date} by {member}" : "Created {date}"), {
+              date: formatDate(app.createdAt, { month: "short", day: "numeric", year: "numeric" }),
+              member: <strong key="member">{creator?.displayName || creator?.name}</strong>,
+            })}
+          </p>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger className="oauth-app-icon-button is-small" aria-label={t("Open menu")}>
+            <MoreHorizontal aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" sideOffset={4} className="oauth-app-menu">
+            <DropdownMenuItem onSelect={() => navigate(applicationEditPath(workspace, app.id))}><Pencil aria-hidden="true" />{t("Edit application")}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void downloadManifest()}><Download aria-hidden="true" />{t("Download manifest")}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setImporting(true)}><Upload aria-hidden="true" />{t("Import manifest…")}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setDeleting(true)}><Trash2 aria-hidden="true" />{t("Delete application")}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => navigate(installedApplicationPath(workspace, app.clientId))}><LayoutGrid aria-hidden="true" />{t("View in workspace")}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+      <Section className="oauth-app-section">
+        <Row title={t("Developer")} description={<span data-i18n-ignore>{[app.developerName, app.developerUrl].filter(Boolean).join(" · ") || "—"}</span>} />
+        {app.description && <Row title={t("Description")} description={<span data-i18n-ignore>{app.description}</span>} />}
+        <Row title={t("Redirect URIs")} description={<span className="oauth-app-mono" data-i18n-ignore>{app.redirectUris.join("\n") || "—"}</span>} />
+        <Row title={t("Availability")} description={app.publicEnabled ? t("Public to all workspaces") : t("Private to this workspace")} />
+      </Section>
       {webhookSecret && <ClientSecretNotice kind="webhook" secret={webhookSecret} />}
-      <ApplicationFormFields state={state} onChange={setState} disabled={busy} />
-      <Section title="Linked webhooks">
-        <div className="application-webhook-grid">
-          {linkedWebhooks.map((item) => (
-            <WebhookCard
-              key={item.id}
-              webhook={item}
-              onReload={onReload}
-            />
+      <ApplicationCredentials app={app} onReload={onReload} />
+      {app.webhookEnabled && (
+        <Section className="oauth-app-section" title={t("Webhook")} description={t("Every workspace that installs the application receives these events, signed with the webhook signing secret.")}>
+          <Row title={t("Webhook URL")} description={<span className="oauth-app-mono" data-i18n-ignore>{app.webhookUrl}</span>} />
+          <Row title={t("Webhook signing secret")} description={<span className="oauth-app-mono oauth-app-secret" data-i18n-ignore>{app.webhookSecretPrefix ? `${app.webhookSecretPrefix}••••••••` : "••••••••••••••••"}</span>}>
+            <FlowTooltip label={t("Rotate secret")}>
+              <button type="button" className="oauth-app-icon-button" aria-label={t("Rotate webhook signing secret")} onClick={() => void rotateWebhookSecret()}><RefreshCw aria-hidden="true" /></button>
+            </FlowTooltip>
+          </Row>
+        </Section>
+      )}
+      {failures.length > 0 && (
+        <Section className="oauth-app-section" title={t("Delivery failures")}>
+          {failures.map((item) => (
+            <Row key={item.id} title={<span data-i18n-ignore>{item.executionId}</span>} description={<span data-i18n-ignore>{`${item.url} · ${item.httpStatus ?? "—"} · ${item.responseOrError.slice(0, 120)}`}</span>} />
           ))}
-          {!linkedWebhooks.length && (
-            <div className="settings-empty compact">
-              <Radio size={22} />
-              <h3>No webhooks for this application</h3>
-              <p>Attach HTTPS endpoints to receive workspace events.</p>
-            </div>
-          )}
-        </div>
-        <div className="settings-section-action">
-          <ActionButton
-            onClick={() =>
-              navigate(webhookSettingsPath(data.workspace.urlKey, "new"))
-            }
-          >
-            <Plus size={14} />
-            New webhook
-          </ActionButton>
-        </div>
-      </Section>
-      <Section title="Danger zone">
-        <Row
-          title="Delete application"
-          description="Revokes the client credentials immediately."
-        >
-          <ActionButton
-            danger
-            onClick={() =>
-              void deleteOAuthApplication(app.id).then(async () => {
-                await onReload();
-                onBack();
-              })
-            }
-          >
-            Delete
-          </ActionButton>
-        </Row>
-      </Section>
+        </Section>
+      )}
+      {pendingGroups.length > 0 && (
+        <Section className="oauth-app-section" title={t("Sync group requests")}>
+          {pendingGroups.map((item) => (
+            <Row key={item.id} title={<span data-i18n-ignore>{item.groupName}</span>} description={t("Requested {date}").replace("{date}", formatDate(item.createdAt, { month: "short", day: "numeric", year: "numeric" }))}>
+              <div className="oauth-app-actions">
+                {(["approved", "denied"] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    className={`oauth-app-button${status === "approved" ? " is-primary" : " is-ghost"}`}
+                    onClick={() =>
+                      void decideOAuthSyncGroupRequest(app.id, item.id, { status })
+                        .then(async () => {
+                          setSyncGroups((current) => current.map((entry) => (entry.id === item.id ? { ...entry, status } : entry)));
+                          await onReload();
+                        })
+                        .catch((error) => toast.error(error instanceof Error ? error.message : t("Could not update request")))
+                    }
+                  >
+                    {t(status === "approved" ? "Approve" : "Deny")}
+                  </button>
+                ))}
+              </div>
+            </Row>
+          ))}
+        </Section>
+      )}
       <ManifestImportDialog
         open={importing}
         onClose={() => setImporting(false)}
         applyLabel={t("Validate & save")}
-        onApply={async (manifest, valid, found) => {
-          setIssues(found);
+        onApply={async (manifest, valid) => {
           if (!valid) return false;
-          const saved = await save(manifest);
-          return saved ? undefined : false;
+          try {
+            const merged = manifestFromFormState(applyManifestToForm(formStateFromApplication(app), manifest));
+            const saved = await updateOAuthApplicationFromManifest(app.id, merged);
+            if (saved?.webhookSecret) setWebhookSecret(saved.webhookSecret);
+            await onReload();
+            toast.success(t("Application saved"));
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : t("Could not save application"));
+            return false;
+          }
+        }}
+      />
+      <TypedConfirmDialog
+        open={deleting}
+        title={t('Delete the application "{name}"?').replace("{name}", app.name)}
+        description={t("You cannot undo this action.")}
+        value={app.name}
+        confirmLabel={t("Delete")}
+        onClose={() => setDeleting(false)}
+        onConfirm={async () => {
+          try {
+            await deleteOAuthApplication(app.id);
+            await onReload();
+            navigate(settingsPath(workspace, "api"));
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : t("Could not delete application"));
+          }
         }}
       />
     </div>
   );
 }
 
-function WebhookCard({
-  webhook,
-  onReload,
+/** The reference app's destructive confirmation that asks to type the item's name ("To confirm, type <name> below:"). */
+export function TypedConfirmDialog({
+  open,
+  title,
+  description,
+  value,
+  confirmLabel,
+  onClose,
+  onConfirm,
 }: {
-  webhook: Webhook;
-  onReload: () => Promise<void>;
+  open: boolean;
+  title: string;
+  description: string;
+  value: string;
+  confirmLabel: string;
+  onClose: () => void;
+  onConfirm: () => Promise<void>;
 }) {
+  const t = useOptionalTranslate();
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const matches = typed.trim() === value.trim();
+  const close = () => {
+    if (busy) return;
+    setTyped("");
+    onClose();
+  };
+  const confirm = async () => {
+    if (!matches || busy) return;
+    setBusy(true);
+    try {
+      await onConfirm();
+      setTyped("");
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const [before, after = ""] = t("To confirm, type {name} below:").split("{name}");
   return (
-    <div className="application-webhook-card">
-      <div>
-        <strong data-i18n-ignore>{webhook.name}</strong>
-        <p data-i18n-ignore>{webhook.url}</p>
-        <small>{webhook.resourceTypes.join(", ") || "all resources"}</small>
-      </div>
-      <Toggle
-        label={`${webhook.name} enabled`}
-        checked={webhook.enabled}
-        onChange={(value) =>
-          void updateWebhook(webhook.id, { enabled: value }).then(onReload)
-        }
-      />
-    </div>
+    <Dialog open={open} onOpenChange={(next) => !next && close()}>
+      <DialogContent className="action-dialog" overlayClassName="action-dialog-overlay" aria-describedby={undefined} closeLabel={t("Close")}>
+        <DialogTitle data-i18n-ignore>{title}</DialogTitle>
+        <p>{description}</p>
+        <p className="oauth-app-confirm-label" data-i18n-ignore>{before}<strong>{value}</strong>{after}</p>
+        <input aria-label={t("Application name")} value={typed} autoFocus onChange={(event) => setTyped(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void confirm(); } }} />
+        <footer>
+          <button type="button" onClick={close}>{t("Cancel")}</button>
+          <button type="button" className="danger" disabled={!matches || busy} onClick={() => void confirm()}>{confirmLabel}</button>
+        </footer>
+      </DialogContent>
+    </Dialog>
   );
 }

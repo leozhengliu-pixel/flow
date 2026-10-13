@@ -1,0 +1,125 @@
+/*
+ * The text-selection toolbar (selection-toolbar.tsx), measured from the reference app (dark / light):
+ * 34px inside a .5px border, radius 8, 4px padding; a 42px text-style button, then 26px buttons 6px apart;
+ * one 1×16px hairline (7px before, 2px + 6px after) ahead of the selection actions.
+ * Glyphs are 16px in the muted icon colour; hover, pressed (an active mark) and open-menu states raise the
+ * glyph to the strong colour over a soft fill. Disabled buttons (bold and lists inside a heading) fade to 50%.
+ */
+.selection-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border: .5px solid var(--selection-toolbar-border);
+  border-radius: 8px;
+  background: var(--selection-toolbar-bg);
+  box-shadow: var(--selection-toolbar-shadow);
+  max-width: calc(100vw - 16px);
+}
+.selection-toolbar-item {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+.selection-toolbar-item + .selection-toolbar-item,
+.selection-toolbar-separator + .selection-toolbar-item { margin-left: 6px; }
+.selection-toolbar-button {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--selection-toolbar-icon);
+  cursor: default;
+}
+.selection-toolbar-button--menu { width: 42px; }
+.selection-toolbar-button svg { flex: none; }
+.selection-toolbar-button:hover,
+.selection-toolbar-button:focus-visible { background: var(--selection-toolbar-hover-bg); color: var(--selection-toolbar-icon-strong); }
+.selection-toolbar-button[aria-pressed="true"],
+.selection-toolbar-button[aria-expanded="true"] { background: var(--selection-toolbar-pressed-bg); color: var(--selection-toolbar-icon-strong); }
+.selection-toolbar-button[aria-pressed="true"]:hover,
+.selection-toolbar-button[aria-expanded="true"]:hover { background: var(--selection-toolbar-hover-bg); }
+.selection-toolbar-button[aria-disabled="true"] { opacity: .5; }
+.selection-toolbar-button[aria-disabled="true"]:hover { background: transparent; color: var(--selection-toolbar-icon); }
+.selection-toolbar-separator {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px 0 7px;
+  border-left: 1px solid var(--selection-toolbar-separator);
+  box-sizing: border-box;
+}
+
+/* Text-style and list menus: 200px, 4px padding, 28px rows; open below the toolbar, or above it near the viewport's bottom. */
+.selection-menu {
+  position: absolute;
+  z-index: 680;
+  left: -6px;
+  top: calc(100% + 8px);
+  width: 200px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: .5px solid var(--selection-menu-border);
+  border-radius: 8px;
+  background: var(--selection-menu-bg);
+  box-shadow: var(--selection-menu-shadow);
+}
+.selection-menu[data-side="top"] { top: auto; bottom: calc(100% + 8px); }
+.selection-menu > button {
+  height: 28px;
+  flex: none;
+  display: grid;
+  align-items: center;
+  column-gap: 8px;
+  padding: 0 8px;
+  border: .5px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--selection-menu-text);
+  font: 500 13px / normal var(--font);
+  text-align: left;
+  cursor: default;
+}
+.selection-menu > button:hover,
+.selection-menu > button:focus-visible { background: var(--selection-menu-hover-bg); color: var(--selection-menu-hover-text); }
+.selection-menu-label { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.selection-menu-check { width: 12px; height: 12px; display: flex; color: var(--selection-menu-check); }
+.selection-menu-keys { display: flex; gap: 3px; margin-left: -4px; }
+.selection-menu-keys kbd {
+  min-width: 20px;
+  height: 21px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: .5px solid var(--selection-menu-key-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--selection-menu-key);
+  font: 500 11px / 12px var(--font);
+}
+
+/* Text style: label, check, keys; the label previews the block (Regular text 12/450, headings 15 → 12px semibold). */
+.selection-menu > button[data-block] { grid-template-columns: minmax(0, 1fr) 12px auto; }
+.selection-menu > button[data-block] .selection-menu-label { color: var(--selection-menu-label); font-size: 12px; font-weight: 450; line-height: 23px; }
+.selection-menu > button[data-block="h1"] .selection-menu-label { font-size: 15px; font-weight: 600; }
+.selection-menu > button[data-block="h2"] .selection-menu-label { font-size: 14px; font-weight: 600; }
+.selection-menu > button[data-block="h3"] .selection-menu-label { font-size: 13px; font-weight: 600; }
+.selection-menu > button[data-block="h4"] .selection-menu-label { font-size: 12px; font-weight: 600; }
+
+/* Lists: glyph, label, check. */
+.selection-menu > button[data-list] { grid-template-columns: 16px minmax(0, 1fr) 12px; padding-right: 12px; }
+
+@media (max-width: 640px) {
+  .selection-toolbar { flex-wrap: wrap; row-gap: 4px; }
+}

@@ -15,8 +15,9 @@ import (
 // userOAuthScopes are the scopes an actor=user authorization may request:
 // The reference app's user scopes (read, write, issues:create, comments:create,
 // timeSchedule:write, admin), Flow's identity scopes and the resource scopes
-// applications share with users. app:* scopes are only meaningful with
-// actor=app and are dropped from user requests.
+// applications share with users. app:* scopes are only valid with actor=app:
+// registered applications asking for them otherwise are rejected (as the reference app
+// does) and public MCP clients have them dropped.
 var userOAuthScopes = append(slices.Clone(supportedOAuthScopes), "admin", "timeSchedule:write")
 
 // oauthRequestError carries an RFC 6749 error code with its description.
@@ -83,11 +84,18 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 	if err != nil {
 		var ok bool
 		if client, ok = s.store.OAuthApplicationClient(request.ClientID); !ok {
-			return client, nil, oauthRequestError{Code: "invalid_client", Description: "unknown OAuth client"}
+			// The reference app's wording for an unknown client_id.
+			return client, nil, oauthRequestError{Code: "invalid_client", Description: fmt.Sprintf("Could not find OAuth client with clientId %s. Please check that you are logged into the correct workspace.", request.ClientID)}
 		}
 	}
-	if request.ResponseType != "code" || !store.OAuthRedirectURIAllowed(client.RedirectURIs, request.RedirectURI) {
-		return client, nil, oauthInvalidRequest("response type or redirect URI is invalid")
+	if strings.TrimSpace(request.RedirectURI) == "" {
+		return client, nil, oauthInvalidRequest("Invalid parameters. Make sure to include `redirect_uri`")
+	}
+	if request.ResponseType != "code" {
+		return client, nil, oauthInvalidRequest("Invalid or missing `response_type`. Expected `response_type=code`")
+	}
+	if !store.OAuthRedirectURIAllowed(client.RedirectURIs, request.RedirectURI) {
+		return client, nil, oauthInvalidRequest("Invalid redirect_uri parameter for the application.")
 	}
 	switch request.Prompt {
 	case "", "consent", "login", "select_account":
@@ -114,14 +122,25 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 		if slices.Contains(scopes, "email") || slices.Contains(scopes, "openid") || slices.Contains(scopes, "timeSchedule:write") {
 			return client, nil, oauthInvalidScope("app authorization cannot request personal identity scopes")
 		}
+		if bad := slices.IndexFunc(scopes, func(scope string) bool { return !slices.Contains(domain.ApplicationScopes(), scope) }); bad >= 0 {
+			return client, nil, oauthInvalidScope("Invalid scope: %s", scopes[bad])
+		}
 		scopes, err = domain.NormalizeApplicationScopes(scopes)
 		if err != nil {
 			return client, nil, oauthInvalidScope("%s", err.Error())
 		}
 	} else {
-		scopes = slices.DeleteFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") })
+		// Like the reference app, a registered application asking for app:* scopes
+		// without actor=app is an error. MCP clients (public, dynamically
+		// registered) request every advertised scope, so theirs are dropped.
+		if slices.ContainsFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") }) {
+			if confidentialOAuthClient(client) {
+				return client, nil, oauthInvalidScope("The scopes requested are not valid for this actor mode.")
+			}
+			scopes = slices.DeleteFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") })
+		}
 		if bad := slices.IndexFunc(scopes, func(scope string) bool { return !slices.Contains(userOAuthScopes, scope) }); bad >= 0 {
-			return client, nil, oauthInvalidScope("unsupported scope: %s", scopes[bad])
+			return client, nil, oauthInvalidScope("Invalid scope: %s", scopes[bad])
 		}
 		if slices.Contains(scopes, "admin") && (!confidentialOAuthClient(client) || !slices.Contains(client.AllowedScopes, "admin")) {
 			return client, nil, oauthInvalidScope("the admin scope requires a registered application configured with admin")

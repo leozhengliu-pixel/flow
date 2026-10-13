@@ -24,7 +24,6 @@ import { NewProjectDialog, type NewProjectDraft } from '@/components/projects-pa
 import { projectPeopleChoices } from '@/components/projects-page/project-people'
 import { projectLabelOptions } from '@/components/property/project-label-menu-model'
 import type { ProjectCreateInput, ProjectMutationInput } from '@/components/projects-page/projects-page'
-import { usePageAgentSidebarOpen } from '@/components/agent/use-page-agent-sidebar-open'
 import type { BootstrapData, Draft, FlowDocument, Initiative, InitiativeMutationInput, InitiativeResource, InitiativeUpdate, Invitation, IssueLabel, LabelGroup, PersonalAgentSkill, Presence, Project, ProjectStatus, ProjectTemplate, ProjectUpdate, SavedView, SavedViewMutationInput, Team, User } from '@/types/flow'
 import { initiativePath, type InitiativeRouteTab } from '@/lib/app-routes'
 import { useEntityDescriptionSelectionActions } from '@/components/detail/description-selection-actions'
@@ -135,7 +134,7 @@ export function InitiativeDetailPage(props: Props) {
   }, [props.presence, props.viewer.active, props.viewer.id])
   const peopleChoices = useMemo(() => projectPeopleChoices(props.users, props.invitations, onlineUserIds), [onlineUserIds, props.invitations, props.users])
   const [detailsOpen, setDetailsOpen] = useStoredBoolean(`flow:initiative:${initiative.id}:details`, false)
-  const [agentOpen, setAgentOpen] = usePageAgentSidebarOpen(`initiative:${initiative.id}`, false)
+  const [agentOpen, setAgentOpen] = useState(false)
   const [updatesOpen, setUpdatesOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [projectCreateOpen, setProjectCreateOpen] = useState(false)
@@ -214,16 +213,10 @@ export function InitiativeDetailPage(props: Props) {
     <div className="li-detail-toolbar"><nav>{(['overview', 'activity', 'projects'] as InitiativeRouteTab[]).map(item => <a aria-current={tab === item ? 'page' : undefined} href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/${item}`)} key={item} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); onTabChange(item) }}>{titleCase(item)}</a>)}{storedViews.map(view => <ContextMenu.Root key={view.id}><ContextMenu.Trigger asChild><a aria-current={activeView?.id === view.id ? 'page' : undefined} aria-label={view.name} className="li-saved-view-tab" data-i18n-ignore href={location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); props.onOpenView(view.slugId) }}><ViewGlyph color={view.color} icon={view.icon}/><span>{view.name}</span></a></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content data-flow-motion="floating" className="li-menu li-saved-view-menu"><ContextMenu.Item onSelect={() => void navigator.clipboard.writeText(`${location.origin}${location.pathname.replace(/\/(overview|activity|projects|view\/[^/]+)$/, `/view/${view.slugId}`)}`)}><Copy size={14}/>Copy link</ContextMenu.Item><ContextMenu.Item onSelect={() => void updateStoredView({ ...view, favorite: !view.favorite })}><Star fill={view.favorite ? 'currentColor' : 'none'} size={14}/>{view.favorite ? 'Unfavorite' : 'Favorite'}</ContextMenu.Item><ContextMenu.Separator/><ContextMenu.Item onSelect={() => setEditingView(view)}><Edit3 size={14}/>Edit…</ContextMenu.Item><ContextMenu.Item onSelect={() => void duplicateStoredView(view)}><Copy size={14}/>Duplicate…</ContextMenu.Item><ContextMenu.Item className="danger" onSelect={() => setDeletingView(view)}><Trash2 size={14}/>Delete</ContextMenu.Item></ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>)}{tab === 'new' ? <a aria-current="page" className="li-new-view-tab" href={location.pathname}><ViewGlyph color="#8a8f98" icon="CustomView"/><span>New view</span><Edit3 size={11}/></a> : <button aria-label="Add new view" onClick={() => onTabChange('new')} type="button"><ViewGlyph color="#8a8f98" icon="CustomView"/></button>}</nav><div>
       {tab === 'activity' && <ActivityDisplayMenu value={activityDisplay} onChange={setActivityDisplay}/>} 
       {(tab === 'projects' || tab === 'view') && <><RoadmapFilterMenu health={roadmapHealth} query={roadmapQuery} onHealth={changeRoadmapHealth} onQuery={changeRoadmapQuery}/><RoadmapDisplayMenu properties={roadmapProperties} onChange={changeRoadmapProperties}/></>}
+      {/* Like the reference app, no docked agent here: the agent is the floating chat (bottom-right Agent, with this initiative as context). */}
       <InitiativePageChromeActions
         agentOpen={agentOpen}
         updatesOpen={updatesOpen}
-        onToggleAgent={() => {
-          setAgentOpen(open => {
-            const next = !open
-            if (next) setDetailsOpen(false)
-            return next
-          })
-        }}
         onToggleUpdates={() => setUpdatesOpen(open => !open)}
       />
       <button aria-expanded={detailsOpen && !agentOpen} aria-label={detailsOpen && !agentOpen ? 'Close Initiative details' : 'Open Initiative details'} onClick={() => { setAgentOpen(false); setDetailsOpen(open => !open) }} title={`${detailsOpen && !agentOpen ? 'Close' : 'Open'} Initiative details (⌘I)`} type="button">{detailsOpen && !agentOpen ? <PanelRightClose size={15}/> : <PanelRightOpen size={15}/>}</button>

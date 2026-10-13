@@ -62,6 +62,23 @@ application for the same (or broader) scopes, with `actor=user`, is sent
 straight back to the callback with a new code. Public clients and `actor=app`
 installs always show the consent screen.
 
+The consent screen: a workspace switcher in the corner,
+"<App> is requesting access · Authenticating with your <workspace> workspace",
+the requested permissions (`write` hides the narrower `issues:create`,
+`comments:create` and `timeSchedule:write`), team access for `actor=app`
+installs ("All public teams" or "Only select teams…"), and Cancel / Authorize.
+An invalid request shows Flow's mark and the error description instead, with
+The reference app's wording:
+
+| Problem | `error` | Description |
+| --- | --- | --- |
+| Unknown `client_id` | `invalid_client` | Could not find OAuth client with clientId `<id>`. Please check that you are logged into the correct workspace. |
+| No `redirect_uri` | `invalid_request` | Invalid parameters. Make sure to include \`redirect_uri\` |
+| `response_type` missing or not `code` | `invalid_request` | Invalid or missing \`response_type\`. Expected \`response_type=code\` |
+| `redirect_uri` not registered | `invalid_request` | Invalid redirect_uri parameter for the application. |
+| Unknown scope | `invalid_scope` | Invalid scope: `<scope>` |
+| `app:*` scope without `actor=app` (registered applications) | `invalid_scope` | The scopes requested are not valid for this actor mode. |
+
 ### 2. Handle the callback
 
 ```http
@@ -69,7 +86,7 @@ GET https://app.example.com/oauth/callback?code=flow_code_...&state=RANDOM_STATE
 ```
 
 If the person cancels, the callback receives `error=access_denied` and the
-`state`. Codes are single-use and expire after 10 minutes.
+`state` (no `error_description`). Codes are single-use and expire after 10 minutes.
 
 ### 3. Exchange the code
 
@@ -218,8 +235,9 @@ chooses its teams; the application gets its own app user, and everything it
 creates is attributed to that app user rather than to the installer. Use it for
 agents and service accounts. `admin` cannot be requested with `actor=app`
 (`invalid_scope`), and neither can the personal `openid` / `email` scopes.
-Agent scopes (`app:assignable`, `app:mentionable`) require `actor=app` and are
-dropped from user authorizations.
+Agent scopes (`app:assignable`, `app:mentionable`) require `actor=app`: a
+registered application that requests them without it gets `invalid_scope`
+(public MCP clients, which request every advertised scope, have them dropped).
 
 ## Scopes
 
@@ -230,7 +248,7 @@ dropped from user authorizations.
 | `issues:create` (`create_issues`) | yes | yes | Create and update issues and their attachments. |
 | `comments:create` (`create_comments`) | yes | yes | Create issue comments. |
 | `timeSchedule:write` | yes | no | Accepted for the reference app compatibility; Flow has no time schedule API, so it grants nothing. |
-| `admin` | yes, if configured | **no** | Admin-level endpoints, only when the person is an admin. The application must list `admin` in its configured scopes; public clients cannot request it. |
+| `admin` | yes, if configured | **no** | Admin-level endpoints, only when the person is an admin. The application must list `admin` in its configured scopes (applications created on the settings page can request every scope); public clients cannot request it. |
 | `app:assignable`, `app:mentionable` | no | yes | Agent delegation and mentions. |
 | `customer:read`, `customer:write`, `initiative:read`, `initiative:write`, `release:read`, `release:create`, `releaseStage:update` | yes | yes | Resource-specific access. |
 | `openid`, `email` | yes (public/MCP clients) | no | Identity of the signed-in person. |
@@ -282,7 +300,7 @@ Token, revocation and introspection endpoints return RFC 6749 errors:
 | `invalid_request` | 400 | Missing or malformed parameter, two client authentication methods, unsupported `prompt`, missing PKCE for a public client |
 | `invalid_client` | 401 | Unknown client, wrong secret, Basic credentials for a public client, or a token issued to another client (`WWW-Authenticate: Basic` when Basic was used) |
 | `invalid_grant` | 400 | Code or refresh token invalid, expired, already used outside the grace period, revoked, wrong `redirect_uri` or `code_verifier`, or a secret-only grant redeemed without the secret |
-| `invalid_scope` | 400 | Unsupported scope, scope not configured on the application, `admin` with `actor=app` |
+| `invalid_scope` | 400 | Unsupported scope, scope not configured on the application, `admin` with `actor=app`, `app:*` scopes without `actor=app` |
 | `unauthorized_client` | 400 | Client credentials not enabled for the application |
 | `unsupported_grant_type` | 400 | Grant other than `authorization_code`, `refresh_token`, `client_credentials` |
 | `unsupported_token_type` | 400 | Unknown `token_type_hint` on revocation |
@@ -327,7 +345,7 @@ reproducibly, review them in code, or link people to a pre-filled setup page.
 | `display.iconUrl` | Absolute HTTPS URL; at least 256×256 px recommended. |
 | `developer.name` | Required, 2–80 characters. |
 | `oauth.client_name` | Required, 2–80 characters, must not contain "Flow" or a URL. |
-| `oauth.client_uri` | Required, absolute HTTP(S) homepage or documentation URL. |
+| `oauth.client_uri` | Absolute HTTP(S) homepage or documentation URL. Required for public applications (`distribution: "public"`). |
 | `oauth.redirect_uris` | Required, 1–32 unique URIs (HTTPS, or HTTP on loopback). |
 | `oauth.grant_types` | `authorization_code` (required, default) and optionally `client_credentials`. |
 | `oauth.scopes` | *Flow extension.* Scopes the application may request (default `read`). |
@@ -356,18 +374,20 @@ Invalid manifests return `400` with `{"error": "...", "issues": [...]}`.
 
 ### Pre-filled setup links
 
-Link people to `/<workspace>/settings/applications/new` with either a
+Link people to `/<workspace>/settings/api/applications/new` with either a
 `manifest` query parameter containing the URL-encoded JSON, or the reference app's
 dot-notation parameters: `distribution`, `display.description`,
 `display.iconUrl`, `developer.name`, `oauth.client_name`, `oauth.client_uri`,
 `oauth.redirect_uris` (repeat), `oauth.grant_types` (repeat), `webhook.enabled`,
 `webhook.url`, `webhook.resourceTypes` (repeat). `manifest` wins when both are
-present, and unsupported parameters are ignored. The page also imports and
-exports manifest files, and an application's edit page saves through
-`PUT .../manifest`.
+present, and unsupported parameters are ignored. An application's page
+(`/<workspace>/settings/api/applications/<id>`) downloads its manifest and
+imports one from its menu, and its edit page saves through `PUT .../manifest`.
+Turning Webhooks off on the form leaves the `webhook` block out of the
+manifest, which clears the application's webhook.
 
 ```text
-/acme/settings/applications/new?developer.name=Acme&oauth.client_name=Acme+Agent
+/acme/settings/api/applications/new?developer.name=Acme&oauth.client_name=Acme+Agent
   &oauth.client_uri=https%3A%2F%2Facme.dev&oauth.redirect_uris=https%3A%2F%2Facme.dev%2Fcallback
 ```
 
@@ -375,3 +395,30 @@ The webhook block configures the application-level webhook (the same settings
 as `PUT /api/oauth-applications/{id}/webhook`). Every save reconciles the
 managed webhook in each workspace that installed or authorized the
 application: it is created, updated or removed to match the manifest.
+
+## Settings pages
+
+Flow's settings follow the reference app's:
+
+- **Settings › API › OAuth applications** lists the workspace's applications
+  ("N OAuth applications", each with its icon and "Updated <date>") and
+  creates them at `/<workspace>/settings/api/applications/new`. An
+  application's page (`…/api/applications/<id>`) shows the developer,
+  description, redirect URIs and availability, then **OAuth credentials**:
+  the client ID, the client secret (masked; copy reads it from
+  `GET /api/oauth-applications/{id}/client-secret`, rotate asks first) and
+  "Create & copy token". Its menu edits, downloads the manifest, deletes (type
+  the name to confirm) or opens the application in the workspace. The icon
+  picker uploads to `POST /api/oauth-applications/icon`; the returned
+  `/uploads/oauth_app_icon_…` URL is accepted as `display.iconUrl`.
+- **Settings › Applications** lists every application members authorized
+  ("Authorized by N members") or installed as an app user. Admins load it from
+  `GET /api/oauth/authorized-applications`, which includes every member's
+  active authorizations. An application's page
+  (`/<workspace>/settings/applications/<client_id>`) shows its permissions,
+  the authorizing members and, for `actor=app` installs, the app user with its
+  team access. **Revoke access** revokes every member's tokens (owners and
+  admins may revoke other members' authorizations with
+  `DELETE /api/oauth/authorizations/{id}`); the app user's own menu removes the
+  installation.
+

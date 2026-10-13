@@ -1,0 +1,205 @@
+/* Bottom-right "Chat history" popover, measured against the reference: 383px wide, 12px radius, bottom edge 4px above the button. */
+.popover {
+  position: fixed;
+  right: 10px;
+  bottom: 40px;
+  z-index: 910;
+  box-sizing: border-box;
+  width: 383px;
+  min-width: 382px;
+  max-width: calc(100vw - 20px);
+  max-height: calc(100vh - 150px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0.5px solid var(--agent-chat-history-border);
+  border-radius: 12px;
+  background: var(--agent-chat-history-bg);
+  box-shadow: var(--agent-chat-history-shadow);
+  color: var(--agent-chat-history-text);
+  font-size: 13px;
+  font-weight: 450;
+  transform-origin: right bottom;
+  animation: popoverIn 0.15s ease-out;
+}
+@keyframes popoverIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .popover {
+    animation: none;
+  }
+}
+.header {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  height: 37px;
+  padding: 0 12px 0 14px;
+  border-bottom: 0.5px solid var(--agent-chat-history-divider);
+}
+.header form {
+  position: relative;
+  display: grid;
+  margin: 0;
+}
+.input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  margin: 0;
+  padding: 10px 0 9px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--agent-chat-history-text);
+  caret-color: var(--agent-chat-history-caret);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  cursor: text;
+}
+/* Doubled class: outranks the global light-theme placeholder rule. */
+.popover .input.input::placeholder {
+  color: var(--agent-chat-history-muted);
+  opacity: 1;
+}
+.body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  scroll-padding-block: 24px;
+}
+.viewport::-webkit-scrollbar {
+  display: none;
+}
+.list {
+  padding-bottom: 6px;
+}
+.popover[data-flat] .list {
+  padding-top: 6px;
+}
+.section {
+  display: block;
+}
+.groupHeader {
+  padding: 8px 14px;
+  overflow: hidden;
+  color: var(--agent-chat-history-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: default;
+}
+.separator {
+  box-sizing: border-box;
+  height: 12px;
+  padding: 6px 0 5.5px;
+}
+.separator::before {
+  content: "";
+  display: block;
+  height: 0.5px;
+  background: var(--agent-chat-history-divider);
+}
+.row {
+  position: relative;
+  box-sizing: border-box;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px 0 14px;
+  color: var(--agent-chat-history-text);
+  cursor: default;
+}
+.rowBackground {
+  position: absolute;
+  inset: 0 6px;
+  border-radius: 8px;
+  background: transparent;
+  pointer-events: none;
+}
+.row[data-focused="true"] .rowBackground {
+  background: var(--agent-chat-history-hover);
+}
+.rowTitle {
+  position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding-left: 24px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rowTitleText {
+  min-width: 0;
+}
+.dot {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--agent-chat-history-dot);
+  transform: translateY(-50%);
+}
+.rowMeta {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  margin-left: 8px;
+  color: var(--agent-chat-history-faint);
+  line-height: 16px;
+  white-space: nowrap;
+}
+.empty {
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0 14px;
+  color: var(--agent-chat-history-faint);
+  cursor: default;
+}
+.fadeTop,
+.fadeBottom {
+  position: sticky;
+  z-index: 2;
+  height: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease-out;
+}
+.fadeTop {
+  top: -1px;
+  margin-bottom: -24px;
+  background: linear-gradient(var(--agent-chat-history-bg), transparent);
+}
+.fadeBottom {
+  bottom: -1px;
+  margin-top: -24px;
+  background: linear-gradient(to top, var(--agent-chat-history-bg), transparent);
+}
+.fadeTop[data-visible="true"],
+.fadeBottom[data-visible="true"] {
+  opacity: 1;
+}

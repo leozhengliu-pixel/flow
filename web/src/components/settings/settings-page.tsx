@@ -85,7 +85,6 @@ import {
   deleteIdentityProvider,
   disconnectIntegration,
   revokeAPIKey,
-  revokeOAuthAuthorization,
   inviteMembers,
   removeMember,
   resumeMember,
@@ -111,9 +110,6 @@ import { AgentCursorGlyph, AgentHistoryGlyph, AiBurstGlyph, LoopsGlyph } from '@
 import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import {
   apiKeysSettingsPath,
-  applicationEditPath,
-  applicationNewPath,
-  applicationSettingsPath,
   identityProviderSettingsPath,
   memberProfilePath,
   settingsPath,
@@ -121,7 +117,6 @@ import {
 } from "@/lib/app-routes";
 import { agentSkillsSettingsBackLink } from "@/lib/agent-skills-settings-back-link";
 import { useNavigate } from "react-router-dom";
-import { OAuthAppImage } from "./application-header";
 import type {
   APIKey,
   BootstrapData,
@@ -165,7 +160,8 @@ import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
 import { useSidebarCustomizationState } from "@/components/layout/sidebar-customization-state";
 import { agentWebAccessEnabled } from "@/lib/agent-web-access";
-import { InstalledApplicationsSection } from "./installed-applications-section";
+import { InstalledApplicationPage, InstalledApplicationsPage } from "./installed-applications-section";
+import { OAuthApplicationsSection } from "./oauth-applications-section";
 
 const TeamWorkflowSettings = lazyPage(
   () => import("./team-workflow-settings"),
@@ -1082,6 +1078,38 @@ function SettingsBodyContent(
   if (page === "members")
     return <MembersPageV2 data={props.data} onReload={props.onReload} />;
   if (page === "audit-log") return <AuditLogSettings data={props.data} />;
+  // OAuth application developer pages (Settings › API › New / <app> / <app>/edit, as the reference app routes them). The older
+  // /settings/applications/<id> links of a developer application still open its page.
+  const developerApplication =
+    props.applicationId && (page === "api" || (page === "applications" && (props.applicationId === "new" || props.applicationMode === "edit" || props.data.oauthApplications.some((item) => item.id === props.applicationId))))
+      ? props.applicationId
+      : "";
+  if (developerApplication === "new")
+    return (
+      <ApplicationCreatePage
+        data={props.data}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("api")}
+      />
+    );
+  if (developerApplication && props.applicationMode === "edit")
+    return (
+      <ApplicationEditPage
+        data={props.data}
+        applicationId={developerApplication}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("api")}
+      />
+    );
+  if (developerApplication)
+    return (
+      <ApplicationDetailsPage
+        data={props.data}
+        applicationId={developerApplication}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("api")}
+      />
+    );
   if (page === "api")
     return (
       <ApiPage
@@ -1092,34 +1120,10 @@ function SettingsBodyContent(
         onReload={props.onReload}
       />
     );
-  if (page === "applications" && props.applicationId === "new")
-    return (
-      <ApplicationCreatePage
-        data={props.data}
-        onReload={props.onReload}
-        onBack={() => props.onNavigate("api")}
-      />
-    );
-  if (page === "applications" && props.applicationId && props.applicationMode === "edit")
-    return (
-      <ApplicationEditPage
-        data={props.data}
-        applicationId={props.applicationId}
-        onReload={props.onReload}
-        onBack={() => props.onNavigate("applications")}
-      />
-    );
   if (page === "applications" && props.applicationId)
-    return (
-      <ApplicationDetailsPage
-        data={props.data}
-        applicationId={props.applicationId}
-        onReload={props.onReload}
-        onBack={() => props.onNavigate("applications")}
-      />
-    );
+    return <InstalledApplicationPage data={props.data} clientId={props.applicationId} onReload={props.onReload} />;
   if (page === "applications")
-    return <ApplicationsPage data={props.data} onReload={props.onReload} />;
+    return <InstalledApplicationsPage data={props.data} />;
   if (page === "import-export")
     return <ImportExportSettings data={props.data} onReload={props.onReload} />;
   if (page === "workflows")
@@ -3335,45 +3339,7 @@ function ApiPage({
       <PageTitle description="Flow’s API provides a programmable interface to your data. Use it to build public or private apps, workflows, and integrations for Flow.">
         API
       </PageTitle>
-      <Section title="OAuth applications" description="Manage your organization's OAuth applications.">
-        {data.oauthApplications.map((item) => (
-          <Row
-            key={item.id}
-            title={
-              <span className="settings-inline-title">
-                <OAuthAppImage app={item} size={22} />
-                <span data-i18n-ignore>{item.name}</span>
-              </span>
-            }
-            description={`${item.clientId} · ${item.scopes.join(", ")}`}
-          >
-            <div className="settings-inline-actions">
-              <ActionButton
-                onClick={() =>
-                  navigate(
-                    applicationSettingsPath(data.workspace.urlKey, item.id),
-                  )
-                }
-              >
-                Open
-              </ActionButton>
-              <ActionButton
-                onClick={() =>
-                  navigate(applicationEditPath(data.workspace.urlKey, item.id))
-                }
-              >
-                Edit
-              </ActionButton>
-            </div>
-          </Row>
-        ))}
-        <Row title={data.oauthApplications.length ? "" : "No OAuth applications"} className="settings-row--action">
-          <ActionButton onClick={() => navigate(applicationNewPath(data.workspace.urlKey))}>
-            <Plus size={14} />
-            New OAuth application
-          </ActionButton>
-        </Row>
-      </Section>
+      <OAuthApplicationsSection data={data} />
       <Section title="Webhooks" description="Webhooks allow you to receive HTTP requests when an entity is created, updated, or deleted.">
         {data.webhooks.map((item) => (
           <Row
@@ -3493,113 +3459,6 @@ function IssuedApiKeysPage({
           </Row>
         ))}
         {!keys.length && <Row title="No API keys" />}
-      </Section>
-    </>
-  );
-}
-function ApplicationsPage({
-  data,
-  onReload,
-}: {
-  data: BootstrapData;
-  onReload: () => Promise<void>;
-}) {
-  const navigate = useNavigate();
-  const authorizations = (data.oauthAuthorizations ?? []).filter(
-    (item) => !item.revokedAt,
-  );
-  const empty =
-    !data.integrationConnections.length &&
-    !authorizations.length &&
-    !data.oauthApplications.length;
-  return (
-    <>
-      <PageTitle description="Third-party applications authorized for this workspace.">
-        Applications
-      </PageTitle>
-      <Section title="Workspace OAuth applications">
-        {data.oauthApplications.map((item) => (
-          <Row
-            key={item.id}
-            title={
-              <span className="settings-inline-title">
-                <OAuthAppImage app={item} size={22} />
-                <span data-i18n-ignore>{item.name}</span>
-              </span>
-            }
-            description={`${item.clientId} · ${item.scopes.join(", ")}`}
-          >
-            <div className="settings-inline-actions">
-              <ActionButton
-                onClick={() =>
-                  navigate(
-                    applicationSettingsPath(data.workspace.urlKey, item.id),
-                  )
-                }
-              >
-                Open
-              </ActionButton>
-              <ActionButton
-                onClick={() =>
-                  navigate(applicationEditPath(data.workspace.urlKey, item.id))
-                }
-              >
-                Edit
-              </ActionButton>
-            </div>
-          </Row>
-        ))}
-        {!data.oauthApplications.length && (
-          <div className="settings-empty compact">
-            <AppWindow size={24} />
-            <h3>No OAuth applications</h3>
-            <p>Create developer applications from the API settings page.</p>
-          </div>
-        )}
-      </Section>
-      <InstalledApplicationsSection data={data} onReload={onReload} />
-      <Section title="Authorized applications">
-        {authorizations.map((item) => (
-          <Row
-            key={item.id}
-            title={item.clientName}
-            description={`MCP · ${item.scopes.join(", ")} · ${item.lastUsedAt ? `last used ${formatDate(item.lastUsedAt)}` : `authorized ${formatDate(item.createdAt)}`}`}
-          >
-            <ActionButton
-              danger
-              onClick={() =>
-                void revokeOAuthAuthorization(item.id).then(onReload)
-              }
-            >
-              Revoke access
-            </ActionButton>
-          </Row>
-        ))}
-        {data.integrationConnections.map((item) => (
-          <Row
-            key={item.id}
-            title={item.name}
-            description={`${title(item.provider)} · ${item.status}`}
-          >
-            <ActionButton
-              danger
-              onClick={() =>
-                void disconnectIntegration(item.provider).then(onReload)
-              }
-            >
-              Revoke access
-            </ActionButton>
-          </Row>
-        ))}
-        {empty && (
-          <div className="settings-empty">
-            <AppWindow size={28} />
-            <h3>No authorized applications</h3>
-            <p>
-              Applications authorized by workspace members will appear here.
-            </p>
-          </div>
-        )}
       </Section>
     </>
   );

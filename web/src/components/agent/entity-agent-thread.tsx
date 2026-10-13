@@ -30,6 +30,8 @@ import {
 import styles from './entity-agent-thread.module.css'
 import { AgentErrorDetail } from './agent-error-detail'
 import { GridLoader } from '@/components/ui/grid-loader'
+import { splitAgentQuote } from './agent-floating-request'
+import { AgentSelectedTextIcon } from './agent-icons'
 
 export type EntityAgentThreadProps = {
   messages: AgentMessage[]
@@ -78,6 +80,19 @@ export type EntityAgentThreadProps = {
   /** The saved chat, so reply ratings are kept on the server. */
   sessionId?: string
   onSessionChange?: (session: AgentSession) => void
+  /** Selected text shown as a chip at the start of the composer (the reference app's "Ask agent" on a selection). */
+  quote?: string
+  onQuoteRemove?: () => void
+  /** Extra composer buttons before Send (e.g. the page-context toggle and attach). */
+  composerTools?: ReactNode
+  /** Tab in the composer; return true when handled. */
+  onComposerTab?: () => boolean
+  /** Whether Send is enabled; defaults to "the composer has text". */
+  canSend?: boolean
+  /** The reference app's floating chat shows nothing in an empty conversation (no greeting, no hint). */
+  blankEmpty?: boolean
+  /** Rows shown right above the composer (e.g. attached files). */
+  composerHeader?: ReactNode
 }
 
 export type AgentContextEntity = { key: string; icon?: ReactNode; label: string; onRemove?: () => void }
@@ -115,6 +130,13 @@ export function EntityAgentThread({
   onAnswer,
   sessionId,
   onSessionChange,
+  quote,
+  onQuoteRemove,
+  composerTools,
+  onComposerTab,
+  canSend,
+  blankEmpty = false,
+  composerHeader,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
   // A reply the user stopped keeps only its work (no partial text, "stopped" row or rating).
@@ -186,7 +208,7 @@ export function EntityAgentThread({
         ref={logRef}
         role="log"
       >
-        {!messages.length && !loading && (
+        {!messages.length && !loading && !blankEmpty && (
           welcome ? (
             <div className={styles.welcome} data-state="empty">
               <div className={styles.welcomePattern} aria-hidden="true"/>
@@ -267,7 +289,9 @@ export function EntityAgentThread({
                     })()}
                   </>
                 )}
-                {!isUser && renderAssistantBody ? null : message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
+                {!isUser && renderAssistantBody ? null : isUser && splitAgentQuote(message.content).quote !== undefined ? (
+                  <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><QuotedText data={mentionData} mentions={message.mentions} content={message.content}/></p>
+                ) : message.content && isUser && mentionData && (message.mentions?.length || /@[A-Z][A-Z0-9]*-\d+/.test(message.content)) ? (
                   <p className={`${styles.messageDocument} agent-chat-document`} aria-label={t('Your message')}><MentionedText data={mentionData} mentions={message.mentions} text={message.content}/></p>
                 ) : answer ? answer.markdown && (
                   <AgentAnswerText
@@ -343,6 +367,7 @@ export function EntityAgentThread({
           </div>
         ))}
       </div>
+      <div className={styles.composerArea}>
       {/* Context chips describe what a new conversation will start with; once it has started they read as "added to context". */}
       {!messages.length && (contextIssues.length > 0 || contextEntities.length > 0) && (
           <div className={styles.context}>
@@ -363,6 +388,7 @@ export function EntityAgentThread({
             ))}
           </div>
         )}
+      {composerHeader}
       <div className={styles.composer} data-tooltip-elevated="">
         {mentionData ? (
           <AgentMentionInput
@@ -374,6 +400,9 @@ export function EntityAgentThread({
             value={input}
             onChange={(value, mentions) => { onInputChange(value); onMentionsChange?.(mentions) }}
             onSubmit={onSubmit}
+            quote={quote}
+            onQuoteRemove={onQuoteRemove}
+            onTab={onComposerTab}
           />
         ) : (
         <textarea
@@ -395,6 +424,7 @@ export function EntityAgentThread({
         <footer>
           {footerStart}
           {error ? <span role="alert"><AgentErrorDetail error={error} /></span> : <span />}
+          {composerTools}
           {loading ? (
             <ScopedFlowTooltip label={t('Stop responding')} sideOffset={8}>
               <button aria-label={t('Stop responding')} onClick={onStop} type="button">
@@ -405,7 +435,8 @@ export function EntityAgentThread({
             <ScopedFlowTooltip label={t('Send message')} shortcut="Enter" sideOffset={8}>
               <button
                 aria-label={t('Send message')}
-                disabled={!input.trim() || !enabled || composerDisabled}
+                data-state={(canSend ?? Boolean(input.trim())) && enabled ? 'ready' : 'empty'}
+                disabled={!(canSend ?? input.trim()) || !enabled || composerDisabled}
                 onClick={onSubmit}
                 type="button"
               >
@@ -415,8 +446,19 @@ export function EntityAgentThread({
           )}
         </footer>
       </div>
+      </div>
     </div>
   )
+}
+
+/** A sent message that starts with a quoted selection: the selection as the reference app's inline chip, then the text. */
+function QuotedText({ data, mentions, content }: { data?: BootstrapData; mentions?: AgentMessage['mentions']; content: string }) {
+  const { quote, text } = splitAgentQuote(content)
+  return <>
+    <span className={styles.sentQuote} data-i18n-ignore><AgentSelectedTextIcon className={styles.sentQuoteIcon}/>{quote}</span>
+    {text ? ' ' : null}
+    {text && (data ? <MentionedText data={data} mentions={mentions} text={text}/> : text)}
+  </>
 }
 
 /** A sent message with its @-mentions shown as chips (stored mentions, or issue identifiers). */

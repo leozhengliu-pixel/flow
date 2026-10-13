@@ -17034,6 +17034,41 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/oauth-applications/{id}/client-secret": {
+      "get": {
+        "operationId": "get_oauth_applications_id_client_secret",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "GET /api/oauth-applications/{id}/client-secret",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
+      }
+    },
     "/api/oauth-applications/{id}/developer-token": {
       "post": {
         "operationId": "post_oauth_applications_id_developer_token",
@@ -17661,6 +17696,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/oauth-applications/icon": {
+      "post": {
+        "operationId": "post_oauth_applications_icon",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "POST /api/oauth-applications/icon",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
+      }
+    },
     "/api/oauth-applications/manifest": {
       "post": {
         "operationId": "post_oauth_applications_manifest",
@@ -17792,6 +17852,31 @@
         },
         "x-flow-internal": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/oauth/authorized-applications": {
+      "get": {
+        "operationId": "get_oauth_authorized_applications",
+        "tags": [
+          "oauth"
+        ],
+        "summary": "GET /api/oauth/authorized-applications",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
       }
     },
     "/api/oauth/installation-teams": {

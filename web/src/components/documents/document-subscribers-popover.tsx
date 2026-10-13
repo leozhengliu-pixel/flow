@@ -5,15 +5,16 @@
  * other rows replace the document's subscriber list.
  */
 import * as Popover from '@radix-ui/react-popover'
-import { Bell } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
+import { FlowBellCheckIcon, FlowBellIcon } from '@/components/issue/flow-header-icons'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
 import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import type { FlowDocument, User } from '@/types/flow'
 import { setDocumentSubscribers, type DocumentActionContext } from './document-actions'
+import { DOCUMENT_PAGE_SHORTCUTS } from './use-document-page-shortcuts'
 
 const FILTER_THRESHOLD = 8
 
@@ -29,6 +30,7 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
   disabled?: boolean
 }) {
   const { t } = useI18n()
+  const changeLabel = t('Change document subscribers')
   const viewer = ctx.data.viewer
   const [query, setQuery] = useState('')
   const [pending, setPending] = useState<string>()
@@ -51,10 +53,13 @@ export function DocumentSubscribersPopover({ ctx, document, subscribed, busy, on
 
   const isSubscribed = (user: User) => user.id === viewer.id ? subscribed : (document.subscriberIds ?? []).includes(user.id)
   return <Popover.Root open={open} onOpenChange={next => { onOpenChange(next); if (!next) setQuery('') }}>
-    <ScopedFlowTooltip label={t(subscribed ? 'Unsubscribe' : 'Subscribe')} shortcut="⇧ S" disabled={open}>
+    <ScopedFlowTooltip label={changeLabel} shortcut={DOCUMENT_PAGE_SHORTCUTS.subscribers} disabled={open}>
       <Popover.Trigger asChild>
-        <button aria-label={t('Document subscribers')} aria-busy={busy || undefined} className={`document-icon-button${subscribed ? ' is-active' : ''}`} disabled={disabled} type="button">
-          <Bell size={16} fill={subscribed ? 'currentColor' : 'none'}/>
+        <button aria-label={changeLabel} aria-busy={busy || undefined} className="document-icon-button" data-subscribed={subscribed} disabled={disabled} type="button">
+          <span aria-hidden="true" className="document-bell">
+            <span className="document-bell__layer" data-visible={!subscribed}><FlowBellIcon/></span>
+            <span className="document-bell__layer" data-visible={subscribed}><FlowBellCheckIcon/></span>
+          </span>
         </button>
       </Popover.Trigger>
     </ScopedFlowTooltip>

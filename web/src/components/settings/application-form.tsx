@@ -1,24 +1,17 @@
-import { useId, useRef, useState } from "react";
+import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Copy, KeyRound, TriangleAlert } from "lucide-react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { ApplicationIconPlaceholder } from "@/components/ui/application-icon-placeholder";
 import { useOptionalTranslate } from "@/i18n/i18n";
-import { validateOAuthAppManifest } from "@/lib/api";
-import {
-  OAUTH_SCOPE_OPTIONS,
-  WEBHOOK_RESOURCE_TYPE_OPTIONS,
-  parseManifestText,
-  type ApplicationFormState,
-} from "@/lib/oauth-app-manifest";
+import { uploadOAuthApplicationIcon, validateOAuthAppManifest } from "@/lib/api";
+import { APPLICATION_WEBHOOK_EVENT_GROUPS, parseManifestText, type ApplicationFormErrors, type ApplicationFormState } from "@/lib/oauth-app-manifest";
 import { toast } from "@/lib/toast";
 import type { OAuthAppManifest, OAuthAppManifestIssue } from "@/types/flow";
 
-import {
-  SettingsRow as Row,
-  SettingsSection as Section,
-  SettingsToggle as Toggle,
-} from "./settings-primitives";
+import { SettingsToggle as Toggle } from "./settings-primitives";
 import "./application-pages.css";
+import "./oauth-application-settings.css";
 
 export function ManifestIssues({ issues }: { issues: OAuthAppManifestIssue[] }) {
   const t = useOptionalTranslate();
@@ -41,7 +34,7 @@ export function ManifestIssues({ issues }: { issues: OAuthAppManifestIssue[] }) 
   );
 }
 
-/** The client secret is only returned when an application is created; show it once, copyable. */
+/** A secret returned once (the webhook signing secret when it is created or rotated), copyable. */
 export function ClientSecretNotice({ secret, kind = "client" }: { secret: string; kind?: "client" | "webhook" }) {
   const t = useOptionalTranslate();
   const copy = async () => {
@@ -73,191 +66,158 @@ export function ClientSecretNotice({ secret, kind = "client" }: { secret: string
   );
 }
 
-function CheckList({
-  options,
-  value,
+/**
+ * The reference app's "Create new application" / "Edit application" card: the icon picker, the labelled fields, the Public /
+ * Client credentials / Webhooks switches (with the webhook URL and event groups when webhooks are on) and the
+ * footer buttons.
+ */
+export function ApplicationForm({
+  state,
   onChange,
+  errors,
   disabled,
-  locked = [],
+  onSubmit,
+  actions,
 }: {
-  options: { value: string; label: string; description?: string; badge?: string; ignoreI18n?: boolean }[];
-  value: string[];
-  onChange: (next: string[]) => void;
+  state: ApplicationFormState;
+  onChange: (next: ApplicationFormState) => void;
+  errors: ApplicationFormErrors;
   disabled?: boolean;
-  locked?: string[];
+  onSubmit: () => void;
+  actions: ReactNode;
 }) {
+  const t = useOptionalTranslate();
+  const id = useId();
+  const set = <K extends keyof ApplicationFormState>(key: K, value: ApplicationFormState[K]) => onChange({ ...state, [key]: value });
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    onSubmit();
+  };
   return (
-    <div className="application-check-grid">
-      {options.map((option) => (
-        <label key={option.value} className="application-check">
-          <input
-            type="checkbox"
-            aria-label={option.label}
-            checked={value.includes(option.value)}
-            disabled={disabled || locked.includes(option.value)}
-            onChange={(event) =>
-              onChange(event.target.checked ? [...value, option.value] : value.filter((item) => item !== option.value))
-            }
-          />
-          <span>
-            <strong {...(option.ignoreI18n ? { "data-i18n-ignore": true } : {})}>{option.label}</strong>
-            {option.badge ? <em className="application-check-badge">{option.badge}</em> : null}
-            {option.description ? <small>{option.description}</small> : null}
-          </span>
-        </label>
-      ))}
+    <form className="settings-card oauth-app-form" onSubmit={submit} noValidate>
+      <ApplicationIconPicker url={state.iconUrl} disabled={disabled} onChange={(url) => set("iconUrl", url)} />
+      <FormField id={`${id}-name`} label={t("Application name")} hint={t("User visible name for your application")} error={errors.name}>
+        <input id={`${id}-name`} className="oauth-app-input" value={state.name} disabled={disabled} placeholder="Bug Reporter" data-i18n-ignore onChange={(event) => set("name", event.target.value)} />
+      </FormField>
+      <FormField id={`${id}-developer`} label={t("Developer name")} hint={t("The person or company developing this application")} error={errors.developerName}>
+        <input id={`${id}-developer`} className="oauth-app-input" value={state.developerName} disabled={disabled} placeholder="Bug Reporter Corp" onChange={(event) => set("developerName", event.target.value)} />
+      </FormField>
+      <FormField id={`${id}-developer-url`} label={t("Developer URL")} hint={t("Homepage or documentation for your application. Required for public applications.")} error={errors.developerUrl}>
+        <input id={`${id}-developer-url`} className="oauth-app-input" value={state.developerUrl} disabled={disabled} placeholder="https://bugreporter.com/flow-app" onChange={(event) => set("developerUrl", event.target.value)} />
+      </FormField>
+      <FormField id={`${id}-description`} label={t("Description")} hint={t("Describe your application")}>
+        <textarea id={`${id}-description`} className="oauth-app-input is-multiline" value={state.description} disabled={disabled} placeholder={t("Allows a user to create Flow issues from within the Bug Reporter application.")} onChange={(event) => set("description", event.target.value)} />
+      </FormField>
+      <FormField id={`${id}-redirects`} label={t("Redirect URIs")} hint={t("All OAuth redirect URIs, separated with newlines")} error={errors.redirectUris} errorBelow>
+        <textarea id={`${id}-redirects`} className="oauth-app-input is-multiline" value={state.redirectUris} disabled={disabled} placeholder={"https://bugreporter.com/callback\nhttps://bugreporter.com/callback2"} onChange={(event) => set("redirectUris", event.target.value)} />
+      </FormField>
+      <SwitchRow title={t("Public")} description={t("Allow this application to be installed by other workspaces")}>
+        <Toggle label={t("Public")} checked={state.distribution === "public"} disabled={disabled} onChange={(value) => set("distribution", value ? "public" : "private")} />
+      </SwitchRow>
+      <SwitchRow title={t("Client credentials")} description={fillCode(t("Support generating OAuth access tokens using the {code} grant type."), "client_credentials")}>
+        <Toggle label={t("Client credentials")} checked={state.clientCredentials} disabled={disabled} onChange={(value) => set("clientCredentials", value)} />
+      </SwitchRow>
+      <SwitchRow title={t("Webhooks")} description={t("Webhooks allow you to receive HTTP push notifications on your specified URL.")}>
+        <Toggle label={t("Webhooks")} checked={state.webhookEnabled} disabled={disabled} onChange={(value) => set("webhookEnabled", value)} />
+      </SwitchRow>
+      {state.webhookEnabled && (
+        <>
+          <FormField id={`${id}-webhook-url`} label={t("Webhook URL")} error={errors.webhookUrl}>
+            <input id={`${id}-webhook-url`} className="oauth-app-input" value={state.webhookUrl} disabled={disabled} placeholder="https://example.com/webhook" onChange={(event) => set("webhookUrl", event.target.value)} />
+          </FormField>
+          {APPLICATION_WEBHOOK_EVENT_GROUPS.map((group) => (
+            <fieldset key={group.title} className="oauth-app-events" disabled={disabled}>
+              <legend>
+                <span className="oauth-app-field-label">{t(group.title)}</span>
+                {group.hint && <span className="oauth-app-field-hint"><span aria-hidden="true">-</span> {fillCode(t(group.hint), "actor=app")}</span>}
+              </legend>
+              <div className="oauth-app-event-grid">
+                {group.events.map((event) => (
+                  <label key={event.type}>
+                    <input
+                      type="checkbox"
+                      checked={state.webhookResourceTypes.includes(event.type)}
+                      onChange={(change) => set("webhookResourceTypes", change.target.checked ? [...state.webhookResourceTypes, event.type] : state.webhookResourceTypes.filter((item) => item !== event.type))}
+                    />
+                    <span>{t(event.label)}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ))}
+        </>
+      )}
+      <footer className="oauth-app-form-actions">{actions}</footer>
+    </form>
+  );
+}
+
+function FormField({ id, label, hint, error, errorBelow, children }: { id: string; label: string; hint?: string; error?: string; errorBelow?: boolean; children: ReactNode }) {
+  const t = useOptionalTranslate();
+  return (
+    <div className={`oauth-app-field${error ? " is-invalid" : ""}`}>
+      <label htmlFor={id} className="oauth-app-field-heading">
+        <span className="oauth-app-field-label">{label}</span>
+        {hint && <span className="oauth-app-field-hint"><span aria-hidden="true">-</span> {hint}</span>}
+      </label>
+      <div className="oauth-app-field-control">
+        {children}
+        {error && !errorBelow && <span className="oauth-app-required" role="alert"><span>{t(error)}</span></span>}
+      </div>
+      {error && errorBelow && <span className="oauth-app-required is-below" role="alert"><span>{t(error)}</span></span>}
     </div>
   );
 }
 
-export function ApplicationFormFields({
-  state,
-  onChange,
-  disabled,
-}: {
-  state: ApplicationFormState;
-  onChange: (next: ApplicationFormState) => void;
-  disabled?: boolean;
-}) {
-  const t = useOptionalTranslate();
-  const id = useId();
-  const set = <K extends keyof ApplicationFormState>(key: K, value: ApplicationFormState[K]) =>
-    onChange({ ...state, [key]: value });
-  const knownScopes = new Set(OAUTH_SCOPE_OPTIONS.map((option) => option.scope));
-  const extraScopes = state.scopes.filter((scope) => !knownScopes.has(scope));
+function SwitchRow({ title, description, children }: { title: string; description: ReactNode; children: ReactNode }) {
   return (
-    <>
-      <Section title={t("Application details")}>
-        <label className="application-field">
-          {t("Name")}
-          <input
-            className="settings-input"
-            value={state.name}
-            disabled={disabled}
-            onChange={(event) => set("name", event.target.value)}
-          />
-        </label>
-        <label className="application-field">
-          {t("Developer name")}
-          <input
-            className="settings-input"
-            value={state.developerName}
-            disabled={disabled}
-            onChange={(event) => set("developerName", event.target.value)}
-          />
-        </label>
-        <label className="application-field">
-          {t("Developer URL")}
-          <input
-            className="settings-input"
-            value={state.developerUrl}
-            disabled={disabled}
-            placeholder="https://example.com"
-            onChange={(event) => set("developerUrl", event.target.value)}
-          />
-        </label>
-        <label className="application-field">
-          {t("Description")}
-          <textarea
-            className="settings-input"
-            value={state.description}
-            disabled={disabled}
-            onChange={(event) => set("description", event.target.value)}
-          />
-        </label>
-        <label className="application-field">
-          {t("Icon URL")}
-          <input
-            className="settings-input"
-            value={state.iconUrl}
-            disabled={disabled}
-            placeholder="https://…"
-            onChange={(event) => set("iconUrl", event.target.value)}
-          />
-        </label>
-      </Section>
-      <Section title={t("OAuth")}>
-        <div className="application-field">
-          <label htmlFor={`${id}-redirects`}>{t("Redirect URIs")}</label>
-          <textarea
-            id={`${id}-redirects`}
-            className="settings-input"
-            value={state.redirectUris}
-            disabled={disabled}
-            onChange={(event) => set("redirectUris", event.target.value)}
-            placeholder="https://app.example.com/oauth/callback"
-          />
-          <small>{t("One URI per line.")}</small>
-        </div>
-        <Row title={t("Public application")} description={t("Allow installation in other workspaces")}>
-          <Toggle
-            label={t("Public application")}
-            checked={state.distribution === "public"}
-            disabled={disabled}
-            onChange={(value) => set("distribution", value ? "public" : "private")}
-          />
-        </Row>
-        <Row title={t("Client credentials")} description={t("Allow server-to-server access as this application.")}>
-          <Toggle
-            label={t("Client credentials")}
-            checked={state.clientCredentials}
-            disabled={disabled}
-            onChange={(value) => set("clientCredentials", value)}
-          />
-        </Row>
-      </Section>
-      <Section title={t("Scopes")} description={t("Permissions the application can request.")}>
-        <CheckList
-          disabled={disabled}
-          locked={["read"]}
-          value={state.scopes}
-          onChange={(next) => set("scopes", next)}
-          options={[
-            ...OAUTH_SCOPE_OPTIONS.map((option) => ({
-              value: option.scope,
-              label: t(option.label),
-              description: t(option.description),
-              badge: option.userOnly ? t("User actor only") : undefined,
-            })),
-            ...extraScopes.map((scope) => ({ value: scope, label: scope, ignoreI18n: true })),
-          ]}
-        />
-      </Section>
-      <Section title={t("Agent")} description={t("Let people assign work to this application or mention it.")}>
-        <Row title={t("Assignable")} description={t("Can be assigned and delegated issues (app:assignable)")}>
-          <Toggle label={t("Assignable")} checked={state.assignable} disabled={disabled} onChange={(value) => set("assignable", value)} />
-        </Row>
-        <Row title={t("Mentionable")} description={t("Can be mentioned in comments and documents (app:mentionable)")}>
-          <Toggle label={t("Mentionable")} checked={state.mentionable} disabled={disabled} onChange={(value) => set("mentionable", value)} />
-        </Row>
-      </Section>
-      <Section title={t("Webhook")} description={t("Receive HTTP requests when workspace data changes.")}>
-        <Row title={t("Webhooks enabled")} description={t("Deliver events to the URL below")}>
-          <Toggle label={t("Webhooks enabled")} checked={state.webhookEnabled} disabled={disabled} onChange={(value) => set("webhookEnabled", value)} />
-        </Row>
-        <div className="application-field">
-          <label htmlFor={`${id}-webhook-url`}>{t("Webhook URL")}</label>
-          <input
-            id={`${id}-webhook-url`}
-            className="settings-input"
-            value={state.webhookUrl}
-            disabled={disabled}
-            placeholder="https://example.com/webhooks/flow"
-            onChange={(event) => set("webhookUrl", event.target.value)}
-          />
-          <small>{t("Must be an HTTPS URL.")}</small>
-        </div>
-        <fieldset className="application-fieldset">
-          <legend>{t("Resource types")}</legend>
-          <CheckList
-            disabled={disabled}
-            value={state.webhookResourceTypes}
-            onChange={(next) => set("webhookResourceTypes", next)}
-            options={WEBHOOK_RESOURCE_TYPE_OPTIONS.map((type) => ({ value: type, label: type, ignoreI18n: true }))}
-          />
-        </fieldset>
-      </Section>
-    </>
+    <div className="oauth-app-switch">
+      <div>
+        <span className="oauth-app-switch-title">{title}</span>
+        <span className="oauth-app-switch-description">{description}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** Renders `{code}` in a translated sentence as the reference app's inline code chip. */
+function fillCode(text: string, code: string) {
+  const [before, after = ""] = text.split("{code}");
+  if (!text.includes("{code}")) return text;
+  return <>{before}<code className="oauth-app-code" data-i18n-ignore>{code}</code>{after}</>;
+}
+
+/** The reference app's "Application icon · At least 256x256px" tile: click to upload an image. */
+function ApplicationIconPicker({ url, disabled, onChange }: { url: string; disabled?: boolean; onChange: (url: string) => void }) {
+  const t = useOptionalTranslate();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const upload = async (file: File) => {
+    setBusy(true);
+    try {
+      onChange((await uploadOAuthApplicationIcon(file)).url);
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t("Could not upload icon"));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="oauth-app-icon-row">
+      <button type="button" className="oauth-app-icon-tile" aria-label={t("Upload application icon")} disabled={disabled || busy} onClick={() => input.current?.click()}>
+        {url ? <img src={url} alt="" /> : <ApplicationIconPlaceholder />}
+      </button>
+      <input ref={input} type="file" hidden accept="image/png,image/jpeg,image/webp,image/svg+xml" aria-label={t("Application icon")} onChange={(event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (file) void upload(file);
+      }} />
+      <div className="oauth-app-icon-copy">
+        <span className="oauth-app-field-label">{t("Application icon")}</span>
+        <span className="oauth-app-icon-hint">{t("At least 256x256px")}</span>
+      </div>
+    </div>
   );
 }
 

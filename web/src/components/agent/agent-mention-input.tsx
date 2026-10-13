@@ -9,6 +9,7 @@ import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { useI18n } from '@/i18n/i18n'
 import type { BootstrapData, WorkflowState } from '@/types/flow'
 import styles from './agent-mention-input.module.css'
+import { AgentSelectedTextIcon } from './agent-icons'
 
 export type AgentMention = { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: string; label: string }
 
@@ -36,6 +37,9 @@ export function AgentMentionInput({
   ariaLabel,
   editorRef: externalRef,
   className,
+  quote,
+  onQuoteRemove,
+  onTab,
 }: {
   data: BootstrapData
   /** Issues from the current page, offered first under "This page". */
@@ -49,6 +53,12 @@ export function AgentMentionInput({
   /** Lets a host keep writing into the editor directly (drafts, edits). */
   editorRef?: RefObject<HTMLDivElement | null>
   className?: string
+  /** Selected text shown as the reference app's "selected text" chip at the start of the composer. */
+  quote?: string
+  /** The user deleted the quote chip (Backspace or a cut). */
+  onQuoteRemove?: () => void
+  /** Tab with no mention menu open; return true when the host handled it (e.g. toggling page context). */
+  onTab?: () => boolean
 }) {
   const { t } = useI18n()
   const ownRef = useRef<HTMLDivElement>(null)
@@ -56,7 +66,8 @@ export function AgentMentionInput({
   const [query, setQuery] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [chips, setChips] = useState<Chip[]>([])
-  const [empty, setEmpty] = useState(!value)
+  const [empty, setEmpty] = useState(!value && !quote)
+  const [quoteEl, setQuoteEl] = useState<HTMLElement | null>(null)
   // The page only holds the issues it loaded, so fetch workspace issues while the menu is open.
   const candidates = useIssueCandidates(data, query !== null)
 
@@ -86,6 +97,8 @@ export function AgentMentionInput({
     const walk = (node: Node): string => {
       if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? ''
       if (!(node instanceof HTMLElement)) return ''
+      // The quote travels separately (the host puts it first, as a markdown quote).
+      if (node.dataset.agentQuote !== undefined) return ''
       if (node.dataset.mentionId) {
         mentions.push({ type: node.dataset.mentionType as AgentMention['type'], id: node.dataset.mentionId, label: node.dataset.mentionLabel ?? '' })
         return `@${node.dataset.mentionLabel ?? ''}`
@@ -94,24 +107,67 @@ export function AgentMentionInput({
       const inner = [...node.childNodes].map(walk).join('')
       return node.tagName === 'DIV' && node !== editor ? `\n${inner}` : inner
     }
-    const text = walk(editor).replace(/\u00a0/g, ' ')
+    const text = walk(editor).replace(/\u00a0/g, ' ').replace(/^ /, editor.querySelector('[data-agent-quote]') ? '' : ' ')
     const unique = mentions.filter((item, index) => mentions.findIndex(other => other.type === item.type && other.id === item.id) === index)
     return { text, mentions: unique }
   }, [editorRef])
 
   const sync = useCallback(() => {
     const { text, mentions } = read()
-    setEmpty(!text.trim() && !mentions.length)
+    const quoted = Boolean(editorRef.current?.querySelector('[data-agent-quote]'))
+    setEmpty(!text.trim() && !mentions.length && !quoted)
     setChips(current => current.filter(chip => chip.el.isConnected))
+    if (quote && !quoted) { setQuoteEl(null); onQuoteRemove?.() }
     onChange(text, mentions)
-  }, [onChange, read])
+  }, [editorRef, onChange, onQuoteRemove, quote, read])
+
+  // The quote chip sits first in the editor with the caret after it's chip from "Ask agent".
+  useLayoutEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    const existing = editor.querySelector<HTMLElement>('[data-agent-quote]')
+    if (!quote) { if (existing) { existing.remove(); setQuoteEl(null) } return }
+    if (existing) { existing.dataset.agentQuote = quote; setQuoteEl(existing); return }
+    const chip = document.createElement('span')
+    chip.setAttribute('contenteditable', 'false')
+    chip.className = styles.quoteChip
+    chip.dataset.agentQuote = quote
+    editor.insertBefore(chip, editor.firstChild)
+    const after = document.createTextNode('\u00a0')
+    editor.insertBefore(after, chip.nextSibling)
+    setQuoteEl(chip)
+    setEmpty(false)
+  }, [editorRef, quote])
+
+  // Like the reference app, "Ask agent" on a selection moves the caret into the composer, right after the chip (once it is usable).
+  const focusedQuote = useRef<string | undefined>(undefined)
+  useLayoutEffect(() => {
+    const editor = editorRef.current
+    const chip = editor?.querySelector<HTMLElement>('[data-agent-quote]')
+    if (!editor || !chip || !quote || disabled || focusedQuote.current === quote) return
+    focusedQuote.current = quote
+    editor.focus({ preventScroll: true })
+    const range = document.createRange()
+    range.setStartAfter(chip.nextSibling ?? chip)
+    range.collapse(true)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }, [disabled, editorRef, quote])
 
   // Clear the editor when the host resets the value (after sending); restore plain drafts on mount.
   useLayoutEffect(() => {
     const editor = editorRef.current
     if (!editor) return
-    if (!value && editor.textContent) { editor.textContent = ''; setChips([]); setEmpty(true); setQuery(null) }
-    else if (value && !editor.textContent && !editor.querySelector('[data-mention-id]')) { editor.textContent = value; setEmpty(false) }
+    const quoteChip = editor.querySelector('[data-agent-quote]')
+    const typed = quoteChip ? (editor.textContent ?? '').slice((quoteChip.textContent ?? '').length).replace(/^\u00a0/, '') : editor.textContent
+    if (!value && typed) {
+      // Keep the quote chip: the host drops it (via `quote`) when the message is sent.
+      editor.textContent = ''
+      if (quoteChip) { editor.append(quoteChip, document.createTextNode('\u00a0')) }
+      setChips([]); setEmpty(!quoteChip); setQuery(null)
+    }
+    else if (value && !typed && !editor.querySelector('[data-mention-id]')) { editor.append(document.createTextNode(value)); setEmpty(false) }
   }, [editorRef, value])
 
   const detectQuery = () => {
@@ -164,6 +220,7 @@ export function AgentMentionInput({
     if (query !== null && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setQuery(null); return }
     // With the menu open and nothing to pick, Enter just closes it rather than sending.
     if (query !== null && event.key === 'Enter') { event.preventDefault(); setQuery(null); return }
+    if (event.key === 'Tab' && !event.shiftKey && query === null && onTab?.()) { event.preventDefault(); return }
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onSubmit() }
   }
 
@@ -207,6 +264,10 @@ export function AgentMentionInput({
       onKeyDown={onKeyDown}
       onPaste={event => { event.preventDefault(); document.execCommand('insertText', false, event.clipboardData.getData('text/plain')) }}
     />
+    {quoteEl && quote && createPortal(<>
+      <AgentSelectedTextIcon className={styles.quoteIcon}/>
+      <span className={styles.quoteText} data-i18n-ignore>{quote}</span>
+    </>, quoteEl, 'agent-quote')}
     {chips.map((chip, index) => createPortal(<>
       <span className={styles.chipIcon}>{chip.option.icon}</span>
       {chip.option.detail ? <><span className={styles.identifier}>{chip.option.label}</span> {chip.option.detail}</> : chip.option.label}

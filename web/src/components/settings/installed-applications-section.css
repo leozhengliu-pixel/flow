@@ -1,1 +1,6 @@
-.settings-installed-app-avatar{width:16px;height:16px;border-radius:4px;object-fit:cover}
+/* Settings › Applications › <app>: member avatars, the app user's permission count and empty rows. */
+.oauth-app-member-avatar{--avatar:var(--theme-accent);width:32px;height:32px;flex:none;display:grid;place-items:center;overflow:hidden;border-radius:50%;background:var(--avatar);color:var(--oauth-primary-text);font-size:12px;font-weight:500}
+.oauth-app-member-avatar img{width:100%;height:100%;object-fit:cover}
+.oauth-app-scope-count{display:inline-flex;align-items:center;gap:4px}
+.oauth-app-scope-count svg{width:12px;height:12px}
+.oauth-app-muted-title{color:var(--theme-text-secondary);font-weight:450}

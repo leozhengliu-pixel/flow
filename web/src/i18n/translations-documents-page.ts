@@ -9,6 +9,8 @@ export const documentsPageZhCN: Record<string, string> = {
   'Document breadcrumb': '文档面包屑导航',
   'Edited {date}': '{date} 编辑',
   'Document subscribers': '文档订阅者',
+  'Change document subscribers': '更改文档订阅者',
+  'Document display options and metadata; {edited}': '文档显示选项和元数据；{edited}',
   'Change document subscribers…': '更改文档订阅者…',
   'Restore document': '恢复文档',
   'Document restored': '文档已恢复',

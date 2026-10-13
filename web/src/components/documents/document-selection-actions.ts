@@ -10,7 +10,8 @@ export function documentSelectionActions({ data, document, t, onAskAgent, onComm
   data: Pick<BootstrapData, 'teams' | 'workspace'>
   document: Pick<FlowDocument, 'id' | 'slugId' | 'title' | 'teamIds' | 'projectIds'>
   t: Translate
-  onAskAgent: (prompt: string) => void
+  /** Opens the agent chat with the selected text quoted. */
+  onAskAgent: (selectedText: string) => void
   /** Starts an inline comment on the selection (omitted for viewers). */
   onComment?: DescriptionSelectionActions['onComment']
 }): DescriptionSelectionActions {
@@ -22,6 +23,7 @@ export function documentSelectionActions({ data, document, t, onAskAgent, onComm
         detail: { text: `${selection.text}\n\n${t('From')} ${link}`, teamId: document.teamIds[0] ?? data.teams[0]?.id, projectId: document.projectIds[0] },
       }))
     },
-    onAskAgent: selection => onAskAgent(`${t('About this selection from the document:')}\n\n> ${selection.text.replace(/\n/g, '\n> ')}\n\n`),
+    // Like the reference app, the selection rides into the floating chat as a "selected text" chip, not as prefilled prose.
+    onAskAgent: selection => { if (selection.text.trim()) onAskAgent(selection.text) },
   }
 }

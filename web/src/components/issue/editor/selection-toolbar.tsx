@@ -1,76 +1,171 @@
-import { Bold, Check, ChevronDown, Code2, Italic, Link2, List, ListOrdered, ListTodo, CaseSensitive, ChevronsDownUp, SquarePlus, MessageSquare, Quote, SquareCode, Strikethrough, Underline as UnderlineIcon } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
-import { useRef, useState } from 'react'
+import { useEditorState } from '@tiptap/react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useI18n } from '@/i18n/i18n'
 import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
 import { AgentCursorGlyph } from '@/components/ui/agent-glyph'
+import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import type { DescriptionSelectionActions } from './structured-blocks'
 import { LinkEditor } from './link-editor'
+import { ToolbarGlyph, type ToolbarGlyphName } from './selection-toolbar-glyphs'
 import { useDismissibleLayer } from '@/hooks/use-dismissible-layer'
+import './selection-toolbar.css'
 
+type BlockId = 'paragraph' | 'h1' | 'h2' | 'h3' | 'h4'
+type ListId = 'bulletList' | 'orderedList' | 'taskList'
+
+/** The text-style menu: the toolbar's first button shows the selected block's glyph and names it. */
+const TEXT_STYLES: readonly { id: BlockId; label: string; shortcut: string; glyph: ToolbarGlyphName; level?: 1 | 2 | 3 | 4 }[] = [
+  { id: 'paragraph', label: 'Regular text', shortcut: '⌘⌥0', glyph: 'textStyle' },
+  { id: 'h1', label: 'Heading 1', shortcut: '⌘⌥1', glyph: 'heading1', level: 1 },
+  { id: 'h2', label: 'Heading 2', shortcut: '⌘⌥2', glyph: 'heading2', level: 2 },
+  { id: 'h3', label: 'Heading 3', shortcut: '⌘⌥3', glyph: 'heading3', level: 3 },
+  { id: 'h4', label: 'Heading 4', shortcut: '⌘⌥4', glyph: 'heading4', level: 4 },
+]
+
+const LIST_STYLES: readonly { id: ListId; label: string; glyph: ToolbarGlyphName }[] = [
+  { id: 'bulletList', label: 'List', glyph: 'bulletList' },
+  { id: 'orderedList', label: 'Numbered list', glyph: 'numberedList' },
+  { id: 'taskList', label: 'Checklist', glyph: 'checklist' },
+]
+
+/** The tooltip shortcut of each toolbar button (the editor binds them; ⌘K opens the link field from the toolbar). */
+const TOOLBAR_SHORTCUTS = {
+  Bold: '⌘B', Italic: '⌘I', Strikethrough: '⌘⇧X', Underline: '⌘U', Link: '⌘K', Quote: '⌥⇧.', Collapse: '⌘⇧6',
+  'Inline code': '⌘E', 'Code block': '⌘⇧\\', 'Create issue from selection': '⌘⇧O', 'Ask agent': '⌘J', Comment: '⌘⌥M',
+} as const
+
+/**
+ * The floating toolbar over a text selection, shared by every rich-text editor (issue, project and initiative
+ * descriptions, documents, comments, updates). Laid out like the reference: a 42px text-style button, 26px buttons
+ * 6px apart, one hairline before the selection actions (create issue, ask agent, comment), tooltips above.
+ */
 export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?: DescriptionSelectionActions }) {
   const { t } = useI18n()
-  const [listOpen, setListOpen] = useState(false)
-  const selection = () => { const { from, to } = editor.state.selection; return { from, to, text: editor.state.doc.textBetween(from, to, '\n') } }
-  const lists = [
-    {id:'bulletList',label:'Bulleted list',icon:List,run:()=>editor.chain().focus().toggleBulletList().run()},
-    {id:'orderedList',label:'Numbered list',icon:ListOrdered,run:()=>editor.chain().focus().toggleOrderedList().run()},
-    {id:'taskList',label:'Checklist',icon:ListTodo,run:()=>editor.chain().focus().toggleTaskList().run()},
-  ]
-  const [blockOpen, setBlockOpen] = useState(false)
-  const [linkOpen, setLinkOpen] = useState(false)
+  const [open, setOpen] = useState<'block' | 'list' | 'link' | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
-  const blocks = [
-    { id: 'paragraph', label: 'Regular text', shortcut: '⌘⌥0', active: editor.isActive('paragraph'), run: () => editor.chain().focus().setParagraph().run() },
-    { id: 'h1', label: 'Heading 1', shortcut: '⌘⌥1', active: editor.isActive('heading', { level: 1 }), run: () => editor.chain().focus().setHeading({ level: 1 }).run() },
-    { id: 'h2', label: 'Heading 2', shortcut: '⌘⌥2', active: editor.isActive('heading', { level: 2 }), run: () => editor.chain().focus().setHeading({ level: 2 }).run() },
-    { id: 'h3', label: 'Heading 3', shortcut: '⌘⌥3', active: editor.isActive('heading', { level: 3 }), run: () => editor.chain().focus().setHeading({ level: 3 }).run() },
-    { id: 'h4', label: 'Heading 4', shortcut: '⌘⌥4', active: editor.isActive('heading', { level: 4 }), run: () => editor.chain().focus().setHeading({ level: 4 }).run() },
-  ]
-  const closeLink = () => { setLinkOpen(false); editor.commands.focus() }
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: current }) => ({
+      block: TEXT_STYLES.find(style => style.level ? current.isActive('heading', { level: style.level }) : false)?.id ?? 'paragraph',
+      bold: current.isActive('bold'), italic: current.isActive('italic'), strike: current.isActive('strike'), underline: current.isActive('underline'),
+      link: current.isActive('link'), blockquote: current.isActive('blockquote'), details: current.isActive('details'), code: current.isActive('code'), codeBlock: current.isActive('codeBlock'),
+      bulletList: current.isActive('bulletList'), orderedList: current.isActive('orderedList'), taskList: current.isActive('taskList'),
+      editable: current.isEditable,
+    }),
+  })
+  const selection = () => { const { from, to } = editor.state.selection; return { from, to, text: editor.state.doc.textBetween(from, to, '\n') } }
+  const toggle = (menu: 'block' | 'list' | 'link') => setOpen(current => current === menu ? null : menu)
+  const closeLink = () => { setOpen(null); editor.commands.focus() }
   useDismissibleLayer({
-    open: blockOpen || linkOpen || listOpen,
+    open: open !== null,
     refs: [rootRef],
     onDismiss: reason => {
-      setListOpen(false)
-      setBlockOpen(false)
-      setLinkOpen(false)
+      setOpen(null)
       if (reason === 'escape') editor.commands.focus()
     },
   })
-  // A read-only document (viewers, commenters) keeps only the selection actions.
-  const editable = editor.isEditable
-  return <TooltipProvider><div className="description-bubble-menu" role="toolbar" aria-label={t("Text formatting")} ref={rootRef}>
-    {editable && <>
-    <div className="description-block-control">
-      <button type="button" aria-label={t('Text style')} title={t('Text style')} aria-expanded={blockOpen} onMouseDown={event => event.preventDefault()} onClick={() => { setListOpen(false); setLinkOpen(false); setBlockOpen(value => !value) }}><CaseSensitive size={16}/><ChevronDown size={12}/></button>
-      {blockOpen && <div className="description-block-menu" role="listbox" aria-label={t("Text style")}>{blocks.map(block => <button key={block.id} type="button" role="option" aria-selected={block.active} data-block={block.id} onMouseDown={event => event.preventDefault()} onClick={() => { setBlockOpen(false); block.run() }}><span className="description-block-label">{t(block.label)}{block.active && <Check size={14} aria-hidden="true"/>}</span><span className="description-block-keys" aria-hidden="true">{[...block.shortcut].map((key, index) => <kbd key={index}>{key}</kbd>)}</span></button>)}</div>}
-    </div>
-    <FormatButton label="Bold" active={editor.isActive('bold')} onPress={() => editor.chain().focus().toggleBold().run()}><Bold size={16}/></FormatButton>
-    <FormatButton label="Italic" active={editor.isActive('italic')} onPress={() => editor.chain().focus().toggleItalic().run()}><Italic size={16}/></FormatButton>
-    <FormatButton label="Strikethrough" active={editor.isActive('strike')} onPress={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={16}/></FormatButton>
-    <FormatButton label="Underline" active={editor.isActive('underline')} onPress={() => editor.chain().focus().toggleUnderline().run()}><UnderlineIcon size={16}/></FormatButton>
-    <div className="description-link-control">
-      <FormatButton label="Link" active={editor.isActive('link') || linkOpen} onPress={() => { setListOpen(false); setBlockOpen(false); setLinkOpen(value => !value) }}><Link2 size={16}/></FormatButton>
-      {linkOpen && <LinkEditor initialValue={(editor.getAttributes('link').href as string | undefined) ?? ''} onApply={href => { editor.chain().focus().extendMarkRange('link').setLink({ href }).run(); closeLink() }} onRemove={() => { editor.chain().focus().extendMarkRange('link').unsetLink().run(); closeLink() }} onClose={closeLink}/>}
-    </div>
-    <span className="description-toolbar-separator"/>
-    <FormatButton label="Quote" active={editor.isActive('blockquote')} onPress={() => editor.chain().focus().toggleBlockquote().run()}><Quote size={16}/></FormatButton>
-    <FormatButton label="Collapse" active={editor.isActive("details")} onPress={() => editor.isActive("details") ? editor.chain().focus().unsetDetails().run() : editor.chain().focus().setDetails().run()}><ChevronsDownUp size={16}/></FormatButton>
-    <FormatButton label="Inline code" active={editor.isActive('code')} onPress={() => editor.chain().focus().toggleCode().run()}><Code2 size={16}/></FormatButton>
-    <FormatButton label="Code block" active={editor.isActive('codeBlock')} onPress={() => editor.chain().focus().toggleCodeBlock().run()}><SquareCode size={16}/></FormatButton>
-    <div className="description-block-control"><button type="button" aria-label={t('List style')} title={t('List style')} aria-expanded={listOpen} onMouseDown={event=>event.preventDefault()} onClick={()=>{setBlockOpen(false);setLinkOpen(false);setListOpen(value=>!value)}}><List size={16}/><ChevronDown size={12}/></button>
-      {listOpen&&<div className="description-block-menu" role="listbox" aria-label={t('List style')}>{lists.map(item=>{const Icon=item.icon;return <button key={item.id} type="button" role="option" aria-selected={editor.isActive(item.id)} onMouseDown={event=>event.preventDefault()} onClick={()=>{setListOpen(false);item.run()}}><Icon size={16}/><span>{t(item.label)}</span></button>})}</div>}
-    </div>
+  // ⌘K with text selected opens the link field (and keeps the app-wide ⌘K menu closed), as the Link tooltip says.
+  useEffect(() => {
+    const dom = editor.view.dom
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.shiftKey || event.altKey || event.key.toLowerCase() !== 'k') return
+      if (!editor.isEditable || editor.state.selection.empty) return
+      event.preventDefault()
+      setOpen('link')
+    }
+    dom.addEventListener('keydown', onKeyDown)
+    return () => dom.removeEventListener('keydown', onKeyDown)
+  }, [editor])
+  const heading = state.block !== 'paragraph'
+  const style = TEXT_STYLES.find(item => item.id === state.block) ?? TEXT_STYLES[0]
+  const hasActions = Boolean(actions?.onCreateIssue || actions?.onAskAgent || actions?.onComment)
+  return <TooltipProvider><div className="description-bubble-menu selection-toolbar" role="toolbar" aria-label={t('Text formatting')} ref={rootRef}>
+    {state.editable && <>
+      <span className="selection-toolbar-item">
+        <ToolbarButton label={t(style.label)} shortcut={style.shortcut} wide expanded={open === 'block'} onPress={() => toggle('block')}>
+          <ToolbarGlyph name={style.glyph}/><ToolbarGlyph name="chevron" size={12}/>
+        </ToolbarButton>
+        {open === 'block' && <ToolbarMenu anchorRef={rootRef} label={t('Text style')}>
+          {TEXT_STYLES.map(item => <button key={item.id} type="button" role="menuitemradio" aria-checked={state.block === item.id} data-block={item.id} onMouseDown={event => event.preventDefault()} onClick={() => {
+            setOpen(null)
+            const chain = editor.chain().focus()
+            if (item.level) chain.setHeading({ level: item.level }).run()
+            else chain.setParagraph().run()
+          }}>
+            <span className="selection-menu-label">{t(item.label)}</span>
+            <span className="selection-menu-check">{state.block === item.id && <FlowGlyph name="check" size={12}/>}</span>
+            <span className="selection-menu-keys" aria-hidden="true">{[...item.shortcut].map((key, index) => <kbd key={index}>{key}</kbd>)}</span>
+          </button>)}
+        </ToolbarMenu>}
+      </span>
+      <ToolbarItem label={t('Bold')} shortcut={TOOLBAR_SHORTCUTS.Bold} active={state.bold} disabled={heading} onPress={() => editor.chain().focus().toggleBold().run()}><ToolbarGlyph name="bold"/></ToolbarItem>
+      <ToolbarItem label={t('Italic')} shortcut={TOOLBAR_SHORTCUTS.Italic} active={state.italic} onPress={() => editor.chain().focus().toggleItalic().run()}><ToolbarGlyph name="italic"/></ToolbarItem>
+      <ToolbarItem label={t('Strikethrough')} shortcut={TOOLBAR_SHORTCUTS.Strikethrough} active={state.strike} onPress={() => editor.chain().focus().toggleStrike().run()}><ToolbarGlyph name="strikethrough"/></ToolbarItem>
+      <ToolbarItem label={t('Underline')} shortcut={TOOLBAR_SHORTCUTS.Underline} active={state.underline} onPress={() => editor.chain().focus().toggleUnderline().run()}><ToolbarGlyph name="underline"/></ToolbarItem>
+      <span className="selection-toolbar-item description-link-control">
+        <ToolbarButton label={t('Link')} shortcut={TOOLBAR_SHORTCUTS.Link} active={state.link || open === 'link'} tooltipDisabled={open === 'link'} onPress={() => toggle('link')}><ToolbarGlyph name="link"/></ToolbarButton>
+        {open === 'link' && <LinkEditor initialValue={(editor.getAttributes('link').href as string | undefined) ?? ''} onApply={href => { editor.chain().focus().extendMarkRange('link').setLink({ href }).run(); closeLink() }} onRemove={() => { editor.chain().focus().extendMarkRange('link').unsetLink().run(); closeLink() }} onClose={closeLink}/>}
+      </span>
+      <ToolbarItem label={t('Quote')} shortcut={TOOLBAR_SHORTCUTS.Quote} active={state.blockquote} onPress={() => editor.chain().focus().toggleBlockquote().run()}><ToolbarGlyph name="quote"/></ToolbarItem>
+      <ToolbarItem label={t('Collapse')} shortcut={TOOLBAR_SHORTCUTS.Collapse} active={state.details} onPress={() => state.details ? editor.chain().focus().unsetDetails().run() : editor.chain().focus().setDetails().run()}><ToolbarGlyph name="collapse"/></ToolbarItem>
+      <ToolbarItem label={t('Inline code')} shortcut={TOOLBAR_SHORTCUTS['Inline code']} active={state.code} onPress={() => editor.chain().focus().toggleCode().run()}><ToolbarGlyph name="inlineCode"/></ToolbarItem>
+      <ToolbarItem label={t('Code block')} shortcut={TOOLBAR_SHORTCUTS['Code block']} active={state.codeBlock} onPress={() => editor.chain().focus().toggleCodeBlock().run()}><ToolbarGlyph name="codeBlock"/></ToolbarItem>
+      <span className="selection-toolbar-item">
+        <ToolbarButton label={t('List')} wide disabled={heading} expanded={open === 'list'} onPress={() => toggle('list')}>
+          <ToolbarGlyph name="bulletList"/><ToolbarGlyph name="chevron" size={12}/>
+        </ToolbarButton>
+        {open === 'list' && <ToolbarMenu anchorRef={rootRef} label={t('List')}>
+          {LIST_STYLES.map(item => <button key={item.id} type="button" role="menuitemradio" aria-checked={state[item.id]} data-list={item.id} onMouseDown={event => event.preventDefault()} onClick={() => {
+            setOpen(null)
+            const chain = editor.chain().focus()
+            if (item.id === 'bulletList') chain.toggleBulletList().run()
+            else if (item.id === 'orderedList') chain.toggleOrderedList().run()
+            else chain.toggleTaskList().run()
+          }}>
+            <ToolbarGlyph name={item.glyph}/>
+            <span className="selection-menu-label">{t(item.label)}</span>
+            <span className="selection-menu-check">{state[item.id] && <FlowGlyph name="check" size={12}/>}</span>
+          </button>)}
+        </ToolbarMenu>}
+      </span>
     </>}
-    {editable&&(actions?.onCreateIssue||actions?.onAskAgent||actions?.onComment)&&<span className="description-toolbar-separator"/>}
-    {actions?.onCreateIssue&&<FormatButton label="Create issue from selection" shortcut="⌘⇧O" onPress={()=>actions.onCreateIssue?.(selection())}><SquarePlus size={16}/></FormatButton>}
-    {actions?.onAskAgent&&<FormatButton label="Ask agent" shortcut="⌘J" onPress={()=>actions.onAskAgent?.(selection())}><AgentCursorGlyph size={16}/></FormatButton>}
-    {actions?.onComment&&<FormatButton label="Comment" onPress={()=>actions.onComment?.(selection())}><MessageSquare size={16}/></FormatButton>}
+    {state.editable && hasActions && <span className="selection-toolbar-separator" role="separator" aria-orientation="vertical"/>}
+    {actions?.onCreateIssue && <ToolbarItem label={t('Create issue from selection')} shortcut={TOOLBAR_SHORTCUTS['Create issue from selection']} onPress={() => actions.onCreateIssue?.(selection())}><ToolbarGlyph name="createIssue"/></ToolbarItem>}
+    {actions?.onAskAgent && <ToolbarItem label={t('Ask agent')} shortcut={TOOLBAR_SHORTCUTS['Ask agent']} onPress={() => actions.onAskAgent?.(selection())}><AgentCursorGlyph size={16}/></ToolbarItem>}
+    {actions?.onComment && <ToolbarItem label={t('Comment')} shortcut={TOOLBAR_SHORTCUTS.Comment} onPress={() => actions.onComment?.(selection())}><ToolbarGlyph name="comment"/></ToolbarItem>}
   </div></TooltipProvider>
 }
 
-function FormatButton({ label, shortcut, active = false, onPress, children }: { label: string; shortcut?: string; active?: boolean; onPress: () => void; children: React.ReactNode }) {
-  const { t } = useI18n()
-  return <FlowTooltip label={t(label)} shortcut={shortcut}><button type="button" aria-label={t(label)} aria-pressed={active} onMouseDown={event => event.preventDefault()} onClick={onPress}>{children}</button></FlowTooltip>
+type ToolbarButtonProps = { label: string; shortcut?: string; active?: boolean; disabled?: boolean; expanded?: boolean; wide?: boolean; tooltipDisabled?: boolean; onPress: () => void; children: ReactNode }
+
+/** One 26px (42px with a caret) toolbar button; its tooltip sits centred above it. Toggles report `aria-pressed`, menu buttons `aria-expanded`. */
+function ToolbarButton({ label, shortcut, active, disabled = false, expanded, wide = false, tooltipDisabled, onPress, children }: ToolbarButtonProps) {
+  return <FlowTooltip label={label} shortcut={shortcut} side="top" disabled={tooltipDisabled ?? expanded}>
+    <button type="button" className={wide ? 'selection-toolbar-button selection-toolbar-button--menu' : 'selection-toolbar-button'} aria-label={label}
+      aria-pressed={expanded === undefined ? active : undefined} aria-expanded={expanded} aria-haspopup={expanded === undefined ? undefined : 'menu'}
+      aria-disabled={disabled || undefined} onMouseDown={event => event.preventDefault()} onClick={() => { if (!disabled) onPress() }}>{children}</button>
+  </FlowTooltip>
+}
+
+function ToolbarItem(props: ToolbarButtonProps) {
+  return <span className="selection-toolbar-item"><ToolbarButton {...props}/></span>
+}
+
+/**
+ * A text-style or list menu: 200px, aligned 6px left of its button, 8px below it (4px below the toolbar), flipping
+ * above the toolbar when the viewport has no room below.
+ */
+function ToolbarMenu({ label, anchorRef, children }: { label: string; anchorRef: RefObject<HTMLElement | null>; children: ReactNode }) {
+  const menuRef = useRef<HTMLDivElement>(null)
+  const [side, setSide] = useState<'bottom' | 'top'>('bottom')
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current?.getBoundingClientRect()
+    const height = menuRef.current?.offsetHeight ?? 0
+    if (!anchor) return
+    const fitsBelow = anchor.bottom + 4 + height <= window.innerHeight - 8
+    const fitsAbove = anchor.top - 4 - height >= 8
+    setSide(!fitsBelow && fitsAbove ? 'top' : 'bottom')
+  }, [anchorRef])
+  return <div ref={menuRef} className="selection-menu" role="menu" aria-label={label} data-side={side}>{children}</div>
 }

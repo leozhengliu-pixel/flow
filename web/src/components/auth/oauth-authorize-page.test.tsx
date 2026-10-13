@@ -1,120 +1,90 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useNavigate } from 'react-router-dom'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { OAuthAuthorizePage } from './oauth-authorize-page'
-import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
-import type { AccountBootstrap } from '@/types/flow'
-import { viewer } from '@/test/fixtures'
 import { I18nProvider } from '@/i18n/i18n'
+import { ApiError } from '@/lib/api-client'
+import { consentPermissions, oauthErrorMessage } from '@/lib/oauth-consent'
+import { OAuthAuthorizePage } from './oauth-authorize-page'
 
-vi.mock('@/lib/api',()=>({decideOAuthAuthorization:vi.fn(),fetchOAuthAuthorizationRequest:vi.fn(),fetchUserSettings:vi.fn()}))
-vi.mock('@/lib/api-client',async importOriginal=>({...(await importOriginal<typeof import('@/lib/api-client')>()),request:vi.fn().mockResolvedValue([])}))
-vi.mock('@/lib/theme',()=>({applyAccountTheme:vi.fn(),applyTheme:vi.fn()}))
-const account:AccountBootstrap={viewer,workspaces:[{workspace:{id:'workspace-1',name:'Workspace',urlKey:'workspace'},role:'Admin',joinedAt:'2026-09-11T00:00:00Z',issueCount:75675}],lastWorkspaceKey:'workspace',workspaceRegionSelectorEnabled:false,workspaceDefaultRegion:'global'}
-const authorization:OAuthAuthorizationRequest={client:{client_id:'client-1',client_name:'First client'},redirectUri:'http://127.0.0.1/callback',scopes:['read'],scopeLabels:['Read workspace'],workspaces:account.workspaces,viewer}
-const initial='/oauth/authorize?client_id=client-1&redirect_uri=http%3A%2F%2F127.0.0.1%2Fcallback&response_type=code&code_challenge=challenge&code_challenge_method=S256'
-function Navigation(){const navigate=useNavigate();return <button type="button" onClick={()=>navigate('/oauth/authorize?client_id=client-2')}>Change client</button>}
-function App({value=account}:{value?:AccountBootstrap}){return <MemoryRouter initialEntries={[initial]}><OAuthAuthorizePage account={value}/><Navigation/></MemoryRouter>}
+const api = vi.hoisted(() => ({ fetchOAuthAuthorizationRequest: vi.fn(), decideOAuthAuthorization: vi.fn(), fetchUserSettings: vi.fn() }))
+const client = vi.hoisted(() => ({ request: vi.fn() }))
+vi.mock('@/lib/api', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api')>()), ...api }))
+vi.mock('@/lib/api-client', async importOriginal => ({ ...(await importOriginal<typeof import('@/lib/api-client')>()), request: client.request }))
 
-beforeEach(()=>{vi.clearAllMocks();vi.mocked(fetchUserSettings).mockImplementation(()=>new Promise(()=>{}));vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue(authorization)})
-describe('OAuth consent request lifecycle',()=>{
-  it('renders approval without awaiting theme settings and avoids reference-triggered duplicate reads',async()=>{
-    const view=render(<App/>)
-    await screen.findByRole('button',{name:'Approve'})
-    expect(fetchOAuthAuthorizationRequest).toHaveBeenCalledTimes(1)
-    expect(fetchUserSettings).toHaveBeenCalledTimes(1)
-    view.rerender(<App value={{...account,workspaces:[...account.workspaces],lastWorkspaceKey:undefined}}/>)
-    expect(fetchOAuthAuthorizationRequest).toHaveBeenCalledTimes(1)
-    expect(fetchUserSettings).toHaveBeenCalledTimes(1)
+const workspace = { id: 'w1', name: 'flow-app', urlKey: 'flow-app', color: '#b89b38', region: 'us' }
+const viewer = { id: 'u1', name: 'Skyler', displayName: 'Skyler', email: 'sky@example.test', active: true, emailVerified: true }
+const account = { viewer, workspaces: [{ workspace, viewerRole: 'admin' }], lastWorkspaceKey: 'flow-app' } as never
+const consent = (patch = {}) => ({
+  client: { client_id: 'c1', client_name: 'QA OAuth', token_endpoint_auth_method: 'client_secret_basic' },
+  redirectUri: 'http://localhost:8765/callback',
+  scopes: ['read', 'write'],
+  scopeLabels: ['Read access to your workspace', 'Write access to your workspace'],
+  workspaces: [{ workspace, viewerRole: 'admin' }],
+  viewer,
+  ...patch,
+})
+
+function renderAt(search: string) {
+  return render(<I18nProvider><MemoryRouter initialEntries={[`/oauth/authorize${search}`]}><Routes><Route path="/oauth/authorize" element={<OAuthAuthorizePage account={account}/>}/></Routes></MemoryRouter></I18nProvider>)
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  localStorage.setItem('flow:locale', 'en-US')
+  api.fetchUserSettings.mockResolvedValue({})
+  api.decideOAuthAuthorization.mockResolvedValue({ redirect: 'http://localhost:8765/callback?code=x&state=s' })
+  client.request.mockResolvedValue([{ id: 't1', name: 'Flow-app', key: 'FLO', color: '#f00', icon: 'Team' }])
+  Object.defineProperty(window, 'location', { configurable: true, value: { ...window.location, assign: vi.fn() } })
+})
+
+describe('OAuth consent page', () => {
+  it('shows the reference app\'s consent card: title, workspace, permissions, Cancel / Authorize and the notice', async () => {
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent())
+    renderAt('?client_id=c1&redirect_uri=http%3A%2F%2Flocalhost%3A8765%2Fcallback&response_type=code&scope=read,write&state=s')
+    expect(await screen.findByRole('heading', { name: 'QA OAuth is requesting access' })).toBeVisible()
+    expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Authenticating with your flow-app workspace')).toBeVisible()
+    const list = screen.getByRole('list')
+    expect(within(list).getAllByRole('listitem').map(item => item.textContent)).toEqual(['Read access to your workspace', 'Write access to your workspace'])
+    expect(screen.getByText(/By approving, you authorize Flow to share this data with QA OAuth/)).toBeVisible()
+    expect(screen.getByRole('link', { name: 'third-party applications' })).toBeVisible()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Authorize' }))
+    await waitFor(() => expect(api.decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({ approve: true, workspaceKey: 'flow-app', clientId: 'c1', state: 's' })))
   })
 
-  it('cancels previous authorization reads and ignores stale responses after switching requests',async()=>{
-    let finish!: (value:OAuthAuthorizationRequest)=>void
-    vi.mocked(fetchOAuthAuthorizationRequest).mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValueOnce({...authorization,client:{client_id:'client-2',client_name:'Second client'}})
-    const view=render(<App/>)
-    await waitFor(()=>expect(fetchOAuthAuthorizationRequest).toHaveBeenCalledTimes(1))
-    const oldSignal=vi.mocked(fetchOAuthAuthorizationRequest).mock.calls[0][1]!
-    fireEvent.click(screen.getByRole('button',{name:'Change client'}))
-    await screen.findByRole('heading',{name:'Second client is requesting access'})
-    expect(oldSignal.aborted).toBe(true)
-    await act(async()=>finish(authorization))
-    expect(screen.queryByRole('heading',{name:'First client is requesting access'})).not.toBeInTheDocument()
-    const lastSignal=vi.mocked(fetchOAuthAuthorizationRequest).mock.calls.at(-1)![1]!
-    view.unmount()
-    expect(lastSignal.aborted).toBe(true)
+  it('asks for team access on actor=app installs and needs a team for "Only select teams…"', async () => {
+    const user = userEvent.setup()
+    api.fetchOAuthAuthorizationRequest.mockResolvedValue(consent({ actor: 'app', scopes: ['read', 'app:assignable'], scopeLabels: [] }))
+    renderAt('?client_id=c1&redirect_uri=x&response_type=code&scope=read,app:assignable&actor=app')
+    expect(await screen.findByText('Assign issues and projects to the app in teams it can access')).toBeVisible()
+    const access = screen.getByRole('radiogroup', { name: 'Team access' })
+    expect(within(access).getByRole('radio', { name: 'All public teams' })).toBeChecked()
+    await user.click(within(access).getByRole('radio', { name: 'Only select teams…' }))
+    expect(screen.getByRole('button', { name: 'Authorize' })).toBeDisabled()
+    await user.click(screen.getByRole('combobox', { name: 'Select teams…' }))
+    await user.click(await screen.findByRole('option', { name: 'Flow-app' }))
+    expect(screen.getByRole('button', { name: 'Authorize' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Authorize' }))
+    await waitFor(() => expect(api.decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({ actor: 'app', allPublicTeams: false, teamIds: ['t1'] })))
   })
 
-  it('submits one authorization for rapid clicks and allows retry after a failed request',async()=>{
-    let fail!: (reason:Error)=>void
-    vi.mocked(decideOAuthAuthorization).mockImplementationOnce(()=>new Promise((_resolve,reject)=>{fail=reject})).mockImplementation(()=>new Promise(()=>{}))
-    render(<App/>)
-    const approve=await screen.findByRole('button',{name:'Approve'})
-    act(()=>{approve.click();approve.click()})
-    expect(decideOAuthAuthorization).toHaveBeenCalledTimes(1)
-    expect(approve).toBeDisabled()
-    await act(async()=>fail(new Error('Temporarily unavailable')))
-    expect(screen.getByText('Temporarily unavailable')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button',{name:'Approve'}))
-    expect(decideOAuthAuthorization).toHaveBeenCalledTimes(2)
+  it('shows an invalid request: the mark and the server\'s message', async () => {
+    api.fetchOAuthAuthorizationRequest.mockRejectedValue(new ApiError('Could not find OAuth client with clientId abc. Please check that you are logged into the correct workspace.', 400, 'invalid_client'))
+    renderAt('?client_id=abc&redirect_uri=x&response_type=code')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not find OAuth client with clientId abc. Please check that you are logged into the correct workspace.')
+    expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull()
+  })
+})
+
+describe('consent wording', () => {
+  it('lists write alone when it covers the narrower write scopes', () => {
+    expect(consentPermissions(['read', 'write', 'create_issues', 'create_comments', 'timeSchedule:write', 'admin']).map(item => item.scope)).toEqual(['read', 'write', 'admin'])
+    expect(consentPermissions(['read', 'create_issues']).map(item => item.label)).toEqual(['Read access to your workspace', 'Create issues for your workspace'])
   })
 
-  it('shows the server authorization error instead of a generic expired-link message',async()=>{
-    vi.mocked(fetchOAuthAuthorizationRequest).mockRejectedValueOnce(new Error('S256 PKCE code challenge is required'))
-    render(<App/>)
-    expect(await screen.findByText('S256 PKCE code challenge is required')).toBeInTheDocument()
-    expect(screen.queryByText('This authorization link is incomplete or has expired.')).not.toBeInTheDocument()
-  })
-  it('approves straight away for a workspace the user already authorized, without showing consent',async()=>{
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,previouslyAuthorizedWorkspaceKey:'workspace',prompt:''})
-    vi.mocked(decideOAuthAuthorization).mockImplementation(()=>new Promise(()=>{}))
-    render(<App/>)
-    await waitFor(()=>expect(decideOAuthAuthorization).toHaveBeenCalledTimes(1))
-    expect(decideOAuthAuthorization).toHaveBeenCalledWith(expect.objectContaining({clientId:'client-1',workspaceKey:'workspace',approve:true}))
-    expect(screen.queryByRole('button',{name:'Approve'})).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Loading authorization request')).toBeInTheDocument()
-  })
-
-  it('asks for consent when no previous authorization exists, and when consent is forced',async()=>{
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,previouslyAuthorizedWorkspaceKey:''})
-    const view=render(<App/>)
-    await screen.findByRole('button',{name:'Approve'})
-    expect(decideOAuthAuthorization).not.toHaveBeenCalled()
-    view.unmount()
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,previouslyAuthorizedWorkspaceKey:'workspace',prompt:'consent'})
-    render(<App/>)
-    await screen.findByRole('button',{name:'Approve'})
-    expect(decideOAuthAuthorization).not.toHaveBeenCalled()
-  })
-
-  it('shows the app-install consent even if the workspace was authorized before',async()=>{
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,actor:'app',previouslyAuthorizedWorkspaceKey:'workspace'})
-    render(<I18nProvider><MemoryRouter initialEntries={[initial+'&actor=app']}><OAuthAuthorizePage account={account}/></MemoryRouter></I18nProvider>)
-    await screen.findByRole('button',{name:'Install application'})
-    expect(decideOAuthAuthorization).not.toHaveBeenCalled()
-  })
-
-  it('shows the client logo and developer link, and ignores non-http URLs',async()=>{
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,client:{...authorization.client,logo_uri:'https://cdn.example.com/logo.png',client_uri:'https://example.com'}})
-    const view=render(<App/>)
-    await screen.findByRole('button',{name:'Approve'})
-    expect(view.container.querySelector('img.oauth-client-logo')).toHaveAttribute('src','https://cdn.example.com/logo.png')
-    expect(screen.getByRole('link',{name:'https://example.com'})).toHaveAttribute('href','https://example.com/')
-    view.unmount()
-    vi.mocked(fetchOAuthAuthorizationRequest).mockResolvedValue({...authorization,client:{...authorization.client,logo_uri:'javascript:alert(1)',client_uri:'javascript:alert(1)'}})
-    const unsafe=render(<App/>)
-    await screen.findByRole('button',{name:'Approve'})
-    expect(unsafe.container.querySelector('img.oauth-client-logo')).toBeNull()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
-  })
-
-  it.each([
-    ['invalid_scope','This application requested a permission that Flow does not support.'],
-    ['invalid_client','This application is not registered or is no longer available.'],
-  ])('maps the %s error code to a friendly message',async(code,message)=>{
-    vi.mocked(fetchOAuthAuthorizationRequest).mockRejectedValueOnce(Object.assign(new Error('raw description'),{code}))
-    render(<App/>)
-    expect(await screen.findByText(message)).toBeInTheDocument()
-    expect(screen.queryByText('raw description')).not.toBeInTheDocument()
+  it('translates the server\'s measured errors with their values', () => {
+    const t = (value: string) => value === 'Invalid scope: {value}' ? '无效的权限范围：{value}' : value
+    expect(oauthErrorMessage(new Error('Invalid scope: bogus'), t)).toBe('无效的权限范围：bogus')
   })
 })

@@ -10,7 +10,8 @@ export function handleEditorSubmit(event: KeyboardEvent, submit?: () => void) {
 /**
  * The reference app's block shortcuts, matched on the physical key (`event.code`) because Shift/Option change `event.key`
  * (⌘⇧7 reports "&", ⌘⌥1 reports "¡" on a Mac keyboard):
- * ⌘⌥0 text, ⌘⌥1/2/3/4 headings, ⌘⇧7 checklist, ⌘⇧8 bulleted, ⌘⇧9 numbered, ⌘⇧6 collapsible, ⌘⇧\ code block, ⌥⇧. quote.
+ * ⌘⌥0 text, ⌘⌥1/2/3/4 headings, ⌘⇧7 checklist, ⌘⇧8 bulleted, ⌘⇧9 numbered, ⌘⇧6 collapsible, ⌘⇧\ code block, ⌥⇧. quote,
+ * ⌘⇧X strikethrough.
  */
 export function handleBlockShortcut(event: KeyboardEvent, editor: Editor | null) {
   if (!editor) return false
@@ -27,6 +28,7 @@ export function handleBlockShortcut(event: KeyboardEvent, editor: Editor | null)
     if (event.code === 'Digit9') return run(() => editor.chain().focus().toggleOrderedList().run())
     if (event.code === 'Digit6') return run(() => editor.chain().focus().setDetails().run())
     if (event.code === 'Backslash') return run(() => editor.chain().focus().toggleCodeBlock().run())
+    if (event.code === 'KeyX') return run(() => editor.chain().focus().toggleStrike().run())
   }
   if (event.altKey && event.shiftKey && !mod && event.code === 'Period') return run(() => editor.chain().focus().toggleBlockquote().run())
   return false

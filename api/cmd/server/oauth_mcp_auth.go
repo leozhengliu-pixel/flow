@@ -196,8 +196,9 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	redirect, _ := url.Parse(input.RedirectURI)
 	query := redirect.Query()
 	if !input.Approve {
+		// The reference app redirects a cancelled request with error=access_denied and
+		// the state only (no error_description).
 		query.Set("error", "access_denied")
-		query.Set("error_description", "The user denied the request")
 		if input.State != "" {
 			query.Set("state", input.State)
 		}
@@ -364,10 +365,32 @@ func oauthRequestFromQuery(query url.Values) oauthAuthorizationRequest {
 	return oauthAuthorizationRequest{Actor: query.Get("actor"), ClientID: query.Get("client_id"), RedirectURI: query.Get("redirect_uri"), ResponseType: query.Get("response_type"), Scope: query.Get("scope"), State: query.Get("state"), CodeChallenge: query.Get("code_challenge"), CodeChallengeMethod: query.Get("code_challenge_method"), Resource: query.Get("resource"), Prompt: query.Get("prompt")}
 }
 
+// oauthScopeLabelText is the consent screen's wording for each scope, as
+// The reference app words its permissions list.
+var oauthScopeLabelText = map[string]string{
+	"read":                "Read access to your workspace",
+	"write":               "Write access to your workspace",
+	"admin":               "Admin access to manage settings and people",
+	"create_issues":       "Create issues for your workspace",
+	"create_comments":     "Create issue comments for your workspace",
+	"timeSchedule:write":  "Create and modify time schedules for your workspace",
+	"app:assignable":      "Assign issues and projects to the app in teams it can access",
+	"app:mentionable":     "Mention app in issues, projects, and documents it can access",
+	"initiative:read":     "Read data about initiatives in the workspace",
+	"initiative:write":    "Create and modify initiatives in the workspace",
+	"customer:read":       "Read data about customers in the workspace",
+	"customer:write":      "Create and modify customers in the workspace",
+	"release:read":        "Read data about releases in the workspace",
+	"release:create":      "Create releases in the workspace",
+	"releaseStage:update": "Move releases between stages in the workspace",
+	"openid":              "Verify your identity",
+	"email":               "Read your email address",
+}
+
 func oauthScopeLabels(scopes []string) []string {
 	labels := []string{}
 	for _, scope := range scopes {
-		label := map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address", "admin": "Admin", "create_issues": "Create issues", "create_comments": "Create comments", "timeSchedule:write": "Manage time schedules", "app:mentionable": "Mention application", "app:assignable": "Delegate issues to application", "customer:read": "Read customers", "customer:write": "Manage customers", "initiative:read": "Read initiatives", "initiative:write": "Manage initiatives", "release:read": "Read releases", "release:create": "Create releases", "releaseStage:update": "Update release stages"}[scope]
+		label := oauthScopeLabelText[scope]
 		if label == "" {
 			label = scope
 		}

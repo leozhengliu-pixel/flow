@@ -1,96 +1,110 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeftRight, Cable, ChevronDown, CircleAlert, ShieldCheck } from 'lucide-react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ArrowRightLeft, Check, ChevronDown } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 
 import { decideOAuthAuthorization, fetchOAuthAuthorizationRequest, fetchUserSettings, type OAuthAuthorizationRequest } from '@/lib/api'
 import { applyAccountTheme } from '@/lib/theme'
-import type { AccountBootstrap } from '@/types/flow'
-import type { Team } from '@/types/flow'
 import { request as apiRequest } from '@/lib/api-client'
-
-import './oauth-authorize-page.css'
+import { settingsPath, workspaceOnboardingPath } from '@/lib/app-routes'
+import { useOptionalTranslate } from '@/i18n/i18n'
+import { consentPermissions, oauthErrorMessage } from '@/lib/oauth-consent'
+import type { AccountBootstrap, Team, WorkspaceMembership } from '@/types/flow'
 import { FlowLogo } from '@/components/ui/flow-logo'
 import { GridLoader } from '@/components/ui/grid-loader'
-import { ApplicationTeamAccess } from '@/components/agent/application-team-access'
+import { WorkspaceAvatar } from '@/components/workspace/workspace-menu'
+import { ApplicationIconPlaceholder } from '@/components/ui/application-icon-placeholder'
+import { TeamCombobox } from './oauth-team-combobox'
+import { ScopeIcon } from './oauth-scope-icon'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+
+import './oauth-authorize-page.css'
 
 type Props = { account: AccountBootstrap }
+type Translate = (source: string) => string
 
+/**
+ * /oauth/authorize — the reference app's consent screen: a workspace switcher in the corner, one card with both marks,
+ * "<App> is requesting access", the requested permissions (and, for actor=app installs, team access), Cancel /
+ * Authorize, and the data-sharing notice under the card. Invalid requests show the mark and the error, centered.
+ */
 export function OAuthAuthorizePage({ account }: Props) {
   const location = useLocation()
-  return <OAuthConsentPage key={JSON.stringify([account.viewer.id,location.search])} account={account}/>
+  return <OAuthConsentPage key={JSON.stringify([account.viewer.id, location.search])} account={account}/>
 }
 
 function OAuthConsentPage({ account }: Props) {
+  const t = useOptionalTranslate()
   const location = useLocation()
   const navigate = useNavigate()
   const query = useMemo(() => new URLSearchParams(location.search), [location.search])
   const [request, setRequest] = useState<OAuthAuthorizationRequest>()
   const [workspaceKey, setWorkspaceKey] = useState('')
-  const [selecting, setSelecting] = useState(true)
   const [pending, setPending] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
   const [autoApproving, setAutoApproving] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [teamIds, setTeamIds] = useState<string[]>([])
   const [allPublicTeams, setAllPublicTeams] = useState(true)
   const isApplication = query.get('actor') === 'app'
-  const pendingRef=useRef(false)
-  const submitRef=useRef<(approve:boolean,workspaceOverride?:string)=>Promise<void>>(async()=>{})
-  const activeRef=useRef(true)
-  const preferredWorkspaceRef=useRef(account.lastWorkspaceKey)
-  preferredWorkspaceRef.current=account.lastWorkspaceKey
-  const themeWorkspace=account.workspaces.find(item=>item.workspace.urlKey===account.lastWorkspaceKey)?.workspace.urlKey??account.workspaces[0]?.workspace.urlKey
+  const pendingRef = useRef(false)
+  const submitRef = useRef<(approve: boolean, workspaceOverride?: string) => Promise<void>>(async () => {})
+  const activeRef = useRef(true)
+  const preferredWorkspaceRef = useRef(account.lastWorkspaceKey)
+  preferredWorkspaceRef.current = account.lastWorkspaceKey
+  const themeWorkspace = account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)?.workspace.urlKey ?? account.workspaces[0]?.workspace.urlKey
 
   useEffect(() => {
-    let active=true
-    if (themeWorkspace) void fetchUserSettings(themeWorkspace).then(settings=>{if(active)applyAccountTheme(settings)}).catch(() => undefined)
-    return ()=>{active=false}
+    let active = true
+    if (themeWorkspace) void fetchUserSettings(themeWorkspace).then(settings => { if (active) applyAccountTheme(settings) }).catch(() => undefined)
+    return () => { active = false }
   }, [themeWorkspace])
 
   useEffect(() => {
-    const controller=new AbortController()
-    activeRef.current=true
-    fetchOAuthAuthorizationRequest(location.search,controller.signal)
+    const controller = new AbortController()
+    activeRef.current = true
+    fetchOAuthAuthorizationRequest(location.search, controller.signal)
       .then(value => {
-        if(controller.signal.aborted)return
+        if (controller.signal.aborted) return
         setRequest(value)
         // The user already approved this client for a workspace: skip the consent screen and continue straight away.
         const remembered = value.previouslyAuthorizedWorkspaceKey
         if (remembered && value.prompt !== 'consent' && new URLSearchParams(location.search).get('actor') !== 'app' && value.workspaces.some(item => item.workspace.urlKey === remembered)) {
           setWorkspaceKey(remembered)
-          setSelecting(false)
           setAutoApproving(true)
           void submitRef.current(true, remembered)
           return
         }
         const preferred = value.workspaces.find(item => item.workspace.urlKey === preferredWorkspaceRef.current) ?? value.workspaces[0]
-        if (value.workspaces.length === 1 && preferred) {
-          setWorkspaceKey(preferred.workspace.urlKey)
-          setSelecting(false)
-        }
+        if (preferred) setWorkspaceKey(preferred.workspace.urlKey)
       })
-      .catch(value => {if(!controller.signal.aborted)setError(oauthFailure(value,'This authorization request is invalid.'))})
-    return ()=>{controller.abort();activeRef.current=false}
+      .catch(value => { if (!controller.signal.aborted) setLoadError(oauthErrorMessage(value, t)) })
+    return () => { controller.abort(); activeRef.current = false }
+  // `t` only words the error; reloading the request when the locale loads would repeat the request.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search])
 
-  const selected = request?.workspaces.find(item => item.workspace.urlKey === workspaceKey)
   useEffect(() => {
     setTeams([]); setTeamIds([]); setAllPublicTeams(true)
     if (!isApplication || !workspaceKey) return
     const abort = new AbortController()
-    void apiRequest<Team[]>(`/api/oauth/installation-teams?workspace=${encodeURIComponent(workspaceKey)}`, {signal:abort.signal}).then(value => { if (!abort.signal.aborted) setTeams(value) }).catch(error => { if (!abort.signal.aborted) setError(String(error.message ?? error)) })
+    void apiRequest<Team[]>(`/api/oauth/installation-teams?workspace=${encodeURIComponent(workspaceKey)}`, { signal: abort.signal })
+      .then(value => { if (!abort.signal.aborted) setTeams(value) })
+      .catch(value => { if (!abort.signal.aborted) setError(oauthErrorMessage(value, t)) })
     return () => abort.abort()
-  }, [isApplication,workspaceKey])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isApplication, workspaceKey])
+
   const submit = async (approve: boolean, workspaceOverride?: string) => {
     const targetWorkspace = workspaceOverride ?? workspaceKey
-    if (pendingRef.current||(approve && (!targetWorkspace || !workspaceOverride && isApplication && !allPublicTeams && !teamIds.length))) return
-    pendingRef.current=true
+    if (pendingRef.current || (approve && (!targetWorkspace || !workspaceOverride && isApplication && !allPublicTeams && !teamIds.length))) return
+    pendingRef.current = true
     setPending(true)
     setError('')
     try {
       const result = await decideOAuthAuthorization({
         actor: query.get('actor') ?? undefined,
-        teamIds: isApplication ? teamIds : undefined,
+        teamIds: isApplication ? (allPublicTeams ? [] : teamIds) : undefined,
         allPublicTeams: isApplication ? allPublicTeams : undefined,
         clientId: query.get('client_id') ?? '',
         redirectUri: query.get('redirect_uri') ?? '',
@@ -103,87 +117,127 @@ function OAuthConsentPage({ account }: Props) {
         workspaceKey: targetWorkspace,
         approve,
       })
-      if(activeRef.current)window.location.assign(result.redirect)
+      if (activeRef.current) window.location.assign(result.redirect)
     } catch (value) {
-      if(!activeRef.current)return
-      pendingRef.current=false
-      setError(oauthFailure(value,'Could not complete authorization.'))
+      if (!activeRef.current) return
+      pendingRef.current = false
+      setError(oauthErrorMessage(value, t))
       setPending(false)
       setAutoApproving(false)
     }
   }
-
   submitRef.current = submit
-  if (!request || autoApproving) return <OAuthShell workspaceName={account.workspaces[0]?.workspace.name}>
-    {error?<section className="oauth-invalid" role="alert"><CircleAlert/><h1>Authorization request unavailable</h1><p>{oauthErrorMessage(error)}</p><button onClick={()=>navigate('/')}>Back to Flow</button></section>:<div aria-label="Loading authorization request" className="oauth-loading"><GridLoader size={22}/></div>}
-  </OAuthShell>
 
-  if (selecting) return <OAuthShell workspaceName={account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)?.workspace.name}>
-    <section className="oauth-workspace-card">
-      <OAuthMarks clientName={request.client.client_name} logoUri={request.client.logo_uri}/>
-      <h1>{request.client.client_name} is requesting access</h1>
-      <p>Select a workspace to authenticate</p>
-      <label>Workspace to connect</label>
-      <div className="oauth-workspace-list">
-        {request.workspaces.map(item => <button key={item.workspace.id} onClick={() => {
-          setWorkspaceKey(item.workspace.urlKey)
-          setSelecting(false)
-        }}>
-          <WorkspaceMark name={item.workspace.name} color={item.workspace.color}/>
-          <span><strong data-i18n-ignore>{item.workspace.name}</strong><small data-i18n-ignore>{request.viewer.email}</small></span>
-          <ChevronDown/>
-        </button>)}
-      </div>
-      {error && <div className="oauth-error">{error}</div>}
+  const memberships = request?.workspaces.length ? request.workspaces : account.workspaces
+  const selected = memberships.find(item => item.workspace.urlKey === workspaceKey)
+    ?? account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)
+    ?? memberships[0]
+  const switcher = <OAuthWorkspaceSwitcher email={request?.viewer.email ?? account.viewer.email} memberships={memberships} selected={selected} onSelect={key => { setError(''); setWorkspaceKey(key) }} onCreate={() => navigate(workspaceOnboardingPath())} t={t}/>
+
+  if (loadError) return <OAuthShell switcher={switcher}>
+    <section className="oauth-error-page" role="alert">
+      <FlowLogo className="oauth-error-logo" size={84}/>
+      <p>{loadError}</p>
     </section>
   </OAuthShell>
 
-  return <OAuthShell workspaceName={selected?.workspace.name} onWorkspace={() => setSelecting(true)}>
-    <section className="oauth-consent-card">
-      <OAuthMarks clientName={request.client.client_name} logoUri={request.client.logo_uri}/>
-      <h1>{request.client.client_name} is requesting access</h1>
-      <div className="oauth-details">
-        <h2>Details</h2>
-        <dl>
-          <div><dt>Name:</dt><dd data-i18n-ignore>{request.client.client_name}</dd></div>
-          {safeHttpUrl(request.client.client_uri) && <div><dt>Developer:</dt><dd data-i18n-ignore><a href={safeHttpUrl(request.client.client_uri)} target="_blank" rel="noreferrer noopener">{request.client.client_uri}</a></dd></div>}
-          <div><dt>Redirect URIs:</dt><dd data-i18n-ignore>{request.redirectUri}</dd></div>
-          <div><dt>Access:</dt><dd>{request.scopeLabels.join(', ')}</dd></div>
-        </dl>
+  if (!request || autoApproving) return <OAuthShell switcher={switcher}>
+    <div aria-label={t('Loading authorization request')} className="oauth-loading"><GridLoader size={22}/></div>
+  </OAuthShell>
+
+  const appName = request.client.client_name
+  const workspaceName = selected?.workspace.name ?? ''
+  const permissions = consentPermissions(request.scopes, request.scopeLabels)
+  const blocked = isApplication && !allPublicTeams && !teamIds.length
+  return <OAuthShell switcher={switcher}>
+    <section className="oauth-card" aria-labelledby="oauth-card-title">
+      <header className="oauth-card-header">
+        <OAuthMarks clientName={appName} logoUri={request.client.logo_uri} t={t}/>
+        <div className="oauth-card-heading">
+          <h1 id="oauth-card-title" data-i18n-ignore>{fill(t('{app} is requesting access'), { app: appName })}</h1>
+          <p data-i18n-ignore>{fill(t('Authenticating with your {workspace} workspace'), { workspace: <strong key="workspace">{workspaceName}</strong> })}</p>
+        </div>
+      </header>
+      <div className="oauth-card-section">
+        <h2>{t('Permissions')}</h2>
+        <ul className="oauth-list">
+          {permissions.map(item => <li key={item.scope}><ScopeIcon scope={item.scope}/><span data-i18n-ignore>{t(item.label)}</span></li>)}
+        </ul>
       </div>
-      <div className="oauth-copy">
-        {isApplication ? <><p>Install <strong data-i18n-ignore>{request.client.client_name}</strong> as an application member. It will act under its own identity in the selected teams.</p><ApplicationTeamAccess key={workspaceKey} teams={teams} value={{allPublicTeams,teamIds}} onChange={value=>{setAllPublicTeams(value.allPublicTeams);setTeamIds(value.teamIds)}}/></> : <p>This MCP client is requesting access to your Flow workspace. By approving, you authorize Flow to share this data with <strong data-i18n-ignore>{request.client.client_name}</strong> on behalf of your organization. Once shared, the client's use of the data is governed by its own terms and privacy policy, not by Flow's terms or data commitments.</p>}
-        <p>Owners and admins can revoke this connection at any time in Settings. Learn about <button onClick={() => navigate(`/${workspaceKey}/settings/applications`)}>third-party applications</button>.</p>
-      </div>
-      {error && <div className="oauth-error">{error}</div>}
-      <footer>
-        <button className="oauth-cancel" disabled={pending} onClick={() => void submit(false)}>Cancel</button>
-        <button className="oauth-approve" disabled={pending || isApplication && !allPublicTeams && !teamIds.length} onClick={() => void submit(true)}>{pending ? <GridLoader/> : <ShieldCheck/>}{isApplication ? 'Install application' : 'Approve'}</button>
+      {isApplication && <ConsentTeamAccess teams={teams} allPublicTeams={allPublicTeams} teamIds={teamIds} t={t} onChange={(nextAll, nextIds) => { setAllPublicTeams(nextAll); setTeamIds(nextIds) }}/>}
+      {error && <p className="oauth-card-error" role="alert">{error}</p>}
+      <footer className="oauth-card-actions">
+        <button type="button" className="oauth-button" disabled={pending} onClick={() => void submit(false)}>{t('Cancel')}</button>
+        <button type="button" className="oauth-button is-primary" disabled={pending || blocked || !workspaceKey} aria-busy={pending || undefined} onClick={() => void submit(true)}>{t('Authorize')}</button>
       </footer>
     </section>
+    <div className="oauth-notice" data-i18n-ignore>
+      <span>{fill(t('This application is requesting access to your Flow workspace. By approving, you authorize Flow to share this data with {app} on behalf of your organization. Once shared, {app}’s use of the data is governed by its own terms and privacy policy, not by Flow’s terms or data commitments.'), { app: appName })}</span>
+      <span>{fill(t('Owners and admins can revoke this connection at any time in Settings. Learn about {link}.'), { link: <a key="link" href={settingsPath(workspaceKey || selected?.workspace.urlKey || '', 'applications')} onClick={event => { event.preventDefault(); navigate(settingsPath(workspaceKey || selected?.workspace.urlKey || '', 'applications')) }}>{t('third-party applications')}</a> })}</span>
+    </div>
   </OAuthShell>
 }
 
-function OAuthShell({ workspaceName, onWorkspace, children }: { workspaceName?: string; onWorkspace?: () => void; children: React.ReactNode }) {
+function OAuthShell({ switcher, children }: { switcher: ReactNode; children: ReactNode }) {
   return <main className="oauth-page">
-    <header><button className="oauth-workspace-menu" onClick={onWorkspace} disabled={!onWorkspace}><WorkspaceMark name={workspaceName ?? 'Flow'}/><span data-i18n-ignore>{workspaceName ?? 'Flow'}</span>{onWorkspace && <ChevronDown/>}</button></header>
+    {switcher}
     <div className="oauth-page-body">{children}</div>
   </main>
 }
 
-function OAuthMarks({ clientName, logoUri }: { clientName: string; logoUri?: string }) {
+/** The reference app's corner workspace menu: the signed-in email, the workspaces (check on the one being authorized) and Account actions. */
+function OAuthWorkspaceSwitcher({ email, memberships, selected, onSelect, onCreate, t }: { email: string; memberships: WorkspaceMembership[]; selected?: WorkspaceMembership; onSelect: (key: string) => void; onCreate: () => void; t: Translate }) {
+  if (!selected) return null
+  return <DropdownMenu>
+    <DropdownMenuTrigger className="oauth-workspace-trigger" aria-label={t('Switch workspace')}>
+      <WorkspaceAvatar workspace={selected.workspace}/>
+      <span data-i18n-ignore>{selected.workspace.name}</span>
+      <ChevronDown aria-hidden="true"/>
+    </DropdownMenuTrigger>
+    <DropdownMenuContent align="start" sideOffset={4} className="oauth-workspace-menu">
+      <DropdownMenuLabel data-i18n-ignore>{email}</DropdownMenuLabel>
+      {memberships.map((membership, index) => <DropdownMenuItem key={membership.workspace.id} onSelect={() => onSelect(membership.workspace.urlKey)} className={membership.workspace.id === selected.workspace.id ? 'is-current' : undefined}>
+        <WorkspaceAvatar workspace={membership.workspace}/>
+        <span className="oauth-workspace-option" data-i18n-ignore>{membership.workspace.name}</span>
+        {membership.workspace.id === selected.workspace.id && <Check aria-hidden="true" className="oauth-workspace-check"/>}
+        {index < 9 && <kbd className="oauth-workspace-index">{index + 1}</kbd>}
+      </DropdownMenuItem>)}
+      <DropdownMenuLabel>{t('Account')}</DropdownMenuLabel>
+      <DropdownMenuItem onSelect={onCreate}>{t('Create or join a workspace…')}</DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>
+}
+
+function OAuthMarks({ clientName, logoUri, t }: { clientName: string; logoUri?: string; t: Translate }) {
   const logo = safeHttpUrl(logoUri)
-  return <div className="oauth-marks"><span className="oauth-client-mark" aria-label={logo ? 'Application logo' : 'MCP client'}>{logo ? <img src={logo} alt="" className="oauth-client-logo"/> : <Cable/>}</span><ArrowLeftRight/><span className="oauth-flow-mark" aria-label="Flow"><FlowLogo/></span><span className="oauth-client-name" data-i18n-ignore>{clientName}</span></div>
+  return <div className="oauth-marks">
+    <span className={`oauth-mark${logo ? '' : ' is-placeholder'}`} role="img" aria-label={t('{app} icon').replace('{app}', clientName)}>
+      {logo ? <img src={logo} alt=""/> : <ApplicationIconPlaceholder/>}
+    </span>
+    <ArrowRightLeft aria-hidden="true" className="oauth-marks-arrows"/>
+    <span className="oauth-mark is-flow" role="img" aria-label="Flow"><FlowLogo size={34}/></span>
+  </div>
 }
 
-function WorkspaceMark({ name, color }: { name: string; color?: string }) {
-  const initials = name.split(/\s+/).map(part => part[0]).join('').slice(0, 2).toUpperCase() || 'F'
-  return <span className="oauth-workspace-mark" style={color ? { backgroundColor: color } : undefined}>{initials}</span>
+function ConsentTeamAccess({ teams, allPublicTeams, teamIds, onChange, t }: { teams: Team[]; allPublicTeams: boolean; teamIds: string[]; onChange: (allPublicTeams: boolean, teamIds: string[]) => void; t: Translate }) {
+  return <div className="oauth-card-section">
+    <h2>{t('Team access')}</h2>
+    <div className="oauth-list oauth-team-access" role="radiogroup" aria-label={t('Team access')}>
+      <label><input type="radio" name="oauth-team-access" checked={allPublicTeams} onChange={() => onChange(true, [])}/><span>{t('All public teams')}</span></label>
+      <label><input type="radio" name="oauth-team-access" checked={!allPublicTeams} onChange={() => onChange(false, teamIds)}/><span>{t('Only select teams…')}</span></label>
+      {!allPublicTeams && <TeamCombobox teams={teams.filter(team => !team.retiredAt)} value={teamIds} onChange={next => onChange(false, next)} t={t}/>}
+    </div>
+  </div>
 }
 
-function oauthErrorMessage(value:string){if(value==='invalid_request')return'This authorization link is incomplete or has expired.';if(value==='invalid_client')return'This application is not registered or is no longer available.';if(value==='invalid_scope')return'This application requested a permission that Flow does not support.';if(value==='app scopes require actor=app')return'This application requested agent scopes without actor=app.';return value||'This authorization request could not be loaded.'}
+/** Fills `{name}` placeholders with text or elements (so translated sentences keep their own word order). */
+function fill(template: string, values: Record<string, ReactNode>): ReactNode {
+  const parts = template.split(/(\{\w+\})/g)
+  if (parts.every(part => !/^\{\w+\}$/.test(part) || typeof values[part.slice(1, -1)] === 'string')) {
+    return parts.map(part => /^\{\w+\}$/.test(part) ? values[part.slice(1, -1)] as string : part).join('')
+  }
+  return parts.map((part, index) => /^\{\w+\}$/.test(part) ? <Fragment key={index}>{values[part.slice(1, -1)]}</Fragment> : part)
+}
 
-function oauthFailure(value:unknown,fallback:string){const code=(value as {code?:string}|null)?.code;if(code==='invalid_scope'||code==='invalid_client')return oauthErrorMessage(code);return value instanceof Error&&value.message?oauthErrorMessage(value.message):oauthErrorMessage(code||fallback)}
-
-/** Only http(s) URLs from the OAuth client are linked or loaded as images. */
-function safeHttpUrl(value?:string){if(!value)return undefined;try{const url=new URL(value);return url.protocol==='https:'||url.protocol==='http:'?url.toString():undefined}catch{return undefined}}
+/** Only http(s) URLs from the OAuth client are loaded as images. */
+function safeHttpUrl(value?: string) { if (!value) return undefined; try { const url = new URL(value); return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined } catch { return undefined } }

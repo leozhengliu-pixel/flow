@@ -191,6 +191,9 @@ import type { NewProjectDraft } from "@/components/projects-page/new-project-dia
 import { LabelActions } from "@/components/workspace/label-page-toolbar";
 import { WorkspaceOnboarding, WelcomeOnboarding, WorkspaceDirectoryPage, MemberProfilePage, TeamCreatePage, TeamOverviewPage, SettingsPage, AuthPage, AuthTokenPage, AuthErrorPage, AuthGoogleCallbackPage, MobileAuthPage, InviteLinkAccept, OAuthAuthorizePage, CompleteOAuthView, CompleteFigmaAuthView, CompleteSentryAuthView, AuthDesktopRedirectFigma, WorkspaceSearchPage, WorkspaceOperationsPage, DocumentPage, WorkspaceSecondaryPage, AnalyticsDashboardPage, DashboardsPage, CustomerDetailPage, InboxAppPage, ProjectsPage, ProjectDetailPage, MyIssuesPage, IssueExplorerPage, ViewsPage, InitiativesPage, InitiativeDetailPage, CyclesPage, CycleDetailPage, PulsePage, TeamArchivePage, ReviewsPage, AgentPage, AgentChatPanel, LoopsPage, DetailPane, CommandMenu, BulkActionBar, CreateIssueDialog } from "@/lib/route-pages";
 import { AGENT_SESSION_DOCKED_EVENT } from "@/components/agent/agent-docked-sessions";
+import { AgentChatHistoryPopover } from "@/components/agent/agent-chat-history-popover";
+import { FlowTooltip } from "@/components/ui/tooltip";
+import { OPEN_FLOATING_AGENT_EVENT, type FloatingAgentRequest } from "@/components/agent/agent-floating-request";
 import { AGENT_PAGE_ASK_EVENT } from "@/components/agent/agent-ask-request";
 import { documentsRedirectPath } from "@/lib/documents-redirect";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
@@ -550,11 +553,15 @@ function App() {
   const bootstrapProjection = projectListProjection ? 'project-list' : route.kind === 'issue' ? 'issue-detail' : undefined;
   const { t: translateTitle } = useI18n();
   useEffect(() => {
-    // Search sets its own title (it includes the query).
+    // Search sets its own title (it includes the query); the OAuth consent page is titled "Flow" (the reference app: "the reference app").
     if (route.kind === "search") return;
+    if (location.pathname === "/oauth/authorize") {
+      document.title = "Flow";
+      return;
+    }
     const info = routeInfo(route, data, translateTitle);
     applyDocumentTitle(info, data?.workspace.name);
-  }, [route, data, translateTitle]);
+  }, [route, data, translateTitle, location.pathname]);
   useEffect(() => {
     if (!loadedWorkspaceKey) return;
     const warmDetails = () => {
@@ -974,8 +981,23 @@ function App() {
       setCreateOpen(true);
   }, [location.pathname, location.search]);
   const [floatingAgentOpen, setFloatingAgentOpen] = useState(false);
+  // Bottom-right "Chat history" popover; picking a chat opens it in the floating chat (no navigation).
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const [floatingAgentSession, setFloatingAgentSession] = useState<AgentSession>();
+  const chatHistoryButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { if (!floatingAgentOpen) setFloatingAgentSession(undefined); }, [floatingAgentOpen]);
   // "Ask Flow" with a typed question (⌘K Tab): the floating chat opens on a fresh conversation that sends it at once.
-  const [floatingAgentRequest, setFloatingAgentRequest] = useState<{ id: number; prompt: string }>();
+  const [floatingAgentRequest, setFloatingAgentRequest] = useState<{ id: number; prompt?: string; quote?: string }>();
+  // A page (e.g. a document's selection toolbar) asks for the floating chat, the reference app's "Ask agent" on a selection.
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<FloatingAgentRequest>).detail ?? {};
+      setFloatingAgentRequest({ id: Date.now(), prompt: detail.prompt, quote: detail.quote });
+      setFloatingAgentOpen(true);
+    };
+    window.addEventListener(OPEN_FLOATING_AGENT_EVENT, listener);
+    return () => window.removeEventListener(OPEN_FLOATING_AGENT_EVENT, listener);
+  }, []);
   const selectedIssue =
     route.kind === "issue"
       ? data?.issues.find(
@@ -6958,9 +6980,11 @@ function App() {
         data={data}
         onCreateSkill={() => { setFloatingAgentOpen(false); navigateTo(newAgentSkillPath(data.workspace.urlKey)) }}
         issues={selectedIssue ? [issueToExplorerRow(selectedIssue, data.workspace.urlKey, data.issues, data)] : []}
-        key={floatingAgentRequest?.id ?? "floating"}
+        key={floatingAgentSession ? `session-${floatingAgentSession.id}` : floatingAgentRequest?.id ?? "floating"}
+        initialSession={floatingAgentSession}
         initialPrompt={floatingAgentRequest?.prompt}
-        autoSubmit={Boolean(floatingAgentRequest)}
+        initialQuote={floatingAgentRequest?.quote}
+        autoSubmit={Boolean(floatingAgentRequest?.prompt)}
         pageContext={
           // Issues ride along through `issues`; projects, initiatives and documents attach as the page entity.
           page === "project-detail" && selectedProject
@@ -6977,6 +7001,8 @@ function App() {
         onOpenFullPage={(session) => { setFloatingAgentOpen(false); navigateTo(agentPath(data.workspace.urlKey, session?.slugId)) }}
       />
       <div className="bottom-agent">
+        {/* Minimized floating chats park here as pills's bottom bar. */}
+        <div className="bottom-agent__chats" data-agent-dock-slot="" />
         <button
           aria-label="Agent"
           aria-expanded={floatingAgentOpen}
@@ -6986,16 +7012,47 @@ function App() {
           <AgentCursorGlyph size={14} />
           <span>Agent</span>
         </button>
-        <button
-          aria-label="Chat history"
-          onClick={() =>
-            navigateTo(`${agentPath(data.workspace.urlKey)}?history=1`)
-          }
-          type="button"
-        >
-          <AgentHistoryGlyph size={14} />
-        </button>
+        <FlowTooltip align="end" disabled={chatHistoryOpen} label="Chat history…" side="top">
+          <button
+            aria-expanded={chatHistoryOpen}
+            aria-haspopup="dialog"
+            aria-label="Chat history"
+            onClick={() => setChatHistoryOpen((value) => !value)}
+            ref={chatHistoryButtonRef}
+            type="button"
+          >
+            <AgentHistoryGlyph size={14} />
+          </button>
+        </FlowTooltip>
       </div>
+      <AgentChatHistoryPopover
+        anchorRef={chatHistoryButtonRef}
+        onClose={(options) => {
+          setChatHistoryOpen(false);
+          if (options?.restoreFocus) chatHistoryButtonRef.current?.focus();
+        }}
+        onSelect={(session) => {
+          // Like the reference app: the chat opens in the floating chat on the current page; the page does not change.
+          setClosedAgentSessionIds((current) => new Set(current).add(session.id));
+          setFloatingAgentRequest(undefined);
+          setFloatingAgentSession(session);
+          setFloatingAgentOpen(true);
+        }}
+        open={chatHistoryOpen}
+        related={
+          page === "project-detail" && selectedProject
+            ? { type: "project", id: selectedProject.id }
+            : page === "initiative-detail" && selectedInitiative
+              ? { type: "initiative", id: selectedInitiative.id }
+              : page === "document-detail" && selectedDocument
+                ? { type: "document", id: selectedDocument.id }
+                : selectedIssue
+                  ? { type: "issue", id: selectedIssue.id }
+                  : undefined
+        }
+        sessions={data.agentSessions}
+        toolbarSessionIds={[toolbarAgentSession?.id, floatingAgentSession?.id].filter((id): id is string => Boolean(id))}
+      />
     </div></ActiveTeamProvider></PeopleProvider>
   );
 }

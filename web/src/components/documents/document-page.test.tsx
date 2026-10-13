@@ -27,8 +27,7 @@ vi.mock('@/components/documents/collaborative-editor', () => ({
 vi.mock('@/components/issue/issue-description-editor', () => ({
   IssueDescriptionEditor: (props: { readOnly?: boolean; value: string }) => <div aria-label="Read-only content" data-readonly={String(Boolean(props.readOnly))}>{props.value}</div>,
 }))
-vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: () => <svg aria-hidden="true"/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
-vi.mock('@/components/agent/document-agent-panel', () => ({ DocumentAgentPanel: () => <div data-testid="document-agent-panel"/> }))
+vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: ({ icon, color }: { icon?: string; color?: string }) => <svg aria-hidden="true" data-color={color} data-icon={icon}/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
 vi.mock('./document-history-dialog', () => ({ DocumentHistoryDialog: ({ open }: { open: boolean }) => open ? <div aria-label="History dialog" role="dialog"/> : null }))
 vi.mock('./document-template-chip', async importOriginal => ({ ...(await importOriginal<typeof import('./document-template-chip')>()), DocumentTemplateChip: () => <span data-testid="template-chip"/> }))
 vi.mock('./document-owner-picker', async importOriginal => ({
@@ -42,6 +41,7 @@ vi.mock('@/lib/api', async importOriginal => ({
 
 import { requestDocumentUiAction } from './document-actions'
 import { DocumentPage, type DocumentPageProps } from './document-page'
+import { documentEditedDate } from './document-edited-date'
 
 const flowDocument = {
   id: 'document-1', slugId: 'document-one', title: 'Document one', content: '', color: '#8b8b90', creator: viewer,
@@ -98,13 +98,12 @@ describe('DocumentPage header', () => {
     expect(props.onReload).not.toHaveBeenCalled()
   })
 
-  it('has no Activity panel, and opens the agent rail from the header', async () => {
-    const user = userEvent.setup()
+  it('has no Activity panel and, no docked agent rail or header chat button', () => {
     const { container } = renderPage()
     expect(container.querySelector('.entity-activity-panel')).toBeNull()
+    expect(container.querySelector('.document-agent-rail')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Agent chat' })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /Open chat|打开聊天/ }))
-    expect(screen.getByTestId('document-agent-panel')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Open chat|打开聊天/ })).not.toBeInTheDocument()
   })
 
   it('shows Team › Documents › title for a team document and Project › title for a project document', () => {
@@ -179,7 +178,7 @@ describe('DocumentPage header', () => {
   it('opens a subscribers popover from the bell: viewer check plus the other members', async () => {
     const user = userEvent.setup()
     const { props } = renderPage()
-    await user.click(screen.getByRole('button', { name: 'Document subscribers' }))
+    await user.click(screen.getByRole('button', { name: 'Change document subscribers' }))
     const list = await screen.findByRole('group', { name: 'Document subscribers' })
     expect(within(list).getByRole('checkbox', { name: 'Viewer' })).toBeChecked()
     expect(within(list).getByRole('checkbox', { name: 'Teammate' })).not.toBeChecked()
@@ -197,7 +196,7 @@ describe('DocumentPage header', () => {
     const user = userEvent.setup()
     const subscribed = { ...flowDocument, subscriberIds: [viewer.id, teammate.id] } as FlowDocument
     renderPage({ document: subscribed })
-    await user.click(screen.getByRole('button', { name: 'Document subscribers' }))
+    await user.click(screen.getByRole('button', { name: 'Change document subscribers' }))
     await user.click(await screen.findByRole('checkbox', { name: 'Teammate' }))
     await waitFor(() => expect(api.updateDocument).toHaveBeenCalledWith(flowDocument.id, { subscriberIds: [viewer.id] }))
   })
@@ -206,7 +205,7 @@ describe('DocumentPage header', () => {
     const user = userEvent.setup()
     const unsubscribed = { ...flowDocument, subscriberIds: [] } as FlowDocument
     renderPage({ document: unsubscribed })
-    await user.click(screen.getByRole('button', { name: 'Document subscribers' }))
+    await user.click(screen.getByRole('button', { name: 'Change document subscribers' }))
     await user.click(await screen.findByRole('checkbox', { name: 'Viewer' }))
     await waitFor(() => expect(api.addSubscription).toHaveBeenCalledWith('document', flowDocument.id))
   })
@@ -404,7 +403,7 @@ describe('DocumentPage deleted state', () => {
     renderPage({ deletedEntry: entry })
     expect(screen.getByText(/Deleted|已删除/)).toBeVisible()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Document subscribers' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Change document subscribers' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /chat/i })).not.toBeInTheDocument()
     expect(screen.queryByTestId('template-chip')).not.toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Document title' })).toHaveAttribute('readonly')
@@ -467,5 +466,105 @@ describe('DocumentPage mobile header and print', () => {
     expect(documentPageCss).not.toMatch(/384px/)
     expect(documentPageCss).not.toMatch(/rgba?\(/)
     expect(documentPageCss).not.toMatch(/:root\[data-theme/)
+  })
+})
+
+describe('DocumentPage header, measured against the reference', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    Object.values(api).forEach(mock => mock.mockReset())
+    api.refreshResourcePreferences.mockResolvedValue(undefined)
+    api.listDocumentPermissions.mockResolvedValue([])
+    api.updateDocument.mockResolvedValue({})
+  })
+
+  it('draws a project parent as the page glyph in the project colour, then a plain (non-link) title crumb', () => {
+    const inProject = { ...flowDocument, teamIds: [], projectIds: [project.id] } as FlowDocument
+    renderPage({ document: inProject })
+    const nav = screen.getByRole('navigation', { name: /breadcrumb|面包屑/i })
+    const crumb = within(nav).getByRole('link', { name: project.name })
+    const glyph = crumb.querySelector('svg')
+    expect(glyph).toHaveAttribute('data-icon', 'Page')
+    expect(glyph).toHaveAttribute('data-color', project.color)
+    expect(within(nav).getAllByRole('link')).toHaveLength(1)
+    const title = nav.querySelector('.document-breadcrumb-current')!
+    expect(title).toHaveTextContent('Document one')
+    expect(title.querySelector('svg')).toHaveAttribute('data-icon', 'Page')
+    // An untouched document icon colour takes the header's dim glyph token; a chosen colour is kept.
+    expect(title.querySelector('svg')).toHaveAttribute('data-color', 'var(--issue-header-icon)')
+    expect(nav.querySelectorAll('.document-breadcrumb-separator')).toHaveLength(1)
+  })
+
+  it('draws a team parent as Team (page glyph in the team colour) › Documents › title', () => {
+    renderPage()
+    const nav = screen.getByRole('navigation', { name: /breadcrumb|面包屑/i })
+    expect(within(nav).getByRole('link', { name: 'Test team' }).querySelector('svg')).toHaveAttribute('data-icon', 'Page')
+    expect(within(nav).getByRole('link', { name: 'Documents' }).querySelector('svg')).toBeNull()
+    expect(nav.querySelectorAll('.document-breadcrumb-separator')).toHaveLength(2)
+  })
+
+  it('shows the favorite tooltip with ⌥ F and the filled star once favorited', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderPage()
+    const star = screen.getByRole('switch', { name: 'Add to favorites' })
+    expect(star.querySelector('.document-favorite-filled')).toBeNull()
+    await user.hover(star)
+    const tooltip = await screen.findByRole('tooltip', undefined, { timeout: 2000 })
+    expect(tooltip).toHaveTextContent('Favorite document')
+    expect(tooltip.textContent).toMatch(/⌥\s*F/)
+    unmount()
+
+    renderPage({ document: { ...flowDocument, favorite: true } as FlowDocument })
+    const filled = screen.getByRole('switch', { name: 'Remove from favorites' })
+    expect(filled).toHaveAttribute('aria-checked', 'true')
+    expect(filled.querySelector('.document-favorite-filled')).not.toBeNull()
+    await user.hover(filled)
+    expect(await screen.findByRole('tooltip', undefined, { timeout: 2000 })).toHaveTextContent('Unfavorite document')
+  })
+
+  it('labels the bell "Change document subscribers" (⌘ ⇧ S) and cross-fades plain bell and bell-with-check', async () => {
+    const user = userEvent.setup()
+    const { unmount } = renderPage()
+    const bell = screen.getByRole('button', { name: 'Change document subscribers' })
+    const layers = () => [...bell.querySelectorAll('.document-bell__layer')].map(layer => layer.getAttribute('data-visible'))
+    expect(layers()).toEqual(['false', 'true'])
+    expect(bell).not.toHaveClass('is-active')
+    await user.hover(bell)
+    const tooltip = await screen.findByRole('tooltip', undefined, { timeout: 2000 })
+    expect(tooltip).toHaveTextContent('Change document subscribers')
+    expect(tooltip.textContent).toMatch(/⌘\s*⇧\s*S/)
+    unmount()
+
+    renderPage({ document: { ...flowDocument, subscriberIds: [] } as FlowDocument })
+    expect([...screen.getByRole('button', { name: 'Change document subscribers' }).querySelectorAll('.document-bell__layer')].map(layer => layer.getAttribute('data-visible'))).toEqual(['true', 'false'])
+  })
+
+  it('names the Edited trigger like the reference: display options and metadata; Edited <date>', () => {
+    renderPage()
+    const trigger = document.querySelector('.document-header .document-edited')!
+    expect(trigger.getAttribute('aria-label')).toMatch(/^Document display options and metadata; Edited [A-Z][a-z]{2} \d{1,2}/)
+    expect(trigger.querySelector('svg')).not.toBeNull()
+    expect(trigger.hasAttribute('title')).toBe(false)
+  })
+
+  it('formats the edit date as an absolute "Mon D" (even today), with the year only for another year', () => {
+    const format = (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-US', options).format(new Date(value))
+    const now = new Date('2026-10-13T16:22:00.000Z')
+    expect(documentEditedDate('2026-10-13T16:21:00.000Z', format, now)).toBe('Oct 13')
+    expect(documentEditedDate('2026-10-12T12:00:00.000Z', format, now)).toBe('Oct 12')
+    expect(documentEditedDate('2026-09-29T12:00:00.000Z', format, now)).toBe('Sep 29')
+    expect(documentEditedDate('2025-09-29T12:00:00.000Z', format, now)).toBe('Sep 29, 2025')
+  })
+
+  it('keeps the measured header geometry in CSS: 8px inset, 6px gaps, 28px circles with 14px glyphs, 10px crumb inset', () => {
+    expect(documentPageCss).toMatch(/\.document-header\s*\{[^}]*padding:\s*0 8px;[^}]*gap:\s*6px/)
+    expect(documentPageCss).toMatch(/\.document-breadcrumbs\s*\{[^}]*height:\s*34px;[^}]*padding-left:\s*10px/)
+    expect(documentPageCss).toMatch(/\.document-breadcrumb-link\s*\{[^}]*height:\s*24px;[^}]*margin:\s*0 -5px 0 -4px;[^}]*padding:\s*0 5px 0 4px;[^}]*border-radius:\s*8px/)
+    expect(documentPageCss).toMatch(/\.document-breadcrumb-separator\s*\{[^}]*margin:\s*-2px 8px 0/)
+    expect(documentPageCss).toMatch(/\.document-icon-button\s*\{[^}]*width:\s*28px;[^}]*height:\s*28px;[^}]*padding:\s*0 2px/)
+    expect(documentPageCss).toMatch(/\.document-icon-button svg\s*\{\s*width:\s*14px;\s*height:\s*14px/)
+    expect(documentPageCss).toMatch(/\.document-title-actions\s*\{[^}]*gap:\s*6px/)
+    expect(documentPageCss).toMatch(/\.document-header-actions\s*\{[^}]*gap:\s*4px/)
+    expect(documentPageCss).toMatch(/\.document-edited\s*\{[^}]*padding:\s*0 10px 0 8px;[^}]*font:\s*500 12px/)
   })
 })

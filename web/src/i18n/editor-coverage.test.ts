@@ -40,7 +40,7 @@ describe('editor chrome translations', () => {
           const text = match[1]
           if (!/[A-Za-z]{2,}/.test(text)) continue
           const zh = (zhCN as Record<string, string>)[text] ?? translateToChinese(text)
-          if (/[A-Za-z]{3,}/.test(zh.replace(/\{[a-zA-Z]+\}/g, '').replace(/\b(?:URL|ID|CSV|Markdown|Slack|Pulse|GitHub|GitLab|Figma|Miro|Tella|Loom|YouTube|Descript)\b/g, ''))) missing.push(`${path.split('/').pop()}: ${text} -> ${zh}`)
+          if (/[A-Za-z]{3,}/.test(zh.replace(/\{[a-zA-Z]+\}/g, '').replace(/\b(?:URL|ID|CSV|Markdown|Slack|Pulse|Agent|GitHub|GitLab|Figma|Miro|Tella|Loom|YouTube|Descript)\b/g, ''))) missing.push(`${path.split('/').pop()}: ${text} -> ${zh}`)
         }
       }
     }

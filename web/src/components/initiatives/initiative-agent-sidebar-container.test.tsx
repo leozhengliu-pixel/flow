@@ -79,4 +79,10 @@ describe('InitiativePageChrome (LS-0311)', () => {
     await user.click(screen.getByRole('button', { name: 'Open initiative updates' }))
     expect(onUpdates).toHaveBeenCalled()
   })
+
+  it('has no agent button when the page does not dock an agent (the reference app: the floating chat is the agent)', () => {
+    render(<I18nProvider><InitiativePageChromeActions agentOpen={false} updatesOpen={false} onToggleUpdates={vi.fn()}/></I18nProvider>)
+    expect(screen.queryByRole('button', { name: 'Open agent sidebar' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open initiative updates' })).toBeInTheDocument()
+  })
 })
