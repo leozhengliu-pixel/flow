@@ -157,7 +157,7 @@ import type {
 import { deriveResourceCounts } from "@/lib/resource-counts";
 import { Sidebar, type PageId } from "@/components/layout/sidebar";
 import { workspaceFeatureEnabled } from "@/components/layout/sidebar-customization-state";
-import { issueReturnPath } from '@/lib/issue-navigation-context';
+import { issueListContextPath, issueReturnPath } from '@/lib/issue-navigation-context';
 import { WorkspaceBootShell } from "@/components/layout/workspace-boot-shell";
 import { issueDetailPane } from "@/lib/issue-detail-boot";
 import {
@@ -195,6 +195,7 @@ import type { MyIssuesCreateContext } from "@/components/my-issues/my-issues-lis
 import { createIssueShortcutContext } from "@/lib/create-issue-shortcut";
 import { useLocation } from "react-router-dom";
 import { useRouteNavigation } from "@/hooks/use-route-navigation";
+import { usePrefilledIssueRoute } from "@/hooks/use-prefilled-issue-route";
 import { applyDocumentTitle, routeInfo } from "@/lib/route-info";
 import { useI18n } from "@/i18n/i18n";
 import {
@@ -514,6 +515,7 @@ function App() {
     },
     [data],
   );
+  usePrefilledIssueRoute({ route, data, location, navigateTo, openCreateIssue });
   useEffect(() => {
     const createFromSelection = (event: Event) => {
       const { text, teamId, projectId } = (event as CustomEvent<{text:string;teamId:string;projectId?:string}>).detail;
@@ -3764,6 +3766,8 @@ function App() {
         key={issue.id}
         issue={issue}
         data={data!}
+        // A preview sits beside the list it was opened from: that list is its breadcrumb context.
+        returnPath={`${location.pathname}${location.search}`}
         workspacePresence={realtime.presence}
         onClose={onClose}
         onNavigateIssue={openIssue}
@@ -4754,7 +4758,7 @@ function App() {
               historyLoading={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.loading}
               historyError={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.error ? 'Could not load issue history' : undefined}
               onRetryHistory={()=>{void refreshActivity(false).catch(()=>undefined)}}
-              returnPath={issueReturnPath(location.state, data.workspace.urlKey, selectedIssue)}
+              returnPath={issueListContextPath(location.state, data.workspace.urlKey)}
               navigationIssueIds={issueSequenceIDs(location.state)}
               workspacePresence={realtime.presence}
               issueOptionsActions={selectedIssueOptionsActions}
@@ -6833,7 +6837,9 @@ function App() {
             initialProjectMilestoneId={createProjectMilestoneId}
             initialStateId={createStateId ?? createStateRef.current}
             initialTemplateId={
-              new URLSearchParams(location.search).get("template") ?? undefined
+              route.kind === "new-issue"
+                ? undefined
+                : new URLSearchParams(location.search).get("template") ?? undefined
             }
             onOpenChange={(open) => {
               setCreateOpen(open);
@@ -6994,7 +7000,8 @@ function pageForRoute(route: AppRoute): PageId | "not-found" {
     route.kind === "automation-new" ||
     route.kind === "automation-detail" ||
     route.kind === "automation-runs" ||
-    route.kind === "label"
+    route.kind === "label" ||
+    route.kind === "new-issue"
   )
     return "workspace-issues";
   if (route.kind === "pulse") return "pulse";

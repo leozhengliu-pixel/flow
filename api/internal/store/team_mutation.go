@@ -219,7 +219,7 @@ func (s *SQLiteStore) mutateTeamMetadata(ctx context.Context, workspaceKey, even
 		s.invalidateHotCache(ctx, workspaceKey, eventType, event.AggregateID)
 	}
 	if sink := s.webhook(); sink != nil {
-		sink(workspaceKey, event)
+		sink(workspaceKey, webhookEvent(ctx, event, realtimePayload))
 	}
 	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)

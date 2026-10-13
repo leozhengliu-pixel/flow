@@ -20,17 +20,46 @@ func validateOAuthInput(input *oauthInput) error {
 	if input.LogoURL != nil && *input.LogoURL != "" && !validOAuthMetadataURI(*input.LogoURL) && !strings.HasPrefix(*input.LogoURL, "/uploads/") {
 		return fmt.Errorf("invalid application logo URL")
 	}
-	if input.RedirectURIs != nil && (len(*input.RedirectURIs) > 20 || slices.ContainsFunc(*input.RedirectURIs, func(uri string) bool { return !validOAuthRedirectURI(uri) })) {
+	if input.DeveloperName != nil && len([]rune(strings.TrimSpace(*input.DeveloperName))) > 80 {
+		return fmt.Errorf("developer name must be at most 80 characters")
+	}
+	if input.DeveloperURL != nil && *input.DeveloperURL != "" && !absoluteHTTPURL(*input.DeveloperURL, false) {
+		return fmt.Errorf("developer URL must be an absolute HTTP or HTTPS URL")
+	}
+	if input.RedirectURIs != nil && (len(*input.RedirectURIs) > 32 || slices.ContainsFunc(*input.RedirectURIs, func(uri string) bool { return !validOAuthRedirectURI(uri) })) {
 		return fmt.Errorf("invalid OAuth redirect URI")
 	}
 	if input.Scopes != nil {
-		scopes, err := domain.NormalizeApplicationScopes(*input.Scopes)
+		scopes, err := normalizeOAuthApplicationScopes(*input.Scopes)
 		if err != nil {
 			return err
 		}
 		input.Scopes = &scopes
 	}
 	return nil
+}
+
+// normalizeOAuthApplicationScopes validates the scopes an application may
+// request. Besides the application scopes it may allow the user-actor-only
+// scopes admin and timeSchedule:write, which actor=app tokens never receive.
+func normalizeOAuthApplicationScopes(values []string) ([]string, error) {
+	userOnly := []string{}
+	rest := []string{}
+	for _, value := range values {
+		value = canonicalOAuthScope(value)
+		if domain.UserOnlyOAuthScope(value) {
+			if !slices.Contains(userOnly, value) {
+				userOnly = append(userOnly, value)
+			}
+			continue
+		}
+		rest = append(rest, value)
+	}
+	scopes, err := domain.NormalizeApplicationScopes(rest)
+	if err != nil {
+		return nil, err
+	}
+	return append(scopes, userOnly...), nil
 }
 
 func (s *server) issueClientCredentials(w http.ResponseWriter, r *http.Request, form url.Values) {
@@ -54,6 +83,10 @@ func (s *server) issueClientCredentials(w http.ResponseWriter, r *http.Request, 
 	var scopes []string
 	if form.Get("scope") != "" {
 		scopes = strings.Fields(strings.ReplaceAll(form.Get("scope"), ",", " "))
+		if slices.Contains(scopes, "admin") {
+			writeOAuthError(w, 400, "invalid_scope", "the admin scope cannot be requested with actor=app")
+			return
+		}
 		var err error
 		scopes, err = domain.NormalizeApplicationScopes(scopes)
 		if err != nil {

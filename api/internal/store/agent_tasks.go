@@ -233,6 +233,7 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 	if activity.Type == "action" {
 		task.PendingTool = nil
 	}
+	replacedEphemeral := applyAgentActivityTiming(&task, &activity)
 	taskRaw, err := json.Marshal(task)
 	if err != nil {
 		return task, err
@@ -262,6 +263,9 @@ func (s *SQLiteStore) AppendAgentActivity(ctx context.Context, workspace, id str
 		return task, ErrIssueVersion
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO application_agent_activities(session_id,id,data,created_at) VALUES(?,?,?,?)`, id, activity.ID, activityRaw, activity.CreatedAt.Format(time.RFC3339Nano)); err != nil {
+		return task, err
+	}
+	if err = s.deleteEphemeralActivity(ctx, tx, id, replacedEphemeral); err != nil {
 		return task, err
 	}
 	if err = tx.Commit(); err != nil {

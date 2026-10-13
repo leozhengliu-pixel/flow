@@ -211,12 +211,14 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureWorkspaceMetadataRecords", s.ensureWorkspaceMetadataRecords},
 		{"ensureApplicationAgents", s.ensureApplicationAgents},
 		{"ensureAuditStreamSecrets", s.ensureAuditStreamSecrets},
+		{"ensureWebhookDeliveries", s.ensureWebhookDeliveries},
 		{"ensureMetadataSearchIndex", s.ensureMetadataSearchIndex},
 		{"ensureAPIKeyLookup", s.ensureAPIKeyLookup},
 		{"ensureCustomerFilterIndex", s.ensureCustomerFilterIndex},
 		{"ensureReleaseIssueIndex", s.ensureReleaseIssueIndex},
 		{"ensureTeamDefaultFavorites", s.ensureTeamDefaultFavorites},
 		{"ensureLoopRunRecords", s.ensureLoopRunRecords},
+		{"ensureFileUploads", s.ensureFileUploads},
 		{"loadOrSeed", s.loadOrSeed},
 		{"seedWorkspaceOwners", func(ctx context.Context) error {
 			if strings.EqualFold(strings.TrimSpace(config.FixtureProfile), "test") {

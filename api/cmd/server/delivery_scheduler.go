@@ -71,8 +71,14 @@ func (s *server) runDeliverySchedulerTick(ctx context.Context) error {
 
 func (s *server) processDueDeliveries(ctx context.Context, now time.Time) error {
 	sweepSettings := s.settingsLastSweep.Swap(now.Unix()/60) != now.Unix()/60
+	s.processDueWebhookDeliveries(ctx, now)
+	if sweepSettings {
+		s.reconcileAllApplicationWebhooks(ctx)
+	}
 	for _, key := range s.store.WorkspaceKeys() {
+		s.sweepAppUserNotifications(ctx, key, now)
 		if sweepSettings {
+			s.sweepIssueSLAWebhooks(ctx, key, now)
 			if err := s.maintainTeamSettings(ctx, key, now); err != nil {
 				return err
 			}

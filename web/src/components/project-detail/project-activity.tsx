@@ -13,6 +13,8 @@ import { AgentWriteIcon } from '@/components/agent/agent-icons'
 import { useI18n } from '@/i18n/i18n'
 import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
 import { Avatar } from '@/components/issue/issue-row'
+import { ViaApp } from '@/components/ui/via-app'
+import { attributedActorAvatar, attributedActorName } from '@/lib/actor-attribution'
 import { CalendarIcon, PriorityIcon, ProjectIcon } from '@/components/issue/issue-icons'
 import { EmojiPicker, ReactionPills } from '@/components/reactions/emoji-picker'
 import { DeleteCommentDialog } from '@/components/activity/activity-timeline'
@@ -277,8 +279,8 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
     : <div className={className}><RichComment body={item.body} data={item.bodyData} version={item.version}/></div>
   const card = <article className="project-activity__comment-card" data-activity-anchor={`comment-${comment.id}`} data-resolved={comment.resolved || undefined} id={`comment-${comment.id}`}>
     <header>
-      <Avatar name={comment.user.displayName}/>
-      <strong data-i18n-ignore>{comment.user.displayName}</strong>
+      <Avatar name={attributedActorName(comment.user, comment.botActor)} avatarUrl={attributedActorAvatar(comment.user, comment.botActor)}/>
+      <strong data-i18n-ignore>{attributedActorName(comment.user, comment.botActor)}</strong><ViaApp user={comment.user} botActor={comment.botActor}/>
       <time data-i18n-ignore dateTime={comment.createdAt} title={format(new Date(comment.createdAt), 'PPpp')}>{commentTimeLabel(comment.createdAt, locale)}</time>
       {comment.editedAt && <span className="project-activity__comment-edited">edited</span>}
       <div className="project-activity__comment-actions">
@@ -293,7 +295,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
     </footer>
     {threadOpen && <div className="project-activity__thread">
       {replies.map(reply => <div className="project-activity__reply" data-activity-anchor={`comment-${reply.id}`} id={`comment-${reply.id}`} key={reply.id}>
-        <header><Avatar name={reply.user.displayName}/><strong data-i18n-ignore>{reply.user.displayName}</strong><time data-i18n-ignore dateTime={reply.createdAt} title={format(new Date(reply.createdAt), 'PPpp')}>{commentTimeLabel(reply.createdAt, locale)}</time>{reply.editedAt && <span className="project-activity__comment-edited">edited</span>}<div className="project-activity__comment-actions"><EmojiPicker align="end" onSelect={emoji => react(reply.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={14}/></button></EmojiPicker>{menu(reply, 14)}</div></header>
+        <header><Avatar name={attributedActorName(reply.user, reply.botActor)} avatarUrl={attributedActorAvatar(reply.user, reply.botActor)}/><strong data-i18n-ignore>{attributedActorName(reply.user, reply.botActor)}</strong><ViaApp user={reply.user} botActor={reply.botActor}/><time data-i18n-ignore dateTime={reply.createdAt} title={format(new Date(reply.createdAt), 'PPpp')}>{commentTimeLabel(reply.createdAt, locale)}</time>{reply.editedAt && <span className="project-activity__comment-edited">edited</span>}<div className="project-activity__comment-actions"><EmojiPicker align="end" onSelect={emoji => react(reply.id, emoji)}><button aria-label="Add reaction" className="project-activity__comment-action" type="button"><SmilePlus size={14}/></button></EmojiPicker>{menu(reply, 14)}</div></header>
         {body(reply, 'project-activity__reply-body')}
         <ReactionPills reactions={reply.reactions} viewerId={viewerId} onToggle={emoji => react(reply.id, emoji)}/>
       </div>)}
@@ -307,7 +309,7 @@ function ProjectCommentCard({ comment, replies, users, viewerId, canModerate, th
     : <>{card}{dialog}</>
 }
 
-function CommentEntry({ comment }: { comment: Comment }) { return <article className="project-activity__comment"><Avatar name={comment.user.displayName}/><div><header><strong>{comment.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(comment.createdAt), { addSuffix: true })}</time></header><div className="project-activity__rich"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div></div></article> }
+function CommentEntry({ comment }: { comment: Comment }) { return <article className="project-activity__comment"><Avatar name={attributedActorName(comment.user, comment.botActor)} avatarUrl={attributedActorAvatar(comment.user, comment.botActor)}/><div><header><strong>{attributedActorName(comment.user, comment.botActor)}</strong><ViaApp user={comment.user} botActor={comment.botActor}/><time>{formatDistanceToNowStrict(new Date(comment.createdAt), { addSuffix: true })}</time></header><div className="project-activity__rich"><RichComment body={comment.body} data={comment.bodyData} version={comment.version}/></div></div></article> }
 function PropertyEvent({ actor, icon, reference, text, time }: { actor?: string; icon?: ReactNode; reference?: ActivityRef; text: string; time: string }) {
   const { t } = useI18n()
   // The reference app bolds the actor and runs the date straight after the sentence.

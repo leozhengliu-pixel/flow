@@ -15,6 +15,7 @@ import {
   labelPath,
   meetingPath,
   newAPIKeyPath,
+  newIssuePath,
   newSigningKeyPath,
   parseAppRoute,
   releasePipelinePath,
@@ -358,3 +359,35 @@ describe('settings aliases and deep links', () => {
     expect(parseAppRoute('/acme/views/projects')).toEqual({ kind: 'workspace-views', workspaceSlug: 'acme', resource: 'projects' })
   })
 })
+
+describe('prefilled new-issue routes', () => {
+  it('parses workspace and team scoped /new links', () => {
+    expect(parseAppRoute('/acme/new', '?title=Hi')).toEqual({ kind: 'new-issue', workspaceSlug: 'acme' })
+    expect(parseAppRoute('/acme/team/ENG/new')).toEqual({ kind: 'new-issue', workspaceSlug: 'acme', teamKey: 'ENG' })
+    expect(parseAppRoute('/acme/team/ENG/new/')).toEqual({ kind: 'new-issue', workspaceSlug: 'acme', teamKey: 'ENG' })
+  })
+
+  it('does not capture other paths', () => {
+    expect(parseAppRoute('/acme/new/extra').kind).not.toBe('new-issue')
+    expect(parseAppRoute('/acme/team/ENG/new/extra').kind).not.toBe('new-issue')
+    expect(parseAppRoute('/acme/team/ENG')).toMatchObject({ kind: 'team-overview' })
+  })
+
+  it('builds paths and keeps the route in its workspace', () => {
+    expect(newIssuePath('acme')).toBe('/acme/new')
+    expect(newIssuePath('acme', 'ENG')).toBe('/acme/team/ENG/new')
+    expect(routeBelongsToWorkspace(parseAppRoute(newIssuePath('acme', 'ENG')), 'acme')).toBe(true)
+  })
+})
+
+describe("new OAuth application route", () => {
+  it("parses both settings locations to the create page and keeps pre-fill params in the path", async () => {
+    const { applicationNewPath, parseAppRoute: parse } = await import("./app-routes");
+    for (const path of ["/acme/settings/applications/new", "/acme/settings/api/applications/new"]) {
+      expect(parse(path)).toMatchObject({ kind: "settings", page: "applications", applicationId: "new" });
+    }
+    expect(applicationNewPath("acme")).toBe("/acme/settings/applications/new");
+    expect(applicationNewPath("acme", "oauth.client_name=A")).toBe("/acme/settings/applications/new?oauth.client_name=A");
+    expect(parse("/acme/settings/applications/app-1/edit")).toMatchObject({ applicationId: "app-1", applicationMode: "edit" });
+  });
+});

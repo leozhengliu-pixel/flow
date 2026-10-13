@@ -4,7 +4,7 @@ import * as pages from './route-pages'
 type PageName = keyof typeof pages
 // Exhaustive so new route kinds cannot silently miss code preloading.
 const routePages = {
-  root: [], 'workspace-root': [], 'not-found': [],
+  root: [], 'workspace-root': [], 'not-found': [], 'new-issue': ['CreateIssueDialog'],
   'workspace-onboarding': ['WorkspaceOnboarding'], inbox: ['InboxAppPage'], search: ['WorkspaceSearchPage'],
   diary: ['WorkspaceSecondaryPage'], welcome: ['WelcomeOnboarding'], meetings: ['WorkspaceSecondaryPage'], meeting: ['WorkspaceSecondaryPage'], automations: ['WorkspaceSecondaryPage'],
   'automation-new': ['WorkspaceSecondaryPage'], 'automation-detail': ['WorkspaceSecondaryPage'], 'automation-runs': ['WorkspaceSecondaryPage'],

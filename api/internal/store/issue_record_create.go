@@ -245,7 +245,7 @@ func (s *SQLiteStore) createIssueRecords(ctx context.Context, workspace string, 
 	}
 	s.invalidateHotCache(ctx, workspace, "issue.created", event.AggregateID)
 	if sink := s.webhook(); sink != nil {
-		sink(workspace, event)
+		sink(workspace, webhookEvent(ctx, event, realtime))
 	}
 	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)

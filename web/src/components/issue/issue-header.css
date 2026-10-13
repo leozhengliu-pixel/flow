@@ -1,0 +1,99 @@
+/*
+ * Issue detail header, measured against the reference app at 1470×708 in dark and light themes:
+ * - the 44px bar: breadcrumb, favorite, options, then presence and the list position (`3 / 19 ↓ ↑`) on the right;
+ * - the floating command strip (copy URL / ID / branch, copy as prompt + coding tool menu) that overlays the
+ *   content just under the bar's right edge and stays put while the issue scrolls.
+ * Colours come from the --issue-header-* / --issue-command-* / --work-menu-* tokens in styles/tokens.css.
+ */
+
+@media (min-width: 801px) {
+  .issue-header .issue-breadcrumb { padding: 0 4px 0 10px; }
+}
+.issue-breadcrumb-link:has(.issue-breadcrumb-team-icon) { margin-right: -5px; padding: 0 5px 0 4px; }
+.issue-breadcrumb-team-icon { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; margin-right: 6px; border-radius: 8px; }
+.issue-breadcrumb-team-icon > svg, .issue-breadcrumb-team-icon > span { width: 16px; height: 16px; opacity: .9; }
+
+/* Favorite and options. */
+.issue-header-icon { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); }
+.issue-header-icon > svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
+.issue-header-icon:hover, .issue-header-icon[data-state=open] { background: var(--issue-header-hover-bg); }
+.issue-header-icon:hover > svg, .issue-header-icon[data-state=open] > svg, .issue-header-icon[aria-checked=true] > svg { color: var(--issue-header-icon-hover); }
+.issue-header-icon:focus-visible, .issue-sequence-buttons button:focus-visible, .issue-command-button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.issue-header > .save-state { margin-left: 8px; }
+
+/* Right side of the bar: presence, then the list position. */
+.issue-header-end { height: 29px; margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.issue-sequence { height: 29px; display: flex; align-items: center; gap: 8px; }
+.issue-sequence-count { display: block; white-space: nowrap; color: var(--issue-header-icon); font-size: 13px; font-weight: 450; line-height: normal; font-variant-numeric: tabular-nums; }
+.issue-sequence-count > span { color: var(--issue-sequence-total); }
+.issue-sequence-buttons { height: 29px; display: flex; align-items: center; border: .5px solid transparent; border-radius: 9999px; }
+.issue-sequence-buttons button { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; border: 0; background: transparent; color: var(--issue-header-fg); }
+.issue-sequence-buttons button > svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
+.issue-sequence-down { margin-right: 1px; padding: 0 0 0 2px; border-radius: 9999px 0 0 9999px; }
+.issue-sequence-up { padding: 0 2px 0 0; border-radius: 0 9999px 9999px 0; }
+.issue-sequence-buttons button:hover:not(:disabled) { background: var(--issue-sequence-hover-bg); }
+.issue-sequence-buttons button:hover:not(:disabled) > svg { color: var(--issue-header-icon-hover); }
+.issue-sequence-buttons button:disabled { opacity: .6; }
+.issue-header-close > svg { stroke-width: 2; }
+
+/* Presence: the people (other than you) who have this issue open. */
+.issue-presence { height: 28px; display: flex; align-items: center; }
+.issue-presence-item { display: flex; margin-left: -4px; border-radius: 50%; }
+.issue-presence-item:first-child { margin-left: 0; }
+.issue-presence-avatar { width: 22px; height: 22px; display: grid; place-items: center; overflow: hidden; border: 2px solid var(--bg-panel); border-radius: 50%; background: var(--avatar, var(--avatar-fallback)); color: var(--on-accent); font-size: 8px; font-weight: 600; }
+.issue-presence-avatar > img { width: 100%; height: 100%; object-fit: cover; }
+.issue-presence-more { height: 22px; min-width: 22px; display: grid; place-items: center; margin-left: -4px; padding: 0 5px; border: 2px solid var(--bg-panel); border-radius: 9999px; background: var(--issue-command-bg); color: var(--issue-header-icon); font-size: 10px; font-weight: 500; }
+
+/* Floating command strip. */
+.issue-command-strip { position: absolute; top: 43.5px; right: 0; z-index: 10; padding: 8px 12px 8px 0; display: flex; pointer-events: none; }
+.issue-command-buttons { height: 29px; display: flex; align-items: center; gap: 6px; }
+.issue-command-button { position: relative; width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: var(--issue-command-bg); color: var(--issue-header-fg); pointer-events: auto; }
+.issue-command-button::after { content: ""; position: absolute; inset: -.5px; border-radius: 9999px; box-shadow: var(--issue-command-ring); pointer-events: none; }
+.issue-command-button > svg { width: 14px; height: 14px; color: var(--issue-header-icon); }
+.issue-command-button:hover { background: var(--issue-command-hover-bg); }
+.issue-command-button:hover::after { box-shadow: var(--issue-command-ring-hover); }
+.issue-command-button:hover > svg { color: var(--issue-header-icon-hover); }
+.issue-work-control { position: relative; width: 58px; height: 29px; display: flex; align-items: center; border: .5px solid transparent; border-radius: 9999px; background: var(--issue-command-bg); pointer-events: auto; }
+.issue-work-control::after { content: ""; position: absolute; inset: 0; border-radius: 9999px; box-shadow: var(--issue-command-ring); pointer-events: none; }
+.issue-work-control .issue-command-button { border: 0; color: var(--issue-header-icon); }
+.issue-work-control:hover { background: var(--issue-command-hover-bg); }
+.issue-work-control .issue-command-button::after { content: none; }
+.issue-work-control .issue-work-prompt { margin-right: 1px; padding: 0 0 0 2px; border-radius: 9999px 0 0 9999px; }
+.issue-work-control .issue-work-tools { padding: 0 2px 0 0; border-radius: 0 9999px 9999px 0; }
+.issue-work-control .issue-work-tools::before { content: ""; position: absolute; top: 4px; left: -.5px; width: .5px; height: 20px; background: var(--issue-command-divider); }
+.issue-work-control .issue-command-button:hover > svg, .issue-work-control .issue-work-tools[data-state=open] > svg { color: var(--issue-command-group-hover-icon); }
+.issue-work-control .issue-work-tools[data-state=open] { background: var(--issue-command-hover-bg); }
+
+/* Work on issue menu (the chevron beside Copy as prompt). */
+.work-menu { z-index: 800; min-width: 160px; width: max-content; overflow: hidden; border: .5px solid var(--work-menu-border); border-radius: 12px; background: var(--work-menu-bg); box-shadow: var(--work-menu-shadow); outline: 0; color: var(--work-menu-text); }
+.work-menu-search { height: 36px; display: flex; align-items: center; gap: 3px; padding: 0 14px; }
+.work-menu-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: var(--work-menu-text); font-size: 13px; }
+.work-menu-search input::placeholder { color: var(--work-menu-muted); }
+.work-menu-search kbd { height: 17px; min-width: 18px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--work-menu-separator); border-radius: 4px; color: var(--work-menu-muted); font: 400 11px/12.1px var(--font); }
+.work-menu-search > span { color: var(--work-menu-muted); font-size: 10px; font-weight: 450; }
+/* The reference app keeps the filter field out of sight until you type (type-to-filter stays available). */
+.work-menu-search:has(input:placeholder-shown) { position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0; border: 0; clip-path: inset(50%); }
+.work-menu [cmdk-list] { padding: 6px 0; }
+.work-menu [cmdk-item] { position: relative; height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 18px 0 14px; outline: 0; color: var(--work-menu-text); font-size: 13px; font-weight: 450; line-height: normal; cursor: default; }
+.work-menu [cmdk-item]::before { content: ""; position: absolute; inset: 0 6px; z-index: -1; border-radius: 8px; }
+.work-menu [cmdk-item] > svg { width: 16px; height: 16px; flex: 0 0 16px; color: var(--work-menu-muted); }
+.work-menu [cmdk-item]:hover, .work-menu[data-keyboard] [cmdk-item][data-selected=true] { color: var(--work-menu-hover-text); }
+.work-menu [cmdk-item]:hover::before, .work-menu[data-keyboard] [cmdk-item][data-selected=true]::before { background: var(--work-menu-hover-bg); }
+.work-menu [cmdk-item]:hover > svg, .work-menu[data-keyboard] [cmdk-item][data-selected=true] > svg { color: var(--work-menu-hover-text); }
+.work-menu [cmdk-list-sizer] { position: relative; z-index: 0; }
+.work-menu-label { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-menu-shortcut { margin-left: 8px; display: flex; align-items: baseline; gap: 3px; }
+.work-menu-shortcut kbd { padding: 0; border: 0; background: none; color: var(--work-menu-muted); font: 500 11px/12.1px var(--font); }
+.work-menu-separator { height: 12px; padding: 6px 0; }
+.work-menu-separator::before { content: ""; display: block; height: .5px; background: var(--work-menu-separator); }
+
+@media (max-width: 800px) {
+  .issue-header .issue-sequence, .issue-header .issue-command-strip { display: none; }
+}
+
+/* Header tooltips (copy / work / navigation): the reference app's tooltip with bordered key caps. */
+.flow-tooltip-content.issue-header-tooltip { height: 27.5px; min-height: 27.5px; gap: 8px; border-color: var(--work-menu-border); background: var(--work-menu-bg); color: var(--work-menu-text); font: 450 11px/16.5px var(--font); }
+.issue-header-tooltip .flow-tooltip-shortcut { display: inline-flex; align-items: center; gap: 3px; color: var(--work-menu-muted); font: 400 11px/12.1px var(--font); }
+.issue-header-keys { display: inline-flex; align-items: center; gap: 3px; }
+.issue-header-keys kbd { height: 17.1px; min-width: 18px; display: grid; place-items: center; padding: 2px; border: .5px solid var(--work-menu-separator); border-radius: 4px; color: var(--work-menu-muted); font: 400 11px/12.1px var(--font); }
+.issue-header-keys-then { color: var(--work-menu-muted); font: 450 10px/16.5px var(--font); }

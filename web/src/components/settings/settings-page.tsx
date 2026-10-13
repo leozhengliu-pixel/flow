@@ -82,9 +82,7 @@ import {
   connectIntegration,
   createAgentSkill,
   createIdentityProvider,
-  createOAuthApplication,
   deleteIdentityProvider,
-  deleteOAuthApplication,
   disconnectIntegration,
   revokeAPIKey,
   revokeOAuthAuthorization,
@@ -99,7 +97,6 @@ import {
   updateIdentityProvider,
   updateMemberRole,
   updateMemberIdentity,
-  updateOAuthApplication,
   updateWebhook,
   updateWorkspacePreferences,
   uploadWorkspaceLogo,
@@ -115,6 +112,7 @@ import { FlowGlyph } from '@/components/ui/menu-glyphs'
 import {
   apiKeysSettingsPath,
   applicationEditPath,
+  applicationNewPath,
   applicationSettingsPath,
   identityProviderSettingsPath,
   memberProfilePath,
@@ -129,7 +127,6 @@ import type {
   BootstrapData,
   IdentityProvider,
   IssueTemplate,
-  OAuthApplication,
   ProjectTemplate,
   ReleasePipeline,
   UserSettings,
@@ -157,6 +154,10 @@ import "./workflow-settings.css";
 import "./advanced-settings.css";
 import "./settings-parity.css";
 import { WebhookEditPage } from "./webhook-edit-page";
+import {
+  webhookResourceLabel,
+  webhookStateLabel,
+} from "@/lib/webhook-resources";
 import { WorkspaceTeamsSettings } from "./workspace-teams-settings";
 import { InviteMembersDialog } from "@/components/workspace-directory/invite-members-dialog";
 import { applyTheme } from "@/lib/theme";
@@ -243,6 +244,10 @@ const IdentityProviderSettingsPage = lazyPage(
 const ApplicationDetailsPage = lazyPage(
   () => import("./application-pages"),
   "ApplicationDetailsPage",
+);
+const ApplicationCreatePage = lazyPage(
+  () => import("./application-pages"),
+  "ApplicationCreatePage",
 );
 const ApplicationEditPage = lazyPage(
   () => import("./application-pages"),
@@ -1083,6 +1088,14 @@ function SettingsBodyContent(
         webhookId={props.webhookId}
         onNavigate={props.onNavigate}
         onReload={props.onReload}
+      />
+    );
+  if (page === "applications" && props.applicationId === "new")
+    return (
+      <ApplicationCreatePage
+        data={props.data}
+        onReload={props.onReload}
+        onBack={() => props.onNavigate("api")}
       />
     );
   if (page === "applications" && props.applicationId && props.applicationMode === "edit")
@@ -3275,9 +3288,6 @@ function ApiPage({
   const navigate = useNavigate();
   const [settings, setSettings] = useState(data.workspaceSettings);
   useEffect(() => setSettings(data.workspaceSettings), [data.workspaceSettings]);
-  const [editingOAuth, setEditingOAuth] = useState<
-    OAuthApplication | null | undefined
-  >(undefined);
   const admin = data.viewerRole === "admin" || data.viewerRole === "owner";
   const apiPath = settingsPath(data.workspace.urlKey, "api");
   const issuedKeys = (data.apiKeys ?? []).filter((item) => !item.revokedAt && !item.oauthClientId);
@@ -3349,7 +3359,7 @@ function ApiPage({
           </Row>
         ))}
         <Row title={data.oauthApplications.length ? "" : "No OAuth applications"} className="settings-row--action">
-          <ActionButton onClick={() => setEditingOAuth(null)}>
+          <ActionButton onClick={() => navigate(applicationNewPath(data.workspace.urlKey))}>
             <Plus size={14} />
             New OAuth application
           </ActionButton>
@@ -3360,7 +3370,14 @@ function ApiPage({
           <Row
             key={item.id}
             title={item.name}
-            description={`${item.url} · ${item.resourceTypes.join(", ") || "all resources"}`}
+            description={[
+              webhookStateLabel(item),
+              item.url,
+              item.resourceTypes.map(webhookResourceLabel).join(", ") ||
+                "all resources",
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           >
             <div className="settings-inline-actions">
               <Toggle
@@ -3424,13 +3441,6 @@ function ApiPage({
           </span>
         </Row>
       </Section>
-      {editingOAuth !== undefined && (
-        <OAuthEditor
-          app={editingOAuth}
-          onClose={() => setEditingOAuth(undefined)}
-          onSaved={onReload}
-        />
-      )}
     </>
   );
 }
@@ -3582,121 +3592,6 @@ function ApplicationsPage({
         )}
       </Section>
     </>
-  );
-}
-function OAuthEditor({
-  app,
-  onClose,
-  onSaved,
-}: {
-  app: OAuthApplication | null;
-  onClose: () => void;
-  onSaved: () => Promise<void>;
-}) {
-  const [name, setName] = useState(app?.name ?? "");
-  const [description, setDescription] = useState(app?.description ?? "");
-  const [redirects, setRedirects] = useState(
-    app?.redirectUris.join("\n") ?? "",
-  );
-  const [scopes, setScopes] = useState(app?.scopes.join(", ") ?? "read");
-  const [clientCredentials, setClientCredentials] = useState(app?.supportsClientCredentials ?? false);
-  const [publicEnabled, setPublicEnabled] = useState(app?.publicEnabled ?? false);
-  const save = async () => {
-    try {
-      const input = {
-        name,
-        description,
-        supportsClientCredentials: clientCredentials,
-        publicEnabled,
-        redirectUris: redirects.split(/\s+/).filter(Boolean),
-        scopes: scopes
-          .split(",")
-          .map((x) => x.trim())
-          .filter(Boolean),
-      };
-      const result = app
-        ? await updateOAuthApplication(app.id, input)
-        : await createOAuthApplication(input);
-      await onSaved();
-      if (result.clientSecret)
-        toast.success(`Client secret: ${result.clientSecret}`, {
-          duration: 15000,
-        });
-      onClose();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "Could not save application",
-      );
-    }
-  };
-  return (
-    <Dialog open onOpenChange={(value) => !value && onClose()}>
-      <DialogContent className="settings-invite-dialog">
-        <DialogTitle>
-          {app ? "Configure application" : "New application"}
-        </DialogTitle>
-        <label>
-          Name
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <label>
-          Description
-          <textarea
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-          />
-        </label>
-        <label>
-          Redirect URIs
-          <textarea
-            value={redirects}
-            onChange={(event) => setRedirects(event.target.value)}
-            placeholder="https://app.example.com/oauth/callback"
-          />
-        </label>
-        <label>
-          Scopes
-          <input
-            value={scopes}
-            onChange={(event) => setScopes(event.target.value)}
-          />
-        </label>
-        <label className="settings-toggle-row">
-          Client credentials
-          <Toggle label="Client credentials" checked={clientCredentials} onChange={setClientCredentials}/>
-        </label>
-        <label className="settings-toggle-row">
-          Allow installation in other workspaces
-          <Toggle label="Allow installation in other workspaces" checked={publicEnabled} onChange={setPublicEnabled}/>
-        </label>
-        <footer>
-          {app && (
-            <ActionButton
-              danger
-              onClick={() =>
-                void deleteOAuthApplication(app.id).then(async () => {
-                  await onSaved();
-                  onClose();
-                })
-              }
-            >
-              Delete
-            </ActionButton>
-          )}
-          <ActionButton onClick={onClose}>Cancel</ActionButton>
-          <ActionButton
-            primary
-            disabled={!name.trim()}
-            onClick={() => void save()}
-          >
-            Save
-          </ActionButton>
-        </footer>
-      </DialogContent>
-    </Dialog>
   );
 }
 const FEATURE_COPY: Partial<

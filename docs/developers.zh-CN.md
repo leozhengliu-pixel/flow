@@ -9,8 +9,11 @@ Flow 应用是你自己运行的服务，通过 HTTP 接入 Flow。把应用安�
 Agent 在此基础上接收任务、报告进度，让成员能在 Flow 中看到执行过程并继续交流。
 可以使用任意编程语言、模型服务或 Agent 框架。
 
+OAuth 授权码流程（含/不含 PKCE）、client credentials、`actor=app`、权限范围、刷新令牌轮换、撤销、内省、“via App”归属和应用清单见 [OAuth 参考](oauth.md)（英文）。
 接口目录见 [OpenAPI](openapi.json)，资源定义见 [领域模型](domain-model.md)，
 完整的任务存储、活动与 webhook 约定见 [应用成员与 Agent 任务](application-agents.md)。
+
+[Webhook](webhooks.md) 文档介绍数据变更事件、负载、签名校验、重试、投递日志、应用级 Webhook 与 Agent 会话事件。
 
 ## 选择执行身份
 

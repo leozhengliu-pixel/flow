@@ -55,6 +55,7 @@
   "restore_document",
   "restore_document_version",
   "save_agent_skill",
+  "save_attachment",
   "save_comment",
   "save_document",
   "save_document_permissions",

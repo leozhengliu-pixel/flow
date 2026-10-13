@@ -29,11 +29,13 @@ function OAuthConsentPage({ account }: Props) {
   const [selecting, setSelecting] = useState(true)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const [autoApproving, setAutoApproving] = useState(false)
   const [teams, setTeams] = useState<Team[]>([])
   const [teamIds, setTeamIds] = useState<string[]>([])
   const [allPublicTeams, setAllPublicTeams] = useState(true)
   const isApplication = query.get('actor') === 'app'
   const pendingRef=useRef(false)
+  const submitRef=useRef<(approve:boolean,workspaceOverride?:string)=>Promise<void>>(async()=>{})
   const activeRef=useRef(true)
   const preferredWorkspaceRef=useRef(account.lastWorkspaceKey)
   preferredWorkspaceRef.current=account.lastWorkspaceKey
@@ -52,13 +54,22 @@ function OAuthConsentPage({ account }: Props) {
       .then(value => {
         if(controller.signal.aborted)return
         setRequest(value)
+        // The user already approved this client for a workspace: skip the consent screen and continue straight away.
+        const remembered = value.previouslyAuthorizedWorkspaceKey
+        if (remembered && value.prompt !== 'consent' && new URLSearchParams(location.search).get('actor') !== 'app' && value.workspaces.some(item => item.workspace.urlKey === remembered)) {
+          setWorkspaceKey(remembered)
+          setSelecting(false)
+          setAutoApproving(true)
+          void submitRef.current(true, remembered)
+          return
+        }
         const preferred = value.workspaces.find(item => item.workspace.urlKey === preferredWorkspaceRef.current) ?? value.workspaces[0]
         if (value.workspaces.length === 1 && preferred) {
           setWorkspaceKey(preferred.workspace.urlKey)
           setSelecting(false)
         }
       })
-      .catch(value => {if(!controller.signal.aborted)setError(value instanceof Error ? value.message : 'This authorization request is invalid.')})
+      .catch(value => {if(!controller.signal.aborted)setError(oauthFailure(value,'This authorization request is invalid.'))})
     return ()=>{controller.abort();activeRef.current=false}
   }, [location.search])
 
@@ -70,8 +81,9 @@ function OAuthConsentPage({ account }: Props) {
     void apiRequest<Team[]>(`/api/oauth/installation-teams?workspace=${encodeURIComponent(workspaceKey)}`, {signal:abort.signal}).then(value => { if (!abort.signal.aborted) setTeams(value) }).catch(error => { if (!abort.signal.aborted) setError(String(error.message ?? error)) })
     return () => abort.abort()
   }, [isApplication,workspaceKey])
-  const submit = async (approve: boolean) => {
-    if (pendingRef.current||(approve && (!workspaceKey || isApplication && !allPublicTeams && !teamIds.length))) return
+  const submit = async (approve: boolean, workspaceOverride?: string) => {
+    const targetWorkspace = workspaceOverride ?? workspaceKey
+    if (pendingRef.current||(approve && (!targetWorkspace || !workspaceOverride && isApplication && !allPublicTeams && !teamIds.length))) return
     pendingRef.current=true
     setPending(true)
     setError('')
@@ -88,25 +100,27 @@ function OAuthConsentPage({ account }: Props) {
         codeChallenge: query.get('code_challenge') ?? '',
         codeChallengeMethod: query.get('code_challenge_method') ?? '',
         resource: query.get('resource') ?? undefined,
-        workspaceKey,
+        workspaceKey: targetWorkspace,
         approve,
       })
       if(activeRef.current)window.location.assign(result.redirect)
     } catch (value) {
       if(!activeRef.current)return
       pendingRef.current=false
-      setError(value instanceof Error ? value.message : 'Could not complete authorization.')
+      setError(oauthFailure(value,'Could not complete authorization.'))
       setPending(false)
+      setAutoApproving(false)
     }
   }
 
-  if (!request) return <OAuthShell workspaceName={account.workspaces[0]?.workspace.name}>
+  submitRef.current = submit
+  if (!request || autoApproving) return <OAuthShell workspaceName={account.workspaces[0]?.workspace.name}>
     {error?<section className="oauth-invalid" role="alert"><CircleAlert/><h1>Authorization request unavailable</h1><p>{oauthErrorMessage(error)}</p><button onClick={()=>navigate('/')}>Back to Flow</button></section>:<div aria-label="Loading authorization request" className="oauth-loading"><GridLoader size={22}/></div>}
   </OAuthShell>
 
   if (selecting) return <OAuthShell workspaceName={account.workspaces.find(item => item.workspace.urlKey === account.lastWorkspaceKey)?.workspace.name}>
     <section className="oauth-workspace-card">
-      <OAuthMarks clientName={request.client.client_name}/>
+      <OAuthMarks clientName={request.client.client_name} logoUri={request.client.logo_uri}/>
       <h1>{request.client.client_name} is requesting access</h1>
       <p>Select a workspace to authenticate</p>
       <label>Workspace to connect</label>
@@ -126,12 +140,13 @@ function OAuthConsentPage({ account }: Props) {
 
   return <OAuthShell workspaceName={selected?.workspace.name} onWorkspace={() => setSelecting(true)}>
     <section className="oauth-consent-card">
-      <OAuthMarks clientName={request.client.client_name}/>
+      <OAuthMarks clientName={request.client.client_name} logoUri={request.client.logo_uri}/>
       <h1>{request.client.client_name} is requesting access</h1>
       <div className="oauth-details">
         <h2>Details</h2>
         <dl>
           <div><dt>Name:</dt><dd data-i18n-ignore>{request.client.client_name}</dd></div>
+          {safeHttpUrl(request.client.client_uri) && <div><dt>Developer:</dt><dd data-i18n-ignore><a href={safeHttpUrl(request.client.client_uri)} target="_blank" rel="noreferrer noopener">{request.client.client_uri}</a></dd></div>}
           <div><dt>Redirect URIs:</dt><dd data-i18n-ignore>{request.redirectUri}</dd></div>
           <div><dt>Access:</dt><dd>{request.scopeLabels.join(', ')}</dd></div>
         </dl>
@@ -156,8 +171,9 @@ function OAuthShell({ workspaceName, onWorkspace, children }: { workspaceName?: 
   </main>
 }
 
-function OAuthMarks({ clientName }: { clientName: string }) {
-  return <div className="oauth-marks"><span className="oauth-client-mark" aria-label="MCP client"><Cable/></span><ArrowLeftRight/><span className="oauth-flow-mark" aria-label="Flow"><FlowLogo/></span><span className="oauth-client-name" data-i18n-ignore>{clientName}</span></div>
+function OAuthMarks({ clientName, logoUri }: { clientName: string; logoUri?: string }) {
+  const logo = safeHttpUrl(logoUri)
+  return <div className="oauth-marks"><span className="oauth-client-mark" aria-label={logo ? 'Application logo' : 'MCP client'}>{logo ? <img src={logo} alt="" className="oauth-client-logo"/> : <Cable/>}</span><ArrowLeftRight/><span className="oauth-flow-mark" aria-label="Flow"><FlowLogo/></span><span className="oauth-client-name" data-i18n-ignore>{clientName}</span></div>
 }
 
 function WorkspaceMark({ name, color }: { name: string; color?: string }) {
@@ -165,4 +181,9 @@ function WorkspaceMark({ name, color }: { name: string; color?: string }) {
   return <span className="oauth-workspace-mark" style={color ? { backgroundColor: color } : undefined}>{initials}</span>
 }
 
-function oauthErrorMessage(value:string){if(value==='invalid_request')return'This authorization link is incomplete or has expired.';if(value==='invalid_client')return'This application is not registered or is no longer available.';if(value==='app scopes require actor=app')return'This application requested agent scopes without actor=app.';return value||'This authorization request could not be loaded.'}
+function oauthErrorMessage(value:string){if(value==='invalid_request')return'This authorization link is incomplete or has expired.';if(value==='invalid_client')return'This application is not registered or is no longer available.';if(value==='invalid_scope')return'This application requested a permission that Flow does not support.';if(value==='app scopes require actor=app')return'This application requested agent scopes without actor=app.';return value||'This authorization request could not be loaded.'}
+
+function oauthFailure(value:unknown,fallback:string){const code=(value as {code?:string}|null)?.code;if(code==='invalid_scope'||code==='invalid_client')return oauthErrorMessage(code);return value instanceof Error&&value.message?oauthErrorMessage(value.message):oauthErrorMessage(code||fallback)}
+
+/** Only http(s) URLs from the OAuth client are linked or loaded as images. */
+function safeHttpUrl(value?:string){if(!value)return undefined;try{const url=new URL(value);return url.protocol==='https:'||url.protocol==='http:'?url.toString():undefined}catch{return undefined}}

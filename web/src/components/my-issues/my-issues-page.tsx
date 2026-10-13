@@ -193,7 +193,8 @@ export function MyIssuesPage({ data, initialView = 'assigned', loading = false, 
   const previewIssue = previewIssueId ? issuesById.get(previewIssueId) : undefined
   const previewRow = previewIssue ? toRow(previewIssue, workspaceSlug, data, issueMatchesView(previewIssue, data, projectedView)) : undefined
   const openRow = (row: MyIssuesRowData) => {
-    const sequence = boundedIssueSequence(displayedGroups.find(group => group.issues.some(issue => issue.id === row.id))?.issues.map(issue => issue.id) ?? [row.id], row.id)
+    // The issue's list position spans every visible group.
+    const sequence = boundedIssueSequence(displayedGroups.flatMap(group => group.issues.map(issue => issue.id)), row.id)
     const issue = issuesById.get(row.id)
     if (controller.detailsOpen || split) {
       setPreviewIssueId(row.id)

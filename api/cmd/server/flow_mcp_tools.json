@@ -798,6 +798,23 @@
     "input_schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string", "description": "Attachment ID" } } }
   },
   {
+    "name": "mcp__flow.save_attachment",
+    "access": "write",
+    "description": "Create or update a link attachment on an issue: an external URL with a title, optional subtitle, icon URL and key/value metadata (for example a support ticket, pull request or dashboard). Saving the same URL on the same issue again updates that attachment instead of duplicating it.",
+    "input_schema": {
+      "type": "object",
+      "required": ["issue", "url"],
+      "properties": {
+        "issue": { "type": "string", "description": "Issue ID or identifier (e.g., ENG-123)" },
+        "url": { "type": "string", "description": "http or https URL of the linked resource; the attachment's identity on this issue" },
+        "title": { "type": "string", "description": "Attachment title. Defaults to the URL host for new attachments" },
+        "subtitle": { "type": "string", "description": "Optional secondary line, e.g. status or owner" },
+        "iconUrl": { "type": "string", "description": "Optional http(s) icon URL shown next to the link" },
+        "metadata": { "type": "object", "description": "Optional key/value metadata stored with the attachment (at most 16 KB)" }
+      }
+    }
+  },
+  {
     "name": "mcp__flow.get_issue",
     "access": "read",
     "description": "Retrieve a Flow issue by ID or identifier (e.g., ENG-123) with full detail: identifier, url, status, priority and priorityLabel, assignee, delegate, creator, team, project, milestone, cycle, labels, parent, sub-issues, relations (blocks, blockedBy, relatedTo, duplicateOf), due date, estimate, attachments, and description.",

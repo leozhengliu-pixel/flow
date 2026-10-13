@@ -41,7 +41,7 @@ var agentChangeIntent = regexp.MustCompile(`(?i)改|设置|设为|设成|调成|
 // agentToolGroups are the optional chat tool groups, in the order they are appended after the core tools.
 var agentToolGroups = []agentToolGroup{
 	{Name: "issue_changes", Summary: "create, edit, comment on, triage, delete issues; reactions, subscriptions, reminders, drafts", NeedsChange: true,
-		Tools:  []string{"save_issue", "save_comment", "delete_comment", "triage_issue", "delete_issue", "save_reaction", "save_subscription", "create_reminder", "create_issue_label", "save_draft", "delete_attachment"},
+		Tools:  []string{"save_issue", "save_comment", "delete_comment", "triage_issue", "delete_issue", "save_reaction", "save_subscription", "create_reminder", "create_issue_label", "save_draft", "delete_attachment", "save_attachment"},
 		Intent: regexp.MustCompile(`.`)},
 	{Name: "project_changes", Summary: "create or edit projects, milestones, initiatives, and post status updates", NeedsChange: true,
 		Tools:  []string{"save_project", "save_milestone", "save_status_update", "save_initiative", "create_initiative_label", "list_project_labels", "list_initiative_labels"},

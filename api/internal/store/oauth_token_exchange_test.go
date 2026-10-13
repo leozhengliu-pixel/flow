@@ -66,8 +66,10 @@ func TestOAuthRefreshExchangeRollsBackStorageFailures(t *testing.T) {
 			if _, _, ok := repo.FindAPIKey("new-hash"); !ok {
 				t.Fatal("committed access token absent from cache")
 			}
-			if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "replay-refresh", domain.APIKey{ID: "replay-access"}, nil, nil); !errors.Is(err, ErrAuthForbidden) {
-				t.Fatalf("replayed refresh succeeded: %v", err)
+			// A retry inside the grace window returns the committed successor.
+			replayed, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "replay-refresh", domain.APIKey{ID: "replay-access"}, nil, nil)
+			if err != nil || replayed.ReplayedRefreshToken != "new-refresh" {
+				t.Fatalf("replay = %q, %v", replayed.ReplayedRefreshToken, err)
 			}
 		})
 	}
@@ -93,30 +95,90 @@ func TestOAuthExchangeValidatesBeforeConsumption(t *testing.T) {
 	}
 }
 
-func TestOAuthRefreshConcurrentExchangeOnlyOneSucceeds(t *testing.T) {
+// Concurrent refreshes rotate once: one request mints the successor, the
+// others are grace-window replays that return that same successor.
+func TestOAuthRefreshConcurrentExchangeRotatesOnce(t *testing.T) {
 	repo, grant := oauthExchangeFixture(t)
-	results := make(chan error, 8)
+	type outcome struct {
+		issued, replayed string
+		err              error
+	}
+	results := make(chan outcome, 8)
 	var group sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			_, err := repo.ExchangeOAuthGrant(context.Background(), "refresh_token", "old-refresh", grant.ClientID, fmt.Sprintf("refresh-%d", i), domain.APIKey{ID: fmt.Sprintf("access-%d", i)}, nil, nil)
-			results <- err
+			issued := fmt.Sprintf("refresh-%d", i)
+			result, err := repo.ExchangeOAuthGrant(context.Background(), "refresh_token", "old-refresh", grant.ClientID, issued, domain.APIKey{ID: fmt.Sprintf("access-%d", i), SecretHash: fmt.Sprintf("hash-%d", i)}, nil, nil)
+			results <- outcome{issued, result.ReplayedRefreshToken, err}
 		}()
 	}
 	group.Wait()
 	close(results)
-	success := 0
-	for err := range results {
-		if err == nil {
-			success++
-		} else if !errors.Is(err, ErrAuthForbidden) {
-			t.Fatal(err)
+	winners, successor, replays := 0, "", []string{}
+	for result := range results {
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		if result.replayed == "" {
+			winners++
+			successor = result.issued
+		} else {
+			replays = append(replays, result.replayed)
 		}
 	}
-	if success != 1 {
-		t.Fatalf("concurrent token exchange succeeded %d times", success)
+	if winners != 1 || len(replays) != 7 {
+		t.Fatalf("rotations = %d, replays = %d", winners, len(replays))
+	}
+	for _, replayed := range replays {
+		if replayed != successor {
+			t.Fatalf("replay returned %q, successor %q", replayed, successor)
+		}
+	}
+	var rows int
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM oauth_refresh_tokens WHERE revoked_at IS NULL`).Scan(&rows); err != nil || rows != 1 {
+		t.Fatalf("live refresh tokens = %d (%v)", rows, err)
+	}
+}
+
+func TestOAuthRefreshReplayGraceWindowAndSuccessorUse(t *testing.T) {
+	repo, grant := oauthExchangeFixture(t)
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "second", domain.APIKey{ID: "a1", SecretHash: "h1"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	// The replay record is sealed: the successor is not stored in clear and
+	// the record can never be redeemed as a refresh token.
+	var sealed []byte
+	if err := repo.db.QueryRowContext(t.Context(), `SELECT data FROM oauth_refresh_tokens WHERE token_hash=?`, oauthReplayHash("old-refresh")).Scan(&sealed); err != nil || strings.Contains(string(sealed), "second") {
+		t.Fatalf("replay record = %s (%v)", sealed, err)
+	}
+	if state, found, _ := repo.OAuthRefreshToken(t.Context(), "old-refresh"); !found || state.Active {
+		t.Fatalf("consumed token state = %+v %v", state, found)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", "other-client", "x", domain.APIKey{ID: "a2"}, nil, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatalf("other client replayed: %v", err)
+	}
+	// Grace window over: replay refused, successor still valid.
+	if _, err := repo.db.ExecContext(t.Context(), `UPDATE oauth_refresh_tokens SET expires_at=? WHERE token_hash=?`, time.Now().UTC().Add(-time.Second).Format(time.RFC3339Nano), oauthReplayHash("old-refresh")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "x", domain.APIKey{ID: "a3"}, nil, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatalf("replay after grace window: %v", err)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "second", grant.ClientID, "third", domain.APIKey{ID: "a4", SecretHash: "h4"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Revoking a consumed token removes its replay record.
+	if err := repo.RevokeOAuthRefreshToken(t.Context(), "second"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "second", grant.ClientID, "x", domain.APIKey{ID: "a5"}, nil, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatalf("revoked token replayed: %v", err)
+	}
+	// The forged replay key itself is not a refresh token.
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "flow-oauth-refresh-replay\x00third", grant.ClientID, "x", domain.APIKey{ID: "a6"}, nil, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatalf("replay key redeemed: %v", err)
 	}
 }
 
@@ -222,5 +284,43 @@ func TestOAuthExchangePrunesExpiredAccessTokens(t *testing.T) {
 	var count int
 	if err := repo.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM workspace_metadata_records WHERE field='apiKeys' AND record_key='expired-oauth'`).Scan(&count); err != nil || count != 0 {
 		t.Fatalf("expired token row still stored: count=%d err=%v", count, err)
+	}
+}
+
+func TestOAuthRefreshRevocationRevokesItsAccessTokens(t *testing.T) {
+	repo, grant := oauthExchangeFixture(t)
+	if err := repo.CreateOAuthRefreshToken(t.Context(), "other-session", grant); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().UTC().Add(time.Hour)
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "old-refresh", grant.ClientID, "chain-2", domain.APIKey{ID: "chain-access-1", SecretHash: "chain-hash-1", ExpiresAt: &future}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "chain-2", grant.ClientID, "chain-3", domain.APIKey{ID: "chain-access-2", SecretHash: "chain-hash-2", ExpiresAt: &future}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "other-session", grant.ClientID, "other-2", domain.APIKey{ID: "other-access", SecretHash: "other-hash", ExpiresAt: &future}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	_, first, _ := repo.FindAPIKey("chain-hash-1")
+	_, second, _ := repo.FindAPIKey("chain-hash-2")
+	_, other, _ := repo.FindAPIKey("other-hash")
+	if first.RefreshFamilyID == "" || first.RefreshFamilyID != second.RefreshFamilyID || other.RefreshFamilyID == first.RefreshFamilyID {
+		t.Fatalf("families = %q %q %q", first.RefreshFamilyID, second.RefreshFamilyID, other.RefreshFamilyID)
+	}
+	// Revoking an already rotated token ends the whole chain.
+	if err := repo.RevokeOAuthRefreshToken(t.Context(), "chain-2"); err != nil {
+		t.Fatal(err)
+	}
+	for _, hash := range []string{"chain-hash-1", "chain-hash-2"} {
+		if _, _, ok := repo.FindAPIKey(hash); ok {
+			t.Fatalf("access token %s survived refresh revocation", hash)
+		}
+	}
+	if _, _, ok := repo.FindAPIKey("other-hash"); !ok {
+		t.Fatal("another session's access token was revoked")
+	}
+	if _, err := repo.ExchangeOAuthGrant(t.Context(), "refresh_token", "chain-3", grant.ClientID, "x", domain.APIKey{ID: "x"}, nil, nil); !errors.Is(err, ErrAuthForbidden) {
+		t.Fatalf("revoked refresh token exchanged: %v", err)
 	}
 }

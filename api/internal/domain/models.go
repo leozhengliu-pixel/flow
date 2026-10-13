@@ -25,6 +25,9 @@ type User struct {
 	AvatarURL     string `json:"avatarUrl,omitempty"`
 	Active        bool   `json:"active"`
 	EmailVerified bool   `json:"emailVerified"`
+	// Via is request-scoped OAuth attribution ("<User> via <App>"). It is never
+	// serialized on the user; records copy it into their BotActor field.
+	Via *ActorBot `json:"-"`
 }
 
 // AuthIdentity binds a user to a stable identifier issued by an external provider.
@@ -288,17 +291,20 @@ type Team struct {
 }
 
 type Customer struct {
-	ID            string    `json:"id"`
-	Name          string    `json:"name"`
-	LogoURL       string    `json:"logoUrl,omitempty"`
-	OwnerID       string    `json:"ownerId,omitempty"`
-	Status        string    `json:"status"`
-	Tier          string    `json:"tier,omitempty"`
-	AnnualRevenue float64   `json:"annualRevenue,omitempty"`
-	Size          int       `json:"size,omitempty"`
-	Domains       []string  `json:"domains"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	LogoURL       string   `json:"logoUrl,omitempty"`
+	OwnerID       string   `json:"ownerId,omitempty"`
+	Status        string   `json:"status"`
+	Tier          string   `json:"tier,omitempty"`
+	AnnualRevenue float64  `json:"annualRevenue,omitempty"`
+	Size          int      `json:"size,omitempty"`
+	Domains       []string `json:"domains"`
+	// ExternalIDs identify the customer in other systems (CRM, support desk);
+	// each is unique within the workspace and usable for upserts.
+	ExternalIDs []string  `json:"externalIds,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 type WorkflowState struct {
@@ -365,6 +371,7 @@ type Document struct {
 	ContentState  string               `json:"contentState,omitempty"`
 	ContentData   map[string]any       `json:"contentData,omitempty"`
 	Creator       User                 `json:"creator"`
+	BotActor      *ActorBot            `json:"botActor,omitempty"`
 	ProjectIDs    []string             `json:"projectIds"`
 	TeamIDs       []string             `json:"teamIds"`
 	IssueID       string               `json:"issueId,omitempty"`
@@ -476,6 +483,7 @@ type Issue struct {
 	Assignee               *User            `json:"assignee,omitempty"`
 	Delegate               *User            `json:"delegate,omitempty"`
 	Creator                User             `json:"creator"`
+	BotActor               *ActorBot        `json:"botActor,omitempty"`
 	Labels                 []IssueLabel     `json:"labels"`
 	Project                *ProjectSummary  `json:"project,omitempty"`
 	ProjectMilestoneID     *string          `json:"projectMilestoneId,omitempty"`
@@ -697,11 +705,19 @@ type Attachment struct {
 	Size        int64     `json:"size"`
 	CreatedAt   time.Time `json:"createdAt"`
 	Creator     User      `json:"creator"`
+	BotActor    *ActorBot `json:"botActor,omitempty"`
 	Provider    string    `json:"provider,omitempty"`
 	ProviderID  string    `json:"providerId,omitempty"`
 	ProviderURL string    `json:"providerUrl,omitempty"`
 	LinkbackURL string    `json:"linkbackUrl,omitempty"`
 	SyncStatus  string    `json:"syncStatus,omitempty"`
+	// Link attachments (the reference app's attachmentCreate): a subtitle, an icon and
+	// free-form key/value metadata shown with the link. Re-creating an
+	// attachment with the same URL on the same issue updates it.
+	Subtitle  string         `json:"subtitle,omitempty"`
+	IconURL   string         `json:"iconUrl,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	UpdatedAt *time.Time     `json:"updatedAt,omitempty"`
 }
 
 type ProjectStatus struct {
@@ -1454,6 +1470,10 @@ type APIKey struct {
 	ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
 	OAuthClientID   string     `json:"oauthClientId,omitempty"`
 	AuthorizationID string     `json:"authorizationId,omitempty"`
+	// RefreshFamilyID links an OAuth access token to its refresh-token
+	// chain, so revoking a refresh token also revokes the access tokens
+	// issued from that chain.
+	RefreshFamilyID string `json:"refreshFamilyId,omitempty"`
 }
 
 // Passkey stores a WebAuthn credential owned by an account. CredentialJSON is
@@ -1505,6 +1525,10 @@ type OAuthAuthorizationCode struct {
 	CodeChallenge   string    `json:"codeChallenge"`
 	AuthorizationID string    `json:"authorizationId"`
 	ExpiresAt       time.Time `json:"expiresAt"`
+	// ClientAuthRequired marks a confidential-client grant issued without
+	// PKCE: redeeming it (and refreshing the resulting tokens) needs the
+	// client secret. The refresh grant inherits it from the code's JSON.
+	ClientAuthRequired bool `json:"clientAuthRequired,omitempty"`
 }
 
 type OAuthRefreshGrant struct {
@@ -1518,6 +1542,15 @@ type OAuthRefreshGrant struct {
 	Scopes          []string  `json:"scopes"`
 	AuthorizationID string    `json:"authorizationId"`
 	ExpiresAt       time.Time `json:"expiresAt"`
+	// ClientAuthRequired: see OAuthAuthorizationCode.
+	ClientAuthRequired bool `json:"clientAuthRequired,omitempty"`
+	// FamilyID identifies one refresh-token chain (one code exchange and
+	// every rotation after it); access tokens carry it as RefreshFamilyID.
+	FamilyID string `json:"familyId,omitempty"`
+	// ReplayedRefreshToken is set (never stored) when a refresh request is a
+	// replay inside the rotation grace window: the response repeats this
+	// successor instead of the freshly generated one.
+	ReplayedRefreshToken string `json:"-"`
 }
 
 type OAuthAuthorization struct {
@@ -1548,6 +1581,18 @@ type OAuthApplication struct {
 	CreatorID                 string    `json:"creatorId"`
 	CreatedAt                 time.Time `json:"createdAt"`
 	UpdatedAt                 time.Time `json:"updatedAt"`
+	// DeveloperName and DeveloperURL are the public developer details from
+	// the app manifest (developer.name, oauth.client_uri).
+	DeveloperName string `json:"developerName,omitempty"`
+	DeveloperURL  string `json:"developerUrl,omitempty"`
+	// Application-level webhook, configured once by the developer: every
+	// workspace that installs or authorizes the application gets a managed
+	// webhook delivering these resource types to WebhookURL, signed with
+	// the application's webhook signing secret.
+	WebhookEnabled       bool     `json:"webhookEnabled,omitempty"`
+	WebhookURL           string   `json:"webhookUrl,omitempty"`
+	WebhookResourceTypes []string `json:"webhookResourceTypes,omitempty"`
+	WebhookSecretPrefix  string   `json:"webhookSecretPrefix,omitempty"`
 }
 
 type Webhook struct {
@@ -1575,6 +1620,19 @@ type Webhook struct {
 	DisabledReason   string     `json:"disabledReason,omitempty"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
+	// PayloadVersion is the delivery envelope (WebhookPayloadVersion for new
+	// webhooks; 0 means the legacy version 1 envelope).
+	PayloadVersion int `json:"payloadVersion,omitempty"`
+	// SigningEnabled is set once a signing secret is stored for the webhook.
+	// Webhooks created before signing only kept a hash of their secret and
+	// deliver unsigned until the secret is rotated.
+	SigningEnabled bool `json:"signingEnabled,omitempty"`
+	// ManagedBy is "application" for a webhook created by an OAuth
+	// application's webhook settings when the application was installed;
+	// it is removed when the application is uninstalled or revoked.
+	ManagedBy           string     `json:"managedBy,omitempty"`
+	ApplicationClientID string     `json:"applicationClientId,omitempty"`
+	DisabledAt          *time.Time `json:"disabledAt,omitempty"`
 }
 
 // WebhookFailureEvent is a persisted outbound delivery failure for a workspace webhook.
@@ -2093,6 +2151,7 @@ type Comment struct {
 	CreatedAt     time.Time             `json:"createdAt"`
 	EditedAt      *time.Time            `json:"editedAt,omitempty"`
 	User          User                  `json:"user"`
+	BotActor      *ActorBot             `json:"botActor,omitempty"`
 	// AnchorID names the inline comment mark (data-comment-id) that anchors a
 	// document thread in the editor; QuotedText is the selection it was
 	// created on. Both are empty for page-level comments and replies.
@@ -2105,6 +2164,7 @@ type ActivityEvent struct {
 	Type      string            `json:"type"`
 	CreatedAt time.Time         `json:"createdAt"`
 	Actor     User              `json:"actor"`
+	BotActor  *ActorBot         `json:"botActor,omitempty"`
 	Metadata  map[string]string `json:"metadata"`
 }
 
@@ -2492,6 +2552,11 @@ type CommentUpdateInput struct {
 }
 type ReactionInput struct {
 	Emoji string `json:"emoji"`
+	// CommentID and Added are set by the server (not the client) so the
+	// domain event records which comment was reacted to and whether the
+	// reaction was added or removed.
+	CommentID string `json:"commentId,omitempty"`
+	Added     *bool  `json:"added,omitempty"`
 }
 
 type IssueUpdateInput struct {
@@ -2704,6 +2769,11 @@ type DomainEvent struct {
 	Payload        json.RawMessage `json:"payload"`
 	PreviousValues json.RawMessage `json:"previousValues,omitempty"`
 	CreatedAt      time.Time       `json:"createdAt"`
+	// ActorID and Snapshot are transient (never persisted): when a committed
+	// mutation is published they carry the acting user and the enriched
+	// realtime payload ({input, entity, deleted}) for webhook deliveries.
+	ActorID  string          `json:"-"`
+	Snapshot json.RawMessage `json:"-"`
 }
 
 type RealtimeEvent struct {

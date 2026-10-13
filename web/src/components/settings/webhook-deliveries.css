@@ -1,0 +1,305 @@
+/* Webhook delivery log (Settings › API › Webhooks › webhook). */
+
+.webhook-deliveries {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 0.5px solid var(--theme-border, var(--border));
+}
+
+.webhook-deliveries-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.webhook-deliveries-header h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--theme-text-primary, var(--text));
+}
+
+.webhook-deliveries-header p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--theme-text-secondary, var(--muted));
+}
+
+.webhook-deliveries-filter {
+  display: inline-flex;
+  padding: 2px;
+  border: 0.5px solid var(--theme-border, var(--border));
+  border-radius: 8px;
+  background: var(--theme-surface-1, transparent);
+}
+
+.webhook-deliveries-filter button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-secondary, var(--muted));
+  font: 500 12px/1 var(--font);
+  cursor: pointer;
+}
+
+.webhook-deliveries-filter button[aria-pressed="true"] {
+  background: var(--theme-surface-hover, var(--bg-hover));
+  color: var(--theme-text-primary, var(--text));
+}
+
+.webhook-delivery-state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 0.5px solid var(--theme-border, var(--border));
+  border-radius: 8px;
+  color: var(--theme-text-secondary, var(--muted));
+  font-size: 12px;
+}
+
+.webhook-delivery-state h4 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--theme-text-primary, var(--text));
+}
+
+.webhook-delivery-state p {
+  margin: 0;
+}
+
+.webhook-delivery-error {
+  color: var(--danger);
+}
+
+.webhook-delivery-table-wrap {
+  overflow-x: auto;
+  border: 0.5px solid var(--theme-border, var(--border));
+  border-radius: 8px;
+}
+
+.webhook-delivery-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.webhook-delivery-table th,
+.webhook-delivery-table td {
+  padding: 8px 10px;
+  border-bottom: 0.5px solid var(--theme-border, var(--border));
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.webhook-delivery-table th {
+  color: var(--theme-text-secondary, var(--muted));
+  font-weight: 500;
+}
+
+.webhook-delivery-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.webhook-delivery-table tbody tr:hover td {
+  background: var(--theme-surface-hover, var(--bg-hover));
+}
+
+.webhook-delivery-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.webhook-delivery-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--theme-text-tertiary, var(--muted));
+}
+
+.webhook-delivery-status.is-succeeded::before {
+  background: var(--success);
+}
+
+.webhook-delivery-status.is-failed::before {
+  background: var(--danger);
+}
+
+.webhook-delivery-status.is-retrying::before,
+.webhook-delivery-status.is-delivering::before {
+  background: var(--semantic-warning);
+}
+
+.webhook-delivery-view,
+.webhook-delivery-more,
+.webhook-delivery-state button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0.5px solid var(--theme-border, var(--border));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--theme-text-primary, var(--text));
+  font: 500 12px/1 var(--font);
+  cursor: pointer;
+}
+
+.webhook-delivery-view:hover,
+.webhook-delivery-more:hover {
+  background: var(--theme-surface-hover, var(--bg-hover));
+}
+
+.webhook-delivery-more {
+  align-self: center;
+}
+
+.webhook-delivery-muted {
+  color: var(--theme-text-secondary, var(--muted));
+  font-size: 12px;
+}
+
+.webhook-delivery-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.webhook-delivery-dialog {
+  max-width: 640px;
+}
+
+.webhook-delivery-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: min(70vh, 720px);
+  overflow: auto;
+}
+
+.webhook-delivery-detail h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--theme-text-secondary, var(--muted));
+}
+
+.webhook-delivery-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.webhook-delivery-facts > div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.webhook-delivery-facts dt {
+  color: var(--theme-text-secondary, var(--muted));
+  font-size: 12px;
+}
+
+.webhook-delivery-facts dd {
+  margin: 0;
+  font-size: 13px;
+}
+
+.webhook-delivery-attempts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.webhook-delivery-attempts li {
+  display: grid;
+  grid-template-columns: 28px 140px 40px 64px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.webhook-delivery-attempt-result {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.webhook-delivery-code {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 10px 12px;
+  border: 0.5px solid var(--theme-border, var(--border));
+  border-radius: 8px;
+  background: var(--theme-surface-1, var(--bg-hover));
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.webhook-delivery-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.webhook-edit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--theme-border, var(--border));
+  border-radius: 8px;
+  background: var(--theme-surface-1, transparent);
+  color: var(--theme-text-secondary, var(--muted));
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.webhook-edit-banner.is-warning {
+  border-color: color-mix(in srgb, var(--semantic-warning) 55%, transparent);
+}
+
+.webhook-edit-banner.is-danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.webhook-edit-banner p {
+  margin: 0;
+}
+
+.webhook-test-result {
+  font-size: 12px;
+  color: var(--theme-text-secondary, var(--muted));
+}
+
+@media (max-width: 760px) {
+  .webhook-deliveries-header {
+    flex-direction: column;
+  }
+
+  .webhook-delivery-attempts li {
+    grid-template-columns: 28px minmax(0, 1fr) 40px;
+  }
+
+  .webhook-delivery-attempts li > :nth-child(4),
+  .webhook-delivery-attempts li > :nth-child(5) {
+    display: none;
+  }
+}

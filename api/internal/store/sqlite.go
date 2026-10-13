@@ -1470,7 +1470,7 @@ func (s *SQLiteStore) mutateFull(ctx context.Context, workspaceKey, eventType st
 func (s *SQLiteStore) publishMutation(ctx context.Context, workspaceKey string, event domain.DomainEvent, realtimePayload json.RawMessage) {
 	s.invalidateHotCache(ctx, workspaceKey, event.Type, event.AggregateID)
 	if sink := s.webhook(); sink != nil {
-		sink(workspaceKey, event)
+		sink(workspaceKey, webhookEvent(ctx, event, realtimePayload))
 	}
 	if sink := s.realtime(); sink != nil {
 		actor, _ := actorFromContext(ctx)

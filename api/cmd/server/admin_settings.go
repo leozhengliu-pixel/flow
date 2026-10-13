@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,46 +26,170 @@ type webhookInput struct {
 	TeamIDs         *[]string `json:"teamIds,omitempty"`
 	TeamRestriction *string   `json:"teamRestriction,omitempty"`
 	Enabled         *bool     `json:"enabled,omitempty"`
+	// PayloadVersion switches a legacy webhook to the current envelope (2);
+	// new webhooks use the current envelope unless 1 is requested.
+	PayloadVersion *int `json:"payloadVersion,omitempty"`
+	// spellings: label (name), teamId (one team) and
+	// allPublicTeams.
+	Label          *string `json:"label,omitempty"`
+	TeamID         *string `json:"teamId,omitempty"`
+	AllPublicTeams *bool   `json:"allPublicTeams,omitempty"`
+}
+
+func (input *webhookInput) normalize() {
+	if input.Name == nil && input.Label != nil {
+		input.Name = input.Label
+	}
+	if input.TeamIDs == nil && input.TeamID != nil && strings.TrimSpace(*input.TeamID) != "" {
+		ids := []string{strings.TrimSpace(*input.TeamID)}
+		input.TeamIDs = &ids
+	}
+	if input.AllPublicTeams != nil && *input.AllPublicTeams && input.TeamRestriction == nil {
+		all := "all"
+		input.TeamRestriction = &all
+	}
+}
+
+// webhookResponse is a webhook as the API returns it.
+func webhookResponse(item domain.Webhook) map[string]any {
+	result := publicWebhookMap(item)
+	result["payloadVersion"] = webhookPayloadVersion(item)
+	status := "active"
+	switch {
+	case item.SecretRevokedAt != nil && !item.SigningEnabled:
+		status = "revoked"
+	case !item.SigningEnabled && item.ManagedBy != "application":
+		// Created before signing: only a hash of the secret was kept.
+		status = "rotationRequired"
+	}
+	result["signingStatus"] = status
+	return result
 }
 
 func (s *server) listWebhooks(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	actor := requestActor(s, r)
 	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
-	result := make([]domain.Webhook, 0, len(data.Webhooks))
+	result := make([]map[string]any, 0, len(data.Webhooks))
 	for _, item := range data.Webhooks {
 		if (admin || item.CreatorID == actor.ID) && webhookVisibleToBootstrap(&data, item) {
-			result = append(result, publicWebhook(item))
+			result = append(result, webhookResponse(item))
 		}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *server) listWebhookFailures(w http.ResponseWriter, r *http.Request) {
+func (s *server) manageableWebhook(r *http.Request) (domain.Webhook, bool) {
 	data := s.workspaceData(r)
 	actor := requestActor(s, r)
 	id := r.PathValue("id")
 	index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == id })
 	if index < 0 || !webhookActorCanManage(&data, actor, data.Webhooks[index]) {
+		return domain.Webhook{}, false
+	}
+	return data.Webhooks[index], true
+}
+
+func (s *server) getWebhook(w http.ResponseWriter, r *http.Request) {
+	webhook, ok := s.manageableWebhook(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, webhookResponse(webhook))
+}
+
+// listWebhookFailures lists failed attempts, newest first: those recorded
+// before the delivery log existed and failed attempts from the log.
+func (s *server) listWebhookFailures(w http.ResponseWriter, r *http.Request) {
+	data := s.workspaceData(r)
+	webhook, ok := s.manageableWebhook(r)
+	if !ok {
 		writeError(w, http.StatusNotFound, "webhook not found")
 		return
 	}
 	result := make([]domain.WebhookFailureEvent, 0)
-	for _, item := range data.WebhookFailureEvents {
-		if item.WebhookID == id {
-			result = append(result, item)
+	page, err := s.store.WebhookDeliveries(r.Context(), store.WebhookDeliveryQuery{Workspace: workspaceKey(r), WebhookID: webhook.ID, Status: "failed", Limit: 50})
+	if err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	for _, delivery := range page.Items {
+		for index := len(delivery.Attempts) - 1; index >= 0; index-- {
+			attempt := delivery.Attempts[index]
+			if attempt.Succeeded {
+				continue
+			}
+			failure := domain.WebhookFailureEvent{ID: fmt.Sprintf("%s:%d", delivery.ID, attempt.Attempt), WebhookID: webhook.ID, ApplicationID: webhook.ApplicationID, ExecutionID: delivery.ID, URL: delivery.URL, ResponseOrError: firstNonEmpty(attempt.Error, "delivery failed"), CreatedAt: attempt.At}
+			if attempt.ResponseStatus > 0 {
+				status := attempt.ResponseStatus
+				failure.HTTPStatus = &status
+				if index == len(delivery.Attempts)-1 && delivery.ResponseBody != "" {
+					failure.ResponseOrError = delivery.ResponseBody
+				}
+			}
+			result = append(result, failure)
 		}
 	}
-	slices.Reverse(result)
+	legacy := []domain.WebhookFailureEvent{}
+	for _, item := range data.WebhookFailureEvents {
+		if item.WebhookID == webhook.ID {
+			legacy = append(legacy, item)
+		}
+	}
+	slices.Reverse(legacy)
+	result = append(result, legacy...)
+	slices.SortStableFunc(result, func(a, b domain.WebhookFailureEvent) int { return b.CreatedAt.Compare(a.CreatedAt) })
 	writeJSON(w, http.StatusOK, result)
+}
+
+// validWebhookURL requires a public HTTPS URL. Development servers (auth
+// disabled) may also use http on a loopback host.
+func (s *server) validWebhookURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return "", fmt.Errorf("%w: webhook URL must be a valid HTTPS URL", errInvalid)
+	}
+	if s.authDisabled && safeLocalDevelopmentURL(value) {
+		return value, nil
+	}
+	if parsed.Scheme != "https" {
+		return "", fmt.Errorf("%w: webhook URL must use HTTPS", errInvalid)
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") {
+		return "", fmt.Errorf("%w: webhook URL must be publicly reachable", errInvalid)
+	}
+	if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified()) {
+		return "", fmt.Errorf("%w: webhook URL must be publicly reachable", errInvalid)
+	}
+	return value, nil
 }
 
 func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 	var input webhookInput
-	if !decodeJSON(w, r, &input) || input.Name == nil || input.URL == nil {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	input.normalize()
+	if input.Name == nil {
+		// The reference app names a webhook after its URL when no label is given.
+		if input.URL != nil {
+			name := strings.TrimSpace(*input.URL)
+			input.Name = &name
+		}
+	}
+	if input.Name == nil || input.URL == nil {
 		writeError(w, http.StatusBadRequest, "name and url are required")
 		return
 	}
+	target, err := s.validWebhookURL(*input.URL)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), errInvalid.Error()+": "))
+		return
+	}
+	input.URL = &target
 	actor := requestActor(s, r)
 	secret, secretErr := randomWebhookSecret()
 	if secretErr != nil {
@@ -70,23 +197,28 @@ func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var created domain.Webhook
-	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "webhook.created", input, func(data *domain.Bootstrap) (string, error) {
+	err = s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "webhook.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
 		if input.TeamIDs != nil && !webhookTeamsManageable(data, actor.ID, *input.TeamIDs) {
 			return "", store.ErrAuthForbidden
 		}
-		created = domain.Webhook{ID: fmt.Sprintf("webhook_%d", now.UnixNano()), CreatorID: actor.ID, ResourceTypes: []string{}, TeamIDs: []string{}, TeamRestriction: "all", SecretHash: secretHash(secret), SecretPrefix: secret[:min(len(secret), 17)], Enabled: true, CreatedAt: now, UpdatedAt: now}
+		created = domain.Webhook{ID: fmt.Sprintf("webhook_%d", now.UnixNano()), CreatorID: actor.ID, ResourceTypes: []string{}, TeamIDs: []string{}, TeamRestriction: "all", SecretHash: secretHash(secret), SecretPrefix: secret[:min(len(secret), 17)], Enabled: true, PayloadVersion: domain.WebhookPayloadVersion, SigningEnabled: true, CreatedAt: now, UpdatedAt: now}
 		if err := applyWebhookInput(data, &created, input); err != nil {
 			return "", err
 		}
 		data.Webhooks = append(data.Webhooks, created)
+		appendAudit(data, "created", "webhook", created.ID, map[string]any{"url": created.URL})
 		return created.ID, nil
 	})
 	if err != nil {
 		respondMutation(w, err, http.StatusCreated, nil)
 		return
 	}
-	response := publicWebhookMap(created)
+	if err := s.store.SetWebhookSigningSecret(r.Context(), store.WebhookSecretRef(created.ID), workspaceKey(r), secret); err != nil {
+		respondMutation(w, err, http.StatusCreated, nil)
+		return
+	}
+	response := webhookResponse(created)
 	response["secret"] = secret
 	writeJSON(w, http.StatusCreated, response)
 }
@@ -95,6 +227,15 @@ func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 	var input webhookInput
 	if !decodeJSON(w, r, &input) {
 		return
+	}
+	input.normalize()
+	if input.URL != nil {
+		target, err := s.validWebhookURL(*input.URL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), errInvalid.Error()+": "))
+			return
+		}
+		input.URL = &target
 	}
 	actor := requestActor(s, r)
 	var updated domain.Webhook
@@ -106,39 +247,65 @@ func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
 		if !webhookActorCanManage(data, actor, data.Webhooks[index]) {
 			return store.ErrAuthForbidden
 		}
+		if data.Webhooks[index].ManagedBy == "application" && (input.URL != nil || input.ResourceTypes != nil || input.TeamIDs != nil || input.TeamRestriction != nil || input.ApplicationID != nil) {
+			// The application's developer owns these settings; the workspace
+			// can only pause or resume the webhook.
+			return fmt.Errorf("%w: this webhook is managed by its application", errInvalid)
+		}
 		if input.TeamIDs != nil && !webhookTeamsManageable(data, actor.ID, *input.TeamIDs) {
 			return store.ErrAuthForbidden
 		}
+		wasEnabled := data.Webhooks[index].Enabled
 		if err := applyWebhookInput(data, &data.Webhooks[index], input); err != nil {
 			return err
 		}
-		data.Webhooks[index].UpdatedAt = time.Now().UTC()
-		updated = data.Webhooks[index]
+		item := &data.Webhooks[index]
+		if item.Enabled && !wasEnabled {
+			// Re-enabling starts a fresh failure window.
+			item.DisabledReason, item.DisabledAt, item.FailingSince = "", nil, nil
+		}
+		item.UpdatedAt = time.Now().UTC()
+		updated = *item
 		return nil
 	})
-	respondMutation(w, err, http.StatusOK, publicWebhook(updated))
+	if err == nil && !updated.Enabled {
+		_ = s.store.CancelWebhookDeliveries(r.Context(), workspaceKey(r), updated.ID)
+	}
+	respondMutation(w, err, http.StatusOK, webhookResponse(updated))
 }
 
 func (s *server) deleteWebhook(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.deleted", r.PathValue("id"), nil, func(data *domain.Bootstrap) error {
-		id := r.PathValue("id")
+	id := r.PathValue("id")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.deleted", id, nil, func(data *domain.Bootstrap) error {
 		before := len(data.Webhooks)
+		managed := false
 		data.Webhooks = slices.DeleteFunc(data.Webhooks, func(item domain.Webhook) bool {
+			if item.ID == id && item.ManagedBy == "application" {
+				managed = true
+				return false
+			}
 			return item.ID == id && webhookActorCanManage(data, actor, item)
 		})
+		if managed {
+			return fmt.Errorf("%w: uninstall the application to remove its webhook", errInvalid)
+		}
 		if len(data.Webhooks) == before {
 			return errNotFound
 		}
 		data.WebhookFailureEvents = slices.DeleteFunc(data.WebhookFailureEvents, func(item domain.WebhookFailureEvent) bool {
 			return item.WebhookID == id
 		})
+		appendAudit(data, "deleted", "webhook", id, nil)
 		return nil
 	})
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
+	_ = s.store.DeleteWebhookSigningSecret(r.Context(), store.WebhookSecretRef(id))
+	_ = s.store.CancelWebhookDeliveries(r.Context(), workspaceKey(r), id)
+	_ = s.store.DeleteWebhookDeliveries(r.Context(), workspaceKey(r), id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -180,10 +347,26 @@ func webhookTeamsManageable(data *domain.Bootstrap, actorID string, teamIDs []st
 	return true
 }
 
+// normalizeWebhookResourceTypes validates resource types (Flow ids or payload
+// type names) and returns the Flow ids without duplicates.
+func normalizeWebhookResourceTypes(values []string, allowApplication bool) ([]string, error) {
+	result := []string{}
+	for _, value := range values {
+		id, ok := canonicalWebhookResourceType(value)
+		if !ok || !allowApplication && slices.Contains(applicationOnlyWebhookResourceTypes, id) {
+			return nil, fmt.Errorf("%w: unknown webhook resource type %q", errInvalid, value)
+		}
+		if !slices.Contains(result, id) {
+			result = append(result, id)
+		}
+	}
+	return result, nil
+}
+
 func applyWebhookInput(data *domain.Bootstrap, item *domain.Webhook, input webhookInput) error {
 	if input.Name != nil {
 		item.Name = strings.TrimSpace(*input.Name)
-		if item.Name == "" {
+		if item.Name == "" || len(item.Name) > 200 {
 			return errInvalid
 		}
 	}
@@ -203,13 +386,11 @@ func applyWebhookInput(data *domain.Bootstrap, item *domain.Webhook, input webho
 		item.ApplicationID = value
 	}
 	if input.ResourceTypes != nil {
-		allowed := []string{"issues", "comments", "attachments", "documents", "reactions", "projects", "project_updates", "cycles", "labels", "users", "issue_sla", "initiatives", "customers", "customer_requests", "releases", "milestones", "relations"}
-		for _, value := range *input.ResourceTypes {
-			if !slices.Contains(allowed, value) {
-				return errInvalid
-			}
+		types, err := normalizeWebhookResourceTypes(*input.ResourceTypes, false)
+		if err != nil {
+			return err
 		}
-		item.ResourceTypes = slices.Compact(slices.Clone(*input.ResourceTypes))
+		item.ResourceTypes = types
 	}
 	if input.TeamIDs != nil {
 		for _, id := range *input.TeamIDs {
@@ -239,6 +420,12 @@ func applyWebhookInput(data *domain.Bootstrap, item *domain.Webhook, input webho
 	if input.Enabled != nil {
 		item.Enabled = *input.Enabled
 	}
+	if input.PayloadVersion != nil {
+		if *input.PayloadVersion != 1 && *input.PayloadVersion != domain.WebhookPayloadVersion {
+			return fmt.Errorf("%w: payloadVersion must be 1 or %d", errInvalid, domain.WebhookPayloadVersion)
+		}
+		item.PayloadVersion = *input.PayloadVersion
+	}
 	return nil
 }
 
@@ -262,6 +449,8 @@ func publicWebhookMap(item domain.Webhook) map[string]any {
 	return result
 }
 
+// rotateWebhookSecret issues a new signing secret, shown once. Webhooks
+// created before signing start signing their deliveries from now on.
 func (s *server) rotateWebhookSecret(w http.ResponseWriter, r *http.Request) {
 	secret, err := randomWebhookSecret()
 	if err != nil {
@@ -273,14 +462,18 @@ func (s *server) rotateWebhookSecret(w http.ResponseWriter, r *http.Request) {
 	var rotated domain.Webhook
 	err = s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.secret_rotated", id, nil, func(data *domain.Bootstrap) error {
 		admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
-		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == id && (admin || item.CreatorID == actor.ID) })
+		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool {
+			return item.ID == id && !item.AuditLog && item.ManagedBy != "application" && (admin || item.CreatorID == actor.ID)
+		})
 		if index < 0 {
 			return errNotFound
 		}
 		data.Webhooks[index].SecretHash = secretHash(secret)
 		data.Webhooks[index].SecretPrefix = secret[:min(len(secret), 17)]
 		data.Webhooks[index].SecretRevokedAt = nil
+		data.Webhooks[index].SigningEnabled = true
 		data.Webhooks[index].UpdatedAt = time.Now().UTC()
+		appendAudit(data, "secret_rotated", "webhook", id, nil)
 		rotated = publicWebhook(data.Webhooks[index])
 		return nil
 	})
@@ -288,17 +481,25 @@ func (s *server) rotateWebhookSecret(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusNotFound, nil)
 		return
 	}
-	response := publicWebhookMap(rotated)
+	if err := s.store.SetWebhookSigningSecret(r.Context(), store.WebhookSecretRef(id), workspaceKey(r), secret); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	response := webhookResponse(rotated)
 	response["secret"] = secret
 	writeJSON(w, http.StatusOK, response)
 }
 
+// revokeWebhookSecret removes the signing secret; deliveries go out unsigned
+// (Flow-Signature-Status: unsigned) until a new secret is rotated in.
 func (s *server) revokeWebhookSecret(w http.ResponseWriter, r *http.Request) {
 	actor := requestActor(s, r)
 	id := r.PathValue("id")
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "webhook.secret_revoked", id, nil, func(data *domain.Bootstrap) error {
 		admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
-		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool { return item.ID == id && (admin || item.CreatorID == actor.ID) })
+		index := slices.IndexFunc(data.Webhooks, func(item domain.Webhook) bool {
+			return item.ID == id && !item.AuditLog && item.ManagedBy != "application" && (admin || item.CreatorID == actor.ID)
+		})
 		if index < 0 {
 			return errNotFound
 		}
@@ -306,8 +507,119 @@ func (s *server) revokeWebhookSecret(w http.ResponseWriter, r *http.Request) {
 		data.Webhooks[index].SecretHash = ""
 		data.Webhooks[index].SecretPrefix = ""
 		data.Webhooks[index].SecretRevokedAt = &now
+		data.Webhooks[index].SigningEnabled = false
 		data.Webhooks[index].UpdatedAt = now
+		appendAudit(data, "secret_revoked", "webhook", id, nil)
 		return nil
 	})
+	if err == nil {
+		err = s.store.DeleteWebhookSigningSecret(r.Context(), store.WebhookSecretRef(id))
+	}
 	respondMutation(w, err, http.StatusNoContent, nil)
+}
+
+// listWebhookDeliveries pages through the delivery log, newest first.
+// Query: status (pending, retrying, succeeded, failed, canceled), cursor, limit.
+func (s *server) listWebhookDeliveries(w http.ResponseWriter, r *http.Request) {
+	webhook, ok := s.manageableWebhook(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	status := r.URL.Query().Get("status")
+	if status != "" && !slices.Contains([]string{"pending", "delivering", "retrying", "succeeded", "failed", "canceled"}, status) {
+		writeError(w, http.StatusBadRequest, "invalid status filter")
+		return
+	}
+	page, err := s.store.WebhookDeliveries(r.Context(), store.WebhookDeliveryQuery{Workspace: workspaceKey(r), WebhookID: webhook.ID, Cursor: r.URL.Query().Get("cursor"), Status: status, Limit: limit})
+	if err == store.ErrIssueQuery {
+		writeError(w, http.StatusBadRequest, "invalid cursor")
+		return
+	}
+	respondMutation(w, err, http.StatusOK, page)
+}
+
+func (s *server) getWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+	webhook, ok := s.manageableWebhook(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	delivery, err := s.store.WebhookDelivery(r.Context(), workspaceKey(r), r.PathValue("deliveryId"))
+	if err != nil || delivery.WebhookID != webhook.ID {
+		writeError(w, http.StatusNotFound, "delivery not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, delivery)
+}
+
+// redeliverWebhookDelivery sends a delivery's payload again as a new
+// delivery (with a new id, timestamp and signature) and waits for the first
+// attempt.
+func (s *server) redeliverWebhookDelivery(w http.ResponseWriter, r *http.Request) {
+	webhook, ok := s.manageableWebhook(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	original, err := s.store.WebhookDelivery(r.Context(), workspaceKey(r), r.PathValue("deliveryId"))
+	if err != nil || original.WebhookID != webhook.ID {
+		writeError(w, http.StatusNotFound, "delivery not found")
+		return
+	}
+	if !webhook.Enabled {
+		writeError(w, http.StatusConflict, "Enable the webhook before redelivering")
+		return
+	}
+	now := time.Now().UTC()
+	delivery := domain.WebhookDelivery{
+		ID: webhookDeliveryID(webhook.ID, fmt.Sprintf("redeliver:%s:%d", original.ID, now.UnixNano())), WorkspaceKey: workspaceKey(r), WebhookID: webhook.ID,
+		SecretRef: webhookSecretRef(webhook), Kind: original.Kind, EventID: original.EventID, EventType: original.EventType, Action: original.Action,
+		URL: webhook.URL, Payload: original.Payload, MaxAttempts: webhookMaxAttempts(), RedeliveryOf: original.ID, CreatedAt: now, NextAttemptAt: &now,
+	}
+	if delivery.Kind == domain.WebhookDeliveryKindTest {
+		delivery.MaxAttempts = 1
+	}
+	s.deliverNow(w, r, delivery, now)
+}
+
+// testWebhook sends a test event and returns the result of the attempt.
+func (s *server) testWebhook(w http.ResponseWriter, r *http.Request) {
+	webhook, ok := s.manageableWebhook(r)
+	if !ok {
+		writeError(w, http.StatusNotFound, "webhook not found")
+		return
+	}
+	data := s.workspaceData(r)
+	actor := requestActor(s, r)
+	now := time.Now().UTC()
+	eventID := fmt.Sprintf("evt_test_%d", now.UnixNano())
+	body, _ := json.Marshal(map[string]any{
+		"action": "test", "type": "WebhookTest", "createdAt": now.Format("2006-01-02T15:04:05.000Z07:00"),
+		"actor":          webhookActorFor([]domain.User{actor}, actor.ID, s.appBaseURL()+"/"+url.PathEscape(data.Workspace.URLKey)),
+		"data":           map[string]any{"webhookId": webhook.ID, "message": "This is a test event from Flow."},
+		"organizationId": data.Workspace.ID, "webhookId": webhook.ID, "eventId": eventID,
+	})
+	delivery := domain.WebhookDelivery{
+		ID: webhookDeliveryID(webhook.ID, eventID), WorkspaceKey: workspaceKey(r), WebhookID: webhook.ID, SecretRef: webhookSecretRef(webhook),
+		Kind: domain.WebhookDeliveryKindTest, EventID: eventID, EventType: "WebhookTest", Action: "test", URL: webhook.URL, Payload: body,
+		MaxAttempts: 1, CreatedAt: now, NextAttemptAt: &now,
+	}
+	s.deliverNow(w, r, delivery, now)
+}
+
+func (s *server) deliverNow(w http.ResponseWriter, r *http.Request, delivery domain.WebhookDelivery, now time.Time) {
+	if _, err := s.store.EnqueueWebhookDelivery(r.Context(), delivery); err != nil {
+		respondMutation(w, err, http.StatusOK, nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), webhookDeliveryTimeout+5*time.Second)
+	defer cancel()
+	completed, claimed := s.runWebhookDelivery(ctx, delivery.ID, now)
+	if !claimed {
+		completed, _ = s.store.WebhookDelivery(r.Context(), delivery.WorkspaceKey, delivery.ID)
+	}
+	completed.Payload = nil
+	writeJSON(w, http.StatusOK, completed)
 }

@@ -31,6 +31,7 @@ type oauthAuthorizationRequest struct {
 	CodeChallenge       string   `json:"codeChallenge"`
 	CodeChallengeMethod string   `json:"codeChallengeMethod"`
 	Resource            string   `json:"resource,omitempty"`
+	Prompt              string   `json:"prompt,omitempty"`
 	WorkspaceKey        string   `json:"workspaceKey,omitempty"`
 	Approve             bool     `json:"approve"`
 }
@@ -61,16 +62,20 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 		scopes = supportedOAuthScopes
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"issuer":                                base,
-		"authorization_endpoint":                base + "/oauth/authorize",
-		"token_endpoint":                        base + "/oauth/token",
-		"registration_endpoint":                 base + "/oauth/register",
-		"revocation_endpoint":                   base + "/oauth/revoke",
-		"response_types_supported":              []string{"code"},
-		"grant_types_supported":                 []string{"authorization_code", "refresh_token", "client_credentials"},
-		"code_challenge_methods_supported":      []string{"S256"},
-		"token_endpoint_auth_methods_supported": []string{"none", "client_secret_basic", "client_secret_post"},
-		"scopes_supported":                      scopes,
+		"issuer":                                        base,
+		"authorization_endpoint":                        base + "/oauth/authorize",
+		"token_endpoint":                                base + "/oauth/token",
+		"registration_endpoint":                         base + "/oauth/register",
+		"revocation_endpoint":                           base + "/oauth/revoke",
+		"response_types_supported":                      []string{"code"},
+		"introspection_endpoint":                        base + "/oauth/introspect",
+		"grant_types_supported":                         []string{"authorization_code", "refresh_token", "client_credentials"},
+		"code_challenge_methods_supported":              []string{"S256"},
+		"token_endpoint_auth_methods_supported":         []string{"none", "client_secret_basic", "client_secret_post"},
+		"revocation_endpoint_auth_methods_supported":    []string{"none", "client_secret_basic", "client_secret_post"},
+		"introspection_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
+		"prompt_values_supported":                       []string{"consent"},
+		"scopes_supported":                              scopes,
 	})
 }
 
@@ -145,7 +150,7 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 	request := oauthRequestFromQuery(r.URL.Query())
 	client, scopes, err := s.validateOAuthAuthorizationRequest(r, request)
 	if err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		writeOAuthRequestError(w, err)
 		return
 	}
 	actor := s.oauthRequestUser(r)
@@ -169,6 +174,11 @@ func (s *server) getOAuthAuthorizationRequest(w http.ResponseWriter, r *http.Req
 		"scopeLabels": oauthScopeLabels(scopes),
 		"workspaces":  account.Workspaces,
 		"viewer":      account.Viewer,
+		"prompt":      request.Prompt,
+		// Set when this user already granted these scopes to this
+		// confidential application; the consent page completes the request
+		// without asking again unless prompt=consent was supplied.
+		"previouslyAuthorizedWorkspaceKey": s.previousOAuthConsent(client, request, scopes, actor.ID, account.Workspaces),
 	})
 }
 
@@ -180,7 +190,7 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	}
 	client, scopes, err := s.validateOAuthAuthorizationRequest(r, input)
 	if err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		writeOAuthRequestError(w, err)
 		return
 	}
 	redirect, _ := url.Parse(input.RedirectURI)
@@ -244,6 +254,8 @@ func (s *server) decideOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	grant.InstallerID = actor.ID
 	grant.TeamIDs = input.TeamIDs
 	grant.AllPublicTeams = input.AllPublicTeams
+	// Without PKCE only the client secret proves the redeemer is the client.
+	grant.ClientAuthRequired = input.CodeChallenge == ""
 	_, err = s.store.CreateOAuthAuthorizationGrant(r.Context(), code, grant, domain.OAuthAuthorization{ID: authorizationID, ClientID: client.ClientID, ClientName: client.ClientName, UserID: actor.ID, Scopes: scopes, CreatedAt: time.Now().UTC()}, applicationApproved)
 	if err != nil {
 		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not authorize client")
@@ -281,6 +293,11 @@ func (s *server) exchangeMCPToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
+	client, ok := s.oauthTokenClient(w, r)
+	if !ok {
+		return
+	}
+	grantType := r.Form.Get("grant_type")
 	accessToken, accessErr := randomSecret("flow_oauth_")
 	refreshToken, refreshErr := randomSecret("flow_refresh_")
 	if accessErr != nil || refreshErr != nil {
@@ -290,11 +307,26 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
 	expiresAt := time.Now().UTC().Add(time.Hour)
 	key := domain.APIKey{ID: fmt.Sprintf("oauth_token_%d", time.Now().UnixNano()), Name: "MCP OAuth token", Prefix: accessToken[:min(len(accessToken), 19)], SecretHash: secretHash(accessToken), TeamIDs: []string{}, CreatedAt: time.Now().UTC(), ExpiresAt: &expiresAt}
 	token := r.Form.Get("refresh_token")
-	if r.Form.Get("grant_type") == "authorization_code" {
+	if grantType == "authorization_code" {
 		token = r.Form.Get("code")
 	}
-	grant, err := s.store.ExchangeOAuthGrant(r.Context(), r.Form.Get("grant_type"), token, r.Form.Get("client_id"), refreshToken, key, func(code domain.OAuthAuthorizationCode) bool {
-		return code.RedirectURI == r.Form.Get("redirect_uri") && validPKCE(r.Form.Get("code_verifier"), code.CodeChallenge)
+	if token == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "code or refresh_token is required")
+		return
+	}
+	grant, err := s.store.ExchangeOAuthGrant(r.Context(), grantType, token, client.ID, refreshToken, key, func(code domain.OAuthAuthorizationCode) bool {
+		if grantType == "refresh_token" {
+			// Tokens from a PKCE flow refresh with client_id alone; tokens
+			// from a secret-only flow need the client secret again.
+			return !code.ClientAuthRequired || client.Authenticated
+		}
+		if code.RedirectURI != r.Form.Get("redirect_uri") {
+			return false
+		}
+		if code.CodeChallenge == "" {
+			return client.Authenticated && r.Form.Get("code_verifier") == ""
+		}
+		return validPKCE(r.Form.Get("code_verifier"), code.CodeChallenge)
 	}, applicationApproved)
 	if err != nil {
 		if errors.Is(err, store.ErrAuthForbidden) {
@@ -304,25 +336,14 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "token_type": "Bearer", "expires_in": 3600, "scope": strings.Join(grant.Scopes, " ")})
-}
-
-func (s *server) revokeOAuthToken(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusOK)
-		return
+	if grant.ReplayedRefreshToken != "" {
+		refreshToken = grant.ReplayedRefreshToken
 	}
-	token := r.Form.Get("token")
-	if err := s.store.RevokeOAuthRefreshToken(r.Context(), token); err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not revoke token")
-		return
+	actor := grant.Actor
+	if actor == "" {
+		actor = "user"
 	}
-	if err := s.store.RevokeOAuthAccessToken(r.Context(), secretHash(token)); err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "Could not revoke token")
-		return
-	}
-	w.WriteHeader(http.StatusOK)
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "token_type": "Bearer", "expires_in": 3600, "scope": strings.Join(grant.Scopes, " "), "actor": actor})
 }
 
 func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request) {
@@ -339,60 +360,14 @@ func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
 
-func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oauthAuthorizationRequest) (domain.OAuthClient, []string, error) {
-	if request.Actor != "" && request.Actor != "user" && request.Actor != "app" {
-		return domain.OAuthClient{}, nil, fmt.Errorf("unsupported OAuth actor")
-	}
-	client, err := s.store.OAuthClient(r.Context(), request.ClientID)
-	if err != nil {
-		var ok bool
-		if client, ok = s.store.OAuthApplicationClient(request.ClientID); !ok {
-			return client, nil, fmt.Errorf("unknown OAuth client")
-		}
-	}
-	if request.ResponseType != "code" || !store.OAuthRedirectURIAllowed(client.RedirectURIs, request.RedirectURI) {
-		return client, nil, fmt.Errorf("response type or redirect URI is invalid")
-	}
-	if request.CodeChallenge == "" || request.CodeChallengeMethod != "S256" {
-		return client, nil, fmt.Errorf("S256 PKCE code challenge is required")
-	}
-	scopes := normalizedStrings(strings.Fields(strings.ReplaceAll(request.Scope, ",", " ")))
-	if request.Actor != "app" {
-		scopes = slices.DeleteFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") })
-	}
-	if len(scopes) == 0 {
-		scopes = []string{"read"}
-	}
-	if request.Actor == "app" && (!slices.Contains(scopes, "read") || slices.Contains(scopes, "email") || slices.Contains(scopes, "openid")) {
-		return client, nil, fmt.Errorf("app authorization requires read and cannot request personal identity scopes")
-	}
-	if request.Actor == "app" {
-		var err error
-		scopes, err = domain.NormalizeApplicationScopes(scopes)
-		if err != nil {
-			return client, nil, err
-		}
-	}
-	if slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(supportedOAuthScopes, scope) }) {
-		return client, nil, fmt.Errorf("one or more requested scopes are unsupported")
-	}
-	if strings.HasSuffix(request.Resource, "/mcp/readonly") && slices.Contains(scopes, "write") {
-		return client, nil, fmt.Errorf("the read-only MCP endpoint does not accept write scope")
-	}
-	if client.AllowedScopes != nil && slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(client.AllowedScopes, scope) }) {
-		return client, nil, fmt.Errorf("requested scopes exceed the application's configured permissions")
-	}
-	return client, scopes, nil
-}
-
 func oauthRequestFromQuery(query url.Values) oauthAuthorizationRequest {
-	return oauthAuthorizationRequest{Actor: query.Get("actor"), ClientID: query.Get("client_id"), RedirectURI: query.Get("redirect_uri"), ResponseType: query.Get("response_type"), Scope: query.Get("scope"), State: query.Get("state"), CodeChallenge: query.Get("code_challenge"), CodeChallengeMethod: query.Get("code_challenge_method"), Resource: query.Get("resource")}
+	return oauthAuthorizationRequest{Actor: query.Get("actor"), ClientID: query.Get("client_id"), RedirectURI: query.Get("redirect_uri"), ResponseType: query.Get("response_type"), Scope: query.Get("scope"), State: query.Get("state"), CodeChallenge: query.Get("code_challenge"), CodeChallengeMethod: query.Get("code_challenge_method"), Resource: query.Get("resource"), Prompt: query.Get("prompt")}
 }
 
 func oauthScopeLabels(scopes []string) []string {
 	labels := []string{}
 	for _, scope := range scopes {
-		label := map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address", "app:mentionable": "Mention application", "app:assignable": "Delegate issues to application"}[scope]
+		label := map[string]string{"read": "Read", "write": "Write", "openid": "Identity", "email": "Email address", "admin": "Admin", "create_issues": "Create issues", "create_comments": "Create comments", "timeSchedule:write": "Manage time schedules", "app:mentionable": "Mention application", "app:assignable": "Delegate issues to application", "customer:read": "Read customers", "customer:write": "Manage customers", "initiative:read": "Read initiatives", "initiative:write": "Manage initiatives", "release:read": "Read releases", "release:create": "Create releases", "releaseStage:update": "Update release stages"}[scope]
 		if label == "" {
 			label = scope
 		}

@@ -75,7 +75,9 @@ func (s *SQLiteStore) IssueApplicationCredential(ctx context.Context, workspace,
 			return current, ErrAuthForbidden
 		}
 		if requested == nil {
-			requested = slices.Clone(app.Scopes)
+			// admin / timeSchedule:write are user-actor scopes; an app's
+			// default token carries only the scopes an app actor can hold.
+			requested = slices.DeleteFunc(slices.Clone(app.Scopes), domain.UserOnlyOAuthScope)
 		}
 		scopes, err := domain.NormalizeApplicationScopes(requested)
 		if err != nil || slices.ContainsFunc(scopes, func(scope string) bool { return !slices.Contains(app.Scopes, scope) }) {

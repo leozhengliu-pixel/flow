@@ -173,7 +173,17 @@ func (s *SQLiteStore) OAuthApplicationClient(clientID string) (domain.OAuthClien
 	for workspace, data := range s.workspaces {
 		for _, app := range data.OAuthApplications {
 			if app.ClientID == clientID {
-				return domain.OAuthClient{ClientID: app.ClientID, ClientName: app.Name, LogoURI: app.LogoURL, AllowedScopes: slices.Clone(app.Scopes), HomeWorkspaceKey: workspace, PublicEnabled: app.PublicEnabled, RedirectURIs: app.RedirectURIs, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}, TokenEndpointAuthMethod: "none", CreatedAt: app.CreatedAt}, true
+				grants := []string{"authorization_code", "refresh_token"}
+				if app.SupportsClientCredentials {
+					grants = append(grants, "client_credentials")
+				}
+				// Registered applications hold a client secret: they are
+				// confidential clients (PKCE optional, secret verified).
+				method := "none"
+				if app.ClientSecret != "" {
+					method = "client_secret_basic"
+				}
+				return domain.OAuthClient{ClientID: app.ClientID, ClientName: app.Name, ClientURI: app.DeveloperURL, LogoURI: app.LogoURL, AllowedScopes: slices.Clone(app.Scopes), HomeWorkspaceKey: workspace, PublicEnabled: app.PublicEnabled, RedirectURIs: app.RedirectURIs, GrantTypes: grants, ResponseTypes: []string{"code"}, TokenEndpointAuthMethod: method, CreatedAt: app.CreatedAt}, true
 			}
 		}
 	}
@@ -260,8 +270,25 @@ func (s *SQLiteStore) ConsumeOAuthRefreshToken(ctx context.Context, token string
 }
 
 func (s *SQLiteStore) RevokeOAuthRefreshToken(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE token_hash=?`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(token))
-	return err
+	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE token_hash=? AND revoked_at IS NULL`, time.Now().UTC().Format(time.RFC3339Nano), tokenHash(token)); err != nil {
+		return err
+	}
+	// A revoked token must not be replayable inside the rotation grace window.
+	if err := s.deleteOAuthRefreshReplay(ctx, token); err != nil {
+		return err
+	}
+	// RFC 7009 §2.1: revoking a refresh token also invalidates the access
+	// tokens issued from the same refresh-token chain.
+	state, found, err := s.OAuthRefreshToken(ctx, token)
+	if err != nil || !found || state.Grant.FamilyID == "" {
+		return err
+	}
+	// The rest of the chain (a successor already issued from this token)
+	// belongs to the same grant and is revoked too.
+	if _, err := s.db.ExecContext(ctx, `UPDATE oauth_refresh_tokens SET revoked_at=? WHERE revoked_at IS NULL AND `+s.jsonText("data", "familyId")+`=?`, time.Now().UTC().Format(time.RFC3339Nano), state.Grant.FamilyID); err != nil {
+		return err
+	}
+	return s.revokeOAuthAccessFamily(ctx, state.Grant.WorkspaceKey, state.Grant.FamilyID)
 }
 
 func (s *SQLiteStore) FindAPIKey(secretHash string) (string, domain.APIKey, bool) {
