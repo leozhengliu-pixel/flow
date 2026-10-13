@@ -9,9 +9,11 @@
 @media (min-width: 801px) {
   .issue-header .issue-breadcrumb { padding: 0 4px 0 10px; }
 }
-.issue-breadcrumb-link:has(.issue-breadcrumb-team-icon) { margin-right: -5px; padding: 0 5px 0 4px; }
-.issue-breadcrumb-team-icon { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; margin-right: 6px; border-radius: 8px; }
+/* Every reference crumb is padded 4px left / 5px right (with matching negative margins), icon or not. */
+.issue-breadcrumb-link { margin-right: -5px; padding: 0 5px 0 4px; }
+.issue-breadcrumb-team-icon, .issue-breadcrumb-project-icon { width: 16px; height: 16px; flex: 0 0 16px; display: grid; place-items: center; margin-right: 6px; border-radius: 8px; }
 .issue-breadcrumb-team-icon > svg, .issue-breadcrumb-team-icon > span { width: 16px; height: 16px; opacity: .9; }
+.issue-breadcrumb-project-icon > svg, .issue-breadcrumb-project-icon > span { width: 16px; height: 16px; }
 
 /* Favorite and options. */
 .issue-header-icon { width: 28px; height: 28px; flex: 0 0 28px; display: grid; place-items: center; padding: 0 2px; border: .5px solid transparent; border-radius: 9999px; background: transparent; color: var(--issue-header-fg); }

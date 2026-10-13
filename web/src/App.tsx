@@ -171,13 +171,14 @@ import { fetchWorkspacePreferences, listLoops } from '@/lib/api';
 import { getAgentSession, listAgentSessions, listAgentSkills } from '@/lib/api';
 import type { AgentSession, ReleasePipeline } from "@/types/flow";
 import { creatablePipelines, releasesAvailable, routePipeline } from "@/components/command/release-command-model";
-import { navigationReturnPath, navigationLabel, projectsListOriginPath, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
+import { navigationReturnPath, navigationLabel, navigationTrail, projectsListOriginPath, sidebarOriginPath, reviewsOriginView, issueSequenceIDs } from '@/lib/navigation-context';
 import type {
   IssueOptionsActions,
   IssueConversionKind,
   RelatedIssueCreationKind,
 } from "@/components/issue/issue-options-menu";
 import { ErrorState, SkeletonRows } from "@/components/state/state-view";
+import { LoadingContainer } from "@/components/ui/loading-caret";
 import { OrganizationNotFound } from "@/components/workspace/organization-not-found";
 import { confirmAction } from "@/components/ui/action-dialog-service";
 import { toast } from "@/lib/toast";
@@ -3775,7 +3776,7 @@ function App() {
         returnPath={`${location.pathname}${location.search}`}
         workspacePresence={realtime.presence}
         onClose={onClose}
-        onNavigateIssue={openIssue}
+        onNavigateIssue={(issue) => openIssue(issue)}
         onUpdate={async (input) => {
           await updateIssueById(issue, input);
         }}
@@ -4505,7 +4506,7 @@ function App() {
   if (!data)
     return withStore(
       <WorkspaceBootShell>
-        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<SkeletonRows count={9}/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? (
+        {previewIssue && !previewIssue.isSummary ? <Suspense fallback={<LoadingContainer loading label="Loading issue"/>}><IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(detailWorkspaceKey,'all'))}/></Suspense> : error ? (
           requestedWorkspaceKey ? (
             <OrganizationNotFound
               orgKey={requestedWorkspaceKey}
@@ -4521,7 +4522,7 @@ function App() {
           ) : (
             <ErrorState retry={load} />
           )
-        ) : <SkeletonRows count={9} />}
+        ) : <LoadingContainer loading label="Loading issue"/>}
       </WorkspaceBootShell>
     );
   if (route.kind === "settings")
@@ -4744,9 +4745,9 @@ function App() {
   const renderIssuePane = (inTriage: boolean) => {
     const IssuePanel = inTriage ? TriageIssuePanel : MainIssuePanel;
     return <>
-        {issuePane === "checking-access" && <IssuePanel role="status">Checking issue access…</IssuePanel>}
+        {issuePane === "checking-access" && <IssuePanel><LoadingContainer loading label="Checking issue access"/></IssuePanel>}
         {issuePane === "preview" && previewIssue && (
-          <Suspense fallback={<IssuePanel><SkeletonRows count={9}/></IssuePanel>}>
+          <Suspense fallback={<IssuePanel><LoadingContainer loading label="Loading issue"/></IssuePanel>}>
             <IssuePanel>
               <IssueLoadingPreview issue={previewIssue} onBack={()=>navigateTo(workspaceIssuesPath(data.workspace.urlKey,'all'))}/>
             </IssuePanel>
@@ -4764,6 +4765,7 @@ function App() {
               historyError={issueHistoryState.key===`${data.workspace.urlKey}:${selectedIssue.id}`&&issueHistoryState.error ? 'Could not load issue history' : undefined}
               onRetryHistory={()=>{void refreshActivity(false).catch(()=>undefined)}}
               returnPath={issueListContextPath(location.state, data.workspace.urlKey)}
+              navigationTrail={navigationTrail(location.state, data.workspace.urlKey)}
               navigationIssueIds={issueSequenceIDs(location.state)}
               workspacePresence={realtime.presence}
               issueOptionsActions={selectedIssueOptionsActions}
@@ -4780,7 +4782,7 @@ function App() {
               onNavigateRoot={() =>
                 navigateTo(issueReturnPath(location.state, data.workspace.urlKey, selectedIssue))
               }
-              onNavigateIssue={openIssue}
+              onNavigateIssue={(issue, options) => openIssue(issue, undefined, options?.sibling)}
               onUpdate={updateSelected}
               onIssueUpdated={replaceIssue}
               onDelete={removeSelected}
@@ -4801,7 +4803,7 @@ function App() {
             />
           </IssuePanel>
         )}
-        {routeScopeValid && issuePane === "loading" && <IssuePanel role="status">Loading issue…</IssuePanel>}
+        {routeScopeValid && issuePane === "loading" && <IssuePanel><LoadingContainer loading label="Loading issue"/></IssuePanel>}
         {routeScopeValid && issuePane === "not-found" && (
           <RouteNotFound
             title="Issue not found"
@@ -4810,11 +4812,11 @@ function App() {
         )}
     </>;
   };
-  const openIssue = (issue: Issue, sequence?: string[]) => {
+  const openIssue = (issue: Issue, sequence?: string[], sibling = false) => {
     if (data.issueCollectionPaged) setData(current => current ? { ...current, issues: [issue, ...current.issues.filter(item => item.id !== issue.id)].slice(0, 2000) } : current);
     rememberResult("issue", issue.id);
     navigateTo(issuePath(data.workspace.urlKey, issue), {
-      state: sequence ? { issueSequence: sequence.slice(0, 1000) } : undefined,
+      state: sequence ? { issueSequence: sequence.slice(0, 1000) } : sibling ? { issueSibling: true } : undefined,
     });
   };
   const openProject = (project: Project) => {

@@ -10,12 +10,14 @@ import { IssueOptionsMenu, type IssueOptionsActions } from '@/components/issue/i
 import { FlowBranchIcon, FlowChevronIcon, FlowCodingToolsIcon, FlowFavoriteFilledIcon, FlowFavoriteIcon, FlowIssueIdIcon, FlowNextIcon, FlowPreviousIcon, FlowUrlIcon, FlowWorkIcon } from '@/components/issue/flow-header-icons'
 import { issuePath, settingsPath } from '@/lib/app-routes'
 import { enabledCodingTools, renderCodingPrompt, type CodingTool } from '@/lib/coding-tools'
-import { issueBreadcrumbs } from '@/lib/issue-navigation-context'
+import { issueBreadcrumbs, type IssueBreadcrumb } from '@/lib/issue-navigation-context'
 import { issueViewers } from '@/lib/issue-presence'
 import { configuredIssueBranch, copyIssueForWork } from '@/lib/issue-work-actions'
 import { useOptionalTranslate } from '@/i18n/i18n'
 import { UserAvatar } from '@/components/ui/user-avatar'
 import { ViewGlyph } from '@/components/views/view-icon-picker'
+import { ProjectGlyph } from '@/components/views/project-glyph'
+import { AgentEntityHover } from '@/components/agent/agent-entity-hover'
 import './issue-header.css'
 
 export type IssueSaveState = 'idle' | 'saving' | 'saved' | 'error'
@@ -29,6 +31,8 @@ interface IssueHeaderProps {
   closable?: boolean
   onNavigateIssue?: (issue: Issue) => void; onNavigateRoot?: () => void
   returnPath?: string
+  /** The pages the issue was opened from, oldest first (see issueBreadcrumbs); falls back to `returnPath`. */
+  navigationTrail?: string[]
   onUpdate: (input: IssueUpdateInput) => Promise<void>; onDelete: () => Promise<void>; onRelation: (type: IssueRelationType) => void
   /** The reference app's Accept / Decline / duplicate / snooze controls, shown while the issue is in Triage. */
   triageActions?: React.ReactNode
@@ -36,11 +40,11 @@ interface IssueHeaderProps {
   variant?: 'page' | 'triage'
 }
 
-export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, closable = false, onClose, onNavigate, onNavigateRoot, returnPath, onUpdate, onDelete, onRelation, triageActions, variant = 'page' }: IssueHeaderProps) {
+export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data, activities, issueOptionsActions, position, total, closable = false, onClose, onNavigate, onNavigateRoot, returnPath, navigationTrail, onUpdate, onDelete, onRelation, triageActions, variant = 'page' }: IssueHeaderProps) {
   const t = useOptionalTranslate()
   const favorite=data.favorites.some(item=>item.resourceType==='issue'&&item.resourceId===issue.id)
   const canGoNext=position<total, canGoPrevious=position>1
-  const breadcrumbs = issueBreadcrumbs(data, issue, returnPath)
+  const breadcrumbs = issueBreadcrumbs(data, issue, navigationTrail?.length ? navigationTrail : returnPath)
   const viewers = issueViewers(presence, issue.id, data.viewer.id)
   const preferences=data.userSettings?.[data.viewer.id]
   const tools=enabledCodingTools(preferences)
@@ -54,7 +58,7 @@ export function IssueHeader({ issue, presence = [], saveState, onRetrySave, data
   const presenceGroup=viewers.length>0?<IssuePresence viewers={viewers} label={t('People viewing this issue')}/>:null
   return <header className={triage?'issue-header issue-header--triage':'issue-header'}>
     <button type="button" data-sidebar-trigger aria-label="Open sidebar" onClick={() => window.dispatchEvent(new Event('flow:open-sidebar'))} />
-    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}>{crumb.team&&<span className="issue-breadcrumb-team-icon" aria-hidden="true"><ViewGlyph color={crumb.team.color} icon={crumb.team.icon || 'Team'}/></span>}{crumb.label}</a><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
+    <div className="issue-header-context"><nav className="issue-breadcrumb" aria-label="Issue breadcrumb">{!triage&&breadcrumbs.map((crumb,index)=><span className="issue-breadcrumb-segment" key={crumb.href}><BreadcrumbLink crumb={crumb} data={data} onClick={index===breadcrumbs.length-1 && onNavigateRoot ? event=>activateLink(event,onNavigateRoot) : undefined}/><span className="issue-breadcrumb-separator" aria-hidden="true">›</span></span>)}<a className="issue-breadcrumb-current" href={issuePath(data.workspace.urlKey,issue)} aria-current="page"><strong>{issue.identifier}</strong><span>{issue.title}</span></a></nav><HeaderTooltip label={t(favorite?'Unfavorite issue':'Favorite issue')} shortcut="⌥ F"><button className="issue-header-icon" type="button" role="switch" aria-checked={favorite} aria-label={favorite?'Remove from favorites':'Add to favorites'} onClick={()=>void issueOptionsActions?.toggleFavorite()}>{favorite?<FlowFavoriteFilledIcon className="issue-header-favorite-filled"/>:<FlowFavoriteIcon/>}</button></HeaderTooltip><IssueOptionsMenu issue={issue} data={data} activities={activities} actions={issueOptionsActions} favorited={favorite} onUpdate={onUpdate} onDelete={onDelete} onRelation={onRelation}/></div>
     {saveState==='error'?<button type="button" className="save-state error" onClick={onRetrySave}>Save failed · Retry</button>:<span className={`save-state ${saveState}`} role="status" aria-live="polite">{saveState==='saving'?'Saving...':saveState==='saved'?'Saved':''}</span>}
     {triage&&presenceGroup}
     {triageActions}
@@ -99,6 +103,20 @@ function WorkMenu({tools,onOpenTool,onCopyPrompt,configurePath}:{tools:CodingToo
       </Command>
     </Popover.Content></Popover.Portal>
   </Popover.Root>
+}
+
+/** One crumb: team and project crumbs carry their icon; the project opens its hover card, "Projects" and an
+ * issue crumb (the issue this one was opened from) show a tooltip, like the reference header. */
+function BreadcrumbLink({crumb,data,onClick}:{crumb:IssueBreadcrumb;data:BootstrapData;onClick?:(event:React.MouseEvent<HTMLAnchorElement>)=>void}){
+  const t = useOptionalTranslate()
+  const link=<a className="issue-breadcrumb-link" href={crumb.href} data-i18n-ignore={crumb.entity || undefined} onClick={onClick}>
+    {crumb.team&&<span className="issue-breadcrumb-team-icon" aria-hidden="true"><ViewGlyph color={crumb.team.color} icon={crumb.team.icon || 'Team'}/></span>}
+    {crumb.project&&<span className="issue-breadcrumb-project-icon" aria-hidden="true"><ProjectGlyph project={crumb.project}/></span>}
+    {crumb.entity?crumb.label:t(crumb.label)}
+  </a>
+  if(crumb.project)return <AgentEntityHover data={data} entity={{kind:'project',project:crumb.project}} side="bottom" sideOffset={8} alignOffset={4}>{link}</AgentEntityHover>
+  if(crumb.tooltip)return <FlowTooltip label={crumb.entity?<span data-i18n-ignore>{crumb.tooltip}</span>:t(crumb.tooltip)}>{link}</FlowTooltip>
+  return link
 }
 
 function IssuePresence({viewers,label}:{viewers:Presence[];label:string}){

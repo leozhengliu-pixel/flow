@@ -62,6 +62,28 @@ describe('IssueHeader', () => {
     expect(within(nav).getByRole('link', { name: 'Issues' })).toHaveAttribute('href', '/workspace/team/TST/all')
   })
 
+  it('shows "Projects › ◆ Project" for an issue opened from a project\'s issues, the project linking back to that tab', async () => {
+    setup({ returnPath: '/workspace/project/project-one/issues', navigationTrail: ['/workspace/projects/all', '/workspace/project/project-one/issues'] })
+    const nav = screen.getByRole('navigation', { name: 'Issue breadcrumb' })
+    expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual(['Projects', 'Project one', expect.stringContaining('Test issue')])
+    expect(within(nav).getByRole('link', { name: 'Projects' })).toHaveAttribute('href', '/workspace/projects/all')
+    const projectLink = within(nav).getByRole('link', { name: 'Project one' })
+    expect(projectLink).toHaveAttribute('href', '/workspace/project/project-one/issues')
+    expect(projectLink.querySelector('.issue-breadcrumb-project-icon svg, .issue-breadcrumb-project-icon span')).not.toBeNull()
+    await userEvent.hover(within(nav).getByRole('link', { name: 'Projects' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('All projects')
+  })
+
+  it('shows the parent issue crumb (identifier, title on hover) for a sub-issue opened from its parent', async () => {
+    const parent = makeIssue({ id: 'issue-2', identifier: 'TST-2', title: 'Parent issue' })
+    const data = makeBootstrap({ issues: [makeIssue(), parent], cycleSettings: {}, documents: [], members: [], drafts: [], reviews: [], favorites: [], customers: [], teamMembers: [], userSettings: {}, teamSettings: {}, projectTemplates: [], agentSkills: [], customerRequests: [], issueSlas: [], slaRules: [] } as never)
+    setup({ data, navigationTrail: ['/workspace/team/TST/all', '/workspace/issue/TST-2/parent-issue'], position: 1, total: 0 })
+    const nav = screen.getByRole('navigation', { name: 'Issue breadcrumb' })
+    expect(within(nav).getAllByRole('link').map(link => link.textContent)).toEqual(['Test team', 'TST-2', expect.stringContaining('Test issue')])
+    await userEvent.hover(within(nav).getByRole('link', { name: 'TST-2' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Parent issue')
+  })
+
   it('hides the position when the issue was opened without a list', () => {
     setup({ position: 1, total: 0 })
     expect(screen.queryByRole('group', { name: 'Issue navigation' })).toBeNull()

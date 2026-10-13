@@ -1,0 +1,15 @@
+/* Reference loader caret: 8×16, 2px radius, base label colour, hidden until its delay, then
+   blinking 1s (opaque 0–40%, 20% 50–90%). */
+.flow-loading-caret{width:8px;height:16px;flex:0 0 auto;border-radius:2px;background:var(--loading-caret);opacity:0;animation:flow-loading-caret 1s var(--ease) 1s infinite;pointer-events:none}
+.flow-loading-caret.is-positioned{position:absolute;top:14px;left:10px;z-index:1}
+.flow-loading-caret.is-positioned.is-flush{left:0}
+@keyframes flow-loading-caret{0%,40%,100%{opacity:1}50%,90%{opacity:.2}}
+
+/* Content that may be loading keeps its layout; while loading it fades out after 500ms. */
+.flow-loading-frame{position:relative;height:100%;min-height:0;min-width:0}
+.flow-loading-content{height:100%;min-height:0;min-width:0;opacity:1;transition:opacity 0s ease-in 0s}
+.flow-loading-content.is-loading{opacity:0;will-change:opacity;backface-visibility:hidden;transition-duration:.1s;transition-delay:.5s}
+
+/* List footer while the next page loads. */
+.flow-loading-footer{height:50px;flex:0 0 50px}
+.flow-loading-footer>.flow-loading-caret{margin:14px 0 0 24px}

@@ -32,6 +32,7 @@ import {
   issueToExplorerRow,
 } from "@/components/issue-explorer/issue-explorer-model";
 import { buildIssueGroups, groupMoveUpdate, groupSummaries, labelGroups, pagedDisplayQuery } from "@/components/issue-explorer/issue-grouping";
+import { boundedIssueSequence } from "@/lib/navigation-context";
 import { MyIssuesBulkActionBar } from "@/components/my-issues/my-issues-bulk-action-bar";
 import { IssueRowActionsProvider } from "@/components/my-issues/issue-row-actions";
 import {
@@ -537,7 +538,8 @@ export function ProjectIssues({
             }
             onOpenIssue={(row) => {
               const issue = rowIssues.get(row.id);
-              if (issue) onOpenIssue(issue);
+              // Like the reference, the list order becomes the issue page's "n / total" and J / K sequence.
+              if (issue) onOpenIssue(issue, boundedIssueSequence(groups.flatMap(group => group.issues.map(item => item.id)), issue.id));
             }}
             onPropertyChange={changeProperty}
             onSelectIssue={select}
@@ -549,7 +551,8 @@ export function ProjectIssues({
             onMove={move}
             onOpenIssue={(row) => {
               const issue = rowIssues.get(row.id);
-              if (issue) onOpenIssue(issue);
+              // Like the reference, the list order becomes the issue page's "n / total" and J / K sequence.
+              if (issue) onOpenIssue(issue, boundedIssueSequence(groups.flatMap(group => group.issues.map(item => item.id)), issue.id));
             }}
             onPropertyChange={changeProperty}
             onSelectIssue={select}

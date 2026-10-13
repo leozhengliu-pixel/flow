@@ -21,7 +21,9 @@ describe('IssueLoadingPreview', () => {
 
   it('does not promote summary records into the persistable preview surface', () => {
     render(<IssueLoadingPreview issue={makeIssue({ isSummary: true, title: 'Summary only' })} onBack={vi.fn()} />)
-    expect(screen.getByRole('status')).toHaveTextContent('Loading issue…')
+    const caret = screen.getByRole('status', { name: 'Loading issue' })
+    expect(caret).toHaveClass('flow-loading-caret', 'is-positioned')
+    expect(caret).toHaveTextContent('')
     expect(screen.queryByRole('heading', { name: 'Summary only' })).not.toBeInTheDocument()
   })
 })
