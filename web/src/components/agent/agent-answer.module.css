@@ -43,13 +43,15 @@ a.referenceCard:focus-visible{outline:2px solid var(--focus-ring);outline-offset
 /* The reference app's option pills ("Choose an option"): 32px pills 6px apart, 10px in, 2px above and below; the chosen one keeps a check. */
 .choices{align-self:stretch;margin-top:12px;padding:2px 0}
 .choiceGroup{display:flex;flex-wrap:wrap;gap:6px}
-.choice{height:32px;display:inline-flex;max-width:100%;padding:0;border:.5px solid transparent;border-radius:9999px;background:var(--agent-send-bg);color:var(--agent-thread-text);font:500 13px/normal var(--font);text-align:left;cursor:default;transition:background-color .15s,color .15s,opacity .15s}
+.choice{position:relative;height:32px;display:inline-flex;max-width:100%;padding:0;border:.5px solid transparent;border-radius:9999px;background:var(--agent-send-bg);color:var(--agent-thread-text);font:500 13px/normal var(--font);text-align:left;cursor:default;transition:background-color .15s,color .15s,opacity .15s}
 .choiceLabel{min-width:0;display:flex;align-items:center;padding:0 12px;border-radius:9999px;font-weight:450}
 .choiceLabel>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .choiceCheck{width:0;height:14px;display:inline-flex;align-items:center;overflow:visible;opacity:0;color:var(--agent-thread-muted)}
 .choiceCheck svg{flex:none;margin-left:6px}
 .choice[data-selected] .choiceCheck{width:20px;opacity:1}
 .choice:hover:not(:disabled),.choice:focus-visible{background:var(--agent-send-hover-bg);outline:0}
+.choice:after{content:"";position:absolute;inset:0;border-radius:inherit;box-shadow:var(--agent-choice-ring);pointer-events:none;transition:box-shadow .15s}
+.choice:hover:not(:disabled):after,.choice:focus-visible:after{box-shadow:var(--agent-choice-ring-hover)}
 .choice:disabled:not([data-selected]){opacity:.5}
 .references .entityIdentifier{color:var(--agent-thread-muted);letter-spacing:-.24px}
 .references a.referenceRow>svg:first-child{width:14px;height:14px}
