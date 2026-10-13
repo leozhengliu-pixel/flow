@@ -261,6 +261,10 @@ budgets apply per client address rather than to the proxy.
 | `FLOW_API_RATE_LIMIT_OAUTH_REQUESTS` / `_COMPLEXITY` | `5000` / `2000000` | Hourly budgets per user (or app user) and OAuth application. |
 | `FLOW_API_RATE_LIMIT_UNAUTHENTICATED_REQUESTS` / `_COMPLEXITY` | `600` / `100000` | Hourly budgets per client address. |
 | `FLOW_API_RATE_LIMIT_SESSION_REQUESTS` / `_COMPLEXITY` | `0` / `0` | Hourly budgets for browser sessions; `0` means unlimited. |
+| `FLOW_API_RATE_LIMIT_AGENT_RUN_REQUESTS` | `1200` | Hourly `/mcp` request budget per agent run (worker run tokens); `0` means unlimited. |
+| `FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_REQUESTS` | `36000` | Hourly `/mcp` request budget shared by all agent runs of a workspace; `0` means unlimited. |
+| `FLOW_API_RATE_LIMIT_AGENT_WORKSPACE_OVERRIDES` | empty | Per-workspace overrides of the agent workspace budget, e.g. `acme=100000,trial=2000`. |
+| `FLOW_TOOL_CALL_CONCURRENCY` | 2 per CPU (at least 4) | Flow tool calls (MCP, agent runs, in-process agent) executing at once; more wait. Each holds a copy of the workspace metadata. `0` disables the bound. |
 | `FLOW_API_MAX_COMPLEXITY` | `10000` | Largest complexity a single request may have. |
 | `FLOW_FILE_URL_SIGNING_KEY` | generated | HMAC key for signed file URLs. When unset, Flow generates one and stores it in the database (shared by all instances). Changing it invalidates outstanding signed URLs. |
 

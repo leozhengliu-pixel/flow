@@ -174,10 +174,8 @@ func (s *server) loopInstructionReferences(ctx context.Context, workspace string
 			}
 		case "project":
 			line = fmt.Sprintf("Project %q", fallback)
-			for _, project := range data.Projects {
-				if project.ID == mention.ID || project.SlugID == mention.ID {
-					line = fmt.Sprintf("Project %q (id %s)", project.Name, project.ID)
-				}
+			if index := domain.ProjectIndexBySlugRef(data.Projects, mention.ID); index >= 0 {
+				line = fmt.Sprintf("Project %q (id %s)", data.Projects[index].Name, data.Projects[index].ID)
 			}
 		case "document":
 			line = fmt.Sprintf("Document %q", fallback)

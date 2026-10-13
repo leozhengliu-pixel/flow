@@ -947,16 +947,19 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 		}
 		return s.pagedIssueVisible(r, issueID)
 	}
+	// Project and initiative paths take an id or a slug (GET /api/projects/{id}
+	// accepts a current, stale-prefix or legacy slug); the record it names is checked.
 	projectAllowed := func(projectID string) bool {
-		return slices.ContainsFunc(data.Projects, func(item domain.Project) bool {
-			return item.ID == projectID && (len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed))
-		})
+		index := domain.ProjectIndexBySlugRef(data.Projects, projectID)
+		if index < 0 {
+			return false
+		}
+		item := data.Projects[index]
+		return len(item.TeamIDs) == 0 || slices.ContainsFunc(item.TeamIDs, teamAllowed)
 	}
 	initiativeAllowed := func(initiativeID string) bool {
-		return slices.ContainsFunc(data.Initiatives, func(item domain.Initiative) bool {
-			if item.ID != initiativeID {
-				return false
-			}
+		index := domain.InitiativeIndexBySlugRef(data.Initiatives, initiativeID)
+		return index >= 0 && func(item domain.Initiative) bool {
 			if item.LeadTeamID != "" && !teamAllowed(item.LeadTeamID) {
 				return false
 			}
@@ -970,7 +973,7 @@ func (s *server) resourceAllowed(r *http.Request, workspace string, userID strin
 				return true
 			}
 			return slices.ContainsFunc(item.ProjectIDs, projectAllowed)
-		})
+		}(data.Initiatives[index])
 	}
 	viewAllowed := func(viewID string) bool {
 		return slices.ContainsFunc(data.SavedViews, func(item domain.SavedView) bool {

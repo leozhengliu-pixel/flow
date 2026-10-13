@@ -589,7 +589,34 @@ func (s *SQLiteStore) CancelAgentRun(ctx context.Context, id string) (AgentRun, 
 	if _, err := s.db.ExecContext(ctx, `UPDATE agent_runs SET cancel_requested=1,updated_at=? WHERE id=? AND status IN ('leased','running')`, at, id); err != nil {
 		return AgentRun{}, err
 	}
+	s.agentRunCancel.wake()
 	return s.AgentRun(ctx, id)
+}
+
+// AgentRunCancelWake returns a channel closed the next time a run may have to
+// stop in this process: a cancel was requested or an agent session was
+// canceled. Waiters re-check with AgentRunsToCancel (other API processes do not
+// wake it, so they also re-check periodically).
+func (s *SQLiteStore) AgentRunCancelWake() <-chan struct{} { return s.agentRunCancel.wait() }
+
+// AgentRunsToCancel lists the runs a worker holds that should stop: a cancel
+// was requested, or the person stopped the run's session (a stop signal moves
+// the session to canceled).
+func (s *SQLiteStore) AgentRunsToCancel(ctx context.Context, owner string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT r.id FROM agent_runs r LEFT JOIN application_agent_tasks t ON t.id=r.session_id AND t.workspace_key=r.workspace_key WHERE r.status IN ('leased','running') AND r.lease_owner=? AND (r.cancel_requested=1 OR t.status='canceled') ORDER BY r.id`, owner)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // MarkAgentRunWrote records that a write tool succeeded during the run, so an

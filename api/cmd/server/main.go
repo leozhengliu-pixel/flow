@@ -96,6 +96,9 @@ type server struct {
 	// Public API request/complexity budgets (api_rate_limit.go).
 	apiRateLimiter     *apiRateLimiter
 	apiRateLimiterOnce sync.Once
+	// Bound on Flow tool calls in flight (tool_call_limiter.go).
+	toolCallLimiter     *toolCallLimiter
+	toolCallLimiterOnce sync.Once
 }
 
 func main() {
@@ -2996,7 +2999,7 @@ func (s *server) createProject(w http.ResponseWriter, r *http.Request) {
 		if len(teamIDs) == 0 {
 			teamIDs = []string{data.Teams[0].ID}
 		}
-		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: slug(strings.TrimSpace(*input.Name)), Icon: "Project", Color: "#5e6ad2", PriorityLabel: "No priority", Position: nextProjectPosition(data.Projects), Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
+		created = domain.Project{ID: id, Name: strings.TrimSpace(*input.Name), SlugID: domain.SlugWithSuffix(*input.Name, domain.NewSlugSuffix()), Icon: "Project", Color: "#5e6ad2", PriorityLabel: "No priority", Position: nextProjectPosition(data.Projects), Health: "noUpdate", Status: status, MemberIDs: []string{}, TeamIDs: teamIDs, DependencyIDs: []string{}, Initiatives: []string{}, Customers: []string{}, Resources: []domain.ProjectResource{}, Milestones: []domain.ProjectMilestone{}, Comments: []domain.Comment{}, DescriptionRevisions: []domain.ProjectDescriptionRevision{}, UpdateCadence: "none", CreatedAt: now, UpdatedAt: now}
 		creator := authUser(r)
 		if creator.ID == "" {
 			creator = data.Viewer
@@ -3168,7 +3171,7 @@ func (s *server) createInitiative(w http.ResponseWriter, r *http.Request) {
 	var created domain.Initiative
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "initiative.created", input, func(data *domain.Bootstrap) (string, error) {
 		now := time.Now().UTC()
-		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: slug(*input.Name), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
+		created = domain.Initiative{ID: fmt.Sprintf("initiative_%d", now.UnixNano()), Name: strings.TrimSpace(*input.Name), SlugID: domain.SlugWithSuffix(*input.Name, domain.NewSlugSuffix()), Icon: "Initiative", Color: "#d15f64", Status: "active", PriorityLabel: "No priority", Position: nextInitiativePosition(data.Initiatives), Health: "noUpdate", Creator: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), ContributingTeamIDs: []string{}, LabelIDs: []string{}, ParentInitiativeIDs: []string{}, ProjectIDs: []string{}, Resources: []domain.InitiativeResource{}, Comments: []domain.Comment{}, NotificationRules: domain.InitiativeNotificationRules{DescriptionChanges: true, NewUpdate: true}, UpdateSchedule: domain.InitiativeUpdateSchedule{Cadence: "none", Weekday: 1, TimeRange: "09:00-12:00"}, DescriptionHistory: []domain.InitiativeDescriptionRevision{}, CreatedAt: now, UpdatedAt: now}
 		if err := applyInitiativeUpdate(data, &created, input); err != nil {
 			return "", err
 		}
@@ -6033,7 +6036,9 @@ func applyProjectUpdate(data *domain.Bootstrap, project *domain.Project, input d
 			return errInvalid
 		}
 		project.Name = strings.TrimSpace(*input.Name)
-		project.SlugID = slug(project.Name)
+		// The slug's hex suffix stays, so links made before the rename keep
+		// resolving; the old slug is kept for exact lookups too.
+		project.SlugID, project.PreviousSlugIDs = domain.RenamedSlug(project.SlugID, project.PreviousSlugIDs, project.Name)
 	}
 	if input.Summary != nil {
 		project.Summary = *input.Summary
@@ -6263,7 +6268,7 @@ func applyInitiativeUpdate(data *domain.Bootstrap, initiative *domain.Initiative
 			return errInvalid
 		}
 		initiative.Name = strings.TrimSpace(*input.Name)
-		initiative.SlugID = slug(initiative.Name)
+		initiative.SlugID, initiative.PreviousSlugIDs = domain.RenamedSlug(initiative.SlugID, initiative.PreviousSlugIDs, initiative.Name)
 	}
 	if input.Summary != nil {
 		initiative.Summary = *input.Summary
@@ -6436,19 +6441,7 @@ func optionalString(value string) *string {
 	return &value
 }
 func slug(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	var builder strings.Builder
-	lastDash := false
-	for _, character := range value {
-		if unicode.IsLetter(character) || unicode.IsDigit(character) {
-			builder.WriteRune(character)
-			lastDash = false
-		} else if builder.Len() > 0 && !lastDash {
-			builder.WriteByte('-')
-			lastDash = true
-		}
-	}
-	return strings.Trim(builder.String(), "-")
+	return domain.Slugify(value)
 }
 func labelsByID(data *domain.Bootstrap, ids []string) []domain.IssueLabel {
 	return labelsByIDForResource(data, ids, "issue")

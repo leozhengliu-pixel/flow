@@ -28929,6 +28929,31 @@
         "x-flow-source": "main.go"
       }
     },
+    "/internal/agent-runtime/cancels": {
+      "post": {
+        "operationId": "post_internal_agent_runtime_cancels",
+        "tags": [
+          "internal"
+        ],
+        "summary": "POST /internal/agent-runtime/cancels",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "agent_runtime_api.go"
+      }
+    },
     "/internal/agent-runtime/claim": {
       "post": {
         "operationId": "post_internal_agent_runtime_claim",
@@ -35442,6 +35467,13 @@
           "position": {
             "type": "number"
           },
+          "previousSlugIds": {
+            "description": "earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "priority": {
             "type": "integer"
           },
@@ -35461,6 +35493,7 @@
             "type": "array"
           },
           "slugId": {
+            "description": "URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes",
             "type": "string"
           },
           "status": {
@@ -35862,6 +35895,13 @@
           "position": {
             "type": "number"
           },
+          "previousSlugIds": {
+            "description": "earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "priority": {
             "type": "integer"
           },
@@ -35881,6 +35921,7 @@
             "type": "array"
           },
           "slugId": {
+            "description": "URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes",
             "type": "string"
           },
           "status": {
@@ -38640,6 +38681,13 @@
           "position": {
             "type": "number"
           },
+          "previousSlugIds": {
+            "description": "earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "priority": {
             "type": "integer"
           },
@@ -38674,6 +38722,7 @@
             "type": "string"
           },
           "slugId": {
+            "description": "URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes",
             "type": "string"
           },
           "startDate": {
@@ -39444,6 +39493,13 @@
           "position": {
             "type": "number"
           },
+          "previousSlugIds": {
+            "description": "earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "priority": {
             "type": "integer"
           },
@@ -39478,6 +39534,7 @@
             "type": "string"
           },
           "slugId": {
+            "description": "URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes",
             "type": "string"
           },
           "startDate": {

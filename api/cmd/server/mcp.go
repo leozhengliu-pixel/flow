@@ -183,7 +183,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				return
 			}
 			if err := tool.validator.Validate(params.Arguments); err != nil {
-				s.writeMCPError(w, request.ID, -32602, "Invalid tool arguments", map[string]string{"detail": err.Error()})
+				s.writeMCPToolResult(w, request.ID, nil, mcpInvalidArguments(tool, err))
 				return
 			}
 			ctx := context.WithValue(r.Context(), authUserContextKey{}, actor.User)
@@ -338,7 +338,12 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 	if token := strings.TrimSpace(header[len("Bearer "):]); strings.HasPrefix(token, agentRunTokenPrefix) {
 		grant, err := s.authenticateAgentRunToken(r.Context(), token)
 		if err != nil {
-			s.mcpUnauthorized(w, r, "Run token is invalid, expired, or its run has ended")
+			if s.limitInvalidRunToken(w, r) {
+				s.mcpUnauthorized(w, r, "Run token is invalid, expired, or its run has ended")
+			}
+			return mcpActor{}, false
+		}
+		if !s.limitAgentRun(w, r, grant.run) {
 			return mcpActor{}, false
 		}
 		return mcpActor{WorkspaceKey: grant.run.WorkspaceKey, Run: grant}, true
@@ -368,6 +373,13 @@ func (s *server) mcpUnauthorized(w http.ResponseWriter, r *http.Request, message
 	}
 	w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+metadata+`"`)
 	writeOAuthError(w, http.StatusUnauthorized, "invalid_token", message)
+}
+
+// mcpInvalidArguments is the tool error for arguments that fail the tool's input schema. MCP treats input
+// validation as a tool execution error (isError), not a JSON-RPC protocol error: the reason reaches the model as the
+// result text, so it can correct the call. Malformed JSON-RPC requests and unknown tools stay protocol errors.
+func mcpInvalidArguments(tool flowMCPTool, err error) error {
+	return fmt.Errorf("Invalid arguments for %s: %s. Check the tool's input schema and call it again with corrected arguments.", tool.Name, strings.TrimSuffix(err.Error(), "."))
 }
 
 func (s *server) writeMCPError(w http.ResponseWriter, id any, code int, message string, data any) {
@@ -439,7 +451,7 @@ func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, 
 		return
 	}
 	if err := tool.validator.Validate(args); err != nil {
-		s.writeMCPError(w, id, -32602, "Invalid tool arguments", map[string]string{"detail": err.Error()})
+		s.writeMCPToolResult(w, id, nil, mcpInvalidArguments(tool, err))
 		return
 	}
 	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))

@@ -947,10 +947,13 @@ export interface Initiative {
   owner?: User | null
   parentInitiativeIds: string[]
   position: number
+  /** earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve */
+  previousSlugIds?: string[]
   priority: number
   priorityLabel: string
   projectIds: string[]
   resources: InitiativeResource[]
+  /** URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes */
   slugId: string
   status: string
   subscribed: boolean
@@ -1041,10 +1044,13 @@ export interface InitiativePartial {
   owner?: UserPartial | null
   parentInitiativeIds?: string[]
   position?: number
+  /** earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve */
+  previousSlugIds?: string[]
   priority?: number
   priorityLabel?: string
   projectIds?: string[]
   resources?: InitiativeResourcePartial[]
+  /** URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes */
   slugId?: string
   status?: string
   subscribed?: boolean
@@ -1767,6 +1773,8 @@ export interface Project {
   milestones: ProjectMilestone[]
   name: string
   position: number
+  /** earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve */
+  previousSlugIds?: string[]
   priority: number
   priorityLabel: string
   progress: number
@@ -1775,6 +1783,7 @@ export interface Project {
   scopeHistory?: ProjectProgressHistoryPoint[]
   slackChannelId?: string
   slackChannelName?: string
+  /** URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes */
   slugId: string
   startDate?: string | null
   startDateResolution?: string
@@ -1963,6 +1972,8 @@ export interface ProjectPartial {
   milestones?: ProjectMilestonePartial[]
   name?: string
   position?: number
+  /** earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve */
+  previousSlugIds?: string[]
   priority?: number
   priorityLabel?: string
   progress?: number
@@ -1971,6 +1982,7 @@ export interface ProjectPartial {
   scopeHistory?: ProjectProgressHistoryPointPartial[]
   slackChannelId?: string
   slackChannelName?: string
+  /** URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes */
   slugId?: string
   startDate?: string | null
   startDateResolution?: string

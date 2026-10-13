@@ -14,6 +14,7 @@ import {
   teamHomePath,
   workspaceSavedViewPath,
 } from '@/lib/app-routes'
+import { findBySlugRef } from '@/lib/resource-slug'
 import type {
   BootstrapData,
   CodeReview,
@@ -100,7 +101,7 @@ function findTeamByKey(data: BootstrapData, key: string) {
 }
 
 function findProject(data: BootstrapData, slugOrId: string) {
-  return (data.projects ?? []).find(project => project.slugId === slugOrId || project.id === slugOrId)
+  return findBySlugRef(data.projects, slugOrId)
 }
 
 /** Resolves a shortcode target to the workspace entity it names; undefined when the client does not hold it. */
@@ -117,7 +118,7 @@ export function resolveAgentEntity(data: BootstrapData, target: Pick<AgentEntity
       return project ? { kind, project } : undefined
     }
     case 'initiative': {
-      const initiative = (data.initiatives ?? []).find(item => item.id === id || item.slugId === id)
+      const initiative = findBySlugRef(data.initiatives, id)
       return initiative ? { kind, initiative } : undefined
     }
     case 'document': {
@@ -281,7 +282,7 @@ export function parseAgentEntityUrl(url: string, data: BootstrapData, linkText?:
     }
     case 'initiative': {
       if (/^(?:initiative-)?update-/.test(hash)) return linkOnly('update')
-      const initiative = (data.initiatives ?? []).find(item => item.slugId === route.initiativeSlugId || item.id === route.initiativeSlugId)
+      const initiative = findBySlugRef(data.initiatives, route.initiativeSlugId)
       return entityTarget(initiative ? { kind: 'initiative', initiative } : undefined)
     }
     case 'document': {

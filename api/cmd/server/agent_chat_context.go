@@ -60,10 +60,8 @@ func findAgentMessageReferences(data domain.Bootstrap, message string) agentMess
 	}
 	for _, match := range agentProjectLinkPattern.FindAllStringSubmatch(message, -1) {
 		slug, _ := url.PathUnescape(match[1])
-		for _, project := range data.Projects {
-			if project.SlugID == slug || project.ID == slug {
-				addProject(project)
-			}
+		if index := domain.ProjectIndexBySlugRef(data.Projects, slug); index >= 0 {
+			addProject(data.Projects[index])
 		}
 	}
 	lower := strings.ToLower(message)

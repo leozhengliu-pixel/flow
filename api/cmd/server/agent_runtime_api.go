@@ -35,6 +35,10 @@ const (
 	agentRuntimeLease             = time.Minute
 	agentRuntimeHeartbeatInterval = 15 * time.Second
 	agentRuntimeMaxClaimWait      = 20 * time.Second
+	// A cancel long-poll is answered at once when this process stops a run, and re-checks the database this often
+	// for stops made by another API process.
+	agentRuntimeMaxCancelWait     = 25 * time.Second
+	agentRuntimeCancelRecheck     = time.Second
 	agentRuntimeReconcileInterval = 30 * time.Second
 	agentRuntimeMaxAttempts       = 2
 	agentRuntimeWorkerHeader      = "Flow-Worker-Id"
@@ -52,6 +56,7 @@ func (s *server) agentRuntimeEnabled() bool {
 
 func (s *server) registerAgentRuntimeRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /internal/agent-runtime/claim", s.claimAgentRuns)
+	mux.HandleFunc("POST /internal/agent-runtime/cancels", s.watchAgentRunCancels)
 	mux.HandleFunc("GET /internal/agent-runtime/runs/{id}/payload", s.agentRuntimeRun(true, s.agentRunPayload))
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/heartbeat", s.agentRuntimeRun(true, s.heartbeatAgentRun))
 	mux.HandleFunc("POST /internal/agent-runtime/runs/{id}/complete", s.agentRuntimeRun(false, s.completeAgentRun))
@@ -186,6 +191,59 @@ func (s *server) claimAgentRuns(w http.ResponseWriter, r *http.Request) {
 		}
 		select {
 		case <-wake:
+		case <-deadline.C:
+			wait = 0
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+// watchAgentRunCancels is the push path for stops (§8.1): a worker keeps one long-poll open and is answered as soon
+// as a run it holds should stop — a cancel was requested or the person stopped the session — instead of learning it
+// on the run's next heartbeat (every 15 s, which stays the fallback). Ignore lists runs the worker is already
+// stopping, so the answer is not repeated while they finish.
+func (s *server) watchAgentRunCancels(w http.ResponseWriter, r *http.Request) {
+	caller, ok := s.authorizeAgentRuntime(w, r)
+	if !ok {
+		return
+	}
+	if caller.grant != nil {
+		writeError(w, http.StatusForbidden, "This run token cannot be used here")
+		return
+	}
+	var input struct {
+		// WaitMS holds the request up to this long (at most 25 s) until a held run should stop.
+		WaitMS int      `json:"waitMs"`
+		Ignore []string `json:"ignore"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	wait := min(max(time.Duration(input.WaitMS)*time.Millisecond, 0), agentRuntimeMaxCancelWait)
+	deadline := time.NewTimer(wait)
+	defer deadline.Stop()
+	recheck := time.NewTicker(agentRuntimeCancelRecheck)
+	defer recheck.Stop()
+	for {
+		// Taken before the query, so a stop between the query and the wait still wakes this request.
+		wake := s.store.AgentRunCancelWake()
+		ids, err := s.store.AgentRunsToCancel(r.Context(), caller.worker)
+		if err != nil {
+			if r.Context().Err() == nil {
+				writeError(w, http.StatusInternalServerError, "canceled runs could not be read")
+			}
+			return
+		}
+		ids = slices.DeleteFunc(ids, func(id string) bool { return slices.Contains(input.Ignore, id) })
+		if len(ids) > 0 || wait == 0 {
+			writeJSON(w, http.StatusOK, map[string]any{"cancel": ids})
+			return
+		}
+		select {
+		case <-wake:
+		case <-recheck.C:
 		case <-deadline.C:
 			wait = 0
 		case <-r.Context().Done():

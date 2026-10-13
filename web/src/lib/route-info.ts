@@ -2,6 +2,7 @@ import type { AppRoute, SettingsPageId } from "@/lib/app-routes";
 import { findTrashedDocument } from "@/components/documents/document-trash";
 import { SETTINGS_SEARCH_PAGES } from "@/components/settings/settings-search";
 import type { BootstrapData, Issue, Project } from "@/types/flow";
+import { findBySlugRef } from "@/lib/resource-slug";
 
 export type RouteInfo = {
   title: string;
@@ -104,11 +105,7 @@ export function routeInfo(
   if (route.kind === "project") {
     const project =
       data?.project ||
-      data?.projects?.find(
-        (item) =>
-          item.id === route.projectSlugId ||
-          item.slugId === route.projectSlugId,
-      );
+      findBySlugRef(data?.projects, route.projectSlugId);
     if (project) {
       const tab =
         route.tab && route.tab !== "overview"

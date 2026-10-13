@@ -849,7 +849,8 @@ type ProjectProgressHistoryPoint struct {
 type Project struct {
 	ID                   string                       `json:"id"`
 	Name                 string                       `json:"name"`
-	SlugID               string                       `json:"slugId"`
+	SlugID               string                       `json:"slugId"`                    // URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes
+	PreviousSlugIDs      []string                     `json:"previousSlugIds,omitempty"` // earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve
 	Summary              string                       `json:"summary"`
 	Description          string                       `json:"description"`
 	Icon                 string                       `json:"icon,omitempty"`
@@ -2172,7 +2173,8 @@ type MigrationBundle struct {
 type Initiative struct {
 	ID                   string                          `json:"id"`
 	Name                 string                          `json:"name"`
-	SlugID               string                          `json:"slugId"`
+	SlugID               string                          `json:"slugId"`                    // URL slug `<name-slug>-<12 hex>`; the hex suffix stays when the name changes
+	PreviousSlugIDs      []string                        `json:"previousSlugIds,omitempty"` // earlier slugs (before a rename, or the legacy name-only slug); links using them still resolve
 	Summary              string                          `json:"summary"`
 	Description          string                          `json:"description"`
 	Icon                 string                          `json:"icon,omitempty"`

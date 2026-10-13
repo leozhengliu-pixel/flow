@@ -1,5 +1,6 @@
 import { myIssuesPath, parseAppRoute, teamHomePath, teamIssuesPath } from './app-routes'
 import type { BootstrapData, Issue, Project } from '@/types/flow'
+import { findBySlugRef } from './resource-slug'
 import { navigationReturnPath, navigationTrail, projectsListOriginPath, workspacePath } from './navigation-context'
 
 /** `team` / `project`: the crumb is drawn with that entity's icon like the reference header.
@@ -68,7 +69,7 @@ function trailCrumbs(data: BootstrapData, issue: Issue, trail: string[]): IssueB
     return [...before, { label: source?.identifier ?? route.identifier.toUpperCase(), href, entity: true, tooltip: source?.title, issue: source }]
   }
   if (route.kind === 'project') {
-    const project = data.projects.find(project => project.slugId === route.projectSlugId || project.id === route.projectSlugId)
+    const project = findBySlugRef(data.projects, route.projectSlugId)
     if (project) {
       const list = projectsListOriginPath({ navigationTrail: trail.slice(0, -1) }, workspace)
       const crumb: IssueBreadcrumb = { label: project.name, href, entity: true, project }

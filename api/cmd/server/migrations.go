@@ -487,7 +487,7 @@ func applyFlowMigration(data *domain.Bootstrap, job *domain.MigrationJob, bundle
 		}
 		oldID := source.ID
 		source.ID = migrationID("project")
-		source.SlugID = slug(source.Name) + fmt.Sprintf("-%x", time.Now().UnixNano()&0xffffff)
+		source.SlugID, source.PreviousSlugIDs = domain.SlugWithSuffix(source.Name, domain.NewSlugSuffix()), nil
 		source.TeamIDs = mapIDs(source.TeamIDs, teamMap, fallbackTeamID)
 		source.LabelIDs = mapIDs(source.LabelIDs, labelMap, "")
 		source.MemberIDs = mapIDs(source.MemberIDs, userMap, "")
@@ -544,6 +544,7 @@ func applyFlowMigration(data *domain.Bootstrap, job *domain.MigrationJob, bundle
 	for _, source := range bundle.Initiatives {
 		oldID := source.ID
 		source.ID = migrationID("initiative")
+		source.SlugID, source.PreviousSlugIDs = domain.SlugWithSuffix(source.Name, domain.NewSlugSuffix()), nil
 		source.ProjectIDs = mapIDs(source.ProjectIDs, projectMap, "")
 		source.LeadTeamID = mapOne(source.LeadTeamID, teamMap, "")
 		source.ContributingTeamIDs = mapIDs(source.ContributingTeamIDs, teamMap, "")

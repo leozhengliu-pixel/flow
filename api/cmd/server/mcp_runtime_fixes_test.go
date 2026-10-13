@@ -104,8 +104,8 @@ func TestMCPBatchDeleteTakesIDs(t *testing.T) {
 	if message := mcpToolErrorText(t, f.call(t, "delete_issue", map[string]any{"id": created[2], "ids": []string{created[2]}})); !strings.Contains(message, "either id or ids") {
 		t.Fatalf("id and ids: %s", message)
 	}
-	if response := f.call(t, "delete_issue", map[string]any{"ids": []string{}}); response["error"] == nil {
-		t.Fatalf("empty ids accepted: %v", response)
+	if message := mcpToolErrorText(t, f.call(t, "delete_issue", map[string]any{"ids": []string{}})); !strings.Contains(message, "Invalid arguments for delete_issue") {
+		t.Fatalf("empty ids: %s", message)
 	}
 	mcpSuccess(t, f.call(t, "delete_issue", map[string]any{"id": created[2]}))
 

@@ -35,9 +35,10 @@ export function flowMcpServer(flowUrl: string, token: string, options: { name?: 
 }
 
 /**
- * The SDK default hides the cause ("An error occurred while running the tool"). Flow answers invalid arguments
- * with a JSON-RPC error (-32602 "Invalid tool arguments") whose reason is only in `data.detail`; the model needs
- * that reason to correct the call, so pass it through.
+ * The SDK default hides the cause ("An error occurred while running the tool"). Flow now answers invalid
+ * arguments with an `isError` tool result whose text is the reason, which reaches the model unchanged; protocol
+ * errors (and older Flow builds, which put the reason only in JSON-RPC `data.detail`) still come through here, so
+ * pass the detail through.
  */
 export function mcpErrorText(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
