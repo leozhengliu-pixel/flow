@@ -14,6 +14,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"flow/api/internal/domain"
@@ -26,6 +27,10 @@ type agentProviderMessage struct {
 	ToolResult *agentProviderToolResult
 	// Images are sent as image inputs with a user message.
 	Images []agentProviderImage
+	// Reasoning is the provider's reasoning for an assistant turn (Chat Completions `reasoning_content`). Thinking
+	// models served over Chat Completions (DeepSeek, Kimi) refuse a tool-call turn of the current request sent back
+	// without it, so it is replayed there; Responses and Anthropic Messages never send it.
+	Reasoning string
 }
 
 type agentProviderImage struct {
@@ -367,7 +372,9 @@ func (s *server) requestOpenAIResponses(ctx context.Context, messages []agentPro
 }
 
 func (s *server) requestChatCompletions(ctx context.Context, messages []agentProviderMessage, tools []agentProviderTool, emit func(agentProviderEvent) error) (agentProviderTurn, error) {
-	payload := map[string]any{"model": s.agent.Model, "messages": chatMessages(messages), "stream": true, "max_tokens": s.agentMaxOutputTokens(ctx)}
+	reasoningKey := s.agent.BaseURL + "\x00" + s.agent.Model
+	_, replay := agentChatReasoningProviders.Load(reasoningKey)
+	payload := map[string]any{"model": s.agent.Model, "messages": chatMessagesReplaying(messages, replay), "stream": true, "max_tokens": s.agentMaxOutputTokens(ctx)}
 	if s.agent.ReasoningEffort != "" {
 		payload["reasoning_effort"] = s.agent.ReasoningEffort
 	}
@@ -377,12 +384,23 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 		})
 	}
 	response, err := s.agentProviderRequest(ctx, "/chat/completions", payload, false)
+	if !replay && agentReasoningReplayRequired(err) {
+		// A thinking model wants every tool-call turn of the current request back with its reasoning, including
+		// turns Flow rebuilt (an approval's held calls, a stored chat). Remember the provider and send them again
+		// with reasoning_content ("" where it was not kept), which it accepts.
+		agentChatReasoningProviders.Store(reasoningKey, true)
+		payload["messages"] = chatMessagesReplaying(messages, true)
+		response, err = s.agentProviderRequest(ctx, "/chat/completions", payload, false)
+	}
 	if err != nil {
 		return agentProviderTurn{}, err
 	}
 	defer response.Body.Close()
 	if !isEventStream(response) {
 		turn, decodeErr := decodeChatResponse(response)
+		if turn.Reasoning != "" {
+			agentChatReasoningProviders.Store(reasoningKey, true)
+		}
 		return turn, emitDecodedAgentTurn(turn, decodeErr, emit)
 	}
 	turn := agentProviderTurn{}
@@ -425,6 +443,9 @@ func (s *server) requestChatCompletions(ctx context.Context, messages []agentPro
 			}
 		}
 		if choice.Delta.ReasoningContent != "" {
+			if turn.Reasoning == "" {
+				agentChatReasoningProviders.Store(reasoningKey, true)
+			}
 			turn.Reasoning += choice.Delta.ReasoningContent
 			if err := emit(agentProviderEvent{Type: "reasoning.delta", Delta: choice.Delta.ReasoningContent}); err != nil {
 				return err
@@ -750,7 +771,25 @@ func responsesInput(messages []agentProviderMessage) (string, []any) {
 	return instructions, input
 }
 
+// agentChatReasoningProviders holds the Chat Completions providers (base URL and model) seen returning
+// reasoning_content or asking for it back; their assistant tool-call turns always carry the field.
+var agentChatReasoningProviders sync.Map
+
+// agentReasoningReplayRequired reports whether a provider refused a request because an assistant tool-call turn
+// came without its reasoning_content (DeepSeek: "The `reasoning_content` in the thinking mode must be passed back").
+func agentReasoningReplayRequired(err error) bool {
+	var providerErr *agentProviderError
+	return errors.As(err, &providerErr) && providerErr.status == http.StatusBadRequest && strings.Contains(providerErr.message, "reasoning_content")
+}
+
 func chatMessages(messages []agentProviderMessage) []any {
+	return chatMessagesReplaying(messages, false)
+}
+
+// chatMessagesReplaying encodes messages for Chat Completions. An assistant turn's kept reasoning is always sent
+// back as reasoning_content; with replayReasoning every assistant tool-call turn carries the field, empty when its
+// reasoning was not kept (thinking models accept "" but refuse a missing field).
+func chatMessagesReplaying(messages []agentProviderMessage, replayReasoning bool) []any {
 	result := []any{}
 	for _, message := range messages {
 		if message.ToolResult != nil {
@@ -771,6 +810,9 @@ func chatMessages(messages []agentProviderMessage) []any {
 				calls = append(calls, map[string]any{"id": call.ID, "type": "function", "function": map[string]any{"name": call.Name, "arguments": string(call.Arguments)}})
 			}
 			item["tool_calls"] = calls
+		}
+		if message.Role == "assistant" && (message.Reasoning != "" || replayReasoning && len(message.ToolCalls) > 0) {
+			item["reasoning_content"] = message.Reasoning
 		}
 		result = append(result, item)
 	}

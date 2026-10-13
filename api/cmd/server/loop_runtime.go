@@ -766,7 +766,7 @@ func (s *server) executeLoopRun(ctx context.Context, workspace string, loop doma
 			output += text + "\n\n"
 		}
 		rec.setOutput(strings.TrimSpace(output))
-		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls})
+		messages = append(messages, agentProviderMessage{Role: "assistant", Content: turn.Text, ToolCalls: turn.ToolCalls, Reasoning: turn.Reasoning})
 		var finished *domain.LoopRunSummary
 		for _, call := range turn.ToolCalls {
 			reply := func(content string, isError bool) {
