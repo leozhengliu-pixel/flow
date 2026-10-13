@@ -171,7 +171,8 @@ export type ProjectDetailProps = {
     input: SavedViewMutationInput,
   ) => Promise<SavedView>;
   onDeleteSavedView: (view: SavedView) => Promise<void>;
-  onOpenIssue: (issue: Issue) => void;
+  /** `sequence`: the list's issue ids in display order (the issue page's position and J / K). */
+  onOpenIssue: (issue: Issue, sequence?: string[]) => void;
   onUpdateIssue: (issueId: string, input: IssueUpdateInput) => Promise<Issue>;
   onDeleteIssues: (issueIds: string[]) => Promise<void>;
   onCreateIssue: (projectId: string, projectMilestoneId?: string, context?: MyIssuesCreateContext) => void;

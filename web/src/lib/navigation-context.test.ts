@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boundedIssueSequence, navigationReturnPath, navigationTrail, nextNavigationState, projectsListOriginPath, reviewsOriginView, sidebarOriginPath, workspacePath } from './navigation-context'
+import { boundedIssueSequence, issueSequenceIDs, navigationReturnPath, navigationTrail, nextNavigationState, projectsListOriginPath, reviewsOriginView, sidebarOriginPath, workspacePath } from './navigation-context'
 import { parseAppRoute } from './app-routes'
 import { sidebarRoutePath } from './sidebar-route'
 
@@ -52,12 +52,29 @@ describe('navigation contexts across modules', () => {
 
   it('keeps the issue list and sequence through sibling navigation and slug canonicalization', () => {
     const state = nextNavigationState(location('/acme/team/ENG/all?status=todo'), '/acme/issue/ENG-1/old', { issueSequence: ['i1','i2'] })
-    const next = nextNavigationState(location('/acme/issue/ENG-1/old', state), '/acme/issue/ENG-2/title')
+    const next = nextNavigationState(location('/acme/issue/ENG-1/old', state), '/acme/issue/ENG-2/title', { issueSibling: true })
+    expect(next).not.toHaveProperty('issueSibling', true)
     const canonical = nextNavigationState(location('/acme/issue/ENG-2/title', next), '/acme/issue/ENG-2/new-title', undefined, true)
     expect(canonical).toMatchObject({ returnTo: '/acme/team/ENG/all?status=todo', issueSequence: ['i1','i2'] })
     const settings = nextNavigationState(location('/acme/issue/ENG-2/new-title', canonical), '/acme/settings/account/preferences')
     const returned = nextNavigationState(location('/acme/settings/account/preferences', settings), '/acme/issue/ENG-2/new-title')
     expect(returned).toMatchObject({ issueSequence: ['i1','i2'], returnTo: '/acme/team/ENG/all?status=todo' })
+  })
+
+  it('records the issue a sub-issue (or any linked issue) was opened from, dropping the list sequence', () => {
+    const list = '/acme/project/p/issues'
+    const parent = '/acme/issue/ENG-1/parent'
+    const opened = nextNavigationState(location(list, { navigationTrail: ['/acme/projects/all'] }), parent, { issueSequence: ['i1', 'i2'] })
+    expect(navigationTrail(opened, 'acme')).toEqual(['/acme/projects/all', list])
+    const child = nextNavigationState(location(parent, opened), '/acme/issue/ENG-3/child')
+    expect(navigationTrail(child, 'acme')).toEqual(['/acme/projects/all', list, parent])
+    expect(issueSequenceIDs(child)).toEqual([])
+    // The parent crumb is an ancestor: going back to it restores the parent's own trail.
+    const back = nextNavigationState(location('/acme/issue/ENG-3/child', child), parent)
+    expect(navigationTrail(back, 'acme')).toEqual(['/acme/projects/all', list])
+    // Triage walks its list with an explicit return target: still a sibling step.
+    const triage = nextNavigationState(location(parent, opened), '/acme/issue/ENG-2/next', { returnTo: list, issueSequence: ['i1', 'i2'] })
+    expect(navigationTrail(triage, 'acme')).toEqual(['/acme/projects/all', list])
   })
 
   it('clears context when changing workspaces or explicitly resetting navigation', () => {

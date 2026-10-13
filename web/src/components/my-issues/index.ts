@@ -1,7 +1,7 @@
 export { MyIssuesSurface } from './my-issues-surface'
 export { defaultMyIssuesDisplayOptions } from './my-issues-display-defaults'
 export type { MyIssuesDisplayOptions, MyIssuesFilterKey, MyIssuesFilterOption, MyIssuesGrouping, MyIssuesProperty, MyIssuesSurfaceProps, MyIssuesView } from './my-issues-surface'
-export { MyIssuesList, MyIssuesListEmpty, MyIssuesListError, MyIssuesListSkeleton, MyIssuesRow } from './my-issues-list'
+export { MyIssuesList, MyIssuesListEmpty, MyIssuesListError, MyIssuesRow } from './my-issues-list'
 export type { MyIssuesContextAction, MyIssuesContextOption, MyIssuesCreateContext, MyIssuesGroupData, MyIssuesListProps, MyIssuesRowData, MyIssuesStateType } from './my-issues-list'
 export { MyIssuesDetailsPane } from './my-issues-details-pane'
 export type { MyIssuesDetailsPaneProps, MyIssuesDetailsSummary, MyIssuesSummaryItem, MyIssuesSummaryTab } from './my-issues-details-pane'

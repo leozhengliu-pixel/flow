@@ -26,6 +26,7 @@ import { useI18n } from '@/i18n/i18n'
 import { IssueSLAIndicator } from '@/components/issue/issue-sla-indicator'
 import { SubIssueProgressRing } from '@/components/issue/sub-issue-progress-ring'
 import { CheckboxMark } from '@/components/ui/checkbox-mark'
+import { LoadingContainer, LoadingListFooter } from '@/components/ui/loading-caret'
 import type { ActivityEvent, FeatureSettings, IssueSLA } from '@/types/flow'
 import { CustomerRevenueRowChip, CustomersRowChip } from '@/components/customer/customer-row-properties'
 import { fetchIssueHistory } from '@/lib/api'
@@ -219,7 +220,7 @@ type MyIssuesListContext = { loadingMore: boolean }
 const MY_ISSUES_VIRTUAL_COMPONENTS: Components<MyIssuesListEntry, MyIssuesListContext> = { Footer: MyIssuesVirtualFooter }
 
 function MyIssuesVirtualFooter({ context }: { context: MyIssuesListContext }) {
-  return context.loadingMore ? <div className={styles.loadingMore}>Loading more…</div> : null
+  return context.loadingMore ? <LoadingListFooter label="Loading issues"/> : null
 }
 
 export function MyIssuesList({ groups, loading = false, error, selectedIds = EMPTY_SET, activeIssueId, collapsedGroupIds = EMPTY_SET, displayProperties = DEFAULT_PROPERTIES, nestedSubIssues=false, propertyOptions = EMPTY_OPTIONS, mutationErrors = EMPTY_ERRORS, onClearError, onContextAction, onCreateIssue, onGroupCollapsedChange, onOpenIssue, onPropertyChange, onRetryMutation, onSelectIssue, createIssueLabel = 'Create new issue', loadingMore = false, onEndReached, emptyState, hideGroupHeaders = false }: MyIssuesListProps) {
@@ -233,7 +234,7 @@ export function MyIssuesList({ groups, loading = false, error, selectedIds = EMP
     return [...parent, header, ...group.issues.map((issue, index) => ({ key: `issue:${group.id}:${issue.id}`, kind: 'issue' as const, issue, nestedLines: nestedLines.get(issue.id) ?? EMPTY_LINES, groupEnd: index === group.issues.length - 1 }))]
   }), [collapsedGroupIds, groups, hideGroupHeaders, nestedSubIssues])
   useSelectHoveredRowWithX(entries, selectedIds, onSelectIssue)
-  if (loading) return <MyIssuesListSkeleton/>
+  if (loading) return <LoadingContainer loading label="Loading issues"/>
   if (error) return <MyIssuesListError message={error} onRetry={onClearError}/>
   if (!groups.some(group => group.issues.length)) return emptyState ?? <MyIssuesListEmpty/>
   let identifierLength = 6
@@ -523,7 +524,6 @@ export function DelegateAvatar({ delegate, className }: { delegate: NonNullable<
 }
 function MyIssuesAssigneeAvatar({ assignee }: { assignee: NonNullable<MyIssuesRowData['assignee']> }) { return <UserAvatar avatarUrl={assignee.avatarUrl} className={styles.avatar} color={assignee.color ?? 'var(--avatar-fallback)'} name={assignee.name}/> }
 
-export function MyIssuesListSkeleton({ rows = 6 }: { rows?: number }) { return <div className={styles.skeleton} aria-label="Loading issues" aria-busy="true"><div className={styles.skeletonHeader}/>{Array.from({ length: rows }, (_, index) => <div className={styles.skeletonRow} key={index}><i/><i/><i/><i/></div>)}</div> }
 export function MyIssuesListEmpty() { return <div className={styles.state} role="status"><span className={styles.emptyIcon}><Check size={15}/></span><strong>No issues</strong><p>No issues match this view.</p></div> }
 export function MyIssuesListError({ message, onRetry }: { message: string; onRetry?: () => void }) { return <div className={styles.state} role="alert"><strong>Could not load issues</strong><p>{message}</p>{onRetry && <button type="button" onClick={onRetry}>Try again</button>}</div> }
 

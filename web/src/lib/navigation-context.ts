@@ -73,7 +73,9 @@ export function nextNavigationState(current: LocationContext, destination: strin
   const targetPath = targetUrl.pathname + targetUrl.search + targetUrl.hash
   const ancestor = trail.lastIndexOf(targetPath)
   const sameDetail = sourceIdentity !== undefined && sourceIdentity === targetIdentity
-  const siblingIssue = source.kind === 'issue' && target.kind === 'issue'
+  // J / K and triage walk a list: the list stays the origin. Any other issue-to-issue link (a sub-issue,
+  // the parent, a relation) drills in like the reference app, which records the issue it came from.
+  const siblingIssue = source.kind === 'issue' && target.kind === 'issue' && (after.issueSibling === true || after.returnTo !== undefined || Array.isArray(after.issueSequence))
   if (ancestor >= 0) trail = trail.slice(0, ancestor)
   else if (sameDetail || siblingIssue || replace) { /* Preserve list origin during tab/canonical transitions. */ }
   else if (targetIdentity) {
@@ -87,7 +89,7 @@ export function nextNavigationState(current: LocationContext, destination: strin
   const sequence = Array.isArray(after.issueSequence) ? issueSequenceIDs(after) : issueSequenceIDs(before)
   const sequenceOrigin = Array.isArray(after.issueSequence) ? trail.at(-1) : workspacePath(before.issueSequenceOrigin, workspace)
   const retainSequence = targetIdentity && sequence.length && (target.kind !== 'issue' || sequenceOrigin === trail.at(-1))
-  return { ...extras, ...after, issueSequence: retainSequence ? sequence : undefined, issueSequenceOrigin: retainSequence ? sequenceOrigin : undefined, navigationTrail: trail, returnTo: trail.at(-1) }
+  return { ...extras, ...after, issueSibling: undefined, issueSequence: retainSequence ? sequence : undefined, issueSequenceOrigin: retainSequence ? sequenceOrigin : undefined, navigationTrail: trail, returnTo: trail.at(-1) }
 }
 
 export function issueSequenceIDs(state: unknown): string[] {

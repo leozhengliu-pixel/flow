@@ -23,13 +23,13 @@ import styles from './agent-entity-hover.module.css'
 const HOVER_DELAY_MS = 500
 
 /** Wraps a chip (or list row) so hovering or focusing it opens the entity's card. */
-export function AgentEntityHover({ children, data, entity, side = 'top' }: { children: ReactElement; data: BootstrapData; entity: AgentEntity; side?: 'top' | 'left' | 'right' | 'bottom' }) {
+export function AgentEntityHover({ children, data, entity, side = 'top', sideOffset = 3, alignOffset = 0 }: { children: ReactElement; data: BootstrapData; entity: AgentEntity; side?: 'top' | 'left' | 'right' | 'bottom'; sideOffset?: number; alignOffset?: number }) {
   return (
     <Tooltip.Provider delayDuration={HOVER_DELAY_MS} skipDelayDuration={0}>
       <Tooltip.Root disableHoverableContent>
         <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
         <Tooltip.Portal>
-          <Tooltip.Content align="start" className={styles.card} collisionPadding={8} data-agent-entity-card={entity.kind === 'link' ? entity.icon : entity.kind} data-flow-motion="tooltip" side={side} sideOffset={3}>
+          <Tooltip.Content align="start" alignOffset={alignOffset} className={styles.card} collisionPadding={8} data-agent-entity-card={entity.kind === 'link' ? entity.icon : entity.kind} data-flow-motion="tooltip" side={side} sideOffset={sideOffset}>
             <AgentEntityCardBody data={data} entity={entity}/>
           </Tooltip.Content>
         </Tooltip.Portal>

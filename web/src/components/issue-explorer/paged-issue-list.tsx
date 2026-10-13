@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { GroupedVirtuoso, Virtuoso } from 'react-virtuoso'
 import type { BootstrapData, Issue, IssueUpdateInput } from '@/types/flow'
 import { listIssueRecordGroups, listIssueRecords, type IssueQueryInput } from '@/lib/api'
@@ -9,6 +9,7 @@ import { ISSUE_QUERY_INVALIDATED, issueMayMatchQuery, queryUsesLabels, type Issu
 import styles from '@/components/my-issues/my-issues-list.module.css'
 import boardStyles from './issue-board.module.css'
 import { IssueBoardCard, IssueBoardGroupHeader } from './issue-board'
+import { LoadingContainer, LoadingListFooter } from '@/components/ui/loading-caret'
 /** The server's customer group for requests whose customer no longer exists. */
 const UNKNOWN_CUSTOMER_GROUP = '__unknown__'
 
@@ -41,6 +42,7 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const [error, setError] = useState<string>()
   const [loading, setLoading] = useState(true)
   const [dragging, setDragging] = useState<{ issue: Issue; group: string }>()
+  const lastContent = useRef<ReactNode>(null)
   const active = useRef<{ signature: string; abort: AbortController; pending: Set<string>; ready: boolean } | undefined>(undefined)
   const queryRef = useRef(query); queryRef.current = query
   const totalRef = useRef(onTotalChange); totalRef.current = onTotalChange
@@ -112,7 +114,8 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
         if (queryUsesLabels(queryRef.current)) requestRefresh()
         return
       }
-      if (detail.force) { cache.clear(); recordsRef.current?.([]); setGroups([]); setLoading(true) }
+      // A forced (permission) invalidation must not keep showing rows the viewer may have lost.
+      if (detail.force) { cache.clear(); lastContent.current = null; recordsRef.current?.([]); setGroups([]); setLoading(true) }
       if (detail.force) { clearTimeout(refreshTimer.current); setRetry(value => value + 1) }
       else if (!detail.issue || cache.contains(detail.issue.id) || issueMayMatchQuery(detail.issue, queryRef.current, dataRef.current)) requestRefresh()
     }
@@ -162,44 +165,57 @@ export function PagedIssueList({ data, query, collapsedGroupIds, onGroupCollapse
   const counts = groups.map(group => collapsedGroupIds?.has(group.value) ? 0 : group.loaded + (group.hasMore ? 1 : 0))
   const offsets: number[] = []; let offset = 0
   for (const count of counts) { offsets.push(offset); offset += count }
-  if (loading) return <div className={styles.loadingMore} role="status">Loading issues…</div>
-  if (error && !cache.retainedEntities) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
-  if (rowProps.emptyState && groups.every(group => !group.count)) return rowProps.emptyState
-  if (!groups.length) return <div className={styles.state}>No issues</div>
-  if (layout === 'board') {
-    const drop = (group: Group, before?: Issue) => {
-      if (!dragging || !onMoveIssueRecord) return
-      const property = query.groupBy === 'status' ? 'stateId' : query.groupBy === 'priority' ? 'priority' : query.groupBy === 'assignee' ? 'assigneeId' : query.groupBy === 'project' ? 'projectId' : query.groupBy === 'cycle' ? 'cycleId' : undefined
-      if (!property) return
-      const input: IssueUpdateInput = { [property]: property === 'priority' ? Number(group.value) : group.value }
-      if (before) input.sortOrder = (before.sortOrder ?? 0) - .5
-      const issue = dragging.issue; setDragging(undefined)
-      void onMoveIssueRecord(issue, input).then(() => setRetry(value => value + 1)).catch(error => setError(String(error.message ?? error)))
+  const renderList = (): ReactNode => {
+    if (error && !cache.retainedEntities) return <div className={styles.state} role="alert"><p>{error}</p><button onClick={() => { active.current?.abort.abort(); setRetry(value => value + 1) }}>Retry</button></div>
+    if (rowProps.emptyState && groups.every(group => !group.count)) return rowProps.emptyState
+    if (!groups.length) return <div className={styles.state}>No issues</div>
+    if (layout === 'board') {
+      const drop = (group: Group, before?: Issue) => {
+        if (!dragging || !onMoveIssueRecord) return
+        const property = query.groupBy === 'status' ? 'stateId' : query.groupBy === 'priority' ? 'priority' : query.groupBy === 'assignee' ? 'assigneeId' : query.groupBy === 'project' ? 'projectId' : query.groupBy === 'cycle' ? 'cycleId' : undefined
+        if (!property) return
+        const input: IssueUpdateInput = { [property]: property === 'priority' ? Number(group.value) : group.value }
+        if (before) input.sortOrder = (before.sortOrder ?? 0) - .5
+        const issue = dragging.issue; setDragging(undefined)
+        void onMoveIssueRecord(issue, input).then(() => setRetry(value => value + 1)).catch(error => setError(String(error.message ?? error)))
+      }
+      return <div className={boardStyles.board} role="list" aria-label="Issue board">
+        {groups.filter(group => !hiddenGroupIds.includes(group.value)).map(group => <VisibleIssueColumn key={group.value} label={descriptor(group).label}>
+          <IssueBoardGroupHeader group={descriptor(group)} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={rowProps.onSelectIssue}/>
+          <div style={{ flex: 1, minHeight: 0 }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); drop(group) }}>
+            <Virtuoso style={{ height: '100%' }} totalCount={group.loaded + (group.hasMore ? 1 : 0)} defaultItemHeight={120} context={revision} increaseViewportBy={240} itemContent={index => {
+              const pageIndex = cache.pageAt(group.value, index), page = cache.get(group.value, pageIndex), issue = page?.items[index - cache.start(group.value, pageIndex)]
+              if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
+              const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
+              return <div style={{ padding: '4px 8px' }}><IssueBoardCard issue={row} properties={rowProps.displayProperties ?? new Set(['id','status','priority','assignee'])} propertyOptions={rowProps.propertyOptions ?? { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }} selected={Boolean(rowProps.selectedIds?.has(issue.id))} dragging={dragging?.issue.id === issue.id} dropBefore={false} onDragStart={() => setDragging({ issue, group: group.value })} onDragEnd={() => setDragging(undefined)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); drop(group, issue) }} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onOpenSubIssue={child => { const issue = page!.items.find(issue => issue.id === child.id); if (issue) onOpenIssueRecord(issue, cache.sequence(group.value, issue.id)) }} onPropertyChange={(property, value) => rowProps.onPropertyChange?.(row, property, value)} onSelect={(selected, range) => rowProps.onSelectIssue?.(issue.id, selected, range)}/></div>
+            }}/>
+          </div>
+        </VisibleIssueColumn>)}
+        {hiddenGroupIds.length > 0 && <section className={boardStyles.hiddenColumns}><strong>Hidden columns</strong>{groups.filter(group => hiddenGroupIds.includes(group.value)).map(group => <button key={group.value} onClick={() => onShowGroup?.(group.value)}><span data-i18n-ignore>{descriptor(group).label}</span><b>{group.count}</b></button>)}</section>}
+      </div>
     }
-    return <div className={boardStyles.board} role="list" aria-label="Issue board">
-      {groups.filter(group => !hiddenGroupIds.includes(group.value)).map(group => <VisibleIssueColumn key={group.value} label={descriptor(group).label}>
-        <IssueBoardGroupHeader group={descriptor(group)} onCreateIssue={onCreateIssue} onHideGroup={onHideGroup} onSelectIssue={rowProps.onSelectIssue}/>
-        <div style={{ flex: 1, minHeight: 0 }} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); drop(group) }}>
-          <Virtuoso style={{ height: '100%' }} totalCount={group.loaded + (group.hasMore ? 1 : 0)} defaultItemHeight={120} context={revision} increaseViewportBy={240} itemContent={index => {
-            const pageIndex = cache.pageAt(group.value, index), page = cache.get(group.value, pageIndex), issue = page?.items[index - cache.start(group.value, pageIndex)]
-            if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
-            const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
-            return <div style={{ padding: '4px 8px' }}><IssueBoardCard issue={row} properties={rowProps.displayProperties ?? new Set(['id','status','priority','assignee'])} propertyOptions={rowProps.propertyOptions ?? { status: [], priority: [], assignee: [], dueDate: [], labels: [], project: [] }} selected={Boolean(rowProps.selectedIds?.has(issue.id))} dragging={dragging?.issue.id === issue.id} dropBefore={false} onDragStart={() => setDragging({ issue, group: group.value })} onDragEnd={() => setDragging(undefined)} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); event.stopPropagation(); drop(group, issue) }} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onOpenSubIssue={child => { const issue = page!.items.find(issue => issue.id === child.id); if (issue) onOpenIssueRecord(issue, cache.sequence(group.value, issue.id)) }} onPropertyChange={(property, value) => rowProps.onPropertyChange?.(row, property, value)} onSelect={(selected, range) => rowProps.onSelectIssue?.(issue.id, selected, range)}/></div>
-          }}/>
-        </div>
-      </VisibleIssueColumn>)}
-      {hiddenGroupIds.length > 0 && <section className={boardStyles.hiddenColumns}><strong>Hidden columns</strong>{groups.filter(group => hiddenGroupIds.includes(group.value)).map(group => <button key={group.value} onClick={() => onShowGroup?.(group.value)}><span data-i18n-ignore>{descriptor(group).label}</span><b>{group.count}</b></button>)}</section>}
-    </div>
+    return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
+      groupContent={index => <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
+      itemContent={(index, groupIndex) => {
+        const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = cache.pageAt(group.value, localIndex)
+        const page = cache.get(group.value, pageIndex), issue = page?.items[localIndex - cache.start(group.value, pageIndex)]
+        if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
+        const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
+        return <MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/>
+      }}/>
   }
-  return <GroupedVirtuoso className={styles.virtualList} role="list" aria-label="Issues" groupCounts={counts} context={revision} defaultItemHeight={44} increaseViewportBy={{ top: 176, bottom: 264 }}
-    groupContent={index => <MyIssuesGroupHeader group={descriptor(groups[index])} collapsed={Boolean(collapsedGroupIds?.has(groups[index].value))} createIssueLabel="Create new issue" onCreateIssue={onCreateIssue} onGroupCollapsedChange={onGroupCollapsedChange}/>}
-    itemContent={(index, groupIndex) => {
-      const group = groups[groupIndex], localIndex = index - offsets[groupIndex], pageIndex = cache.pageAt(group.value, localIndex)
-      const page = cache.get(group.value, pageIndex), issue = page?.items[localIndex - cache.start(group.value, pageIndex)]
-      if (!issue) return <IssuePagePlaceholder load={() => load(group.value, pageIndex)}/>
-      const row = issueToExplorerRow(issue, data.workspace.urlKey, page!.items, data)
-      return <MyIssuesRow issue={row} selected={rowProps.selectedIds?.has(issue.id)} displayProperties={rowProps.displayProperties} propertyOptions={rowProps.propertyOptions} mutationError={rowProps.mutationErrors?.get(issue.id)} onOpen={() => onOpenIssueRecord(issue, cache.sequence(group.value, issue.id))} onPropertyChange={rowProps.onPropertyChange} onSelect={rowProps.onSelectIssue} onContextAction={rowProps.onContextAction} onRetryMutation={rowProps.onRetryMutation}/>
-    }}/>
+  // While a query loads, the previous result stays (inert) and fades out after 500ms;
+  // a first load is blank. Either way the loader caret shows from 1s, never text.
+  // A new query renders once with the old groups before its load starts: that is loading too.
+  const pending = loading || renderedSignature.current !== signature
+  const content = pending ? lastContent.current : renderList()
+  return <LoadingContainer loading={pending} label="Loading issues"><LastContent content={content} loading={pending} store={lastContent}/></LoadingContainer>
+}
+
+/** Remembers the last loaded list so a reload can keep showing it. */
+function LastContent({ content, loading, store }: { content: ReactNode; loading: boolean; store: { current: ReactNode } }) {
+  useLayoutEffect(() => { if (!loading) store.current = content }, [content, loading, store])
+  return content
 }
 
 function VisibleIssueColumn({ label, children }: { label: string; children: ReactNode }) {
@@ -229,8 +245,9 @@ function issueQueryChanged(before: Issue, after: Issue, query: IssueQueryInput) 
   return [...fields].some(field => value(before, field) !== value(after, field)) || Boolean(query.q && (before.title !== after.title || before.description !== after.description))
 }
 
+/** A not-yet-fetched page: fetches it and shows the list-footer caret meanwhile. */
 function IssuePagePlaceholder({ load }: { load: () => void }) {
   const loadRef = useRef(load); loadRef.current = load
   useEffect(() => { loadRef.current() }, [load])
-  return <div className={styles.loadingMore}><button type="button" onClick={load}>Load issues…</button></div>
+  return <LoadingListFooter label="Loading issues"/>
 }
