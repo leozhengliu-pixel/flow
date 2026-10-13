@@ -218,6 +218,7 @@ func OpenDatabase(config DatabaseConfig) (*SQLiteStore, error) {
 		{"ensureReleaseIssueIndex", s.ensureReleaseIssueIndex},
 		{"ensureTeamDefaultFavorites", s.ensureTeamDefaultFavorites},
 		{"ensureLoopRunRecords", s.ensureLoopRunRecords},
+		{"ensureAgentRuns", s.ensureAgentRuns},
 		{"ensureFileUploads", s.ensureFileUploads},
 		{"loadOrSeed", s.loadOrSeed},
 		{"seedWorkspaceOwners", func(ctx context.Context) error {

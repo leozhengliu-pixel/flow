@@ -169,10 +169,17 @@ func (s *server) agentToolDefinitions() ([]agentProviderTool, error) {
 			continue
 		}
 		name := strings.TrimPrefix(item.Name, "mcp__flow.")
+		if agentMCPOnlyTools[name] {
+			continue
+		}
 		tools = append(tools, agentProviderTool{Name: name, Description: item.Description, Parameters: item.InputSchema, Access: item.Access})
 	}
 	return append(tools, agentProgressToolDefinition), nil
 }
+
+// agentMCPOnlyTools are Flow tools offered to MCP clients and worker runs (/mcp) but not to the in-process agent,
+// whose tool set stays as it was until the worker runtime replaces it.
+var agentMCPOnlyTools = map[string]bool{"count_issues": true}
 
 // agentProgressTool lets the model narrate its plan the way the reference app's agent does ("Reviewing project activity").
 // It never touches data: chat sessions render it as a step title, other runners simply acknowledge it.

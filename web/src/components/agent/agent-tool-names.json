@@ -1,4 +1,5 @@
 [
+  "count_issues",
   "create_attachment",
   "create_attachment_from_upload",
   "create_initiative_label",

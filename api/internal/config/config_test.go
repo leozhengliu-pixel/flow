@@ -224,3 +224,30 @@ func TestLoadTTSKeyFallsBackOnlyToTheAgentHost(t *testing.T) {
 		t.Fatalf("other host TTS with a key = %#v %v %v", loaded.TTS, loaded.Warnings, err)
 	}
 }
+
+func TestLoadAgentRuntimeValidation(t *testing.T) {
+	for _, key := range []string{"FLOW_DATABASE_DRIVER", "FLOW_DATABASE_URL", "FLOW_STORAGE_DRIVER", "FLOW_REDIS_MODE", "FLOW_AGENT_RUNTIME", "FLOW_AGENT_WORKER_SECRET", "FLOW_AGENT_WORKER_SECRET_FILE", "FLOW_AGENT_WORKSPACE_CONCURRENCY"} {
+		t.Setenv(key, "")
+	}
+	loaded, err := Load()
+	if err != nil || loaded.Agent.Runtime != AgentRuntimeInProcess || loaded.Agent.WorkerSecret != "" || loaded.Agent.WorkspaceRunConcurrency != 4 {
+		t.Fatalf("runtime defaults = %+v, %v", loaded.Agent, err)
+	}
+	t.Setenv("FLOW_AGENT_RUNTIME", "sidecar")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_RUNTIME") {
+		t.Fatalf("unknown runtime error = %v", err)
+	}
+	t.Setenv("FLOW_AGENT_RUNTIME", "worker")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "FLOW_AGENT_WORKER_SECRET is required") {
+		t.Fatalf("worker without secret error = %v", err)
+	}
+	t.Setenv("FLOW_AGENT_WORKER_SECRET", "short")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "at least 32") {
+		t.Fatalf("short secret error = %v", err)
+	}
+	t.Setenv("FLOW_AGENT_WORKER_SECRET", strings.Repeat("s", 32))
+	t.Setenv("FLOW_AGENT_WORKSPACE_CONCURRENCY", "2")
+	if loaded, err := Load(); err != nil || loaded.Agent.Runtime != AgentRuntimeWorker || loaded.Agent.WorkspaceRunConcurrency != 2 {
+		t.Fatalf("worker runtime = %+v, %v", loaded.Agent.Runtime, err)
+	}
+}

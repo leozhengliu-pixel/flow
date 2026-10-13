@@ -20,6 +20,9 @@ import (
 // callFlowTool runs a Flow tool for MCP clients and the built-in agent, and
 // logs failures (they don't go through an HTTP route of their own).
 func (s *server) callFlowTool(ctx context.Context, actor mcpActor, name string, args map[string]any) (any, error) {
+	if _, batch := args["ids"]; batch && mcpBatchDeleteTools()[name] {
+		return s.callFlowBatchDelete(ctx, actor, name, args)
+	}
 	started := time.Now()
 	result, err := s.runFlowTool(ctx, actor, name, args)
 	if err != nil {
@@ -55,7 +58,7 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 	if err != nil {
 		return nil, err
 	}
-	if name != "list_issues" && name != "search_issues" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release" || name == "create_reminder") {
+	if name != "list_issues" && name != "count_issues" && name != "search_issues" && (strings.Contains(name, "issue") || strings.Contains(name, "comment") || strings.Contains(name, "attachment") || name == "save_release" || name == "create_reminder") {
 		if err := s.hydrateMCPIssueArguments(ctx, actor, &data, args); err != nil {
 			return nil, err
 		}
@@ -168,6 +171,8 @@ func (s *server) runFlowTool(ctx context.Context, actor mcpActor, name string, a
 		return paginate(items, args), nil
 	case "list_issues":
 		return s.pagedMCPIssues(ctx, actor, data, args)
+	case "count_issues":
+		return s.countMCPIssues(ctx, actor, data, args)
 	case "list_cycles":
 		team, err := mcpFindTeam(data, stringArg(args, "teamId"))
 		if err != nil {
@@ -559,100 +564,8 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 	q.Summary = true
 	fields := stringsArg(args, "fields")
 	q.IncludeDescription = len(fields) == 0 || slices.Contains(fields, "description")
-	q.SearchText = stringArg(args, "query")
-	if !boolArg(args, "includeArchived") {
-		q.Archived = "false"
-	}
-	add := func(field string, values ...string) {
-		q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Values: values})
-	}
-	if value := stringArg(args, "team"); value != "" {
-		team, err := mcpFindTeam(data, value)
-		if err != nil {
-			return nil, err
-		}
-		add("team", team.ID)
-	}
-	if value := stringArg(args, "state"); value != "" {
-		ids := []string{}
-		for _, state := range data.States {
-			if equalFoldAny(value, state.ID, state.Name, state.Type) {
-				ids = append(ids, state.ID)
-			}
-		}
-		add("status", ids...)
-	}
-	for _, field := range []string{"assignee", "delegate"} {
-		value, present := nullableStringArg(args, field)
-		if !present {
-			continue
-		}
-		id := ""
-		if value != "" && value != "null" {
-			user, err := mcpFindUser(data, value)
-			if err != nil {
-				return nil, err
-			}
-			id = user.ID
-		}
-		column := field
-		if field == "delegate" {
-			column = "delegateId"
-		}
-		add(column, id)
-	}
-	if value := stringArg(args, "project"); value != "" {
-		project, err := mcpFindProject(data, value)
-		if err != nil {
-			return nil, err
-		}
-		add("project", project.ID)
-	}
-	if value := stringArg(args, "parentId"); value != "" {
-		id, err := s.store.AuthorizedIssueRecordID(ctx, q, value)
-		if err != nil {
-			return nil, err
-		}
-		add("parent", id)
-	}
-	if value := stringArg(args, "label"); value != "" {
-		ids := []string{}
-		for _, label := range data.Labels {
-			if equalFoldAny(value, label.ID, label.Name) {
-				ids = append(ids, label.ID)
-			}
-		}
-		add("labels", ids...)
-	}
-	if value := stringArg(args, "cycle"); value != "" {
-		ids := []string{}
-		for _, cycle := range data.Cycles {
-			if cycleMatches(data, cycle.ID, value) {
-				ids = append(ids, cycle.ID)
-			}
-		}
-		add("cycle", ids...)
-	}
-	if value := stringArg(args, "release"); value != "" {
-		ids := []string{}
-		for _, release := range data.Releases {
-			if equalFoldAny(value, release.ID, release.SlugID) {
-				ids = append(ids, release.IssueIDs...)
-			}
-		}
-		add("id", ids...)
-	}
-	if hasNumberArg(args, "priority") {
-		add("priority", strconv.Itoa(intArg(args, "priority", 0)))
-	}
-	for _, field := range []string{"createdAt", "updatedAt"} {
-		if value := stringArg(args, field); value != "" {
-			date, err := mcpDateAt(value, anchor)
-			if err != nil {
-				return nil, err
-			}
-			q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Operator: "gte", Values: []string{date.Format(time.RFC3339Nano)}})
-		}
+	if err := s.applyMCPIssueFilters(ctx, &q, data, args, anchor); err != nil {
+		return nil, err
 	}
 	page, err := s.store.QueryIssueRecords(ctx, q)
 	if err != nil {
@@ -700,6 +613,128 @@ func (s *server) pagedMCPIssues(ctx context.Context, actor mcpActor, data domain
 		return map[string]any{"items": items, "nextCursor": page.NextCursor}, nil
 	}
 	return map[string]any{"items": page.Items, "nextCursor": page.NextCursor}, nil
+}
+
+// applyMCPIssueFilters adds list_issues' filters (team, state, assignee, project, dates…) to an issue query; dates
+// relative to now (-P1D) are resolved against anchor.
+func (s *server) applyMCPIssueFilters(ctx context.Context, q *store.IssueRecordQuery, data domain.Bootstrap, args map[string]any, anchor time.Time) error {
+	q.SearchText = stringArg(args, "query")
+	if !boolArg(args, "includeArchived") {
+		q.Archived = "false"
+	}
+	add := func(field string, values ...string) {
+		q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Values: values})
+	}
+	if value := stringArg(args, "team"); value != "" {
+		team, err := mcpFindTeam(data, value)
+		if err != nil {
+			return err
+		}
+		add("team", team.ID)
+	}
+	if value := stringArg(args, "state"); value != "" {
+		ids := []string{}
+		for _, state := range data.States {
+			if equalFoldAny(value, state.ID, state.Name, state.Type) {
+				ids = append(ids, state.ID)
+			}
+		}
+		add("status", ids...)
+	}
+	for _, field := range []string{"assignee", "delegate"} {
+		value, present := nullableStringArg(args, field)
+		if !present {
+			continue
+		}
+		id := ""
+		if value != "" && value != "null" {
+			user, err := mcpFindUser(data, value)
+			if err != nil {
+				return err
+			}
+			id = user.ID
+		}
+		column := field
+		if field == "delegate" {
+			column = "delegateId"
+		}
+		add(column, id)
+	}
+	if value := stringArg(args, "project"); value != "" {
+		project, err := mcpFindProject(data, value)
+		if err != nil {
+			return err
+		}
+		add("project", project.ID)
+	}
+	if value := stringArg(args, "parentId"); value != "" {
+		id, err := s.store.AuthorizedIssueRecordID(ctx, *q, value)
+		if err != nil {
+			return err
+		}
+		add("parent", id)
+	}
+	if value := stringArg(args, "label"); value != "" {
+		ids := []string{}
+		for _, label := range data.Labels {
+			if equalFoldAny(value, label.ID, label.Name) {
+				ids = append(ids, label.ID)
+			}
+		}
+		add("labels", ids...)
+	}
+	if value := stringArg(args, "cycle"); value != "" {
+		ids := []string{}
+		for _, cycle := range data.Cycles {
+			if cycleMatches(data, cycle.ID, value) {
+				ids = append(ids, cycle.ID)
+			}
+		}
+		add("cycle", ids...)
+	}
+	if value := stringArg(args, "release"); value != "" {
+		ids := []string{}
+		for _, release := range data.Releases {
+			if equalFoldAny(value, release.ID, release.SlugID) {
+				ids = append(ids, release.IssueIDs...)
+			}
+		}
+		add("id", ids...)
+	}
+	if hasNumberArg(args, "priority") {
+		add("priority", strconv.Itoa(intArg(args, "priority", 0)))
+	}
+	for _, field := range []string{"createdAt", "updatedAt"} {
+		if value := stringArg(args, field); value != "" {
+			date, err := mcpDateAt(value, anchor)
+			if err != nil {
+				return err
+			}
+			q.Filter.And = append(q.Filter.And, store.IssueFilter{Field: field, Operator: "gte", Values: []string{date.Format(time.RFC3339Nano)}})
+		}
+	}
+	return nil
+}
+
+// countMCPIssues counts the issues list_issues would return for the same filters (every page), so an agent
+// never counts by paging through lists.
+func (s *server) countMCPIssues(ctx context.Context, actor mcpActor, data domain.Bootstrap, args map[string]any) (any, error) {
+	q, err := s.mcpIssueQuery(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.applyMCPIssueFilters(ctx, &q, data, args, time.Now().UTC()); err != nil {
+		return nil, err
+	}
+	q.Limit, q.Summary, q.IncludeTotal = 1, true, true
+	page, err := s.store.QueryIssueRecords(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	if page.Total < 0 {
+		return nil, fmt.Errorf("issues could not be counted")
+	}
+	return map[string]any{"count": page.Total}, nil
 }
 
 func activeIssueSuggestions(data *domain.Bootstrap, issueID string) []domain.IssueSuggestion {

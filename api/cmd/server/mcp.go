@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
 	"slices"
@@ -54,6 +55,8 @@ type mcpActor struct {
 	User                domain.User
 	APIKey              domain.APIKey
 	AuthorizationUserID string
+	// Run is set for an agent run token (agent_run_tokens.go): tool calls then act as the run's principal.
+	Run *agentRunGrant
 }
 
 func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
@@ -68,6 +71,10 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 			panic(err)
 		}
 		raw["additionalProperties"] = false
+		if mcpBatchDeleteTools()[tools[index].Name] {
+			mcpBatchDeleteSchema(raw)
+			tools[index].Description += " To delete several items in one call, pass `ids` instead of `id`."
+		}
 		tools[index].InputSchema, _ = json.Marshal(raw)
 		var schema jsonschema.Schema
 		if err := json.Unmarshal(tools[index].InputSchema, &schema); err != nil {
@@ -143,7 +150,7 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 		case "tools/list":
 			listed := make([]map[string]any, 0, len(tools))
 			for _, tool := range tools {
-				if readonly && tool.Access == "write" {
+				if readonly && tool.Access == "write" || actor.Run != nil && !actor.Run.allows(s, tool, readonly) {
 					continue
 				}
 				listed = append(listed, map[string]any{"name": tool.Name, "description": tool.Description, "inputSchema": json.RawMessage(tool.InputSchema), "annotations": map[string]any{"readOnlyHint": tool.Access == "read", "destructiveHint": strings.HasPrefix(tool.Name, "delete_") || tool.Name == "merge_diff"}})
@@ -167,6 +174,10 @@ func (s *server) mcpHTTP(readonly bool) http.HandlerFunc {
 				return
 			}
 			tool := tools[index]
+			if actor.Run != nil {
+				s.callMCPRunTool(w, r, request.ID, actor.Run, tool, params.Arguments, readonly)
+				return
+			}
 			if !mcpToolAllowed(tool, actor.APIKey, readonly, params.Arguments) {
 				s.writeMCPToolResult(w, request.ID, nil, fmt.Errorf("write scope is required"))
 				return
@@ -324,6 +335,14 @@ func (s *server) authenticateMCP(w http.ResponseWriter, r *http.Request) (mcpAct
 		s.mcpUnauthorized(w, r, "Bearer token is required")
 		return mcpActor{}, false
 	}
+	if token := strings.TrimSpace(header[len("Bearer "):]); strings.HasPrefix(token, agentRunTokenPrefix) {
+		grant, err := s.authenticateAgentRunToken(r.Context(), token)
+		if err != nil {
+			s.mcpUnauthorized(w, r, "Run token is invalid, expired, or its run has ended")
+			return mcpActor{}, false
+		}
+		return mcpActor{WorkspaceKey: grant.run.WorkspaceKey, Run: grant}, true
+	}
 	authentication, err := s.store.AuthenticateAPIKeyRecord(r.Context(), "", secretHash(strings.TrimSpace(header[len("Bearer "):])), applicationApproved)
 	key := authentication.Key
 	if err != nil || key.Scopes != nil && !slices.ContainsFunc(key.Scopes, func(scope string) bool {
@@ -356,14 +375,101 @@ func (s *server) writeMCPError(w http.ResponseWriter, id any, code int, message 
 }
 
 func (s *server) writeMCPToolResult(w http.ResponseWriter, id any, result any, err error) {
-	if err != nil {
-		writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]any{"content": []map[string]string{{"type": "text", "text": err.Error()}}, "isError": true}})
-		return
-	}
-	raw, marshalErr := json.Marshal(result)
-	if marshalErr != nil {
+	body, ok := mcpToolCallResult(result, err, nil)
+	if !ok {
 		s.writeMCPError(w, id, -32603, "Internal error", nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: map[string]any{"content": []map[string]string{{"type": "text", "text": string(raw)}}, "structuredContent": result, "isError": false}})
+	writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: body})
+}
+
+// mcpToolCallResult is a tools/call result: the tool's JSON as text content and as structuredContent. The MCP spec
+// requires structuredContent to be an object, and strict clients (Claude Code, the OpenAI Agents SDK) reject
+// anything else, so a list result such as list_cycles' becomes {items: […]} and another non-object value
+// {value: …}; the text content keeps the tool's own JSON. extra adds fields to structuredContent. ok is false when
+// the result cannot be encoded.
+func mcpToolCallResult(result any, err error, extra map[string]any) (map[string]any, bool) {
+	if err != nil {
+		return map[string]any{"content": []map[string]string{{"type": "text", "text": err.Error()}}, "isError": true}, true
+	}
+	raw, marshalErr := json.Marshal(result)
+	if marshalErr != nil {
+		return nil, false
+	}
+	body := map[string]any{"content": []map[string]string{{"type": "text", "text": string(raw)}}, "isError": false}
+	if structured := mcpStructuredContent(raw, extra); structured != nil {
+		body["structuredContent"] = structured
+	}
+	return body, true
+}
+
+func mcpStructuredContent(raw json.RawMessage, extra map[string]any) any {
+	trimmed := bytes.TrimSpace(raw)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		if len(extra) == 0 {
+			return nil
+		}
+		return extra
+	}
+	if trimmed[0] != '{' {
+		key := "value"
+		if trimmed[0] == '[' {
+			key = "items"
+		}
+		wrapped := map[string]any{key: raw}
+		maps.Copy(wrapped, extra)
+		return wrapped
+	}
+	if len(extra) == 0 {
+		return raw
+	}
+	var object map[string]any
+	if json.Unmarshal(raw, &object) != nil {
+		return raw
+	}
+	maps.Copy(object, extra)
+	return object
+}
+
+// callMCPRunTool answers tools/call for an agent run token. An Idempotency-Key header (the worker sends
+// "<runId>:<toolUseId>") makes a retried write return the first result instead of writing twice.
+func (s *server) callMCPRunTool(w http.ResponseWriter, r *http.Request, id any, grant *agentRunGrant, tool flowMCPTool, args map[string]any, readonly bool) {
+	if !grant.allows(s, tool, readonly) {
+		s.writeMCPToolResult(w, id, nil, fmt.Errorf("%s is not available to this agent run", tool.Name))
+		return
+	}
+	if err := tool.validator.Validate(args); err != nil {
+		s.writeMCPError(w, id, -32602, "Invalid tool arguments", map[string]string{"detail": err.Error()})
+		return
+	}
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if len(key) > 160 {
+		s.writeMCPError(w, id, -32602, "Idempotency-Key is too long", nil)
+		return
+	}
+	if key != "" && tool.Access == "write" {
+		if cached, found, err := s.store.AgentRunKey(r.Context(), grant.run.ID, "mcp:"+key); err == nil && found {
+			writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: json.RawMessage(cached)})
+			return
+		}
+	}
+	result, changes, err := s.callAgentRunTool(r, grant, tool.Name, args)
+	var extra map[string]any
+	switch {
+	case len(changes) == 1:
+		extra = map[string]any{"change": changes[0]}
+	case len(changes) > 1:
+		extra = map[string]any{"changes": changes}
+	}
+	body, ok := mcpToolCallResult(result, err, extra)
+	if !ok {
+		s.writeMCPError(w, id, -32603, "Internal error", nil)
+		return
+	}
+	if key != "" && tool.Access == "write" && err == nil {
+		if raw, marshalErr := json.Marshal(body); marshalErr == nil {
+			_ = s.store.SaveAgentRunKey(r.Context(), grant.run, "mcp:"+key, raw)
+		}
+	}
+	writeJSON(w, http.StatusOK, mcpRPCResponse{JSONRPC: "2.0", ID: id, Result: body})
 }

@@ -41,6 +41,8 @@ export const agentStepsZhCN: Record<string, string> = {
   "Looked at project updates": "已查看项目更新",
   "Searching issues…": "正在搜索事项…",
   "Searched issues": "已搜索事项",
+  "Counting issues…": "正在统计事项…",
+  "Counted issues": "已统计事项",
   "Reviewing inbox…": "正在查看收件箱…",
   "Reviewed inbox": "已查看收件箱",
   "Looking at users…": "正在查看成员…",

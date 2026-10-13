@@ -1005,6 +1005,11 @@ func (s *server) executeAgentTool(r *http.Request, data domain.Bootstrap, call d
 			break
 		}
 	}
+	if _, run := agentRunFrom(r.Context()); run && !allowed {
+		// A worker run calls through /mcp, which offers the whole Flow MCP inventory (count_issues too).
+		access := agentChangeToolAccess()[strings.TrimPrefix(call.Name, "mcp__flow.")]
+		allowed = access == "read" || access == "write" && s.agent.WriteTools
+	}
 	if !allowed {
 		return nil, fmt.Errorf("Agent tool is not enabled: %s", call.Name)
 	}

@@ -91,6 +91,8 @@ type server struct {
 	loopInstanceOnce      sync.Once
 	loopInstance          string
 	loopReconcilerStarted atomic.Bool
+	// agentRunReconcilerStarted guards the agent runtime's lease reconciler (agent_runtime_api.go).
+	agentRunReconcilerStarted atomic.Bool
 	// Public API request/complexity budgets (api_rate_limit.go).
 	apiRateLimiter     *apiRateLimiter
 	apiRateLimiterOnce sync.Once
@@ -173,6 +175,9 @@ func main() {
 		_ = s.stopDeliveryScheduler(shutdownCtx)
 		_ = httpServer.Shutdown(shutdownCtx)
 	}()
+	if s.agentRuntimeWorker() {
+		log.Printf("FLOW_AGENT_RUNTIME=worker: the internal runtime API is on; built-in agent runs still execute in-process until the worker runtime takes them over")
+	}
 	log.Printf("Flow API listening on %s using database=%s storage=%s redis=%s", httpServer.Addr, applicationConfig.Database.Driver, applicationConfig.Storage.Driver, applicationConfig.Redis.Mode)
 	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
@@ -220,6 +225,7 @@ func newHandler(s *server) http.Handler {
 	s.startWorkflowScheduler()
 	s.startDeliveryScheduler()
 	s.startLoopRunReconciler()
+	s.startAgentRunReconciler()
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]string{"status": "ok", "redis": "disabled", "version": version, "commit": commit}
@@ -247,6 +253,7 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("/mcp", readWriteMCP)
 	mux.HandleFunc("/mcp/readonly", readOnlyMCP)
 	mux.HandleFunc("PUT /api/mcp/uploads/{token}", s.putMCPUpload)
+	s.registerAgentRuntimeRoutes(mux)
 	mux.HandleFunc("GET /api/oauth/authorization-request", s.getOAuthAuthorizationRequest)
 	mux.HandleFunc("POST /api/oauth/authorization-request", s.decideOAuthAuthorization)
 	mux.HandleFunc("DELETE /api/oauth/authorizations/{id}", s.revokeOAuthAuthorization)
@@ -908,7 +915,7 @@ func (s *server) withStaticFiles(next http.Handler) http.Handler {
 	}
 	files := http.FileServer(http.Dir(s.staticPath))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/scim/") || strings.HasPrefix(r.URL.Path, "/uploads/") || strings.HasPrefix(r.URL.Path, "/.well-known/oauth-") || r.URL.Path == "/mcp" || r.URL.Path == "/mcp/readonly" || r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/scim/") || strings.HasPrefix(r.URL.Path, "/uploads/") || strings.HasPrefix(r.URL.Path, "/.well-known/oauth-") || strings.HasPrefix(r.URL.Path, "/internal/") || r.URL.Path == "/mcp" || r.URL.Path == "/mcp/readonly" || r.URL.Path == "/oauth/register" || r.URL.Path == "/oauth/token" || r.URL.Path == "/oauth/revoke" {
 			next.ServeHTTP(w, r)
 			return
 		}
