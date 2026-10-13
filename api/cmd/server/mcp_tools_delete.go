@@ -146,7 +146,7 @@ func (s *server) mcpResolveDeletion(ctx context.Context, actor mcpActor, data do
 			Affected: map[string]int{"issues": issues, "milestones": len(project.Milestones), "updates": len(data.ProjectUpdates[project.ID])},
 			run:      route("/api/projects/"+pathID(project.ID), s.deleteProject, project.ID)}
 		if issues > 0 {
-			deletion.Note = "The project's issues are kept but removed from the project; restoring the project does not add them back."
+			deletion.Note = "The project's issues are archived and removed from the project; restoring the project un-archives them and puts them back in it."
 		}
 		return deletion, nil
 	case "delete_initiative":
@@ -171,7 +171,7 @@ func (s *server) mcpResolveDeletion(ctx context.Context, actor mcpActor, data do
 			Affected: map[string]int{"projects": len(projects), "subInitiatives": children, "updates": len(data.InitiativeUpdates[initiative.ID])},
 			run:      route("/api/initiatives/"+pathID(initiative.ID), s.deleteInitiative, initiative.ID)}
 		if children > 0 || len(projects) > 0 {
-			deletion.Note = "Its projects and sub-initiatives are kept but unlinked from it; restoring the initiative may not link them again."
+			deletion.Note = "Its projects and sub-initiatives are kept but unlinked from it; restoring the initiative links them again."
 		}
 		return deletion, nil
 	case "delete_view":
@@ -192,12 +192,10 @@ func (s *server) mcpResolveDeletion(ctx context.Context, actor mcpActor, data do
 		if items, err := s.store.ListLoopRuns(ctx, data.Workspace.URLKey, loop.ID, loopRunHistory); err == nil {
 			runs = len(items)
 		}
-		deletion := &mcpDeletion{Type: "loop", TrashType: "loop", ID: loop.ID, Name: loop.Name, Restorable: true, Affected: map[string]int{"runs": runs},
-			run: route("/api/loops/"+pathID(loop.ID), s.deleteLoop, loop.ID)}
-		if runs > 0 {
-			deletion.Note = "The loop's run history and saved versions are deleted with it; restoring brings back the loop only."
-		}
-		return deletion, nil
+		// Like the reference app ("Delete this loop?"), deleting a loop cannot be undone.
+		return &mcpDeletion{Type: "loop", ID: loop.ID, Name: loop.Name, Affected: map[string]int{"runs": runs},
+			Note: "Loops are deleted permanently with their saved versions and run history; Flow cannot restore them.",
+			run:  route("/api/loops/"+pathID(loop.ID), s.deleteLoop, loop.ID)}, nil
 	case "delete_agent_skill":
 		return s.mcpResolveSkillDeletion(actor, data, query, stringArg(args, "team"))
 	case "delete_customer":
@@ -215,11 +213,14 @@ func (s *server) mcpResolveDeletion(ctx context.Context, actor mcpActor, data do
 				requests++
 			}
 		}
-		deletion := &mcpDeletion{Type: "customer", TrashType: "customer", ID: customer.ID, Name: customer.Name, Restorable: true,
+		// Like the reference app, deleting a customer cannot be undone and deletes its
+		// customer requests with it.
+		deletion := &mcpDeletion{Type: "customer", ID: customer.ID, Name: customer.Name,
 			Affected: map[string]int{"requests": requests},
+			Note:     "Customers are deleted permanently; Flow cannot restore them.",
 			run:      route("/api/customers/"+pathID(customer.ID), s.deleteCustomer, customer.ID)}
 		if requests > 0 {
-			deletion.Note = "The customer's requests are deleted with it and are not restored with the customer."
+			deletion.Note = "Customers are deleted permanently with all their customer requests; Flow cannot restore them."
 		}
 		return deletion, nil
 	case "delete_customer_request":

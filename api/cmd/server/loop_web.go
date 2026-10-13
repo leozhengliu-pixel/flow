@@ -69,7 +69,7 @@ const loopWebSearchUnavailable = "Web search is enabled for this loop, but no we
 
 // agentWebAccess reports whether Flow Agent may use the web in a workspace: on unless an admin turned it off.
 func agentWebAccess(settings domain.WorkspaceSettings) bool {
-	return !settings.AgentWebSearchDisabled && !settings.HIPAACompliance
+	return settings.AgentWebAccessEnabled()
 }
 
 // agentNativeWebSearch reports whether model turns can use the provider's hosted web search instead of a

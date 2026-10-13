@@ -158,7 +158,9 @@ func (s *SQLiteStore) writeApplicationInstallationTx(ctx context.Context, tx *sq
 		a.ID = "installation_" + hash
 		a.UserID = "app_" + hash
 		a.CreatedAt = now
-		_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,'',1,?,?)`, a.UserID, nil, a.Name, a.Name, a.AvatarURL, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
+		// An application installed again after being uninstalled reuses its
+		// app user (kept so history still names it).
+		_, err = tx.ExecContext(ctx, `INSERT INTO auth_users(id,email,name,display_name,avatar_url,password_hash,active,created_at,updated_at) VALUES(?,?,?,?,?,'',1,?,?) ON CONFLICT(id) DO NOTHING`, a.UserID, nil, a.Name, a.Name, a.AvatarURL, now.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano))
 		if err != nil {
 			return current, a, err
 		}

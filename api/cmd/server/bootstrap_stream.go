@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"slices"
 	"time"
@@ -84,6 +85,7 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 		if stream != nil {
 			handled, err := stream(key, buffer, encoder)
 			if err != nil {
+				log.Printf("bootstrap stream field=%s: %v", key, err)
 				return
 			}
 			if handled {
@@ -105,6 +107,7 @@ func writeBootstrapWithFields(w http.ResponseWriter, data domain.Bootstrap, stre
 			_, err = buffer.Write(fields[key])
 		}
 		if err != nil {
+			log.Printf("bootstrap stream field=%s: %v", key, err)
 			return
 		}
 	}

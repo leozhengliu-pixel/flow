@@ -34,6 +34,7 @@ import { usePagedInbox } from './use-paged-inbox'
 import { PullRequestInboxView } from '@/components/reviews/pull-request-inbox-view'
 import { markdownPlainText } from '@/lib/markdown-plain-text'
 import { DocumentInboxView } from './hosts/document-inbox-view'
+import { ProjectAgentReplyInboxView } from './hosts/project-agent-reply-inbox-view'
 import { documentNotificationKind, documentNotificationLine, isDocumentNotification, notificationDocument } from './hosts/document-inbox-model'
 
 const initialDisplayOptions: InboxDisplayOptions = {
@@ -63,6 +64,8 @@ interface InboxProjection extends InboxNotificationRowData {
   hostKind?: ReturnType<typeof classifyInboxHost>
   /** Document notifications render the document host. */
   documentId?: string
+  /** An agent's reply in a project comment thread renders the project thread host. */
+  agentReplyProjectId?: string
 }
 
 export interface InboxAppPageProps {
@@ -137,9 +140,15 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
   }, [onLoadIssueContext, paged, selectedIssueId, selectedIssueSummary])
   const [displayOptions, setDisplayOptions] = useState(readInboxDisplayOptions)
   const [filters, setFilters] = useState<InboxFilterCondition[]>(readInboxFilters)
+  // Opening a notification marks it read. With "unreads only" on it must not vanish from under the open
+  // detail (or break J/K navigation from it):, anything opened stays listed until the Inbox is
+  // left or the read filter is toggled again.
+  const [retained, setRetained] = useState(() => ({ showRead: displayOptions.showRead, ids: new Set<string>() }))
+  const retainedIds = retained.showRead === displayOptions.showRead ? retained.ids : NO_RETAINED_IDS
+  if (selectedId && !retainedIds.has(selectedId)) setRetained({ showRead: displayOptions.showRead, ids: new Set(retainedIds).add(selectedId) })
   const filterOptions = useMemo<InboxFilterOptions>(
-    () => buildInboxFilterOptions(notifications, displayOptions, inboxData),
-    [inboxData, displayOptions, notifications],
+    () => buildInboxFilterOptions(notifications, displayOptions, inboxData, retainedIds),
+    [inboxData, displayOptions, notifications, retainedIds],
   )
   const notificationsRef = useRef(notifications)
   notificationsRef.current = notifications
@@ -240,7 +249,7 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
     const now = Date.now()
     let visible = tabNotifications.filter(notification => {
       if (!displayOptions.showSnoozed && notification.snoozedUntil && new Date(notification.snoozedUntil).getTime() > now) return false
-      return (displayOptions.showRead || !notification.read) && filters.every(filter => notificationMatchesFilter(notification, filter))
+      return (displayOptions.showRead || !notification.read || retainedIds.has(notification.id)) && filters.every(filter => notificationMatchesFilter(notification, filter))
     })
     visible = [...visible].sort((left, right) => {
       if ((displayOptions.showUnreadFirst || displayOptions.unreadGrouping === 'focus') && left.read !== right.read) return left.read ? 1 : -1
@@ -249,11 +258,11 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       return displayOptions.ordering === 'newest' ? delta : -delta
     })
     return visible
-  }, [displayOptions, filters, tabNotifications])
+  }, [displayOptions, filters, retainedIds, tabNotifications])
   const filterHiddenCount = useMemo(() => {
-    const withoutFilters = tabNotifications.filter(notification => notificationVisibleForDisplay(notification, displayOptions))
+    const withoutFilters = tabNotifications.filter(notification => notificationVisibleForDisplay(notification, displayOptions, retainedIds))
     return Math.max(0, withoutFilters.length - withoutFilters.filter(notification => filters.every(filter => notificationMatchesFilter(notification, filter))).length)
-  }, [displayOptions, filters, tabNotifications])
+  }, [displayOptions, filters, retainedIds, tabNotifications])
 
   const tabCounts = useMemo(() => ({
     priority: notifications.filter(item => matchesInboxTab(item, 'priority') && !item.read && (!item.snoozedUntil || new Date(item.snoozedUntil).getTime() <= Date.now())).length,
@@ -349,6 +358,11 @@ export function InboxAppPage({ data, presence = [], onReload, onOpenIssue, onOpe
       if (projection?.documentId) {
         const raw = inboxData.notifications.find(item => item.id === projection.id)
         if (raw) return { content: <DocumentInboxView key={raw.id} data={data} notification={raw}/> }
+      }
+
+      if (projection?.agentReplyProjectId && project) {
+        const raw = inboxData.notifications.find(item => item.id === projection.id)
+        if (raw) return { content: <ProjectAgentReplyInboxView key={raw.id} workspaceKey={data.workspace.urlKey} project={project} notification={raw}/> }
       }
 
       if (projection?.kind === 'pulse') {
@@ -602,6 +616,35 @@ function projectInbox(data: BootstrapData, t: (source: string) => string): Inbox
     }
     const issue = notification.issueId ? issues.get(notification.issueId) : undefined
     const reminderProject = notification.projectId ? data.projects.find(project => project.id === notification.projectId) : undefined
+    // An agent's reply in a project comment thread: one row per thread, like issue threads.
+    if (!issue && reminderProject && notification.type === 'agentReply') {
+      if (notification.deletedAt || notification.archivedAt) return []
+      return [{
+        id: notification.id,
+        issueId: '',
+        sourceType: notification.commentId ? 'comment' as const : 'activity' as const,
+        sourceId: notification.commentId ?? notification.sourceId,
+        notificationType: inboxNotificationCategory(notification),
+        actorId: notification.actor.id,
+        actor: notification.actor.displayName,
+        actorAvatarUrl: notification.actor.avatarUrl,
+        kind: 'comment' as const,
+        identifier: t('Project'),
+        title: reminderProject.name,
+        body: agentReplyLine(notification, t),
+        timeLabel: relativeTime(notification.updatedAt),
+        timestamp: notification.updatedAt,
+        read: Boolean(notification.readAt),
+        favorite: notification.favorite,
+        snoozedUntil: notification.snoozedUntil,
+        projectId: reminderProject.id,
+        initiativeIds: data.initiatives.filter(initiative => initiative.projectIds.includes(reminderProject.id)).map(initiative => initiative.id),
+        issuePriority: 0,
+        issueStatusType: 'started' as const,
+        hostKind: 'project-overview',
+        agentReplyProjectId: reminderProject.id,
+      }]
+    }
     if (!issue && reminderProject && (/project/i.test(notification.type) || (/^update(Comment|Reaction)$/.test(notification.type) && notification.sourceType !== 'initiativeUpdate')) && !notification.deletedAt && !notification.archivedAt) {
       const hostKind = classifyInboxHost({
         type: notification.type,
@@ -819,8 +862,10 @@ function sortablePriority(priority: number) {
   return priority === 0 ? Number.MAX_SAFE_INTEGER : priority
 }
 
-function notificationVisibleForDisplay(notification: InboxProjection, display: InboxDisplayOptions) {
-  if (!display.showRead && notification.read) return false
+const NO_RETAINED_IDS: ReadonlySet<string> = new Set()
+
+function notificationVisibleForDisplay(notification: InboxProjection, display: InboxDisplayOptions, retainedIds: ReadonlySet<string>) {
+  if (!display.showRead && notification.read && !retainedIds.has(notification.id)) return false
   return display.showSnoozed || !notification.snoozedUntil || new Date(notification.snoozedUntil).getTime() <= Date.now()
 }
 
@@ -837,10 +882,10 @@ function matchesInboxTab(notification: InboxProjection, tab: InboxTab) {
   return tab === 'priority' ? priority : !priority
 }
 
-function buildInboxFilterOptions(notifications: InboxProjection[], display: InboxDisplayOptions, data: BootstrapData): InboxFilterOptions {
+function buildInboxFilterOptions(notifications: InboxProjection[], display: InboxDisplayOptions, data: BootstrapData, retainedIds: ReadonlySet<string>): InboxFilterOptions {
   // Menu counts describe the Inbox collection before user predicates, so a
   // zero-result filter never hides the options needed to change it.
-  const candidates = notifications.filter(notification => notificationVisibleForDisplay(notification, display))
+  const candidates = notifications.filter(notification => notificationVisibleForDisplay(notification, display, retainedIds))
   const count = (property: InboxFilterCondition['property'], value: string) => candidates.filter(notification => notificationMatchesFilter(notification, {
     id: 'count', property, operator: 'is', values: [{ value, valueLabel: value }],
   })).length

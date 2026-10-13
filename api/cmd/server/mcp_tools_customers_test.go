@@ -83,15 +83,16 @@ func TestMCPCustomerToolsCreateLogRequestAndDelete(t *testing.T) {
 	}
 	f.restoreFromTrash(t, "customer_request", need["id"].(string))
 	deleted := mcpObject(t, f, "delete_customer", map[string]any{"id": "QA fix – Acme Corp"})
-	if deleted["deleted"] != true || deleted["restorable"] != true || deleted["restorableUntil"] == nil || mcpAffected(t, deleted)["requests"] != float64(1) {
+	// Like the reference app, deleting a customer is permanent and takes its requests.
+	if note, _ := deleted["note"].(string); deleted["deleted"] != true || deleted["restorable"] != false || deleted["restorableUntil"] != nil || mcpAffected(t, deleted)["requests"] != float64(1) || !strings.Contains(note, "permanently") {
 		t.Fatalf("deleted customer: %v", deleted)
 	}
 	if message := mcpToolError(t, f, "get_customer", map[string]any{"query": customer["id"]}); !strings.Contains(message, "not found") {
 		t.Fatalf("deleted customer still found: %s", message)
 	}
-	f.restoreFromTrash(t, "customer", customer["id"].(string))
-	if !slices.ContainsFunc(f.repository.Bootstrap().Customers, func(item domain.Customer) bool { return item.ID == customer["id"] }) {
-		t.Fatal("customer not restored")
+	data := f.repository.Bootstrap()
+	if slices.ContainsFunc(data.Trash, func(entry domain.TrashEntry) bool { return entry.ResourceID == customer["id"] }) || slices.ContainsFunc(data.CustomerRequests, func(item domain.CustomerRequest) bool { return item.CustomerID == customer["id"] }) {
+		t.Fatal("permanently deleted customer left a trash entry or requests")
 	}
 }
 

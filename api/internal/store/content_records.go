@@ -42,11 +42,13 @@ func (s *SQLiteStore) WalkContentRecords(ctx context.Context, workspace, kind st
 	defer rows.Close()
 	for rows.Next() {
 		var resource string
-		var raw json.RawMessage
+		// Scan into []byte: rows written as TEXT (older SQLite json_set
+		// batch updates) do not scan into json.RawMessage.
+		var raw []byte
 		if err := rows.Scan(&resource, &raw); err != nil {
 			return err
 		}
-		if err := visit(resource, raw); err != nil {
+		if err := visit(resource, json.RawMessage(raw)); err != nil {
 			return err
 		}
 	}
