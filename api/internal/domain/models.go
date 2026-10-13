@@ -223,6 +223,8 @@ type AgentApprovalTarget struct {
 	SubIssues int `json:"subIssues,omitempty"`
 	// Affected counts other linked items the delete touches, by kind ("issues", "milestones", …).
 	Affected map[string]int `json:"affected,omitempty"`
+	// Permanent marks a delete with no trash (customers, loops, views…): it cannot be undone.
+	Permanent bool `json:"permanent,omitempty"`
 }
 
 type AgentQuestionOption struct {
@@ -294,14 +296,16 @@ type AgentSession struct {
 	Location string   `json:"location"`
 	IssueIDs []string `json:"issueIds"`
 	// ProjectIDs and DocumentIDs are resources @-mentioned in the conversation.
-	ProjectIDs  []string       `json:"projectIds,omitempty"`
-	DocumentIDs []string       `json:"documentIds,omitempty"`
-	UserIDs     []string       `json:"userIds,omitempty"`
-	LoopIDs     []string       `json:"loopIds,omitempty"` // loops (usually drafts) the conversation is building
-	SkillIDs    []string       `json:"skillIds"`
-	Messages    []AgentMessage `json:"messages"`
-	CreatedAt   time.Time      `json:"createdAt"`
-	UpdatedAt   time.Time      `json:"updatedAt"`
+	ProjectIDs  []string `json:"projectIds,omitempty"`
+	DocumentIDs []string `json:"documentIds,omitempty"`
+	// InitiativeIDs are initiatives in context: @-mentioned, or the initiative page the chat was opened on.
+	InitiativeIDs []string       `json:"initiativeIds,omitempty"`
+	UserIDs       []string       `json:"userIds,omitempty"`
+	LoopIDs       []string       `json:"loopIds,omitempty"` // loops (usually drafts) the conversation is building
+	SkillIDs      []string       `json:"skillIds"`
+	Messages      []AgentMessage `json:"messages"`
+	CreatedAt     time.Time      `json:"createdAt"`
+	UpdatedAt     time.Time      `json:"updatedAt"`
 	// LastReadAt is when the owner last saw the conversation. It is unread while
 	// UpdatedAt is later (a reply landed after they looked); conversations from
 	// before read tracking have no LastReadAt and count as read.
@@ -1416,9 +1420,14 @@ type WorkspaceSettings struct {
 	AgentGuidancePermission string   `json:"agentGuidancePermission,omitempty"`
 	AgentInstructions       string   `json:"agentInstructions,omitempty"`
 	PreventGuestAgents      bool     `json:"preventGuestAgents"`
-	AgentWebSearch          bool     `json:"agentWebSearch"`
-	// AgentWebSearchDisabled turns Flow Agent's web access off. Web access is on by default's agent;
-	// AgentWebSearch above is the older opt-in flag and no longer decides it.
+	// AgentWebSearch is the older opt-in flag (off by default before web access became default-on). It is kept in
+	// step with the effective setting for older clients and no longer decides it.
+	AgentWebSearch bool `json:"agentWebSearch"`
+	// AgentWebAccess is Flow Agent's web access as an admin set it: nil when never set (web access is on, like
+	// The reference app's agent), or the explicit choice. AgentWebAccessEnabled resolves it.
+	AgentWebAccess *bool `json:"agentWebAccess,omitempty"`
+	// AgentWebSearchDisabled mirrors !AgentWebAccessEnabled() for older clients; true always meant an admin turned
+	// web access off.
 	AgentWebSearchDisabled       bool              `json:"agentWebSearchDisabled"`
 	ExternalLoopTriggers         bool              `json:"externalLoopTriggers"`
 	MCPConnectorsEnabled         bool              `json:"mcpConnectorsEnabled"`
@@ -2048,6 +2057,9 @@ type TrashEntry struct {
 	DeletedBy    User            `json:"deletedBy"`
 	DeletedAt    time.Time       `json:"deletedAt"`
 	ExpiresAt    time.Time       `json:"expiresAt"`
+	// Links are what the deletion detached from other records; restoring
+	// re-attaches them. Server-side only (stripped from viewer projections).
+	Links *TrashLinks `json:"links,omitempty"`
 }
 
 type ImportJob struct {
@@ -2535,6 +2547,11 @@ type IssueCreateInput struct {
 	Icon               *string        `json:"icon,omitempty"`
 	Recurrence         *string        `json:"recurrence,omitempty"`       // with DueDate as the first due date
 	NextOccurrenceAt   *string        `json:"nextOccurrenceAt,omitempty"` // legacy alias for the first due date
+	// CreateAsUser names the external person an actor=app token acts for
+	// ("<name> via <App>", at most 100 characters). Rejected for user tokens.
+	CreateAsUser *string `json:"createAsUser,omitempty"`
+	// DisplayIconURL is that person's avatar; requires createAsUser.
+	DisplayIconURL *string `json:"displayIconUrl,omitempty"`
 }
 
 type ProjectMutationInput struct {
@@ -2639,6 +2656,11 @@ type CommentCreateInput struct {
 	ParentID   *string        `json:"parentId,omitempty"`
 	AnchorID   string         `json:"anchorId,omitempty"`
 	QuotedText string         `json:"quotedText,omitempty"`
+	// CreateAsUser names the external person an actor=app token acts for
+	// ("<name> via <App>", at most 100 characters). Rejected for user tokens.
+	CreateAsUser *string `json:"createAsUser,omitempty"`
+	// DisplayIconURL is that person's avatar; requires createAsUser.
+	DisplayIconURL *string `json:"displayIconUrl,omitempty"`
 }
 
 type CommentUpdateInput struct {
@@ -2932,4 +2954,23 @@ type SearchResponse struct {
 	Results []SearchResult       `json:"results"`
 	History []SearchHistoryEntry `json:"history"`
 	Recent  []RecentResource     `json:"recent"`
+}
+
+// AgentWebAccessEnabled reports whether Flow Agent may use the web in the workspace: the admin's explicit choice when
+// there is one, otherwise on (unless an older client stored the disabled flag). HIPAA mode always turns it off.
+func (settings WorkspaceSettings) AgentWebAccessEnabled() bool {
+	if settings.HIPAACompliance {
+		return false
+	}
+	if settings.AgentWebAccess != nil {
+		return *settings.AgentWebAccess
+	}
+	return !settings.AgentWebSearchDisabled
+}
+
+// SetAgentWebAccess records an admin's explicit web access choice and keeps the older flags in step.
+func (settings *WorkspaceSettings) SetAgentWebAccess(enabled bool) {
+	settings.AgentWebAccess = &enabled
+	settings.AgentWebSearch = enabled
+	settings.AgentWebSearchDisabled = !enabled
 }

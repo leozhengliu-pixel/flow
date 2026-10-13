@@ -27,6 +27,18 @@ describe('TitleTooltipBridge', () => {
     expect(screen.queryByRole('tooltip')).toBeNull()
   })
 
+  it('uses the lighter palette for titles over elevated and raised surfaces', () => {
+    vi.useFakeTimers()
+    render(<><TitleTooltipBridge/><div data-tooltip-elevated><button type="button" title="Attach"><svg/></button></div><div data-tooltip-raised><button type="button" title="Close"><svg/></button></div></>)
+    fireEvent.pointerOver(screen.getByRole('button', { name: 'Attach' }), { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(450))
+    expect(screen.getByRole('tooltip')).toHaveClass('flow-tooltip-content--elevated')
+    fireEvent.pointerOut(screen.getByRole('button', { name: 'Attach' }), { relatedTarget: document.body })
+    fireEvent.pointerOver(screen.getByRole('button', { name: 'Close' }), { pointerType: 'mouse' })
+    act(() => vi.advanceTimersByTime(450))
+    expect(screen.getByRole('tooltip')).toHaveClass('flow-tooltip-content--raised')
+  })
+
   it('leaves opted-out elements alone', () => {
     render(<><TitleTooltipBridge/><div data-native-title><button type="button" title="Native">x</button></div></>)
     fireEvent.pointerOver(screen.getByRole('button'), { pointerType: 'mouse' })

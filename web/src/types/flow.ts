@@ -1446,9 +1446,11 @@ export interface WorkspaceSettings {
   agentGuidancePermission?: string;
   agentInstructions?: string;
   preventGuestAgents?: boolean;
-  /** Older opt-in flag; agentWebSearchDisabled decides web access now. */
+  /** Older opt-in flag, kept in step with the effective setting; agentWebAccess decides web access now. */
   agentWebSearch?: boolean;
-  /** Flow Agent's web access is on unless this is set. */
+  /** Flow Agent's web access as an admin set it; absent when never set (web access is on). */
+  agentWebAccess?: boolean;
+  /** Mirrors !agentWebAccess for older clients. */
   agentWebSearchDisabled?: boolean;
   externalLoopTriggers?: boolean;
   mcpConnectorsEnabled?: boolean;
@@ -2808,7 +2810,7 @@ export interface AgentMessage extends AgentChatMessage {
   id: UUID;
   parts?: AgentMessagePart[];
   /** Resources @-mentioned in a user message, in order. */
-  mentions?: { type: 'issue' | 'project' | 'document' | 'user'; id: UUID; label: string }[];
+  mentions?: { type: 'issue' | 'project' | 'document' | 'initiative' | 'user'; id: UUID; label: string }[];
   durationMs?: number;
   /** The owner's rating of an assistant reply (thumbs up / down, with an optional note). */
   feedback?: AgentFeedback;
@@ -2871,6 +2873,8 @@ export interface AgentApprovalTarget {
   subIssues?: number;
   /** Other linked items the delete touches, by kind. */
   affected?: Record<string, number>;
+  /** The delete has no trash (customers, loops, views…), so it cannot be undone. */
+  permanent?: boolean;
 }
 export interface AgentToolCall {
   id: UUID;
@@ -2917,6 +2921,8 @@ export interface AgentSession {
   loopIds?: UUID[];
   /** Projects attached as context (sent by the server; used to label draft cards). */
   projectIds?: UUID[];
+  /** Initiatives attached as context (the initiative page a chat opened on, or @-mentions). */
+  initiativeIds?: UUID[];
   skillIds: UUID[];
   messages: AgentMessage[];
   /** Notes left about the whole conversation from the chat menu's "Leave feedback…". */

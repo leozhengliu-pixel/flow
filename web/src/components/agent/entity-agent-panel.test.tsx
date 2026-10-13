@@ -91,4 +91,44 @@ describe('EntityAgentPanel', () => {
       expect(screen.getByLabelText('AI message')).toHaveTextContent('Sure')
     })
   })
+
+  it('attaches an initiative as context and sends it as initiativeIds', async () => {
+    streams.streamNewAgentSession.mockImplementation(async (input, onEvent) => {
+      const next = { ...session, issueIds: [], initiativeIds: input.initiativeIds, title: 'Initiative chat' }
+      onEvent({ type: 'session.completed', session: next })
+      return next
+    })
+    const user = userEvent.setup()
+    render(
+      <I18nProvider>
+        <EntityAgentPanel open onRequestClose={vi.fn()} target={{ type: 'initiative', id: 'initiative-1', title: 'Payments Q4' }}/>
+      </I18nProvider>,
+    )
+    const input = await screen.findByRole('textbox', { name: 'Send a message to Flow Agent' })
+    await waitFor(() => expect(input).toBeEnabled())
+    await user.type(input, 'How is it going?')
+    await user.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(streams.streamNewAgentSession).toHaveBeenCalled())
+    expect(streams.streamNewAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'How is it going?', initiativeIds: ['initiative-1'], location: 'toolbar' }),
+      expect.any(Function),
+      expect.any(AbortSignal),
+    )
+    // The first message shows the initiative as added to context.
+    expect(await screen.findByText('Payments Q4')).toBeVisible()
+  })
+
+  it('reopens the latest chat that has the initiative in context', async () => {
+    api.listAgentSessions.mockResolvedValue([
+      { ...session, id: 'older', title: 'Older initiative chat', issueIds: [], initiativeIds: ['initiative-1'], updatedAt: '2026-08-30T00:00:00Z' },
+      { ...session, id: 'other', title: 'Other chat', issueIds: [], initiativeIds: ['initiative-2'], updatedAt: '2026-09-02T00:00:00Z' },
+      { ...session, id: 'newer', title: 'Newer initiative chat', issueIds: [], initiativeIds: ['initiative-1'], updatedAt: '2026-09-01T00:00:00Z' },
+    ])
+    render(
+      <I18nProvider>
+        <EntityAgentPanel open onRequestClose={vi.fn()} target={{ type: 'initiative', id: 'initiative-1', title: 'Payments Q4' }}/>
+      </I18nProvider>,
+    )
+    expect(await screen.findByText('Newer initiative chat')).toBeVisible()
+  })
 })

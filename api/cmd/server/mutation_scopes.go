@@ -235,19 +235,46 @@ func slaIssueScope(data domain.Bootstrap, rules []domain.SLARule) store.Mutation
 	return scope
 }
 
-// trashRestoreScope lets restoring a deleted issue recreate its record and
-// content; other trash entries are metadata only.
+// trashRestoreScope loads what restoring a trash entry touches: a deleted
+// issue's record and content (and those of the sub-issues deleted with it)
+// plus the parent, sub-issues and related issues it is re-linked to, or a
+// deleted project's former issues. Other entries are
+// metadata only.
 func trashRestoreScope(ctx context.Context, entryID string) context.Context {
 	return store.WithMutationScope(ctx, store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
 		for _, entry := range data.Trash {
-			if entry.ID != entryID || entry.ResourceType != "issue" {
+			if entry.ID != entryID {
 				continue
 			}
-			var value deletedIssuePayload
-			if json.Unmarshal(entry.Payload, &value) != nil || value.Issue.ID == "" {
-				return store.MutationScope{}
+			switch entry.ResourceType {
+			case "issue":
+				var value deletedIssuePayload
+				if json.Unmarshal(entry.Payload, &value) != nil || value.Issue.ID == "" {
+					return store.MutationScope{}
+				}
+				scope := store.MutationScope{IssueIDs: trashedIssueScopeIDs(value.Issue, entry.Links), Resources: []string{value.Issue.ID}, CreateIssues: true}
+				// Sub-issues deleted with it are restored with it.
+				for _, child := range data.Trash {
+					var cascaded deletedIssuePayload
+					if child.ResourceType != "issue" || child.Links == nil || child.Links.DeletedWithIssueID != value.Issue.ID || json.Unmarshal(child.Payload, &cascaded) != nil || cascaded.Issue.ID == "" {
+						continue
+					}
+					scope.IssueIDs = append(scope.IssueIDs, trashedIssueScopeIDs(cascaded.Issue, child.Links)...)
+					scope.Resources = append(scope.Resources, cascaded.Issue.ID)
+				}
+				scope.IssueIDs = normalizedStrings(scope.IssueIDs)
+				return scope
+			case "project":
+				if entry.Links == nil || len(entry.Links.ProjectIssues) == 0 {
+					return store.MutationScope{}
+				}
+				ids := make([]string, 0, len(entry.Links.ProjectIssues))
+				for _, item := range entry.Links.ProjectIssues {
+					ids = append(ids, item.IssueID)
+				}
+				return store.MutationScope{IssueIDs: ids}
 			}
-			return store.MutationScope{IssueIDs: []string{value.Issue.ID}, Resources: []string{value.Issue.ID}, CreateIssues: true}
+			return store.MutationScope{}
 		}
 		return store.MutationScope{}
 	}})

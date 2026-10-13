@@ -1,14 +1,15 @@
 import * as React from 'react'
 import * as TooltipPrimitive from '@radix-ui/react-tooltip'
 import { cn } from '@/lib/utils'
-import { isElevatedTrigger, tooltipShortcutKeys } from './tooltip-shortcut'
+import { tooltipShortcutKeys, tooltipTone, type TooltipTone } from './tooltip-shortcut'
 
 /**
  * The app-wide tooltip, measured against the reference app: 450ms hover delay, then instant tooltips for 400ms
  * after one closes (moving along a toolbar), 8px from the trigger, no arrow, closes without an exit animation.
  * One surface for every tooltip: label, then the shortcut as boxed keys ("G then I" puts a plain "then" between
- * steps). Tooltips over elevated surfaces (a composer card, a popover) use the lighter elevated palette: pass
- * `elevated`, or mark an ancestor of the trigger with `data-tooltip-elevated`.
+ * steps). Tooltips over raised surfaces use a lighter palette, one step per level: `elevated` over the agent
+ * composer card, `raised` over dialogs and floating panels. Pass the prop, or mark an ancestor of the trigger with
+ * `data-tooltip-elevated` / `data-tooltip-raised`.
  */
 export const TOOLTIP_DELAY = 450
 export const TOOLTIP_SKIP_DELAY = 400
@@ -53,8 +54,10 @@ export interface FlowTooltipProps {
   contentClassName?: string
   /** Gap between the trigger and the tooltip (8px by default). */
   sideOffset?: number
-  /** Lighter palette for tooltips over elevated surfaces; also inferred from a `data-tooltip-elevated` ancestor. */
+  /** Lightest palette, for tooltips over the agent composer card; also inferred from a `data-tooltip-elevated` ancestor. */
   elevated?: boolean
+  /** Lighter palette for tooltips over dialogs and floating panels; also inferred from a `data-tooltip-raised` ancestor. */
+  raised?: boolean
   children: React.ReactElement
 }
 
@@ -76,19 +79,21 @@ export function TooltipBody({ label, shortcut }: { label?: React.ReactNode; shor
 }
 
 /** Convenience wrapper for icon buttons and compact controls. */
-export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false, contentClassName, sideOffset, elevated }: FlowTooltipProps) {
+export function FlowTooltip({ label, shortcut, children, side = 'bottom', align = 'center', disabled = false, contentClassName, sideOffset, elevated, raised }: FlowTooltipProps) {
   const [open, setOpen] = React.useState(false)
-  const [inferredElevated, setInferredElevated] = React.useState(false)
+  const [inferredTone, setInferredTone] = React.useState<TooltipTone | undefined>()
   const triggerRef = React.useRef<HTMLButtonElement>(null)
   React.useEffect(() => { if (disabled) setOpen(false) }, [disabled])
   if (!label && !shortcut) return children
+  // An explicit prop (even `false`) overrides what the surroundings suggest.
+  const tone: TooltipTone | undefined = elevated ? 'elevated' : raised ? 'raised' : elevated === false || raised === false ? undefined : inferredTone
   return (
     <TooltipRoot open={open && !disabled} onOpenChange={next => {
-      if (next) setInferredElevated(isElevatedTrigger(triggerRef.current))
+      if (next) setInferredTone(tooltipTone(triggerRef.current))
       setOpen(next && !disabled)
     }}>
       <TooltipTrigger asChild ref={triggerRef}>{children}</TooltipTrigger>
-      <TooltipContent align={align} className={cn((elevated ?? inferredElevated) && 'flow-tooltip-content--elevated', contentClassName)} side={side} sideOffset={sideOffset}>
+      <TooltipContent align={align} className={cn(tone && `flow-tooltip-content--${tone}`, contentClassName)} side={side} sideOffset={sideOffset}>
         <TooltipBody label={label} shortcut={shortcut}/>
       </TooltipContent>
     </TooltipRoot>

@@ -281,6 +281,7 @@ import {
 } from "@/lib/app-routes";
 import { findDocumentBySlugSuffix } from "@/lib/document-slug";
 import { findTrashedDocument } from "@/components/documents/document-trash";
+import { ISSUE_DELETE_DESCRIPTION } from "@/lib/issue-delete-confirmation";
 import { OPEN_COMMAND_MENU_EVENT } from "@/components/command/command-context";
 import type { CreateIssueInput } from "@/components/create-issue/create-issue-dialog";
 
@@ -1944,7 +1945,7 @@ function App() {
       "Could not convert issue to project",
     );
     await run(
-      () => deleteIssue(selectedIssue.id),
+      () => deleteIssue(selectedIssue.id, { keepSubIssues: true }),
       "Project was created, but the original issue could not be removed",
     );
     setData((current) =>
@@ -3430,13 +3431,13 @@ function App() {
   const batchDelete = async () => {
     if (
       !(await confirmAction(`Delete ${selected.size} selected issues?`, {
-        description: "This cannot be undone.",
+        description: ISSUE_DELETE_DESCRIPTION,
         confirmLabel: "Delete",
       }))
     )
       return;
     await run(
-      () => Promise.all([...selected].map(deleteIssue)),
+      () => Promise.all([...selected].map((id) => deleteIssue(id).catch((error) => { if (!(error instanceof ApiError && error.status === 404)) throw error; }))),
       "Could not delete selected issues",
     );
     setData((current) =>
@@ -3541,7 +3542,8 @@ function App() {
   };
   const deleteIssuesFromPage = async (ids: string[]) => {
     await run(
-      () => Promise.all(ids.map(deleteIssue)),
+      // A selected sub-issue may already be gone with its selected parent.
+      () => Promise.all(ids.map((id) => deleteIssue(id).catch((error) => { if (!(error instanceof ApiError && error.status === 404)) throw error; }))),
       "Could not delete issues",
     );
     setData((current) =>
@@ -6954,7 +6956,7 @@ function App() {
           page === "project-detail" && selectedProject
             ? { type: "project", id: selectedProject.id, label: selectedProject.name }
             : page === "initiative-detail" && selectedInitiative
-              ? { type: "initiative", id: selectedInitiative.id, label: selectedInitiative.name, href: initiativePath(data.workspace.urlKey, selectedInitiative) }
+              ? { type: "initiative", id: selectedInitiative.id, label: selectedInitiative.name }
               : page === "document-detail" && selectedDocument
                 ? { type: "document", id: selectedDocument.id, label: selectedDocument.title || "Untitled" }
                 : undefined

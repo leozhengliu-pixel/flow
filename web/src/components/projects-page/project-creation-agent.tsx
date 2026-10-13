@@ -393,7 +393,7 @@ export function ProjectCreationAgent({
         )}
       </div>
       <div className="project-creation-agent__composer">
-        <div className="project-creation-agent__composer-card">
+        <div className="project-creation-agent__composer-card" data-tooltip-elevated="">
         {attachments.length > 0 && (
           <div className="project-creation-agent__attachments">
             {attachments.map((file) => (

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowUp, X } from 'lucide-react'
 import { AgentElicitation } from './agent-elicitation'
 import { AgentElicitationResponseQueue } from './agent-elicitation-response-queue'
@@ -12,8 +12,10 @@ import { parseAgentAnswer } from './agent-answer-content'
 import { useAgentEntityData } from './agent-entity-data'
 import { AgentQuestionPrompt } from './agent-approval-question'
 import { AgentWorkGroup } from './agent-work-group'
+import { isBlankStoppedReply, settleStoppedAgentReply } from './agent-stopped-reply'
 import { formatAgentTime, shouldShowAgentTime } from './agent-time'
 import { StatusIcon } from '@/components/issue/issue-icons'
+import { ScopedFlowTooltip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n/i18n'
 import type { AgentMessage, AgentMessagePart, AgentSession, BootstrapData } from '@/types/flow'
 import { AgentMentionInput, type AgentMention } from './agent-mention-input'
@@ -82,7 +84,7 @@ export type AgentContextEntity = { key: string; icon?: ReactNode; label: string;
 
 /** LS-0253 EntityAgentThread — shared conversation + draft renderer for page/sidebar panels. */
 export function EntityAgentThread({
-  messages,
+  messages: savedMessages,
   streamParts = [],
   loading = false,
   error,
@@ -115,6 +117,8 @@ export function EntityAgentThread({
   onSessionChange,
 }: EntityAgentThreadProps) {
   const { t } = useI18n()
+  // A reply the user stopped keeps only its work (no partial text, "stopped" row or rating).
+  const messages = useMemo(() => savedMessages.map(settleStoppedAgentReply), [savedMessages])
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const logRef = useRef<HTMLDivElement>(null)
   const draftKey = agentDraftStorageKey(conversationDraftKey)
@@ -205,6 +209,8 @@ export function EntityAgentThread({
           const isUser = message.role === 'user'
           // An option picked on a question shows as the chosen pill there, not as a separate message.
           if (isUser && message.answerTo) return null
+          // A reply stopped before it did anything leaves only the message you sent.
+          if (!isUser && isBlankStoppedReply(savedMessages[index])) return null
           const question = isUser ? undefined : message.parts?.find(part => part.type === 'question' && part.question)
           const replyText = question ? (message.parts ?? []).filter(part => part.type === 'text').map(part => part.text ?? '').join('') : message.content
           const time = shouldShowAgentTime(messages, index) ? formatAgentTime(message.createdAt, t('Today')) : ''
@@ -212,7 +218,8 @@ export function EntityAgentThread({
           const streaming = loading && index === messages.length - 1
           const extraActions = renderMessageActions?.(message, index)
           const answer = isUser ? undefined : parseAgentAnswer(replyText, entityData)
-          const showFeedback = !isUser && Boolean(answer?.prose.trim()) && !streaming
+          // The reference app rates answers only: a reply that asks a question (ask_user) has no 👍👎 row, answered or not.
+          const showFeedback = !isUser && Boolean(answer?.prose.trim()) && !streaming && !question
           const suggestions = answer && index === latestAssistantIndex && !loading ? answer.suggestions : []
           return (
             <Fragment key={message.id || `${message.role}-${index}`}>
@@ -341,7 +348,7 @@ export function EntityAgentThread({
             ))}
           </div>
         )}
-      <div className={styles.composer}>
+      <div className={styles.composer} data-tooltip-elevated="">
         {mentionData ? (
           <AgentMentionInput
             ariaLabel={t('Send a message to Flow Agent')}
@@ -374,18 +381,22 @@ export function EntityAgentThread({
           {footerStart}
           {error ? <span role="alert"><AgentErrorDetail error={error} /></span> : <span />}
           {loading ? (
-            <button aria-label={t('Stop responding')} onClick={onStop} type="button">
-              <X />
-            </button>
+            <ScopedFlowTooltip label={t('Stop responding')} sideOffset={8}>
+              <button aria-label={t('Stop responding')} onClick={onStop} type="button">
+                <X />
+              </button>
+            </ScopedFlowTooltip>
           ) : (
-            <button
-              aria-label={t('Send message')}
-              disabled={!input.trim() || !enabled || composerDisabled}
-              onClick={onSubmit}
-              type="button"
-            >
-              <ArrowUp />
-            </button>
+            <ScopedFlowTooltip label={t('Send message')} shortcut="Enter" sideOffset={8}>
+              <button
+                aria-label={t('Send message')}
+                disabled={!input.trim() || !enabled || composerDisabled}
+                onClick={onSubmit}
+                type="button"
+              >
+                <ArrowUp />
+              </button>
+            </ScopedFlowTooltip>
           )}
         </footer>
       </div>

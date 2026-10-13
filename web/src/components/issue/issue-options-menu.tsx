@@ -32,6 +32,7 @@ import './issue-options-select.css'
 import './issue-options-menu.css'
 import { IssueReleasePicker } from './issue-release-picker'
 import { useI18n } from '@/i18n/i18n'
+import { issueDeleteConfirmation } from '@/lib/issue-delete-confirmation'
 import { IssueActionGlyph } from './issue-action-glyphs'
 import { CustomerRequestCreateDialog } from '@/components/customer/customer-request-create-dialog'
 import { requestIssueCustomerRequest } from '@/components/customer/customer-request-events'
@@ -134,8 +135,9 @@ export function IssueOptionsMenu({
   const history = useMemo(() => descriptionHistory(issue, activities), [activities, issue])
   const selectedHistory = history.find(item => item.id === selectedHistoryId) ?? history[0]
   const confirmDelete = useCallback(async () => {
-    if (await confirmAction(`Delete ${issue.identifier}?`,{description:'This cannot be undone.',confirmLabel:'Delete'})) void onDelete()
-  }, [issue.identifier, onDelete])
+    const { title, ...options } = issueDeleteConfirmation(issue, t)
+    if (await confirmAction(title, options)) void onDelete()
+  }, [issue, onDelete, t])
 
   const closeMenu = useCallback(() => {
     setOpen(false)

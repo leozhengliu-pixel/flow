@@ -111,11 +111,11 @@ func newAgentChatToolset(session domain.AgentSession) *agentChatToolset {
 			toolset.groups[group.Name] = true
 		}
 	}
-	// A chat opened on an issue, project, or document is usually about changing it.
+	// A chat opened on an issue, project, initiative, or document is usually about changing it.
 	if len(session.IssueIDs) > 0 {
 		toolset.groups["issue_changes"] = true
 	}
-	if len(session.ProjectIDs) > 0 && change {
+	if (len(session.ProjectIDs) > 0 || len(session.InitiativeIDs) > 0) && change {
 		toolset.groups["project_changes"] = true
 	}
 	if len(session.DocumentIDs) > 0 {

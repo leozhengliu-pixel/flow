@@ -34,9 +34,13 @@ export function agentApprovalMarkdown(approval: AgentApproval, t: Translate) {
         ...(target.subIssues ? [t('{count} sub-issues').replace('{count}', String(target.subIssues))] : []),
         ...Object.entries(target.affected ?? {}).filter(([, count]) => count > 0).map(([kind, count]) => `${count} ${affectedNoun(kind, t)}`),
       ]
-      return `- ${targetLink(target)}${notes.length ? ` (${t('also affects')} ${notes.join(', ')})` : ''}`
+      return `- ${targetLink(target)}${target.permanent ? ` (${t('permanent')})` : ''}${notes.length ? ` (${t('also affects')} ${notes.join(', ')})` : ''}`
     })
-    sections.push(`${t('Delete these {count} items? They go to the trash and can be restored.').replace('{count}', String(targets.length))}\n\n${lines.join('\n')}`)
+    // Customers, loops and views have no trash: say so when any target is one of them.
+    const heading = targets.some(target => target.permanent)
+      ? t('Delete these {count} items? Items marked permanent can’t be restored.')
+      : t('Delete these {count} items? They go to the trash and can be restored.')
+    sections.push(`${heading.replace('{count}', String(targets.length))}\n\n${lines.join('\n')}`)
   }
   if (approval.kind === 'publish' || approval.body) {
     const heading = approval.parent ? t('Post this update to {name}?').replace('{name}', targetLink(approval.parent)) : t('Post this update?')

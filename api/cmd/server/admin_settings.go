@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/publicapi"
 	"flow/api/internal/store"
 )
 
@@ -51,9 +52,7 @@ func (input *webhookInput) normalize() {
 }
 
 // webhookResponse is a webhook as the API returns it.
-func webhookResponse(item domain.Webhook) map[string]any {
-	result := publicWebhookMap(item)
-	result["payloadVersion"] = webhookPayloadVersion(item)
+func webhookResponse(item domain.Webhook) publicapi.Webhook {
 	status := "active"
 	switch {
 	case item.SecretRevokedAt != nil && !item.SigningEnabled:
@@ -62,15 +61,19 @@ func webhookResponse(item domain.Webhook) map[string]any {
 		// Created before signing: only a hash of the secret was kept.
 		status = "rotationRequired"
 	}
-	result["signingStatus"] = status
-	return result
+	return publicapi.Webhook{Webhook: publicWebhook(item), PayloadVersion: webhookPayloadVersion(item), SigningStatus: status}
+}
+
+// webhookWithSecret adds the signing secret, shown once.
+func webhookWithSecret(item domain.Webhook, secret string) publicapi.WebhookWithSecret {
+	return publicapi.WebhookWithSecret{Webhook: webhookResponse(item), Secret: secret}
 }
 
 func (s *server) listWebhooks(w http.ResponseWriter, r *http.Request) {
 	data := s.workspaceData(r)
 	actor := requestActor(s, r)
 	admin := strings.EqualFold(data.ViewerRole, "admin") || strings.EqualFold(data.ViewerRole, "owner")
-	result := make([]map[string]any, 0, len(data.Webhooks))
+	result := make([]publicapi.Webhook, 0, len(data.Webhooks))
 	for _, item := range data.Webhooks {
 		if (admin || item.CreatorID == actor.ID) && webhookVisibleToBootstrap(&data, item) {
 			result = append(result, webhookResponse(item))
@@ -218,9 +221,7 @@ func (s *server) createWebhook(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusCreated, nil)
 		return
 	}
-	response := webhookResponse(created)
-	response["secret"] = secret
-	writeJSON(w, http.StatusCreated, response)
+	writeJSON(w, http.StatusCreated, webhookWithSecret(created, secret))
 }
 
 func (s *server) updateWebhook(w http.ResponseWriter, r *http.Request) {
@@ -485,9 +486,7 @@ func (s *server) rotateWebhookSecret(w http.ResponseWriter, r *http.Request) {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
 	}
-	response := webhookResponse(rotated)
-	response["secret"] = secret
-	writeJSON(w, http.StatusOK, response)
+	writeJSON(w, http.StatusOK, webhookWithSecret(rotated, secret))
 }
 
 // revokeWebhookSecret removes the signing secret; deliveries go out unsigned

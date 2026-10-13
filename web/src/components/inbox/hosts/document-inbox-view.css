@@ -12,6 +12,7 @@
 .flow-inbox-document__line time,
 .flow-inbox-document__thread time { color: var(--theme-text-tertiary); font-size: 12px; }
 .flow-inbox-document__avatar { width: 20px; height: 20px; flex: 0 0 20px; display: grid; place-items: center; overflow: hidden; border-radius: 50%; background: var(--theme-surface-active); color: var(--theme-text-secondary); font-size: 9px; font-weight: 600; }
+.flow-inbox-document__line > .flow-inbox-document__avatar { flex: 0 0 20px; }
 .flow-inbox-document__avatar img { width: 100%; height: 100%; object-fit: cover; }
 .flow-inbox-document__quote { margin: 0 0 12px; padding: 2px 0 2px 10px; border-left: 3px solid var(--document-comment-quote-bar); color: var(--theme-text-secondary); }
 .flow-inbox-document__thread { display: grid; gap: 12px; padding: 12px; border-radius: 10px; background: var(--document-comment-card-bg); box-shadow: var(--document-comment-card-shadow); }
@@ -20,5 +21,6 @@
 .flow-inbox-document__thread article > :not(header) { padding-left: 26px; }
 .flow-inbox-document__thread article.is-target > header strong { color: var(--theme-text-primary); }
 .flow-inbox-document__excerpt { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--theme-surface-hover); color: var(--theme-text-secondary); }
+.flow-inbox-document__thread + .flow-inbox-document__excerpt { margin-top: 12px; }
 .flow-inbox-document__gone { color: var(--theme-text-tertiary); }
 @media (max-width: 800px) { .flow-inbox-document { padding: 24px 16px; } }

@@ -24,7 +24,12 @@ import (
 const agentChangeMaxBytes = 128 << 10
 
 // agentChangeTrashTypes are entity types whose deletes go to the trash (so deleting is undone by restoring the entry).
-var agentChangeTrashTypes = map[string]bool{"issue": true, "project": true, "initiative": true, "document": true, "customer": true}
+var agentChangeTrashTypes = map[string]bool{"issue": true, "project": true, "initiative": true, "document": true}
+
+// agentChangePermanentTypes are entity types whose deletes are permanent (like the reference app, customers have no trash):
+// undoing the agent's create deletes the record for good, so the card offers no Restore afterwards, and the agent's
+// own delete of one cannot be undone.
+var agentChangePermanentTypes = map[string]bool{"customer": true}
 
 // agentChangeSaveTools are the write tools that set an entity's fields (used to revert or re-apply an update).
 var agentChangeSaveTools = map[string]string{
@@ -515,6 +520,10 @@ func (s *server) applyAgentChange(ctx context.Context, actor mcpActor, call doma
 	change.State = ""
 	if undo {
 		change.State = "undone"
+		if change.Action == "created" && agentChangePermanentTypes[change.EntityType] {
+			change.Undoable = false
+			change.Note = fmt.Sprintf("%s was deleted permanently and can't be restored.", agentChangeName(change))
+		}
 	}
 	now := time.Now().UTC()
 	change.UpdatedAt = &now
@@ -566,7 +575,8 @@ func (s *server) applyAgentFieldChange(ctx context.Context, actor mcpActor, chan
 	return change, nil
 }
 
-// removeAgentChangeEntity deletes an entity the agent created (trash-backed types go to the trash).
+// removeAgentChangeEntity deletes an entity the agent created (trash-backed types go to the trash; customers are
+// deleted permanently).
 func (s *server) removeAgentChangeEntity(ctx context.Context, actor mcpActor, change domain.AgentChange) error {
 	id := change.EntityID
 	var err error

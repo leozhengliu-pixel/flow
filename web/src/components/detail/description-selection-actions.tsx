@@ -27,7 +27,7 @@ export function useDescriptionSelectionActions(issue: Issue, data: BootstrapData
 }
 
 /** What a project or initiative description is about; its selection actions act on this entity. */
-export type DescriptionEntity = { kind: 'project' | 'initiative'; id: string; name: string; /** Path of the entity's page, linked from an issue made out of a selection and sent with an initiative's chat. */ href?: string }
+export type DescriptionEntity = { kind: 'project' | 'initiative'; id: string; name: string; /** Path of the entity's page, linked from an issue made out of a selection. */ href?: string }
 
 /**
  * Selection actions for a project or initiative description, like the issue description's: "Ask agent" opens the
@@ -46,7 +46,7 @@ export function useEntityDescriptionSelectionActions({ entity, data, teamId, pro
     },
     onAskAgent: selection => setAgent({ ...selection, entityId: entity.id }),
   }
-  const context: AgentPageContext = { type: entity.kind, id: entity.id, label: entity.name, href: entity.href }
+  const context: AgentPageContext = { type: entity.kind, id: entity.id, label: entity.name }
   const prompt = (text: string) => `${t(entity.kind === 'project' ? 'About this selection from the project description:' : 'About this selection from the initiative description:')}\n\n> ${text.replace(/\n/g, '\n> ')}\n\n`
   const panels = agent?.entityId === entity.id
     ? <Suspense fallback={null}><AgentChatPanel key={`${entity.id}:${agent.from}`} data={data} initialPrompt={prompt(agent.text)} issues={[]} pageContext={context} open onClose={() => setAgent(undefined)}/></Suspense>

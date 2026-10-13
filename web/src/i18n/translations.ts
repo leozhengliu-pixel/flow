@@ -8,6 +8,7 @@ import { releasePipelinesZhCN } from './translations-release-pipelines';
 import { releaseViewsZhCN } from './translations-release-views';
 import { customerSettingsZhCN } from './translations-customer-settings';
 import { customersListZhCN } from './translations-customers-list';
+import { recentlyDeletedZhCN } from './translations-recently-deleted';
 import { customerDetailZhCN } from './translations-customer-detail';
 import { customerRequestsZhCN } from './translations-customer-requests';
 import { customerFiltersZhCN } from './translations-customer-filters';
@@ -1362,6 +1363,8 @@ export const zhCN: Record<string, string> = {
   "Comment for accepting issue": "接受事项时的评论",
   "Add an optional comment…": "添加可选评论…",
   "Set priority": "设置优先级",
+  "Mark as read": "标记为已读",
+  "Mark as unread": "标记为未读",
   "Set a priority before moving this issue out of triage.": "将事项移出分流前请先设置优先级。",
   "Issue accepted": "事项已接受",
   "Could not accept issue": "无法接受事项",
@@ -5873,3 +5876,5 @@ for (const [source, translation] of Object.entries(teamAgentGuidanceZhCN)) zhCN[
 for (const [source, translation] of Object.entries(agentChangesZhCN)) zhCN[source] ??= translation;
 // Agent approvals (bulk deletes, agent-written updates), interrupted steps and web access fill gaps only.
 for (const [source, translation] of Object.entries(agentRuntimeZhCN)) zhCN[source] ??= translation;
+// Recently deleted views and installed applications fill gaps only.
+for (const [source, translation] of Object.entries(recentlyDeletedZhCN)) zhCN[source] ??= translation;

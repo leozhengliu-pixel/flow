@@ -854,6 +854,7 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 		data.AuditLog = []domain.AuditLogEntry{}
 		data.Trash = slices.DeleteFunc(data.Trash, func(item domain.TrashEntry) bool { return item.DeletedBy.ID != userID })
 	}
+	stripTrashLinks(&data)
 	if role == "guest" {
 		visibleUsers := map[string]bool{userID: true}
 		for _, membership := range data.TeamMembers {

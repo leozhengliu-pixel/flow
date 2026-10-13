@@ -33,6 +33,7 @@ func TestAgentApprovalPolicy(t *testing.T) {
 	data := srv.store.Bootstrap()
 	first := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "QA fix – one", "teamId": data.Teams[0].ID}, http.StatusCreated)
 	second := requestJSON[domain.Issue](t, handler, http.MethodPost, "/api/issues", map[string]any{"title": "QA fix – two", "teamId": data.Teams[0].ID}, http.StatusCreated)
+	requestJSON[domain.Customer](t, handler, http.MethodPost, "/api/customers", map[string]any{"name": "QA fix – Gone customer"}, http.StatusCreated)
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set("X-Workspace-Key", "test-workspace")
 	data = srv.workspaceData(request)
@@ -46,6 +47,7 @@ func TestAgentApprovalPolicy(t *testing.T) {
 		{"single delete", []domain.AgentToolCall{agentTestCall("a", "delete_issue", map[string]any{"id": first.Identifier})}, "Delete " + first.Identifier, ""},
 		{"two deletes", []domain.AgentToolCall{agentTestCall("a", "delete_issue", map[string]any{"id": first.Identifier}), agentTestCall("b", "mcp__flow.delete_issue", map[string]any{"id": second.ID})}, "Delete the QA fix issues", "delete"},
 		{"two deletes after the user approved", []domain.AgentToolCall{agentTestCall("a", "delete_issue", map[string]any{"id": first.Identifier}), agentTestCall("b", "delete_issue", map[string]any{"id": second.ID})}, "批准", ""},
+		{"two permanent deletes", []domain.AgentToolCall{agentTestCall("a", "delete_customer", map[string]any{"id": "QA fix – Gone customer"}), agentTestCall("b", "delete_issue", map[string]any{"id": first.Identifier})}, "Delete them", "delete"},
 		{"one call naming two items", []domain.AgentToolCall{agentTestCall("a", "delete_label", map[string]any{"ids": []string{"Bug", "Feature"}})}, "Remove both labels", "delete"},
 		{"normal writes", []domain.AgentToolCall{agentTestCall("a", "save_issue", map[string]any{"title": "x"}), agentTestCall("b", "save_issue", map[string]any{"id": first.Identifier, "priority": 1})}, "Do it", ""},
 		{"agent-authored update", []domain.AgentToolCall{update}, "Write a project update for Export revamp", "publish"},
@@ -67,6 +69,12 @@ func TestAgentApprovalPolicy(t *testing.T) {
 			}
 			if preview := agentApprovalPreview(*approval); !strings.Contains(preview, "Delete these 2 items") || !strings.Contains(preview, first.Identifier) {
 				t.Errorf("preview = %q", preview)
+			}
+		}
+		if test.name == "two permanent deletes" && approval != nil {
+			// A customer has no trash; an issue does.
+			if !approval.Targets[0].Permanent || approval.Targets[1].Permanent || !strings.Contains(agentApprovalPreview(*approval), "can't be restored") {
+				t.Errorf("permanent delete approval = %+v", approval.Targets)
 			}
 		}
 		if test.name == "agent-authored update" && approval != nil {

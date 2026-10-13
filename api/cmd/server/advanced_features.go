@@ -276,7 +276,13 @@ func appendTrash(data *domain.Bootstrap, resourceType, resourceID, title string,
 		return err
 	}
 	now := time.Now().UTC()
-	data.Trash = append([]domain.TrashEntry{{ID: fmt.Sprintf("trash_%d", now.UnixNano()), ResourceType: resourceType, ResourceID: resourceID, Title: title, Payload: payload, TeamIDs: trashTeamIDs(data, value), DeletedBy: data.Viewer, DeletedAt: now, ExpiresAt: now.AddDate(0, 0, 30)}}, data.Trash...)
+	// Several entries can be added in one write (a pipeline and its
+	// releases); keep their ids distinct.
+	id := fmt.Sprintf("trash_%d", now.UnixNano())
+	for sequence := now.UnixNano() + 1; slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id }); sequence++ {
+		id = fmt.Sprintf("trash_%d", sequence)
+	}
+	data.Trash = append([]domain.TrashEntry{{ID: id, ResourceType: resourceType, ResourceID: resourceID, Title: title, Payload: payload, TeamIDs: trashTeamIDs(data, value), DeletedBy: data.Viewer, DeletedAt: now, ExpiresAt: now.AddDate(0, 0, 30)}}, data.Trash...)
 	appendAudit(data, "deleted", resourceType, resourceID, map[string]any{"title": title})
 	return nil
 }
@@ -692,7 +698,7 @@ func (s *server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 		}
 		removed := data.Documents[index]
 		workspace, removedID = data.Workspace.URLKey, removed.ID
-		if err := appendTrash(data, "document", removed.ID, documentDisplayTitle(removed.Title), removed); err != nil {
+		if err := appendTrashWithLinks(data, "document", removed.ID, documentDisplayTitle(removed.Title), removed, captureDocumentLinks(data, removed.ID)); err != nil {
 			return err
 		}
 		data.Documents = slices.Delete(data.Documents, index, index+1)
@@ -1463,7 +1469,9 @@ func (s *server) deleteRelease(w http.ResponseWriter, r *http.Request) {
 			return errNotFound
 		}
 		item := data.Releases[index]
-		if err := appendTrash(data, "release", item.ID, item.Name, item); err != nil {
+		links := domain.TrashLinks{}
+		captureResourcePreferences(data, "release", item.ID, &links)
+		if err := appendTrashWithLinks(data, "release", item.ID, item.Name, item, links); err != nil {
 			return err
 		}
 		data.Releases = slices.Delete(data.Releases, index, index+1)
@@ -2815,6 +2823,7 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 				return store.ErrAuthForbidden
 			}
 			data.Documents = append([]domain.Document{value}, data.Documents...)
+			restoreDocumentLinks(data, value.ID, entry.Links)
 			syncDocumentProjectResources(data, value)
 			restored = value
 		case "release":
@@ -2826,6 +2835,9 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 				return errConflict
 			}
 			data.Releases = append([]domain.Release{value}, data.Releases...)
+			if entry.Links != nil {
+				restoreResourcePreferences(data, entry.Links)
+			}
 			restored = value
 		case "release_pipeline":
 			var value domain.ReleasePipeline
@@ -2836,6 +2848,26 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 				return errConflict
 			}
 			data.ReleasePipelines = append([]domain.ReleasePipeline{value}, data.ReleasePipelines...)
+			if entry.Links != nil {
+				// The releases deleted with the pipeline come back with it.
+				restoredReleases := []string{}
+				for _, trashed := range data.Trash {
+					if trashed.ResourceType != "release" || !slices.Contains(entry.Links.PipelineReleaseIDs, trashed.ResourceID) {
+						continue
+					}
+					var release domain.Release
+					if json.Unmarshal(trashed.Payload, &release) != nil || release.PipelineID != value.ID || slices.ContainsFunc(data.Releases, func(item domain.Release) bool { return item.ID == release.ID }) {
+						continue
+					}
+					data.Releases = append(data.Releases, release)
+					if trashed.Links != nil {
+						restoreResourcePreferences(data, trashed.Links)
+					}
+					restoredReleases = append(restoredReleases, trashed.ID)
+				}
+				data.Trash = slices.DeleteFunc(data.Trash, func(item domain.TrashEntry) bool { return slices.Contains(restoredReleases, item.ID) })
+				restoreResourcePreferences(data, entry.Links)
+			}
 			restored = publicReleasePipeline(value)
 		case "ask":
 			var value domain.Ask
@@ -2849,6 +2881,9 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			if json.Unmarshal(entry.Payload, &value) != nil {
 				return errInvalid
 			}
+			if value.CustomerID != "" && !slices.ContainsFunc(data.Customers, func(item domain.Customer) bool { return item.ID == value.CustomerID }) {
+				return errConflict
+			}
 			data.CustomerRequests = append([]domain.CustomerRequest{value}, data.CustomerRequests...)
 			restored = value
 		case "customer":
@@ -2857,15 +2892,30 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 				return errInvalid
 			}
 			data.Customers = append([]domain.Customer{value}, data.Customers...)
+			restoreCustomerLinks(data, value.ID, entry.Links)
 			restored = value
 		case "issue":
-			var value deletedIssuePayload
-			if json.Unmarshal(entry.Payload, &value) != nil {
-				return errInvalid
+			issue, err := restoreTrashedIssue(data, entry)
+			if err != nil {
+				return err
 			}
-			data.Issues = append([]domain.Issue{value.Issue}, data.Issues...)
-			data.Comments[value.Issue.ID], data.Activities[value.Issue.ID] = value.Comments, value.Activities
-			restored = value.Issue
+			// Sub-issues deleted with the issue come back with it, parents
+			// before their children (the trash lists newer entries first).
+			cascaded := []string{}
+			for _, child := range slices.Clone(data.Trash) {
+				if child.ResourceType != "issue" || child.Links == nil || child.Links.DeletedWithIssueID != issue.ID {
+					continue
+				}
+				if _, err := restoreTrashedIssue(data, child); err != nil {
+					return err
+				}
+				cascaded = append(cascaded, child.ID)
+			}
+			data.Trash = slices.DeleteFunc(data.Trash, func(item domain.TrashEntry) bool { return slices.Contains(cascaded, item.ID) })
+			if index := issueIndexByID(data, issue.ID); index >= 0 {
+				issue = data.Issues[index]
+			}
+			restored = issue
 		case "project":
 			var value deletedProjectPayload
 			if json.Unmarshal(entry.Payload, &value) != nil {
@@ -2873,6 +2923,7 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			}
 			data.Projects = append([]domain.Project{value.Project}, data.Projects...)
 			data.ProjectUpdates[value.Project.ID] = value.Updates
+			restoreProjectLinks(data, value.Project, entry.Links)
 			restored = value.Project
 		case "initiative":
 			var value deletedInitiativePayload
@@ -2881,7 +2932,10 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			}
 			data.Initiatives = append([]domain.Initiative{value.Initiative}, data.Initiatives...)
 			data.InitiativeUpdates[value.Initiative.ID] = value.Updates
-			syncInitiativeProjects(data, value.Initiative.ID, nil, value.Initiative.ProjectIDs)
+			restoreInitiativeLinks(data, value.Initiative.ID, entry.Links)
+			if initiative, err := initiativeByID(data, value.Initiative.ID); err == nil {
+				value.Initiative = *initiative
+			}
 			restored = value.Initiative
 		case "loop":
 			var value domain.Loop
@@ -2894,11 +2948,18 @@ func (s *server) restoreTrashEntry(w http.ResponseWriter, r *http.Request) {
 			// The schedule restarts from now rather than catching up on runs missed while deleted.
 			value.NextRunAt = nil
 			data.Loops = append(data.Loops, value)
+			if entry.Links != nil {
+				for _, version := range entry.Links.LoopVersions {
+					if !slices.ContainsFunc(data.LoopVersions, func(item domain.LoopVersion) bool { return item.ID == version.ID }) {
+						data.LoopVersions = append(data.LoopVersions, version)
+					}
+				}
+			}
 			restored = value
 		default:
 			return errInvalid
 		}
-		data.Trash = slices.Delete(data.Trash, index, index+1)
+		data.Trash = slices.DeleteFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
 		appendAudit(data, "restored", entry.ResourceType, entry.ResourceID, nil)
 		return nil
 	})
@@ -2932,7 +2993,7 @@ func trashedDocumentOwners(entries []domain.TrashEntry, keep func(domain.TrashEn
 
 func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	var purgedCollaborationIDs []string
+	var purgedCollaborationIDs, purgedLoopIDs []string
 	workspace := workspaceKey(r)
 	scope := store.WithMutationScope(r.Context(), store.MutationScope{Resolve: func(data domain.Bootstrap) store.MutationScope {
 		documentIDs, _ := trashedDocumentOwners(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
@@ -2944,6 +3005,7 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 			delete(data.Comments, documentID)
 		}
 		purgedCollaborationIDs, workspace = collaborationIDs, data.Workspace.URLKey
+		purgedLoopIDs = trashedLoopIDs(data.Trash, func(entry domain.TrashEntry) bool { return entry.ID == id })
 		before := len(data.Trash)
 		if !workspaceAdminRole(data.ViewerRole) {
 			entryIndex := slices.IndexFunc(data.Trash, func(item domain.TrashEntry) bool { return item.ID == id })
@@ -2963,6 +3025,7 @@ func (s *server) purgeTrashEntry(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil {
 		s.purgeDocumentContent(r.Context(), workspace, purgedCollaborationIDs)
+		s.purgeLoopRuns(r.Context(), workspace, purgedLoopIDs)
 	}
 	respondMutation(w, err, http.StatusNoContent, nil)
 }
@@ -3656,8 +3719,11 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		scope.Resources = append(scope.Resources, expiredDocuments...)
 		return scope
 	}})
-	var purgedCollaborationIDs []string
-	defer func() { s.purgeDocumentContent(ctx, key, purgedCollaborationIDs) }()
+	var purgedCollaborationIDs, purgedLoopIDs []string
+	defer func() {
+		s.purgeDocumentContent(ctx, key, purgedCollaborationIDs)
+		s.purgeLoopRuns(ctx, key, purgedLoopIDs)
+	}()
 	_ = s.store.MutateWorkspace(mutationCtx, key, "schedules.maintained", "advanced_schedules", nil, func(next *domain.Bootstrap) error {
 		// The trigger above can stay true when a reminder cannot be
 		// delivered (for example the recipient's inbox is off). Skip the
@@ -3708,11 +3774,12 @@ func (s *server) maintainAdvancedSchedules(ctx context.Context, key string) {
 		for _, documentID := range expiredDocuments {
 			delete(next.Comments, documentID)
 		}
+		expiredLoops := trashedLoopIDs(next.Trash, func(entry domain.TrashEntry) bool { return now.After(entry.ExpiresAt) })
 		next.Trash = slices.DeleteFunc(next.Trash, func(item domain.TrashEntry) bool { return now.After(item.ExpiresAt) })
 		if bytes.Equal(before, fingerprint()) && len(expiredDocuments) == 0 {
 			return store.ErrNoMutation
 		}
-		purgedCollaborationIDs = expiredCollaborationIDs
+		purgedCollaborationIDs, purgedLoopIDs = expiredCollaborationIDs, expiredLoops
 		return nil
 	})
 }

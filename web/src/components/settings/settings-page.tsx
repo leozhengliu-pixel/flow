@@ -164,6 +164,8 @@ import { applyTheme } from "@/lib/theme";
 import { workspaceRegionLabel } from "@/components/workspace/workspace-regions";
 import { SidebarCustomization } from "@/components/layout/sidebar";
 import { useSidebarCustomizationState } from "@/components/layout/sidebar-customization-state";
+import { agentWebAccessEnabled } from "@/lib/agent-web-access";
+import { InstalledApplicationsSection } from "./installed-applications-section";
 
 const TeamWorkflowSettings = lazyPage(
   () => import("./team-workflow-settings"),
@@ -3153,8 +3155,8 @@ function SecurityPage({
           <Row title="Enable Flow Agent web search" description="Allow Flow Agent to search the public web for current information and cite sources">
             <Toggle
               label="Enable Flow Agent web search"
-              checked={!settings.agentWebSearchDisabled}
-              onChange={(value) => void save({ ...settings, agentWebSearch: value, agentWebSearchDisabled: !value })}
+              checked={agentWebAccessEnabled(settings)}
+              onChange={(value) => void save({ ...settings, agentWebAccess: value, agentWebSearch: value, agentWebSearchDisabled: !value })}
             />
           </Row>
         </Group>
@@ -3555,6 +3557,7 @@ function ApplicationsPage({
           </div>
         )}
       </Section>
+      <InstalledApplicationsSection data={data} onReload={onReload} />
       <Section title="Authorized applications">
         {authorizations.map((item) => (
           <Row

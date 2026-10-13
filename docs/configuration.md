@@ -353,7 +353,7 @@ credentials to the browser.
 | `FLOW_AGENT_TOOLS_ENABLED` | `true` | Expose Flow MCP read tools to the Agent. |
 | `FLOW_AGENT_WRITE_TOOLS` | `false` | Also expose write tools. Enable only when automatic mutations are acceptable. |
 | `FLOW_AGENT_REASONING_EFFORT` | empty | Reasoning effort for OpenAI-compatible models: `none`, `minimal`, `low`, `medium`, `high` or `xhigh`. Empty leaves the provider default. |
-| `FLOW_AGENT_NATIVE_WEB_SEARCH` | `true` | Without `FLOW_WEB_SEARCH_PROVIDER`, Flow Agent chat and comment threads search the web with the model provider's hosted search tool (OpenAI Responses `web_search`, Anthropic `web_search`). A provider that rejects the tool is detected once and search is turned off; `fetch_url` keeps working. Web access is on per workspace unless an admin turns it off in Settings. |
+| `FLOW_AGENT_NATIVE_WEB_SEARCH` | `true` | Without `FLOW_WEB_SEARCH_PROVIDER`, Flow Agent chat and comment threads search the web with the model provider's hosted search tool (OpenAI Responses `web_search`, Anthropic `web_search`). A provider that rejects the tool is detected once and search is turned off; `fetch_url` keeps working. Web access is on per workspace unless an admin turns it off in Settings (stored as the explicit `agentWebAccess` workspace setting; never set means on). On upgrade, a one-time data migration keeps web access off where the stored settings show an admin turned it off: `agentWebSearchDisabled` was saved, or web search had been turned on (the event log has a save enabling it) and the workspace's settings were saved after that. |
 
 ```dotenv
 FLOW_AGENT_ENABLED=true

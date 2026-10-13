@@ -367,6 +367,7 @@ func (s *server) updateWorkspacePreferences(w http.ResponseWriter, r *http.Reque
 			return errInvalid
 		}
 		ensureAllowedAuthServices(&input, data.WorkspaceSettings, patch)
+		reconcileAgentWebAccess(&input, data.WorkspaceSettings, patch)
 		input.UpdatedAt = time.Now().UTC()
 		data.WorkspaceSettings = input
 		updated = input

@@ -1,4 +1,5 @@
 import type { BootstrapData, FlowDocument, Notification } from '@/types/flow'
+import { agentReplyLine } from '../agent-reply-notification'
 import type { InboxNotificationKind } from '../notification-row'
 
 type Translate = (source: string) => string
@@ -26,6 +27,8 @@ export function isDocumentNotification(notification: Pick<Notification, 'sourceT
 
 /** The row line ("Ann commented on the document: …") in the active locale. */
 export function documentNotificationLine(notification: Notification, t: Translate) {
+  // An agent's reply in a document thread reads like one in an issue thread, without an occurrence count.
+  if (notification.type === 'agentReply') return agentReplyLine(notification, t)
   const template = LINES[notification.type] ?? '{actor} updated the document'
   const actor = notification.actor.displayName || notification.actor.name || t('Someone')
   const line = t(template).replace('{actor}', actor).replace('{emoji}', String(notification.payload?.emoji ?? ''))
@@ -36,7 +39,7 @@ export function documentNotificationLine(notification: Notification, t: Translat
 
 export function documentNotificationKind(notification: Pick<Notification, 'type'>): InboxNotificationKind {
   if (notification.type === 'documentMention' || notification.type === 'documentCommentMention') return 'mention'
-  if (notification.type === 'documentNewComment' || notification.type === 'documentThreadResolved' || notification.type === 'documentCommentReaction') return 'comment'
+  if (notification.type === 'documentNewComment' || notification.type === 'documentThreadResolved' || notification.type === 'documentCommentReaction' || notification.type === 'agentReply') return 'comment'
   return 'generic'
 }
 

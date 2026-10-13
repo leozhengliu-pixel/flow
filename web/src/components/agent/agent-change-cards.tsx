@@ -112,6 +112,7 @@ function AgentChangeCardView({ card, data, onAction }: { card: GroupedCard; data
           : <ChangeEntity card={card} data={data}/>}
         {summary && <p className={styles.summary}>{summary}</p>}
         {card.skipped && <p className={styles.note}>{agentChangeSkippedNote(card.skipped, t, locale)}</p>}
+        {card.finalNote && <p className={styles.note}>{t('Deleted permanently. It can’t be restored.')}</p>}
         {(card.text || (card.undoable && onAction)) && (
           <ChangeFooter card={card}>
             {card.undoable && onAction && (

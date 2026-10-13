@@ -3,7 +3,8 @@
  * documentNewComment, documentThreadResolved, documentCommentReaction,
  * documentChanges, documentMoved, documentDeleted, documentRestored,
  * documentAddedAsOwner / RemovedAsOwner, documentSubscribed / Unsubscribed,
- * documentReminder): the row's localized line and the detail view.
+ * documentReminder, and agentReply for an agent's reply in a document thread):
+ * the row's localized line and the detail view.
  */
 import { ArrowUpRight, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -35,6 +36,7 @@ export function DocumentInboxView({ data, notification }: { data: BootstrapData;
   const thread = root ? [root, ...comments.filter(item => item.parentId === root.id)] : []
   const quote = root?.quotedText || (typeof notification.payload?.quotedText === 'string' ? notification.payload.quotedText : '')
   const gone = !document && notification.type !== 'documentDeleted'
+  const excerpt = typeof notification.payload?.excerpt === 'string' ? notification.payload.excerpt : ''
   return <div className="flow-inbox-document">
     <header>
       <span className="flow-inbox-document__icon">{document ? <DocumentGlyph document={document}/> : <FileText size={16}/>}</span>
@@ -55,7 +57,9 @@ export function DocumentInboxView({ data, notification }: { data: BootstrapData;
         <header><UserAvatar avatarUrl={item.user.avatarUrl} className="flow-inbox-document__avatar" name={item.user.displayName || item.user.name}/><strong data-i18n-ignore>{item.user.displayName || item.user.name}</strong><time dateTime={item.createdAt}>{formatDate(item.createdAt, { month: 'short', day: 'numeric' })}</time></header>
         <RichComment body={item.body} data={item.bodyData}/>
       </article>)}</div>
-      : typeof notification.payload?.excerpt === 'string' && notification.payload.excerpt && <p className="flow-inbox-document__excerpt" data-i18n-ignore>{notification.payload.excerpt}</p>}
+      : null}
+    {/* An agent's reply is a session activity, not a thread comment: its first line follows the thread. */}
+    {(thread.length === 0 || notification.type === 'agentReply') && excerpt && <p className="flow-inbox-document__excerpt" data-i18n-ignore>{excerpt}</p>}
     {gone && <p className="flow-inbox-document__gone">{t('This document is no longer available.')}</p>}
   </div>
 }

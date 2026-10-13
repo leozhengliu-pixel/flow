@@ -25,6 +25,15 @@ describe('agent result cards', () => {
     expect(agentChangeSummary(cards[1], identity)).toBe('Changed the description.')
   })
 
+  it('marks an undone create that was deleted permanently (customers) as final, with no Restore', () => {
+    const [created, deleted] = agentChangeCards({ parts: [
+      part('a', 'save_customer', { action: 'created', entityType: 'customer', entityId: 'c1', label: 'Acme', undoable: false, state: 'undone', note: 'Customer "Acme" was deleted permanently and can\'t be restored.' }),
+      part('b', 'delete_customer', { action: 'deleted', entityType: 'customer', entityId: 'c2', label: 'Beta', undoable: false }),
+    ] })
+    expect(created).toMatchObject({ undone: true, undoable: false, finalNote: expect.stringContaining('permanently') })
+    expect(deleted).toMatchObject({ action: 'deleted', undoable: false, finalNote: undefined })
+  })
+
   it('degrades unknown write tools to a generic card', () => {
     const [card] = agentChangeCards({ parts: [part('p1', 'save_widget', { action: 'updated', entityType: 'widget', entityId: 'w1', label: 'Gizmo', undoable: false })] })
     expect(card.kind).toBeUndefined()

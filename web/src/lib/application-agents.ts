@@ -23,6 +23,8 @@ export const isAgentMember = (user: User) => Boolean(user.app && user.active && 
 export const canDelegateTo = (user: User, teamId: string) => Boolean(user.app && user.active && user.appScopes?.includes('app:assignable') && user.appTeamIds?.includes(teamId))
 export const listApplications = (workspace: string) => apiRequest<ApplicationInstallation[]>('/api/application-installations', workspace)
 export const saveApplication = (workspace: string, input: Partial<ApplicationInstallation>) => apiRequest<{application: ApplicationInstallation; webhookSecret: string}>(`/api/application-installations${input.id ? `/${encodeURIComponent(input.id)}` : ''}`, workspace, { method: input.id ? 'PATCH' : 'POST', body: JSON.stringify(input) })
+/** Uninstalls an application from the workspace (admins): revokes its tokens, cancels its active sessions and removes its app user. */
+export const uninstallApplication = (workspace: string, id: string) => apiRequest<void>(`/api/application-installations/${encodeURIComponent(id)}`, workspace, { method: 'DELETE' })
 export const listApplicationTasks = (workspace: string, issueId: string, signal?: AbortSignal, resourceType = 'issue') => apiRequest<ApplicationTask[]>(`/api/agent-tasks?resourceType=${resourceType}&resourceId=${encodeURIComponent(issueId)}`, workspace, { signal })
 export const getApplicationTask = (workspace: string, id: string, after = '', signal?: AbortSignal) => apiRequest<{session: ApplicationTask; activities: ApplicationActivity[]}>(`/api/agent-tasks/${encodeURIComponent(id)}?after=${encodeURIComponent(after)}`, workspace, { signal })
 /** Removes one of the agent's replies from its thread (a "deleted" marker; the reply stays in the session log). */

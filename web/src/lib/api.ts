@@ -2066,9 +2066,6 @@ export function removeSubscription(type: string, id: string): Promise<Subscripti
 export function restoreTrashEntry(id: string): Promise<unknown> {
   return request(`/api/trash/${id}/restore`, { method: "POST" });
 }
-export function purgeTrashEntry(id: string): Promise<void> {
-  return request(`/api/trash/${id}`, { method: "DELETE" });
-}
 export function previewImport(file: File): Promise<ImportJob> {
   const body = new FormData();
   body.append("file", file);
@@ -2493,6 +2490,9 @@ export function stopAgentSession(id: string): Promise<void> {
 export function createAgentSession(input: {
   message: string;
   issueIds?: string[];
+  projectIds?: string[];
+  documentIds?: string[];
+  initiativeIds?: string[];
   skillIds?: string[];
   location?: "page" | "toolbar";
 }): Promise<import("@/types/flow").AgentSession> {
@@ -2778,9 +2778,10 @@ export function updateCycleSettings(
   });
 }
 
-export function deleteIssue(issueId: string): Promise<void> {
+/** Deletes (trashes) an issue with its sub-issues; `keepSubIssues` (converting to a project) detaches them instead. */
+export function deleteIssue(issueId: string, options: { keepSubIssues?: boolean } = {}): Promise<void> {
   const workspaceKey = typeof window === 'undefined' ? '' : decodeURIComponent(window.location.pathname.split('/').filter(Boolean)[0] ?? '');
-  return request<void>(`/api/issues/${issueId}`, { method: "DELETE" }).then(()=>{
+  return request<void>(`/api/issues/${issueId}${options.keepSubIssues ? '?subIssues=keep' : ''}`, { method: "DELETE" }).then(()=>{
     window.dispatchEvent(new CustomEvent('flow-issue-query-invalidated',{detail:{workspaceKey,issueId}}));
   });
 }

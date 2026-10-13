@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { TOOLTIP_DELAY, TOOLTIP_OFFSET, TOOLTIP_SKIP_DELAY } from './tooltip'
+import { tooltipTone, type TooltipTone } from './tooltip-shortcut'
 
 /**
  * Renders native `title` attributes as Flow tooltips app-wide, so every hover hint shares the
@@ -10,7 +11,7 @@ import { TOOLTIP_DELAY, TOOLTIP_OFFSET, TOOLTIP_SKIP_DELAY } from './tooltip'
  * `aria-label` in the meantime. Opt out with `data-native-title` on the element or an ancestor.
  */
 export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_SKIP_DELAY }: { delay?: number; skipDelay?: number }) {
-  const [tip, setTip] = useState<{ text: string; rect: DOMRect } | null>(null)
+  const [tip, setTip] = useState<{ text: string; rect: DOMRect; tone?: TooltipTone } | null>(null)
   const active = useRef<HTMLElement | null>(null)
   const timer = useRef<number | undefined>(undefined)
   const lastHidden = useRef(0)
@@ -46,7 +47,7 @@ export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_
         element.setAttribute('aria-label', text)
         element.setAttribute('data-flow-title-label', '')
       }
-      const show = () => { if (active.current === element && element.isConnected) setTip({ text, rect: element.getBoundingClientRect() }) }
+      const show = () => { if (active.current === element && element.isConnected) setTip({ text, rect: element.getBoundingClientRect(), tone: tooltipTone(element) }) }
       window.clearTimeout(timer.current)
       if (immediate || Date.now() - lastHidden.current < skipDelay) show()
       else timer.current = window.setTimeout(show, delay)
@@ -89,10 +90,10 @@ export function TitleTooltipBridge({ delay = TOOLTIP_DELAY, skipDelay = TOOLTIP_
     }
   }, [delay, skipDelay])
 
-  return tip ? createPortal(<TitleTooltip text={tip.text} rect={tip.rect}/>, document.body) : null
+  return tip ? createPortal(<TitleTooltip text={tip.text} rect={tip.rect} tone={tip.tone}/>, document.body) : null
 }
 
-function TitleTooltip({ text, rect }: { text: string; rect: DOMRect }) {
+function TitleTooltip({ text, rect, tone }: { text: string; rect: DOMRect; tone?: TooltipTone }) {
   const ref = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<{ top: number; left: number; side: 'top' | 'bottom' } | null>(null)
   useLayoutEffect(() => {
@@ -106,7 +107,7 @@ function TitleTooltip({ text, rect }: { text: string; rect: DOMRect }) {
   return <div
     ref={ref}
     role="tooltip"
-    className="flow-tooltip-content flow-tooltip-content--title"
+    className={`flow-tooltip-content flow-tooltip-content--title${tone ? ` flow-tooltip-content--${tone}` : ''}`}
     data-flow-motion="tooltip"
     data-side={position?.side ?? 'bottom'}
     style={{ position: 'fixed', top: position?.top ?? rect.bottom + TOOLTIP_OFFSET, left: position?.left ?? rect.left, visibility: position ? 'visible' : 'hidden', pointerEvents: 'none' }}

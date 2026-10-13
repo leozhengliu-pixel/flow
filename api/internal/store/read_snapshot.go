@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"flow/api/internal/domain"
 )
@@ -48,8 +49,26 @@ func (s *SQLiteStore) BeginWorkspaceRead(ctx context.Context, workspace string) 
 
 func (s *SQLiteStore) workspaceReadSource(ctx context.Context, workspace string) (metadataReader, domain.Bootstrap, bool) {
 	if snapshot, ok := ctx.Value(workspaceReadKey{}).(workspaceRead); ok && (workspace == "" || workspace == snapshot.workspace) {
-		return snapshot.reader, cloneBootstrap(snapshot.metadata), true
+		data := cloneBootstrap(snapshot.metadata)
+		stripTrashLinks(&data)
+		return snapshot.reader, data, true
 	}
 	data, ok := s.WorkspaceMetadata(workspace)
+	stripTrashLinks(&data)
 	return s.db, data, ok
+}
+
+// stripTrashLinks drops the trash entries' restore links from a read
+// projection: they are server-side bookkeeping and can name other members'
+// favorites and subscriptions.
+func stripTrashLinks(data *domain.Bootstrap) {
+	if !slices.ContainsFunc(data.Trash, func(item domain.TrashEntry) bool { return item.Links != nil }) {
+		return
+	}
+	trash := make([]domain.TrashEntry, len(data.Trash))
+	for index, item := range data.Trash {
+		item.Links = nil
+		trash[index] = item
+	}
+	data.Trash = trash
 }

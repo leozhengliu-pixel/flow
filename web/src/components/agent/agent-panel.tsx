@@ -173,6 +173,7 @@ export function AgentPanel({
         data-dock={dock}
         data-fullscreen={fullscreen || undefined}
         data-minimized={minimized || undefined}
+        data-tooltip-raised={variant === 'floating' ? '' : undefined}
         data-variant={variant}
         role={variant === 'floating' ? 'dialog' : 'complementary'}
         style={variant === 'sidebar' ? { width } : undefined}

@@ -1027,7 +1027,7 @@
   {
     "name": "mcp__flow.delete_customer",
     "access": "write",
-    "description": "Delete a customer. It moves to the workspace trash for 30 days and can be restored; its customer requests are deleted with it and are not restored (the receipt's `affected.requests` counts them).",
+    "description": "Permanently delete a customer and all its customer requests (the receipt's `affected.requests` counts them). This cannot be undone: Flow has no trash or restore for customers.",
     "input_schema": {
       "type": "object",
       "required": ["id"],
@@ -1455,7 +1455,7 @@
   {
     "name": "mcp__flow.delete_loop",
     "access": "write",
-    "description": "Delete a Flow loop (automation). The loop moves to the workspace trash for 30 days and can be restored; its run history and saved versions are deleted with it. Only the loop's editors can delete it.",
+    "description": "Permanently delete a Flow loop (automation) with its saved versions and run history. This cannot be undone: Flow has no trash or restore for loops. Only the loop's editors can delete it.",
     "input_schema": {
       "type": "object",
       "required": ["id"],
