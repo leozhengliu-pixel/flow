@@ -660,25 +660,25 @@ func (m *memoryResponse) Write(p []byte) (int, error) {
 // GET /api/webhooks?first=… (admin only, like the array form)
 
 func (s *server) listWebhooksConnection(w http.ResponseWriter, r *http.Request) {
-	status, items, raw := legacyListJSON[domain.Webhook](s.listWebhooks, r, url.Values{})
+	status, items, raw := legacyListJSON[publicapi.Webhook](s.listWebhooks, r, url.Values{})
 	if status != http.StatusOK {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(status)
 		_, _ = w.Write(raw)
 		return
 	}
-	writeConnection(w, r, items, map[string]func(domain.Webhook) any{
-		"id":            func(x domain.Webhook) any { return x.ID },
-		"name":          func(x domain.Webhook) any { return x.Name },
-		"url":           func(x domain.Webhook) any { return x.URL },
-		"enabled":       func(x domain.Webhook) any { return x.Enabled },
-		"resourceTypes": func(x domain.Webhook) any { return filterList(x.ResourceTypes) },
-		"teams": func(x domain.Webhook) any {
+	writeConnection(w, r, items, map[string]func(publicapi.Webhook) any{
+		"id":            func(x publicapi.Webhook) any { return x.ID },
+		"name":          func(x publicapi.Webhook) any { return x.Name },
+		"url":           func(x publicapi.Webhook) any { return x.URL },
+		"enabled":       func(x publicapi.Webhook) any { return x.Enabled },
+		"resourceTypes": func(x publicapi.Webhook) any { return filterList(x.ResourceTypes) },
+		"teams": func(x publicapi.Webhook) any {
 			return relationList(x.TeamIDs, func(id string) any { return filterRelation(id, nil) })
 		},
-		"createdAt": func(x domain.Webhook) any { return x.CreatedAt },
-		"updatedAt": func(x domain.Webhook) any { return x.UpdatedAt },
-	}, func(x domain.Webhook, orderBy string) pageKey {
+		"createdAt": func(x publicapi.Webhook) any { return x.CreatedAt },
+		"updatedAt": func(x publicapi.Webhook) any { return x.UpdatedAt },
+	}, func(x publicapi.Webhook, orderBy string) pageKey {
 		return orderedKey(orderBy, x.ID, x.CreatedAt, x.UpdatedAt)
 	})
 }

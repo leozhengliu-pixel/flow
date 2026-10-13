@@ -3,6 +3,8 @@
 //   node sdk/typescript/scripts/generate.mjs
 
 import type {
+  ApplicationWebhookInput,
+  ApplicationWebhookSettings,
   Attachment,
   AttachmentConnection,
   AuditEntryTypeCount,
@@ -19,16 +21,24 @@ import type {
   CustomerRequestConnection,
   CustomerRequestInput,
   CustomerUpsertInput,
+  Cycle,
   CycleConnection,
   Document,
   DocumentConnection,
+  DocumentCreateInput,
+  DocumentUpdateInput,
   FileUpload,
   FileUploadInput,
   Initiative,
   InitiativeConnection,
   InitiativeMutationInput,
+  InitiativeUpdate,
+  InitiativeUpdateCreateInput,
   Issue,
+  IssueConnection,
   IssueCreateInput,
+  IssueFilter,
+  IssueLabel,
   IssueLabelConnection,
   IssueRecordPage,
   IssueUpdateInput,
@@ -36,17 +46,32 @@ import type {
   Organization,
   Project,
   ProjectConnection,
+  ProjectMilestone,
   ProjectMilestoneConnection,
+  ProjectMilestoneMutationInput,
+  ProjectMilestoneReorderInput,
   ProjectMutationInput,
   ProjectRecordPage,
+  ProjectUpdate,
+  ProjectUpdateCreateInput,
+  ProjectUpdateMutationInput,
   Release,
   ReleaseConnection,
   SignedFiles,
+  Team,
   TeamConnection,
+  User,
   UserConnection,
   Viewer,
   Webhook,
   WebhookConnection,
+  WebhookCreateInput,
+  WebhookDelivery,
+  WebhookDeliveryPage,
+  WebhookFailureEvent,
+  WebhookUpdateInput,
+  WebhookWithSecret,
+  WorkflowState,
   WorkflowStateConnection,
 } from './models.js'
 import type { ApiTransport, RequestOptions } from '../http.js'
@@ -61,7 +86,7 @@ export interface GetAttachmentsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -91,7 +116,7 @@ export interface GetCommentsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -119,7 +144,7 @@ export interface GetCustomerRequestsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -156,7 +181,7 @@ export interface GetCustomersQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -179,6 +204,16 @@ export interface PutCustomersRequest {
   body: CustomerUpsertInput
 }
 
+/** Arguments of `deleteCustomersId`. */
+export interface DeleteCustomersIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getCustomersId`. */
+export interface GetCustomersIdRequest {
+  path: { id: string }
+}
+
 /** Arguments of `patchCustomersId`. */
 export interface PatchCustomersIdRequest {
   path: { id: string }
@@ -195,7 +230,7 @@ export interface GetCyclesQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -210,6 +245,11 @@ export interface GetCyclesRequest {
   query?: GetCyclesQuery
 }
 
+/** Arguments of `getCyclesId`. */
+export interface GetCyclesIdRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/documents`. */
 export interface GetDocumentsQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -220,7 +260,7 @@ export interface GetDocumentsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -235,9 +275,44 @@ export interface GetDocumentsRequest {
   query?: GetDocumentsQuery
 }
 
+/** Query parameters of `GET /api/documents`. */
+export interface GetDocumentsLegacyQuery {
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** filter object (JSON). Filterable fields: id, title, slugId, creator, teams, projects, issue, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  filter?: Record<string, unknown>
+  /** Only resources of these teams (comma-separated ids). */
+  teamId?: string
+  /** Text search over title and content. */
+  q?: string
+  /** false (default) returns active documents, true only archived ones, all both. */
+  archived?: "true" | "false" | "all"
+}
+
+/** Arguments of `getDocumentsLegacy`. */
+export interface GetDocumentsLegacyRequest {
+  query?: GetDocumentsLegacyQuery
+}
+
+/** Arguments of `postDocuments`. */
+export interface PostDocumentsRequest {
+  body: DocumentCreateInput
+}
+
+/** Arguments of `deleteDocumentsId`. */
+export interface DeleteDocumentsIdRequest {
+  path: { id: string }
+}
+
 /** Arguments of `getDocumentsId`. */
 export interface GetDocumentsIdRequest {
   path: { id: string }
+}
+
+/** Arguments of `patchDocumentsId`. */
+export interface PatchDocumentsIdRequest {
+  path: { id: string }
+  body: DocumentUpdateInput
 }
 
 /** Arguments of `postFiles`. */
@@ -258,6 +333,23 @@ export interface GetFilesSignRequest {
   query: GetFilesSignQuery
 }
 
+/** Query parameters of `GET /api/files/signed/{name}`. */
+export interface GetFilesSignedNameQuery {
+  expires: number
+  signature: string
+}
+
+/** Arguments of `getFilesSignedName`. */
+export interface GetFilesSignedNameRequest {
+  path: { name: string }
+  query: GetFilesSignedNameQuery
+}
+
+/** Arguments of `putFilesUploadsToken`. */
+export interface PutFilesUploadsTokenRequest {
+  path: { token: string }
+}
+
 /** Query parameters of `GET /api/initiatives`. */
 export interface GetInitiativesQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -268,7 +360,7 @@ export interface GetInitiativesQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -286,10 +378,42 @@ export interface PostInitiativesRequest {
   body: InitiativeMutationInput
 }
 
+/** Arguments of `deleteInitiativesId`. */
+export interface DeleteInitiativesIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getInitiativesId`. */
+export interface GetInitiativesIdRequest {
+  path: { id: string }
+}
+
 /** Arguments of `patchInitiativesId`. */
 export interface PatchInitiativesIdRequest {
   path: { id: string }
   body: InitiativeMutationInput
+}
+
+/** Arguments of `getInitiativesIdUpdates`. */
+export interface GetInitiativesIdUpdatesRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postInitiativesIdUpdates`. */
+export interface PostInitiativesIdUpdatesRequest {
+  path: { id: string }
+  body: InitiativeUpdateCreateInput
+}
+
+/** Arguments of `deleteInitiativesIdUpdatesUpdateId`. */
+export interface DeleteInitiativesIdUpdatesUpdateIdRequest {
+  path: { id: string; updateId: string }
+}
+
+/** Arguments of `patchInitiativesIdUpdatesUpdateId`. */
+export interface PatchInitiativesIdUpdatesUpdateIdRequest {
+  path: { id: string; updateId: string }
+  body: ProjectUpdateMutationInput
 }
 
 /** Query parameters of `GET /api/issue-labels`. */
@@ -302,7 +426,7 @@ export interface GetIssueLabelsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -319,25 +443,89 @@ export interface GetIssueLabelsRequest {
   query?: GetIssueLabelsQuery
 }
 
+/** Arguments of `getIssueLabelsId`. */
+export interface GetIssueLabelsIdRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/issue-records`. */
 export interface GetIssueRecordsQuery {
+  /** Page size counting forward from `after` (1-100, default 50). Alias: limit. */
+  first?: number
+  /** Return nodes after this cursor (pageInfo.endCursor). Alias: cursor. */
+  after?: string
+  /** Page size counting backward from `before` (1-100); without `before` the final page. */
+  last?: number
+  /** Return nodes before this cursor (pageInfo.startCursor). */
+  before?: string
+  /** Sort field; timestamps are newest first. */
+  orderBy?: "createdAt" | "updatedAt" | "priority" | "title" | "sortOrder"
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** Filter tree (JSON), see IssueFilter. */
+  filter?: IssueFilter
+  /** Legacy page size (1-500, default 100), or an alias of first in connection form (1-100). */
   limit?: number
+  /** Legacy continuation token (nextCursor), or an alias of after in connection form. */
   cursor?: string
+  /** Legacy ordering (default sortOrder); an alias of orderBy in connection form. */
   sort?: "sortOrder" | "priority" | "createdAt" | "updatedAt" | "title"
+  /** Sort direction. Default asc, except createdAt and updatedAt in connection form (desc). */
   direction?: "asc" | "desc"
+  /** Alias of direction. */
+  orderDirection?: "asc" | "desc"
+  /** Text search over title and identifier. */
   q?: string
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
+  /** Only issues of these projects (comma-separated ids). */
   projectId?: string
+  /** Only issues in these workflow states (comma-separated ids). */
   stateId?: string
-  archived?: "true" | "false" | "all"
-  /** JSON issue filter tree {and,or,not,field,operator,values}. */
-  filter?: string
+  /** false (default) returns active issues, true only archived ones, all both. includeArchived=true is the same as archived=all. */
+  archived?: "false" | "true" | "all"
+  /** Count all matching issues: `total` in the legacy page, `totalCount` in a connection. */
+  includeTotal?: boolean
 }
 
 /** Arguments of `getIssueRecords`. */
 export interface GetIssueRecordsRequest {
   query?: GetIssueRecordsQuery
+}
+
+/** Query parameters of `GET /api/issue-records`. */
+export interface GetIssueRecordsLegacyQuery {
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** Filter tree (JSON), see IssueFilter. */
+  filter?: IssueFilter
+  /** Legacy page size (1-500, default 100), or an alias of first in connection form (1-100). */
+  limit?: number
+  /** Legacy continuation token (nextCursor), or an alias of after in connection form. */
+  cursor?: string
+  /** Legacy ordering (default sortOrder); an alias of orderBy in connection form. */
+  sort?: "sortOrder" | "priority" | "createdAt" | "updatedAt" | "title"
+  /** Sort direction. Default asc, except createdAt and updatedAt in connection form (desc). */
+  direction?: "asc" | "desc"
+  /** Alias of direction. */
+  orderDirection?: "asc" | "desc"
+  /** Text search over title and identifier. */
+  q?: string
+  /** Only resources of these teams (comma-separated ids). */
+  teamId?: string
+  /** Only issues of these projects (comma-separated ids). */
+  projectId?: string
+  /** Only issues in these workflow states (comma-separated ids). */
+  stateId?: string
+  /** false (default) returns active issues, true only archived ones, all both. includeArchived=true is the same as archived=all. */
+  archived?: "false" | "true" | "all"
+  /** Count all matching issues: `total` in the legacy page, `totalCount` in a connection. */
+  includeTotal?: boolean
+}
+
+/** Arguments of `getIssueRecordsLegacy`. */
+export interface GetIssueRecordsLegacyRequest {
+  query?: GetIssueRecordsLegacyQuery
 }
 
 /** Arguments of `getIssueRecordsId`. */
@@ -350,10 +538,20 @@ export interface PostIssuesRequest {
   body: IssueCreateInput
 }
 
+/** Arguments of `deleteIssuesId`. */
+export interface DeleteIssuesIdRequest {
+  path: { id: string }
+}
+
 /** Arguments of `patchIssuesId`. */
 export interface PatchIssuesIdRequest {
   path: { id: string }
   body: IssueUpdateInput
+}
+
+/** Arguments of `deleteIssuesIdAttachmentsAttachmentId`. */
+export interface DeleteIssuesIdAttachmentsAttachmentIdRequest {
+  path: { id: string; attachmentId: string }
 }
 
 /** Arguments of `patchIssuesIdAttachmentsAttachmentId`. */
@@ -368,6 +566,11 @@ export interface PostIssuesIdCommentsRequest {
   body: CommentCreateInput
 }
 
+/** Arguments of `deleteIssuesIdCommentsCommentId`. */
+export interface DeleteIssuesIdCommentsCommentIdRequest {
+  path: { id: string; commentId: string }
+}
+
 /** Arguments of `patchIssuesIdCommentsCommentId`. */
 export interface PatchIssuesIdCommentsCommentIdRequest {
   path: { id: string; commentId: string }
@@ -380,6 +583,22 @@ export interface PostIssuesIdLinkAttachmentsRequest {
   body: LinkAttachmentInput
 }
 
+/** Arguments of `getOauthApplicationsIdWebhook`. */
+export interface GetOauthApplicationsIdWebhookRequest {
+  path: { id: string }
+}
+
+/** Arguments of `putOauthApplicationsIdWebhook`. */
+export interface PutOauthApplicationsIdWebhookRequest {
+  path: { id: string }
+  body: ApplicationWebhookInput
+}
+
+/** Arguments of `postOauthApplicationsIdWebhookRotateSecret`. */
+export interface PostOauthApplicationsIdWebhookRotateSecretRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/project-milestones`. */
 export interface GetProjectMilestonesQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -390,7 +609,7 @@ export interface GetProjectMilestonesQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -415,14 +634,18 @@ export interface GetProjectsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
-  /** filter object (JSON). Filterable fields: id, name, slugId, health, priority, status, lead, teams, labels, members, initiatives, startDate, targetDate, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
-  filter?: Record<string, unknown>
   /** Only resources of these teams (comma-separated ids). */
   teamId?: string
+  /** A filter object in the connection form; an array of {field, operator, values} conditions in the original form. Filterable fields of the connection form: id, name, slugId, health, priority, status, lead, teams, labels, members, initiatives, startDate, targetDate, createdAt, updatedAt, archivedAt. */
+  filter?: Record<string, unknown> | ({
+      field: "status" | "priority" | "lead" | "members" | "health" | "dates" | "milestones" | "labels" | "teams" | "project" | "customers"
+      operator: "is" | "isNot" | "gte" | "lte" | "eq" | "neq"
+      values: string[]
+    })[]
 }
 
 /** Arguments of `getProjects`. */
@@ -430,15 +653,99 @@ export interface GetProjectsRequest {
   query?: GetProjectsQuery
 }
 
+/** Query parameters of `GET /api/projects`. */
+export interface GetProjectsLegacyQuery {
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** Only resources of these teams (comma-separated ids). */
+  teamId?: string
+  /** Text search over name and summary. */
+  q?: string
+  /** false (default) returns active projects, true only archived ones, all both. */
+  archived?: "true" | "false" | "all"
+  /** Page size of the original form (default and maximum as the directory allows). */
+  limit?: number
+  /** nextCursor of the previous page. */
+  cursor?: string
+  /** Count all matching projects (total). */
+  includeTotal?: boolean
+  /** A filter object in the connection form; an array of {field, operator, values} conditions in the original form. Filterable fields of the connection form: id, name, slugId, health, priority, status, lead, teams, labels, members, initiatives, startDate, targetDate, createdAt, updatedAt, archivedAt. */
+  filter?: Record<string, unknown> | ({
+      field: "status" | "priority" | "lead" | "members" | "health" | "dates" | "milestones" | "labels" | "teams" | "project" | "customers"
+      operator: "is" | "isNot" | "gte" | "lte" | "eq" | "neq"
+      values: string[]
+    })[]
+}
+
+/** Arguments of `getProjectsLegacy`. */
+export interface GetProjectsLegacyRequest {
+  query?: GetProjectsLegacyQuery
+}
+
 /** Arguments of `postProjects`. */
 export interface PostProjectsRequest {
   body: ProjectMutationInput
+}
+
+/** Arguments of `deleteProjectsId`. */
+export interface DeleteProjectsIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getProjectsId`. */
+export interface GetProjectsIdRequest {
+  path: { id: string }
 }
 
 /** Arguments of `patchProjectsId`. */
 export interface PatchProjectsIdRequest {
   path: { id: string }
   body: ProjectMutationInput
+}
+
+/** Arguments of `postProjectsIdMilestones`. */
+export interface PostProjectsIdMilestonesRequest {
+  path: { id: string }
+  body: ProjectMilestoneMutationInput
+}
+
+/** Arguments of `deleteProjectsIdMilestonesMilestoneId`. */
+export interface DeleteProjectsIdMilestonesMilestoneIdRequest {
+  path: { id: string; milestoneId: string }
+}
+
+/** Arguments of `patchProjectsIdMilestonesMilestoneId`. */
+export interface PatchProjectsIdMilestonesMilestoneIdRequest {
+  path: { id: string; milestoneId: string }
+  body: ProjectMilestoneMutationInput
+}
+
+/** Arguments of `postProjectsIdMilestonesReorder`. */
+export interface PostProjectsIdMilestonesReorderRequest {
+  path: { id: string }
+  body: ProjectMilestoneReorderInput
+}
+
+/** Arguments of `getProjectsIdUpdates`. */
+export interface GetProjectsIdUpdatesRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postProjectsIdUpdates`. */
+export interface PostProjectsIdUpdatesRequest {
+  path: { id: string }
+  body: ProjectUpdateCreateInput
+}
+
+/** Arguments of `deleteProjectsIdUpdatesUpdateId`. */
+export interface DeleteProjectsIdUpdatesUpdateIdRequest {
+  path: { id: string; updateId: string }
+}
+
+/** Arguments of `patchProjectsIdUpdatesUpdateId`. */
+export interface PatchProjectsIdUpdatesUpdateIdRequest {
+  path: { id: string; updateId: string }
+  body: ProjectUpdateMutationInput
 }
 
 /** Query parameters of `GET /api/releases`. */
@@ -451,7 +758,7 @@ export interface GetReleasesQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -466,6 +773,23 @@ export interface GetReleasesRequest {
   query?: GetReleasesQuery
 }
 
+/** Query parameters of `GET /api/releases`. */
+export interface GetReleasesLegacyQuery {
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** filter object (JSON). Filterable fields: id, name, slugId, status, pipeline, createdAt, updatedAt, archivedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  filter?: Record<string, unknown>
+  /** Only releases of these pipelines. */
+  pipelineId?: string
+  /** Only releases with this status. */
+  status?: string
+}
+
+/** Arguments of `getReleasesLegacy`. */
+export interface GetReleasesLegacyRequest {
+  query?: GetReleasesLegacyQuery
+}
+
 /** Query parameters of `GET /api/teams`. */
 export interface GetTeamsQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -476,7 +800,7 @@ export interface GetTeamsQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -489,6 +813,11 @@ export interface GetTeamsRequest {
   query?: GetTeamsQuery
 }
 
+/** Arguments of `getTeamsId`. */
+export interface GetTeamsIdRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/users`. */
 export interface GetUsersQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -499,7 +828,7 @@ export interface GetUsersQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -514,6 +843,11 @@ export interface GetUsersRequest {
   query?: GetUsersQuery
 }
 
+/** Arguments of `getUsersId`. */
+export interface GetUsersIdRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/webhooks`. */
 export interface GetWebhooksQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -524,7 +858,7 @@ export interface GetWebhooksQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt" | "updatedAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -537,6 +871,86 @@ export interface GetWebhooksRequest {
   query?: GetWebhooksQuery
 }
 
+/** Query parameters of `GET /api/webhooks`. */
+export interface GetWebhooksLegacyQuery {
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** filter object (JSON). Filterable fields: id, name, url, enabled, resourceTypes, teams, createdAt, updatedAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  filter?: Record<string, unknown>
+}
+
+/** Arguments of `getWebhooksLegacy`. */
+export interface GetWebhooksLegacyRequest {
+  query?: GetWebhooksLegacyQuery
+}
+
+/** Arguments of `postWebhooks`. */
+export interface PostWebhooksRequest {
+  body: WebhookCreateInput
+}
+
+/** Arguments of `deleteWebhooksId`. */
+export interface DeleteWebhooksIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `getWebhooksId`. */
+export interface GetWebhooksIdRequest {
+  path: { id: string }
+}
+
+/** Arguments of `patchWebhooksId`. */
+export interface PatchWebhooksIdRequest {
+  path: { id: string }
+  body: WebhookUpdateInput
+}
+
+/** Query parameters of `GET /api/webhooks/{id}/deliveries`. */
+export interface GetWebhooksIdDeliveriesQuery {
+  /** failed also lists deliveries that are retrying. */
+  status?: "pending" | "delivering" | "retrying" | "succeeded" | "failed" | "canceled"
+  /** nextCursor of the previous page. */
+  cursor?: string
+  /** Page size (1-100, default 50). */
+  limit?: number
+}
+
+/** Arguments of `getWebhooksIdDeliveries`. */
+export interface GetWebhooksIdDeliveriesRequest {
+  path: { id: string }
+  query?: GetWebhooksIdDeliveriesQuery
+}
+
+/** Arguments of `getWebhooksIdDeliveriesDeliveryId`. */
+export interface GetWebhooksIdDeliveriesDeliveryIdRequest {
+  path: { id: string; deliveryId: string }
+}
+
+/** Arguments of `postWebhooksIdDeliveriesDeliveryIdRedeliver`. */
+export interface PostWebhooksIdDeliveriesDeliveryIdRedeliverRequest {
+  path: { id: string; deliveryId: string }
+}
+
+/** Arguments of `getWebhooksIdFailures`. */
+export interface GetWebhooksIdFailuresRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postWebhooksIdRevokeSecret`. */
+export interface PostWebhooksIdRevokeSecretRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postWebhooksIdRotateSecret`. */
+export interface PostWebhooksIdRotateSecretRequest {
+  path: { id: string }
+}
+
+/** Arguments of `postWebhooksIdTest`. */
+export interface PostWebhooksIdTestRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/workflow-states`. */
 export interface GetWorkflowStatesQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -547,7 +961,7 @@ export interface GetWorkflowStatesQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -562,6 +976,11 @@ export interface GetWorkflowStatesRequest {
   query?: GetWorkflowStatesQuery
 }
 
+/** Arguments of `getWorkflowStatesId`. */
+export interface GetWorkflowStatesIdRequest {
+  path: { id: string }
+}
+
 /** Query parameters of `GET /api/workspace/audit-log`. */
 export interface GetWorkspaceAuditLogQuery {
   /** Page size counting forward from `after` (1-250, default 50). Alias: limit. */
@@ -572,7 +991,7 @@ export interface GetWorkspaceAuditLogQuery {
   last?: number
   /** Return nodes before this cursor (pageInfo.startCursor). */
   before?: string
-  /** Sort field; results are newest first. */
+  /** Sort field; timestamps are newest first. */
   orderBy?: "createdAt"
   /** Include archived resources. */
   includeArchived?: boolean
@@ -594,6 +1013,33 @@ export interface GetWorkspaceAuditLogRequest {
   query?: GetWorkspaceAuditLogQuery
 }
 
+/** Query parameters of `GET /api/workspace/audit-log`. */
+export interface GetWorkspaceAuditLogLegacyQuery {
+  /** Include archived resources. */
+  includeArchived?: boolean
+  /** filter object (JSON). Filterable fields: id, type, action, resourceType, resourceId, actor, ip, createdAt. Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or. */
+  filter?: Record<string, unknown>
+  type?: string
+  actorId?: string
+  actorEmail?: string
+  resourceType?: string
+  resourceId?: string
+  ip?: string
+  /** RFC 3339, YYYY-MM-DD or ISO 8601 duration (-P7D). */
+  since?: string
+  until?: string
+}
+
+/** Arguments of `getWorkspaceAuditLogLegacy`. */
+export interface GetWorkspaceAuditLogLegacyRequest {
+  query?: GetWorkspaceAuditLogLegacyQuery
+}
+
+/** Arguments of `getUploadsName`. */
+export interface GetUploadsNameRequest {
+  path: { name: string }
+}
+
 /** Method, path and success statuses of every typed operation. */
 export const operations = {
   getAttachments: { method: "GET", path: "/api/attachments", operationId: "get_attachments", successStatuses: [200] },
@@ -605,37 +1051,89 @@ export const operations = {
   getCustomers: { method: "GET", path: "/api/customers", operationId: "get_customers", successStatuses: [200] },
   postCustomers: { method: "POST", path: "/api/customers", operationId: "post_customers", successStatuses: [201] },
   putCustomers: { method: "PUT", path: "/api/customers", operationId: "put_customers", successStatuses: [200, 201] },
+  deleteCustomersId: { method: "DELETE", path: "/api/customers/{id}", operationId: "delete_customers_id", successStatuses: [204] },
+  getCustomersId: { method: "GET", path: "/api/customers/{id}", operationId: "get_customers_id", successStatuses: [200] },
   patchCustomersId: { method: "PATCH", path: "/api/customers/{id}", operationId: "patch_customers_id", successStatuses: [200] },
   getCycles: { method: "GET", path: "/api/cycles", operationId: "get_cycles", successStatuses: [200] },
+  getCyclesId: { method: "GET", path: "/api/cycles/{id}", operationId: "get_cycles_id", successStatuses: [200] },
   getDocuments: { method: "GET", path: "/api/documents", operationId: "get_documents", successStatuses: [200] },
+  getDocumentsLegacy: { method: "GET", path: "/api/documents", operationId: "get_documents_legacy", successStatuses: [200] },
+  postDocuments: { method: "POST", path: "/api/documents", operationId: "post_documents", successStatuses: [201] },
+  deleteDocumentsId: { method: "DELETE", path: "/api/documents/{id}", operationId: "delete_documents_id", successStatuses: [204] },
   getDocumentsId: { method: "GET", path: "/api/documents/{id}", operationId: "get_documents_id", successStatuses: [200] },
+  patchDocumentsId: { method: "PATCH", path: "/api/documents/{id}", operationId: "patch_documents_id", successStatuses: [200] },
   postFiles: { method: "POST", path: "/api/files", operationId: "post_files", successStatuses: [200] },
   getFilesSign: { method: "GET", path: "/api/files/sign", operationId: "get_files_sign", successStatuses: [200] },
+  getFilesSignedName: { method: "GET", path: "/api/files/signed/{name}", operationId: "get_files_signed_name", successStatuses: [200] },
+  putFilesUploadsToken: { method: "PUT", path: "/api/files/uploads/{token}", operationId: "put_files_uploads_token", successStatuses: [204] },
   getInitiatives: { method: "GET", path: "/api/initiatives", operationId: "get_initiatives", successStatuses: [200] },
   postInitiatives: { method: "POST", path: "/api/initiatives", operationId: "post_initiatives", successStatuses: [201] },
+  deleteInitiativesId: { method: "DELETE", path: "/api/initiatives/{id}", operationId: "delete_initiatives_id", successStatuses: [204] },
+  getInitiativesId: { method: "GET", path: "/api/initiatives/{id}", operationId: "get_initiatives_id", successStatuses: [200] },
   patchInitiativesId: { method: "PATCH", path: "/api/initiatives/{id}", operationId: "patch_initiatives_id", successStatuses: [200] },
+  getInitiativesIdUpdates: { method: "GET", path: "/api/initiatives/{id}/updates", operationId: "get_initiatives_id_updates", successStatuses: [200] },
+  postInitiativesIdUpdates: { method: "POST", path: "/api/initiatives/{id}/updates", operationId: "post_initiatives_id_updates", successStatuses: [201] },
+  deleteInitiativesIdUpdatesUpdateId: { method: "DELETE", path: "/api/initiatives/{id}/updates/{updateId}", operationId: "delete_initiatives_id_updates_updateId", successStatuses: [204] },
+  patchInitiativesIdUpdatesUpdateId: { method: "PATCH", path: "/api/initiatives/{id}/updates/{updateId}", operationId: "patch_initiatives_id_updates_updateId", successStatuses: [200] },
   getIssueLabels: { method: "GET", path: "/api/issue-labels", operationId: "get_issue_labels", successStatuses: [200] },
+  getIssueLabelsId: { method: "GET", path: "/api/issue-labels/{id}", operationId: "get_issue_labels_id", successStatuses: [200] },
   getIssueRecords: { method: "GET", path: "/api/issue-records", operationId: "get_issue_records", successStatuses: [200] },
+  getIssueRecordsLegacy: { method: "GET", path: "/api/issue-records", operationId: "get_issue_records_legacy", successStatuses: [200] },
   getIssueRecordsId: { method: "GET", path: "/api/issue-records/{id}", operationId: "get_issue_records_id", successStatuses: [200] },
   postIssues: { method: "POST", path: "/api/issues", operationId: "post_issues", successStatuses: [201] },
+  deleteIssuesId: { method: "DELETE", path: "/api/issues/{id}", operationId: "delete_issues_id", successStatuses: [204] },
   patchIssuesId: { method: "PATCH", path: "/api/issues/{id}", operationId: "patch_issues_id", successStatuses: [200] },
+  deleteIssuesIdAttachmentsAttachmentId: { method: "DELETE", path: "/api/issues/{id}/attachments/{attachmentId}", operationId: "delete_issues_id_attachments_attachmentId", successStatuses: [204] },
   patchIssuesIdAttachmentsAttachmentId: { method: "PATCH", path: "/api/issues/{id}/attachments/{attachmentId}", operationId: "patch_issues_id_attachments_attachmentId", successStatuses: [200] },
   postIssuesIdComments: { method: "POST", path: "/api/issues/{id}/comments", operationId: "post_issues_id_comments", successStatuses: [201] },
+  deleteIssuesIdCommentsCommentId: { method: "DELETE", path: "/api/issues/{id}/comments/{commentId}", operationId: "delete_issues_id_comments_commentId", successStatuses: [204] },
   patchIssuesIdCommentsCommentId: { method: "PATCH", path: "/api/issues/{id}/comments/{commentId}", operationId: "patch_issues_id_comments_commentId", successStatuses: [200] },
   postIssuesIdLinkAttachments: { method: "POST", path: "/api/issues/{id}/link-attachments", operationId: "post_issues_id_link_attachments", successStatuses: [200, 201] },
+  getOauthApplicationsIdWebhook: { method: "GET", path: "/api/oauth-applications/{id}/webhook", operationId: "get_oauth_applications_id_webhook", successStatuses: [200] },
+  putOauthApplicationsIdWebhook: { method: "PUT", path: "/api/oauth-applications/{id}/webhook", operationId: "put_oauth_applications_id_webhook", successStatuses: [200] },
+  postOauthApplicationsIdWebhookRotateSecret: { method: "POST", path: "/api/oauth-applications/{id}/webhook/rotate-secret", operationId: "post_oauth_applications_id_webhook_rotate_secret", successStatuses: [200] },
   getOrganization: { method: "GET", path: "/api/organization", operationId: "get_organization", successStatuses: [200] },
   getProjectMilestones: { method: "GET", path: "/api/project-milestones", operationId: "get_project_milestones", successStatuses: [200] },
   getProjects: { method: "GET", path: "/api/projects", operationId: "get_projects", successStatuses: [200] },
+  getProjectsLegacy: { method: "GET", path: "/api/projects", operationId: "get_projects_legacy", successStatuses: [200] },
   postProjects: { method: "POST", path: "/api/projects", operationId: "post_projects", successStatuses: [201] },
+  deleteProjectsId: { method: "DELETE", path: "/api/projects/{id}", operationId: "delete_projects_id", successStatuses: [204] },
+  getProjectsId: { method: "GET", path: "/api/projects/{id}", operationId: "get_projects_id", successStatuses: [200] },
   patchProjectsId: { method: "PATCH", path: "/api/projects/{id}", operationId: "patch_projects_id", successStatuses: [200] },
+  postProjectsIdMilestones: { method: "POST", path: "/api/projects/{id}/milestones", operationId: "post_projects_id_milestones", successStatuses: [201] },
+  deleteProjectsIdMilestonesMilestoneId: { method: "DELETE", path: "/api/projects/{id}/milestones/{milestoneId}", operationId: "delete_projects_id_milestones_milestoneId", successStatuses: [204] },
+  patchProjectsIdMilestonesMilestoneId: { method: "PATCH", path: "/api/projects/{id}/milestones/{milestoneId}", operationId: "patch_projects_id_milestones_milestoneId", successStatuses: [200] },
+  postProjectsIdMilestonesReorder: { method: "POST", path: "/api/projects/{id}/milestones/reorder", operationId: "post_projects_id_milestones_reorder", successStatuses: [200] },
+  getProjectsIdUpdates: { method: "GET", path: "/api/projects/{id}/updates", operationId: "get_projects_id_updates", successStatuses: [200] },
+  postProjectsIdUpdates: { method: "POST", path: "/api/projects/{id}/updates", operationId: "post_projects_id_updates", successStatuses: [201] },
+  deleteProjectsIdUpdatesUpdateId: { method: "DELETE", path: "/api/projects/{id}/updates/{updateId}", operationId: "delete_projects_id_updates_updateId", successStatuses: [204] },
+  patchProjectsIdUpdatesUpdateId: { method: "PATCH", path: "/api/projects/{id}/updates/{updateId}", operationId: "patch_projects_id_updates_updateId", successStatuses: [200] },
   getReleases: { method: "GET", path: "/api/releases", operationId: "get_releases", successStatuses: [200] },
+  getReleasesLegacy: { method: "GET", path: "/api/releases", operationId: "get_releases_legacy", successStatuses: [200] },
   getTeams: { method: "GET", path: "/api/teams", operationId: "get_teams", successStatuses: [200] },
+  getTeamsId: { method: "GET", path: "/api/teams/{id}", operationId: "get_teams_id", successStatuses: [200] },
   getUsers: { method: "GET", path: "/api/users", operationId: "get_users", successStatuses: [200] },
+  getUsersId: { method: "GET", path: "/api/users/{id}", operationId: "get_users_id", successStatuses: [200] },
   getViewer: { method: "GET", path: "/api/viewer", operationId: "get_viewer", successStatuses: [200] },
   getWebhooks: { method: "GET", path: "/api/webhooks", operationId: "get_webhooks", successStatuses: [200] },
+  getWebhooksLegacy: { method: "GET", path: "/api/webhooks", operationId: "get_webhooks_legacy", successStatuses: [200] },
+  postWebhooks: { method: "POST", path: "/api/webhooks", operationId: "post_webhooks", successStatuses: [201] },
+  deleteWebhooksId: { method: "DELETE", path: "/api/webhooks/{id}", operationId: "delete_webhooks_id", successStatuses: [204] },
+  getWebhooksId: { method: "GET", path: "/api/webhooks/{id}", operationId: "get_webhooks_id", successStatuses: [200] },
+  patchWebhooksId: { method: "PATCH", path: "/api/webhooks/{id}", operationId: "patch_webhooks_id", successStatuses: [200] },
+  getWebhooksIdDeliveries: { method: "GET", path: "/api/webhooks/{id}/deliveries", operationId: "get_webhooks_id_deliveries", successStatuses: [200] },
+  getWebhooksIdDeliveriesDeliveryId: { method: "GET", path: "/api/webhooks/{id}/deliveries/{deliveryId}", operationId: "get_webhooks_id_deliveries_deliveryId", successStatuses: [200] },
+  postWebhooksIdDeliveriesDeliveryIdRedeliver: { method: "POST", path: "/api/webhooks/{id}/deliveries/{deliveryId}/redeliver", operationId: "post_webhooks_id_deliveries_deliveryId_redeliver", successStatuses: [200] },
+  getWebhooksIdFailures: { method: "GET", path: "/api/webhooks/{id}/failures", operationId: "get_webhooks_id_failures", successStatuses: [200] },
+  postWebhooksIdRevokeSecret: { method: "POST", path: "/api/webhooks/{id}/revoke-secret", operationId: "post_webhooks_id_revoke_secret", successStatuses: [204] },
+  postWebhooksIdRotateSecret: { method: "POST", path: "/api/webhooks/{id}/rotate-secret", operationId: "post_webhooks_id_rotate_secret", successStatuses: [200] },
+  postWebhooksIdTest: { method: "POST", path: "/api/webhooks/{id}/test", operationId: "post_webhooks_id_test", successStatuses: [200] },
   getWorkflowStates: { method: "GET", path: "/api/workflow-states", operationId: "get_workflow_states", successStatuses: [200] },
+  getWorkflowStatesId: { method: "GET", path: "/api/workflow-states/{id}", operationId: "get_workflow_states_id", successStatuses: [200] },
   getWorkspaceAuditLog: { method: "GET", path: "/api/workspace/audit-log", operationId: "get_workspace_audit_log", successStatuses: [200] },
+  getWorkspaceAuditLogLegacy: { method: "GET", path: "/api/workspace/audit-log", operationId: "get_workspace_audit_log_legacy", successStatuses: [200] },
   getWorkspaceAuditLogTypes: { method: "GET", path: "/api/workspace/audit-log/types", operationId: "get_workspace_audit_log_types", successStatuses: [200] },
+  getUploadsName: { method: "GET", path: "/uploads/{name}", operationId: "get_uploads_name", successStatuses: [200] },
 } as const
 
 export type OperationName = keyof typeof operations
@@ -721,6 +1219,22 @@ export class FlowApi {
   }
 
   /**
+   * `DELETE /api/customers/{id}`
+   * Delete a customer
+   */
+  deleteCustomersId(request: DeleteCustomersIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/customers/{id}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `GET /api/customers/{id}`
+   * Get a customer
+   */
+  getCustomersId(request: GetCustomersIdRequest, options?: RequestOptions): Promise<Customer> {
+    return this.transport.request({ method: "GET", path: "/api/customers/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `PATCH /api/customers/{id}`
    * Update a customer
    */
@@ -737,12 +1251,48 @@ export class FlowApi {
   }
 
   /**
+   * `GET /api/cycles/{id}`
+   * Get a cycle
+   */
+  getCyclesId(request: GetCyclesIdRequest, options?: RequestOptions): Promise<Cycle> {
+    return this.transport.request({ method: "GET", path: "/api/cycles/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `GET /api/documents`
    * List documents
    * Connection with pagination arguments; otherwise the legacy array (q, teamId, archived).
+   * Returns the connection form; `getDocumentsLegacy` returns the original response.
    */
-  getDocuments(request?: GetDocumentsRequest, options?: RequestOptions): Promise<DocumentConnection | Document[]> {
+  getDocuments(request?: GetDocumentsRequest, options?: RequestOptions): Promise<DocumentConnection> {
+    return this.transport.request({ method: "GET", path: "/api/documents", query: { ...request?.query, connection: "1" }, ...options })
+  }
+
+  /**
+   * `GET /api/documents`
+   * List documents
+   * Connection with pagination arguments; otherwise the legacy array (q, teamId, archived).
+   * Returns the original response (no pagination arguments); `getDocuments` returns the connection form.
+   */
+  getDocumentsLegacy(request?: GetDocumentsLegacyRequest, options?: RequestOptions): Promise<Document[]> {
     return this.transport.request({ method: "GET", path: "/api/documents", query: request?.query, ...options })
+  }
+
+  /**
+   * `POST /api/documents`
+   * Create a document
+   * Content is Markdown. An actor=app token may name the external author with createAsUser.
+   */
+  postDocuments(request: PostDocumentsRequest, options?: RequestOptions): Promise<Document> {
+    return this.transport.request({ method: "POST", path: "/api/documents", body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/documents/{id}`
+   * Delete a document
+   */
+  deleteDocumentsId(request: DeleteDocumentsIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/documents/{id}", pathParams: request.path, expect: 'none', ...options })
   }
 
   /**
@@ -751,6 +1301,15 @@ export class FlowApi {
    */
   getDocumentsId(request: GetDocumentsIdRequest, options?: RequestOptions): Promise<Document> {
     return this.transport.request({ method: "GET", path: "/api/documents/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `PATCH /api/documents/{id}`
+   * Update a document
+   * Send expectedVersion to detect a concurrent change: the write is then refused with 409 and the current document.
+   */
+  patchDocumentsId(request: PatchDocumentsIdRequest, options?: RequestOptions): Promise<Document> {
+    return this.transport.request({ method: "PATCH", path: "/api/documents/{id}", pathParams: request.path, body: request.body, ...options })
   }
 
   /**
@@ -772,6 +1331,23 @@ export class FlowApi {
   }
 
   /**
+   * `GET /api/files/signed/{name}`
+   * Download through a signed URL
+   */
+  getFilesSignedName(request: GetFilesSignedNameRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "GET", path: "/api/files/signed/{name}", pathParams: request.path, query: request.query, expect: 'none', ...options })
+  }
+
+  /**
+   * `PUT /api/files/uploads/{token}`
+   * Upload file bytes
+   * The token in the URL is the credential. Size must equal the prepared size; one successful PUT per token.
+   */
+  putFilesUploadsToken(request: PutFilesUploadsTokenRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "PUT", path: "/api/files/uploads/{token}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
    * `GET /api/initiatives`
    * List initiatives
    */
@@ -788,11 +1364,63 @@ export class FlowApi {
   }
 
   /**
+   * `DELETE /api/initiatives/{id}`
+   * Delete an initiative
+   */
+  deleteInitiativesId(request: DeleteInitiativesIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/initiatives/{id}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `GET /api/initiatives/{id}`
+   * Get an initiative
+   * By id or slugId.
+   */
+  getInitiativesId(request: GetInitiativesIdRequest, options?: RequestOptions): Promise<Initiative> {
+    return this.transport.request({ method: "GET", path: "/api/initiatives/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `PATCH /api/initiatives/{id}`
    * Update an initiative
    */
   patchInitiativesId(request: PatchInitiativesIdRequest, options?: RequestOptions): Promise<Initiative> {
     return this.transport.request({ method: "PATCH", path: "/api/initiatives/{id}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/initiatives/{id}/updates`
+   * List initiative updates
+   * Newest first. Not paged.
+   */
+  getInitiativesIdUpdates(request: GetInitiativesIdUpdatesRequest, options?: RequestOptions): Promise<InitiativeUpdate[]> {
+    return this.transport.request({ method: "GET", path: "/api/initiatives/{id}/updates", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/initiatives/{id}/updates`
+   * Post an initiative update
+   */
+  postInitiativesIdUpdates(request: PostInitiativesIdUpdatesRequest, options?: RequestOptions): Promise<InitiativeUpdate> {
+    return this.transport.request({ method: "POST", path: "/api/initiatives/{id}/updates", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/initiatives/{id}/updates/{updateId}`
+   * Delete an initiative update
+   * The author or a workspace administrator.
+   */
+  deleteInitiativesIdUpdatesUpdateId(request: DeleteInitiativesIdUpdatesUpdateIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/initiatives/{id}/updates/{updateId}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `PATCH /api/initiatives/{id}/updates/{updateId}`
+   * Edit an initiative update
+   * The author or a workspace administrator. Same body as a project update edit; health is onTrack, atRisk or offTrack.
+   */
+  patchInitiativesIdUpdatesUpdateId(request: PatchInitiativesIdUpdatesUpdateIdRequest, options?: RequestOptions): Promise<InitiativeUpdate> {
+    return this.transport.request({ method: "PATCH", path: "/api/initiatives/{id}/updates/{updateId}", pathParams: request.path, body: request.body, ...options })
   }
 
   /**
@@ -804,11 +1432,30 @@ export class FlowApi {
   }
 
   /**
+   * `GET /api/issue-labels/{id}`
+   * Get an issue label
+   */
+  getIssueLabelsId(request: GetIssueLabelsIdRequest, options?: RequestOptions): Promise<IssueLabel> {
+    return this.transport.request({ method: "GET", path: "/api/issue-labels/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `GET /api/issue-records`
    * Query issues
-   * Cursor paging with limit/cursor (hasMore/nextCursor), sort, direction, teamId, projectId, stateId and the view filter tree in `filter`.
+   * Cursor-paged issue query over an indexed keyset, at most 100 per page. With first/last/after/before/orderBy (or connection=1) the response is a connection and pages in both directions: pageInfo.endCursor continues forward with `first` + `after`, pageInfo.startCursor backward with `last` + `before` (`last` alone returns the final page). Without them the original page {items, hasMore, nextCursor, total} paged with `limit` + `cursor` (forward only) is returned. Cursors are bound to the filter and ordering they were issued for. Default order in connection form is createdAt, newest first.
+   * Returns the connection form; `getIssueRecordsLegacy` returns the original response.
    */
-  getIssueRecords(request?: GetIssueRecordsRequest, options?: RequestOptions): Promise<IssueRecordPage> {
+  getIssueRecords(request?: GetIssueRecordsRequest, options?: RequestOptions): Promise<IssueConnection> {
+    return this.transport.request({ method: "GET", path: "/api/issue-records", query: { ...request?.query, connection: "1" }, ...options })
+  }
+
+  /**
+   * `GET /api/issue-records`
+   * Query issues
+   * Cursor-paged issue query over an indexed keyset, at most 100 per page. With first/last/after/before/orderBy (or connection=1) the response is a connection and pages in both directions: pageInfo.endCursor continues forward with `first` + `after`, pageInfo.startCursor backward with `last` + `before` (`last` alone returns the final page). Without them the original page {items, hasMore, nextCursor, total} paged with `limit` + `cursor` (forward only) is returned. Cursors are bound to the filter and ordering they were issued for. Default order in connection form is createdAt, newest first.
+   * Returns the original response (no pagination arguments); `getIssueRecords` returns the connection form.
+   */
+  getIssueRecordsLegacy(request?: GetIssueRecordsLegacyRequest, options?: RequestOptions): Promise<IssueRecordPage> {
     return this.transport.request({ method: "GET", path: "/api/issue-records", query: request?.query, ...options })
   }
 
@@ -829,11 +1476,27 @@ export class FlowApi {
   }
 
   /**
+   * `DELETE /api/issues/{id}`
+   * Delete an issue
+   */
+  deleteIssuesId(request: DeleteIssuesIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/issues/{id}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
    * `PATCH /api/issues/{id}`
    * Update an issue
    */
   patchIssuesId(request: PatchIssuesIdRequest, options?: RequestOptions): Promise<Issue> {
     return this.transport.request({ method: "PATCH", path: "/api/issues/{id}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/issues/{id}/attachments/{attachmentId}`
+   * Delete an attachment
+   */
+  deleteIssuesIdAttachmentsAttachmentId(request: DeleteIssuesIdAttachmentsAttachmentIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/issues/{id}/attachments/{attachmentId}", pathParams: request.path, expect: 'none', ...options })
   }
 
   /**
@@ -853,6 +1516,14 @@ export class FlowApi {
   }
 
   /**
+   * `DELETE /api/issues/{id}/comments/{commentId}`
+   * Delete a comment
+   */
+  deleteIssuesIdCommentsCommentId(request: DeleteIssuesIdCommentsCommentIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/issues/{id}/comments/{commentId}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
    * `PATCH /api/issues/{id}/comments/{commentId}`
    * Update a comment
    */
@@ -867,6 +1538,31 @@ export class FlowApi {
    */
   postIssuesIdLinkAttachments(request: PostIssuesIdLinkAttachmentsRequest, options?: RequestOptions): Promise<Attachment> {
     return this.transport.request({ method: "POST", path: "/api/issues/{id}/link-attachments", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/oauth-applications/{id}/webhook`
+   * Get the webhook of an OAuth application
+   */
+  getOauthApplicationsIdWebhook(request: GetOauthApplicationsIdWebhookRequest, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
+    return this.transport.request({ method: "GET", path: "/api/oauth-applications/{id}/webhook", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `PUT /api/oauth-applications/{id}/webhook`
+   * Configure the webhook of an OAuth application
+   * Enabling the webhook for the first time creates the application's signing secret, returned once.
+   */
+  putOauthApplicationsIdWebhook(request: PutOauthApplicationsIdWebhookRequest, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
+    return this.transport.request({ method: "PUT", path: "/api/oauth-applications/{id}/webhook", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `POST /api/oauth-applications/{id}/webhook/rotate-secret`
+   * Rotate the signing secret of an application webhook
+   */
+  postOauthApplicationsIdWebhookRotateSecret(request: PostOauthApplicationsIdWebhookRotateSecretRequest, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
+    return this.transport.request({ method: "POST", path: "/api/oauth-applications/{id}/webhook/rotate-secret", pathParams: request.path, ...options })
   }
 
   /**
@@ -889,8 +1585,19 @@ export class FlowApi {
    * `GET /api/projects`
    * List projects
    * With first/last/after/before/orderBy the response is a connection; without them the project directory page (limit/cursor/filter) is returned for existing clients.
+   * Returns the connection form; `getProjectsLegacy` returns the original response.
    */
-  getProjects(request?: GetProjectsRequest, options?: RequestOptions): Promise<ProjectConnection | ProjectRecordPage> {
+  getProjects(request?: GetProjectsRequest, options?: RequestOptions): Promise<ProjectConnection> {
+    return this.transport.request({ method: "GET", path: "/api/projects", query: { ...request?.query, connection: "1" }, ...options })
+  }
+
+  /**
+   * `GET /api/projects`
+   * List projects
+   * With first/last/after/before/orderBy the response is a connection; without them the project directory page (limit/cursor/filter) is returned for existing clients.
+   * Returns the original response (no pagination arguments); `getProjects` returns the connection form.
+   */
+  getProjectsLegacy(request?: GetProjectsLegacyRequest, options?: RequestOptions): Promise<ProjectRecordPage> {
     return this.transport.request({ method: "GET", path: "/api/projects", query: request?.query, ...options })
   }
 
@@ -903,6 +1610,23 @@ export class FlowApi {
   }
 
   /**
+   * `DELETE /api/projects/{id}`
+   * Delete a project
+   */
+  deleteProjectsId(request: DeleteProjectsIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/projects/{id}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `GET /api/projects/{id}`
+   * Get a project
+   * By id or slugId, with its milestones, comments and history.
+   */
+  getProjectsId(request: GetProjectsIdRequest, options?: RequestOptions): Promise<Project> {
+    return this.transport.request({ method: "GET", path: "/api/projects/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `PATCH /api/projects/{id}`
    * Update a project
    */
@@ -911,11 +1635,92 @@ export class FlowApi {
   }
 
   /**
+   * `POST /api/projects/{id}/milestones`
+   * Create a project milestone
+   */
+  postProjectsIdMilestones(request: PostProjectsIdMilestonesRequest, options?: RequestOptions): Promise<ProjectMilestone> {
+    return this.transport.request({ method: "POST", path: "/api/projects/{id}/milestones", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/projects/{id}/milestones/{milestoneId}`
+   * Delete a project milestone
+   * Issues in the milestone keep their project and lose the milestone.
+   */
+  deleteProjectsIdMilestonesMilestoneId(request: DeleteProjectsIdMilestonesMilestoneIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/projects/{id}/milestones/{milestoneId}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `PATCH /api/projects/{id}/milestones/{milestoneId}`
+   * Update a project milestone
+   */
+  patchProjectsIdMilestonesMilestoneId(request: PatchProjectsIdMilestonesMilestoneIdRequest, options?: RequestOptions): Promise<ProjectMilestone> {
+    return this.transport.request({ method: "PATCH", path: "/api/projects/{id}/milestones/{milestoneId}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `POST /api/projects/{id}/milestones/reorder`
+   * Reorder the milestones of a project
+   * ids must list every milestone of the project exactly once.
+   */
+  postProjectsIdMilestonesReorder(request: PostProjectsIdMilestonesReorderRequest, options?: RequestOptions): Promise<ProjectMilestone[]> {
+    return this.transport.request({ method: "POST", path: "/api/projects/{id}/milestones/reorder", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/projects/{id}/updates`
+   * List project updates
+   * Newest first. Not paged.
+   */
+  getProjectsIdUpdates(request: GetProjectsIdUpdatesRequest, options?: RequestOptions): Promise<ProjectUpdate[]> {
+    return this.transport.request({ method: "GET", path: "/api/projects/{id}/updates", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/projects/{id}/updates`
+   * Post a project update
+   * Posting archives the project's pending update reminders and sets the project health. health defaults to the project's current one.
+   */
+  postProjectsIdUpdates(request: PostProjectsIdUpdatesRequest, options?: RequestOptions): Promise<ProjectUpdate> {
+    return this.transport.request({ method: "POST", path: "/api/projects/{id}/updates", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/projects/{id}/updates/{updateId}`
+   * Delete a project update
+   * The author or a workspace administrator.
+   */
+  deleteProjectsIdUpdatesUpdateId(request: DeleteProjectsIdUpdatesUpdateIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/projects/{id}/updates/{updateId}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `PATCH /api/projects/{id}/updates/{updateId}`
+   * Edit a project update
+   * The author or a workspace administrator.
+   */
+  patchProjectsIdUpdatesUpdateId(request: PatchProjectsIdUpdatesUpdateIdRequest, options?: RequestOptions): Promise<ProjectUpdate> {
+    return this.transport.request({ method: "PATCH", path: "/api/projects/{id}/updates/{updateId}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
    * `GET /api/releases`
    * List releases
    * Connection with pagination arguments; otherwise the legacy array.
+   * Returns the connection form; `getReleasesLegacy` returns the original response.
    */
-  getReleases(request?: GetReleasesRequest, options?: RequestOptions): Promise<ReleaseConnection | Release[]> {
+  getReleases(request?: GetReleasesRequest, options?: RequestOptions): Promise<ReleaseConnection> {
+    return this.transport.request({ method: "GET", path: "/api/releases", query: { ...request?.query, connection: "1" }, ...options })
+  }
+
+  /**
+   * `GET /api/releases`
+   * List releases
+   * Connection with pagination arguments; otherwise the legacy array.
+   * Returns the original response (no pagination arguments); `getReleases` returns the connection form.
+   */
+  getReleasesLegacy(request?: GetReleasesLegacyRequest, options?: RequestOptions): Promise<Release[]> {
     return this.transport.request({ method: "GET", path: "/api/releases", query: request?.query, ...options })
   }
 
@@ -928,11 +1733,29 @@ export class FlowApi {
   }
 
   /**
+   * `GET /api/teams/{id}`
+   * Get a team
+   * By id or team key (ENG).
+   */
+  getTeamsId(request: GetTeamsIdRequest, options?: RequestOptions): Promise<Team> {
+    return this.transport.request({ method: "GET", path: "/api/teams/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `GET /api/users`
    * List users
    */
   getUsers(request?: GetUsersRequest, options?: RequestOptions): Promise<UserConnection> {
     return this.transport.request({ method: "GET", path: "/api/users", query: request?.query, ...options })
+  }
+
+  /**
+   * `GET /api/users/{id}`
+   * Get a user
+   * By id, or `me` for the caller.
+   */
+  getUsersId(request: GetUsersIdRequest, options?: RequestOptions): Promise<User> {
+    return this.transport.request({ method: "GET", path: "/api/users/{id}", pathParams: request.path, ...options })
   }
 
   /**
@@ -948,9 +1771,118 @@ export class FlowApi {
    * `GET /api/webhooks`
    * List webhooks
    * Workspace admins (or the admin scope). Connection with pagination arguments; otherwise the legacy array.
+   * Returns the connection form; `getWebhooksLegacy` returns the original response.
    */
-  getWebhooks(request?: GetWebhooksRequest, options?: RequestOptions): Promise<WebhookConnection | Webhook[]> {
+  getWebhooks(request?: GetWebhooksRequest, options?: RequestOptions): Promise<WebhookConnection> {
+    return this.transport.request({ method: "GET", path: "/api/webhooks", query: { ...request?.query, connection: "1" }, ...options })
+  }
+
+  /**
+   * `GET /api/webhooks`
+   * List webhooks
+   * Workspace admins (or the admin scope). Connection with pagination arguments; otherwise the legacy array.
+   * Returns the original response (no pagination arguments); `getWebhooks` returns the connection form.
+   */
+  getWebhooksLegacy(request?: GetWebhooksLegacyRequest, options?: RequestOptions): Promise<Webhook[]> {
     return this.transport.request({ method: "GET", path: "/api/webhooks", query: request?.query, ...options })
+  }
+
+  /**
+   * `POST /api/webhooks`
+   * Create a webhook
+   * The response carries the signing secret, shown only once.
+   */
+  postWebhooks(request: PostWebhooksRequest, options?: RequestOptions): Promise<WebhookWithSecret> {
+    return this.transport.request({ method: "POST", path: "/api/webhooks", body: request.body, ...options })
+  }
+
+  /**
+   * `DELETE /api/webhooks/{id}`
+   * Delete a webhook
+   * Not available for application-managed webhooks; uninstall the application instead.
+   */
+  deleteWebhooksId(request: DeleteWebhooksIdRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "DELETE", path: "/api/webhooks/{id}", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `GET /api/webhooks/{id}`
+   * Get a webhook
+   */
+  getWebhooksId(request: GetWebhooksIdRequest, options?: RequestOptions): Promise<Webhook> {
+    return this.transport.request({ method: "GET", path: "/api/webhooks/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `PATCH /api/webhooks/{id}`
+   * Update a webhook
+   * Re-enabling a webhook resets its failure window; disabling it cancels its queued retries. Webhooks managed by an application accept only `enabled`.
+   */
+  patchWebhooksId(request: PatchWebhooksIdRequest, options?: RequestOptions): Promise<Webhook> {
+    return this.transport.request({ method: "PATCH", path: "/api/webhooks/{id}", pathParams: request.path, body: request.body, ...options })
+  }
+
+  /**
+   * `GET /api/webhooks/{id}/deliveries`
+   * List deliveries
+   * The delivery log of the last 30 days, newest first, with cursor paging. Requests are stored without their payload here; fetch one delivery for it.
+   */
+  getWebhooksIdDeliveries(request: GetWebhooksIdDeliveriesRequest, options?: RequestOptions): Promise<WebhookDeliveryPage> {
+    return this.transport.request({ method: "GET", path: "/api/webhooks/{id}/deliveries", pathParams: request.path, query: request?.query, ...options })
+  }
+
+  /**
+   * `GET /api/webhooks/{id}/deliveries/{deliveryId}`
+   * Get a delivery
+   * With the request payload, every attempt and the first 2 KB of the response body.
+   */
+  getWebhooksIdDeliveriesDeliveryId(request: GetWebhooksIdDeliveriesDeliveryIdRequest, options?: RequestOptions): Promise<WebhookDelivery> {
+    return this.transport.request({ method: "GET", path: "/api/webhooks/{id}/deliveries/{deliveryId}", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/webhooks/{id}/deliveries/{deliveryId}/redeliver`
+   * Redeliver
+   * Sends the payload again as a new delivery (new id, timestamp and signature) and returns it after its first attempt. 409 while the webhook is disabled.
+   */
+  postWebhooksIdDeliveriesDeliveryIdRedeliver(request: PostWebhooksIdDeliveriesDeliveryIdRedeliverRequest, options?: RequestOptions): Promise<WebhookDelivery> {
+    return this.transport.request({ method: "POST", path: "/api/webhooks/{id}/deliveries/{deliveryId}/redeliver", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `GET /api/webhooks/{id}/failures`
+   * List failed attempts
+   * Compatibility view of the delivery log: failed attempts, newest first.
+   */
+  getWebhooksIdFailures(request: GetWebhooksIdFailuresRequest, options?: RequestOptions): Promise<WebhookFailureEvent[]> {
+    return this.transport.request({ method: "GET", path: "/api/webhooks/{id}/failures", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/webhooks/{id}/revoke-secret`
+   * Revoke the signing secret
+   * Deliveries go out unsigned (Flow-Signature-Status: unsigned) until a new secret is rotated in.
+   */
+  postWebhooksIdRevokeSecret(request: PostWebhooksIdRevokeSecretRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "POST", path: "/api/webhooks/{id}/revoke-secret", pathParams: request.path, expect: 'none', ...options })
+  }
+
+  /**
+   * `POST /api/webhooks/{id}/rotate-secret`
+   * Rotate the signing secret
+   * Takes effect immediately for new attempts. The new secret is returned once.
+   */
+  postWebhooksIdRotateSecret(request: PostWebhooksIdRotateSecretRequest, options?: RequestOptions): Promise<WebhookWithSecret> {
+    return this.transport.request({ method: "POST", path: "/api/webhooks/{id}/rotate-secret", pathParams: request.path, ...options })
+  }
+
+  /**
+   * `POST /api/webhooks/{id}/test`
+   * Send a test event
+   * Delivers a WebhookTest event once and returns the delivery.
+   */
+  postWebhooksIdTest(request: PostWebhooksIdTestRequest, options?: RequestOptions): Promise<WebhookDelivery> {
+    return this.transport.request({ method: "POST", path: "/api/webhooks/{id}/test", pathParams: request.path, ...options })
   }
 
   /**
@@ -962,11 +1894,30 @@ export class FlowApi {
   }
 
   /**
+   * `GET /api/workflow-states/{id}`
+   * Get a workflow state
+   */
+  getWorkflowStatesId(request: GetWorkflowStatesIdRequest, options?: RequestOptions): Promise<WorkflowState> {
+    return this.transport.request({ method: "GET", path: "/api/workflow-states/{id}", pathParams: request.path, ...options })
+  }
+
+  /**
    * `GET /api/workspace/audit-log`
    * List audit log entries
    * Admins. Filters: type (resourceType.action or action), actorId, actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; otherwise an array.
+   * Returns the connection form; `getWorkspaceAuditLogLegacy` returns the original response.
    */
-  getWorkspaceAuditLog(request?: GetWorkspaceAuditLogRequest, options?: RequestOptions): Promise<AuditLogEntryConnection | AuditLogEntry[]> {
+  getWorkspaceAuditLog(request?: GetWorkspaceAuditLogRequest, options?: RequestOptions): Promise<AuditLogEntryConnection> {
+    return this.transport.request({ method: "GET", path: "/api/workspace/audit-log", query: { ...request?.query, connection: "1" }, ...options })
+  }
+
+  /**
+   * `GET /api/workspace/audit-log`
+   * List audit log entries
+   * Admins. Filters: type (resourceType.action or action), actorId, actorEmail, resourceType, resourceId, ip, since, until, or a filter object. Connection with pagination arguments; otherwise an array.
+   * Returns the original response (no pagination arguments); `getWorkspaceAuditLog` returns the connection form.
+   */
+  getWorkspaceAuditLogLegacy(request?: GetWorkspaceAuditLogLegacyRequest, options?: RequestOptions): Promise<AuditLogEntry[]> {
     return this.transport.request({ method: "GET", path: "/api/workspace/audit-log", query: request?.query, ...options })
   }
 
@@ -976,5 +1927,14 @@ export class FlowApi {
    */
   getWorkspaceAuditLogTypes(options?: RequestOptions): Promise<AuditEntryTypeCount[]> {
     return this.transport.request({ method: "GET", path: "/api/workspace/audit-log/types", ...options })
+  }
+
+  /**
+   * `GET /uploads/{name}`
+   * Download a file
+   * Authenticated with the session or the Authorization header, like any API call.
+   */
+  getUploadsName(request: GetUploadsNameRequest, options?: RequestOptions): Promise<void> {
+    return this.transport.request({ method: "GET", path: "/uploads/{name}", pathParams: request.path, expect: 'none', ...options })
   }
 }

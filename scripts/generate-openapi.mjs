@@ -28,6 +28,8 @@ for (const entry of await readdir(serverDir, { withFileTypes: true })) {
 const contract = JSON.parse(execFileSync('go', ['run', './cmd/openapi-schema'], { cwd: apiDir, encoding: 'utf8', maxBuffer: 64 << 20, env: { ...process.env, GOFLAGS: process.env.GOFLAGS ?? '' } }))
 
 const errorResponse = { $ref: '#/components/responses/Error' }
+const internalRoutes = new Set(contract.internalRoutes)
+const untypedRoutes = []
 routes.sort((left, right) => left.routePath.localeCompare(right.routePath) || left.method.localeCompare(right.method))
 const paths = {}
 for (const route of routes) {
@@ -39,20 +41,29 @@ for (const route of routes) {
     continue
   }
   const parameters = [...route.routePath.matchAll(/\{([^}]+)\}/g)].map(match => ({ name: match[1], in: 'path', required: true, schema: { type: 'string' } }))
+  if (!internalRoutes.has(`${route.method.toUpperCase()} ${route.routePath}`)) {
+    untypedRoutes.push(`${route.method.toUpperCase()} ${route.routePath}`)
+  }
   operations[route.method] = {
     operationId: operationID(route.method, route.routePath),
     tags: [routeTag(route.routePath)],
     summary: `${route.method.toUpperCase()} ${route.routePath}`,
+    description: 'Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.',
     ...(parameters.length ? { parameters } : {}),
     responses: {
       '2XX': {
-        description: 'Success. This route is not part of the typed public contract yet; see docs/api.md and the domain schemas.',
+        description: 'Success. The response is not described by this document.',
         content: { 'application/json': { schema: {} } },
       },
       default: errorResponse,
     },
+    'x-flow-internal': true,
     'x-flow-source': route.source,
   }
+}
+if (untypedRoutes.length) {
+  console.error(`Routes without a contract that are not declared internal (add an Operation in api/internal/publicapi/contract.go or list them in internal_routes.go):\n${untypedRoutes.map(route => `  ${route}`).join('\n')}`)
+  process.exit(1)
 }
 for (const key of Object.keys(contract.operations)) {
   const [method, routePath] = key.split(' ')
@@ -109,6 +120,15 @@ if (rotateSecret) {
   rotateSecret.description = 'Rotate the client secret and immediately invalidate existing client-credentials tokens. The new secret is returned once.'
 }
 
+// Hand-documented platform routes are part of the public surface.
+for (const documented of [['post', '/oauth/token'], ['post', '/api/oauth/token'], ['post', '/oauth/register'], ['post', '/oauth/revoke'], ['post', '/mcp'], ['post', '/mcp/readonly'], ['post', '/api/oauth-applications/{id}/developer-token'], ['post', '/api/oauth-applications/{id}/rotate-secret']]) {
+  const operation = paths[documented[1]]?.[documented[0]]
+  if (operation) delete operation['x-flow-internal']
+}
+for (const mcpPath of ['/mcp', '/mcp/readonly']) {
+  for (const operation of Object.values(paths[mcpPath] ?? {})) delete operation['x-flow-internal']
+}
+
 const rateLimitHeader = (description, format) => ({ description, schema: { type: 'integer', ...(format ? { format } : {}) } })
 const errorContent = { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } }
 const errorResponseFor = (description, extraHeaders = {}) => ({ description, headers: extraHeaders, content: errorContent })
@@ -125,6 +145,7 @@ const document = {
       '',
       'Authenticate with a personal API key or an OAuth access token in `Authorization: Bearer <token>`; tokens select their workspace. Browser sessions send the `X-Workspace-Key` header.',
       'Lists return connections (`nodes`, `pageInfo`) paged with `first`/`after` or `last`/`before`, ordered newest first by `orderBy` (createdAt or updatedAt), filtered with a `filter` object.',
+      'Routes marked `x-flow-internal` serve the web app and are not part of the contract. Payloads Flow sends to webhook endpoints are described in the `webhooks` section.',
       'Errors use one envelope (`error`, `code`, `type`, `requestId`). Requests are rate limited per user or application (X-RateLimit-* headers, HTTP 429 with type RATELIMITED).',
       'The API is unversioned: changes are additive, deprecated operations are flagged and kept for at least six months. See docs/api.md.',
     ].join('\n'),
@@ -132,6 +153,7 @@ const document = {
   },
   servers: [{ url: '{origin}', description: 'Your Flow deployment', variables: { origin: { default: 'http://127.0.0.1:8080', description: 'Scheme, host and port of the Flow server (FLOW_APP_URL).' } } }],
   tags: [
+    { name: 'webhooks', description: 'Webhook management, the delivery log, and the payloads Flow sends (see the `webhooks` section of this document and docs/webhooks.md).' },
     { name: 'identity', description: 'Who the caller is and which workspace they act in.' },
     { name: 'files', description: 'Uploads, downloads and signed file URLs.' },
     { name: 'attachments', description: 'File and link attachments on issues.' },
@@ -141,6 +163,7 @@ const document = {
     { name: 'mcp', description: 'Model Context Protocol server.' },
   ],
   paths,
+  webhooks: contract.webhooks,
   components: {
     schemas: contract.schemas,
     parameters: {
@@ -148,6 +171,7 @@ const document = {
       after: { name: 'after', in: 'query', description: 'Return nodes after this cursor (pageInfo.endCursor). Alias: cursor.', schema: { type: 'string' } },
       last: { name: 'last', in: 'query', description: 'Page size counting backward from `before` (1-250).', schema: { type: 'integer', minimum: 1, maximum: 250 } },
       before: { name: 'before', in: 'query', description: 'Return nodes before this cursor (pageInfo.startCursor).', schema: { type: 'string' } },
+      connection: { name: 'connection', in: 'query', description: 'Set to `1` to get the connection form with default paging. Routes that predate connections answer with their original array or page unless first, last, after, before, orderBy or connection=1 is given.', schema: { type: 'string', enum: ['1', 'true'] } },
       includeArchived: { name: 'includeArchived', in: 'query', description: 'Include archived resources.', schema: { type: 'boolean', default: false } },
     },
     headers: {

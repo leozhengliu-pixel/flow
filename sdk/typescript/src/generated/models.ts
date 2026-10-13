@@ -19,6 +19,161 @@ export interface ActorBot {
   userDisplayName?: string
 }
 
+/** ActorBot attributes a record to an OAuth application ("<User> via <App>"). It is stored on issues, comments, attachments, documents and activity when the request was authenticated with an OAuth token: - actor=user token: the record's user is the person who authorized the application; ActorBot names the application. - actor=app token with createAsUser: the record's user is the application user; UserDisplayName / UserAvatarURL name the external person the application acted for. - Flow's agent (Type "agent"): the record's user is the person the agent worked for (in-app chat) or the agent's own app user (comment threads and delegation); OnBehalfOfID / OnBehalfOfName name the person either way, so history reads "Flow <did X> on behalf of <User>". In webhook payloads only id is guaranteed. */
+export interface ActorBotPartial {
+  avatarUrl?: string
+  id: string
+  name?: string
+  /** OnBehalfOfID / OnBehalfOfName name the person an agent acted for. */
+  onBehalfOfId?: string
+  onBehalfOfName?: string
+  /** Type is "oauthApplication" for OAuth clients. */
+  type?: string
+  userAvatarUrl?: string
+  userDisplayName?: string
+}
+
+/** AgentActivityPrompt is the person's prompt, on prompted events. */
+export interface AgentActivityPrompt {
+  body?: string
+  type: string
+}
+
+/** AgentGuidance is one rule of the agent guidance that applies to a session. */
+export interface AgentGuidance {
+  body: string
+  /** Origin is workspace or team. */
+  origin: "workspace" | "team"
+  teamId?: string
+  teamKey?: string
+  teamName?: string
+}
+
+/** AgentSessionCreator is the person who started the session. */
+export interface AgentSessionCreator {
+  email?: string
+  id: string
+  name?: string
+}
+
+/** AgentSessionData is the session an agent is asked to work on. */
+export interface AgentSessionData {
+  comment?: NotificationComment | null
+  commentId?: string
+  creator?: AgentSessionCreator | null
+  id: string
+  issue?: AgentSessionIssue | null
+  issueId?: string
+  status: string
+}
+
+/** AgentSessionIssue identifies the issue of an agent session. */
+export interface AgentSessionIssue {
+  id: string
+  identifier?: string
+  title?: string
+}
+
+/** AgentSessionPreviousComment is an earlier comment of the triggering thread. */
+export interface AgentSessionPreviousComment {
+  body?: string
+  createdAt?: string
+  id: string
+  userId?: string
+  userName?: string
+}
+
+/** AgentSessionWebhookEvent tells an agent about work: created for a new session (the agent was delegated an issue or mentioned) and prompted when a person replies. Answer within 5 seconds and process the work asynchronously. */
+export interface AgentSessionWebhookEvent {
+  action: "created" | "prompted"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  agentActivity?: AgentActivityPrompt | null
+  agentSession: AgentSessionData
+  appUserId: string
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  guidance?: AgentGuidance[]
+  issue?: AgentSessionIssue | null
+  oauthClientId: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  previousComments?: AgentSessionPreviousComment[]
+  /** PromptContext is a ready-to-use prompt: the issue, the triggering thread and the guidance rules, XML-escaped. */
+  promptContext?: string
+  type: "AgentSessionEvent"
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** AppUserNotificationData is one inbox notification of the application's user. */
+export interface AppUserNotificationData {
+  actorId?: string
+  comment?: NotificationComment | null
+  commentId?: string
+  id: string
+  issue?: NotificationIssue | null
+  issueId?: string
+  type: string
+}
+
+/** AppUserNotificationWebhookEvent forwards the inbox of the application's user (assignment covers both assignee and delegate). */
+export interface AppUserNotificationWebhookEvent {
+  action: "issueMention" | "issueCommentMention" | "issueEmojiReaction" | "issueCommentReaction" | "issueAssignedToYou" | "issueUnassignedFromYou" | "issueNewComment" | "issueStatusChanged"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  appUserId: string
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  notification: AppUserNotificationData
+  oauthClientId: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "AppUserNotification"
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** ApplicationWebhookInput configures the webhook of an OAuth application. */
+export interface ApplicationWebhookInput {
+  enabled?: boolean | null
+  /** ResourceTypes may include the application-only types agent_session_events, app_user_notifications, permission_changes and oauth_app. */
+  resourceTypes?: string[] | null
+  /** URL is a public HTTPS endpoint. */
+  url?: string | null
+}
+
+/** ApplicationWebhookSettings is the webhook configuration of an OAuth application. */
+export interface ApplicationWebhookSettings {
+  applicationId: string
+  clientId: string
+  enabled: boolean
+  /** Installations counts the workspaces with a managed webhook. */
+  installations: number
+  resourceTypes: string[]
+  /** Secret is the signing secret, present only when it was just created or rotated. */
+  secret?: string
+  secretPrefix?: string
+  signingEnabled: boolean
+  url: string
+}
+
 export interface Attachment {
   botActor?: ActorBot | null
   contentType: string
@@ -42,9 +197,58 @@ export interface Attachment {
 }
 
 export interface AttachmentConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Attachment[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface AttachmentPartial {
+  botActor?: ActorBotPartial | null
+  contentType?: string
+  createdAt?: string
+  creator?: UserPartial
+  iconUrl?: string
+  id: string
+  issueId?: string
+  linkbackUrl?: string
+  metadata?: Record<string, unknown>
+  provider?: string
+  providerId?: string
+  providerUrl?: string
+  size?: number
+  /** Link attachments (the reference app's attachmentCreate): a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it. */
+  subtitle?: string
+  syncStatus?: string
+  title?: string
+  updatedAt?: string | null
+  url?: string
+}
+
+/** AttachmentWebhookEvent is sent when a file or link attachment is added to or removed from an issue. */
+export interface AttachmentWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: AttachmentPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Attachment"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 /** AuditEntryTypeCount is one audit entry type present in the log. */
@@ -65,9 +269,11 @@ export interface AuditLogEntry {
 }
 
 export interface AuditLogEntryConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: AuditLogEntry[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 export interface Comment {
@@ -89,21 +295,50 @@ export interface Comment {
 }
 
 export interface CommentConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Comment[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 export interface CommentCreateInput {
   anchorId?: string
   body: string
   bodyData?: Record<string, unknown>
+  /** CreateAsUser names the external person an actor=app token acts for ("<name> via <App>", at most 100 characters). Rejected for user tokens. */
+  createAsUser?: string | null
+  /** DisplayIconURL is that person's avatar; requires createAsUser. */
+  displayIconUrl?: string | null
   parentId?: string | null
   quotedText?: string
 }
 
+export interface CommentPartial {
+  /** AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
+  anchorId?: string
+  body?: string
+  bodyData?: Record<string, unknown>
+  botActor?: ActorBotPartial | null
+  createdAt?: string
+  editedAt?: string | null
+  id: string
+  parentId?: string | null
+  quotedText?: string
+  reactions?: Record<string, string[]>
+  resolved?: boolean
+  threadSummary?: CommentThreadSummaryPartial | null
+  user?: UserPartial
+  version?: number
+}
+
 export interface CommentThreadSummary {
   content: string
+  evalLogId?: string
+}
+
+export interface CommentThreadSummaryPartial {
+  content?: string
   evalLogId?: string
 }
 
@@ -113,6 +348,53 @@ export interface CommentUpdateInput {
   expectedVersion?: number | null
   resolved?: boolean | null
   threadSummary?: CommentThreadSummary | null
+}
+
+/** CommentWebhookData is a comment with the resource it belongs to. In webhook payloads only id is guaranteed. */
+export interface CommentWebhookDataPartial {
+  /** AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
+  anchorId?: string
+  body?: string
+  bodyData?: Record<string, unknown>
+  botActor?: ActorBotPartial | null
+  createdAt?: string
+  editedAt?: string | null
+  id: string
+  /** IssueID is the commented issue, or the id of the parent resource (project, initiative, document) for other comments. */
+  issueId?: string
+  parentId?: string | null
+  quotedText?: string
+  reactions?: Record<string, string[]>
+  resolved?: boolean
+  threadSummary?: CommentThreadSummaryPartial | null
+  user?: UserPartial
+  userId?: string
+  version?: number
+}
+
+/** CommentWebhookEvent is sent when a comment on an issue, project, project update, initiative, initiative update or document is created, edited, resolved or deleted. */
+export interface CommentWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: CommentWebhookDataPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Comment"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface Customer {
@@ -132,9 +414,11 @@ export interface Customer {
 }
 
 export interface CustomerConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Customer[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 /** CustomerInput creates or updates a customer. */
@@ -148,6 +432,47 @@ export interface CustomerInput {
   size?: number | null
   status?: string | null
   tier?: string | null
+}
+
+/** CustomerNeedWebhookEvent is sent when a customer request (Flow's name for a customer need) is created, updated or deleted. */
+export interface CustomerNeedWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: CustomerRequestPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "CustomerNeed"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+export interface CustomerPartial {
+  annualRevenue?: number
+  createdAt?: string
+  domains?: string[]
+  /** ExternalIDs identify the customer in other systems (CRM, support desk); each is unique within the workspace and usable for upserts. */
+  externalIds?: string[]
+  id: string
+  logoUrl?: string
+  name?: string
+  ownerId?: string
+  size?: number
+  status?: string
+  tier?: string
+  updatedAt?: string
 }
 
 export interface CustomerRequest {
@@ -169,9 +494,11 @@ export interface CustomerRequest {
 }
 
 export interface CustomerRequestConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: CustomerRequest[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 /** CustomerRequestInput creates or updates a customer request (need). */
@@ -192,6 +519,24 @@ export interface CustomerRequestInput {
   sourceUrl?: string | null
 }
 
+export interface CustomerRequestPartial {
+  archivedAt?: string | null
+  /** ArchivedByExclusion is the excluded domain/email entry that archived this request; removing that entry from the exclusion list restores it. */
+  archivedByExclusion?: string
+  attachments?: AttachmentPartial[]
+  body?: string
+  createdAt?: string
+  creator?: UserPartial
+  customerId?: string
+  id: string
+  issueId?: string
+  priority?: number
+  projectId?: string
+  source?: string
+  sourceUrl?: string
+  updatedAt?: string
+}
+
 /** CustomerUpsertInput matches by id, then external id(s), then domain. */
 export interface CustomerUpsertInput {
   annualRevenue?: number | null
@@ -205,6 +550,31 @@ export interface CustomerUpsertInput {
   size?: number | null
   status?: string | null
   tier?: string | null
+}
+
+/** CustomerWebhookEvent is sent when a customer is created, updated, merged or deleted. */
+export interface CustomerWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: CustomerPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Customer"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface Cycle {
@@ -227,9 +597,30 @@ export interface Cycle {
 }
 
 export interface CycleConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Cycle[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface CyclePartial {
+  calendarToken?: string
+  capacity?: number
+  capacityByMember?: Record<string, Record<string, number>>
+  createdAt?: string
+  description?: string
+  endsAt?: string
+  favorite?: boolean
+  id: string
+  insight?: Record<string, string>
+  name?: string
+  number?: number
+  resources?: CycleResourcePartial[]
+  startsAt?: string
+  status?: string
+  teamId?: string
+  updatedAt?: string
 }
 
 export interface CycleResource {
@@ -239,6 +630,40 @@ export interface CycleResource {
   title: string
   type: string
   url: string
+}
+
+export interface CycleResourcePartial {
+  createdAt?: string
+  documentId?: string
+  id: string
+  title?: string
+  type?: string
+  url?: string
+}
+
+/** CycleWebhookEvent is sent when a cycle is created, started, completed, updated or deleted. */
+export interface CycleWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: CyclePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Cycle"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface Document {
@@ -275,9 +700,11 @@ export interface Document {
 }
 
 export interface DocumentConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Document[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 export interface DocumentContent {
@@ -289,6 +716,73 @@ export interface DocumentContent {
   version: number
 }
 
+export interface DocumentContentPartial {
+  content?: string
+  contentData?: Record<string, unknown>
+  contentState?: string
+  id: string
+  updatedAt?: string
+  version?: number
+}
+
+/** DocumentCreateInput creates a document. Content is Markdown; contentData and contentState carry the collaborative editor's document. */
+export interface DocumentCreateInput {
+  color?: string | null
+  /** Content is the document body as Markdown. */
+  content?: string | null
+  /** ContentData is the editor's JSON document (ProseMirror). */
+  contentData?: Record<string, unknown>
+  /** ContentState is the base64 Yjs state of the collaborative editor. */
+  contentState?: string | null
+  /** CreateAsUser names the external person an actor=app token acts for ("<name> via <App>", at most 100 characters). Rejected for user tokens. */
+  createAsUser?: string | null
+  /** DisplayIconURL is that person's avatar; requires createAsUser. */
+  displayIconUrl?: string | null
+  favorite?: boolean | null
+  icon?: string | null
+  /** IssueID attaches the document to an issue. */
+  issueId?: string | null
+  projectIds?: string[] | null
+  subscriberIds?: string[] | null
+  teamIds?: string[] | null
+  /** TemplateID starts from a document template. */
+  templateId?: string | null
+  title?: string | null
+}
+
+export interface DocumentPartial {
+  archivedAt?: string | null
+  attachments?: AttachmentPartial[]
+  botActor?: ActorBotPartial | null
+  /** CollaborationID names the realtime (Yjs) document the editor joins; "" means the document id. Restoring a version starts a new generation so editors holding the replaced state reload instead of merging it back. */
+  collaborationId?: string
+  color?: string
+  content?: string
+  contentData?: Record<string, unknown>
+  contentState?: string
+  contentVersion?: number
+  createdAt?: string
+  creator?: UserPartial
+  /** DeletedAt is only set on a document read back from "Recently deleted". */
+  deletedAt?: string | null
+  favorite?: boolean
+  icon?: string
+  id: string
+  issueId?: string
+  permissions?: DocumentPermissionPartial[]
+  /** PreviousSlugIDs keeps the slugs a renamed document used before, so old links keep resolving (and the web app redirects to slugId). */
+  previousSlugIds?: string[]
+  projectIds?: string[]
+  revisions?: DocumentRevisionPartial[]
+  slugId?: string
+  subscriberIds?: string[]
+  teamIds?: string[]
+  title?: string
+  updatedAt?: string
+  /** Version increases with every accepted write; PATCH callers may send expectedVersion to detect a concurrent change (409 with the current document). ContentVersion increases only when the collaborative base state (contentState) is replaced, guarding update-log compaction. */
+  version?: number
+}
+
 /** DocumentPermission grants a role to a workspace member, team, or the whole workspace. Roles are owner, editor, commenter, or viewer. */
 export interface DocumentPermission {
   createdAt: string
@@ -298,6 +792,17 @@ export interface DocumentPermission {
   subjectId: string
   subjectType: string
   updatedAt: string
+}
+
+/** DocumentPermission grants a role to a workspace member, team, or the whole workspace. Roles are owner, editor, commenter, or viewer. In webhook payloads only id is guaranteed. */
+export interface DocumentPermissionPartial {
+  createdAt?: string
+  documentId?: string
+  id: string
+  role?: string
+  subjectId?: string
+  subjectType?: string
+  updatedAt?: string
 }
 
 export interface DocumentRevision {
@@ -315,6 +820,72 @@ export interface DocumentRevision {
   /** StartedAt is when the editing burst this version covers began. */
   startedAt?: string | null
   title: string
+}
+
+export interface DocumentRevisionPartial {
+  author?: UserPartial
+  /** AuthorIDs lists everyone who edited during the burst this version covers (Author is the latest). CreatedAt is when the burst ended. */
+  authorIds?: string[]
+  /** BotActor attributes the latest edit to an application or to Flow's agent. */
+  botActor?: ActorBotPartial | null
+  content?: string
+  contentData?: Record<string, unknown>
+  contentState?: string
+  createdAt?: string
+  documentId?: string
+  id: string
+  /** StartedAt is when the editing burst this version covers began. */
+  startedAt?: string | null
+  title?: string
+}
+
+/** DocumentUpdateInput changes a document; omitted fields stay as they are. */
+export interface DocumentUpdateInput {
+  /** Archived archives or restores the document. */
+  archived?: boolean | null
+  color?: string | null
+  content?: string | null
+  contentData?: Record<string, unknown>
+  /** ContentState replaces the collaborative base state; see expectedContentVersion. */
+  contentState?: string | null
+  /** DocumentUpdateIDs are the editor update ids the snapshot includes; the server prunes them after a successful write. */
+  documentUpdateIds?: string[]
+  /** ExpectedContentVersion guards replacing contentState; a stale value keeps the content fields but skips contentState. */
+  expectedContentVersion?: number | null
+  /** ExpectedVersion rejects the write with 409 (and the current document) when the document changed since the caller read it. */
+  expectedVersion?: number | null
+  favorite?: boolean | null
+  icon?: string | null
+  issueId?: string | null
+  projectIds?: string[] | null
+  subscriberIds?: string[] | null
+  teamIds?: string[] | null
+  title?: string | null
+}
+
+/** DocumentWebhookEvent is sent when a document is created, updated or deleted. */
+export interface DocumentWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: DocumentPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Document"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 /** Error is the error envelope returned with every 4xx/5xx under /api/. */
@@ -391,15 +962,24 @@ export interface Initiative {
 }
 
 export interface InitiativeConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Initiative[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 export interface InitiativeDescriptionRevision {
   description: string
   editedAt: string
   editor: User
+  id: string
+}
+
+export interface InitiativeDescriptionRevisionPartial {
+  description?: string
+  editedAt?: string
+  editor?: UserPartial
   id: string
 }
 
@@ -433,6 +1013,48 @@ export interface InitiativeNotificationRules {
   newUpdate: boolean
 }
 
+export interface InitiativeNotificationRulesPartial {
+  allProjectUpdates?: boolean
+  descriptionChanges?: boolean
+  newUpdate?: boolean
+}
+
+/** Initiative is the workspace-level planning aggregate above projects. ProjectIDs intentionally stores stable project IDs; list progress and health are projections computed by the client from the associated projects. In webhook payloads only id is guaranteed. */
+export interface InitiativePartial {
+  /** creation through an application or Flow's agent */
+  botActor?: ActorBotPartial | null
+  color?: string
+  comments?: CommentPartial[]
+  contributingTeamIds?: string[]
+  createdAt?: string
+  creator?: UserPartial
+  description?: string
+  descriptionHistory?: InitiativeDescriptionRevisionPartial[]
+  favorite?: boolean
+  health?: string
+  icon?: string
+  id: string
+  labelIds?: string[]
+  leadTeamId?: string
+  name?: string
+  notificationRules?: InitiativeNotificationRulesPartial
+  owner?: UserPartial | null
+  parentInitiativeIds?: string[]
+  position?: number
+  priority?: number
+  priorityLabel?: string
+  projectIds?: string[]
+  resources?: InitiativeResourcePartial[]
+  slugId?: string
+  status?: string
+  subscribed?: boolean
+  summary?: string
+  targetDate?: string | null
+  targetDateResolution?: string
+  updateSchedule?: InitiativeUpdateSchedulePartial
+  updatedAt?: string
+}
+
 export interface InitiativeResource {
   createdAt: string
   documentId?: string
@@ -443,10 +1065,114 @@ export interface InitiativeResource {
   url: string
 }
 
+export interface InitiativeResourcePartial {
+  createdAt?: string
+  documentId?: string
+  id: string
+  initiativeId?: string
+  title?: string
+  type?: string
+  url?: string
+}
+
+export interface InitiativeUpdate {
+  attachments: Attachment[]
+  body: string
+  bodyData?: Record<string, unknown>
+  comments: Comment[]
+  createdAt: string
+  diff?: PulseDiff | null
+  editedAt?: string | null
+  health: string
+  id: string
+  initiativeId: string
+  reactions: Record<string, string[]>
+  snapshot?: PulseSnapshot | null
+  user: User
+}
+
+export interface InitiativeUpdateCreateInput {
+  body: string
+  bodyData?: Record<string, unknown>
+  health: string
+}
+
+export interface InitiativeUpdatePartial {
+  attachments?: AttachmentPartial[]
+  body?: string
+  bodyData?: Record<string, unknown>
+  comments?: CommentPartial[]
+  createdAt?: string
+  diff?: PulseDiffPartial | null
+  editedAt?: string | null
+  health?: string
+  id: string
+  initiativeId?: string
+  reactions?: Record<string, string[]>
+  snapshot?: PulseSnapshotPartial | null
+  user?: UserPartial
+}
+
 export interface InitiativeUpdateSchedule {
   cadence: string
   timeRange: string
   weekday: number
+}
+
+export interface InitiativeUpdateSchedulePartial {
+  cadence?: string
+  timeRange?: string
+  weekday?: number
+}
+
+/** InitiativeUpdateWebhookEvent is sent when an initiative update is posted, edited or deleted (also when an attachment is added to or removed from it). Its data is the update (with initiativeId); for remove, the update before it was deleted. */
+export interface InitiativeUpdateWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: InitiativeUpdatePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "InitiativeUpdate"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** InitiativeWebhookEvent is sent when an initiative is created, updated or deleted. */
+export interface InitiativeWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: InitiativePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Initiative"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 /** Issue follows Flow's public GraphQL entity naming and relationship shape. */
@@ -523,14 +1249,26 @@ export interface Issue {
   version: number
 }
 
+export interface IssueConnection {
+  /** Nodes ordered by orderBy (timestamps newest first). */
+  nodes: Issue[]
+  pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
 export interface IssueCreateInput {
   assigneeId?: string | null
   contentState?: string | null
+  /** CreateAsUser names the external person an actor=app token acts for ("<name> via <App>", at most 100 characters). Rejected for user tokens. */
+  createAsUser?: string | null
   cycleId?: string | null
   delegateId?: string | null
   description: string
   descriptionData?: Record<string, unknown>
   descriptionState?: string | null
+  /** DisplayIconURL is that person's avatar; requires createAsUser. */
+  displayIconUrl?: string | null
   dueDate?: string | null
   estimate?: number | null
   icon?: string | null
@@ -551,6 +1289,19 @@ export interface IssueCreateInput {
   title: string
 }
 
+/** IssueFilter is the filter tree of the issue query API: and, or, not, or a condition on one field. Fields are id, identifier, team, status (state id or type), statusType, project, assignee, creator, cycle, parent, priority, createdAt, updatedAt, title, sortOrder, labels, subscribers, myActivity, sharedWith, customerId, agentSessionState and the indexed attributes projectMilestoneId, estimate, dueDate, completedAt, canceledAt, startedAt, templateId, delegateId and others. Operators (case-insensitive) are is, in, isNot, notIn, includesAll, excludesAll, isEmpty, isNotEmpty, before, after, gt, gte, lt, lte, contains and doesNotContain. */
+export interface IssueFilter {
+  and?: IssueFilter[]
+  /** Field names the property to compare. */
+  field?: string
+  not?: IssueFilter | null
+  operator?: string
+  or?: IssueFilter[]
+  /** Value is a single comparison value; Values a list. Both are matched as text. */
+  value?: unknown
+  values?: unknown[]
+}
+
 export interface IssueLabel {
   archivedAt?: string | null
   color: string
@@ -567,9 +1318,125 @@ export interface IssueLabel {
 }
 
 export interface IssueLabelConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: IssueLabel[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface IssueLabelPartial {
+  archivedAt?: string | null
+  color?: string
+  createdAt?: string
+  creatorId?: string
+  description?: string
+  groupId?: string
+  id: string
+  issueCount?: number
+  lastAppliedAt?: string | null
+  name?: string
+  resourceType?: string
+  scope?: string
+}
+
+/** IssueLabelWebhookEvent is sent when a label is created, updated, merged or deleted. */
+export interface IssueLabelWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: IssueLabelPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "IssueLabel"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** Issue follows Flow's public GraphQL entity naming and relationship shape. In webhook payloads only id is guaranteed. */
+export interface IssuePartial {
+  addedToCycle?: string
+  agentSessionId?: string
+  /** AgentSessionState is the delegated agent task's status, decorated on read (never persisted): pending, active, awaitingInput, complete, error, canceled, or merged once a pull request linked to the issue merged during the session. */
+  agentSessionState?: string
+  archivedAt?: string | null
+  assignee?: UserPartial | null
+  attachments?: AttachmentPartial[]
+  autoClosed?: boolean
+  autoClosedAt?: string | null
+  botActor?: ActorBotPartial | null
+  canceledAt?: string | null
+  completedAt?: string | null
+  createdAt?: string
+  creator?: UserPartial
+  cycleId?: string | null
+  delegate?: UserPartial | null
+  description?: string
+  descriptionState?: string
+  documentContent?: DocumentContentPartial | null
+  dueDate?: string | null
+  estimate?: number | null
+  externalSource?: string
+  /** recurring issue icon (issue template icon format) */
+  icon?: string
+  id: string
+  identifier?: string
+  isSummary?: boolean
+  labels?: IssueLabelPartial[]
+  nextOccurrenceAt?: string | null
+  number?: number
+  parentId?: string | null
+  permissions?: IssuePermissionPartial[]
+  priority?: number
+  priorityLabel?: string
+  project?: ProjectSummaryPartial | null
+  projectMilestoneId?: string | null
+  reactions?: Record<string, string[]>
+  recurrence?: string
+  recurrenceOccurrence?: string
+  recurrenceSeriesId?: string
+  relations?: IssueRelationPartial[]
+  shareToken?: string
+  sharedAt?: string | null
+  slaBreachesAt?: string | null
+  slaType?: string
+  snoozedUntil?: string | null
+  sortOrder?: number
+  startedAt?: string | null
+  state?: WorkflowStatePartial
+  statusChangedAt?: string | null
+  subIssueIds?: string[]
+  subscriberIds?: string[]
+  /** Active Triage Intelligence suggestion targets (the reference app's "Suggested assignee/project/team", "Suggested duplicates/relations" filters). They mirror the active IssueSuggestions so filters stay indexed lookups. */
+  suggestedAssigneeIds?: string[]
+  suggestedDuplicateIds?: string[]
+  suggestedLabelIds?: string[]
+  suggestedProjectIds?: string[]
+  suggestedRelatedIds?: string[]
+  suggestedTeamIds?: string[]
+  suggestionsGeneratedAt?: string | null
+  /** title/description fingerprint of the last generation */
+  suggestionsInputSketch?: string
+  suggestionsSource?: string
+  suggestionsThinking?: string
+  team?: TeamPartial
+  templateId?: string
+  title?: string
+  triagedAt?: string | null
+  updatedAt?: string
+  version?: number
 }
 
 /** IssuePermission grants access to an issue (and, for sub-issues, may be inherited from an ancestor) to an individual, team, or the workspace. Private-team issues use these grants to support explicit sharing without making the whole team visible. */
@@ -583,10 +1450,25 @@ export interface IssuePermission {
   updatedAt: string
 }
 
+/** IssuePermission grants access to an issue (and, for sub-issues, may be inherited from an ancestor) to an individual, team, or the workspace. Private-team issues use these grants to support explicit sharing without making the whole team visible. In webhook payloads only id is guaranteed. */
+export interface IssuePermissionPartial {
+  createdAt?: string
+  id: string
+  issueId?: string
+  role?: string
+  subjectId?: string
+  subjectType?: string
+  updatedAt?: string
+}
+
 export interface IssueRecordPage {
+  endCursor?: string
   hasMore: boolean
+  hasPrevious?: boolean
   items: Issue[]
   nextCursor?: string
+  /** StartCursor and EndCursor address the first and last item of the page (pass as before / after); HasPrevious reports rows before the page. Set only for queries with Cursors. */
+  startCursor?: string
   total: number
 }
 
@@ -595,6 +1477,78 @@ export interface IssueRelation {
   issueId: string
   relatedIssueId: string
   type: string
+}
+
+export interface IssueRelationPartial {
+  id: string
+  issueId?: string
+  relatedIssueId?: string
+  type?: string
+}
+
+/** IssueRelationWebhookEvent is sent when an issue relation is added or removed. */
+export interface IssueRelationWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: IssueRelationPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "IssueRelation"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** IssueSLAData is the SLA of an issue. */
+export interface IssueSLAData {
+  dueAt?: string
+  id: string
+  issueId: string
+  ruleId?: string
+  status?: string
+}
+
+/** IssueSLAIssue identifies the issue an SLA event is about. */
+export interface IssueSLAIssue {
+  id: string
+  identifier?: string
+  title?: string
+}
+
+/** IssueSLAWebhookEvent is sent when an SLA is set on an issue (set), is close to breaching (highRisk, once, when less than a quarter of the window of at most 24 hours remains) or breached (breached). */
+export interface IssueSLAWebhookEvent {
+  action: "set" | "highRisk" | "breached"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: IssueSLAData
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  issueData: IssueSLAIssue
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "IssueSLA"
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface IssueUpdateInput {
@@ -632,14 +1586,104 @@ export interface IssueUpdateInput {
   title?: string | null
 }
 
+/** IssueWebhookEvent is sent when an issue is created, updated (including archive) or deleted. */
+export interface IssueWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: IssuePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Issue"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** LegacyWebhookEvent is the version 1 body that webhooks created before signing keep until an administrator switches them (PATCH /api/webhooks/{id} with payloadVersion 2). */
+export interface LegacyWebhookEvent {
+  /** Action is the raw event verb, for example created or status_changed. */
+  action: string
+  actor?: WebhookActor | null
+  createdAt: string
+  /** Data is the mutation input. */
+  data: unknown
+  eventType: string
+  /** ID is the event id. */
+  id: string
+  organizationId: string
+  previousValues?: unknown
+  /** Type is the Flow resource name, for example issues. */
+  type: string
+  updatedFrom?: unknown
+  url?: string
+  webhookId: string
+  /** WebhookTimestamp is the signed Unix time in milliseconds of the attempt. */
+  webhookTimestamp: number
+}
+
 /** LinkAttachmentInput creates or updates a link attachment. */
 export interface LinkAttachmentInput {
+  /** CreateAsUser names the external person an actor=app token acts for ("<name> via <App>", at most 100 characters). Rejected for user tokens. */
+  createAsUser?: string | null
+  /** DisplayIconURL is that person's avatar; requires createAsUser. */
+  displayIconUrl?: string | null
   iconUrl?: string | null
   metadata?: Record<string, unknown>
   subtitle?: string | null
   title?: string | null
   /** URL identifies the attachment on its issue; saving it again updates it. */
   url: string
+}
+
+/** NotificationComment is the comment of an inbox notification. */
+export interface NotificationComment {
+  body?: string
+  id: string
+  userId?: string
+}
+
+/** NotificationIssue is the issue of an inbox notification. */
+export interface NotificationIssue {
+  id: string
+  identifier?: string
+  teamId?: string
+  title?: string
+  url?: string
+}
+
+/** OAuthAppWebhookEvent is sent to application webhooks when the application was uninstalled or its last authorization revoked. */
+export interface OAuthAppWebhookEvent {
+  action: "revoked"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  oauthClientId: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "OAuthApp"
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 /** Organization is the workspace with headline counts. */
@@ -667,6 +1711,32 @@ export interface PageInfo {
   hasPreviousPage: boolean
   /** StartCursor is the cursor of the first node (pass as `before`). */
   startCursor?: string | null
+}
+
+/** PermissionChangeWebhookEvent is sent to application webhooks when the teams the application can access change. */
+export interface PermissionChangeWebhookEvent {
+  action: "teamAccessChanged"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  addedTeamIds: string[]
+  appUserId: string
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  oauthClientId: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  removedTeamIds: string[]
+  type: "PermissionChange"
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface Project {
@@ -719,9 +1789,11 @@ export interface Project {
 }
 
 export interface ProjectConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Project[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 export interface ProjectDependencyRelationInput {
@@ -737,6 +1809,14 @@ export interface ProjectDescriptionRevision {
   projectId: string
 }
 
+export interface ProjectDescriptionRevisionPartial {
+  author?: UserPartial
+  createdAt?: string
+  description?: string
+  id: string
+  projectId?: string
+}
+
 export interface ProjectMilestone {
   createdAt: string
   description: string
@@ -750,9 +1830,11 @@ export interface ProjectMilestone {
 }
 
 export interface ProjectMilestoneConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: ProjectMilestone[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
 }
 
 export interface ProjectMilestoneMutationInput {
@@ -761,6 +1843,64 @@ export interface ProjectMilestoneMutationInput {
   targetDate?: string | null
   /** TemplateMilestoneID links a milestone sent with a new project to the project template milestone it came from (template issues follow it). */
   templateMilestoneId?: string
+}
+
+export interface ProjectMilestonePartial {
+  createdAt?: string
+  description?: string
+  /** DescriptionRevisions holds earlier descriptions, newest first, for the milestone's "Show description history" dialog. */
+  descriptionRevisions?: ProjectDescriptionRevisionPartial[]
+  id: string
+  name?: string
+  projectId?: string
+  targetDate?: string | null
+  updatedAt?: string
+}
+
+/** ProjectMilestoneReorderInput orders the milestones of a project. */
+export interface ProjectMilestoneReorderInput {
+  /** IDs lists every milestone of the project once, in the new order. */
+  ids: string[]
+}
+
+/** ProjectMilestoneWebhookData is a milestone with its position in the project. In webhook payloads only id is guaranteed. */
+export interface ProjectMilestoneWebhookDataPartial {
+  createdAt?: string
+  description?: string
+  /** DescriptionRevisions holds earlier descriptions, newest first, for the milestone's "Show description history" dialog. */
+  descriptionRevisions?: ProjectDescriptionRevisionPartial[]
+  id: string
+  name?: string
+  projectId?: string
+  /** SortOrder is the milestone's position in its project, starting at 0. */
+  sortOrder?: number
+  targetDate?: string | null
+  updatedAt?: string
+}
+
+/** ProjectMilestoneWebhookEvent is sent when a project milestone is created, updated or deleted, and, as an update with updatedFrom {sortOrder}, for every milestone whose position changed when the milestones of a project are reordered (eventType project.milestone_reordered). Its data is the milestone (with projectId and sortOrder); for remove, the milestone before it was deleted. */
+export interface ProjectMilestoneWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: ProjectMilestoneWebhookDataPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "ProjectMilestone"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface ProjectMutationInput {
@@ -795,6 +1935,55 @@ export interface ProjectMutationInput {
   updateSchedule?: ProjectUpdateSchedule | null
 }
 
+export interface ProjectPartial {
+  archivedAt?: string | null
+  /** creation through an application or Flow's agent */
+  botActor?: ActorBotPartial | null
+  color?: string
+  commentAttachments?: AttachmentPartial[]
+  comments?: CommentPartial[]
+  completedScopeHistory?: ProjectProgressHistoryPointPartial[]
+  createdAt?: string
+  creator?: UserPartial | null
+  creatorId?: string
+  customers?: string[]
+  dependencyIds?: string[]
+  description?: string
+  descriptionRevisions?: ProjectDescriptionRevisionPartial[]
+  health?: string
+  icon?: string
+  id: string
+  inProgressScopeHistory?: ProjectProgressHistoryPointPartial[]
+  initiatives?: string[]
+  issueCount?: number
+  issueCountHistory?: ProjectProgressHistoryPointPartial[]
+  labelIds?: string[]
+  lead?: UserPartial | null
+  memberIds?: string[]
+  milestones?: ProjectMilestonePartial[]
+  name?: string
+  position?: number
+  priority?: number
+  priorityLabel?: string
+  progress?: number
+  progressHistory?: ProjectProgressHistoryPointPartial[]
+  resources?: ProjectResourcePartial[]
+  scopeHistory?: ProjectProgressHistoryPointPartial[]
+  slackChannelId?: string
+  slackChannelName?: string
+  slugId?: string
+  startDate?: string | null
+  startDateResolution?: string
+  status?: ProjectStatusPartial
+  summary?: string
+  targetDate?: string | null
+  targetDateResolution?: string
+  teamIds?: string[]
+  updateCadence?: string
+  updateSchedule?: ProjectUpdateSchedulePartial | null
+  updatedAt?: string
+}
+
 export interface ProjectProgressHistoryPoint {
   addedEstimateToday?: number
   addedIssueCountToday?: number
@@ -810,6 +1999,23 @@ export interface ProjectProgressHistoryPoint {
   startedIssueCount?: number
   unstartedEstimate?: number
   value: number
+}
+
+export interface ProjectProgressHistoryPointPartial {
+  addedEstimateToday?: number
+  addedIssueCountToday?: number
+  backlogEstimate?: number
+  completedEstimate?: number
+  completedEstimateToday?: number
+  completedIssueCount?: number
+  completedIssueCountToday?: number
+  date?: string
+  scopeCount?: number
+  scopeEstimate?: number
+  startedEstimate?: number
+  startedIssueCount?: number
+  unstartedEstimate?: number
+  value?: number
 }
 
 export interface ProjectRecordPage {
@@ -830,6 +2036,17 @@ export interface ProjectResource {
   url: string
 }
 
+export interface ProjectResourcePartial {
+  createdAt?: string
+  creatorId?: string
+  id: string
+  pinnedTeamIds?: string[]
+  projectId?: string
+  title?: string
+  type?: string
+  url?: string
+}
+
 export interface ProjectStatus {
   color: string
   description?: string
@@ -839,11 +2056,79 @@ export interface ProjectStatus {
   type: string
 }
 
+export interface ProjectStatusPartial {
+  color?: string
+  description?: string
+  id: string
+  name?: string
+  position?: number
+  type?: string
+}
+
 export interface ProjectSummary {
   color: string
   icon?: string
   id: string
   name: string
+}
+
+export interface ProjectSummaryPartial {
+  color?: string
+  icon?: string
+  id: string
+  name?: string
+}
+
+/** ProjectUpdate mirrors the update stream shown on a Flow project. Updates belong to the project aggregate so they persist alongside project metadata. */
+export interface ProjectUpdate {
+  attachments: Attachment[]
+  body: string
+  bodyData?: Record<string, unknown>
+  comments: Comment[]
+  createdAt: string
+  diff?: PulseDiff | null
+  dueAt?: string | null
+  editedAt?: string | null
+  health: string
+  id: string
+  missing?: boolean
+  projectId: string
+  reactions: Record<string, string[]>
+  /** Snapshot records the project's status, priority, lead, dates and milestone progress when the update was posted; Diff compares it with the previous update's snapshot. Updates posted before snapshots were recorded have neither. */
+  snapshot?: PulseSnapshot | null
+  user: User
+}
+
+export interface ProjectUpdateCreateInput {
+  body: string
+  bodyData?: Record<string, unknown>
+  health: string
+}
+
+export interface ProjectUpdateMutationInput {
+  body?: string | null
+  bodyData?: Record<string, unknown>
+  health?: string | null
+}
+
+/** ProjectUpdate mirrors the update stream shown on a Flow project. Updates belong to the project aggregate so they persist alongside project metadata. In webhook payloads only id is guaranteed. */
+export interface ProjectUpdatePartial {
+  attachments?: AttachmentPartial[]
+  body?: string
+  bodyData?: Record<string, unknown>
+  comments?: CommentPartial[]
+  createdAt?: string
+  diff?: PulseDiffPartial | null
+  dueAt?: string | null
+  editedAt?: string | null
+  health?: string
+  id: string
+  missing?: boolean
+  projectId?: string
+  reactions?: Record<string, string[]>
+  /** Snapshot records the project's status, priority, lead, dates and milestone progress when the update was posted; Diff compares it with the previous update's snapshot. Updates posted before snapshots were recorded have neither. */
+  snapshot?: PulseSnapshotPartial | null
+  user?: UserPartial
 }
 
 export interface ProjectUpdateSchedule {
@@ -852,6 +2137,263 @@ export interface ProjectUpdateSchedule {
   mode: string
   timezone: string
   weekday: number
+}
+
+export interface ProjectUpdateSchedulePartial {
+  frequencyDays?: number
+  hour?: number
+  mode?: string
+  timezone?: string
+  weekday?: number
+}
+
+/** ProjectUpdateWebhookEvent is sent when a project update is posted, edited or deleted (also when an attachment is added to or removed from it). Its data is the update (with projectId); for remove, the update before it was deleted. */
+export interface ProjectUpdateWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: ProjectUpdatePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "ProjectUpdate"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** ProjectWebhookEvent is sent when a project is created, updated or deleted. */
+export interface ProjectWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: ProjectPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Project"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** PulseDiff lists what changed since the previous update of the same project or initiative. For initiatives Lead holds the owner change. */
+export interface PulseDiff {
+  /** Initiatives lists sub-initiatives added to or removed from an initiative. */
+  initiatives?: PulseProjectsChange | null
+  lead?: PulseValueChange | null
+  milestones?: PulseMilestoneChange[]
+  priority?: PulseValueChange | null
+  progressSince?: PulseProgressChange | null
+  projects?: PulseProjectsChange | null
+  startDate?: PulseValueChange | null
+  status?: PulseValueChange | null
+  targetDate?: PulseValueChange | null
+}
+
+/** PulseDiff lists what changed since the previous update of the same project or initiative. For initiatives Lead holds the owner change. In webhook payloads only id is guaranteed. */
+export interface PulseDiffPartial {
+  /** Initiatives lists sub-initiatives added to or removed from an initiative. */
+  initiatives?: PulseProjectsChangePartial | null
+  lead?: PulseValueChangePartial | null
+  milestones?: PulseMilestoneChangePartial[]
+  priority?: PulseValueChangePartial | null
+  progressSince?: PulseProgressChangePartial | null
+  projects?: PulseProjectsChangePartial | null
+  startDate?: PulseValueChangePartial | null
+  status?: PulseValueChangePartial | null
+  targetDate?: PulseValueChangePartial | null
+}
+
+export interface PulseMilestoneChange {
+  added?: boolean
+  /** Completed is set when the milestone reached 100%. */
+  completed?: boolean
+  /** From is the previous progress; absent for a milestone added since the previous update (Added). */
+  from?: number | null
+  id: string
+  name: string
+  targetDate?: string
+  to: number
+}
+
+export interface PulseMilestoneChangePartial {
+  added?: boolean
+  /** Completed is set when the milestone reached 100%. */
+  completed?: boolean
+  /** From is the previous progress; absent for a milestone added since the previous update (Added). */
+  from?: number | null
+  id: string
+  name?: string
+  targetDate?: string
+  to?: number
+}
+
+export interface PulseMilestoneSnapshot {
+  completed: number
+  id: string
+  name: string
+  progress: number
+  targetDate?: string
+  total: number
+}
+
+export interface PulseMilestoneSnapshotPartial {
+  completed?: number
+  id: string
+  name?: string
+  progress?: number
+  targetDate?: string
+  total?: number
+}
+
+export interface PulseProgressChange {
+  date: string
+  from: number
+  to: number
+}
+
+export interface PulseProgressChangePartial {
+  date?: string
+  from?: number
+  to?: number
+}
+
+export interface PulseProjectsChange {
+  added: PulseRef[]
+  removed: PulseRef[]
+}
+
+export interface PulseProjectsChangePartial {
+  added?: PulseRefPartial[]
+  removed?: PulseRefPartial[]
+}
+
+export interface PulseRef {
+  id: string
+  name: string
+}
+
+export interface PulseRefPartial {
+  id: string
+  name?: string
+}
+
+/** PulseSnapshot is the state of a project or initiative captured when an update is posted. Consecutive snapshots produce the update's PulseDiff. */
+export interface PulseSnapshot {
+  capturedAt: string
+  /** Initiatives are an initiative's sub-initiatives. Nil means the snapshot predates sub-initiative capture (no diff); an empty list is captured. */
+  initiatives?: PulseRef[] | null
+  lead?: string
+  leadId?: string
+  milestones?: PulseMilestoneSnapshot[]
+  priority?: number | null
+  priorityLabel?: string
+  progress?: number | null
+  /** Initiative fields (status, owner and target date reuse the fields above). */
+  projects?: PulseRef[]
+  startDate?: string
+  status?: string
+  /** Project fields. */
+  statusId?: string
+  targetDate?: string
+}
+
+/** PulseSnapshot is the state of a project or initiative captured when an update is posted. Consecutive snapshots produce the update's PulseDiff. In webhook payloads only id is guaranteed. */
+export interface PulseSnapshotPartial {
+  capturedAt?: string
+  /** Initiatives are an initiative's sub-initiatives. Nil means the snapshot predates sub-initiative capture (no diff); an empty list is captured. */
+  initiatives?: PulseRefPartial[] | null
+  lead?: string
+  leadId?: string
+  milestones?: PulseMilestoneSnapshotPartial[]
+  priority?: number | null
+  priorityLabel?: string
+  progress?: number | null
+  /** Initiative fields (status, owner and target date reuse the fields above). */
+  projects?: PulseRefPartial[]
+  startDate?: string
+  status?: string
+  /** Project fields. */
+  statusId?: string
+  targetDate?: string
+}
+
+/** PulseValueChange is one property change between two snapshots. Empty strings mean "none" (no lead, no date). */
+export interface PulseValueChange {
+  from: string
+  fromId?: string
+  to: string
+  toId?: string
+}
+
+/** PulseValueChange is one property change between two snapshots. Empty strings mean "none" (no lead, no date). In webhook payloads only id is guaranteed. */
+export interface PulseValueChangePartial {
+  from?: string
+  fromId?: string
+  to?: string
+  toId?: string
+}
+
+/** ReactionWebhookData is an emoji reaction. Exactly the parent that was reacted to is set. */
+export interface ReactionWebhookData {
+  commentId?: string
+  emoji: string
+  id: string
+  initiativeId?: string
+  initiativeUpdateId?: string
+  issueId?: string
+  parentId?: string
+  /** ParentType and ParentID name other parents (documents, for example). */
+  parentType?: string
+  projectId?: string
+  projectUpdateId?: string
+  userId: string
+}
+
+/** ReactionWebhookEvent is sent when an emoji reaction is added (create) or removed (remove). */
+export interface ReactionWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: ReactionWebhookData
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Reaction"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface Release {
@@ -884,9 +2426,77 @@ export interface Release {
 }
 
 export interface ReleaseConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Release[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface ReleaseNotePartial {
+  body?: string
+  bodyData?: Record<string, unknown>
+  createdAt?: string
+  creator?: UserPartial
+  id: string
+  publishedAt?: string | null
+  releaseId?: string
+  title?: string
+  updatedAt?: string
+}
+
+/** ReleaseNoteWebhookEvent is sent when a release note is created, updated or deleted. */
+export interface ReleaseNoteWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: ReleaseNotePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "ReleaseNote"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+export interface ReleasePartial {
+  archivedAt?: string | null
+  commitSha?: string
+  completedCount?: number
+  createdAt?: string
+  creator?: UserPartial
+  description?: string
+  id: string
+  issueCount?: number
+  issueIds?: string[]
+  name?: string
+  pipelineId?: string
+  position?: number
+  projectIds?: string[]
+  releaseNotes?: string
+  releasedAt?: string | null
+  resources?: ReleaseResourcePartial[]
+  slugId?: string
+  stage?: string
+  stageFrozenAt?: string | null
+  startDate?: string | null
+  startedAt?: string | null
+  status?: string
+  subscriberIds?: string[]
+  targetDate?: string | null
+  updatedAt?: string
+  version?: string
 }
 
 export interface ReleaseResource {
@@ -898,6 +2508,42 @@ export interface ReleaseResource {
   title: string
   type: string
   url?: string
+}
+
+export interface ReleaseResourcePartial {
+  /** Content holds markdown for documents attached by CI (the reference app's --document). */
+  content?: string
+  createdAt?: string
+  documentId?: string
+  id: string
+  title?: string
+  type?: string
+  url?: string
+}
+
+/** ReleaseWebhookEvent is sent when a release is created, updated, completed or deleted. */
+export interface ReleaseWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: ReleasePartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "Release"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 export interface SignedFile {
@@ -927,9 +2573,27 @@ export interface Team {
 }
 
 export interface TeamConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Team[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface TeamPartial {
+  /** ArchivedAt marks a deleted team inside its restoration window. Archived teams and their issues are hidden from every viewer until restored or purged. */
+  archivedAt?: string | null
+  archivedById?: string
+  color?: string
+  createdAt?: string | null
+  externalSource?: string
+  icon?: string
+  id: string
+  key?: string
+  name?: string
+  private?: boolean
+  retiredAt?: string | null
+  updatedAt?: string | null
 }
 
 export interface User {
@@ -954,9 +2618,57 @@ export interface User {
 }
 
 export interface UserConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: User[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface UserPartial {
+  active?: boolean
+  app?: boolean
+  appAllPublicTeams?: boolean
+  appScopes?: string[]
+  appTeamIds?: string[]
+  avatarUrl?: string
+  builtinAgent?: boolean
+  displayName?: string
+  email?: string
+  emailVerified?: boolean
+  id: string
+  jobTitle?: string
+  name?: string
+  oauthClientId?: string
+  outOfOfficeUntil?: string | null
+  userId?: string
+  /** Username is the workspace-unique handle (the reference app's "username"), derived per request from account settings or the email local part. */
+  username?: string
+}
+
+/** UserWebhookEvent is sent when a workspace member changes. */
+export interface UserWebhookEvent {
+  action: "create" | "update" | "remove"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: UserPartial
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "User"
+  /** UpdatedFrom holds the previous values of the changed properties, on update. */
+  updatedFrom?: Record<string, unknown>
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
 }
 
 /** Viewer describes the authenticated caller. */
@@ -981,6 +2693,7 @@ export interface ViewerApplication {
   name?: string
 }
 
+/** Webhook is a webhook as the API returns it: the stored webhook with its effective payload version and signing state. The signing secret is never part of it (only WebhookWithSecret on creation and rotation). */
 export interface Webhook {
   applicationClientId?: string
   applicationId?: string
@@ -1001,23 +2714,196 @@ export interface Webhook {
   managedBy?: string
   name: string
   nextAttemptAt?: string | null
-  /** PayloadVersion is the delivery envelope (WebhookPayloadVersion for new webhooks; 0 means the legacy version 1 envelope). */
-  payloadVersion?: number
+  /** PayloadVersion is the delivery envelope: 2 is the current one, 1 the legacy envelope of webhooks created before signing. */
+  payloadVersion: 1 | 2
   resourceTypes: string[]
   secretPrefix?: string
   secretRevokedAt?: string | null
   /** SigningEnabled is set once a signing secret is stored for the webhook. Webhooks created before signing only kept a hash of their secret and deliver unsigned until the secret is rotated. */
   signingEnabled?: boolean
+  /** SigningStatus is active, rotationRequired (created before signing: rotate the secret to sign deliveries) or revoked (deliveries go out unsigned). */
+  signingStatus: "active" | "rotationRequired" | "revoked"
   teamIds: string[]
   teamRestriction?: string
   updatedAt: string
   url: string
 }
 
+/** WebhookActor is who made the change. */
+export interface WebhookActor {
+  email?: string
+  id: string
+  name?: string
+  type: "user" | "application"
+  /** URL is the actor's profile page in Flow. */
+  url?: string
+}
+
 export interface WebhookConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: Webhook[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+/** WebhookCreateInput creates a webhook. */
+export interface WebhookCreateInput {
+  /** AllPublicTeams selects every team. */
+  allPublicTeams?: boolean | null
+  enabled?: boolean | null
+  /** Label is an alias of name. */
+  label?: string | null
+  /** Name is shown in the webhook list; the URL when omitted. */
+  name?: string | null
+  /** PayloadVersion selects the delivery envelope; new webhooks use 2. */
+  payloadVersion?: 1 | 2 | null
+  /** ResourceTypes are payload type names (Issue, Comment) or Flow ids (issues, comments). */
+  resourceTypes: string[]
+  /** TeamID restricts the webhook to one team. */
+  teamId?: string | null
+  /** TeamIDs restricts the webhook to several teams. Omit both for every team you can access. */
+  teamIds?: string[] | null
+  /** TeamRestriction is all or selected; it follows teamIds when omitted. */
+  teamRestriction?: "all" | "selected" | null
+  /** URL is a public HTTPS endpoint that answers 2xx within 5 seconds. */
+  url: string
+}
+
+/** WebhookDelivery is one queued or completed delivery of an event to a webhook endpoint. Payload is the request body without webhookTimestamp, which is added (and signed) when each attempt is sent. */
+export interface WebhookDelivery {
+  action: string
+  attempt: number
+  attempts: WebhookDeliveryAttempt[]
+  completedAt?: string | null
+  createdAt: string
+  durationMs: number
+  error?: string
+  eventId: string
+  eventType: string
+  id: string
+  kind: "event" | "test" | "lifecycle"
+  maxAttempts: number
+  nextAttemptAt?: string | null
+  payload?: unknown
+  redeliveryOf?: string
+  responseBody?: string
+  responseStatus?: number
+  status: "pending" | "delivering" | "retrying" | "succeeded" | "failed" | "canceled"
+  updatedAt: string
+  url: string
+  webhookId: string
+}
+
+/** WebhookDeliveryAttempt summarises one HTTP attempt of a delivery. */
+export interface WebhookDeliveryAttempt {
+  at: string
+  attempt: number
+  durationMs: number
+  error?: string
+  responseStatus?: number
+  succeeded: boolean
+}
+
+export interface WebhookDeliveryPage {
+  hasMore: boolean
+  items: WebhookDelivery[]
+  nextCursor?: string
+}
+
+/** WebhookFailureEvent is a persisted outbound delivery failure for a workspace webhook. */
+export interface WebhookFailureEvent {
+  applicationId?: string
+  createdAt: string
+  executionId: string
+  httpStatus?: number | null
+  id: string
+  responseOrError: string
+  url: string
+  webhookId: string
+}
+
+/** WebhookTestData is the body of a test event. */
+export interface WebhookTestData {
+  message: string
+  webhookId: string
+}
+
+/** WebhookTestEvent is sent by "Send test event" and POST /api/webhooks/{id}/test. */
+export interface WebhookTestEvent {
+  action: "test"
+  /** Actor is who made the change; null for system changes. */
+  actor?: WebhookActor | null
+  /** CreatedAt is when the change happened (ISO 8601). */
+  createdAt: string
+  data: WebhookTestData
+  /** EventID is Flow's id of the change. Every webhook receiving the same change gets the same value; use it to deduplicate. */
+  eventId?: string
+  /** EventType is Flow's detailed event, for example issue.updated or comment.resolved. */
+  eventType?: string
+  /** OrganizationID is the workspace id. */
+  organizationId: string
+  type: "WebhookTest"
+  /** URL is the entity's page in Flow, when it has one. */
+  url?: string
+  /** WebhookID is the webhook this delivery belongs to. */
+  webhookId: string
+  /** WebhookTimestamp is the Unix time in milliseconds when the delivery was sent. It is signed: use it for the replay check. */
+  webhookTimestamp: number
+}
+
+/** WebhookUpdateInput changes a webhook. Application-managed webhooks only accept enabled. */
+export interface WebhookUpdateInput {
+  allPublicTeams?: boolean | null
+  /** Enabled false pauses the webhook and cancels its queued retries; true resumes it and resets the failure window. */
+  enabled?: boolean | null
+  label?: string | null
+  name?: string | null
+  /** PayloadVersion 2 switches a legacy webhook to the current envelope. */
+  payloadVersion?: 1 | 2 | null
+  resourceTypes?: string[] | null
+  teamId?: string | null
+  teamIds?: string[] | null
+  teamRestriction?: "all" | "selected" | null
+  url?: string | null
+}
+
+/** WebhookWithSecret is returned when a webhook is created or its secret rotated: the only time the signing secret is shown. */
+export interface WebhookWithSecret {
+  applicationClientId?: string
+  applicationId?: string
+  /** Stream progress: the last delivered audit entry and retry state. */
+  auditCursorAt?: string | null
+  auditCursorId?: string
+  /** AuditLog marks the workspace's audit log stream. It receives audit entries only, signed with a secret kept outside the workspace document. */
+  auditLog?: boolean
+  createdAt: string
+  creatorId: string
+  deliveryAttempts?: number
+  disabledAt?: string | null
+  disabledReason?: string
+  enabled: boolean
+  failingSince?: string | null
+  id: string
+  /** ManagedBy is "application" for a webhook created by an OAuth application's webhook settings when the application was installed; it is removed when the application is uninstalled or revoked. */
+  managedBy?: string
+  name: string
+  nextAttemptAt?: string | null
+  /** PayloadVersion is the delivery envelope: 2 is the current one, 1 the legacy envelope of webhooks created before signing. */
+  payloadVersion: 1 | 2
+  resourceTypes: string[]
+  /** Secret signs every delivery (Flow-Signature). Store it now. */
+  secret: string
+  secretPrefix?: string
+  secretRevokedAt?: string | null
+  /** SigningEnabled is set once a signing secret is stored for the webhook. Webhooks created before signing only kept a hash of their secret and deliver unsigned until the secret is rotated. */
+  signingEnabled?: boolean
+  /** SigningStatus is active, rotationRequired (created before signing: rotate the secret to sign deliveries) or revoked (deliveries go out unsigned). */
+  signingStatus: "active" | "rotationRequired" | "revoked"
+  teamIds: string[]
+  teamRestriction?: string
+  updatedAt: string
+  url: string
 }
 
 export interface WorkflowState {
@@ -1033,9 +2919,23 @@ export interface WorkflowState {
 }
 
 export interface WorkflowStateConnection {
-  /** Nodes ordered newest first by orderBy. */
+  /** Nodes ordered by orderBy (timestamps newest first). */
   nodes: WorkflowState[]
   pageInfo: PageInfo
+  /** Number of matching nodes, on endpoints that report it (issues, with includeTotal=true). */
+  totalCount?: number
+}
+
+export interface WorkflowStatePartial {
+  color?: string
+  default?: boolean
+  description?: string
+  id: string
+  name?: string
+  position?: number
+  reserved?: boolean
+  teamId?: string
+  type?: string
 }
 
 export interface Workspace {

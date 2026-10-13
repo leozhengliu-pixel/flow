@@ -27,8 +27,8 @@ install it from the folder (or from a tarball made with `npm pack`):
 
 ```bash
 cd sdk/typescript && npm install && npm run build
-npm pack                      # produces flow-sdk-0.2.0.tgz
-npm install ./flow-sdk-0.2.0.tgz   # in your project
+npm pack                      # produces flow-sdk-0.3.0.tgz
+npm install ./flow-sdk-0.3.0.tgz   # in your project
 ```
 
 ```ts
@@ -126,10 +126,11 @@ exported for typing filters.
 
 ### Issues
 
-Issues use the issue query API, which predates connections. `client.issues`
-wraps it in a connection: forward paging only, at most 100 per page, newest
+`client.issues` uses the issue query API (`GET /api/issue-records`) in its
+connection form: cursor paging in both directions, at most 100 per page, newest
 first unless you choose another `orderBy` (`createdAt`, `updatedAt`,
-`priority`, `title`, `sortOrder`) and `orderDirection`.
+`priority`, `title`, `sortOrder`) and `orderDirection`. `last` without `before`
+starts at the final page, and `fetchNext()` / `fetchPrevious()` both work.
 
 ```ts
 const issues = await client.issues({
@@ -140,8 +141,12 @@ const issues = await client.issues({
   includeArchived: false,
   // The view filter tree used by saved views (an object or its JSON text).
   filter: { and: [{ field: 'priority', operator: 'is', values: ['urgent'] }] },
+  includeTotal: true,
 })
-issues.totalCount // matching issues in total
+issues.totalCount // matching issues in total (with includeTotal)
+
+const latest = await client.issues({ last: 20 }) // the oldest 20 by the default order, i.e. the final page
+await latest.fetchPrevious()
 
 const issue = await client.issue('ENG-123') // an id or an identifier
 ```
@@ -154,7 +159,7 @@ A connection has `nodes`, `pageInfo` (`hasNextPage`, `hasPreviousPage`,
 ```ts
 const issues = await client.issues({ first: 50 })
 
-// fetchNext() appends the next page to issues.nodes (fetchPrevious() prepends).
+// fetchNext() appends the next page to issues.nodes (fetchPrevious() prepends the one before).
 while (issues.pageInfo.hasNextPage) await issues.fetchNext()
 
 // Iterate lazily over this page and every following one. The connection is not modified.
@@ -168,8 +173,11 @@ const first500 = await connection.all({ limit: 500 })
 ```
 
 Cursors are opaque and stay valid when new resources are created. Page
-backward with `client.teams({ last: 25 })` and `fetchPrevious()`; issues and
-webhook deliveries only page forward.
+backward with `client.teams({ last: 25 })` and `fetchPrevious()`; the delivery
+log of a webhook only pages forward. Routes that predate connections answer
+with an array or a page unless a paging argument is given; the SDK always asks
+for the connection, and `client.api.get<Name>Legacy` (for example
+`getDocumentsLegacy`) returns the original response.
 
 ## Mutations
 
@@ -225,10 +233,29 @@ const { customer, created } = await client.upsertCustomer({
 await client.createCustomerRequest({ customerExternalId: 'crm-1042', issueId: 'ENG-123', attachmentUrl })
 ```
 
+### Documents, milestones, updates
+
+```ts
+const doc = await client.createDocument({ title: 'Runbook', content: '# Steps', projectIds: [project.id] })
+await client.updateDocument(doc.id, { content: 'Edited', expectedVersion: doc.version }) // 409 on a concurrent change
+await client.deleteDocument(doc.id)
+
+const milestone = await client.createProjectMilestone(project.id, { name: 'Beta', targetDate: '2026-12-01' })
+await client.reorderProjectMilestones(project.id, [milestone.id, ...others])
+await client.createProjectUpdate(project.id, { body: 'On track', health: 'onTrack' })
+const updates = await client.projectUpdates(project.id) // newest first, not paged
+await client.createInitiativeUpdate(initiative.id, { body: 'Going well', health: 'onTrack' })
+```
+
+Single records: `client.team(idOrKey)`, `user(idOrMe)`, `workflowState`,
+`issueLabel`, `cycle`, `project(idOrSlug)`, `initiative(idOrSlug)` and
+`customer`.
+
 ### Acting for a person (`actor=app`)
 
 Application tokens can show "Mark via Acme Sync" with `createAsUser` and
-`displayIconUrl` on `createIssue`, `createComment` and `upsertLinkAttachment`
+`displayIconUrl` on `createIssue`, `createComment`, `createDocument` and
+`upsertLinkAttachment`; the fields are part of the generated input types
 ([oauth.md](oauth.md#via-app-attribution)).
 
 ### Webhooks, audit log
@@ -240,7 +267,8 @@ const { secret, ...webhook } = await client.createWebhook({ label: 'CI', url: 'h
 await client.updateWebhook(webhook.id, { enabled: false })
 await client.rotateWebhookSecret(webhook.id) // the new secret is returned once
 await client.testWebhook(webhook.id)
-for await (const delivery of await client.webhookDeliveries(webhook.id, { status: 'Failed' })) console.log(delivery.id)
+for await (const delivery of await client.webhookDeliveries(webhook.id, { status: 'failed' })) console.log(delivery.id)
+await client.revokeWebhookSecret(webhook.id) // 204: deliveries go out unsigned until you rotate
 
 const log = await client.auditLog({ type: 'customer.created', since: '-P7D' })
 const types = await client.auditLogTypes()
@@ -378,6 +406,11 @@ verify both and give you typed events. They are in `@flow/sdk/webhooks`
 because they use `node:crypto` (Node.js, Bun, Deno, Cloudflare Workers with
 `nodejs_compat`).
 
+Event types (`WebhookEvent`, `IssueWebhookEvent`, `WebhookEventOf<'Comment'>`,
+...) are generated from the `webhooks` section of `openapi.json`, which is
+described by the same Go types the server's deliveries are checked against.
+Entity `data` is the REST model with only `id` guaranteed (`IssuePartial`, ...).
+
 ### Verify a request yourself
 
 ```ts
@@ -494,9 +527,11 @@ with `refreshToken` to refresh on demand.
 ## Generated code
 
 `sdk/typescript/src/generated/` is produced from [`openapi.json`](openapi.json):
-`models.ts` (one type per component schema), and `operations.ts` (request and
-query types, the `operations` table and the `FlowApi` class with one method per
-typed operation). The generator needs only Node.js:
+`models.ts` (one type per component schema, including the payload of every
+webhook event), `operations.ts` (request and query types, the `operations`
+table and the `FlowApi` class with one method per typed operation, and a
+`...Legacy` method for list routes with two response shapes) and `webhooks.ts`
+(the `WebhookEvent` union built from the `webhooks` section of the document). The generator needs only Node.js:
 
 ```bash
 node sdk/typescript/scripts/generate.mjs           # regenerate
@@ -504,8 +539,9 @@ node sdk/typescript/scripts/generate.mjs --check   # CI: fails when the generate
 ```
 
 After changing routes or contract types, run `node scripts/generate-openapi.mjs`
-first, then regenerate the SDK. Routes that are not in the typed contract yet
-(see the inventory in `openapi.json`) are reachable through `client.request()`.
+first, then regenerate the SDK. Routes marked `x-flow-internal` in
+`openapi.json` serve the web app and are not part of the contract; they are
+reachable through `client.request()` but may change.
 
 Develop the package with `npm install`, `npm run build`, `npm test` and
 `npx tsc --noEmit` inside `sdk/typescript`.

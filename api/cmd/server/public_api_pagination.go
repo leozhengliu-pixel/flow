@@ -224,13 +224,18 @@ func timeValue(value *time.Time) time.Time {
 
 // connectionRequested reports whether a legacy list endpoint was called with
 // connection arguments; those endpoints keep their original array/page shape
-// otherwise.
+// otherwise. `connection=1` (or true) asks for the connection explicitly, so a
+// client can page with the defaults.
 func connectionRequested(r *http.Request) bool {
 	query := r.URL.Query()
 	for _, name := range []string{"first", "last", "after", "before", "orderBy"} {
 		if query.Has(name) {
 			return true
 		}
+	}
+	switch strings.ToLower(strings.TrimSpace(query.Get("connection"))) {
+	case "1", "true":
+		return true
 	}
 	return false
 }

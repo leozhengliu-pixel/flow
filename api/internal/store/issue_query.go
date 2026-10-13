@@ -52,6 +52,15 @@ type IssueRecordQuery struct {
 	IncludeTotal       bool
 	Summary            bool
 	IncludeDescription bool
+	// Reverse pages backward: Cursor is then the first row of the page that
+	// follows the wanted one, and the page holds the Limit rows that precede
+	// it (the last Limit rows of the whole result without a Cursor). Rows
+	// keep the requested order. Reverse is not part of a cursor's scope, so
+	// the cursors of one page serve both directions.
+	Reverse bool `json:",omitempty"`
+	// Cursors fills IssueRecordPage.StartCursor, EndCursor and HasPrevious
+	// (connection responses). Legacy responses leave them out.
+	Cursors bool `json:",omitempty"`
 }
 
 type IssueRecordAccess struct {
@@ -271,6 +280,12 @@ type IssueRecordPage struct {
 	NextCursor string         `json:"nextCursor,omitempty"`
 	HasMore    bool           `json:"hasMore"`
 	Total      int64          `json:"total"`
+	// StartCursor and EndCursor address the first and last item of the page
+	// (pass as before / after); HasPrevious reports rows before the page.
+	// Set only for queries with Cursors.
+	StartCursor string `json:"startCursor,omitempty"`
+	EndCursor   string `json:"endCursor,omitempty"`
+	HasPrevious bool   `json:"hasPrevious,omitempty"`
 }
 
 type IssueRecordGroup struct {
@@ -748,6 +763,7 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	scope.Cursor = ""
 	scope.Limit = 0
 	scope.IncludeTotal = false
+	scope.Reverse, scope.Cursors = false, false
 	raw, _ := json.Marshal(scope)
 	hash := fmt.Sprintf("%x", sha256.Sum256(raw))
 	if query.IncludeTotal {
@@ -776,6 +792,10 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 		if direction == "DESC" {
 			operator = "<"
 		}
+		if query.Reverse {
+			// Backward: the rows that sort before the cursor row.
+			operator = map[string]string{">": "<", "<": ">"}[operator]
+		}
 		where += " AND (" + expression + operator + "? OR (" + expression + "=? AND i.id" + operator + "?))"
 		args = append(args, value, value, cursor.ID)
 	}
@@ -787,13 +807,19 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 	if query.Summary && query.IncludeDescription {
 		descriptionColumn = "COALESCE(" + s.jsonText("i.data", "description") + ", '')"
 	}
-	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+","+expression+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY "+expression+" "+direction+",i.id "+direction+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
+	scanDirection := direction
+	if query.Reverse {
+		// The index is read from the far end; the page is turned around below.
+		scanDirection = map[string]string{"ASC": "DESC", "DESC": "ASC"}[direction]
+	}
+	rows, err := s.db.QueryContext(ctx, prefix+"SELECT "+payload+","+expression+","+descriptionColumn+" FROM issue_records i WHERE "+where+" ORDER BY "+expression+" "+scanDirection+",i.id "+scanDirection+" LIMIT ?", append(append(prefixArgs, args...), limit+1)...)
 	if err != nil {
 		return page, err
 	}
 	defer rows.Close()
 	lastValue := ""
 	pageBytes := 0
+	sortValues := []string{}
 	for rows.Next() {
 		var raw []byte
 		var sortValue string
@@ -817,17 +843,38 @@ func (s *SQLiteStore) queryIssueRecordsSQL(ctx context.Context, query IssueRecor
 			}
 		}
 		page.Items = append(page.Items, issue)
+		sortValues = append(sortValues, sortValue)
 		pageBytes += len(raw) + len(description)
 		lastValue = sortValue
 	}
 	if err := rows.Err(); err != nil {
 		return page, err
 	}
-	if page.HasMore {
-		raw, _ := json.Marshal(issueRecordCursor{Version: 1, Scope: hash, Value: lastValue, ID: page.Items[len(page.Items)-1].ID})
-		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
-	}
 	rows.Close()
+	encode := func(index int) string {
+		raw, _ := json.Marshal(issueRecordCursor{Version: 1, Scope: hash, Value: sortValues[index], ID: page.Items[index].ID})
+		return base64.RawURLEncoding.EncodeToString(raw)
+	}
+	if query.Reverse {
+		// More rows beyond the page's far edge mean earlier rows exist; a
+		// cursor row (that existed when the cursor was issued) follows it.
+		hasPrevious := page.HasMore
+		slices.Reverse(page.Items)
+		slices.Reverse(sortValues)
+		page.HasMore, page.HasPrevious = query.Cursor != "", hasPrevious
+	} else {
+		page.HasPrevious = query.Cursor != ""
+		if page.HasMore {
+			raw, _ := json.Marshal(issueRecordCursor{Version: 1, Scope: hash, Value: lastValue, ID: page.Items[len(page.Items)-1].ID})
+			page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+		}
+	}
+	if query.Cursors && len(page.Items) > 0 {
+		page.StartCursor, page.EndCursor = encode(0), encode(len(page.Items)-1)
+	}
+	if !query.Cursors {
+		page.HasPrevious = false
+	}
 	return page, nil
 }
 

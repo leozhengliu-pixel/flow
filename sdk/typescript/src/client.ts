@@ -3,6 +3,8 @@ import { Connection, cursorConnection, type PageInfo, type PageRequest, type Pag
 import { FlowApi, operations } from './generated/operations.js'
 import type {
   GetAttachmentsQuery,
+  GetIssueRecordsQuery,
+  GetWebhooksIdDeliveriesQuery,
   GetWorkspaceAuditLogQuery,
   GetCommentsQuery,
   GetCustomerRequestsQuery,
@@ -24,6 +26,8 @@ import type {
   AuditEntryTypeCount,
   AuditLogEntry,
   Comment,
+  ApplicationWebhookInput,
+  ApplicationWebhookSettings,
   CommentCreateInput,
   CommentUpdateInput,
   Customer,
@@ -33,42 +37,50 @@ import type {
   CustomerUpsertInput,
   Cycle,
   Document,
+  DocumentCreateInput,
+  DocumentUpdateInput,
   FileUpload,
   FileUploadInput,
   Initiative,
   InitiativeMutationInput,
+  InitiativeUpdate,
+  InitiativeUpdateCreateInput,
   Issue,
   IssueCreateInput,
+  IssueFilter,
   IssueLabel,
   IssueUpdateInput,
   LinkAttachmentInput,
   Organization,
   Project,
   ProjectMilestone,
+  ProjectMilestoneMutationInput,
   ProjectMutationInput,
+  ProjectUpdate,
+  ProjectUpdateCreateInput,
+  ProjectUpdateMutationInput,
   Release,
   SignedFile,
   Team,
   User,
   Viewer,
   Webhook,
+  WebhookCreateInput,
+  WebhookDelivery,
+  WebhookFailureEvent,
+  WebhookUpdateInput,
+  WebhookWithSecret,
   WorkflowState,
 } from './generated/models.js'
 import { HttpClient, type FetchLike, type RequestOptions, type RequestSpec, type TransportOptions } from './http.js'
 import type { RateLimitInfo } from './rate-limit.js'
 import type {
-  AppAttribution,
   CustomerUpsertResult,
-  IssueFilter,
   IssuesArgs,
   LinkAttachmentResult,
   UploadBody,
   UploadFileOptions,
-  WebhookCreateInput,
   WebhookDeliveriesArgs,
-  WebhookDelivery,
-  WebhookUpdateInput,
-  WebhookWithSecret,
 } from './types.js'
 
 export type TokenSource = string | (() => string | Promise<string>)
@@ -112,13 +124,14 @@ export type ReleasesArgs = GetReleasesQuery
 export type WebhooksArgs = GetWebhooksQuery
 export type AuditLogArgs = GetWorkspaceAuditLogQuery
 
-export type CreateIssueInput = IssueCreateInput & AppAttribution
-export type CreateCommentInput = CommentCreateInput & AppAttribution & {
+/** Issues take `createAsUser` and `displayIconUrl` (actor=app tokens: "<name> via <App>") directly. */
+export type CreateIssueInput = IssueCreateInput
+export type CreateCommentInput = CommentCreateInput & {
   /** Issue id or identifier (`ENG-123`). Comments on documents, projects and initiatives are read-only in the SDK for now. */
   issueId: string
 }
 export type UpdateCommentInput = CommentUpdateInput & { issueId: string }
-export type UpsertLinkAttachmentInput = LinkAttachmentInput & AppAttribution
+export type UpsertLinkAttachmentInput = LinkAttachmentInput
 export type UpdateAttachmentInput = LinkAttachmentInput & { issueId: string }
 
 export interface RawRequestOptions extends RequestOptions {
@@ -157,9 +170,9 @@ function csv(value: string | string[] | undefined): string | undefined {
 function pageOf<T>(result: unknown): Page<T> {
   if (Array.isArray(result)) return { nodes: result as T[], pageInfo: { hasNextPage: false, hasPreviousPage: false } }
   if (typeof result === 'object' && result !== null) {
-    const record = result as { nodes?: T[]; items?: T[]; pageInfo?: PageInfo }
+    const record = result as { nodes?: T[]; items?: T[]; pageInfo?: PageInfo; totalCount?: number }
     if (Array.isArray(record.nodes)) {
-      return { nodes: record.nodes, pageInfo: { hasNextPage: false, hasPreviousPage: false, ...record.pageInfo } }
+      return { nodes: record.nodes, pageInfo: { hasNextPage: false, hasPreviousPage: false, ...record.pageInfo }, totalCount: record.totalCount }
     }
     if (Array.isArray(record.items)) return { nodes: record.items, pageInfo: { hasNextPage: false, hasPreviousPage: false } }
   }
@@ -244,7 +257,9 @@ export class FlowClient {
     const { first, after, last, before, ...rest } = (args ?? {}) as Partial<PageRequest> & Record<string, unknown>
     const pageSize = last ?? first ?? 50
     // A page argument makes every list endpoint answer with a connection.
-    const initial: PageRequest = last === undefined ? { first: first ?? pageSize, after, before } : { last, before, after }
+    // `last` and `before` page backward, `first` and `after` forward.
+    const backward = last !== undefined || (before !== undefined && first === undefined)
+    const initial: PageRequest = backward ? { last: pageSize, before } : { first: pageSize, after }
     const fetchPage = async (request: PageRequest): Promise<Page<T>> => pageOf<T>(await call({ ...rest, ...request } as unknown as Q))
     return new Connection<T>(await fetchPage(initial), fetchPage, pageSize)
   }
@@ -268,37 +283,31 @@ export class FlowClient {
   // -------------------------------------------------------------------------
 
   /**
-   * Lists issues, newest first by default, using the issue query API
-   * (cursor paging, forward only, at most 100 per page).
+   * Lists issues, newest first by default, with the issue query API: cursor
+   * paging in both directions (`first`/`after`, `last`/`before`; at most 100
+   * per page), so `fetchNext()` and `fetchPrevious()` both work. `last`
+   * without `before` starts at the final page.
    */
   async issues(args: IssuesArgs = {}, options?: RequestOptions): Promise<Connection<Issue>> {
-    const limit = Math.min(100, Math.max(1, args.first ?? 50))
-    const sort = args.orderBy ?? 'createdAt'
-    const direction = args.orderDirection ?? (sort === 'createdAt' || sort === 'updatedAt' ? 'desc' : undefined)
-    const filter = args.filter === undefined ? undefined : typeof args.filter === 'string' ? args.filter : JSON.stringify(args.filter satisfies IssueFilter)
-    return cursorConnection<Issue>(
-      async (cursor, size) => {
-        const page = await this.api.getIssueRecords(
-          {
-            query: {
-              limit: size,
-              cursor,
-              sort,
-              direction,
-              q: args.query,
-              teamId: csv(args.teamId),
-              projectId: csv(args.projectId),
-              stateId: csv(args.stateId),
-              archived: args.includeArchived ? 'all' : undefined,
-              filter,
-            },
-          },
-          options,
-        )
-        return { items: page.items ?? [], hasMore: page.hasMore, nextCursor: page.nextCursor, total: page.total }
-      },
-      { after: args.after, limit },
+    const { first, after, last, before, orderBy, orderDirection, filter, query, teamId, projectId, stateId, includeArchived, includeTotal } = args
+    const limit = (value: number | undefined) => (value === undefined ? undefined : Math.min(100, Math.max(1, value)))
+    const encoded = filter === undefined ? undefined : typeof filter === 'string' ? filter : JSON.stringify(filter satisfies IssueFilter)
+    const base: GetIssueRecordsQuery = {
+      orderBy: orderBy ?? 'createdAt',
+      orderDirection,
+      q: query,
+      teamId: csv(teamId),
+      projectId: csv(projectId),
+      stateId: csv(stateId),
+      includeArchived: includeArchived ? true : undefined,
+      includeTotal: includeTotal ? true : undefined,
+      filter: encoded as unknown as GetIssueRecordsQuery['filter'],
+    }
+    const paged = await this.list<Issue, GetIssueRecordsQuery>(
+      { ...base, first: limit(first), after, last: limit(last), before },
+      request => this.api.getIssueRecords({ query: request }, options),
     )
+    return paged
   }
 
   /** One issue by id or identifier (`ENG-123`). */
@@ -341,6 +350,10 @@ export class FlowClient {
     return this.api.patchIssuesIdCommentsCommentId({ path: { id: issueId, commentId }, body }, options)
   }
 
+  deleteComment(issueId: string, commentId: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteIssuesIdCommentsCommentId({ path: { id: issueId, commentId } }, options)
+  }
+
   // -------------------------------------------------------------------------
   // Workspace structure
   // -------------------------------------------------------------------------
@@ -349,20 +362,42 @@ export class FlowClient {
     return this.list<Team, TeamsArgs>(args, query => this.api.getTeams({ query }, options))
   }
 
+  /** One team by id or key (`ENG`). */
+  team(id: string, options?: RequestOptions): Promise<Team> {
+    return this.api.getTeamsId({ path: { id } }, options)
+  }
+
   users(args?: UsersArgs, options?: RequestOptions): Promise<Connection<User>> {
     return this.list<User, UsersArgs>(args, query => this.api.getUsers({ query }, options))
+  }
+
+  /** One user by id; `me` is the caller. */
+  user(id: string, options?: RequestOptions): Promise<User> {
+    return this.api.getUsersId({ path: { id } }, options)
   }
 
   workflowStates(args?: WorkflowStatesArgs, options?: RequestOptions): Promise<Connection<WorkflowState>> {
     return this.list<WorkflowState, WorkflowStatesArgs>(args, query => this.api.getWorkflowStates({ query }, options))
   }
 
+  workflowState(id: string, options?: RequestOptions): Promise<WorkflowState> {
+    return this.api.getWorkflowStatesId({ path: { id } }, options)
+  }
+
   issueLabels(args?: IssueLabelsArgs, options?: RequestOptions): Promise<Connection<IssueLabel>> {
     return this.list<IssueLabel, IssueLabelsArgs>(args, query => this.api.getIssueLabels({ query }, options))
   }
 
+  issueLabel(id: string, options?: RequestOptions): Promise<IssueLabel> {
+    return this.api.getIssueLabelsId({ path: { id } }, options)
+  }
+
   cycles(args?: CyclesArgs, options?: RequestOptions): Promise<Connection<Cycle>> {
     return this.list<Cycle, CyclesArgs>(args, query => this.api.getCycles({ query }, options))
+  }
+
+  cycle(id: string, options?: RequestOptions): Promise<Cycle> {
+    return this.api.getCyclesId({ path: { id } }, options)
   }
 
   // -------------------------------------------------------------------------
@@ -373,6 +408,11 @@ export class FlowClient {
     return this.list<Project, ProjectsArgs>(args, query => this.api.getProjects({ query }, options))
   }
 
+  /** One project by id or `slugId`, with its milestones, comments and history. */
+  project(id: string, options?: RequestOptions): Promise<Project> {
+    return this.api.getProjectsId({ path: { id } }, options)
+  }
+
   createProject(input: ProjectMutationInput, options?: RequestOptions): Promise<Project> {
     return this.api.postProjects({ body: input }, options)
   }
@@ -381,12 +421,56 @@ export class FlowClient {
     return this.api.patchProjectsId({ path: { id }, body: input }, options)
   }
 
+  deleteProject(id: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteProjectsId({ path: { id } }, options)
+  }
+
   projectMilestones(args?: ProjectMilestonesArgs, options?: RequestOptions): Promise<Connection<ProjectMilestone>> {
     return this.list<ProjectMilestone, ProjectMilestonesArgs>(args, query => this.api.getProjectMilestones({ query }, options))
   }
 
+  createProjectMilestone(projectId: string, input: ProjectMilestoneMutationInput, options?: RequestOptions): Promise<ProjectMilestone> {
+    return this.api.postProjectsIdMilestones({ path: { id: projectId }, body: input }, options)
+  }
+
+  updateProjectMilestone(projectId: string, milestoneId: string, input: ProjectMilestoneMutationInput, options?: RequestOptions): Promise<ProjectMilestone> {
+    return this.api.patchProjectsIdMilestonesMilestoneId({ path: { id: projectId, milestoneId }, body: input }, options)
+  }
+
+  /** Issues in the milestone keep their project and lose the milestone. */
+  deleteProjectMilestone(projectId: string, milestoneId: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteProjectsIdMilestonesMilestoneId({ path: { id: projectId, milestoneId } }, options)
+  }
+
+  /** Orders the milestones of a project; `ids` lists every milestone exactly once. */
+  reorderProjectMilestones(projectId: string, ids: string[], options?: RequestOptions): Promise<ProjectMilestone[]> {
+    return this.api.postProjectsIdMilestonesReorder({ path: { id: projectId }, body: { ids } }, options)
+  }
+
+  /** The updates of a project, newest first (not paged). */
+  projectUpdates(projectId: string, options?: RequestOptions): Promise<ProjectUpdate[]> {
+    return this.api.getProjectsIdUpdates({ path: { id: projectId } }, options)
+  }
+
+  createProjectUpdate(projectId: string, input: ProjectUpdateCreateInput, options?: RequestOptions): Promise<ProjectUpdate> {
+    return this.api.postProjectsIdUpdates({ path: { id: projectId }, body: input }, options)
+  }
+
+  updateProjectUpdate(projectId: string, updateId: string, input: ProjectUpdateMutationInput, options?: RequestOptions): Promise<ProjectUpdate> {
+    return this.api.patchProjectsIdUpdatesUpdateId({ path: { id: projectId, updateId }, body: input }, options)
+  }
+
+  deleteProjectUpdate(projectId: string, updateId: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteProjectsIdUpdatesUpdateId({ path: { id: projectId, updateId } }, options)
+  }
+
   initiatives(args?: InitiativesArgs, options?: RequestOptions): Promise<Connection<Initiative>> {
     return this.list<Initiative, InitiativesArgs>(args, query => this.api.getInitiatives({ query }, options))
+  }
+
+  /** One initiative by id or `slugId`. */
+  initiative(id: string, options?: RequestOptions): Promise<Initiative> {
+    return this.api.getInitiativesId({ path: { id } }, options)
   }
 
   createInitiative(input: InitiativeMutationInput, options?: RequestOptions): Promise<Initiative> {
@@ -397,12 +481,47 @@ export class FlowClient {
     return this.api.patchInitiativesId({ path: { id }, body: input }, options)
   }
 
+  deleteInitiative(id: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteInitiativesId({ path: { id } }, options)
+  }
+
+  /** The updates of an initiative, newest first (not paged). */
+  initiativeUpdates(initiativeId: string, options?: RequestOptions): Promise<InitiativeUpdate[]> {
+    return this.api.getInitiativesIdUpdates({ path: { id: initiativeId } }, options)
+  }
+
+  createInitiativeUpdate(initiativeId: string, input: InitiativeUpdateCreateInput, options?: RequestOptions): Promise<InitiativeUpdate> {
+    return this.api.postInitiativesIdUpdates({ path: { id: initiativeId }, body: input }, options)
+  }
+
+  updateInitiativeUpdate(initiativeId: string, updateId: string, input: ProjectUpdateMutationInput, options?: RequestOptions): Promise<InitiativeUpdate> {
+    return this.api.patchInitiativesIdUpdatesUpdateId({ path: { id: initiativeId, updateId }, body: input }, options)
+  }
+
+  deleteInitiativeUpdate(initiativeId: string, updateId: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteInitiativesIdUpdatesUpdateId({ path: { id: initiativeId, updateId } }, options)
+  }
+
   documents(args?: DocumentsArgs, options?: RequestOptions): Promise<Connection<Document>> {
     return this.list<Document, DocumentsArgs>(args, query => this.api.getDocuments({ query }, options))
   }
 
   document(id: string, options?: RequestOptions): Promise<Document> {
     return this.api.getDocumentsId({ path: { id } }, options)
+  }
+
+  /** Creates a document; `content` is Markdown. An actor=app token may pass `createAsUser`. */
+  createDocument(input: DocumentCreateInput, options?: RequestOptions): Promise<Document> {
+    return this.api.postDocuments({ body: input }, options)
+  }
+
+  /** Send `expectedVersion` to detect a concurrent change (`ConflictFlowError` carries the current document). */
+  updateDocument(id: string, input: DocumentUpdateInput, options?: RequestOptions): Promise<Document> {
+    return this.api.patchDocumentsId({ path: { id }, body: input }, options)
+  }
+
+  deleteDocument(id: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteDocumentsId({ path: { id } }, options)
   }
 
   releases(args?: ReleasesArgs, options?: RequestOptions): Promise<Connection<Release>> {
@@ -444,7 +563,7 @@ export class FlowClient {
   }
 
   deleteAttachment(issueId: string, attachmentId: string, options?: RequestOptions): Promise<void> {
-    return this.http.request<void>({ method: 'DELETE', path: '/api/issues/{id}/attachments/{attachmentId}', pathParams: { id: issueId, attachmentId }, expect: 'none', ...options })
+    return this.api.deleteIssuesIdAttachmentsAttachmentId({ path: { id: issueId, attachmentId } }, options)
   }
 
   // -------------------------------------------------------------------------
@@ -453,6 +572,14 @@ export class FlowClient {
 
   customers(args?: CustomersArgs, options?: RequestOptions): Promise<Connection<Customer>> {
     return this.list<Customer, CustomersArgs>(args, query => this.api.getCustomers({ query }, options))
+  }
+
+  customer(id: string, options?: RequestOptions): Promise<Customer> {
+    return this.api.getCustomersId({ path: { id } }, options)
+  }
+
+  deleteCustomer(id: string, options?: RequestOptions): Promise<void> {
+    return this.api.deleteCustomersId({ path: { id } }, options)
   }
 
   createCustomer(input: CustomerInput, options?: RequestOptions): Promise<Customer> {
@@ -541,58 +668,77 @@ export class FlowClient {
   }
 
   webhook(id: string, options?: RequestOptions): Promise<Webhook> {
-    return this.http.request<Webhook>({ method: 'GET', path: '/api/webhooks/{id}', pathParams: { id }, ...options })
+    return this.api.getWebhooksId({ path: { id } }, options)
   }
 
   /** Creates a webhook. The result carries the signing `secret`, shown only once. */
   createWebhook(input: WebhookCreateInput, options?: RequestOptions): Promise<WebhookWithSecret> {
-    return this.http.request<WebhookWithSecret>({ method: 'POST', path: '/api/webhooks', body: input, ...options })
+    return this.api.postWebhooks({ body: input }, options)
   }
 
   updateWebhook(id: string, input: WebhookUpdateInput, options?: RequestOptions): Promise<Webhook> {
-    return this.http.request<Webhook>({ method: 'PATCH', path: '/api/webhooks/{id}', pathParams: { id }, body: input, ...options })
+    return this.api.patchWebhooksId({ path: { id }, body: input }, options)
   }
 
   deleteWebhook(id: string, options?: RequestOptions): Promise<void> {
-    return this.http.request<void>({ method: 'DELETE', path: '/api/webhooks/{id}', pathParams: { id }, expect: 'none', ...options })
+    return this.api.deleteWebhooksId({ path: { id } }, options)
   }
 
   /** Issues a new signing secret, returned once. Deploy it to your receiver right away. */
   rotateWebhookSecret(id: string, options?: RequestOptions): Promise<WebhookWithSecret> {
-    return this.http.request<WebhookWithSecret>({ method: 'POST', path: '/api/webhooks/{id}/rotate-secret', pathParams: { id }, ...options })
+    return this.api.postWebhooksIdRotateSecret({ path: { id } }, options)
   }
 
   /** Removes the signing secret; deliveries go out unsigned until a new one is rotated in. */
-  revokeWebhookSecret(id: string, options?: RequestOptions): Promise<Webhook> {
-    return this.http.request<Webhook>({ method: 'POST', path: '/api/webhooks/{id}/revoke-secret', pathParams: { id }, ...options })
+  revokeWebhookSecret(id: string, options?: RequestOptions): Promise<void> {
+    return this.api.postWebhooksIdRevokeSecret({ path: { id } }, options)
   }
 
-  /** The delivery log of a webhook, newest first. */
+  /** The delivery log of a webhook, newest first (cursor paging: forward only). */
   webhookDeliveries(id: string, args: WebhookDeliveriesArgs = {}, options?: RequestOptions): Promise<Connection<WebhookDelivery>> {
     const limit = args.first ?? 50
     return cursorConnection<WebhookDelivery>(
       async (cursor, size) => {
-        const page = await this.http.request<{ items?: WebhookDelivery[]; hasMore?: boolean; nextCursor?: string }>({
-          method: 'GET',
-          path: '/api/webhooks/{id}/deliveries',
-          pathParams: { id },
-          query: { status: args.status, cursor, limit: size },
-          ...options,
-        })
+        const query: GetWebhooksIdDeliveriesQuery = { status: args.status, cursor, limit: size }
+        const page = await this.api.getWebhooksIdDeliveries({ path: { id }, query }, options)
         return { items: page.items ?? [], hasMore: Boolean(page.hasMore), nextCursor: page.nextCursor }
       },
       { after: args.after, limit },
     )
   }
 
+  /** One delivery with its request payload, every attempt and the start of the response body. */
+  webhookDelivery(id: string, deliveryId: string, options?: RequestOptions): Promise<WebhookDelivery> {
+    return this.api.getWebhooksIdDeliveriesDeliveryId({ path: { id, deliveryId } }, options)
+  }
+
+  /** Failed attempts, newest first (compatibility view of the delivery log). */
+  webhookFailures(id: string, options?: RequestOptions): Promise<WebhookFailureEvent[]> {
+    return this.api.getWebhooksIdFailures({ path: { id } }, options)
+  }
+
   /** Sends a `WebhookTest` event; resolves to the delivery. */
   testWebhook(id: string, options?: RequestOptions): Promise<WebhookDelivery> {
-    return this.http.request<WebhookDelivery>({ method: 'POST', path: '/api/webhooks/{id}/test', pathParams: { id }, ...options })
+    return this.api.postWebhooksIdTest({ path: { id } }, options)
   }
 
   /** Sends a delivery again as a new delivery with a new id, timestamp and signature. */
   redeliverWebhook(id: string, deliveryId: string, options?: RequestOptions): Promise<WebhookDelivery> {
-    return this.http.request<WebhookDelivery>({ method: 'POST', path: '/api/webhooks/{id}/deliveries/{deliveryId}/redeliver', pathParams: { id, deliveryId }, ...options })
+    return this.api.postWebhooksIdDeliveriesDeliveryIdRedeliver({ path: { id, deliveryId } }, options)
+  }
+
+  /** The webhook of an OAuth application, set once for every workspace that installs it. */
+  applicationWebhook(applicationId: string, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
+    return this.api.getOauthApplicationsIdWebhook({ path: { id: applicationId } }, options)
+  }
+
+  /** Saves the application webhook; enabling it the first time returns the signing `secret` once. */
+  setApplicationWebhook(applicationId: string, input: ApplicationWebhookInput, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
+    return this.api.putOauthApplicationsIdWebhook({ path: { id: applicationId }, body: input }, options)
+  }
+
+  rotateApplicationWebhookSecret(applicationId: string, options?: RequestOptions): Promise<ApplicationWebhookSettings> {
+    return this.api.postOauthApplicationsIdWebhookRotateSecret({ path: { id: applicationId } }, options)
   }
 
   // -------------------------------------------------------------------------

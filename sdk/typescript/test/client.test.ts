@@ -87,26 +87,59 @@ describe('reading', () => {
     expect(calls[0].url).toBe(`${API_URL}/api/issue-records/a%2Fb%20c`)
   })
 
-  it('maps issue arguments to the issue query API', async () => {
-    const { client: flow, calls } = client(() => json({ items: [issue], hasMore: false, total: 1 }))
+  it('maps issue arguments to the issue connection API', async () => {
+    const { client: flow, calls } = client(() => json({ nodes: [issue], pageInfo: { hasNextPage: false, hasPreviousPage: false }, totalCount: 1 }))
     const issues = await flow.issues({
       first: 500,
       filter: { and: [{ field: 'priority', operator: 'is', values: ['urgent'] }] },
       orderBy: 'updatedAt',
+      orderDirection: 'asc',
       includeArchived: true,
+      includeTotal: true,
       teamId: ['ENG', 'OPS'],
       query: 'crash',
     })
+    expect(calls[0].path).toBe('/api/issue-records')
     const query = calls[0].query
-    expect(query.get('limit')).toBe('100')
-    expect(query.get('sort')).toBe('updatedAt')
-    expect(query.get('direction')).toBe('desc')
-    expect(query.get('archived')).toBe('all')
+    expect(query.get('connection')).toBe('1')
+    expect(query.get('first')).toBe('100')
+    expect(query.get('last')).toBeNull()
+    expect(query.get('orderBy')).toBe('updatedAt')
+    expect(query.get('orderDirection')).toBe('asc')
+    expect(query.get('includeArchived')).toBe('true')
+    expect(query.get('includeTotal')).toBe('true')
     expect(query.get('teamId')).toBe('ENG,OPS')
     expect(query.get('q')).toBe('crash')
     expect(JSON.parse(query.get('filter')!)).toEqual({ and: [{ field: 'priority', operator: 'is', values: ['urgent'] }] })
     expect(issues.nodes).toHaveLength(1)
     expect(issues.totalCount).toBe(1)
+  })
+
+  it('orders issues newest first by default and accepts a filter as JSON text', async () => {
+    const { client: flow, calls } = client(() => json({ nodes: [], pageInfo: { hasNextPage: false, hasPreviousPage: false } }))
+    await flow.issues({ filter: '{"field":"status","values":["started"]}' })
+    expect(calls[0].query.get('orderBy')).toBe('createdAt')
+    expect(calls[0].query.get('first')).toBe('50')
+    expect(calls[0].query.get('filter')).toBe('{"field":"status","values":["started"]}')
+  })
+
+  it('pages issues backward with last and before', async () => {
+    const { client: flow, calls } = client(() => json({ nodes: [], pageInfo: { hasNextPage: true, hasPreviousPage: false } }))
+    await flow.issues({ last: 20, before: 'cursor_x' })
+    expect(calls[0].query.get('last')).toBe('20')
+    expect(calls[0].query.get('before')).toBe('cursor_x')
+    expect(calls[0].query.get('first')).toBeNull()
+    await flow.issues({ last: 5 })
+    expect(calls[1].query.get('last')).toBe('5')
+    expect(calls[1].query.get('before')).toBeNull()
+  })
+
+  it('exposes the original issue page as a legacy operation', async () => {
+    const { client: flow, calls } = client(() => json({ items: [issue], hasMore: false, total: -1 }))
+    const page = await flow.api.getIssueRecordsLegacy({ query: { limit: 5, sort: 'updatedAt' } })
+    expect(page.items).toHaveLength(1)
+    expect(calls[0].query.get('connection')).toBeNull()
+    expect(calls[0].query.get('limit')).toBe('5')
   })
 
   it('always asks lists for a connection and serialises filters as JSON', async () => {
@@ -230,10 +263,10 @@ describe('mutations', () => {
     await flow.redeliverWebhook('webhook_1', 'whd_1')
     expect(calls[4].path).toBe('/api/webhooks/webhook_1/deliveries/whd_1/redeliver')
     await flow.deleteWebhook('webhook_1')
-    const deliveries = await flow.webhookDeliveries('webhook_1', { status: 'Failed', first: 10 })
+    const deliveries = await flow.webhookDeliveries('webhook_1', { status: 'failed', first: 10 })
     expect(deliveries.nodes[0].id).toBe('whd_1')
     expect(deliveries.pageInfo).toMatchObject({ hasNextPage: true, endCursor: 'c1' })
-    expect(calls[6].query.get('status')).toBe('Failed')
+    expect(calls[6].query.get('status')).toBe('failed')
     expect(calls[6].query.get('limit')).toBe('10')
   })
 })
