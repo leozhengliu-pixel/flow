@@ -28,6 +28,7 @@ vi.mock('@/components/issue/issue-description-editor', () => ({
   IssueDescriptionEditor: (props: { readOnly?: boolean; value: string }) => <div aria-label="Read-only content" data-readonly={String(Boolean(props.readOnly))}>{props.value}</div>,
 }))
 vi.mock('@/components/views/view-icon-picker', () => ({ ViewGlyph: () => <svg aria-hidden="true"/>, ViewIconPicker: () => <button aria-label="Document icon"/> }))
+vi.mock('@/components/agent/document-agent-panel', () => ({ DocumentAgentPanel: () => <div data-testid="document-agent-panel"/> }))
 vi.mock('./document-history-dialog', () => ({ DocumentHistoryDialog: ({ open }: { open: boolean }) => open ? <div aria-label="History dialog" role="dialog"/> : null }))
 vi.mock('./document-template-chip', async importOriginal => ({ ...(await importOriginal<typeof import('./document-template-chip')>()), DocumentTemplateChip: () => <span data-testid="template-chip"/> }))
 vi.mock('./document-owner-picker', async importOriginal => ({
@@ -95,6 +96,15 @@ describe('DocumentPage header', () => {
     await waitFor(() => expect(api.addFavorite).toHaveBeenCalledWith('document', flowDocument.id))
     expect(api.refreshResourcePreferences).not.toHaveBeenCalled()
     expect(props.onReload).not.toHaveBeenCalled()
+  })
+
+  it('has no Activity panel, and opens the agent rail from the header', async () => {
+    const user = userEvent.setup()
+    const { container } = renderPage()
+    expect(container.querySelector('.entity-activity-panel')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Agent chat' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Open chat|打开聊天/ }))
+    expect(screen.getByTestId('document-agent-panel')).toBeInTheDocument()
   })
 
   it('shows Team › Documents › title for a team document and Project › title for a project document', () => {
