@@ -32,6 +32,17 @@ services for development; PostgreSQL, MySQL, S3, and Redis coordination are conf
 - **Internationalization**: English and Simplified Chinese interfaces with a persistent language preference.
 - **Horizontal scaling**: Redis standalone/cluster coordination for shared limits, realtime events, presence, serialized workspace writes, and a hot cache for issue records, issue/project directory queries, and workspace metadata.
 
+## Feature tour
+
+| Issues and boards | Projects and milestones |
+| --- | --- |
+| ![Issues board](docs/media/issues-board.gif) | ![Projects](docs/media/projects-overview.gif) |
+| **Selection toolbar in documents** | **Agent chat** |
+| ![Selection toolbar](docs/media/doc-selection-toolbar.gif) | ![Agent chat](docs/media/agent-chat.gif) |
+
+More clips (inbox, cycles, initiatives, comments, the floating agent chat, and
+more) are listed in [docs/media](docs/media/README.md).
+
 ## Architecture
 
 ```text
