@@ -714,7 +714,67 @@ html:root body .menu-content.settings-members-menu[role="menu"] .settings-member
   html:root .settings-app .settings-main .settings-members-page.settings-workspace-members > .settings-members-toolbar { grid-template-columns: 1fr auto auto; row-gap: 8px; }
   html:root .settings-app .settings-main .settings-workspace-members > .settings-members-toolbar > .settings-members-filter { justify-self: start; margin-left: 0; }
 }
-/* The reference app leaves a 2px gap between every group header and row (header y203 → row y237 → header y289). */
+/* The reference app leaves a 2px gap between a group header and its rows (header y203 → row y237 → header y289); rows within a group are contiguous (y417 → y467 → y517). */
 html:root .settings-app .settings-main .settings-workspace-members .settings-members-group + .settings-member-directory-row,
-html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row + .settings-member-directory-row,
 html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row + .settings-members-group { margin-top: 2px; }
+
+/* Member and guest statuses sit in a neutral pill (the reference app's bgShade, the group bar's color); admins keep the purple one. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-role:not(.is-admin) { background: var(--settings-members-group-bg); color: var(--theme-text-secondary); }
+
+/* Avatars: images and the agent mark fill the 24px circle; invited and inactive people get a grey initials avatar. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-avatar { overflow: hidden; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-avatar > img,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-avatar > svg { width: 100%; height: 100%; display: block; border-radius: 50%; object-fit: cover; }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row .settings-member-avatar.is-inactive { background: var(--settings-member-inactive-avatar-bg); color: var(--theme-text-tertiary); font-size: 8px; }
+
+/* Inactive rows (suspended, "Left workspace"): the name is muted and everything else faint, without pills. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-inactive,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-inactive time,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-inactive > span:first-child small,
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-inactive .settings-member-email { color: var(--theme-text-tertiary); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-directory-row.is-inactive > span:first-child strong { color: var(--theme-text-secondary); }
+
+/* Email: click copies it (above the row's profile link). */
+html:root .settings-app .settings-main .settings-workspace-members .settings-member-email {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 8px 16px 8px 0;
+  border: 0;
+  background: none;
+  color: var(--theme-text-secondary);
+  font: 450 12px var(--font);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: text;
+}
+
+/* Empty state: the reference app's centred illustration, "No matching …" and a Clear filter pill. */
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 96px 0 48px;
+  color: var(--theme-text-secondary);
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-empty > svg { color: var(--theme-text-tertiary); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-empty > p { margin: 0; color: var(--theme-text-secondary); font: 500 13px var(--font); }
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-clear-filter {
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--settings-members-control-bg);
+  box-shadow: var(--settings-members-control-ring);
+  color: var(--theme-text-primary);
+  font: 500 12px var(--font);
+}
+html:root .settings-app .settings-main .settings-workspace-members .settings-members-clear-filter:hover { background: var(--bg-hover); }
+html:root body .settings-member-dialog .settings-member-dialog-note { margin: 8px 0 0; color: var(--theme-text-secondary); font-size: 12px; }

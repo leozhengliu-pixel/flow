@@ -341,6 +341,9 @@ func (s *SQLiteStore) RemoveMemberWithChanges(ctx context.Context, workspaceID, 
 	if _, err = tx.ExecContext(ctx, `DELETE FROM team_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID); err != nil {
 		return nil, err
 	}
+	if err = recordWorkspaceDepartureTx(ctx, tx, workspaceID, userID, time.Now()); err != nil {
+		return nil, err
+	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM workspace_memberships WHERE workspace_id=? AND user_id=?`, workspaceID, userID); err != nil {
 		return nil, err
 	}

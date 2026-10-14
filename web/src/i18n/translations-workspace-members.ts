@@ -1,0 +1,43 @@
+/**
+ * Chinese copy for Settings › Members (workspace): the reference app's groups, statuses, row and bulk actions and empty states.
+ * Group labels are keyed by context ("Members group: Active") because "Active" and "Inactive" mean something else
+ * elsewhere. Merged into zhCN by translations.ts, filling gaps only.
+ */
+export const workspaceMembersZhCN: Record<string, string> = {
+  "Members group: Active": "活跃",
+  "Members group: Invited": "已邀请",
+  "Members group: Application": "应用",
+  "Members group: Inactive": "不活跃",
+  "Application (Suspended)": "应用（已停用）",
+  "Owner (Invited)": "所有者（已邀请）",
+  "Admin (Invited)": "管理员（已邀请）",
+  "Member (Invited)": "成员（已邀请）",
+  "Guest (Invited)": "访客（已邀请）",
+  "Manage Flow Agent…": "管理 Flow Agent…",
+  "Manage team access…": "管理团队访问权限…",
+  "Activate user…": "启用用户…",
+  "Activate users…": "启用用户…",
+  "Change roles…": "更改角色…",
+  "Change roles": "更改角色",
+  "Suspend users…": "停用用户…",
+  "{name} has full access to these teams": "{name} 拥有这些团队的完整访问权限",
+  "Suspend {name}?": "停用 {name}？",
+  "Activate {name}?": "启用 {name}？",
+  "Remove {name}?": "移除 {name}？",
+  "They will be able to access this workspace again.": "该成员将可以再次访问此工作区。",
+  "Member activated": "成员已启用",
+  Suspend: "停用",
+  "Clear filter": "清除筛选",
+  "No admins": "没有管理员",
+  "No matching admins": "没有匹配的管理员",
+  "No guests": "没有访客",
+  "No matching guests": "没有匹配的访客",
+  "No applications": "没有应用",
+  "No matching applications": "没有匹配的应用",
+  "No pending invites": "没有待处理邀请",
+  "No matching pending invites": "没有匹配的待处理邀请",
+  "No suspended users": "没有已停用的用户",
+  "No matching suspended users": "没有匹配的已停用用户",
+  "No departed users": "没有已离开的用户",
+  "No matching departed users": "没有匹配的已离开用户",
+};

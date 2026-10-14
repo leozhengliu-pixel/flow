@@ -1055,6 +1055,7 @@ func sanitizeBootstrap(data *domain.Bootstrap) {
 	}
 	data.Viewer.JobTitle = data.UserSettings[data.Viewer.ID].JobTitle
 	applyUsernames(data)
+	presentDepartedMembers(data)
 	if settings, ok := data.UserSettings[data.Viewer.ID]; ok {
 		data.UserSettings = map[string]domain.UserSettings{data.Viewer.ID: settings}
 	} else {

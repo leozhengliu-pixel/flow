@@ -767,8 +767,10 @@ func (s *SQLiteStore) projectBootstrapForUser(ctx context.Context, data domain.B
 	}
 	data.Members, _ = s.ListMembers(ctx, data.Workspace.ID)
 	data.TeamMembers, _ = s.ListTeamMembers(ctx, data.Workspace.ID)
+	data.DepartedMembers = nil
 	if isWorkspaceAdminRole(role) {
 		data.Invitations, _ = s.ListInvitations(ctx, data.Workspace.ID)
+		data.DepartedMembers, _ = s.ListDepartedMembers(ctx, data.Workspace.ID, data.Workspace.URLKey)
 	} else {
 		data.Invitations = []domain.Invitation{}
 	}

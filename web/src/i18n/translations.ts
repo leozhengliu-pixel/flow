@@ -48,6 +48,7 @@ import { issueOptionsZhCN } from './translations-issue-options';
 import { teamAgentGuidanceZhCN } from './translations-team-agent-guidance';
 import { agentChangesZhCN } from './translations-agent-changes';
 import { agentRuntimeZhCN } from './translations-agent-runtime';
+import { workspaceMembersZhCN } from './translations-workspace-members';
 
 export const zhCN: Record<string, string> = {
   "Allow installation in other workspaces": "允许安装到其他工作区",
@@ -5883,3 +5884,5 @@ for (const [source, translation] of Object.entries(agentChangesZhCN)) zhCN[sourc
 for (const [source, translation] of Object.entries(agentRuntimeZhCN)) zhCN[source] ??= translation;
 // Recently deleted views and installed applications fill gaps only.
 for (const [source, translation] of Object.entries(recentlyDeletedZhCN)) zhCN[source] ??= translation;
+// Settings › Members (groups, statuses, row and bulk actions, empty states) fills gaps only.
+for (const [source, translation] of Object.entries(workspaceMembersZhCN)) zhCN[source] ??= translation;

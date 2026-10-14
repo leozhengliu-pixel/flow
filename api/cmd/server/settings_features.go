@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -1672,6 +1673,7 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 
 func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	clientID := ""
 	var deleted domain.OAuthApplication
 	deletedFrom := ""
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "oauth_application.deleted", id, nil, func(data *domain.Bootstrap) error {
@@ -1679,6 +1681,7 @@ func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) 
 		if index < 0 {
 			return errNotFound
 		}
+		clientID = data.OAuthApplications[index].ClientID
 		deleted, deletedFrom = data.OAuthApplications[index], data.Workspace.Name
 		data.OAuthApplications = slices.Delete(data.OAuthApplications, index, index+1)
 		return nil
@@ -1686,6 +1689,25 @@ func (s *server) deleteOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		respondMutation(w, err, http.StatusNoContent, nil)
 		return
+	}
+	// Like the reference app, a deleted application leaves every workspace it was
+	// installed in: its app users are listed as "Left workspace".
+	if clientID != "" {
+		installations, err := s.store.ApplicationInstallationsByClient(r.Context(), clientID)
+		if err != nil {
+			respondMutation(w, err, http.StatusNoContent, nil)
+			return
+		}
+		for _, installation := range installations {
+			if _, err := s.store.UninstallApplication(r.Context(), installation.WorkspaceKey, installation.ID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+				respondMutation(w, err, http.StatusNoContent, nil)
+				return
+			}
+			s.reconcileApplicationWebhooks(context.WithoutCancel(r.Context()), installation.WorkspaceKey)
+		}
 	}
 	// The application's tokens are gone with it; its creator hears so by email.
 	s.notifyApplicationRevoked(context.WithoutCancel(r.Context()), deleted, deletedFrom)
