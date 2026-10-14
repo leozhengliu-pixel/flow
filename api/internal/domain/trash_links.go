@@ -4,7 +4,7 @@ package domain
 // (issues leaving a deleted project, sub-initiatives losing their parent, a
 // customer's requests, ...). Restoring the trash entry re-attaches each link
 // whose records still exist, so the resource comes back exactly as it was,
-//'s trash. It is persisted with the entry and stripped from
+// 's trash. It is persisted with the entry and stripped from
 // viewer projections (it can name other members' favorites).
 type TrashLinks struct {
 	Favorites     []Favorite     `json:"favorites,omitempty"`

@@ -45,7 +45,7 @@ export type GroupableActivityItem = {
     releaseAutomationMetadata?: unknown
     issueSuggestionAutomationMetadata?: unknown
   }
-  fallbackActor?: 'linear' | 'unknown'
+  fallbackActor?: 'flow' | 'unknown'
   summaryItem?: string
 }
 
@@ -65,7 +65,7 @@ export function resolveActivityActor(input: {
   userNames?: string[]
   performedByFlowAi?: boolean
   sourceMetadata?: GroupableActivityItem['sourceMetadata']
-  fallbackActor?: 'linear' | 'unknown'
+  fallbackActor?: 'flow' | 'unknown'
 }): ActivityActor | undefined {
   if (input.performedByFlowAi) return flowActor()
 
@@ -92,7 +92,7 @@ export function resolveActivityActor(input: {
   }
 
   if (!meta) {
-    if (input.fallbackActor === 'linear') return flowActor()
+    if (input.fallbackActor === 'flow') return flowActor()
     if (input.fallbackActor === 'unknown') return unknownActor()
     return undefined
   }
@@ -119,7 +119,7 @@ export function resolveActivityActor(input: {
 }
 
 function flowActor(): ActivityActor {
-  return { key: 'linear', presentation: { type: 'label', label: 'the reference app' } }
+  return { key: 'flow', presentation: { type: 'label', label: 'Flow' } }
 }
 
 function unknownActor(): ActivityActor {
@@ -197,7 +197,7 @@ export function groupActivityHistory<T extends GroupableActivityItem>(
 }
 
 export function actorBadgeLabel(actorKey: string, summaryActor: string): string {
-  if (actorKey === 'linear' || actorKey.startsWith('linear')) return 'AI'
+  if (actorKey === 'flow' || actorKey.startsWith('flow')) return 'AI'
   if (actorKey === 'product-intelligence') return 'AI'
   if (actorKey.startsWith('workflow:')) return 'Workflow'
   if (actorKey.startsWith('users:')) return summaryActor

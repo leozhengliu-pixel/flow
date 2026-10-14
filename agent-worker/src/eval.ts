@@ -7,7 +7,7 @@
  * All arms use the same upstream model (one provider serving all three protocols) and effort and act on their own "QA spike – <arm>" fixtures; results are
  * verified against Flow state through MCP.
  *
- * Env: EVAL_SUITE=core|all (all adds the adapted the reference app prompts), EVAL_REP=n (fixture/tag suffix for repeats),
+ * Env: EVAL_SUITE=core|all (all adds the adapted reference-app prompts), EVAL_REP=n (fixture/tag suffix for repeats),
  *      FLOW_WORKER_FLOW_TOKEN_FILE, EVAL_COOKIE_FILE, EVAL_OUT_DIR, EVAL_ARMS=base,resp,chat,anth, EVAL_ONLY=ids,
  *      FLOW_WORKER_{RESPONSES,CHAT,ANTHROPIC}_BASE_URL,
  *      EVAL_SUSPEND=1 (default) drops the session object on every elicitation and resumes from the store.
@@ -85,7 +85,7 @@ const cases: Case[] = [
 ]
 
 /**
- * Prompts adapted from the 39 prompts sent to the reference app's agent (scratchpad agent-research/raw-linear-prompts.md,
+ * Prompts adapted from the 39 prompts sent to the reference app's agent (scratchpad agent-research prompts, 
  * P1–P39) that the core set does not already cover, rewritten for the chat surface and the arm's fixtures.
  * They run after the core set, in order (L23–L29 use the project and document W4/W5 created, L38 M1's initiative).
  */
@@ -94,7 +94,7 @@ const project = (c: Ctx) => `QA spike – ${c.tag} Export revamp`
 async function getProject(c: Ctx) { return c.mcp.call('get_project', { query: project(c) }) }
 const responded = (r: Result) => ({ pass: r.status === 'response', note: '' })
 const used = (r: Result, tool: string) => r.tools.includes(tool)
-const linearCases: Case[] = [
+const referenceCases: Case[] = [
   { id: 'L02', kind: 'related / duplicates (P2)', prompt: c => `Find related or duplicate issues for ${c.issue} in the workspace.`,
     verify: async (_c, r) => ({ pass: r.status === 'response' && (used(r, 'search_issues') || used(r, 'list_issues')), note: '' }) },
   { id: 'L03', kind: 'add relation (P3)', prompt: c => `Mark ${c.issue} as related to ${c.other}.`,
@@ -275,7 +275,7 @@ async function runArm(arm: Arm) {
   log(`# arm ${arm} fixture ${c.issue}`)
   const results: Result[] = []
   const sessions: string[] = []
-  for (const k of suite === 'all' ? [...cases, ...linearCases] : cases) {
+  for (const k of suite === 'all' ? [...cases, ...referenceCases] : cases) {
     if (only && !only.includes(k.id)) continue
     log(`\n## ${k.id} ${k.kind}\n> ${k.prompt(c)}`)
     let r: Result
