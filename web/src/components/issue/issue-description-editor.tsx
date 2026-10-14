@@ -226,7 +226,7 @@ function DescriptionEditorSession({ value, state, onChange, onBlur, onSubmit, ed
       },
       handleKeyDown: (view, event) => {
         if (handleEditorSubmit(event, submitRef.current)) return true
-        if (handleSelectionShortcut(event, view.state.selection, view.state.doc, selectionActionsRef.current)) return true
+        if (handleSelectionShortcut(event, view.state.selection, view.state.doc, selectionActionsRef.current, liveEditorRef.current)) return true
         if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === 'KeyU') {
           event.preventDefault()
           pickDescriptionFiles(files => insertPickedFiles(view, files, uploadImageRef.current))

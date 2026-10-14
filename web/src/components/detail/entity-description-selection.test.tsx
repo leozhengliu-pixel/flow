@@ -11,7 +11,7 @@ vi.mock('@/components/issue/issue-description-editor', () => ({
   IssueDescriptionEditor: ({ ariaLabel, selectionActions }: { ariaLabel?: string; selectionActions?: DescriptionSelectionActions }) => <div role="textbox" aria-label={ariaLabel}>
     {selectionActions?.onAskAgent && <button type="button" onClick={() => selectionActions.onAskAgent?.({ from: 1, to: 14, text: 'Ship the beta\nby Friday' })}>{`Ask agent in ${ariaLabel}`}</button>}
     {selectionActions?.onCreateIssue && <button type="button" onClick={() => selectionActions.onCreateIssue?.({ from: 1, to: 14, text: 'Ship the beta' })}>{`Create issue in ${ariaLabel}`}</button>}
-    {selectionActions?.onComment && <button type="button">Comment</button>}
+    {selectionActions?.onComment && <button type="button" onClick={() => selectionActions.onComment?.({ from: 1, to: 14, text: 'Ship the beta' })}>Comment</button>}
   </div>,
 }))
 const chat = vi.hoisted(() => vi.fn())
@@ -37,10 +37,10 @@ describe('Ask agent on a project and an initiative description', () => {
   beforeEach(() => { localStorage.setItem('flow:locale', 'en-US'); chat.mockClear() })
   afterEach(() => { vi.unstubAllGlobals() })
 
-  it('opens the chat on the project with the selection quoted, and offers no inline comment', () => {
+  it('opens the chat on the project with the selection quoted, and offers an inline comment', () => {
     const props = projectProps()
     render(<MentionShell data={data}><ProjectOverview {...props}/></MentionShell>)
-    expect(screen.queryByRole('button', { name: 'Comment' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Comment' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Ask agent in Project description' }))
     expect(screen.getByTestId('agent-chat')).toHaveTextContent('About this selection from the project description:')
     expect(chat).toHaveBeenLastCalledWith(expect.objectContaining({
@@ -59,6 +59,23 @@ describe('Ask agent on a project and an initiative description', () => {
       initialPrompt: 'About this selection from the initiative description:\n\n> Ship the beta\n> by Friday\n\n',
       pageContext: { type: 'initiative', id: initiative.id, label: initiative.name },
     }))
+  })
+
+  it('starts an inline comment on the selection beside the project description', () => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+    render(<MentionShell data={data}><ProjectOverview {...projectProps()}/></MentionShell>)
+    expect(screen.queryByRole('complementary', { name: 'Comments' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    expect(screen.getByRole('complementary', { name: 'Comments' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Add a comment…' })).toBeInTheDocument()
+  })
+
+  it('offers an inline comment on an initiative description when the page handles it', () => {
+    const initiative = data.initiatives[0] as Initiative
+    const onComment = vi.fn()
+    render(<MentionShell data={data}><InitiativeDescriptionField initiative={initiative} workspace={data.workspace.urlKey} data={data} label="Initiative description" value="" onCommit={vi.fn()} onComment={onComment}/></MentionShell>)
+    fireEvent.click(screen.getByRole('button', { name: 'Comment' }))
+    expect(onComment).toHaveBeenCalledWith({ from: 1, to: 14, text: 'Ship the beta' })
   })
 
   it('makes an issue from the selection, linking the project it belongs to', () => {

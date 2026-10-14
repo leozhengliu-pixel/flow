@@ -34,6 +34,8 @@ import { MentionReference } from '@/components/editor/mentions/mention-reference
 import { insertImageFiles } from '@/components/issue/editor/image-extension'
 import { insertEmbedFiles } from '@/components/issue/editor/file-extension'
 import { ActivityPage } from '@/components/activity/activity-page'
+import { partitionAnchoredComments } from '@/components/documents/inline-comments/inline-comments-model'
+import { useComposerSelectionActions } from '@/components/editor/selection-issue'
 import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import { hasAgentThread, useAgentCommentThreadIds, useAgentThreadMessageCount, type AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import { getMostRecent, reconcileSelection, selectionFromRoute } from '@/components/activity/entity-activity-update-helper'
@@ -56,9 +58,10 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   const [editing, setEditing] = useState<ProjectUpdate>()
   const draftIds = useRef<Partial<Record<ComposerDraftType, string>>>({ comment: parentDrafts.comment?.id ?? '', project_update: parentDrafts.project_update?.id ?? '' })
   // Replies live in the same project comment list (parentId) and render
-  // inside their root comment's card thread, never as feed entries.
+  // inside their root comment's card thread, never as feed entries. Inline
+  // threads on the description stay beside it (the reference app leaves them out of Activity).
   const commentThreads = useMemo(() => {
-    const comments = project.comments ?? []
+    const comments = partitionAnchoredComments(project.comments ?? []).pageLevel
     const ids = new Set(comments.map(comment => comment.id))
     const replies = new Map<string, Comment[]>()
     for (const comment of comments) {
@@ -88,6 +91,8 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
   const hasContent = Boolean(body.trim()) || files.length > 0
   const composerEditorRef = useRef<Editor | null>(null)
   const setComposerEditor = useCallback((editor: Editor | null) => { composerEditorRef.current = editor }, [])
+  // Selecting text in the composer offers "Create issue from selection" (in this project) and "Ask agent".
+  const composerSelectionActions = useComposerSelectionActions()
   const [pendingUploads, setPendingUploads] = useState(0)
   // Inline media (paperclip, paste, and drop) uploads through the project so the
   // returned URL can be embedded directly in the comment or update body.
@@ -188,7 +193,7 @@ export function ProjectActivity({ activities, drafts = [], issueData, project, p
     <div className="project-activity">
     <section className="project-activity__composer" data-mode={composerMode}>
       <header><div aria-label="Post type" role="tablist"><button aria-selected={composerMode === 'comment'} onClick={() => switchComposerMode('comment')} role="tab" type="button">Comment</button><button aria-selected={composerMode === 'update'} onClick={() => switchComposerMode('update')} role="tab" type="button">Update</button></div>{composerMode === 'update' && <DropdownMenu.Root><DropdownMenu.Trigger asChild><button className={`project-activity__health is-${health}`} type="button"><HealthGlyph health={health}/>{healthLabel(health)}</button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="start" className="project-detail-page__menu project-activity__health-menu" sideOffset={4}>{PROJECT_HEALTHS.slice(0, 3).map(option => <DropdownMenu.Item aria-checked={health === option.id} key={option.id} onSelect={() => setHealth(option.id)}><span className={`project-activity__health-glyph is-${option.id}`}><HealthGlyph health={option.id}/></span><span>{option.label}</span></DropdownMenu.Item>)}</DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root>}</header>
-      <IssueDescriptionEditor className="project-activity__editor" key={`${composerMode}:${editorKey}`} users={users} ariaLabel={composerMode === 'comment' ? 'Project comment' : 'Project update'} value={body} state={composerMode === 'comment' && commentData ? JSON.stringify(commentData) : undefined} placeholder={composerMode === 'comment' ? 'Leave a comment…' : 'Write a project update…'} editorRef={setComposerEditor} onInsertImage={uploadInlineMedia} onSubmit={() => void submit()} onChange={snapshot=>{setBody(snapshot.markdown);if(composerMode==='comment')setCommentData(snapshot.document as Record<string,unknown>)}}/>
+      <IssueDescriptionEditor className="project-activity__editor" key={`${composerMode}:${editorKey}`} users={users} ariaLabel={composerMode === 'comment' ? 'Project comment' : 'Project update'} value={body} state={composerMode === 'comment' && commentData ? JSON.stringify(commentData) : undefined} placeholder={composerMode === 'comment' ? 'Leave a comment…' : 'Write a project update…'} editorRef={setComposerEditor} selectionActions={composerSelectionActions} onInsertImage={uploadInlineMedia} onSubmit={() => void submit()} onChange={snapshot=>{setBody(snapshot.markdown);if(composerMode==='comment')setCommentData(snapshot.document as Record<string,unknown>)}}/>
       {files.length>0&&<div className="project-activity__files">{files.map((file,index)=><span key={`${file.name}-${index}`}><Paperclip size={12}/>{file.name}<button aria-label={`Remove ${file.name}`} onClick={()=>setFiles(current=>current.filter((_,item)=>item!==index))}><X size={11}/></button></span>)}</div>}
       <footer>{composerMode === 'update' ? <button className="project-activity__agent" onClick={() => setAgentOpen(true)} type="button"><AgentWriteIcon size={14}/>Write with Agent</button> : <span/>}<div><button aria-label="Attach images, files, or videos" className="project-activity__attach" onClick={()=>fileRef.current?.click()} type="button"><Paperclip size={14}/></button><input ref={fileRef} hidden multiple type="file" onChange={event=>{const picked=Array.from(event.target.files??[]);if(composerMode==='comment')insertComposerFiles(picked);else setFiles(current=>[...current,...picked]);event.target.value=''}}/>{hasContent && <button className="project-activity__cancel" disabled={saving} onClick={cancel} type="button">Cancel</button>}<button className={hasContent ? 'is-submit is-primary' : 'is-submit'} disabled={!body.trim() || saving || pendingUploads > 0} onClick={() => void submit()} type="button">{saving ? 'Posting…' : composerMode === 'update' ? 'Post update' : 'Comment'}</button></div></footer>
     </section>
@@ -210,6 +215,7 @@ function UpdateEntry({ changes, onComment, onDelete, onDeleteAttachment, onEdit,
   const [comment, setComment] = useState('')
   const [commentData, setCommentData] = useState<Record<string, unknown>>()
   const postComment = () => { if (comment.trim()) void onComment(comment.trim(), commentData).then(() => { setComment(''); setCommentData(undefined) }) }
+  const composerSelectionActions = useComposerSelectionActions()
   // An agent mentioned in the update's comments answers in this thread; its replies count as the thread's comments.
   const agentThreads = useAgentCommentThreadIds()
   const threadIds = (update.comments ?? []).map(item => item.id)
@@ -218,7 +224,7 @@ function UpdateEntry({ changes, onComment, onDelete, onDeleteAttachment, onEdit,
   return <article className="project-activity__update" data-update-id={update.id}><header><span className={`project-activity__update-health is-${update.health}`}><HealthGlyph health={update.health}/>{healthLabel(update.health)}</span><Avatar name={update.user.displayName}/><strong>{update.user.displayName}</strong><time>{formatDistanceToNowStrict(new Date(update.createdAt), { addSuffix: true })}</time><DropdownMenu.Root><DropdownMenu.Trigger asChild><button aria-label="Open update menu" type="button"><MoreHorizontal size={14}/></button></DropdownMenu.Trigger><DropdownMenu.Portal><DropdownMenu.Content data-flow-motion="floating" align="end" className="project-detail-page__menu" sideOffset={4}><DropdownMenu.Item onSelect={onEdit}><span>Edit</span></DropdownMenu.Item><DropdownMenu.Item className="is-danger" onSelect={onDelete}><Trash2 size={14}/><span>Delete</span></DropdownMenu.Item></DropdownMenu.Content></DropdownMenu.Portal></DropdownMenu.Root></header><div className="project-activity__rich"><RichComment body={update.body} data={update.bodyData}/></div>{changes.length > 0 && <ul aria-label="Changes since last update" className="project-activity__changes">{changes.map(change => <li key={change.field}><span>{PROPERTY_LABELS[change.field] ?? change.field}</span><span>{formatPropertyValue(change.field, change.from)}</span><span aria-hidden="true">→</span><span>{formatPropertyValue(change.field, change.to)}</span></li>)}</ul>}{update.attachments?.length>0&&<div className="project-activity__attachments">{update.attachments.map(attachment=><span key={attachment.id}><a href={attachment.url} target="_blank" rel="noreferrer"><Paperclip size={12}/>{attachment.title||'Attachment'}</a><button aria-label={`Remove ${attachment.title||'attachment'}`} onClick={()=>void onDeleteAttachment(attachment.id)}><X size={11}/></button></span>)}</div>}
     <div className="project-activity__reactions">{Object.entries(update.reactions ?? {}).map(([emoji, users]) => <button aria-pressed={users.includes(viewerId)} key={emoji} onClick={() => void onReact(emoji)} type="button">{emoji} {users.length}</button>)}</div>
     <footer><button aria-label={`${commentCount} comments`} onClick={() => setCommentsOpen(value => !value)} type="button"><MessageCircle size={13}/>{commentCount || null}</button><EmojiPicker onSelect={async emoji => { await onReact(emoji) }}><button aria-label="Add reaction" type="button"><SmilePlus size={13}/></button></EmojiPicker></footer>
-    {commentsOpen && <div className="project-activity__comments">{(update.comments ?? []).map(item => <CommentEntry comment={item} key={item.id}/>)}{agentThread && renderAgentThread ? renderAgentThread(threadIds) : <div className="project-activity__comment-box"><Avatar name="You"/><MentionTextField ariaLabel="Add comment" onChange={(markdown, snapshot) => { setComment(markdown); setCommentData(snapshot.document as Record<string, unknown> | undefined) }} onSubmit={postComment} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim()} onClick={postComment} type="button">Comment</button></div>}</div>}
+    {commentsOpen && <div className="project-activity__comments">{(update.comments ?? []).map(item => <CommentEntry comment={item} key={item.id}/>)}{agentThread && renderAgentThread ? renderAgentThread(threadIds) : <div className="project-activity__comment-box"><Avatar name="You"/><MentionTextField ariaLabel="Add comment" selectionActions={composerSelectionActions} onChange={(markdown, snapshot) => { setComment(markdown); setCommentData(snapshot.document as Record<string, unknown> | undefined) }} onSubmit={postComment} placeholder="Leave a comment…" value={comment}/><button disabled={!comment.trim()} onClick={postComment} type="button">Comment</button></div>}</div>}
   </article>
 }
 

@@ -194,6 +194,7 @@ import { AGENT_SESSION_DOCKED_EVENT } from "@/components/agent/agent-docked-sess
 import { AgentChatHistoryPopover } from "@/components/agent/agent-chat-history-popover";
 import { FlowTooltip } from "@/components/ui/tooltip";
 import { OPEN_FLOATING_AGENT_EVENT, type FloatingAgentRequest } from "@/components/agent/agent-floating-request";
+import { CREATE_ISSUE_INLINE_EVENT, type InlineIssueInput, type InlineIssueRequest } from "@/components/editor/selection-issue";
 import { AGENT_PAGE_ASK_EVENT } from "@/components/agent/agent-ask-request";
 import { documentsRedirectPath } from "@/lib/documents-redirect";
 import { issueToExplorerRow } from "@/components/issue-explorer/issue-explorer-model";
@@ -1695,6 +1696,32 @@ function App() {
     if (!input.createMore) navigateTo(issuePath(data.workspace.urlKey, issue));
     return issue;
   };
+  // A comment composer's "Create issue from selection" creates the issue in place: no dialog and no
+  // navigation, just the "Issue created" toast (the composer swaps the selection for a mention of the issue).
+  const createIssueInPlace = useRef<(input: InlineIssueInput) => Promise<Issue>>(undefined);
+  createIssueInPlace.current = async (input) => {
+    const issue = await createIssue(input);
+    setData((current) =>
+      current
+        ? deriveResourceCounts({
+            ...current,
+            issues: [issue, ...current.issues],
+            activities: { ...current.activities, [issue.id]: [] },
+          })
+        : current,
+    );
+    if (data) toastIssueCreated(issue, issuePath(data.workspace.urlKey, issue), translateTitle);
+    return issue;
+  };
+  useEffect(() => {
+    const listener = (event: Event) => {
+      const detail = (event as CustomEvent<InlineIssueRequest>).detail;
+      const create = createIssueInPlace.current;
+      if (detail && create) detail.result = create(detail.input);
+    };
+    window.addEventListener(CREATE_ISSUE_INLINE_EVENT, listener);
+    return () => window.removeEventListener(CREATE_ISSUE_INLINE_EVENT, listener);
+  }, []);
   const addSubIssue = async (input: {
     title: string;
     description: string;

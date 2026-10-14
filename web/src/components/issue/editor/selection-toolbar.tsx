@@ -131,9 +131,9 @@ export function SelectionToolbar({ editor, actions }: { editor: Editor; actions?
       </span>
     </>}
     {state.editable && hasActions && <span className="selection-toolbar-separator" role="separator" aria-orientation="vertical"/>}
-    {actions?.onCreateIssue && <ToolbarItem label={t('Create issue from selection')} shortcut={TOOLBAR_SHORTCUTS['Create issue from selection']} onPress={() => actions.onCreateIssue?.(selection())}><ToolbarGlyph name="createIssue"/></ToolbarItem>}
-    {actions?.onAskAgent && <ToolbarItem label={t('Ask agent')} shortcut={TOOLBAR_SHORTCUTS['Ask agent']} onPress={() => actions.onAskAgent?.(selection())}><AgentCursorGlyph size={16}/></ToolbarItem>}
-    {actions?.onComment && <ToolbarItem label={t('Comment')} shortcut={TOOLBAR_SHORTCUTS.Comment} onPress={() => actions.onComment?.(selection())}><ToolbarGlyph name="comment"/></ToolbarItem>}
+    {actions?.onCreateIssue && <ToolbarItem label={t('Create issue from selection')} shortcut={TOOLBAR_SHORTCUTS['Create issue from selection']} onPress={() => actions.onCreateIssue?.(selection(), editor)}><ToolbarGlyph name="createIssue"/></ToolbarItem>}
+    {actions?.onAskAgent && <ToolbarItem label={t('Ask agent')} shortcut={TOOLBAR_SHORTCUTS['Ask agent']} onPress={() => actions.onAskAgent?.(selection(), editor)}><AgentCursorGlyph size={16}/></ToolbarItem>}
+    {actions?.onComment && <ToolbarItem label={t('Comment')} shortcut={TOOLBAR_SHORTCUTS.Comment} onPress={() => actions.onComment?.(selection(), editor)}><ToolbarGlyph name="comment"/></ToolbarItem>}
   </div></TooltipProvider>
 }
 

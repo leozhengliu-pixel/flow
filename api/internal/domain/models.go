@@ -1695,6 +1695,10 @@ type OAuthApplication struct {
 	// the app manifest (developer.name, oauth.client_uri).
 	DeveloperName string `json:"developerName,omitempty"`
 	DeveloperURL  string `json:"developerUrl,omitempty"`
+	// GitHubUsername associates GitHub activity with the application's app
+	// user (actor=app): pull requests opened and events sent by this GitHub
+	// account are attributed to the app user. "[bot]" names a GitHub App.
+	GitHubUsername string `json:"githubUsername,omitempty"`
 	// Application-level webhook, configured once by the developer: every
 	// workspace that installs or authorizes the application gets a managed
 	// webhook delivering these resource types to WebhookURL, signed with
@@ -2023,14 +2027,17 @@ type Subscription struct {
 // implicitly; "muted" silences a thread even for issue subscribers. Exactly
 // one of IssueID or ProjectID names the thread's parent resource.
 type ThreadSubscription struct {
-	ID        string    `json:"id"`
-	UserID    string    `json:"userId"`
-	IssueID   string    `json:"issueId,omitempty"`
-	ProjectID string    `json:"projectId,omitempty"`
-	CommentID string    `json:"commentId"`
-	State     string    `json:"state"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID        string `json:"id"`
+	UserID    string `json:"userId"`
+	IssueID   string `json:"issueId,omitempty"`
+	ProjectID string `json:"projectId,omitempty"`
+	// InitiativeID marks a thread on an initiative (its inline description
+	// comments); IssueID and ProjectID are then empty.
+	InitiativeID string    `json:"initiativeId,omitempty"`
+	CommentID    string    `json:"commentId"`
+	State        string    `json:"state"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type ThreadSubscriptionInput struct {
@@ -2268,8 +2275,9 @@ type Comment struct {
 	EditedAt      *time.Time            `json:"editedAt,omitempty"`
 	User          User                  `json:"user"`
 	BotActor      *ActorBot             `json:"botActor,omitempty"`
-	// AnchorID names the inline comment mark (data-comment-id) that anchors a
-	// document thread in the editor; QuotedText is the selection it was
+	// AnchorID names the inline comment that anchors a thread to text: the
+	// comment mark (data-comment-id) in a document, or the selection in a
+	// project or initiative description. QuotedText is the selection it was
 	// created on. Both are empty for page-level comments and replies.
 	AnchorID   string `json:"anchorId,omitempty"`
 	QuotedText string `json:"quotedText,omitempty"`

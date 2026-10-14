@@ -9500,6 +9500,90 @@
         "x-flow-source": "main.go"
       }
     },
+    "/api/initiatives/{id}/comments/{commentId}/subscription": {
+      "delete": {
+        "operationId": "delete_initiatives_id_comments_commentId_subscription",
+        "tags": [
+          "initiatives"
+        ],
+        "summary": "DELETE /api/initiatives/{id}/comments/{commentId}/subscription",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      },
+      "put": {
+        "operationId": "put_initiatives_id_comments_commentId_subscription",
+        "tags": [
+          "initiatives"
+        ],
+        "summary": "PUT /api/initiatives/{id}/comments/{commentId}/subscription",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "commentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "main.go"
+      }
+    },
     "/api/initiatives/{id}/history": {
       "get": {
         "operationId": "get_initiatives_id_history",
@@ -17070,6 +17154,39 @@
       }
     },
     "/api/oauth-applications/{id}/developer-token": {
+      "get": {
+        "operationId": "get_oauth_applications_id_developer_token",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "GET /api/oauth-applications/{id}/developer-token",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
+      },
       "post": {
         "operationId": "post_oauth_applications_id_developer_token",
         "tags": [
@@ -17694,6 +17811,41 @@
         ],
         "x-flow-typed": true,
         "x-flow-source": "main.go"
+      }
+    },
+    "/api/oauth-applications/{id}/webhook/secret": {
+      "get": {
+        "operationId": "get_oauth_applications_id_webhook_secret",
+        "tags": [
+          "oauth-applications"
+        ],
+        "summary": "GET /api/oauth-applications/{id}/webhook/secret",
+        "description": "Internal route of the Flow web app and administration. It is not part of the typed public contract and may change without notice.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "2XX": {
+            "description": "Success. The response is not described by this document.",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "x-flow-internal": true,
+        "x-flow-source": "oauth_platform.go"
       }
     },
     "/api/oauth-applications/icon": {
@@ -33088,7 +33240,7 @@
       "Comment": {
         "properties": {
           "anchorId": {
-            "description": "AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
+            "description": "AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
             "type": "string"
           },
           "body": {
@@ -33239,7 +33391,7 @@
       "CommentPartial": {
         "properties": {
           "anchorId": {
-            "description": "AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
+            "description": "AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
             "type": "string"
           },
           "body": {
@@ -33384,7 +33536,7 @@
         "description": "CommentWebhookData is a comment with the resource it belongs to. In webhook payloads only id is guaranteed.",
         "properties": {
           "anchorId": {
-            "description": "AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
+            "description": "AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies.",
             "type": "string"
           },
           "body": {

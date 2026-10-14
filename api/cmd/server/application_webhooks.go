@@ -120,7 +120,7 @@ func (s *server) updateApplicationWebhook(w http.ResponseWriter, r *http.Request
 	}
 	settings := s.applicationWebhookSettings(r.Context(), updated)
 	if updated.WebhookEnabled && !settings.SigningEnabled {
-		secret, err := s.storeApplicationWebhookSecret(r, updated)
+		secret, err := s.storeApplicationWebhookSecret(r, updated, "")
 		if err != nil {
 			respondMutation(w, err, http.StatusOK, nil)
 			return
@@ -139,7 +139,7 @@ func (s *server) rotateApplicationWebhookSecret(w http.ResponseWriter, r *http.R
 		writeError(w, http.StatusNotFound, "application not found")
 		return
 	}
-	secret, err := s.storeApplicationWebhookSecret(r, data.OAuthApplications[index])
+	secret, err := s.storeApplicationWebhookSecret(r, data.OAuthApplications[index], "")
 	if err != nil {
 		respondMutation(w, err, http.StatusOK, nil)
 		return
@@ -151,18 +151,21 @@ func (s *server) rotateApplicationWebhookSecret(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, settings)
 }
 
-// storeApplicationWebhookSecret generates and stores a new signing secret
-// for the application and records its prefix.
-func (s *server) storeApplicationWebhookSecret(r *http.Request, app domain.OAuthApplication) (string, error) {
-	secret, err := randomWebhookSecret()
-	if err != nil {
-		return "", err
+// storeApplicationWebhookSecret stores a signing secret for the application
+// (the given one, which the settings form generated and showed, or a new
+// one) and records its prefix.
+func (s *server) storeApplicationWebhookSecret(r *http.Request, app domain.OAuthApplication, secret string) (string, error) {
+	if !webhookSecretPattern.MatchString(secret) {
+		var err error
+		if secret, err = randomWebhookSecret(); err != nil {
+			return "", err
+		}
 	}
 	if err := s.store.SetWebhookSigningSecret(r.Context(), store.ApplicationWebhookSecretRef(app.ClientID), workspaceKey(r), secret); err != nil {
 		return "", err
 	}
 	prefix := secret[:min(len(secret), 17)]
-	err = s.store.MutateWorkspace(store.WithMetadataFields(r.Context(), "oauthApplications"), workspaceKey(r), "oauth_application.updated", app.ID, map[string]any{"webhookSecretRotated": true}, func(data *domain.Bootstrap) error {
+	err := s.store.MutateWorkspace(store.WithMetadataFields(r.Context(), "oauthApplications"), workspaceKey(r), "oauth_application.updated", app.ID, map[string]any{"webhookSecretRotated": true}, func(data *domain.Bootstrap) error {
 		index := slices.IndexFunc(data.OAuthApplications, func(item domain.OAuthApplication) bool { return item.ID == app.ID })
 		if index < 0 {
 			return errNotFound

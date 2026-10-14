@@ -1571,6 +1571,8 @@ export interface OAuthApplication {
   publicEnabled?: boolean;
   developerName?: string;
   developerUrl?: string;
+  /** The reference app's "GitHub username": GitHub activity of this account belongs to the app user (actor=app). */
+  githubUsername?: string;
   webhookEnabled?: boolean;
   webhookUrl?: string;
   webhookResourceTypes?: string[];
@@ -1579,7 +1581,10 @@ export interface OAuthApplication {
   createdAt: string;
   updatedAt: string;
 }
-/** OAuth app manifest (plus Flow's `oauth.scopes` and `agent` extensions). */
+/**
+ * OAuth app manifest (plus Flow's `oauth.scopes`, `agent` and `github` extensions, and the
+ * write-only `webhook.secret` the settings form generates).
+ */
 export interface OAuthAppManifest {
   $schema?: string;
   schemaVersion?: string;
@@ -1593,8 +1598,9 @@ export interface OAuthAppManifest {
     grant_types?: string[];
     scopes?: string[];
   };
-  webhook?: { enabled?: boolean; url?: string; resourceTypes?: string[] };
+  webhook?: { enabled?: boolean; url?: string; resourceTypes?: string[]; secret?: string };
   agent?: { assignable?: boolean; mentionable?: boolean };
+  github?: { username?: string };
 }
 export interface OAuthAppManifestIssue {
   path: string;
@@ -1991,6 +1997,8 @@ export interface ThreadSubscription {
   issueId?: UUID;
   /** Set for project comment threads. */
   projectId?: UUID;
+  /** Set for initiative comment threads. */
+  initiativeId?: UUID;
   commentId: UUID;
   state: ThreadSubscriptionState;
   createdAt: string;

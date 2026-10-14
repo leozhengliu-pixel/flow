@@ -81,6 +81,16 @@ describe('consent wording', () => {
   it('lists write alone when it covers the narrower write scopes', () => {
     expect(consentPermissions(['read', 'write', 'create_issues', 'create_comments', 'timeSchedule:write', 'admin']).map(item => item.scope)).toEqual(['read', 'write', 'admin'])
     expect(consentPermissions(['read', 'create_issues']).map(item => item.label)).toEqual(['Read access to your workspace', 'Create issues for your workspace'])
+    // The reference app's wording for the resource scopes (measured on its consent screen).
+    expect(consentPermissions(['initiative:read', 'initiative:write', 'customer:read', 'customer:write', 'release:read', 'release:create', 'releaseStage:update']).map(item => item.label)).toEqual([
+      'Read data about initiatives in the workspace',
+      'Read and write data about initiatives in the workspace',
+      'Read data about customers in the workspace',
+      'Read and write data about customers in the workspace',
+      'Read releases in the workspace',
+      'Create releases in the workspace',
+      'Update release stages in the workspace',
+    ])
   })
 
   it('translates the server\'s measured errors with their values', () => {

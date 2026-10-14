@@ -21,6 +21,9 @@ vi.mock('@/lib/api', async importOriginal => ({
   fetchOAuthSyncGroupRequests: vi.fn(),
   deleteOAuthApplication: vi.fn(),
   uploadOAuthApplicationIcon: vi.fn(),
+  fetchApplicationWebhookSecret: vi.fn(),
+  rotateApplicationWebhookSecret: vi.fn(),
+  updateApplicationWebhook: vi.fn(),
 }))
 vi.mock('@/components/ui/action-dialog-service', () => ({ confirmAction: vi.fn().mockResolvedValue(true) }))
 
@@ -103,9 +106,58 @@ describe('ApplicationCreatePage', () => {
     })
     expect(manifest.distribution).toBe('public')
     expect(manifest.developer).toEqual({ name: 'Acme Inc' })
-    expect(manifest.webhook).toEqual({ enabled: true, url: 'https://hooks.acme.test', resourceTypes: ['Issue'] })
+    // Like the reference app, the signing secret is generated in the form, shown unmasked and saved with the webhook.
+    expect(manifest.webhook).toEqual({ enabled: true, url: 'https://hooks.acme.test', resourceTypes: ['Issue'], secret: expect.stringMatching(/^flow_wh_[A-Za-z0-9_-]{32}$/) })
+    expect(manifest.github).toBeUndefined()
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/workspace/settings/api/applications/app-2'))
     expect(reload).toHaveBeenCalled()
+  })
+
+  it('shows the generated webhook signing secret in the form, keeps it while toggling and copies it', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    renderAt('/workspace/settings/api/applications/new', <ApplicationCreatePage data={data} onReload={vi.fn()} onBack={vi.fn()} />)
+    expect(screen.queryByLabelText('Webhook signing secret')).toBeNull()
+    await user.click(screen.getByRole('checkbox', { name: 'Webhooks' }))
+    const field = screen.getByLabelText<HTMLInputElement>('Webhook signing secret')
+    const secret = field.value
+    expect(secret).toMatch(/^flow_wh_/)
+    expect(field).toHaveAttribute('type', 'text')
+    expect(field).toHaveAttribute('readonly')
+    await user.click(screen.getByRole('button', { name: 'Hide' }))
+    expect(screen.getByLabelText('Webhook signing secret')).toHaveAttribute('type', 'password')
+    await user.click(screen.getByRole('checkbox', { name: 'Webhooks' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Webhooks' }))
+    expect(screen.getByLabelText('Webhook signing secret')).toHaveValue(secret)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    await user.click(screen.getByRole('button', { name: 'Copy to clipboard' }))
+    expect(writeText).toHaveBeenCalledWith(secret)
+  })
+
+  it('has the reference app\'s GitHub username field and checks the account on GitHub when creating', async () => {
+    const user = userEvent.setup()
+    const lookup = vi.fn().mockResolvedValue(new Response('{}', { status: 404 }))
+    vi.stubGlobal('fetch', lookup)
+    vi.mocked(api.createOAuthApplicationFromManifest).mockResolvedValue(app)
+    renderAt('/workspace/settings/api/applications/new?oauth.client_name=Coder&developer.name=Dev&oauth.redirect_uris=https%3A%2F%2Fa.test%2Fcb', <ApplicationCreatePage data={data} onReload={vi.fn().mockResolvedValue(undefined)} onBack={vi.fn()} />)
+    const input = screen.getByLabelText(/^GitHub username/)
+    expect(input).toHaveAttribute('placeholder', 'github-username')
+    expect(screen.getByText('actor=app')).toBeVisible()
+    expect(screen.getByText('my-app[bot]')).toBeVisible()
+    // "[[" types a literal "[" (user-event reads "[name]" as a key).
+    await user.type(input, 'missing-bot[[bot]')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByText('Invalid GitHub username')).toBeVisible()
+    expect(lookup).toHaveBeenCalledWith('https://api.github.com/users/missing-bot%5Bbot%5D', expect.anything())
+    expect(api.createOAuthApplicationFromManifest).not.toHaveBeenCalled()
+    lookup.mockResolvedValue(new Response('{}', { status: 200 }))
+    await user.clear(input)
+    await user.type(input, 'acme-coder[[bot]')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => expect(api.createOAuthApplicationFromManifest).toHaveBeenCalled())
+    expect(vi.mocked(api.createOAuthApplicationFromManifest).mock.calls[0][0].github).toEqual({ username: 'acme-coder[bot]' })
+    vi.unstubAllGlobals()
   })
 
   it('marks the reference app\'s required fields and does not call the server', async () => {
@@ -152,11 +204,18 @@ describe('ApplicationEditPage', () => {
   it('edits the application with the reference app\'s form, keeps its scopes and returns to its page', async () => {
     const user = userEvent.setup()
     const reload = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(api.updateOAuthApplicationFromManifest).mockResolvedValue(app)
-    renderAt('/workspace/settings/api/applications/app-1/edit', <ApplicationEditPage data={data} applicationId="app-1" onReload={reload} onBack={vi.fn()} />)
+    const saved = { ...app, webhookSecretPrefix: 'flow_wh_saved', githubUsername: 'acme-coder[bot]' }
+    vi.mocked(api.updateOAuthApplicationFromManifest).mockResolvedValue(saved)
+    vi.mocked(api.fetchApplicationWebhookSecret).mockResolvedValue({ secret: 'flow_wh_saved-secret' })
+    renderAt('/workspace/settings/api/applications/app-1/edit', <ApplicationEditPage data={makeBootstrap({ oauthApplications: [saved], webhooks: [] })} applicationId="app-1" onReload={reload} onBack={vi.fn()} />)
     expect(screen.getByRole('heading', { name: 'Edit application' })).toBeVisible()
     expect(screen.getByLabelText(/^Developer URL/)).toHaveValue('https://acme.test')
+    expect(screen.getByLabelText(/^GitHub username/)).toHaveValue('acme-coder[bot]')
     expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
+    // The saved signing secret is loaded into the form, masked until "Show".
+    await waitFor(() => expect(screen.getByLabelText('Webhook signing secret')).toHaveValue('flow_wh_saved-secret'))
+    expect(screen.getByLabelText('Webhook signing secret')).toHaveAttribute('type', 'password')
+    expect(api.fetchApplicationWebhookSecret).toHaveBeenCalledWith('app-1')
     await user.clear(screen.getByLabelText(/^Application name/))
     await user.type(screen.getByLabelText(/^Application name/), 'Renamed')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -164,7 +223,9 @@ describe('ApplicationEditPage', () => {
     const [id, manifest] = vi.mocked(api.updateOAuthApplicationFromManifest).mock.calls[0]
     expect(id).toBe('app-1')
     expect(manifest.oauth).toMatchObject({ client_name: 'Renamed', scopes: ['read', 'write', 'app:assignable'], grant_types: ['authorization_code', 'client_credentials'] })
+    // An existing secret is never sent back; an unchanged GitHub username is not looked up again.
     expect(manifest.webhook).toEqual({ enabled: true, url: 'https://hooks.acme.test', resourceTypes: ['Issue'] })
+    expect(manifest.github).toEqual({ username: 'acme-coder[bot]' })
     await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/workspace/settings/api/applications/app-1'))
     expect(reload).toHaveBeenCalled()
   })
@@ -180,6 +241,36 @@ describe('ApplicationDetailsPage', () => {
     expect(screen.getByText('Private to this workspace')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'OAuth credentials' })).toBeVisible()
     expect(screen.queryByText('Installs')).toBeNull()
+  })
+
+  it('shows the reference app\'s Webhooks section: status, URL, masked secret, events and delivery failures', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    const reload = vi.fn().mockResolvedValue(undefined)
+    vi.mocked(api.fetchApplicationWebhookSecret).mockResolvedValue({ secret: 'flow_wh_current' })
+    vi.mocked(api.rotateApplicationWebhookSecret).mockResolvedValue({ applicationId: 'app-1', clientId: 'client-1', enabled: true, url: 'https://hooks.acme.test', resourceTypes: ['Issue'], signingEnabled: true, installations: 1, secret: 'flow_wh_rotated' })
+    vi.mocked(api.updateApplicationWebhook).mockResolvedValue({ applicationId: 'app-1', clientId: 'client-1', enabled: false, url: 'https://hooks.acme.test', resourceTypes: ['Issue'], signingEnabled: true, installations: 1 })
+    const configured = { ...app, webhookResourceTypes: ['OAuthAuthorization', 'Issue'], githubUsername: 'acme-coder[bot]' }
+    renderAt('/workspace/settings/api/applications/app-1', <ApplicationDetailsPage data={makeBootstrap({ oauthApplications: [configured], webhooks: [] })} applicationId="app-1" onReload={reload} onBack={vi.fn()} />)
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } })
+    expect(screen.getByText('acme-coder[bot]')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Webhooks' })).toBeVisible()
+    expect(screen.getByText('Enabled')).toBeVisible()
+    expect(screen.getByText('https://hooks.acme.test')).toBeVisible()
+    expect(screen.getByLabelText('Signing secret (hidden)')).toHaveTextContent('•'.repeat(32))
+    expect(screen.getByText('Issues, OAuth authorization events')).toBeVisible()
+    expect(screen.getByRole('heading', { name: 'Webhook delivery failures' })).toBeVisible()
+    expect(await screen.findByText('No failures recorded for this webhook')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: 'Copy webhook signing secret' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('flow_wh_current'))
+    await user.click(screen.getByRole('button', { name: 'Rotate webhook signing secret' }))
+    const { confirmAction } = await import('@/components/ui/action-dialog-service')
+    expect(confirmAction).toHaveBeenCalledWith('Rotate your signing secret?', expect.objectContaining({ description: 'The current signing secret will be invalidated. You will need to update any services that verify webhook signatures. You cannot undo this action.', confirmLabel: 'Rotate' }))
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('flow_wh_rotated'))
+    expect(screen.queryByText('flow_wh_rotated')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Webhook options' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Disable webhooks' }))
+    await waitFor(() => expect(api.updateApplicationWebhook).toHaveBeenCalledWith('app-1', { enabled: false }))
   })
 
   it('opens Edit application from the menu and deletes only after typing the name', async () => {

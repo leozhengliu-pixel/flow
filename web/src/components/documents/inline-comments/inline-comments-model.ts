@@ -2,6 +2,7 @@
  * Pure model for document inline comment threads: threads from the flat
  * comment list, anchor ranges in the editor document, and gutter layout.
  */
+import type { Editor } from '@tiptap/core'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import type { Comment } from '@/types/flow'
 
@@ -39,6 +40,27 @@ export function buildThreads(comments: Comment[]): InlineThread[] {
     threads.get(rootOf(comment).id)?.replies.push(comment)
   }
   return [...threads.values()]
+}
+
+/**
+ * Splits an entity's comments into its inline threads (a first comment anchored to text, with its replies) and its
+ * page-level discussion (everything else). Projects and initiatives keep both in one list: the inline threads show
+ * beside the description, the rest in the Activity feed.
+ */
+export function partitionAnchoredComments(comments: Comment[]): { anchored: Comment[]; pageLevel: Comment[] } {
+  const byId = new Map(comments.map(comment => [comment.id, comment]))
+  const anchoredRoot = (comment: Comment) => {
+    let current = comment
+    for (let depth = 0; current.parentId && depth < 16; depth++) {
+      const parent = byId.get(current.parentId)
+      if (!parent) break
+      current = parent
+    }
+    return Boolean(current.anchorId)
+  }
+  const anchored: Comment[] = [], pageLevel: Comment[] = []
+  for (const comment of comments) (anchoredRoot(comment) ? anchored : pageLevel).push(comment)
+  return { anchored, pageLevel }
 }
 
 /** Ranges covered by each inline comment mark (by its commentId attribute). */
@@ -115,6 +137,26 @@ export function layoutGutter(items: GutterItem[], activeId?: string, gap = 8): M
     ceiling = top - gap
   }
   return result
+}
+
+/** A fresh id for a new thread's anchor (the inline comment mark's data-comment-id). */
+export function newAnchorId() {
+  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID().replace(/-/g, '') : Math.random().toString(16).slice(2) + Date.now().toString(16)
+  return `cmt_${random.slice(0, 24)}`
+}
+
+/** Removes a thread's anchor mark from the document (deleting its first comment deletes the thread). */
+export function removeAnchorMark(editor: Editor | null, anchorId: string) {
+  if (!editor || editor.isDestroyed || !anchorId) return
+  const type = editor.schema.marks[INLINE_COMMENT_MARK]
+  const range = findMarkRanges(editor.state.doc).get(anchorId)
+  if (!type || !range) return
+  const tr = editor.state.tr
+  editor.state.doc.nodesBetween(range.from, range.to, (node, pos) => {
+    if (!node.isText) return
+    for (const mark of node.marks) if (mark.type === type && mark.attrs.commentId === anchorId) tr.removeMark(pos, pos + node.nodeSize, mark)
+  })
+  editor.view.dispatch(tr.setMeta('addToHistory', false))
 }
 
 /** A comment's body as Markdown for "Copy content as Markdown". */

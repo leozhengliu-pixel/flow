@@ -255,6 +255,7 @@ var InternalRoutes = []string{
 	"POST /api/imports/{id}/retry",
 	// /api/initiatives
 	"DELETE /api/initiatives/{id}/comments/{commentId}",
+	"DELETE /api/initiatives/{id}/comments/{commentId}/subscription",
 	"DELETE /api/initiatives/{id}/relations/{relationId}",
 	"DELETE /api/initiatives/{id}/resources/{resourceId}",
 	"DELETE /api/initiatives/{id}/updates/{updateId}/attachments/{attachmentId}",
@@ -272,6 +273,7 @@ var InternalRoutes = []string{
 	"POST /api/initiatives/{id}/updates/{updateId}/attachments",
 	"POST /api/initiatives/{id}/updates/{updateId}/comments",
 	"POST /api/initiatives/{id}/updates/{updateId}/reactions",
+	"PUT /api/initiatives/{id}/comments/{commentId}/subscription",
 	// /api/integration-deliveries
 	"POST /api/integration-deliveries",
 	"POST /api/integration-deliveries/{id}/retry",
@@ -452,10 +454,12 @@ var InternalRoutes = []string{
 	"DELETE /api/oauth-applications/{id}",
 	"GET /api/oauth-applications",
 	"GET /api/oauth-applications/{id}/client-secret",
+	"GET /api/oauth-applications/{id}/developer-token",
 	"GET /api/oauth-applications/{id}/failures",
 	"GET /api/oauth-applications/{id}/installs",
 	"GET /api/oauth-applications/{id}/manifest",
 	"GET /api/oauth-applications/{id}/sync-groups",
+	"GET /api/oauth-applications/{id}/webhook/secret",
 	"PATCH /api/oauth-applications/{id}",
 	"POST /api/oauth-applications",
 	"POST /api/oauth-applications/icon",

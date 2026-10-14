@@ -21,6 +21,7 @@ import { ClientEditorProvider } from '@/components/editor/client-editor-provider
 import { resolvedTeamSettings } from '@/lib/team-hierarchy'
 import type { ActivityHighlightTarget } from '@/components/activity/activity-highlight'
 import { Composer } from '@/components/editor/composer'
+import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
 import { Avatar } from '@/components/issue/issue-row'
 import { AddReactionIcon, AttachmentIcon, NoAssigneeIcon, StatusIcon } from '@/components/issue/issue-icons'
 import { LinkExistingSubIssue } from './link-existing-sub-issue'
@@ -175,7 +176,10 @@ export function DetailPane({issue,data,comments,activities,historyLoading=false,
         <div className="activity-heading"><span>Activity</span><div><Button className="issue-subscribe-toggle" variant="ghost" size="sm" disabled={Boolean(issue.archivedAt)} onClick={()=>toggleSubscriber(data.viewer.id)}>{issue.subscriberIds.includes(data.viewer.id)?'Unsubscribe':'Subscribe'}</Button><IssueSubscriberPicker issue={issue} users={data.users} onToggle={toggleSubscriber}/></div></div>
         {historyLoading&&<div className="sr-only" role="status">{t('Loading activity...')}</div>}
         {historyError&&!historyLoading&&<div className="issue-history-state" role="alert"><span>{t('Could not load activity')}: {historyError}</span>{onRetryHistory&&<Button variant="ghost" size="sm" onClick={onRetryHistory}><RotateCw size={14}/>{t('Retry')}</Button>}</div>}
+        {/* An issue made from a comment's selection is a sub-issue of this one, in its team and project. */}
+        <SelectionIssueProvider value={{ teamId: issue.team.id, projectId: issue.project?.id, parentId: issue.id }}>
         <div className="detail-pane__activity"><ClientEditorProvider issueId={issue.id} onUploadFile={onUpload}><PagedActivityTimeline issueId={issue.id} parentId={issue.id} parentType="issue" cursors={data.issueHistoryCursors?.[issue.id]} highlightTarget={highlightTarget} events={activities} comments={comments} viewerId={data.viewer.id} context={data} threadSummariesEnabled={threadSummariesEnabled} renderAgentThread={(_comment,controls,threadIds)=><IssueAgentTasks issue={issue} data={data} commentId={threadIds} threadControls={controls} teamId={issue.team.id}/>} renderAgentSession={taskId=><IssueAgentTasks issue={issue} data={data} taskId={taskId} teamId={issue.team.id}/>} onReply={(body,bodyData,parentId)=>onComment(body,bodyData,parentId)} onEdit={onEditComment} onDelete={onDeleteComment} onReaction={onReactComment} onResolve={onResolveComment} onUpload={uploadCommentFile} threadSubscriptions={data.threadSubscriptions} onThreadSubscription={async (commentId, state) => { await setThreadSubscription(issue.id, commentId, state); toast.success(state === 'muted' ? t('Thread muted') : state ? t('Subscribed to thread') : t('Thread subscription removed')) }}/></ClientEditorProvider></div><Composer drafts={data.drafts} draftMetadata={{ resourceType: 'issue' }} draftResourceId={issue.id} draftTitle={issue.title} draftType="comment" onSubmit={onComment} onUpload={uploadCommentFile}/>
+        </SelectionIssueProvider>
       </article></IssueAgentTasksProvider>
       <div className="issue-agent-rail">
         {agentOpen ? (

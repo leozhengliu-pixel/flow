@@ -1,0 +1,72 @@
+/* Inline comments on a project or initiative description (see entity-inline-comments.tsx). The thread cards, popover and
+   resolved panel are the document ones (document-inline-comments.css); this file draws the anchors and makes room. */
+
+/* Open threads underline their text; the active thread and the selection being commented on are highlighted. */
+.inline-comment-host .inline-comment-mark,
+.inline-comment-host .inline-comment-mark[data-resolved="true"] { background: none; border-bottom: 0; text-decoration: none; }
+.inline-comment-host .inline-comment-open {
+  border-bottom: 2px solid var(--document-comment-underline);
+  cursor: pointer;
+  transition: background-color var(--quick) ease;
+}
+.inline-comment-host .inline-comment-open.is-active,
+.inline-comment-host .inline-comment-pending {
+  border-bottom-color: transparent;
+  border-radius: 2px;
+  background: var(--document-comment-highlight);
+}
+.inline-comment-host .inline-comment-pending { background: var(--document-comment-pending); }
+
+/* "Resolved comments": the page a quote comes from, above it. */
+.document-thread-quote-source { display: block; color: var(--theme-text-tertiary, var(--theme-text-secondary)); font-size: 12px; font-style: normal; line-height: 18px; }
+
+/* Gutter cards need room right of the column. Like the reference app, the column moves left (keeping 48px from the
+   page edge) until a card fits 16px right of the text and 8px short of the page's right edge (284px or more, up to 372px
+   on wide screens), and narrows before it would overlap the cards. Below the threshold, or with a side panel open, the
+   open thread is a popover under its text instead. */
+.project-detail-page__main,
+.li-detail-main { container-type: inline-size; }
+.project-overview.inline-comment-host,
+.li-overview.inline-comment-host { position: relative; }
+@media (min-width: 1232px) {
+  .project-overview.has-comment-gutter {
+    --inline-comment-shift: max(48px, min(calc((100cqw - 805px) / 2), calc(100cqw - 1113px)));
+    --inline-comment-column: min(805px, calc(100cqw - var(--inline-comment-shift) - 308px));
+    width: var(--inline-comment-column);
+    margin-right: 0;
+    margin-left: var(--inline-comment-shift);
+  }
+  .project-overview.has-comment-gutter .document-inline-gutter:not(.is-popover) {
+    width: min(372px, calc(100cqw - var(--inline-comment-shift) - var(--inline-comment-column) - 24px));
+  }
+  /* The initiative column is 820px with 8px of padding: the cards start 16px right of its text. */
+  .li-overview.has-comment-gutter {
+    --inline-comment-shift: max(48px, min(calc((100cqw - 820px) / 2), calc(100cqw - 1120px)));
+    --inline-comment-column: min(820px, calc(100cqw - var(--inline-comment-shift) - 300px));
+    width: var(--inline-comment-column);
+    margin-right: 0;
+    margin-left: var(--inline-comment-shift);
+  }
+  .li-overview.has-comment-gutter .document-inline-gutter:not(.is-popover) {
+    left: calc(100% + 8px);
+    width: min(372px, calc(100cqw - var(--inline-comment-shift) - var(--inline-comment-column) - 16px));
+  }
+}
+
+/* "Resolved comments" sits where the details panel does (the page keeps that column free while it is open): a card
+   under the toolbar, 16px from the right edge, as tall as its threads. */
+.project-detail-page .document-resolved-panel,
+.li-detail .document-resolved-panel {
+  top: 96px;
+  right: 16px;
+  bottom: auto;
+  width: 388px;
+  max-height: calc(100vh - 112px);
+  border: .5px solid var(--document-comment-card-border);
+}
+.project-detail-page .document-resolved-panel > header,
+.li-detail .document-resolved-panel > header { height: 40px; flex-basis: 40px; border-bottom: 0; color: var(--theme-text-secondary); }
+
+@media print {
+  .inline-comment-host .inline-comment-open { border-bottom: 0; background: none; }
+}

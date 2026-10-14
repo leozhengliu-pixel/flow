@@ -5,6 +5,8 @@
  */
 export const documentsCommentsZhCN: Record<string, string> = {
   // Inline comments
+  'Show resolved comments': '显示已解决的评论',
+  'Could not create issue': '无法创建事项',
   'Comment thread': '评论讨论串',
   'Comments': '评论',
   'Add a comment…': '添加评论…',

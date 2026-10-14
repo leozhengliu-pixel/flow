@@ -277,7 +277,7 @@ export interface AuditLogEntryConnection {
 }
 
 export interface Comment {
-  /** AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
+  /** AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
   anchorId?: string
   body: string
   bodyData?: Record<string, unknown>
@@ -315,7 +315,7 @@ export interface CommentCreateInput {
 }
 
 export interface CommentPartial {
-  /** AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
+  /** AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
   anchorId?: string
   body?: string
   bodyData?: Record<string, unknown>
@@ -352,7 +352,7 @@ export interface CommentUpdateInput {
 
 /** CommentWebhookData is a comment with the resource it belongs to. In webhook payloads only id is guaranteed. */
 export interface CommentWebhookDataPartial {
-  /** AnchorID names the inline comment mark (data-comment-id) that anchors a document thread in the editor; QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
+  /** AnchorID names the inline comment that anchors a thread to text: the comment mark (data-comment-id) in a document, or the selection in a project or initiative description. QuotedText is the selection it was created on. Both are empty for page-level comments and replies. */
   anchorId?: string
   body?: string
   bodyData?: Record<string, unknown>

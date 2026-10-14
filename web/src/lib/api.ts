@@ -955,9 +955,24 @@ export function fetchViewer(): Promise<Viewer> {
 export function deleteOAuthApplication(id: string): Promise<void> {
   return request(`/api/oauth-applications/${id}`, { method: "DELETE" });
 }
-export type ApplicationToken = { access_token: string; token_type: 'Bearer'; expires_in: number; scope: string; actor: 'user' | 'app'; subject_user_id?: string; app_user_id?: string }
-export function createApplicationDeveloperToken(id: string, actor: 'user' | 'app', scopes: string[]): Promise<ApplicationToken> {
-  return request(`/api/oauth-applications/${encodeURIComponent(id)}/developer-token`, jsonRequest('POST', { actor, scopes }))
+/** A developer token; `existing` marks the app user's active token copied again (the reference app allows one at a time). */
+export type ApplicationToken = { access_token: string; token_type: 'Bearer'; expires_in: number; scope: string; actor: 'user' | 'app'; subject_user_id?: string; app_user_id?: string; existing?: boolean }
+/** The reference app's "Create & copy token": `user` gets a read/write token (scopes omitted); `app` the chosen scopes. */
+export function createApplicationDeveloperToken(id: string, actor: 'user' | 'app', scopes?: string[]): Promise<ApplicationToken> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/developer-token`, jsonRequest('POST', scopes ? { actor, scopes } : { actor }))
+}
+/** The app user's active developer token, or undefined when there is none (choose scopes to create one). */
+export async function fetchApplicationDeveloperToken(id: string): Promise<ApplicationToken | undefined> {
+  try {
+    return await request<ApplicationToken>(`/api/oauth-applications/${encodeURIComponent(id)}/developer-token`)
+  } catch (error) {
+    if (error instanceof PulseApiError && error.status === 404) return undefined
+    throw error
+  }
+}
+/** The application's webhook signing secret (edit form and the Webhooks section's copy button). */
+export function fetchApplicationWebhookSecret(id: string): Promise<{ secret: string }> {
+  return request(`/api/oauth-applications/${encodeURIComponent(id)}/webhook/secret`)
 }
 export function rotateOAuthApplicationSecret(id: string): Promise<{ clientSecret: string }> {
   return request(`/api/oauth-applications/${encodeURIComponent(id)}/rotate-secret`, { method: 'POST' })
@@ -3954,6 +3969,48 @@ export function toggleInitiativeCommentReaction(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ emoji }),
   });
+}
+
+/** A project or initiative: their comment threads (page-level and inline on the description) share one API shape. */
+export type CommentThreadEntity = { kind: "project" | "initiative"; id: string };
+const commentThreadPath = (entity: CommentThreadEntity, commentId?: string) =>
+  `/api/${entity.kind === "project" ? "projects" : "initiatives"}/${encodeURIComponent(entity.id)}/comments${commentId ? `/${encodeURIComponent(commentId)}` : ""}`;
+/** Starts a thread (an inline one carries `anchorId` and `quotedText`) or replies to one (`parentId`). */
+export function createEntityComment(
+  entity: CommentThreadEntity,
+  input: Pick<Comment, "body" | "bodyData" | "parentId" | "anchorId" | "quotedText">,
+): Promise<Comment> {
+  return request(commentThreadPath(entity), jsonRequest("POST", input));
+}
+export function updateEntityComment(
+  entity: CommentThreadEntity,
+  commentId: string,
+  input: Pick<Comment, "body" | "bodyData"> & { expectedVersion?: number },
+): Promise<Comment> {
+  return request(commentThreadPath(entity, commentId), jsonRequest("PATCH", input));
+}
+export function resolveEntityComment(
+  entity: CommentThreadEntity,
+  commentId: string,
+  resolved: boolean,
+  expectedVersion?: number,
+): Promise<Comment> {
+  return request(commentThreadPath(entity, commentId), jsonRequest("PATCH", { resolved, expectedVersion }));
+}
+export function deleteEntityComment(entity: CommentThreadEntity, commentId: string): Promise<void> {
+  return request(commentThreadPath(entity, commentId), { method: "DELETE" });
+}
+export function toggleEntityCommentReaction(entity: CommentThreadEntity, commentId: string, emoji: string): Promise<Comment> {
+  return request(`${commentThreadPath(entity, commentId)}/reactions`, jsonRequest("POST", { emoji }));
+}
+export function setEntityThreadSubscription(
+  entity: CommentThreadEntity,
+  commentId: string,
+  state: ThreadSubscriptionState | null,
+): Promise<ThreadSubscription | void> {
+  const path = `${commentThreadPath(entity, commentId)}/subscription`;
+  if (!state) return request(path, { method: "DELETE" });
+  return request(path, jsonRequest("PUT", { state }));
 }
 export function createInitiativeUpdate(
   id: string,

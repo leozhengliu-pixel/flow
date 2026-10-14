@@ -328,7 +328,8 @@ func TestOAuthScopeValidation(t *testing.T) {
 	// An authorized admin-scope user token is usable and reports its scopes.
 	code := authorizeCode(t, host, admin, workspace, app.ClientID, "read admin", "")
 	pair := oauthForm[oauthTokenPair](t, host.URL+"/oauth/token", url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {oauthTestRedirect}}, app.ClientID, app.ClientSecret, 200)
-	if pair.Scope != "read admin" {
+	// Like the reference app, the scope is reported sorted.
+	if pair.Scope != "admin read" {
 		t.Fatalf("admin token scope = %q", pair.Scope)
 	}
 }

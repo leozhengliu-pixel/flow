@@ -230,7 +230,7 @@ describe('embedded surface parity (floating chat panel, thread cards, reactions,
 
   it('switches between gutter cards and the popover at the same viewport width in CSS and in the component', () => {
     const css = flat(read('../documents/inline-comments/document-inline-comments.css'))
-    const source = read('../documents/inline-comments/document-inline-comments.tsx')
+    const source = read('../documents/inline-comments/inline-comment-gutter.tsx')
     const width = source.match(/GUTTER_MIN_VIEWPORT = (\d+)/)?.[1]
     expect(width).toBe('1232')
     expect(css).toContain(`@media (min-width: ${width}px)`)
