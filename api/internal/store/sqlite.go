@@ -354,6 +354,7 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 		{version: 5, name: "encrypted connector credentials", apply: s.createConnectorSecretsSchema},
 		{version: 6, name: "team membership role index", apply: s.createTeamMembershipRoleIndex},
 		{version: 7, name: "team membership origin", apply: s.addTeamMembershipOrigin},
+		{version: 8, name: "workspace departures", apply: s.createWorkspaceDeparturesSchema},
 		// Versions from 1000 up are data migrations (runDataMigrations),
 		// which run after the workspaces are loaded.
 	}
@@ -2036,6 +2037,9 @@ func (s *SQLiteStore) deleteWorkspace(ctx context.Context, workspaceKey string) 
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_memberships WHERE workspace_id = ?`, data.Workspace.ID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_departures WHERE workspace_id = ?`, data.Workspace.ID); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM workspace_invitations WHERE workspace_id = ?`, data.Workspace.ID); err != nil {

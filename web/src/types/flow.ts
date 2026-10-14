@@ -53,7 +53,7 @@ export interface AuthSession {
 export interface WorkspaceMember {
   user: User;
   role: WorkspaceRole;
-  status: "active" | "suspended";
+  status: "active" | "suspended" | "departed";
   joinedAt: string;
   lastSeenAt?: string;
 }
@@ -2418,6 +2418,11 @@ export interface BootstrapData {
   agentSessions: AgentSession[];
   agentSkills: PersonalAgentSkill[];
   members: WorkspaceMember[];
+  /**
+   * Former members, for admins (Settings › Members › Inactive, "Left workspace"): removed people and the app users of
+   * uninstalled or deleted applications. Their status is "departed"; lastSeenAt is when they left.
+   */
+  departedMembers?: WorkspaceMember[];
   teamMembers: TeamMember[];
   invitations: Invitation[];
   workspaceInviteLink?: WorkspaceInviteLink | null;

@@ -213,6 +213,9 @@ var InternalRoutes = []string{
 	"DELETE /api/drafts/{id}",
 	"PATCH /api/drafts/{id}",
 	"POST /api/drafts",
+	// /api/email (signed one-click unsubscribe links in onboarding emails)
+	"GET /api/email/unsubscribe",
+	"POST /api/email/unsubscribe",
 	// /api/email-intake
 	"POST /api/email-intake/{token}/receive",
 	// /api/events

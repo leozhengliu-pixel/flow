@@ -15,6 +15,31 @@ import (
 // agent, which follows the server's agent configuration instead.
 var ErrBuiltinApplication = errors.New("the built-in agent cannot be uninstalled")
 
+// InstallationRef names an application installation in a workspace.
+type InstallationRef struct {
+	WorkspaceKey string
+	ID           string
+}
+
+// ApplicationInstallationsByClient lists every workspace's installation of
+// an OAuth client, e.g. to uninstall them when the application is deleted.
+func (s *SQLiteStore) ApplicationInstallationsByClient(ctx context.Context, clientID string) ([]InstallationRef, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT workspace_key,id FROM application_installations WHERE client_id=? ORDER BY workspace_key,id`, clientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := []InstallationRef{}
+	for rows.Next() {
+		var item InstallationRef
+		if err := rows.Scan(&item.WorkspaceKey, &item.ID); err != nil {
+			return nil, err
+		}
+		result = append(result, item)
+	}
+	return result, rows.Err()
+}
+
 // UninstallApplication removes an application installation from the
 // workspace (the reference app's "Revoke access" on an installed application): its
 // tokens and the workspace's authorizations of the application are revoked,
@@ -57,6 +82,10 @@ func (s *SQLiteStore) UninstallApplication(ctx context.Context, workspace, id st
 			if _, err := tx.ExecContext(ctx, `UPDATE workspace_metadata_records SET data=? WHERE workspace_key=? AND field='oauthAuthorizations' AND record_key=?`, grantRaw, current.Workspace.URLKey, grant.ID); err != nil {
 				return current, err
 			}
+		}
+		// The app user stays listed in Settings › Members as "Left workspace".
+		if err := recordWorkspaceDepartureTx(ctx, tx, current.Workspace.ID, removed.UserID, now); err != nil {
+			return current, err
 		}
 		statements := []struct {
 			query string

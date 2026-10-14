@@ -2478,11 +2478,16 @@ type Bootstrap struct {
 	AgentSkills                   []PersonalAgentSkill               `json:"agentSkills"`
 	Settings                      map[string]any                     `json:"settings"`
 	Members                       []WorkspaceMember                  `json:"members"`
-	TeamMembers                   []TeamMember                       `json:"teamMembers"`
-	Invitations                   []Invitation                       `json:"invitations"`
-	WorkspaceInviteLink           *WorkspaceInviteLink               `json:"workspaceInviteLink,omitempty"`
-	OAuthSyncGroupRequests        []OAuthSyncGroupRequest            `json:"oauthSyncGroupRequests,omitempty"`
-	ViewerRole                    string                             `json:"viewerRole"`
+	// DepartedMembers lists former members (status "departed": removed people
+	// and the app users of uninstalled or deleted applications) for workspace
+	// admins, as the reference app's Settings › Members shows them under "Inactive" with
+	// "Left workspace".
+	DepartedMembers        []WorkspaceMember       `json:"departedMembers,omitempty"`
+	TeamMembers            []TeamMember            `json:"teamMembers"`
+	Invitations            []Invitation            `json:"invitations"`
+	WorkspaceInviteLink    *WorkspaceInviteLink    `json:"workspaceInviteLink,omitempty"`
+	OAuthSyncGroupRequests []OAuthSyncGroupRequest `json:"oauthSyncGroupRequests,omitempty"`
+	ViewerRole             string                  `json:"viewerRole"`
 }
 
 type ProviderJob struct {
