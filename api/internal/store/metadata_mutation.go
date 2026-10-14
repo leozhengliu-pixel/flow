@@ -96,6 +96,7 @@ func metadataOnlyMutation(event string, payload any) bool {
 		return true
 	case "initiative.created", "initiative.updated", "initiative.deleted",
 		"initiative.commented", "initiative.comment_updated", "initiative.comment_deleted", "initiative.comment_reaction_toggled",
+		"initiative.comment_resolved", "initiative.comment_unresolved", "initiative.comment_thread_subscription",
 		"initiative.update_created", "initiative.update_updated", "initiative.update_deleted", "initiative.update_commented", "initiative.update_reaction_toggled",
 		"initiative.update_attachment_created", "initiative.update_attachment_deleted",
 		"initiative.relation_created", "initiative.relation_updated", "initiative.relation_deleted",

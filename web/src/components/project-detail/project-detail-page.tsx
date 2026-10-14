@@ -8,6 +8,9 @@ import { projectPulseSubscribed } from '@/lib/pulse-subscriptions';
 import { ViewGlyph } from "@/components/views/view-icon-picker";
 import { normalizeProjectIcon } from "@/components/views/project-icon";
 import { ProjectOverview } from "./project-overview";
+import { useResolvedInlineThreadCount } from "@/components/detail/entity-inline-comments-state";
+import { ResolvedCommentsButton } from "@/components/documents/inline-comments/inline-comment-gutter";
+import { SelectionIssueProvider } from "@/components/editor/selection-issue-provider";
 import { useLabelSelection } from "@/components/property/use-label-selection";
 import { ProjectActivity } from "./project-activity";
 import {
@@ -88,6 +91,10 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
     true,
   );
   const [insightsOpen, setInsightsOpen] = useState(false);
+  // "Show resolved comments" (while the description has resolved inline threads) takes the details panel's place.
+  const resolvedThreadCount = useResolvedInlineThreadCount(project.comments);
+  const [resolvedCommentsOpen, setResolvedCommentsOpen] = useState(false);
+  const closeResolvedComments = useCallback(() => setResolvedCommentsOpen(false), []);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -376,6 +383,8 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
   };
 
   return (
+    // An issue made from a comment's selection goes to this project (and its first team).
+    <SelectionIssueProvider value={{ teamId: project.teamIds?.[0], projectId: project.id }}>
     <main className="project-detail-page">
       <header className="project-detail-page__header">
         <button
@@ -617,6 +626,19 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               />
             </>
           )}
+          {tab === "overview" && (
+            <ResolvedCommentsButton
+              className="project-detail-page__toolbar-button ui-pill"
+              count={resolvedThreadCount}
+              label="Show resolved comments"
+              open={resolvedCommentsOpen}
+              onToggle={() => {
+                setResolvedCommentsOpen((value) => !value);
+                setDetailsOpen(false);
+                setInsightsOpen(false);
+              }}
+            />
+          )}
           <FlowTooltip label={t(insightsOpen ? "Close project insights" : "Open project insights")}>
             <button
               aria-label={t(insightsOpen ? "Close project insights" : "Open project insights")}
@@ -625,6 +647,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               onClick={() => {
                 setInsightsOpen((value) => !value);
                 setDetailsOpen(false);
+                setResolvedCommentsOpen(false);
               }}
               type="button"
             >
@@ -644,6 +667,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               onClick={() => {
                 setDetailsOpen((value) => !value);
                 setInsightsOpen(false);
+                setResolvedCommentsOpen(false);
               }}
               type="button"
             >
@@ -654,7 +678,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
       </div>
 
       <div
-        className={`project-detail-page__workspace ${detailsOpen || insightsOpen ? "has-details" : ""} ${tab === "new" ? "is-new-view" : ""}`}
+        className={`project-detail-page__workspace ${detailsOpen || insightsOpen || (tab === "overview" && resolvedCommentsOpen && resolvedThreadCount > 0) ? "has-details" : ""} ${tab === "new" ? "is-new-view" : ""}`}
       >
         <div className="project-detail-page__main">
           {customerRequestsEnabled && props.issueData && <ProjectCustomerRequestsLauncher data={props.issueData} project={displayedProject} onOpenRequests={openCustomerRequests} />}
@@ -663,6 +687,9 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
               {...props}
               issueSummary={issueSummary}
               project={displayedProject}
+              sidePanelOpen={detailsOpen || insightsOpen}
+              resolvedCommentsOpen={resolvedCommentsOpen && resolvedThreadCount > 0}
+              onResolvedCommentsClose={closeResolvedComments}
               labels={projectLabels}
               onOpenMilestoneIssues={openMilestoneIssues}
               onPickerRequestHandled={clearPickerRequest}
@@ -803,6 +830,7 @@ export function ProjectDetailPage(props: ProjectDetailProps) {
         project={project}
       />
     </main>
+    </SelectionIssueProvider>
   );
 }
 

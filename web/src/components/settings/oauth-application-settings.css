@@ -115,3 +115,15 @@ html:root .settings-app .settings-main .oauth-app-section .settings-row .setting
 /* Type-to-confirm delete dialog. */
 .oauth-app-confirm-label{margin:4px 0 0;color:var(--theme-text-secondary);font-size:15px;line-height:23px}
 .oauth-app-confirm-label strong{color:var(--oauth-title);font-weight:600}
+
+/* The reference app's "Webhook signing secret" field: a read-only input with Copy and Show/Hide inside its right edge. */
+.oauth-app-secret-field .oauth-app-input{padding-right:64px;font:400 12px/normal var(--font-mono);letter-spacing:.2px}
+.oauth-app-secret-field .oauth-app-input[type=password]{letter-spacing:1.5px}
+.oauth-app-secret-field-actions{position:absolute;top:50%;right:4px;display:flex;align-items:center;transform:translateY(-50%)}
+.oauth-app-secret-field-actions .oauth-app-icon-button:disabled{opacity:.5}
+
+/* Application page › Webhooks: the delivery status dot and the empty failures row. */
+.oauth-app-webhook-status{display:inline-flex;align-items:center;gap:6px}
+.oauth-app-webhook-status i{width:6px;height:6px;flex:none;border-radius:50%;background:var(--theme-text-tertiary)}
+.oauth-app-webhook-status[data-enabled=true] i{background:var(--project-health-on-track)}
+html:root .settings-app .settings-main .oauth-app-section .settings-row.oauth-app-empty-row strong{color:var(--theme-text-secondary);font-weight:450}

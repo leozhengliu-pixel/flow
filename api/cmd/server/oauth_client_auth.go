@@ -14,11 +14,11 @@ import (
 
 // userOAuthScopes are the scopes an actor=user authorization may request:
 // The reference app's user scopes (read, write, issues:create, comments:create,
-// timeSchedule:write, admin), Flow's identity scopes and the resource scopes
-// applications share with users. app:* scopes are only valid with actor=app:
+// timeSchedule:write, admin, release:*), Flow's identity scopes. app:*,
+// customer:* and initiative:* scopes are only valid with actor=app:
 // registered applications asking for them otherwise are rejected (as the reference app
 // does) and public MCP clients have them dropped.
-var userOAuthScopes = append(slices.Clone(supportedOAuthScopes), "admin", "timeSchedule:write")
+var userOAuthScopes = append(slices.DeleteFunc(slices.Clone(supportedOAuthScopes), appOnlyOAuthScope), "admin", "timeSchedule:write")
 
 // oauthRequestError carries an RFC 6749 error code with its description.
 type oauthRequestError struct {
@@ -55,6 +55,48 @@ func canonicalOAuthScope(scope string) string {
 		return "create_comments"
 	}
 	return strings.TrimSpace(scope)
+}
+
+// publicOAuthScopeName is the name a scope is reported under in token
+// responses, introspection and server metadata: the reference app's spelling
+// (issues:create, comments:create) rather than Flow's stored name.
+func publicOAuthScopeName(scope string) string {
+	switch scope {
+	case "create_issues":
+		return "issues:create"
+	case "create_comments":
+		return "comments:create"
+	}
+	return scope
+}
+
+// publicOAuthScopes renders granted scopes in token
+// responses: the reference app's names, de-duplicated, sorted and space-separated.
+func publicOAuthScopes(scopes []string) string {
+	names := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		names = append(names, publicOAuthScopeName(scope))
+	}
+	slices.Sort(names)
+	return strings.Join(slices.Compact(names), " ")
+}
+
+// publicOAuthScopeList is publicOAuthScopes for metadata lists, keeping order.
+func publicOAuthScopeList(scopes []string) []string {
+	names := []string{}
+	for _, scope := range scopes {
+		if name := publicOAuthScopeName(scope); !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// appOnlyOAuthScope reports scopes the reference app accepts only with actor=app: the
+// agent scopes and the customer / initiative resource scopes. A registered
+// application requesting them for a user authorization gets invalid_scope.
+func appOnlyOAuthScope(scope string) bool {
+	return strings.HasPrefix(scope, "app:") || strings.HasPrefix(scope, "customer:") || strings.HasPrefix(scope, "initiative:")
 }
 
 // parseOAuthScopes accepts comma- or space-separated scopes (the reference app documents
@@ -130,14 +172,15 @@ func (s *server) validateOAuthAuthorizationRequest(r *http.Request, request oaut
 			return client, nil, oauthInvalidScope("%s", err.Error())
 		}
 	} else {
-		// Like the reference app, a registered application asking for app:* scopes
-		// without actor=app is an error. MCP clients (public, dynamically
-		// registered) request every advertised scope, so theirs are dropped.
-		if slices.ContainsFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") }) {
+		// Like the reference app, a registered application asking for app:*,
+		// customer:* or initiative:* scopes without actor=app is an error.
+		// MCP clients (public, dynamically registered) request every
+		// advertised scope, so theirs are dropped.
+		if slices.ContainsFunc(scopes, appOnlyOAuthScope) {
 			if confidentialOAuthClient(client) {
 				return client, nil, oauthInvalidScope("The scopes requested are not valid for this actor mode.")
 			}
-			scopes = slices.DeleteFunc(scopes, func(scope string) bool { return strings.HasPrefix(scope, "app:") })
+			scopes = slices.DeleteFunc(scopes, appOnlyOAuthScope)
 		}
 		if bad := slices.IndexFunc(scopes, func(scope string) bool { return !slices.Contains(userOAuthScopes, scope) }); bad >= 0 {
 			return client, nil, oauthInvalidScope("Invalid scope: %s", scopes[bad])
@@ -363,7 +406,7 @@ func (s *server) introspectOAuthToken(w http.ResponseWriter, r *http.Request) {
 			if actor == "" {
 				actor = "user"
 			}
-			result := map[string]any{"active": true, "scope": strings.Join(key.Scopes, " "), "client_id": id, "token_type": "Bearer", "iat": key.CreatedAt.Unix(), "sub": key.SubjectID(), "actor": actor, "workspace": workspace, "grant_type": key.GrantType}
+			result := map[string]any{"active": true, "scope": publicOAuthScopes(key.Scopes), "client_id": id, "token_type": "Bearer", "iat": key.CreatedAt.Unix(), "sub": key.SubjectID(), "actor": actor, "workspace": workspace, "grant_type": key.GrantType}
 			if key.ExpiresAt != nil {
 				result["exp"] = key.ExpiresAt.Unix()
 			}
@@ -387,7 +430,7 @@ func (s *server) introspectOAuthToken(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "user"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"active": true, "scope": strings.Join(state.Grant.Scopes, " "), "client_id": id, "token_type": "refresh_token", "iat": state.CreatedAt.Unix(), "exp": state.ExpiresAt.Unix(), "sub": state.Grant.UserID, "actor": actor, "workspace": state.Grant.WorkspaceKey})
+	writeJSON(w, http.StatusOK, map[string]any{"active": true, "scope": publicOAuthScopes(state.Grant.Scopes), "client_id": id, "token_type": "refresh_token", "iat": state.CreatedAt.Unix(), "exp": state.ExpiresAt.Unix(), "sub": state.Grant.UserID, "actor": actor, "workspace": state.Grant.WorkspaceKey})
 }
 
 // oauthClientDisplay names an OAuth client for "via <App>" attribution.

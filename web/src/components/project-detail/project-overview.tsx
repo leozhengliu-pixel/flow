@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Editor } from '@tiptap/react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { AlignLeft, ArrowRight, Diamond, FileText, Flag, Link2, MoreHorizontal, Plus, X, Send } from 'lucide-react'
@@ -37,11 +38,13 @@ import { ProjectMilestoneMenu } from './project-milestone-menu'
 import { DescriptionHistoryDialog } from './project-header-menus'
 import { DisclosureTriangle } from '@/components/ui/disclosure-triangle'
 import { useEntityDescriptionSelectionActions } from '@/components/detail/description-selection-actions'
+import { EntityInlineComments, EntityResolvedCommentsPanel, type InlineCommentEntity } from '@/components/detail/entity-inline-comments'
+import { useEntityInlineComments } from '@/components/detail/entity-inline-comments-state'
 import { projectPath } from '@/lib/app-routes'
 
 type Props = ProjectDetailProps & { projectIssues: Issue[]; save: (input: ProjectMutationInput) => Promise<void> }
 
-export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onMoveMilestone, onConvertMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled, onOpenDocumentHistory, onReloadWorkspace }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void }) {
+export function ProjectOverview({ issueData, issueSummary, project, projects, projectRelations, integrationConnections, viewer, onUpdate, initiatives, documents, projectStatuses, projectUpdates, users, teams, labels, labelGroups, projectIssues, save, onCreateLabel, onCreateResource, onUpdateResource, onDeleteResource, onCreateMilestone, onUpdateMilestone, onDeleteMilestone, onMoveMilestone, onConvertMilestone, onOpenMilestoneIssues = () => onTabChange('issues'), onTabChange, pickerRequest, onPickerRequestHandled, onOpenDocumentHistory, onReloadWorkspace, sidePanelOpen = false, resolvedCommentsOpen = false, onResolvedCommentsClose }: Props & { onOpenMilestoneIssues?: (milestoneId?: string) => void; pickerRequest?: ProjectPickerRequest; onPickerRequestHandled?: () => void; /** The details or insights panel takes the room right of the column (inline threads open as popovers). */ sidePanelOpen?: boolean; resolvedCommentsOpen?: boolean; onResolvedCommentsClose?: () => void }) {
   const statuses = useMemo(() => uniqueById(projectStatuses.length ? projectStatuses : projects.map(item => item.status)), [projectStatuses, projects])
   const members = users.filter(user => (project.memberIds ?? []).includes(user.id))
   const selectedMemberIds = [...new Set([...(project.memberIds ?? []), ...(project.lead?.id ? [project.lead.id] : [])])]
@@ -63,8 +66,13 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
   const [targetDateOpen, setTargetDateOpen] = useProjectPickerOpen('targetDate', pickerRequest, onPickerRequestHandled)
   const [labelsOpen, setLabelsOpen] = useProjectPickerOpen('labels', pickerRequest, onPickerRequestHandled)
   const teamNames = projectTeams.map(team => team.name).join(', ')
+  // Inline comments on the description ("Comment" on its selection toolbar), shown beside it.
+  const inlineComments = useEntityInlineComments(project.comments)
+  const projectHref = issueData ? projectPath(issueData.workspace.urlKey, project) : undefined
+  const commentEntity = useMemo<InlineCommentEntity>(() => ({ kind: 'project', id: project.id, name: project.name, href: projectHref, teamId: project.teamIds?.[0] ?? teams[0]?.id }), [project.id, project.name, project.teamIds, projectHref, teams])
+  const reloadComments = useCallback(async () => { await onReloadWorkspace?.() }, [onReloadWorkspace])
 
-  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className="project-overview">
+  return <TooltipProvider delayDuration={450} skipDelayDuration={400}><div className={`project-overview inline-comment-host${inlineComments.gutter ? ' has-comment-gutter' : ''}`} ref={inlineComments.shellRef}>
     {outline.length > 1 && <ProjectOutlineRail items={outline}/>}
     <section className="project-overview__intro">
       <ViewIconPicker surface="page" color={project.color} icon={normalizeProjectIcon(project.icon)} onChange={visual => void save(visual)} triggerClassName="project-overview__icon"/>
@@ -96,7 +104,7 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
 
     <section className="project-overview__description" id="project-overview-description">
       <h3>Description</h3>
-      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })} selection={{ entity: { kind: 'project', id: project.id, name: project.name, href: issueData ? projectPath(issueData.workspace.urlKey, project) : undefined }, data: issueData, teamId: project.teamIds?.[0] ?? teams[0]?.id }}/>
+      <ProjectDescriptionEditor users={users} value={project.description} onCommit={description => save({ description })} editorRef={inlineComments.editorRef} selection={{ entity: { kind: 'project', id: project.id, name: project.name, href: projectHref }, data: issueData, teamId: project.teamIds?.[0] ?? teams[0]?.id, onComment: issueData ? inlineComments.startComment : undefined }}/>
     </section>
 
     <section className="project-overview__milestones" id="project-overview-milestones">
@@ -108,6 +116,8 @@ export function ProjectOverview({ issueData, issueSummary, project, projects, pr
       />}
       {!creatingMilestone && <button className="project-overview__milestone-link" type="button" onClick={() => setCreatingMilestone(true)}><Plus size={16}/>Milestone</button>}
     </section>
+    {issueData && <EntityInlineComments state={inlineComments} entity={commentEntity} data={issueData} railOpen={sidePanelOpen || resolvedCommentsOpen} onReload={reloadComments}/>}
+    {issueData && resolvedCommentsOpen && <EntityResolvedCommentsPanel state={inlineComments} entity={commentEntity} data={issueData} onReload={reloadComments} onClose={() => onResolvedCommentsClose?.()}/>}
   </div></TooltipProvider>
 }
 
@@ -218,13 +228,13 @@ function ProjectEditableText({ ariaLabel, autoFocus, className, multiline, onCom
   return <input aria-label={ariaLabel} autoFocus={autoFocus} className={className} onBlur={commit} onChange={event => setDraft(event.target.value)} onKeyDown={onDone ? event => { if (event.key === 'Enter') event.currentTarget.blur(); if (event.key === 'Escape') { cancelled.current = true; setDraft(value); event.currentTarget.blur() } } : undefined} placeholder={placeholder} value={draft}/>
 }
 
-function ProjectDescriptionEditor({ users, value, onCommit, selection }: { users: Props['users']; value: string; onCommit: (value: string) => Promise<void>; selection: Parameters<typeof useEntityDescriptionSelectionActions>[0] }) {
+function ProjectDescriptionEditor({ users, value, onCommit, selection, editorRef }: { users: Props['users']; value: string; onCommit: (value: string) => Promise<void>; selection: Parameters<typeof useEntityDescriptionSelectionActions>[0]; editorRef?: (editor: Editor | null) => void }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
-  // Selecting text offers "Ask agent" and "Create issue from selection", as in an issue description.
+  // Selecting text offers "Create issue from selection", "Ask agent" and "Comment", as in an issue description.
   const { actions, panels } = useEntityDescriptionSelectionActions(selection)
   return <>
-    <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} selectionActions={actions} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
+    <IssueDescriptionEditor users={users} ariaLabel="Project description" className="project-overview__description-editor" placeholder="Add description…" value={value} selectionActions={actions} editorRef={editorRef} onChange={snapshot => setDraft(snapshot.markdown)} onBlur={() => { const next = draft.trim(); if (next !== value) void onCommit(next) }}/>
     {panels}
   </>
 }

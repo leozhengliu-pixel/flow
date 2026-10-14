@@ -89,11 +89,11 @@ describe('selection toolbar tooltips', () => {
 })
 
 describe('selection toolbar behaviour', () => {
-  it('passes the selected text with its range to the selection actions', async () => {
+  it('passes the selected text with its range, and the editor it is in, to the selection actions', async () => {
     const { actions } = setup(), user = userEvent.setup()
     for(const [label,callback] of [['Create issue from selection',actions.onCreateIssue],['Ask agent',actions.onAskAgent],['Comment',actions.onComment]] as const) {
       await user.click(screen.getByRole('button',{name:label}))
-      expect(callback).toHaveBeenCalledWith({text:'Selected requirement',from:1,to:21})
+      expect(callback).toHaveBeenCalledWith({text:'Selected requirement',from:1,to:21}, expect.objectContaining({ commands: expect.anything() }))
     }
   })
   it('marks active formatting as pressed', async () => {

@@ -51,7 +51,7 @@ func (s *server) oauthProtectedResource(w http.ResponseWriter, r *http.Request) 
 		"resource":                 resource,
 		"authorization_servers":    []string{base},
 		"bearer_methods_supported": []string{"header"},
-		"scopes_supported":         scopes,
+		"scopes_supported":         publicOAuthScopeList(scopes),
 	})
 }
 
@@ -75,7 +75,7 @@ func (s *server) oauthAuthorizationServer(w http.ResponseWriter, r *http.Request
 		"revocation_endpoint_auth_methods_supported":    []string{"none", "client_secret_basic", "client_secret_post"},
 		"introspection_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post"},
 		"prompt_values_supported":                       []string{"consent"},
-		"scopes_supported":                              scopes,
+		"scopes_supported":                              publicOAuthScopeList(scopes),
 	})
 }
 
@@ -344,7 +344,7 @@ func (s *server) issueOAuthTokens(w http.ResponseWriter, r *http.Request) {
 	if actor == "" {
 		actor = "user"
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "token_type": "Bearer", "expires_in": 3600, "scope": strings.Join(grant.Scopes, " "), "actor": actor})
+	writeJSON(w, http.StatusOK, map[string]any{"access_token": accessToken, "refresh_token": refreshToken, "token_type": "Bearer", "expires_in": 3600, "scope": publicOAuthScopes(grant.Scopes), "actor": actor})
 }
 
 func (s *server) revokeOAuthAuthorization(w http.ResponseWriter, r *http.Request) {
@@ -366,7 +366,7 @@ func oauthRequestFromQuery(query url.Values) oauthAuthorizationRequest {
 }
 
 // oauthScopeLabelText is the consent screen's wording for each scope, as
-// The reference app words its permissions list.
+// The reference app words its permissions list (measured on the reference app's consent screen).
 var oauthScopeLabelText = map[string]string{
 	"read":                "Read access to your workspace",
 	"write":               "Write access to your workspace",
@@ -377,12 +377,12 @@ var oauthScopeLabelText = map[string]string{
 	"app:assignable":      "Assign issues and projects to the app in teams it can access",
 	"app:mentionable":     "Mention app in issues, projects, and documents it can access",
 	"initiative:read":     "Read data about initiatives in the workspace",
-	"initiative:write":    "Create and modify initiatives in the workspace",
+	"initiative:write":    "Read and write data about initiatives in the workspace",
 	"customer:read":       "Read data about customers in the workspace",
-	"customer:write":      "Create and modify customers in the workspace",
-	"release:read":        "Read data about releases in the workspace",
+	"customer:write":      "Read and write data about customers in the workspace",
+	"release:read":        "Read releases in the workspace",
 	"release:create":      "Create releases in the workspace",
-	"releaseStage:update": "Move releases between stages in the workspace",
+	"releaseStage:update": "Update release stages in the workspace",
 	"openid":              "Verify your identity",
 	"email":               "Read your email address",
 }

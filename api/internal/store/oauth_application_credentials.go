@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"time"
 
 	"flow/api/internal/domain"
@@ -93,7 +94,9 @@ func (s *SQLiteStore) IssueApplicationCredential(ctx context.Context, workspace,
 		key.SubjectUserID, key.CreatorID, key.IssuedByUserID = issuerID, issuerID, issuerID
 		key.Actor, key.OAuthClientID, key.Scopes = actor, clientID, scopes
 		if actor == "app" {
-			installation := domain.ApplicationInstallation{ClientID: clientID, Name: app.Name, AvatarURL: app.LogoURL, InstalledBy: issuerID, AllPublicTeams: true, Scopes: scopes, Active: true}
+			// A copy: decoding an existing installation below reuses this
+			// slice's backing array, which would overwrite the token's scopes.
+			installation := domain.ApplicationInstallation{ClientID: clientID, Name: app.Name, AvatarURL: app.LogoURL, InstalledBy: issuerID, AllPublicTeams: true, Scopes: slices.Clone(scopes), Active: true}
 			var raw []byte
 			err := tx.QueryRowContext(ctx, `SELECT data FROM application_installations WHERE workspace_key=? AND client_id=?`+lock, workspace, clientID).Scan(&raw)
 			if err == nil {
@@ -190,4 +193,41 @@ func (s *SQLiteStore) OAuthApplicationHome(clientID string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// An application's app user holds one developer token at a time (the reference app's
+// "Create & copy token › App" copies the existing token instead of minting
+// another). The token itself is kept, sealed like webhook signing secrets,
+// so the settings page can copy it again; the API key record decides
+// whether it is still active.
+func applicationDeveloperTokenRef(workspace, clientID string) string {
+	return "devtoken:" + workspace + ":" + clientID
+}
+
+// SetApplicationDeveloperToken remembers the app developer token issued as
+// API key keyID.
+func (s *SQLiteStore) SetApplicationDeveloperToken(ctx context.Context, workspace, clientID, keyID, token string) error {
+	if keyID == "" || token == "" || strings.ContainsRune(keyID, ' ') {
+		return ErrIssueQuery
+	}
+	return s.SetWebhookSigningSecret(ctx, applicationDeveloperTokenRef(workspace, clientID), workspace, keyID+" "+token)
+}
+
+// ApplicationDeveloperToken returns the remembered app developer token and
+// its API key ID, if one was issued.
+func (s *SQLiteStore) ApplicationDeveloperToken(ctx context.Context, workspace, clientID string) (string, string, bool, error) {
+	stored, ok, err := s.WebhookSigningSecret(ctx, applicationDeveloperTokenRef(workspace, clientID))
+	if err != nil || !ok {
+		return "", "", false, err
+	}
+	keyID, token, found := strings.Cut(stored, " ")
+	if !found || keyID == "" || token == "" {
+		return "", "", false, nil
+	}
+	return keyID, token, true, nil
+}
+
+// DeleteApplicationDeveloperToken forgets the remembered app developer token.
+func (s *SQLiteStore) DeleteApplicationDeveloperToken(ctx context.Context, workspace, clientID string) error {
+	return s.DeleteWebhookSigningSecret(ctx, applicationDeveloperTokenRef(workspace, clientID))
 }

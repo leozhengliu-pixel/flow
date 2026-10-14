@@ -878,6 +878,8 @@ func newHandler(s *server) http.Handler {
 	mux.HandleFunc("PATCH /api/initiatives/{id}/comments/{commentId}", s.updateInitiativeComment)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}", s.deleteInitiativeComment)
 	mux.HandleFunc("POST /api/initiatives/{id}/comments/{commentId}/reactions", s.toggleInitiativeCommentReaction)
+	mux.HandleFunc("PUT /api/initiatives/{id}/comments/{commentId}/subscription", s.setInitiativeThreadSubscription)
+	mux.HandleFunc("DELETE /api/initiatives/{id}/comments/{commentId}/subscription", s.clearInitiativeThreadSubscription)
 	mux.HandleFunc("POST /api/initiatives/{id}/updates", s.createInitiativeUpdate)
 	mux.HandleFunc("PATCH /api/initiatives/{id}/updates/{updateId}", s.updateInitiativeUpdate)
 	mux.HandleFunc("DELETE /api/initiatives/{id}/updates/{updateId}", s.deleteInitiativeUpdate)
@@ -3411,6 +3413,10 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "comment body is required")
 		return
 	}
+	if err := normalizeCommentAnchor(&input); err != nil {
+		writeCommentCreateError(w, err)
+		return
+	}
 	id := r.PathValue("id")
 	var created domain.Comment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.commented", id, input, func(data *domain.Bootstrap) error {
@@ -3418,23 +3424,95 @@ func (s *server) createInitiativeComment(w http.ResponseWriter, r *http.Request)
 		if err != nil {
 			return err
 		}
-		created = domain.Comment{ID: fmt.Sprintf("initiative_comment_%d", time.Now().UnixNano()), Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		// Replies join their thread's root; an inline thread's anchor is unique.
+		parentID, err := threadReplyParent(initiative.Comments, input.ParentID)
+		if err != nil {
+			return err
+		}
+		if commentAnchorTaken(initiative.Comments, input.AnchorID) {
+			return errConflict
+		}
+		created = domain.Comment{ID: fmt.Sprintf("initiative_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: parentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		initiative.Comments = append(initiative.Comments, created)
 		initiative.UpdatedAt = created.CreatedAt
 		return nil
 	})
+	if writeCommentCreateError(w, err) {
+		return
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 
+// updateInitiativeComment edits a comment's body (its author only, like a
+// project comment) or, with a body-less {"resolved": bool} patch, resolves or
+// re-opens the comment's thread, which any member may do.
 func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request) {
 	var input domain.CommentUpdateInput
-	if !decodeJSON(w, r, &input) || strings.TrimSpace(input.Body) == "" {
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	resolveOnly := commentUpdateIsResolveOnly(input)
+	if !resolveOnly && strings.TrimSpace(input.Body) == "" {
 		writeError(w, http.StatusBadRequest, "comment body is required")
 		return
 	}
 	id, commentID := r.PathValue("id"), r.PathValue("commentId")
-	var updated domain.Comment
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_updated", id, input, func(data *domain.Bootstrap) error {
+	var updated, current domain.Comment
+	eventType := "initiative.comment_updated"
+	if resolveOnly {
+		eventType = "initiative.comment_resolved"
+		if !*input.Resolved {
+			eventType = "initiative.comment_unresolved"
+		}
+	}
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), eventType, id, input, func(data *domain.Bootstrap) error {
+		initiative, err := initiativeByID(data, id)
+		if err != nil {
+			return err
+		}
+		if resolveOnly {
+			comment, err := resolveInitiativeComment(initiative, commentID, input)
+			if errors.Is(err, errConflict) {
+				current = comment
+			} else {
+				updated = comment
+			}
+			return err
+		}
+		index := slices.IndexFunc(initiative.Comments, func(comment domain.Comment) bool { return comment.ID == commentID })
+		if index < 0 {
+			return errNotFound
+		}
+		comment := &initiative.Comments[index]
+		if comment.User.ID != data.Viewer.ID && !s.authDisabled {
+			return store.ErrAuthForbidden
+		}
+		if input.ExpectedVersion != nil && comment.Version != *input.ExpectedVersion {
+			current = *comment
+			return errConflict
+		}
+		now := time.Now().UTC()
+		comment.Body = strings.TrimSpace(input.Body)
+		comment.BodyData = input.BodyData
+		comment.EditedAt = &now
+		comment.Version++
+		initiative.UpdatedAt = now
+		updated = *comment
+		return nil
+	})
+	if errors.Is(err, errConflict) {
+		writeVersionConflict(w, current)
+		return
+	}
+	respondMutation(w, err, http.StatusOK, updated)
+}
+
+// deleteInitiativeComment removes a comment and its replies (deleting a
+// thread's first comment deletes the thread). The author or a workspace admin
+// may delete it.
+func (s *server) deleteInitiativeComment(w http.ResponseWriter, r *http.Request) {
+	id, commentID := r.PathValue("id"), r.PathValue("commentId")
+	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
 		initiative, err := initiativeByID(data, id)
 		if err != nil {
 			return err
@@ -3443,29 +3521,11 @@ func (s *server) updateInitiativeComment(w http.ResponseWriter, r *http.Request)
 		if index < 0 {
 			return errNotFound
 		}
-		now := time.Now().UTC()
-		initiative.Comments[index].Body = strings.TrimSpace(input.Body)
-		initiative.Comments[index].BodyData = input.BodyData
-		initiative.Comments[index].EditedAt = &now
-		initiative.UpdatedAt = now
-		updated = initiative.Comments[index]
-		return nil
-	})
-	respondMutation(w, err, http.StatusOK, updated)
-}
-
-func (s *server) deleteInitiativeComment(w http.ResponseWriter, r *http.Request) {
-	id, commentID := r.PathValue("id"), r.PathValue("commentId")
-	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "initiative.comment_deleted", id, map[string]string{"commentId": commentID}, func(data *domain.Bootstrap) error {
-		initiative, err := initiativeByID(data, id)
-		if err != nil {
-			return err
+		if initiative.Comments[index].User.ID != data.Viewer.ID && !s.authDisabled && !workspaceAdminRole(data.ViewerRole) {
+			return store.ErrAuthForbidden
 		}
-		before := len(initiative.Comments)
-		initiative.Comments = slices.DeleteFunc(initiative.Comments, func(comment domain.Comment) bool { return comment.ID == commentID })
-		if len(initiative.Comments) == before {
-			return errNotFound
-		}
+		deleteCommentThread(&initiative.Comments, commentID)
+		removeInitiativeThreadSubscriptions(data, initiative.ID, commentID)
 		initiative.UpdatedAt = time.Now().UTC()
 		return nil
 	})
@@ -3990,6 +4050,10 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "comment body is required")
 		return
 	}
+	if err := normalizeCommentAnchor(&input); err != nil {
+		writeCommentCreateError(w, err)
+		return
+	}
 	projectID := r.PathValue("id")
 	var created domain.Comment
 	err := s.store.MutateWorkspace(r.Context(), workspaceKey(r), "project.commented", projectID, input, func(data *domain.Bootstrap) error {
@@ -4008,11 +4072,18 @@ func (s *server) createProjectComment(w http.ResponseWriter, r *http.Request) {
 				input.ParentID = root
 			}
 		}
-		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer)}
+		// An inline description thread's anchor is unique within the project.
+		if commentAnchorTaken(project.Comments, input.AnchorID) {
+			return errConflict
+		}
+		created = domain.Comment{ID: fmt.Sprintf("project_comment_%d", time.Now().UnixNano()), Version: 1, Body: strings.TrimSpace(input.Body), BodyData: input.BodyData, ParentID: input.ParentID, Reactions: map[string][]string{}, CreatedAt: time.Now().UTC(), User: data.Viewer, BotActor: viewerBotActor(data, data.Viewer), AnchorID: input.AnchorID, QuotedText: input.QuotedText}
 		project.Comments = append(project.Comments, created)
 		project.UpdatedAt = created.CreatedAt
 		return nil
 	})
+	if writeCommentCreateError(w, err) {
+		return
+	}
 	respondMutation(w, err, http.StatusCreated, created)
 }
 

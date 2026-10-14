@@ -84,8 +84,16 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 	var updated domain.CodeReview
 	var mergedNow bool
 	var mergedWorkspace string
+	// GitHub activity of an application's GitHub username belongs to its
+	// app user (the reference app's OAuth application "GitHub username").
+	var appUsers map[string]domain.User
+	if provider == "github" {
+		appUsers = s.githubAppUsers(r.Context(), workspaceKey(r))
+	}
 	err = s.store.MutateWorkspace(codeReviewScope(r.Context(), provider, eventID, event), workspaceKey(r), "code_review.webhook", eventID, map[string]any{"provider": provider, "action": event.Action}, func(data *domain.Bootstrap) error {
 		mergedNow, mergedWorkspace = false, data.Workspace.URLKey
+		author := githubActor(appUsers, event.PullRequest.User.Login, data.Viewer)
+		sender := githubActor(appUsers, event.Sender.Login, data.Viewer)
 		if existing := slices.IndexFunc(data.Reviews, func(item domain.CodeReview) bool {
 			return slices.ContainsFunc(item.Events, func(reviewEvent domain.ReviewEvent) bool { return reviewEvent.ID == eventID })
 		}); existing >= 0 {
@@ -99,7 +107,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		defer func() { mergedNow = !wasMerged && updated.Status == "merged" }()
 		now := time.Now().UTC()
 		if index < 0 {
-			review := event.toReview(provider, data.Viewer, now)
+			review := event.toReview(provider, author, now)
 			review.ReviewerIDs = reviewerIDs(data, event)
 			data.Reviews = append([]domain.CodeReview{review}, data.Reviews...)
 			index = 0
@@ -115,7 +123,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 			review.IssueIDs = normalizedStrings(append(review.IssueIDs, inferredReviewIssueIDs(data, review)...))
 			for _, issueID := range review.IssueIDs {
 				if !slices.Contains(previous, issueID) {
-					appendActivity(data, issueID, "issue.review_linked", data.Viewer, map[string]string{"reviewId": review.ID, "reviewTitle": review.Title, "reviewNumber": fmt.Sprint(review.Number), "repository": review.RepositoryOwner + "/" + review.RepositoryName, "url": review.URL, "source": "webhook"})
+					appendActivity(data, issueID, "issue.review_linked", sender, map[string]string{"reviewId": review.ID, "reviewTitle": review.Title, "reviewNumber": fmt.Sprint(review.Number), "repository": review.RepositoryOwner + "/" + review.RepositoryName, "url": review.URL, "source": "webhook"})
 				}
 			}
 			data.Reviews[index] = review
@@ -124,7 +132,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 		// distinguish successive deliveries for the same PR/MR.
 		if index >= 0 {
 			review := data.Reviews[index]
-			review.Events = append(review.Events, domain.ReviewEvent{ID: eventID, Type: reviewEventType(provider, event), Body: provider, Actor: data.Viewer, CreatedAt: now})
+			review.Events = append(review.Events, domain.ReviewEvent{ID: eventID, Type: reviewEventType(provider, event), Body: provider, Actor: sender, CreatedAt: now})
 			if len(review.Events) > 100 {
 				review.Events = review.Events[len(review.Events)-100:]
 			}
@@ -146,7 +154,7 @@ func (s *server) codeWebhook(w http.ResponseWriter, r *http.Request) {
 						}) {
 							continue
 						}
-						data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%d", provider, now.UnixNano()), IssueID: data.Issues[issueIndex].ID, Title: updated.Title, URL: updated.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: data.Viewer, Provider: provider, ProviderID: updated.ExternalID, ProviderURL: updated.URL, LinkbackURL: updated.URL, SyncStatus: "synced"})
+						data.Issues[issueIndex].Attachments = append(data.Issues[issueIndex].Attachments, domain.Attachment{ID: fmt.Sprintf("attachment_%s_%d", provider, now.UnixNano()), IssueID: data.Issues[issueIndex].ID, Title: updated.Title, URL: updated.URL, ContentType: "text/uri-list", CreatedAt: now, Creator: sender, Provider: provider, ProviderID: updated.ExternalID, ProviderURL: updated.URL, LinkbackURL: updated.URL, SyncStatus: "synced"})
 					}
 				}
 			}

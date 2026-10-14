@@ -169,7 +169,7 @@ func (s *server) authenticate(next http.Handler) http.Handler {
 }
 
 func apiKeyRestrictedPersonalPath(path string) bool {
-	if strings.HasPrefix(path, "/api/oauth-applications/") && (strings.HasSuffix(path, "/developer-token") || strings.HasSuffix(path, "/rotate-secret") || strings.HasSuffix(path, "/client-secret")) {
+	if strings.HasPrefix(path, "/api/oauth-applications/") && (strings.HasSuffix(path, "/developer-token") || strings.HasSuffix(path, "/rotate-secret") || strings.HasSuffix(path, "/client-secret") || strings.HasSuffix(path, "/webhook/secret")) {
 		return true
 	}
 	if path == "/api/oauth/authorization-request" || strings.HasPrefix(path, "/api/oauth/authorizations/") {

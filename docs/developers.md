@@ -181,16 +181,22 @@ standard form-encoded `/oauth/token` endpoint.
 
 ## Developer Tokens
 
-In an application's detail page, **Create & copy token** opens an actor and
-scope selection dialog. Choose **Application** for application attribution or
-**User** for your personal attribution. The default selected permission is
-`read`; add only the permissions being tested.
+In an application's detail page, **Create & copy token** works: a
+command menu offers **User** (a `read`/`write` token with your personal
+attribution, created and copied at once) and **App** (a token for the
+application's app user). The first **App** token asks for its scopes (`read`
+and `write` on by default); while it is active, **App** copies the same token
+again and lists its scopes, because an app user holds one developer token at a
+time. Revoke it (Settings › Applications › the application › **Revoke
+access**, or `POST /oauth/revoke`) to create one with other scopes. See
+[Developer tokens](oauth.md#developer-tokens).
 
-Developer tokens last one hour. The dialog shows the secret after creation and
-allows copying it when automatic clipboard access fails. Closing the dialog
-removes it from the UI. Flow stores a hash, not a retrievable access-token secret.
-Issuance and client-secret rotation require an interactive administrator session;
-an API token cannot use those endpoints to mint another credential.
+Developer tokens last one hour. Flow keeps the app user's developer token the
+way it keeps webhook signing secrets (encrypted when
+`FLOW_CONNECTOR_SECRET_KEY` is set) so it can be copied again; user tokens are
+stored as a hash only. Issuance and client-secret rotation require an
+interactive administrator session; an API token cannot use those endpoints to
+mint another credential.
 
 ## Permissions and Team Boundaries
 

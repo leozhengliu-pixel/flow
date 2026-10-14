@@ -666,7 +666,8 @@ function projectEvents(project: Project, updates: ProjectUpdate[], viewer: User)
   // and the API keeps no property history, so no "changed priority" / "assigned lead" entries are synthesized here.
   // The reference app lists top-level project comments here as: <actor> commented “<text>” · <date>.
   for (const comment of project.comments ?? []) {
-    if (comment.parentId) continue
+    // Inline threads on the description are not activity (the reference app lists only page-level comments).
+    if (comment.parentId || comment.anchorId) continue
     const plain = comment.body.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/[#*_`>~]/g, '').replace(/\s+/g, ' ').trim()
     const quote = plain.length > 120 ? `${plain.slice(0, 119)}…` : plain
     events.push({ id: `comment-${comment.id}`, kind: 'comment', at: Date.parse(comment.createdAt), actor: comment.user.displayName, text: `commented “${quote}”`, date: format(new Date(comment.createdAt), 'MMM d') })

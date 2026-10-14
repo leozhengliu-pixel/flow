@@ -2,6 +2,12 @@ import { ArrowUp, Paperclip } from 'lucide-react'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/react'
+import { BubbleMenu } from '@tiptap/react/menus'
+import { SelectionToolbar } from '@/components/issue/editor/selection-toolbar'
+import { showsSelectionToolbar } from '@/components/issue/editor/selection-toolbar-visibility'
+import { handleSelectionShortcut } from '@/components/issue/editor/selection-shortcuts'
+import { structuredBlocks } from '@/components/issue/editor/structured-blocks'
+import { useComposerSelectionActions } from './selection-issue'
 import { Button } from '@/components/ui/button'
 import { createDraft, deleteDraft, updateDraft } from '@/lib/api'
 import { clearComposerDraft, readComposerDraft, writeComposerDraft, type ComposerDraftType } from '@/lib/composer-drafts'
@@ -45,11 +51,22 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
   onUploadRef.current = onUpload
   const [saving, setSaving] = useState(false), [error, setError] = useState(''), [empty, setEmpty] = useState(!commentSendable(initialBody, initialDocument)), [draftBody, setDraftBody] = useState(initialBody)
   const draftId = useRef(persistedDraft?.id ?? '')
+  // Like the reference app, selecting text in a comment offers "Create issue from selection" and "Ask agent" on the formatting toolbar.
+  const selectionActions = useComposerSelectionActions()
+  const selectionActionsRef = useRef(selectionActions)
+  selectionActionsRef.current = selectionActions
+  const editorRef = useRef<Editor | null>(null)
+  // Comment boxes sit in cards, popovers and scrolling panels that would clip the toolbar, so it floats in the page body
+  // (fixed); inside a dialog (whose outside does not take clicks) it stays next to the editor.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [toolbarHost, setToolbarHost] = useState<'body' | 'editor'>()
+  useEffect(() => { setToolbarHost(rootRef.current?.closest('[role="dialog"]') ? 'editor' : 'body') }, [])
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [StarterKit.configure({ heading: false }), EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: () => entityDataRef.current }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
+    // Headings, collapsible sections and checklists back the selection toolbar's text-style, collapse and list menus.
+    extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3, 4] }, link: { openOnClick: false, autolink: true, linkOnPaste: true } }), ...structuredBlocks, EmbedPasteNode, MentionChipNode, MentionLinksExtension.configure({ getData: () => entityDataRef.current }), DescriptionImage, DescriptionFile, DescriptionVideo, Placeholder.configure({ placeholder: t(placeholder) })],
     content: initialDocument?.type === 'doc' ? initialDocument : initialBody || { type: 'doc', content: [{ type: 'paragraph' }] },
-    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
+    editorProps: { handleTextInput: handleEmoticonInput, attributes: { class: 'comment-prosemirror', role: 'textbox', 'aria-label': t(placeholder), 'aria-multiline': 'true' }, handleKeyDown: (_view, event) => { const current=mentionRef.current;if(current&&!event.isComposing){const options=optionsRef.current;if(event.key==='Escape'){setMention(undefined);mentionRef.current=undefined;return true}if(options.length&&(event.key==='ArrowDown'||event.key==='ArrowUp')){const next={...current,index:(current.index+(event.key==='ArrowDown'?1:-1)+options.length)%options.length};mentionRef.current=next;setMention(next);event.preventDefault();return true}if(options.length&&(event.key==='Enter'||event.key==='Tab')&&editor){event.preventDefault();insertMention(editor,options[current.index]??options[0]);return true}} if (!event.isComposing && commentShortcutMatches(event)) { event.preventDefault(); void submit(); return true } if (handleSelectionShortcut(event, _view.state.selection, _view.state.doc, selectionActionsRef.current, editorRef.current)) return true; if (event.key === 'Escape' && onCancel) { event.preventDefault(); onCancel(); return true } return false } },
     onUpdate: ({editor}) => { const json = editor.getJSON() as Record<string, unknown>; draftDocument.current = json; const text = commentText(editor); setEmpty(!commentSendable(text, json)); setDraftBody(text);updateMention(editor) },
     onSelectionUpdate:({editor})=>updateMention(editor),
   })
@@ -65,6 +82,7 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     }, 350)
     return () => window.clearTimeout(timer)
   }, [draftBody, draftMetadata, draftResourceId, draftTitle, draftType, saving])
+  editorRef.current = editor
   useEffect(() => {
     if (!editor) return
     editor.storage.image.upload = file => {
@@ -86,9 +104,10 @@ export function Composer({ placeholder = 'Leave a comment…', initialValue = ''
     onAttach?.()
   }
   const submit = async () => { const json = editor?.getJSON() as Record<string, unknown> | undefined; const text = editor ? commentText(editor) : ''; const body = commentBody(text, json); if (!body || saving) return; setSaving(true); setError(''); try { await onSubmit?.(body, json); if (draftType && draftResourceId) { if (draftId.current && !draftId.current.startsWith('local:')) await deleteDraft(draftId.current).catch(() => undefined); clearComposerDraft(draftType, draftResourceId); draftId.current = '' } editor?.commands.clearContent() } catch (reason) { setError(reason instanceof Error ? reason.message : 'Comment could not be submitted') } finally { setSaving(false) } }
-  return <div className={`composer${compact ? ' compact' : ''}`} style={{position:'relative'}}>
+  return <div className={`composer${compact ? ' compact' : ''}`} ref={rootRef} style={{position:'relative'}}>
     <EditorContent editor={editor}/>
-    {error && <div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit()}>Retry</button></div>}
+    {editor && toolbarHost && <BubbleMenu editor={editor} appendTo={toolbarHost === 'body' ? () => document.body : undefined} style={{ zIndex: 690 }} options={{ strategy: toolbarHost === 'body' ? 'fixed' : 'absolute', placement: 'top', offset: 6, shift: { padding: 12 }, flip: true }} shouldShow={showsSelectionToolbar}><SelectionToolbar editor={editor} actions={selectionActions}/></BubbleMenu>}
+    {error &&<div className="composer-error" role="alert">{error}<button type="button" onClick={() => void submit()}>Retry</button></div>}
     <div className="composer-toolbar"><div className="composer-tools">
       <button type="button" aria-label="Attach images, files, or videos" onClick={attachFiles}><Paperclip size={14}/></button>
     </div><div className="composer-submit">{onCancel && <Button className="composer-cancel" type="button" variant="ghost" size="sm" onClick={onCancel}>Cancel</Button>}<Button className="composer-send" type="button" size="icon" aria-label="Submit comment" disabled={saving || empty} onClick={() => void submit()}><ArrowUp size={14}/></Button></div></div>

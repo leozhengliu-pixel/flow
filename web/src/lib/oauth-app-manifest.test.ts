@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   emptyApplicationForm,
   formStateFromApplication,
   formStateFromManifest,
+  githubUsernameError,
   manifestFileName,
   manifestFromFormState,
   manifestFromSearch,
@@ -105,6 +106,41 @@ describe("form <-> manifest", () => {
       developerName: "Dev",
       webhookResourceTypes: ["Issue"],
     });
+  });
+});
+
+describe("GitHub username and webhook signing secret", () => {
+  it("round-trips the GitHub username and leaves the block out when it is empty", () => {
+    const state = formStateFromManifest({ github: { username: "acme-coder[bot]" } });
+    expect(state.githubUsername).toBe("acme-coder[bot]");
+    expect(manifestFromFormState(state).github).toEqual({ username: "acme-coder[bot]" });
+    expect(manifestFromFormState({ ...state, githubUsername: "  " }).github).toBeUndefined();
+    expect(manifestFromSearch(`?manifest=${encodeURIComponent(JSON.stringify({ github: { username: "octocat", extra: 1 } }))}`)).toEqual({ github: { username: "octocat" } });
+  });
+
+  it("generates a signing secret for new webhooks and never resends a saved one", () => {
+    const fresh = emptyApplicationForm();
+    expect(fresh.webhookSecret).toMatch(/^flow_wh_[A-Za-z0-9_-]{32}$/);
+    expect(fresh.webhookSecretIsNew).toBe(true);
+    expect(emptyApplicationForm().webhookSecret).not.toBe(fresh.webhookSecret);
+    expect(manifestFromFormState({ ...fresh, webhookEnabled: true, webhookUrl: "https://hooks.test" }).webhook?.secret).toBe(fresh.webhookSecret);
+    const saved = formStateFromApplication({ id: "a", name: "A", clientId: "c", creatorId: "u", createdAt: "", updatedAt: "", redirectUris: [], scopes: ["read"], webhookEnabled: true, webhookUrl: "https://hooks.test", webhookSecretPrefix: "flow_wh_abc" });
+    expect(saved).toMatchObject({ webhookSecret: "", webhookSecretIsNew: false });
+    expect(manifestFromFormState({ ...saved, webhookSecret: "flow_wh_loaded" }).webhook).toEqual({ enabled: true, url: "https://hooks.test", resourceTypes: [] });
+  });
+
+  it("checks the GitHub username: format first, then the account on GitHub", async () => {
+    const found = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    const missing = vi.fn().mockResolvedValue(new Response("{}", { status: 404 }));
+    const offline = vi.fn().mockRejectedValue(new TypeError("offline"));
+    expect(await githubUsernameError("", found)).toBeUndefined();
+    expect(await githubUsernameError("-bad", found)).toBe("Invalid GitHub username");
+    expect(await githubUsernameError("two--hyphens", found)).toBe("Invalid GitHub username");
+    expect(found).not.toHaveBeenCalled();
+    expect(await githubUsernameError("my-app[bot]", found)).toBeUndefined();
+    expect(found).toHaveBeenCalledWith("https://api.github.com/users/my-app%5Bbot%5D", expect.anything());
+    expect(await githubUsernameError("nobody", missing)).toBe("Invalid GitHub username");
+    expect(await githubUsernameError("octocat", offline)).toBeUndefined();
   });
 });
 

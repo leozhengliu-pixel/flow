@@ -1562,6 +1562,7 @@ type oauthInput struct {
 	PublicEnabled             *bool     `json:"publicEnabled,omitempty"`
 	DeveloperName             *string   `json:"developerName,omitempty"`
 	DeveloperURL              *string   `json:"developerUrl,omitempty"`
+	GitHubUsername            *string   `json:"githubUsername,omitempty"`
 }
 
 func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) {
@@ -1581,6 +1582,9 @@ func (s *server) createOAuthApplication(w http.ResponseWriter, r *http.Request) 
 	err := s.store.MutateWorkspaceWithAggregate(r.Context(), workspaceKey(r), "oauth_application.created", input, func(data *domain.Bootstrap) (string, error) {
 		created = domain.OAuthApplication{ID: fmt.Sprintf("oauth_app_%d", time.Now().UnixNano()), Name: strings.TrimSpace(*input.Name), ClientID: clientID, ClientSecret: secret, CreatorID: actor.ID, CredentialsAuthorizedBy: actor.ID, RedirectURIs: []string{}, Scopes: []string{"read"}, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		applyOAuthInput(&created, input)
+		if err := checkGitHubUsernameAvailable(data, created.ID, created.GitHubUsername); err != nil {
+			return "", err
+		}
 		data.OAuthApplications = append([]domain.OAuthApplication{created}, data.OAuthApplications...)
 		return created.ID, nil
 	})
@@ -1619,6 +1623,9 @@ func applyOAuthInput(app *domain.OAuthApplication, input oauthInput) {
 	if input.DeveloperURL != nil {
 		app.DeveloperURL = strings.TrimSpace(*input.DeveloperURL)
 	}
+	if input.GitHubUsername != nil {
+		app.GitHubUsername = strings.TrimSpace(*input.GitHubUsername)
+	}
 	app.UpdatedAt = time.Now().UTC()
 }
 
@@ -1639,6 +1646,9 @@ func (s *server) updateOAuthApplication(w http.ResponseWriter, r *http.Request) 
 			return errNotFound
 		}
 		applyOAuthInput(&data.OAuthApplications[index], input)
+		if err := checkGitHubUsernameAvailable(data, id, data.OAuthApplications[index].GitHubUsername); err != nil {
+			return err
+		}
 		if input.Scopes != nil || input.SupportsClientCredentials != nil {
 			data.OAuthApplications[index].CredentialsAuthorizedBy = requestActor(s, r).ID
 		}

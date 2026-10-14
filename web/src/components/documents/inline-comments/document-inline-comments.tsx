@@ -1,52 +1,27 @@
 /**
  * Inline comments on a document (the reference app has no page-level comment
- * list): select text → toolbar "Comment" → a card in the right gutter with
- * "Add a comment…". Threads anchor to an inline comment mark stored in the
- * collaborative document (its id is saved on the thread as anchorId), so the
- * anchor follows concurrent edits. Open threads underline their text; the
- * active one is highlighted. Resolving hides the highlight and the card; the
- * header's comment button opens "Resolved comments".
- *
- * Threads without an anchor (page-level comments written before inline
- * comments) stay visible, pinned to the top of the gutter.
+ * list): the shared inline comment gutter (inline-comment-gutter.tsx) wired to
+ * the document's comment API. Editors write the anchor mark into the
+ * collaborative document, so the anchor follows concurrent edits; commenters
+ * anchor by quote. Threads without an anchor (page-level comments written
+ * before inline comments) stay visible, pinned to the top of the gutter.
  */
 import type { Editor } from '@tiptap/react'
-import { MessageSquareText, X } from 'lucide-react'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useMemo } from 'react'
 import { toast } from '@/lib/toast'
 
-import { Composer } from '@/components/editor/composer'
-import { FlowTooltip, TooltipProvider } from '@/components/ui/tooltip'
-import { UserAvatar } from '@/components/ui/user-avatar'
 import { useI18n } from '@/i18n/i18n'
 import { documentPath } from '@/lib/app-routes'
 import { createDocumentComment, deleteDocumentComment, resolveDocumentComment, setDocumentThreadSubscription, toggleDocumentCommentReaction, updateDocumentComment, uploadDocumentAttachment } from '@/lib/api'
 import { IssueAgentTasks } from '@/components/agent/issue-agent-tasks'
 import type { AgentThreadControls } from '@/components/agent/issue-agent-task-context'
 import type { BootstrapData, Comment, FlowDocument } from '@/types/flow'
-import { findMarkRanges, findQuoteRange, INLINE_COMMENT_MARK, layoutGutter, type AnchorRange, type InlineThread } from './inline-comments-model'
-import { createInlineCommentsPlugin, inlineCommentsPluginKey, type InlineCommentsMeta, type InlineCommentsPluginState } from './inline-comments-plugin'
-import { InlineThreadCard, type ThreadActions } from './inline-thread-card'
-import { useInlineThreads } from './use-inline-threads'
-import './document-inline-comments.css'
+import { removeAnchorMark, type InlineThread } from './inline-comments-model'
+import type { ThreadActions } from './inline-thread-card'
+import { InlineCommentGutter, ResolvedCommentsButton, ResolvedThreadsPanel, type CommentDraft } from './inline-comment-gutter'
 
-export interface CommentDraft { from: number; to: number; text: string }
-
-const MAX_QUOTE = 4000
-
-function sameRanges(left: Map<string, AnchorRange>, right: Map<string, AnchorRange>) {
-  if (left.size !== right.size) return false
-  for (const [id, range] of right) {
-    const other = left.get(id)
-    if (!other || other.from !== range.from || other.to !== range.to) return false
-  }
-  return true
-}
-
-function newAnchorId() {
-  const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID().replace(/-/g, '') : Math.random().toString(16).slice(2) + Date.now().toString(16)
-  return `cmt_${random.slice(0, 24)}`
-}
+export type { CommentDraft } from './inline-comment-gutter'
+export { GUTTER_MIN_VIEWPORT } from './inline-comment-gutter'
 
 function threadMuted(data: BootstrapData, document: FlowDocument, thread: InlineThread) {
   return (data.threadSubscriptions ?? []).some(item => item.userId === data.viewer.id && item.issueId === document.id && item.commentId === thread.root.id && item.state === 'muted')
@@ -57,69 +32,58 @@ function useAgentThreadRenderer(data: BootstrapData, document: FlowDocument) {
   return useCallback((threadIds: string[], controls: AgentThreadControls) => <IssueAgentTasks commentId={threadIds} data={data} issue={{ id: document.id }} onUpload={async file => (await uploadDocumentAttachment(document.id, file)).url} resourceType="document" teamId={document.teamIds[0]} threadControls={controls} variant="document"/>, [data, document.id, document.teamIds])
 }
 
-function useThreadActions({ data, document, editor, canEdit, onReload, onResolved }: { data: BootstrapData; document: FlowDocument; editor: Editor | null; canEdit: boolean; onReload: () => Promise<void>; onResolved?: (thread: InlineThread, resolved: boolean) => void }): ThreadActions {
+function useThreadActions({ data, document, editor, canEdit, onReload }: { data: BootstrapData; document: FlowDocument; editor: Editor | null; canEdit: boolean; onReload: () => Promise<void> }): ThreadActions {
   const { t } = useI18n()
-  const fail = (fallback: string) => (error: unknown) => { toast.error(error instanceof Error ? error.message : t(fallback)) }
-  const removeMark = (anchorId: string) => {
-    if (!editor || editor.isDestroyed || !canEdit || !anchorId) return
-    const type = editor.schema.marks[INLINE_COMMENT_MARK]
-    const range = findMarkRanges(editor.state.doc).get(anchorId)
-    if (!type || !range) return
-    const tr = editor.state.tr
-    editor.state.doc.nodesBetween(range.from, range.to, (node, pos) => {
-      if (!node.isText) return
-      for (const mark of node.marks) if (mark.type === type && mark.attrs.commentId === anchorId) tr.removeMark(pos, pos + node.nodeSize, mark)
-    })
-    editor.view.dispatch(tr.setMeta('addToHistory', false))
-  }
-  return {
-    reply: async (thread, body, bodyData) => {
-      try { await createDocumentComment(document.id, { body, bodyData, parentId: thread.root.id }); await onReload() }
-      catch (error) { fail('Could not add reply')(error); throw error }
-    },
-    edit: async (comment, body, bodyData) => {
-      try { await updateDocumentComment(document.id, comment.id, { body, bodyData, expectedVersion: comment.version }); await onReload() }
-      catch (error) { fail('Could not edit comment')(error); throw error }
-    },
-    remove: async (thread, comment) => {
-      try {
-        await deleteDocumentComment(document.id, comment.id)
-        if (comment.id === thread.root.id) removeMark(thread.anchorId)
-        await onReload()
-        toast.success(t('Comment deleted'))
-      } catch (error) { fail('Could not delete comment')(error) }
-    },
-    react: async (comment, emoji) => {
-      try { await toggleDocumentCommentReaction(document.id, comment.id, emoji); await onReload() }
-      catch (error) { fail('Could not update reaction')(error) }
-    },
-    resolve: async (thread, resolved) => {
-      try {
-        await resolveDocumentComment(document.id, thread.root.id, resolved, thread.root.version)
-        onResolved?.(thread, resolved)
-        await onReload()
-        toast.success(t(resolved ? 'Thread resolved' : 'Thread reopened'))
-      } catch (error) { fail('Could not update thread')(error) }
-    },
-    toggleThreadSubscription: async thread => {
-      const muted = threadMuted(data, document, thread)
-      try {
-        await setDocumentThreadSubscription(document.id, thread.root.id, muted ? null : 'muted')
-        await onReload()
-        toast.success(t(muted ? 'Subscribed to thread' : 'Unsubscribed from thread'))
-      } catch (error) { fail('Could not update thread subscription')(error) }
-    },
-    copyLink: async comment => {
-      try {
-        await navigator.clipboard.writeText(`${new URL(documentPath(data.workspace.urlKey, document), window.location.origin).href}#comment-${comment.id}`)
-        toast.success(t('Copied comment link to clipboard'))
-      } catch { toast.error(t('Could not copy comment link')) }
-    },
-    newIssue: comment => {
-      const url = `${new URL(documentPath(data.workspace.urlKey, document), window.location.origin).href}#comment-${comment.id}`
-      window.dispatchEvent(new CustomEvent('flow-create-issue-from-selection', { detail: { text: `${comment.body}\n\n${t('From')} [${document.title || t('Untitled document')}](${url})`, teamId: document.teamIds[0] ?? data.teams[0]?.id, projectId: document.projectIds[0] } }))
-    },
-  }
+  return useMemo(() => {
+    const fail = (fallback: string) => (error: unknown) => { toast.error(error instanceof Error ? error.message : t(fallback)) }
+    return {
+      reply: async (thread, body, bodyData) => {
+        try { await createDocumentComment(document.id, { body, bodyData, parentId: thread.root.id }); await onReload() }
+        catch (error) { fail('Could not add reply')(error); throw error }
+      },
+      edit: async (comment, body, bodyData) => {
+        try { await updateDocumentComment(document.id, comment.id, { body, bodyData, expectedVersion: comment.version }); await onReload() }
+        catch (error) { fail('Could not edit comment')(error); throw error }
+      },
+      remove: async (thread, comment) => {
+        try {
+          await deleteDocumentComment(document.id, comment.id)
+          if (comment.id === thread.root.id && canEdit) removeAnchorMark(editor, thread.anchorId)
+          await onReload()
+          toast.success(t('Comment deleted'))
+        } catch (error) { fail('Could not delete comment')(error) }
+      },
+      react: async (comment, emoji) => {
+        try { await toggleDocumentCommentReaction(document.id, comment.id, emoji); await onReload() }
+        catch (error) { fail('Could not update reaction')(error) }
+      },
+      resolve: async (thread, resolved) => {
+        try {
+          await resolveDocumentComment(document.id, thread.root.id, resolved, thread.root.version)
+          await onReload()
+          toast.success(t(resolved ? 'Thread resolved' : 'Thread reopened'))
+        } catch (error) { fail('Could not update thread')(error) }
+      },
+      toggleThreadSubscription: async thread => {
+        const muted = threadMuted(data, document, thread)
+        try {
+          await setDocumentThreadSubscription(document.id, thread.root.id, muted ? null : 'muted')
+          await onReload()
+          toast.success(t(muted ? 'Subscribed to thread' : 'Unsubscribed from thread'))
+        } catch (error) { fail('Could not update thread subscription')(error) }
+      },
+      copyLink: async comment => {
+        try {
+          await navigator.clipboard.writeText(`${new URL(documentPath(data.workspace.urlKey, document), window.location.origin).href}#comment-${comment.id}`)
+          toast.success(t('Copied comment link to clipboard'))
+        } catch { toast.error(t('Could not copy comment link')) }
+      },
+      newIssue: comment => {
+        const url = `${new URL(documentPath(data.workspace.urlKey, document), window.location.origin).href}#comment-${comment.id}`
+        window.dispatchEvent(new CustomEvent('flow-create-issue-from-selection', { detail: { text: `${comment.body}\n\n${t('From')} [${document.title || t('Untitled document')}](${url})`, teamId: document.teamIds[0] ?? data.teams[0]?.id, projectId: document.projectIds[0] } }))
+      },
+    } satisfies ThreadActions
+  }, [canEdit, data, document, editor, onReload, t])
 }
 
 export interface DocumentInlineCommentsProps {
@@ -143,319 +107,42 @@ export interface DocumentInlineCommentsProps {
   railOpen?: boolean
 }
 
-/** Viewports narrower than this (CSS px; the reference app flips between 1230 and 1232) show the open thread as a popover, not a gutter card. */
-export const GUTTER_MIN_VIEWPORT = 1232
-/** The popover is 360px wide, starts 12.5px left of the text it is about and sits just under it. */
-const POPOVER_WIDTH = 360
-const POPOVER_INSET = 12.5
-const POPOVER_GAP = 8
-
 export function DocumentInlineComments({ data, document, comments, editor, shell, draft, onDraftChange, canComment, canEdit, visible = true, onReload, onGutterChange, railOpen = false }: DocumentInlineCommentsProps) {
-  const { t } = useI18n()
-  const { open } = useInlineThreads(comments)
-  const [active, setActive] = useState<string>()
-  const [anchors, setAnchors] = useState<Map<string, AnchorRange>>(new Map())
-  const [unmarked, setUnmarked] = useState<Set<string>>(new Set())
-  const [tops, setTops] = useState<Map<string, number>>(new Map())
-  const [heights, setHeights] = useState<Map<string, number>>(new Map())
-  const [layoutTick, setLayoutTick] = useState(0)
-  // Unknown until the page has been measured: threads stay closed (popover rules) rather than flashing as gutter cards.
-  const [narrow, setNarrow] = useState<boolean | undefined>(undefined)
-  const popover = narrow !== false || railOpen
-  const materialized = useRef(new Set<string>())
-  const observer = useRef<ResizeObserver | null>(null)
-  const cards = useRef(new Map<string, HTMLDivElement>())
-  const actions = useThreadActions({ data, document, editor, canEdit, onReload, onResolved: (thread, resolved) => { if (resolved && active === thread.root.id) setActive(undefined) } })
+  const actions = useThreadActions({ data, document, editor, canEdit, onReload })
   const renderAgentThread = useAgentThreadRenderer(data, document)
   const canModerate = data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
-  const threadKey = (thread: InlineThread) => thread.root.id
-
-  // Register the decoration plugin on the live editor.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) return
-    editor.registerPlugin(createInlineCommentsPlugin())
-    let last: InlineCommentsPluginState | undefined
-    const sync = () => {
-      const state = inlineCommentsPluginKey.getState(editor.state) as InlineCommentsPluginState | undefined
-      if (!state || state === last) return
-      last = state
-      setAnchors(current => sameRanges(current, state.ranges) ? current : state.ranges)
-      setUnmarked(current => current.size === state.unmarked.size && [...state.unmarked].every(id => current.has(id)) ? current : state.unmarked)
-      setLayoutTick(value => value + 1)
-    }
-    editor.on('transaction', sync)
-    return () => {
-      editor.off('transaction', sync)
-      if (!editor.isDestroyed) editor.unregisterPlugin(inlineCommentsPluginKey)
-    }
-  }, [editor])
-
-  const dispatchMeta = useCallback((meta: InlineCommentsMeta) => {
-    if (!editor || editor.isDestroyed) return
-    editor.view.dispatch(editor.state.tr.setMeta(inlineCommentsPluginKey, meta).setMeta('addToHistory', false))
-  }, [editor])
-
-  // Open threads and the active one drive the decorations.
-  // Keyed by content so re-renders with equal threads never dispatch again
-  // (each dispatch is a transaction, which re-renders this component).
-  const openKey = JSON.stringify(open.filter(thread => thread.anchorId).map(thread => [thread.anchorId, thread.root.quotedText ?? '']))
-  const activeAnchor = open.find(thread => thread.root.id === active)?.anchorId
-  useEffect(() => {
-    const anchors = (JSON.parse(openKey) as [string, string][]).map(([id, quote]) => ({ id, quote: quote || undefined }))
-    dispatchMeta({ open: anchors, active: activeAnchor ?? null })
-  }, [dispatchMeta, openKey, activeAnchor])
-  const pendingFrom = draft?.from, pendingTo = draft?.to
-  useEffect(() => { dispatchMeta({ pending: pendingFrom !== undefined && pendingTo !== undefined ? { from: pendingFrom, to: pendingTo } : null }) }, [dispatchMeta, pendingFrom, pendingTo])
-
-  // An editor writes the anchor mark for threads a commenter started (they
-  // could only anchor by quote), so the anchor then follows edits.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed || !canEdit) return
-    const type = editor.schema.marks[INLINE_COMMENT_MARK]
-    if (!type) return
-    const missing = [...unmarked].filter(id => !materialized.current.has(id) && anchors.has(id))
-    if (!missing.length) return
-    const tr = editor.state.tr
-    for (const id of missing) {
-      const range = anchors.get(id)!
-      materialized.current.add(id)
-      tr.addMark(range.from, range.to, type.create({ commentId: id }))
-    }
-    editor.view.dispatch(tr.setMeta('addToHistory', false))
-  }, [anchors, canEdit, editor, unmarked])
-
-  // Clicking highlighted text activates its thread; clicking elsewhere in the
-  // document clears it.
-  useEffect(() => {
-    if (!editor || editor.isDestroyed) return
-    const dom = editor.view.dom
-    const onClick = (event: MouseEvent) => {
-      const target = (event.target as HTMLElement).closest<HTMLElement>('[data-comment-anchor]')
-      const anchorId = target?.dataset.commentAnchor
-      const thread = anchorId ? open.find(item => item.anchorId === anchorId) : undefined
-      setActive(thread?.root.id)
-    }
-    dom.addEventListener('click', onClick)
-    return () => dom.removeEventListener('click', onClick)
-  }, [editor, open])
-
-  // Deep links (#comment-<id>) activate and reveal their thread.
-  useEffect(() => {
-    const id = window.location.hash.match(/^#comment-(.+)$/)?.[1]
-    if (!id) return
-    const thread = open.find(item => item.root.id === id || item.replies.some(reply => reply.id === id))
-    if (!thread) return
-    setActive(thread.root.id)
-    window.setTimeout(() => window.document.getElementById(`comment-${id}`)?.scrollIntoView({ block: 'center' }), 60)
-  }, [open])
-
-  // Measure each card; layout is recomputed when a card resizes.
-  useEffect(() => {
-    observer.current = new ResizeObserver(entries => {
-      setHeights(current => {
-        let changed = false
-        const next = new Map(current)
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).dataset.threadId ?? (entry.target as HTMLElement).dataset.draftCard
-          if (!id) continue
-          const height = Math.round(entry.contentRect.height + 2)
-          if (next.get(id) !== height) { next.set(id, height); changed = true }
-        }
-        return changed ? next : current
-      })
-    })
-    return () => observer.current?.disconnect()
-  }, [])
-  // One stable ref callback per card, so re-renders do not re-observe.
-  const cardRefs = useRef(new Map<string, (element: HTMLDivElement | null) => void>())
-  const cardRef = useCallback((id: string) => {
-    let callback = cardRefs.current.get(id)
-    if (!callback) {
-      callback = (element: HTMLDivElement | null) => {
-        const previous = cards.current.get(id)
-        if (previous && previous !== element) observer.current?.unobserve(previous)
-        if (element) { cards.current.set(id, element); observer.current?.observe(element) }
-        else cards.current.delete(id)
-      }
-      cardRefs.current.set(id, callback)
-    }
-    return callback
-  }, [])
-
-  // Gutter cards need a wide viewport (a media query, like the reference app: the page's own width plays no part).
-  useEffect(() => {
-    const query = window.matchMedia(`(min-width: ${GUTTER_MIN_VIEWPORT}px)`)
-    const update = () => setNarrow(!query.matches)
-    update()
-    query.addEventListener('change', update)
-    return () => query.removeEventListener('change', update)
-  }, [])
-
-  useEffect(() => {
-    const onResize = () => setLayoutTick(value => value + 1)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-
-  const anchorTop = useCallback((range: AnchorRange | undefined) => {
-    if (!editor || editor.isDestroyed || !shell || !range) return 0
-    try {
-      const position = Math.min(Math.max(range.from, 0), editor.state.doc.content.size)
-      // The card's top edge lines up with the top of the text's 24px line box (the glyph box starts 3px lower).
-      return editor.view.coordsAtPos(position).top - shell.getBoundingClientRect().top - 3
-    } catch { return 0 }
-  }, [editor, shell])
-
-  /** Popover placement: under the text of the range, 12.5px left of it, kept inside the page. */
-  const popoverStyle = useCallback((range: AnchorRange | undefined): React.CSSProperties => {
-    if (!editor || editor.isDestroyed || !shell || !range) return { top: 0, left: 0 }
-    try {
-      const position = Math.min(Math.max(range.from, 0), editor.state.doc.content.size)
-      const coords = editor.view.coordsAtPos(position)
-      const box = shell.getBoundingClientRect()
-      const left = Math.max(0, Math.min(coords.left - box.left - POPOVER_INSET, box.width - POPOVER_WIDTH))
-      return { top: coords.bottom - box.top + POPOVER_GAP, left }
-    } catch { return { top: 0, left: 0 } }
-  }, [editor, shell])
-
-  // A popover shows only the thread being read (or the composer being written); the others wait to be clicked.
-  const visibleThreads = visible ? (popover ? open.filter(thread => thread.root.id === active) : open) : []
-  useLayoutEffect(() => {
-    const items = visibleThreads.map(thread => ({ id: threadKey(thread), top: thread.anchorId ? anchorTop(anchors.get(thread.anchorId)) : 0, height: heights.get(threadKey(thread)) ?? 96 }))
-    if (draft) items.push({ id: 'draft', top: anchorTop(draft), height: heights.get('draft') ?? 96 })
-    const next = layoutGutter(items, draft ? 'draft' : active)
-    setTops(current => {
-      if (current.size === next.size && [...next].every(([id, top]) => current.get(id) === top)) return current
-      return next
-    })
-  }, [active, anchorTop, anchors, draft, heights, layoutTick, visibleThreads]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const shown = visibleThreads.length > 0 || Boolean(draft)
-  const shifts = shown && !popover
-  useEffect(() => { onGutterChange?.(shifts) }, [onGutterChange, shifts])
-
-  // In popover mode, clicking anywhere outside the thread, its anchor text and its menus closes it.
-  useEffect(() => {
-    if (!popover || !active) return
-    const onDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null
-      if (target?.closest('.document-inline-gutter, [data-comment-anchor], [role="menu"], [role="dialog"], [data-radix-popper-content-wrapper]')) return
-      setActive(undefined)
-    }
-    window.document.addEventListener('mousedown', onDown)
-    return () => window.document.removeEventListener('mousedown', onDown)
-  }, [active, popover])
-
-  // Escape closes the composer / deactivates the thread.
-  useEffect(() => {
-    if (!draft && !active) return
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') { onDraftChange(undefined); setActive(undefined) } }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [active, draft, onDraftChange])
-
-  // The composer takes focus when it opens (its editor mounts a frame later).
-  const focusComposer = useCallback((element: HTMLDivElement | null) => {
-    if (!element) return
-    const started = Date.now()
-    const focus = () => {
-      const target = element.querySelector<HTMLElement>('[contenteditable="true"]')
-      if (target) target.focus()
-      else if (Date.now() - started < 3000) window.setTimeout(focus, 30)
-    }
-    focus()
-  }, [])
-
-  const submitDraft = async (body: string, bodyData?: Record<string, unknown>) => {
-    if (!draft) return
-    const anchorId = newAnchorId()
-    try {
-      const created = await createDocumentComment(document.id, { body, bodyData, anchorId, quotedText: draft.text.slice(0, MAX_QUOTE) })
-      const pending = editor && !editor.isDestroyed ? inlineCommentsPluginKey.getState(editor.state)?.pending : undefined
-      const type = editor?.schema.marks[INLINE_COMMENT_MARK]
-      if (editor && !editor.isDestroyed && canEdit && pending && type) {
-        materialized.current.add(anchorId)
-        editor.view.dispatch(editor.state.tr.addMark(pending.from, pending.to, type.create({ commentId: anchorId })).setMeta(inlineCommentsPluginKey, { pending: null }).setMeta('addToHistory', false))
-      }
-      onDraftChange(undefined)
-      setActive(created.id)
-      await onReload()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('Could not add comment'))
-      throw error
-    }
-  }
-
-  if (!shown) return null
-  return <TooltipProvider><div className={`document-inline-gutter${popover ? ' is-popover' : ''}`} aria-label={t('Comments')} role="complementary">
-    {draft && <div className="document-thread-card is-draft is-active" data-draft-card="draft" ref={cardRef('draft')} style={popover ? popoverStyle(draft) : { top: tops.get('draft') ?? anchorTop(draft) }}>
-      <div className="document-thread-draft">
-        <UserAvatar avatarUrl={data.viewer.avatarUrl} className="document-thread-avatar" name={data.viewer.displayName || data.viewer.name}/>
-        <div className="document-thread-draft-composer" ref={focusComposer}>
-          <Composer compact users={data.users} placeholder={t('Add a comment…')} onCancel={() => onDraftChange(undefined)} onSubmit={submitDraft}/>
-        </div>
-      </div>
-    </div>}
-    {visibleThreads.map(thread => <InlineThreadCard
-      key={threadKey(thread)}
-      ref={cardRef(threadKey(thread))}
-      thread={thread}
-      viewer={data.viewer}
-      users={data.users}
-      active={active === thread.root.id}
-      canComment={canComment}
-      canModerate={canModerate}
-      muted={threadMuted(data, document, thread)}
-      actions={actions}
-      onActivate={() => setActive(thread.root.id)}
-      renderAgentThread={renderAgentThread}
-      style={popover ? popoverStyle(thread.anchorId ? anchors.get(thread.anchorId) : undefined) : { top: tops.get(threadKey(thread)) ?? 0 }}
-    />)}
-  </div></TooltipProvider>
+  const createThread = useCallback((input: { body: string; bodyData?: Record<string, unknown>; anchorId: string; quotedText: string }) => createDocumentComment(document.id, input), [document.id])
+  return <InlineCommentGutter
+    comments={comments}
+    viewer={data.viewer}
+    users={data.users}
+    editor={editor}
+    shell={shell}
+    draft={draft}
+    onDraftChange={onDraftChange}
+    canComment={canComment}
+    writesMarks={canEdit}
+    canModerate={canModerate}
+    visible={visible}
+    onGutterChange={onGutterChange}
+    railOpen={railOpen}
+    actions={actions}
+    muted={thread => threadMuted(data, document, thread)}
+    renderAgentThread={renderAgentThread}
+    createThread={createThread}
+    onReload={onReload}
+  />
 }
 
 /** Header button (shown only when resolved threads exist) toggling the "Resolved comments" panel. */
 export function DocumentResolvedCommentsButton({ count, open, onToggle }: { count: number; open: boolean; onToggle: () => void }) {
-  const { t } = useI18n()
-  if (!count) return null
-  const label = t('Resolved comments')
-  return <TooltipProvider><FlowTooltip label={label}><button aria-expanded={open} aria-label={label} className={`document-icon-button${open ? ' is-active' : ''}`} data-active={open || undefined} onClick={onToggle} type="button"><MessageSquareText size={15}/></button></FlowTooltip></TooltipProvider>
+  return <ResolvedCommentsButton count={count} open={open} onToggle={onToggle}/>
 }
 
 /** "Resolved comments": the quote, the thread and its reactions; "Reopen thread" in each "…" menu. */
 export function ResolvedCommentsPanel({ data, document, comments, editor, canComment, canEdit, onReload, onClose }: { data: BootstrapData; document: FlowDocument; comments: Comment[]; editor: Editor | null; canComment: boolean; canEdit: boolean; onReload: () => Promise<void>; onClose: () => void }) {
-  const { t } = useI18n()
-  const { resolved } = useInlineThreads(comments)
   const actions = useThreadActions({ data, document, editor, canEdit, onReload })
   const renderAgentThread = useAgentThreadRenderer(data, document)
   const canModerate = data.viewerRole === 'admin' || String(data.viewerRole) === 'owner'
-  useEffect(() => { if (!resolved.length) onClose() }, [onClose, resolved.length])
-  // Selecting a resolved thread reveals the text it was written on.
-  const reveal = (thread: InlineThread) => {
-    if (!editor || editor.isDestroyed) return
-    const range = findMarkRanges(editor.state.doc).get(thread.anchorId) ?? (thread.root.quotedText ? findQuoteRange(editor.state.doc, thread.root.quotedText) : undefined)
-    if (range) editor.chain().setTextSelection(range).scrollIntoView().run()
-  }
-  return <TooltipProvider><aside className="document-resolved-panel" aria-label={t('Resolved comments')}>
-    <header>
-      <strong>{t('Resolved comments')}</strong>
-      <FlowTooltip label={t('Close')}><button aria-label={t('Close')} className="document-thread-icon" onClick={onClose} type="button"><X size={14}/></button></FlowTooltip>
-    </header>
-    <div className="document-resolved-list">
-      {[...resolved].reverse().map(thread => <InlineThreadCard
-        key={thread.root.id}
-        thread={thread}
-        viewer={data.viewer}
-        users={data.users}
-        active={false}
-        canComment={canComment}
-        canModerate={canModerate}
-        muted={threadMuted(data, document, thread)}
-        actions={actions}
-        onActivate={() => reveal(thread)}
-      renderAgentThread={renderAgentThread}
-        variant="resolved"
-      />)}
-    </div>
-  </aside></TooltipProvider>
+  return <ResolvedThreadsPanel comments={comments} viewer={data.viewer} users={data.users} editor={editor} canComment={canComment} canModerate={canModerate} actions={actions} muted={thread => threadMuted(data, document, thread)} renderAgentThread={renderAgentThread} onClose={onClose}/>
 }

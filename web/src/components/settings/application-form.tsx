@@ -1,7 +1,8 @@
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Copy, KeyRound, TriangleAlert } from "lucide-react";
+import { Copy, Eye, EyeOff, TriangleAlert } from "lucide-react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { FlowTooltip } from "@/components/ui/tooltip";
 import { ApplicationIconPlaceholder } from "@/components/ui/application-icon-placeholder";
 import { useOptionalTranslate } from "@/i18n/i18n";
 import { uploadOAuthApplicationIcon, validateOAuthAppManifest } from "@/lib/api";
@@ -34,34 +35,43 @@ export function ManifestIssues({ issues }: { issues: OAuthAppManifestIssue[] }) 
   );
 }
 
-/** A secret returned once (the webhook signing secret when it is created or rotated), copyable. */
-export function ClientSecretNotice({ secret, kind = "client" }: { secret: string; kind?: "client" | "webhook" }) {
+/**
+ * The reference app's "Webhook signing secret" field: a read-only input with Copy and Show/Hide. A secret the form just generated
+ * is shown in the clear; the application's saved secret starts masked.
+ */
+function WebhookSecretField({ id, secret, isNew }: { id: string; secret: string; isNew: boolean }) {
   const t = useOptionalTranslate();
+  const [visible, setVisible] = useState(isNew);
   const copy = async () => {
+    if (!secret) return;
     try {
       await navigator.clipboard.writeText(secret);
-      toast.success(t("Copied to clipboard"));
+      toast.info(t("Copied to clipboard"), { description: t("The signing secret has been copied to your clipboard.") });
     } catch {
       toast.error(t("Could not copy to clipboard"));
     }
   };
   return (
-    <div className="application-secret-box" role="status">
-      <p className="application-secret-title">
-        <KeyRound size={14} />
-        {kind === "webhook" ? t("Webhook signing secret") : t("Client secret")}
-      </p>
-      <div className="application-secret-value">
-        <code data-i18n-ignore aria-label={kind === "webhook" ? t("Webhook signing secret") : t("Client secret")}>
-          {secret}
-        </code>
-        <button type="button" className="settings-icon-action" aria-label={kind === "webhook" ? t("Copy webhook signing secret") : t("Copy client secret")} onClick={() => void copy()}>
-          <Copy size={14} />
-        </button>
+    <div className="oauth-app-field">
+      <label htmlFor={id} className="oauth-app-field-heading">
+        <span className="oauth-app-field-label">{t("Webhook signing secret")}</span>
+      </label>
+      <div className="oauth-app-field-control oauth-app-secret-field">
+        <input id={id} className="oauth-app-input" type={visible ? "text" : "password"} readOnly value={secret} data-i18n-ignore aria-busy={!secret || undefined} />
+        <div className="oauth-app-secret-field-actions">
+          <FlowTooltip label={t("Copy to clipboard")}>
+            <button type="button" className="oauth-app-icon-button is-small" aria-label={t("Copy to clipboard")} disabled={!secret} onClick={() => void copy()}>
+              <Copy aria-hidden="true" />
+            </button>
+          </FlowTooltip>
+          <FlowTooltip label={t(visible ? "Hide" : "Show")}>
+            <button type="button" className="oauth-app-icon-button is-small" aria-label={t(visible ? "Hide" : "Show")} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>
+              {/* The reference app: an open eye while the secret shows, a crossed-out eye while it is masked. */}
+              {visible ? <Eye aria-hidden="true" /> : <EyeOff aria-hidden="true" />}
+            </button>
+          </FlowTooltip>
+        </div>
       </div>
-      <p className="application-secret-warning">
-        {t("Copy this secret now. For security it will not be shown again.")}
-      </p>
     </div>
   );
 }
@@ -111,6 +121,15 @@ export function ApplicationForm({
       <FormField id={`${id}-redirects`} label={t("Redirect URIs")} hint={t("All OAuth redirect URIs, separated with newlines")} error={errors.redirectUris} errorBelow>
         <textarea id={`${id}-redirects`} className="oauth-app-input is-multiline" value={state.redirectUris} disabled={disabled} placeholder={"https://bugreporter.com/callback\nhttps://bugreporter.com/callback2"} onChange={(event) => set("redirectUris", event.target.value)} />
       </FormField>
+      <FormField
+        id={`${id}-github`}
+        label={t("GitHub username")}
+        hint={fillCodes(t("For {actor} only, add a GitHub username to associate commits and comments in GitHub with your application (use {suffix} suffix for GitHub Apps, like {example})"), { actor: "actor=app", suffix: "[bot]", example: "my-app[bot]" })}
+        error={errors.githubUsername}
+        errorBelow
+      >
+        <input id={`${id}-github`} className="oauth-app-input" value={state.githubUsername} disabled={disabled} placeholder="github-username" data-i18n-ignore autoComplete="off" spellCheck={false} onChange={(event) => set("githubUsername", event.target.value)} />
+      </FormField>
       <SwitchRow title={t("Public")} description={t("Allow this application to be installed by other workspaces")}>
         <Toggle label={t("Public")} checked={state.distribution === "public"} disabled={disabled} onChange={(value) => set("distribution", value ? "public" : "private")} />
       </SwitchRow>
@@ -125,6 +144,7 @@ export function ApplicationForm({
           <FormField id={`${id}-webhook-url`} label={t("Webhook URL")} error={errors.webhookUrl}>
             <input id={`${id}-webhook-url`} className="oauth-app-input" value={state.webhookUrl} disabled={disabled} placeholder="https://example.com/webhook" onChange={(event) => set("webhookUrl", event.target.value)} />
           </FormField>
+          <WebhookSecretField key={state.webhookSecretIsNew ? "new" : "saved"} id={`${id}-webhook-secret`} secret={state.webhookSecret} isNew={state.webhookSecretIsNew} />
           {APPLICATION_WEBHOOK_EVENT_GROUPS.map((group) => (
             <fieldset key={group.title} className="oauth-app-events" disabled={disabled}>
               <legend>
@@ -152,7 +172,7 @@ export function ApplicationForm({
   );
 }
 
-function FormField({ id, label, hint, error, errorBelow, children }: { id: string; label: string; hint?: string; error?: string; errorBelow?: boolean; children: ReactNode }) {
+function FormField({ id, label, hint, error, errorBelow, children }: { id: string; label: string; hint?: ReactNode; error?: string; errorBelow?: boolean; children: ReactNode }) {
   const t = useOptionalTranslate();
   return (
     <div className={`oauth-app-field${error ? " is-invalid" : ""}`}>
@@ -183,9 +203,14 @@ function SwitchRow({ title, description, children }: { title: string; descriptio
 
 /** Renders `{code}` in a translated sentence as the reference app's inline code chip. */
 function fillCode(text: string, code: string) {
-  const [before, after = ""] = text.split("{code}");
-  if (!text.includes("{code}")) return text;
-  return <>{before}<code className="oauth-app-code" data-i18n-ignore>{code}</code>{after}</>;
+  return fillCodes(text, { code });
+}
+
+/** Renders each `{name}` placeholder in a translated sentence as the reference app's inline code chip. */
+function fillCodes(text: string, codes: Record<string, string>) {
+  const parts = text.split(/\{(\w+)\}/);
+  if (parts.length === 1) return text;
+  return <>{parts.map((part, index) => (index % 2 === 0 ? part : part in codes ? <code key={index} className="oauth-app-code" data-i18n-ignore>{codes[part]}</code> : `{${part}}`))}</>;
 }
 
 /** The reference app's "Application icon · At least 256x256px" tile: click to upload an image. */

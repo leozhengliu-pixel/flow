@@ -77,7 +77,7 @@ The reference app's wording:
 | `response_type` missing or not `code` | `invalid_request` | Invalid or missing \`response_type\`. Expected \`response_type=code\` |
 | `redirect_uri` not registered | `invalid_request` | Invalid redirect_uri parameter for the application. |
 | Unknown scope | `invalid_scope` | Invalid scope: `<scope>` |
-| `app:*` scope without `actor=app` (registered applications) | `invalid_scope` | The scopes requested are not valid for this actor mode. |
+| `app:*`, `customer:*` or `initiative:*` scope without `actor=app` (registered applications) | `invalid_scope` | The scopes requested are not valid for this actor mode. |
 
 ### 2. Handle the callback
 
@@ -132,15 +132,17 @@ Response:
   "access_token": "flow_oauth_...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "scope": "read write",
+  "scope": "comments:create issues:create read write",
   "refresh_token": "flow_refresh_...",
   "actor": "user"
 }
 ```
 
 Access tokens last one hour (the reference app: 24 hours); refresh tokens last 30 days.
-`scope` is space-separated and uses Flow's canonical names (`create_issues`
-for `issues:create`, `create_comments` for `comments:create`).
+As in the reference app, `scope` is space-separated, sorted and uses the reference app's scope names
+(`issues:create`, `comments:create`) in every token response, refresh and
+introspection result and in `scopes_supported`. Requests may still use Flow's
+older names `create_issues` and `create_comments`.
 
 ## Refresh tokens
 
@@ -235,9 +237,12 @@ chooses its teams; the application gets its own app user, and everything it
 creates is attributed to that app user rather than to the installer. Use it for
 agents and service accounts. `admin` cannot be requested with `actor=app`
 (`invalid_scope`), and neither can the personal `openid` / `email` scopes.
-Agent scopes (`app:assignable`, `app:mentionable`) require `actor=app`: a
-registered application that requests them without it gets `invalid_scope`
-(public MCP clients, which request every advertised scope, have them dropped).
+Agent scopes (`app:assignable`, `app:mentionable`) and the customer and
+initiative scopes (`customer:read`, `customer:write`, `initiative:read`,
+`initiative:write`) require `actor=app`: a registered
+application that requests them without it gets `invalid_scope` (public MCP
+clients, which request every advertised scope, have them dropped). User tokens
+reach customers and initiatives through `read` and `write`.
 
 ## Scopes
 
@@ -250,7 +255,8 @@ registered application that requests them without it gets `invalid_scope`
 | `timeSchedule:write` | yes | no | Accepted for the reference app compatibility; Flow has no time schedule API, so it grants nothing. |
 | `admin` | yes, if configured | **no** | Admin-level endpoints, only when the person is an admin. The application must list `admin` in its configured scopes (applications created on the settings page can request every scope); public clients cannot request it. |
 | `app:assignable`, `app:mentionable` | no | yes | Agent delegation and mentions. |
-| `customer:read`, `customer:write`, `initiative:read`, `initiative:write`, `release:read`, `release:create`, `releaseStage:update` | yes | yes | Resource-specific access. |
+| `customer:read`, `customer:write`, `initiative:read`, `initiative:write` | no | yes | Customer and initiative access for the app user ("Read data about customers in the workspace", "Read and write data about customers in the workspace", and the same for initiatives). |
+| `release:read`, `release:create`, `releaseStage:update` | yes | yes | Release access ("Read releases in the workspace", "Create releases in the workspace", "Update release stages in the workspace"). |
 | `openid`, `email` | yes (public/MCP clients) | no | Identity of the signed-in person. |
 
 A registered application's configured scopes are the maximum it may request
@@ -300,7 +306,7 @@ Token, revocation and introspection endpoints return RFC 6749 errors:
 | `invalid_request` | 400 | Missing or malformed parameter, two client authentication methods, unsupported `prompt`, missing PKCE for a public client |
 | `invalid_client` | 401 | Unknown client, wrong secret, Basic credentials for a public client, or a token issued to another client (`WWW-Authenticate: Basic` when Basic was used) |
 | `invalid_grant` | 400 | Code or refresh token invalid, expired, already used outside the grace period, revoked, wrong `redirect_uri` or `code_verifier`, or a secret-only grant redeemed without the secret |
-| `invalid_scope` | 400 | Unsupported scope, scope not configured on the application, `admin` with `actor=app`, `app:*` scopes without `actor=app` |
+| `invalid_scope` | 400 | Unsupported scope, scope not configured on the application, `admin` with `actor=app`, `app:*`, `customer:*` or `initiative:*` scopes without `actor=app` |
 | `unauthorized_client` | 400 | Client credentials not enabled for the application |
 | `unsupported_grant_type` | 400 | Grant other than `authorization_code`, `refresh_token`, `client_credentials` |
 | `unsupported_token_type` | 400 | Unknown `token_type_hint` on revocation |
@@ -333,7 +339,8 @@ reproducibly, review them in code, or link people to a pre-filled setup page.
     "url": "https://acme.dev/api/flow/webhook",
     "resourceTypes": ["Issue", "Comment", "OAuthAuthorization"]
   },
-  "agent": { "assignable": true, "mentionable": true }
+  "agent": { "assignable": true, "mentionable": true },
+  "github": { "username": "acme-agent[bot]" }
 }
 ```
 
@@ -352,7 +359,9 @@ reproducibly, review them in code, or link people to a pre-filled setup page.
 | `webhook.url` | Required with `webhook`. HTTPS, not a loopback, private-network or internal host (the same check as every Flow webhook). |
 | `webhook.resourceTypes` | Required with `webhook`, at least one, unique. Payload type names (`Issue`, `Comment`, `Attachment`, `IssueLabel`, `Reaction`, `Project`, `ProjectUpdate`, `ProjectMilestone`, `Document`, `Initiative`, `InitiativeUpdate`, `Cycle`, `Customer`, `CustomerNeed`, `User`, `IssueSLA`, `Release`, `ReleaseNote`, `IssueRelation`, and the application events `OAuthApp` (the reference app's `OAuthAuthorization` is accepted), `PermissionChange`, `AppUserNotification`, `AgentSessionEvent`) or Flow's webhook ids (`issues`, `comments`, …). Stored and exported under the payload type names. The reference app's `ProjectLabel` is not supported yet. |
 | `webhook.enabled` | Default `true`. |
+| `webhook.secret` | *Flow extension, write-only.* The signing secret the settings form generated and showed (`flow_wh_…`). Used only when the application has no signing secret yet, otherwise ignored; never exported. Leave it out to have Flow generate one. |
 | `agent.assignable`, `agent.mentionable` | *Flow extension.* Add `app:assignable` / `app:mentionable`. |
+| `github.username` | *Flow extension* (the reference app's form field "GitHub username"). A GitHub user name, or a GitHub App's bot name with the `[bot]` suffix (`my-app[bot]`). Unique among the workspace's applications. Leaving `github` out clears it. See [GitHub username](#github-username). |
 
 Unknown fields are rejected. The JSON Schema at
 `/.well-known/oauth-app-manifest.schema.json` lets editors and CI validate a
@@ -365,8 +374,9 @@ All endpoints require a workspace administrator.
 | Request | Effect |
 | --- | --- |
 | `POST /api/oauth-applications/manifest/validate` | `{"valid": bool, "issues": [{"path", "message"}], "application": preview}`; never saves. |
-| `POST /api/oauth-applications/manifest` | Creates the application. `201` with the application, including `clientSecret` (shown once) and, when the webhook is enabled, `webhookSecret` (the signing secret, shown once). |
-| `PUT /api/oauth-applications/{id}/manifest` | Replaces the configuration; client ID and secret are kept. Omitted optional blocks (`display`, `webhook`, `agent`) are cleared. Returns `webhookSecret` the first time a webhook is enabled. |
+| `POST /api/oauth-applications/manifest` | Creates the application. `201` with the application, including `clientSecret` and, when the webhook is enabled, `webhookSecret` (the signing secret: `webhook.secret` when given, otherwise a new one). |
+| `PUT /api/oauth-applications/{id}/manifest` | Replaces the configuration; client ID and secret are kept. Omitted optional blocks (`display`, `webhook`, `agent`, `github`) are cleared. Returns `webhookSecret` the first time a webhook is enabled. |
+| `GET /api/oauth-applications/{id}/webhook/secret` | `{"secret": "flow_wh_…"}`, the current webhook signing secret (`404` when there is none). Signed-in administrators only, not API keys. |
 | `GET /api/oauth-applications/{id}/manifest` | Exports the application as a manifest. |
 | `GET /api/oauth-applications/{id}/installs` | This workspace's active user authorizations and app installations of the application. |
 
@@ -402,15 +412,28 @@ Flow's settings follow the reference app's:
 
 - **Settings › API › OAuth applications** lists the workspace's applications
   ("N OAuth applications", each with its icon and "Updated <date>") and
-  creates them at `/<workspace>/settings/api/applications/new`. An
+  creates them at `/<workspace>/settings/api/applications/new`. The create and
+  edit form has the reference app's fields, including **GitHub username** (checked on
+  submit against GitHub's public API: "Invalid GitHub username" when the
+  account does not exist). With **Webhooks** on, the form shows the **Webhook
+  signing secret**: a new application (or one whose webhook was never
+  enabled) gets a secret generated when the form opens, shown in the clear and
+  saved with the webhook; an existing secret is loaded masked, with Show and
+  Copy ("The signing secret has been copied to your clipboard."). An
   application's page (`…/api/applications/<id>`) shows the developer,
-  description, redirect URIs and availability, then **OAuth credentials**:
-  the client ID, the client secret (masked; copy reads it from
+  description, redirect URIs, availability and GitHub username, then **OAuth
+  credentials**: the client ID, the client secret (masked; copy reads it from
   `GET /api/oauth-applications/{id}/client-secret`, rotate asks first) and
-  "Create & copy token". Its menu edits, downloads the manifest, deletes (type
-  the name to confirm) or opens the application in the workspace. The icon
-  picker uploads to `POST /api/oauth-applications/icon`; the returned
-  `/uploads/oauth_app_icon_…` URL is accepted as `display.iconUrl`.
+  [Create & copy token](#developer-tokens). With a webhook, **Webhooks** shows
+  the delivery status (its menu disables or enables webhooks), the URL, the
+  signing secret (masked; copy reads it from
+  `GET /api/oauth-applications/{id}/webhook/secret`; rotate asks "Rotate your
+  signing secret?" and copies the new secret) and the events, followed by
+  **Webhook delivery failures**. Its menu edits, downloads the manifest,
+  deletes (type the name to confirm) or opens the application in the
+  workspace. The icon picker uploads to `POST /api/oauth-applications/icon`;
+  the returned `/uploads/oauth_app_icon_…` URL is accepted as
+  `display.iconUrl`.
 - **Settings › Applications** lists every application members authorized
   ("Authorized by N members") or installed as an app user. Admins load it from
   `GET /api/oauth/authorized-applications`, which includes every member's
@@ -421,4 +444,51 @@ Flow's settings follow the reference app's:
   admins may revoke other members' authorizations with
   `DELETE /api/oauth/authorizations/{id}`); the app user's own menu removes the
   installation.
+
+## Developer tokens
+
+**Create & copy token** on an application's page works: a
+command menu ("Create developer access token…") offers **User** and **App**.
+
+- **User** creates an `actor=user` token for you with `read` and `write` (as
+  far as the application's configured scopes allow), copies it and says
+  "Developer access token created and copied to your clipboard". Every click
+  creates another token.
+- **App** creates a token for the application's app user (installing the
+  application in this workspace for all public teams if needed). The first
+  time, **Select scopes** asks for its scopes (`read` and `write` on;
+  `app:mentionable`, `app:assignable`, `customer:*` and `initiative:*` off).
+  An app user has one developer token at a time: while it is active, **App**
+  copies that same token again ("Existing app token copied to clipboard",
+  listing its scopes). To change the scopes, revoke it first (**Revoke
+  access** on the application's page in Settings › Applications, or
+  `POST /oauth/revoke`).
+
+| Request | Effect |
+| --- | --- |
+| `POST /api/oauth-applications/{id}/developer-token` `{"actor": "user"}` | A new user token; `scopes` may narrow it. |
+| `POST /api/oauth-applications/{id}/developer-token` `{"actor": "app", "scopes": [...]}` | The app user's active token with `"existing": true`, or a new one with these scopes. |
+| `GET /api/oauth-applications/{id}/developer-token` | The app user's active developer token (`"existing": true`), or `404`. |
+
+The responses have the token endpoint's shape (`access_token`, `expires_in`,
+`scope` with the reference app's names, `actor`, `app_user_id`). Developer tokens last
+one hour, like other Flow access tokens, and have no refresh token. These
+endpoints need a signed-in workspace administrator; API keys and OAuth tokens
+cannot call them.
+
+## GitHub username
+
+An application's **GitHub username** (the reference app: "For `actor=app` only, add a
+GitHub username to associate commits and comments in GitHub with your
+application") ties a GitHub account to the application's app user, the way a
+member's connected GitHub account belongs to them. Use the account your
+application acts as on GitHub, or a GitHub App's bot name such as
+`my-app[bot]`. With the GitHub integration connected, pull requests opened by
+that account and webhook events it sends are attributed to the app user in
+every workspace that installed the application (`actor=app`): the review's
+author, its events and the "linked a pull request" activity. A GitHub account
+can belong to one application per workspace ("There is already a user in Flow
+associated with this GitHub account."). Set it on the form, in the manifest
+(`github.username`) or with `PATCH /api/oauth-applications/{id}`
+(`githubUsername`); an empty value removes the association.
 

@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react'
 import type { Editor } from '@tiptap/react'
 import { requestFloatingAgent } from '@/components/agent/agent-floating-request'
 import { IssueAgentTasksProvider } from '@/components/agent/issue-agent-tasks'
+import { SelectionIssueProvider } from '@/components/editor/selection-issue-provider'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { refreshResourcePreferences } from '@/lib/resource-preferences'
 import { toast } from '@/lib/toast'
@@ -241,7 +242,8 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
   const documentUrlLabel = t('Copy document URL')
 
   // One agent task directory for the page: comment cards show their own sessions (the reference app answers inside the thread).
-  return <IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
+  // An issue made from a comment's selection goes to the document's team and project.
+  return <SelectionIssueProvider value={{ teamId: document.teamIds[0], projectId: document.projectIds[0] }}><IssueAgentTasksProvider resourceType="document" issue={{ id: document.id }} data={data}><main className={`main-panel document-page${deleted ? ' is-deleted' : ''}${commentGutter && !deleted ? ' has-comment-gutter' : ''}`}>
     <header className="document-header">
       <button aria-label={t('Open sidebar')} className="document-mobile-menu" data-sidebar-trigger onClick={onOpenSidebar} type="button"><Menu size={18}/></button>
       <DocumentBreadcrumb data={data} document={{ ...document, title }} origin={origin} onBack={onBack}/>
@@ -308,7 +310,7 @@ export function DocumentPage({ data, document, onReload, onBack, origin, openHis
     {!deleted && <DocumentHistoryDialog document={document} onOpenChange={setHistoryOpen} onRestore={restoreRevision} open={historyOpen}/>}
     {!deleted && <DocumentAccessDialog busy={accessBusy} data={data} document={document} onChangeRole={(type, id, role) => void updateAccess(type, id, role)} onOpenChange={setAccessOpen} open={accessOpen} permissions={permissions}/>}
     <DocumentCustomReminderDialog onOpenChange={reminder.setCustomOpen} onRemind={reminder.remind} open={reminder.customOpen}/>
-  </main></IssueAgentTasksProvider>
+  </main></IssueAgentTasksProvider></SelectionIssueProvider>
 }
 
 const NO_COMMENTS: Comment[] = []

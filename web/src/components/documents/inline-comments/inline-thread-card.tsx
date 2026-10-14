@@ -49,9 +49,11 @@ export interface ThreadCardProps {
   variant?: 'gutter' | 'resolved'
   /** The agent session a comment of this thread started; like the reference app it answers in the card and takes its reply row. */
   renderAgentThread?: (threadIds: string[], controls: AgentThreadControls) => ReactNode
+  /** Resolved-comments panel: the page the quote comes from, named above it. */
+  source?: string
 }
 
-export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(function InlineThreadCard({ thread, viewer, users, active, canComment, canModerate, muted, actions, onActivate, style, variant = 'gutter', renderAgentThread }, ref) {
+export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(function InlineThreadCard({ thread, viewer, users, active, canComment, canModerate, muted, actions, onActivate, style, variant = 'gutter', renderAgentThread, source }, ref) {
   const { t } = useI18n()
   const resolved = variant === 'resolved'
   const agentThreads = useAgentCommentThreadIds()
@@ -68,7 +70,7 @@ export const InlineThreadCard = forwardRef<HTMLDivElement, ThreadCardProps>(func
     aria-label={t('Comment thread')}
     style={style}
   >
-    {resolved && thread.root.quotedText && <blockquote className="document-thread-quote" data-i18n-ignore>{thread.root.quotedText}</blockquote>}
+    {resolved && thread.root.quotedText && <blockquote className="document-thread-quote" data-i18n-ignore>{source && <cite className="document-thread-quote-source">{source}</cite>}{thread.root.quotedText}</blockquote>}
     <ThreadComment
       comment={thread.root}
       viewer={viewer}

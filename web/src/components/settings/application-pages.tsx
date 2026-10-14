@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Download, LayoutGrid, MoreHorizontal, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Download, LayoutGrid, MoreHorizontal, Pencil, Trash2, Upload } from "lucide-react";
 import { toast } from "@/lib/toast";
 
 import {
@@ -9,9 +9,9 @@ import {
   decideOAuthSyncGroupRequest,
   deleteOAuthApplication,
   exportOAuthApplicationManifest,
+  fetchApplicationWebhookSecret,
   fetchOAuthApplicationFailures,
   fetchOAuthSyncGroupRequests,
-  rotateApplicationWebhookSecret,
   updateOAuthApplicationFromManifest,
 } from "@/lib/api";
 import { useI18n, useOptionalTranslate } from "@/i18n/i18n";
@@ -20,6 +20,7 @@ import {
   applyManifestToForm,
   formStateFromApplication,
   formStateFromManifest,
+  githubUsernameError,
   manifestFileName,
   manifestFromFormState,
   manifestFromSearch,
@@ -34,17 +35,15 @@ import type {
   WebhookFailureEvent,
 } from "@/types/flow";
 import { applicationEditPath, applicationSettingsPath, installedApplicationPath, settingsPath } from "@/lib/app-routes";
-import { confirmAction } from "@/components/ui/action-dialog-service";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { FlowTooltip } from "@/components/ui/tooltip";
 
 import { ApplicationCredentials } from "./application-credentials";
+import { ApplicationWebhookSection } from "./application-webhook-section";
 import { OAuthAppAvatar } from "./oauth-applications-section";
 import { fillNodes } from "@/lib/fill-nodes";
 import {
   ApplicationForm,
-  ClientSecretNotice,
   ManifestImportDialog,
   ManifestIssues,
 } from "./application-form";
@@ -102,10 +101,16 @@ export function ApplicationCreatePage({
     setBusy(true);
     setIssues([]);
     try {
+      // Like the reference app, the GitHub username is looked up on GitHub when the form is submitted.
+      const githubUsername = await githubUsernameError(state.githubUsername);
+      if (githubUsername) {
+        setErrors({ githubUsername });
+        return;
+      }
       const app = await createOAuthApplicationFromManifest(manifestFromFormState(state));
       await onReload();
       toast.success(t("Application created"));
-      navigate(applicationSettingsPath(data.workspace.urlKey, app.id), { state: app.webhookSecret ? { webhookSecret: app.webhookSecret } : undefined });
+      navigate(applicationSettingsPath(data.workspace.urlKey, app.id));
     } catch (error) {
       const next = errorIssues(error);
       setIssues(next);
@@ -164,6 +169,22 @@ export function ApplicationEditPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [app?.id, app?.updatedAt]);
 
+  // Like the reference app, the form shows the application's saved signing secret (masked until "Show").
+  const savedSecretPrefix = app?.webhookSecretPrefix;
+  useEffect(() => {
+    if (!app || !savedSecretPrefix) return;
+    let cancelled = false;
+    fetchApplicationWebhookSecret(app.id)
+      .then(({ secret }) => {
+        if (!cancelled) setState((current) => (current.webhookSecretIsNew ? current : { ...current, webhookSecret: secret }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [app?.id, app?.updatedAt, savedSecretPrefix]);
+
   if (!app) return <ApplicationNotFound onBack={onBack} />;
 
   const change = (next: ApplicationFormState) => {
@@ -178,15 +199,20 @@ export function ApplicationEditPage({
     setBusy(true);
     setIssues([]);
     try {
-      const saved = await updateOAuthApplicationFromManifest(app.id, manifestFromFormState(state));
+      const githubUsername = state.githubUsername.trim() !== (app.githubUsername ?? "") ? await githubUsernameError(state.githubUsername) : undefined;
+      if (githubUsername) {
+        setErrors({ githubUsername });
+        return;
+      }
+      await updateOAuthApplicationFromManifest(app.id, manifestFromFormState(state));
       await onReload();
-      toast.success(t("Application saved"));
-      // A newly enabled webhook gets its signing secret now; the application page shows it once.
-      navigate(applicationSettingsPath(data.workspace.urlKey, app.id), saved?.webhookSecret ? { state: { webhookSecret: saved.webhookSecret } } : undefined);
+      toast.success(t("Application updated"), { description: t("“{name}” updated.").replace("{name}", state.name.trim()) });
+      navigate(applicationSettingsPath(data.workspace.urlKey, app.id));
     } catch (error) {
       const next = errorIssues(error);
       setIssues(next);
-      if (!next.length) toast.error(error instanceof Error ? error.message : t("Could not save application"));
+      // The reference app: "Update failed" with the server's reason.
+      if (!next.length) toast.error(t("Update failed"), { description: error instanceof Error && error.message ? t(error.message) : t("Could not save application") });
     } finally {
       setBusy(false);
     }
@@ -236,14 +262,12 @@ export function ApplicationDetailsPage({
   onBack: () => void;
 }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const { t, formatDate } = useI18n();
   const app = data.oauthApplications.find((item) => item.id === applicationId);
   const [failures, setFailures] = useState<WebhookFailureEvent[]>([]);
   const [syncGroups, setSyncGroups] = useState<OAuthSyncGroupRequest[]>([]);
   const [importing, setImporting] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [webhookSecret, setWebhookSecret] = useState(() => (location.state as { webhookSecret?: string } | null)?.webhookSecret ?? "");
 
   useEffect(() => {
     let cancelled = false;
@@ -276,16 +300,6 @@ export function ApplicationDetailsPage({
       URL.revokeObjectURL(url);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("Could not export manifest"));
-    }
-  };
-  const rotateWebhookSecret = async () => {
-    if (!(await confirmAction(t("Rotate the webhook signing secret?"), { description: t("You cannot undo this action."), confirmLabel: t("Rotate") }))) return;
-    try {
-      const next = await rotateApplicationWebhookSecret(app.id);
-      setWebhookSecret(next.secret ?? "");
-      await onReload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("Could not rotate secret"));
     }
   };
 
@@ -321,25 +335,19 @@ export function ApplicationDetailsPage({
         {app.description && <Row title={t("Description")} description={<span data-i18n-ignore>{app.description}</span>} />}
         <Row title={t("Redirect URIs")} description={<span className="oauth-app-mono" data-i18n-ignore>{app.redirectUris.join("\n") || "—"}</span>} />
         <Row title={t("Availability")} description={app.publicEnabled ? t("Public to all workspaces") : t("Private to this workspace")} />
+        {app.githubUsername && <Row title={t("GitHub username")} description={<span className="oauth-app-mono" data-i18n-ignore>{app.githubUsername}</span>} />}
       </Section>
-      {webhookSecret && <ClientSecretNotice kind="webhook" secret={webhookSecret} />}
-      <ApplicationCredentials app={app} onReload={onReload} />
-      {app.webhookEnabled && (
-        <Section className="oauth-app-section" title={t("Webhook")} description={t("Every workspace that installs the application receives these events, signed with the webhook signing secret.")}>
-          <Row title={t("Webhook URL")} description={<span className="oauth-app-mono" data-i18n-ignore>{app.webhookUrl}</span>} />
-          <Row title={t("Webhook signing secret")} description={<span className="oauth-app-mono oauth-app-secret" data-i18n-ignore>{app.webhookSecretPrefix ? `${app.webhookSecretPrefix}••••••••` : "••••••••••••••••"}</span>}>
-            <FlowTooltip label={t("Rotate secret")}>
-              <button type="button" className="oauth-app-icon-button" aria-label={t("Rotate webhook signing secret")} onClick={() => void rotateWebhookSecret()}><RefreshCw aria-hidden="true" /></button>
-            </FlowTooltip>
-          </Row>
-        </Section>
-      )}
-      {failures.length > 0 && (
-        <Section className="oauth-app-section" title={t("Delivery failures")}>
-          {failures.map((item) => (
-            <Row key={item.id} title={<span data-i18n-ignore>{item.executionId}</span>} description={<span data-i18n-ignore>{`${item.url} · ${item.httpStatus ?? "—"} · ${item.responseOrError.slice(0, 120)}`}</span>} />
-          ))}
-        </Section>
+      <ApplicationCredentials app={app} workspace={workspace} onReload={onReload} />
+      {app.webhookUrl ? (
+        <ApplicationWebhookSection app={app} failures={failures} onReload={onReload} />
+      ) : (
+        failures.length > 0 && (
+          <Section className="oauth-app-section" title={t("Webhook delivery failures")} description={t("Failed webhook deliveries are logged after exhausting all retries.")}>
+            {failures.map((item) => (
+              <Row key={item.id} title={<span data-i18n-ignore>{item.executionId}</span>} description={<span data-i18n-ignore>{`${item.url} · ${item.httpStatus ?? "—"} · ${item.responseOrError.slice(0, 120)}`}</span>} />
+            ))}
+          </Section>
+        )
       )}
       {pendingGroups.length > 0 && (
         <Section className="oauth-app-section" title={t("Sync group requests")}>
@@ -376,8 +384,7 @@ export function ApplicationDetailsPage({
           if (!valid) return false;
           try {
             const merged = manifestFromFormState(applyManifestToForm(formStateFromApplication(app), manifest));
-            const saved = await updateOAuthApplicationFromManifest(app.id, merged);
-            if (saved?.webhookSecret) setWebhookSecret(saved.webhookSecret);
+            await updateOAuthApplicationFromManifest(app.id, merged);
             await onReload();
             toast.success(t("Application saved"));
           } catch (error) {

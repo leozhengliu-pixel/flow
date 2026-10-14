@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"flow/api/internal/domain"
+	"flow/api/internal/store"
 )
 
 // registerOAuthPlatformRoutes adds the OAuth developer-platform endpoints:
@@ -24,6 +26,8 @@ func (s *server) registerOAuthPlatformRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/oauth-applications/{id}/manifest", s.updateOAuthApplicationFromManifest)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/installs", s.listOAuthApplicationInstalls)
 	mux.HandleFunc("GET /api/oauth-applications/{id}/client-secret", s.getOAuthApplicationClientSecret)
+	mux.HandleFunc("GET /api/oauth-applications/{id}/developer-token", s.getApplicationDeveloperToken)
+	mux.HandleFunc("GET /api/oauth-applications/{id}/webhook/secret", s.getApplicationWebhookSecret)
 	mux.HandleFunc("GET /api/oauth/authorized-applications", s.listAuthorizedApplications)
 	mux.HandleFunc("POST /api/oauth-applications/icon", s.uploadOAuthApplicationIcon)
 }
@@ -39,6 +43,30 @@ func (s *server) getOAuthApplicationClientSecret(w http.ResponseWriter, r *http.
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, map[string]string{"clientSecret": secret})
+}
+
+// GET /api/oauth-applications/{id}/webhook/secret returns the application's
+// webhook signing secret for the settings page (the reference app shows it in the edit
+// form and copies it from the application page). Workspace admins only,
+// never with an API key.
+func (s *server) getApplicationWebhookSecret(w http.ResponseWriter, r *http.Request) {
+	data := s.workspaceData(r)
+	index := slices.IndexFunc(data.OAuthApplications, func(app domain.OAuthApplication) bool { return app.ID == r.PathValue("id") })
+	if index < 0 {
+		writeError(w, http.StatusNotFound, "Application not found")
+		return
+	}
+	secret, ok, err := s.store.WebhookSigningSecret(r.Context(), store.ApplicationWebhookSecretRef(data.OAuthApplications[index].ClientID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not read the webhook signing secret")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "The application has no webhook signing secret")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, map[string]string{"secret": secret})
 }
 
 // GET /api/oauth-applications/{id}/installs lists this workspace's grants of
@@ -64,6 +92,37 @@ func (s *server) listOAuthApplicationInstalls(w http.ResponseWriter, r *http.Req
 	}
 	installations = slices.DeleteFunc(installations, func(item domain.ApplicationInstallation) bool { return item.ClientID != clientID })
 	writeJSON(w, http.StatusOK, map[string]any{"authorizations": authorizations, "installations": installations})
+}
+
+// githubAppUsers maps lower-cased GitHub usernames to the app users of the
+// workspace's active application installations whose application set that
+// username (the reference app's "GitHub username": commits and comments in GitHub by
+// that account belong to the app user).
+func (s *server) githubAppUsers(ctx context.Context, workspace string) map[string]domain.User {
+	installations, err := s.store.ListApplications(ctx, workspace)
+	if err != nil {
+		return nil
+	}
+	users := map[string]domain.User{}
+	for _, installation := range installations {
+		if !installation.Active || installation.UserID == "" {
+			continue
+		}
+		app, ok := s.store.OAuthApplicationByClientID(installation.ClientID)
+		if !ok || app.GitHubUsername == "" {
+			continue
+		}
+		users[strings.ToLower(app.GitHubUsername)] = installation.User()
+	}
+	return users
+}
+
+// githubActor is the app user associated with a GitHub login, or fallback.
+func githubActor(users map[string]domain.User, login string, fallback domain.User) domain.User {
+	if user, ok := users[strings.ToLower(strings.TrimSpace(login))]; ok && login != "" {
+		return user
+	}
+	return fallback
 }
 
 // oauthAttributionInput is the optional attribution on

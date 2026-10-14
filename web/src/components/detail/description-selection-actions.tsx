@@ -31,10 +31,11 @@ export type DescriptionEntity = { kind: 'project' | 'initiative'; id: string; na
 
 /**
  * Selection actions for a project or initiative description, like the issue description's: "Ask agent" opens the
- * floating chat on that entity with the selection quoted in the composer, and "Create issue from selection" seeds
- * the New issue composer (linking the project when it is one). Inline comments do not exist on these descriptions.
+ * floating chat on that entity with the selection quoted in the composer, "Create issue from selection" seeds
+ * the New issue composer (linking the project when it is one), and "Comment" (when `onComment` is given) starts an
+ * inline comment thread on the selection.
  */
-export function useEntityDescriptionSelectionActions({ entity, data, teamId, projectId }: { entity: DescriptionEntity; data?: BootstrapData; teamId?: string; projectId?: string }) {
+export function useEntityDescriptionSelectionActions({ entity, data, teamId, projectId, onComment }: { entity: DescriptionEntity; data?: BootstrapData; teamId?: string; projectId?: string; onComment?: DescriptionSelectionActions['onComment'] }) {
   const { t } = useI18n()
   const [agent, setAgent] = useState<SelectedDescription & { entityId: string }>()
   const link = () => new URL(entity.href ?? window.location.pathname, window.location.origin).href
@@ -45,6 +46,7 @@ export function useEntityDescriptionSelectionActions({ entity, data, teamId, pro
       window.dispatchEvent(new CustomEvent(CREATE_ISSUE_FROM_SELECTION, { detail: { text: `${selection.text}\n\n${t('From')} ${link()}`, teamId: team, projectId: entity.kind === 'project' ? entity.id : projectId } }))
     },
     onAskAgent: selection => setAgent({ ...selection, entityId: entity.id }),
+    onComment,
   }
   const context: AgentPageContext = { type: entity.kind, id: entity.id, label: entity.name }
   const prompt = (text: string) => `${t(entity.kind === 'project' ? 'About this selection from the project description:' : 'About this selection from the initiative description:')}\n\n> ${text.replace(/\n/g, '\n> ')}\n\n`
