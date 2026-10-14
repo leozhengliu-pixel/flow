@@ -14,7 +14,8 @@ import { settingsSidebarTeams } from './settings-sidebar-teams';
 import { UploadPolicyDialog } from './upload-policy-dialog';
 import { ApplicationPolicySettings, DataPrivacyDialog } from './application-policy-settings';
 import type { IntegrationProvider } from '@/lib/app-routes';
-import { isPersonalSettingsPage, isWorkspaceAdmin, roleAllowed, teamReadOnlyNotice, teamSettingsAccess, workspaceReadOnlyNotice, workspaceSettingsAccess } from '@/lib/settings-access';
+import { adminHintsApply, hiddenSettingsMessage, isPersonalSettingsPage, isWorkspaceAdmin, roleAllowed, teamReadOnlyNotice, teamSettingsAccess, workspaceReadOnlyNotice, workspaceSettingsAccess } from '@/lib/settings-access';
+import { AdminOnlyHint } from './admin-only-hint';
 import { useSecuritySetting } from '@/hooks/use-security-setting';
 import { securityPermissionLabel, type SecuritySettingKey } from '@/lib/security-setting';
 import {
@@ -33,6 +34,7 @@ import {
   Upload,
   KeyRound,
   KeyboardOff,
+  MonitorX,
   LayoutTemplate,
   Link2,
   ListFilter,
@@ -402,8 +404,12 @@ const NAV: { title: string; items: NavItem[] }[] = [
       { id: "pulse", label: "Pulse", icon: Radio },
       { id: "asks", label: "Asks", icon: MessageCircleQuestion },
       { id: "emojis", label: "Emojis", icon: Smile },
-      { id: "integrations", label: "Integrations", icon: Plug },
     ],
+  },
+  {
+    // The reference app: its own section; admins see "All integrations", members "Integrations".
+    title: "Integrations",
+    items: [{ id: "integrations", label: "Integrations", icon: Plug }],
   },
   {
     title: "Administration",
@@ -485,9 +491,9 @@ export function SettingsPage(props: SettingsPageProps) {
     () =>
       NAV.map((section) => ({
         ...section,
-        items: section.items.filter(
-          (item) => workspaceSettingsAccess(props.data, item.id) !== "hidden",
-        ),
+        items: section.items
+          .filter((item) => workspaceSettingsAccess(props.data, item.id) !== "hidden")
+          .map((item) => item.id === "integrations" && isWorkspaceAdmin(props.data) ? { ...item, label: "All integrations" } : item),
       })).filter((section) => section.items.length),
     [props.data],
   );
@@ -756,6 +762,14 @@ export function SettingsPage(props: SettingsPageProps) {
               />
             </Suspense>
           </div>
+          {props.page !== "team" && adminHintsApply(props.data, props.page) && (
+            <AdminOnlyHint
+              containerRef={mainRef}
+              page={props.page}
+              readOnly={settingsBodyAccess(props).kind === "read"}
+              workspaceSlug={props.data.workspace.urlKey}
+            />
+          )}
         </main>
       </div>
       {(props.onNavigateAgent || props.onOpenAgentHistory) && (
@@ -857,22 +871,32 @@ function SettingsBody(
 ) {
   const { t } = useI18n();
   const access = settingsBodyAccess(props);
+  if (access.kind === "hidden" && access.team && props.teamSection === "security" && props.teamKey)
+    return <TeamOverviewRedirect teamKey={props.teamKey} onNavigate={props.onNavigate} />;
   if (access.kind === "hidden")
-    return (
+    return access.team ? (
       <div className="settings-empty" role="status">
         <ShieldCheck size={28} />
-        {access.team ? (
-          <h3>{t("You need permission to view this team’s settings.")}</h3>
-        ) : (
-          <>
-            <h3>{t("Admin access required")}</h3>
-            <p>{t("You don't have permission to manage this workspace setting.")}</p>
-          </>
-        )}
+        <h3>{t("You need permission to view this team’s settings.")}</h3>
+      </div>
+    ) : (
+      // The reference app answers an administration URL a member cannot open with "Not found".
+      <div className="settings-shortcuts-not-found" role="status">
+        <MonitorX size={68} strokeWidth={1} />
+        <strong>{t("Not found")}</strong>
+        <span>{t(hiddenSettingsMessage(props.page))}</span>
       </div>
     );
   const body = <SettingsBodyContent {...props} />;
-  return access.kind === "read" ? <ReadOnlySettings notice={access.notice}>{body}</ReadOnlySettings> : body;
+  return access.kind === "read" ? <ReadOnlySettings notice={access.notice} banner={props.page === "team"}>{body}</ReadOnlySettings> : body;
+}
+
+/** The reference app sends members without access to a team section back to the team overview. */
+function TeamOverviewRedirect({ teamKey, onNavigate }: { teamKey: string; onNavigate: SettingsPageProps["onNavigate"] }) {
+  useEffect(() => {
+    onNavigate("team", teamKey);
+  }, [onNavigate, teamKey]);
+  return null;
 }
 
 type SettingsBodyAccess = { kind: "hidden"; team: boolean } | { kind: "read"; notice: string } | { kind: "edit" };
@@ -903,7 +927,11 @@ function settingsBodyAccess(props: SettingsPageProps): SettingsBodyAccess {
   return { kind: "edit" };
 }
 
-function ReadOnlySettings({ notice, children }: { notice: string; children: ReactNode }) {
+/**
+ * Read-only settings: every control is disabled. Workspace pages explain it on
+ * hover like the reference app (AdminOnlyHint); team pages keep the notice above the fields.
+ */
+function ReadOnlySettings({ notice, banner, children }: { notice: string; banner: boolean; children: ReactNode }) {
   const { t } = useI18n();
   // A stable element (not state) so Suspense re-attaching refs cannot loop.
   const [crumbSlot] = useState(() => document.createElement("div"));
@@ -915,11 +943,13 @@ function ReadOnlySettings({ notice, children }: { notice: string; children: Reac
           if (element && crumbSlot.parentNode !== element) element.appendChild(crumbSlot);
         }}
       />
-      <p className="settings-read-only-notice" role="note">
-        <Lock size={14} aria-hidden />
-        <span>{t(notice)}</span>
-      </p>
-      <fieldset disabled className="settings-read-only-fields" aria-label={t(notice)}>
+      {banner && (
+        <p className="settings-read-only-notice" role="note">
+          <Lock size={14} aria-hidden />
+          <span>{t(notice)}</span>
+        </p>
+      )}
+      <fieldset disabled className="settings-read-only-fields" aria-label={t(notice)} data-read-only-notice={notice}>
         <SettingsReadOnlyCrumbSlot.Provider value={crumbSlot}>
           {children}
         </SettingsReadOnlyCrumbSlot.Provider>

@@ -13,6 +13,7 @@ import { PULSE_EVENT, sessionPulseChoice, teamPulseSubscribed, usePulseSubscript
 import { ViewGlyph } from '@/components/views/view-icon-picker'
 import { SlackIcon } from '@/components/issue/issue-icons'
 import { TeamSettingsIcon, TeamArchiveIcon } from './team-menu-icons'
+import { teamLeaveDisabledReason } from '@/lib/team-access'
 import type { BootstrapData, Team } from '@/types/flow'
 
 const notifications = [
@@ -21,25 +22,6 @@ const notifications = [
   ['triage', 'An issue is added to the triage queue'],
   [PULSE_EVENT, 'A team project update is posted'],
 ] as const
-
-function teamLeaveDisabledReason(data: BootstrapData, team: Team) {
-  const membership = data.teamMembers.find(item => item.teamId === team.id && item.userId === data.viewer.id)
-  if (!membership) return 'You are not a member of this team'
-  if (membership.managedSource) return 'Managed by SCIM'
-  if (membership.role === 'owner' && !data.teamMembers.some(item => item.teamId === team.id && item.userId !== data.viewer.id && item.role === 'owner')) return 'A team needs at least one owner'
-  const active = new Set(data.teams.filter(item => !item.retiredAt).map(item => item.id))
-  const memberships = data.teamMembers.filter(item => item.userId === data.viewer.id && active.has(item.teamId))
-  if (memberships.length <= 1) return 'You should be a member of at least one active team'
-  if (data.viewerRole !== 'guest' && memberships.some(item => {
-    const seen = new Set<string>()
-    for (let parent = data.teamSettings[item.teamId]?.parentTeamId ?? data.teamParents?.[item.teamId]; parent && !seen.has(parent); parent = data.teamSettings[parent]?.parentTeamId ?? data.teamParents?.[parent]) {
-      if (parent === team.id) return true
-      seen.add(parent)
-    }
-    return false
-  })) return 'Leave the sub-teams before leaving this team'
-  return undefined
-}
 
 export function SidebarTeamMenu({ data, team, onReload, children }: { data: BootstrapData; team: Team; onReload?: (teamId?: string) => Promise<void>; children: ReactNode }) {
   const { t } = useI18n()

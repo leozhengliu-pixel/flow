@@ -91,6 +91,22 @@ describe("team member origins", () => {
     expect(screen.getByText("Joined by invitation")).toBeInTheDocument();
   });
 
+  it("lets team members add members when Member management allows all team members", async () => {
+    const users = [viewer, teammate, synced];
+    const render_ = (memberPermission: "allMembers" | "owners") => {
+      const data = makeBootstrap({ viewerRole: "member", users, members: users.map(member), teamMembers: [membership(viewer.id), membership(teammate.id, { role: "owner" })] });
+      data.teamSettings = { "team-1": { ...data.teamSettings?.["team-1"], teamId: "team-1", memberPermission } } as typeof data.teamSettings;
+      return render(<I18nProvider><TeamMembersSettings data={data} team={data.teams[0]} onReload={vi.fn().mockResolvedValue(undefined)} /></I18nProvider>);
+    };
+    const allowed = render_("allMembers");
+    expect(screen.getByRole("button", { name: "Add a member" })).toBeEnabled();
+    // Owner roles stay with team owners: a team member gets no menu on the owner's row.
+    expect(within(row(teammate.displayName)).queryByRole("button", { name: /Open menu/ })).toBeNull();
+    allowed.unmount();
+    render_("owners");
+    expect(screen.getByRole("button", { name: "Add a member" })).toBeDisabled();
+  });
+
   it("is localized in zh-CN", async () => {
     localStorage.setItem("flow:locale", "zh-CN");
     renderMembers([membership(viewer.id, { role: "owner" }), membership(synced.id, { origin: "sync" }), membership(provisioned.id, { origin: "scim" })]);

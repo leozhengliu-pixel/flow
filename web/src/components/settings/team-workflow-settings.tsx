@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { viewerOwnsTeam } from '@/lib/settings-permissions';
+import { teamLeaveDisabledReason } from '@/lib/team-access';
+import { ScopedFlowTooltip } from '@/components/ui/tooltip';
 import * as Popover from "@radix-ui/react-popover";
 import {
   ChevronRight,
@@ -459,6 +461,19 @@ function TeamOverview({
   const { settings, save } = useTeamSettings(data, team, onReload);
   // The reference app "dangerousOperations": hierarchy, retire and delete are team-owner only.
   const owner = viewerOwnsTeam(data, team.id);
+  // The reference app's reasons on the disabled danger-zone actions.
+  const lastActiveTeam = !team.retiredAt && data.teams.filter((item) => !item.retiredAt).length <= 1;
+  const leaveReason = teamLeaveDisabledReason(data, team);
+  const retireReason = lastActiveTeam
+    ? "Can't retire the last active team in the workspace"
+    : !owner
+      ? "Only workspace owners, admins, and team owners can retire teams"
+      : undefined;
+  const deleteReason = !owner
+    ? "Only workspace owners, admins, and team owners can delete teams"
+    : lastActiveTeam
+      ? "Can't delete the last active team in the workspace"
+      : undefined;
   const [retireOpen, setRetireOpen] = useState(false);
   useEffect(() => {
     if (owner && action === "retire" && !team.retiredAt) setRetireOpen(true);
@@ -586,40 +601,53 @@ function TeamOverview({
             title="Leave team"
             description="Remove yourself as a member of this team"
           >
-            <button
-              type="button"
-              className="settings-action"
-              onClick={() => void leave()}
-            >
-              Leave team…
-            </button>
+            <ScopedFlowTooltip label={leaveReason ? t(leaveReason) : undefined}>
+              <span className="settings-action-hint">
+                <button
+                  type="button"
+                  className="settings-action"
+                  disabled={Boolean(leaveReason)}
+                  onClick={() => void leave()}
+                >
+                  Leave team…
+                </button>
+              </span>
+            </ScopedFlowTooltip>
           </TeamRow>
         )}
         <TeamRow
           title={team.retiredAt ? "Restore team" : "Retire team"}
           description="Prevent creating and updating issues while preserving historical data"
         >
-          <button
-            type="button"
-            className="settings-action"
-            disabled={!owner}
-            onClick={() => void retire()}
-          >
-            {team.retiredAt ? "Restore…" : "Retire…"}
-          </button>
+          <ScopedFlowTooltip label={retireReason ? t(retireReason) : undefined}>
+            <span className="settings-action-hint">
+              <button
+                type="button"
+                className="settings-action"
+                disabled={Boolean(retireReason)}
+                onClick={() => void retire()}
+              >
+                {team.retiredAt ? "Restore…" : "Retire…"}
+              </button>
+            </span>
+          </ScopedFlowTooltip>
         </TeamRow>
         <TeamRow
           title="Delete team"
           description="Permanently delete this team and all its data, with a 30-day restoration window"
         >
-          <button
-            type="button"
-            className="settings-action"
-            disabled={!owner || data.teams.filter((item) => !item.retiredAt).length <= 1}
-            onClick={() => void remove()}
-          >
-            Delete…
-          </button>
+          <ScopedFlowTooltip label={deleteReason ? t(deleteReason) : undefined}>
+            <span className="settings-action-hint">
+              <button
+                type="button"
+                className="settings-action"
+                disabled={Boolean(deleteReason)}
+                onClick={() => void remove()}
+              >
+                Delete…
+              </button>
+            </span>
+          </ScopedFlowTooltip>
         </TeamRow>
       </TeamSection>
       <RetireTeamForm

@@ -6,6 +6,26 @@ export function isWorkspaceAdmin(data: Pick<BootstrapData, "viewerRole">) {
   return data.viewerRole === "admin" || data.viewerRole === "owner";
 }
 
+/** Why the viewer cannot leave the team (the reference app's copy), or undefined when they can. */
+export function teamLeaveDisabledReason(data: BootstrapData, team: Team) {
+  const membership = data.teamMembers.find(item => item.teamId === team.id && item.userId === data.viewer.id)
+  if (!membership) return 'You are not a member of this team'
+  if (membership.managedSource) return 'Managed by SCIM'
+  if (membership.role === 'owner' && !data.teamMembers.some(item => item.teamId === team.id && item.userId !== data.viewer.id && item.role === 'owner')) return 'A team needs at least one owner'
+  const active = new Set(data.teams.filter(item => !item.retiredAt).map(item => item.id))
+  const memberships = data.teamMembers.filter(item => item.userId === data.viewer.id && active.has(item.teamId))
+  if (memberships.length <= 1) return 'You should be a member of at least one active team'
+  if (data.viewerRole !== 'guest' && memberships.some(item => {
+    const seen = new Set<string>()
+    for (let parent = data.teamSettings[item.teamId]?.parentTeamId ?? data.teamParents?.[item.teamId]; parent && !seen.has(parent); parent = data.teamSettings[parent]?.parentTeamId ?? data.teamParents?.[parent]) {
+      if (parent === team.id) return true
+      seen.add(parent)
+    }
+    return false
+  })) return 'Leave the sub-teams before leaving this team'
+  return undefined
+}
+
 /** A private team, or a top-level team restricted to its members. */
 export function isPrivateTeamBoundary(data: Pick<BootstrapData, "teamSettings">, team: Team) {
   const settings = data.teamSettings?.[team.id];

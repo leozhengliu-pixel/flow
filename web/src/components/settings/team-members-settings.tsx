@@ -12,6 +12,7 @@ import { PropertyMenu } from "@/components/property/property-menu";
 import { useI18n } from "@/i18n/i18n";
 import { setTeamMembership } from "@/lib/api";
 import { personUsername } from "@/lib/people";
+import { canManageTeamSettings } from "@/lib/settings-permissions";
 import { ScopedFlowTooltip } from "@/components/ui/tooltip";
 import type { BootstrapData, Team, TeamMember, TeamMemberOrigin, WorkspaceMember } from "@/types/flow";
 import { SettingsPageTitle, SettingsSelect } from "./settings-primitives";
@@ -104,11 +105,14 @@ export function TeamMembersSettings({
   // Explain the removal rules wherever a sync is involved.
   const syncedTeam =
     Boolean(scimGroup) || rows.some(({ origin }) => origin === "scim" || origin === "sync" || origin === "api");
+  // Owner roles stay with admins and team owners; adding and removing ordinary
+  // members follows the team's "Member management" permission.
   const canManage =
     !scimGroup &&
     (data.viewerRole === "admin" ||
       data.viewerRole === "owner" ||
       memberships.get(data.viewer.id)?.role === "owner");
+  const canAddMembers = canManage || (!scimGroup && canManageTeamSettings(data, team.id, "members"));
   const change = async (userId: string, member: boolean, role: "owner" | "member" = "member", success = "Team members updated") => {
     setBusy(true);
     try {
@@ -172,7 +176,7 @@ export function TeamMembersSettings({
             {t("Export CSV")}
           </button>
         )}
-        {canManage ? (
+        {canAddMembers ? (
           <PropertyMenu
             label={t("Add a member")}
             ariaLabel={t("Add a member")}
@@ -239,7 +243,7 @@ export function TeamMembersSettings({
                 </em>
               </span>
               <span>
-                {(canManage || self) && (
+                {(canManage || self || (canAddMembers && !owner)) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button

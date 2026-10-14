@@ -88,9 +88,12 @@ export function WorkspaceMenu({
             <DropdownMenuItem onSelect={() => onSettings("workspace")}>
               Settings<WorkspaceMenuShortcut>G then S</WorkspaceMenuShortcut>
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onSettings("members")}>
-              Invite and manage members
-            </DropdownMenuItem>
+            {/* Settings › Members is an administration page: the reference app only lists it for admins. */}
+            {(data.viewerRole === "admin" || data.viewerRole === "owner") && (
+              <DropdownMenuItem onSelect={() => onSettings("members")}>
+                Invite and manage members
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() =>
