@@ -429,7 +429,7 @@ func (g *generator) operation(operation publicapi.Operation) schema {
 		case operation.FilterType != nil:
 			parameters = append(parameters, schema{"name": "filter", "in": "query", "description": "Filter tree (JSON), see IssueFilter.", "content": schema{"application/json": schema{"schema": g.schemaFor(reflect.TypeOf(operation.FilterType), false)}}})
 		case len(operation.Filter) > 0:
-			parameters = append(parameters, schema{"name": "filter", "in": "query", "description": "filter object (JSON). Filterable fields: " + strings.Join(operation.Filter, ", ") + ". Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.", "content": schema{"application/json": schema{"schema": schema{"type": "object", "additionalProperties": true}}}})
+			parameters = append(parameters, schema{"name": "filter", "in": "query", "description": "Filter object (JSON). Filterable fields: " + strings.Join(operation.Filter, ", ") + ". Comparators: eq, neq, in, nin, lt, lte, gt, gte, eqIgnoreCase, neqIgnoreCase, startsWith, startsWithIgnoreCase, notStartsWith, endsWith, notEndsWith, contains, notContains, containsIgnoreCase, notContainsIgnoreCase, null; combine with and/or.", "content": schema{"application/json": schema{"schema": schema{"type": "object", "additionalProperties": true}}}})
 		}
 	}
 	for _, param := range operation.Params {

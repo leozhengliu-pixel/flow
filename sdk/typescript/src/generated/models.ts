@@ -3,7 +3,7 @@
 //   node sdk/typescript/scripts/generate.mjs
 
 /** Version of the OpenAPI document these types were generated from. */
-export const SPEC_VERSION = "0.2.0"
+export const SPEC_VERSION = "0.3.0"
 
 /** ActorBot attributes a record to an OAuth application ("<User> via <App>"). It is stored on issues, comments, attachments, documents and activity when the request was authenticated with an OAuth token: - actor=user token: the record's user is the person who authorized the application; ActorBot names the application. - actor=app token with createAsUser: the record's user is the application user; UserDisplayName / UserAvatarURL name the external person the application acted for. - Flow's agent (Type "agent"): the record's user is the person the agent worked for (in-app chat) or the agent's own app user (comment threads and delegation); OnBehalfOfID / OnBehalfOfName name the person either way, so history reads "Flow <did X> on behalf of <User>". */
 export interface ActorBot {
@@ -153,7 +153,7 @@ export interface AppUserNotificationWebhookEvent {
 export interface ApplicationInstallation {
   active: boolean
   allPublicTeams?: boolean
-  /** AllTeams keeps the installation's teams in step with the workspace's teams (the built-in Flow agent works in every team). */
+  /** AllTeams keeps the installation's teams in step with the workspace's teams (as the built-in Flow agent works in every team). */
   allTeams?: boolean
   avatarUrl?: string
   builtin: boolean
@@ -169,7 +169,7 @@ export interface ApplicationInstallation {
   updatedAt: string
   userId: string
   webhookUrl?: string
-  /** WithoutRealtime marks an installation authorized while its application had no webhook:, it receives no webhook deliveries until an administrator authorizes it again ("Receive realtime updates about your workspace" is then a requested permission on the consent screen). */
+  /** WithoutRealtime marks an installation authorized while its application had no webhook: it receives no webhook deliveries until an administrator authorizes it again ("Receive realtime updates about your workspace" is then a requested permission on the consent screen). */
   withoutRealtime?: boolean
   workspaceKey: string
 }
@@ -233,7 +233,7 @@ export interface Attachment {
   providerId?: string
   providerUrl?: string
   size: number
-  /** Link attachments (the reference app's attachmentCreate): a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it. */
+  /** Link attachments: a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it. */
   subtitle?: string
   syncStatus?: string
   title: string
@@ -263,7 +263,7 @@ export interface AttachmentPartial {
   providerId?: string
   providerUrl?: string
   size?: number
-  /** Link attachments (the reference app's attachmentCreate): a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it. */
+  /** Link attachments: a subtitle, an icon and free-form key/value metadata shown with the link. Re-creating an attachment with the same URL on the same issue updates it. */
   subtitle?: string
   syncStatus?: string
   title?: string
@@ -970,7 +970,7 @@ export interface FileUploadHeader {
   value: string
 }
 
-/** FileUploadInput prepares an upload (the reference app's fileUpload). */
+/** FileUploadInput prepares an upload. */
 export interface FileUploadInput {
   contentType: string
   filename: string
@@ -1288,7 +1288,7 @@ export interface Issue {
   statusChangedAt?: string | null
   subIssueIds: string[]
   subscriberIds: string[]
-  /** Active Triage Intelligence suggestion targets (the reference app's "Suggested assignee/project/team", "Suggested duplicates/relations" filters). They mirror the active IssueSuggestions so filters stay indexed lookups. */
+  /** Active Triage Intelligence suggestion targets (the "Suggested assignee/project/team" and "Suggested duplicates/relations" filters). They mirror the active IssueSuggestions so filters stay indexed lookups. */
   suggestedAssigneeIds?: string[]
   suggestedDuplicateIds?: string[]
   suggestedLabelIds?: string[]
@@ -1478,7 +1478,7 @@ export interface IssuePartial {
   statusChangedAt?: string | null
   subIssueIds?: string[]
   subscriberIds?: string[]
-  /** Active Triage Intelligence suggestion targets (the reference app's "Suggested assignee/project/team", "Suggested duplicates/relations" filters). They mirror the active IssueSuggestions so filters stay indexed lookups. */
+  /** Active Triage Intelligence suggestion targets (the "Suggested assignee/project/team" and "Suggested duplicates/relations" filters). They mirror the active IssueSuggestions so filters stay indexed lookups. */
   suggestedAssigneeIds?: string[]
   suggestedDuplicateIds?: string[]
   suggestedLabelIds?: string[]
@@ -1751,7 +1751,7 @@ export interface NotificationIssue {
   url?: string
 }
 
-/** OAuthAppManifest describes an OAuth application declaratively, in the shape of the reference app's OAuth app manifests (see /.well-known/oauth-app-manifest.schema.json). */
+/** OAuthAppManifest describes an OAuth application declaratively (see /.well-known/oauth-app-manifest.schema.json). */
 export interface OAuthAppManifest {
   $schema?: string
   agent?: OAuthAppManifestAgent | null
@@ -2729,7 +2729,7 @@ export interface ReleasePartial {
 }
 
 export interface ReleaseResource {
-  /** Content holds markdown for documents attached by CI (the reference app's --document). */
+  /** Content holds markdown for documents attached by CI (the --document option). */
   content?: string
   createdAt: string
   documentId?: string
@@ -2740,7 +2740,7 @@ export interface ReleaseResource {
 }
 
 export interface ReleaseResourcePartial {
-  /** Content holds markdown for documents attached by CI (the reference app's --document). */
+  /** Content holds markdown for documents attached by CI (the --document option). */
   content?: string
   createdAt?: string
   documentId?: string
@@ -2911,7 +2911,7 @@ export interface User {
   oauthClientId?: string
   outOfOfficeUntil?: string | null
   userId?: string
-  /** Username is the workspace-unique handle (the reference app's "username"), derived per request from account settings or the email local part. */
+  /** Username is the workspace-unique handle (shown as "username"), derived per request from account settings or the email local part. */
   username?: string
 }
 
@@ -2940,7 +2940,7 @@ export interface UserPartial {
   oauthClientId?: string
   outOfOfficeUntil?: string | null
   userId?: string
-  /** Username is the workspace-unique handle (the reference app's "username"), derived per request from account settings or the email local part. */
+  /** Username is the workspace-unique handle (shown as "username"), derived per request from account settings or the email local part. */
   username?: string
 }
 

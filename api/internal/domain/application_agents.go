@@ -21,13 +21,13 @@ type ApplicationInstallation struct {
 	Builtin        bool     `json:"builtin"`
 	Active         bool     `json:"active"`
 	// AllTeams keeps the installation's teams in step with the workspace's
-	// teams (the built-in Flow agent works in every team).
+	// teams (as the built-in Flow agent works in every team).
 	AllTeams bool `json:"allTeams,omitempty"`
 	// ServerSuspended marks an installation deactivated because the server's
 	// agent is disabled; it is reactivated when the agent is enabled again.
 	ServerSuspended bool `json:"serverSuspended,omitempty"`
 	// WithoutRealtime marks an installation authorized while its application
-	// had no webhook:, it receives no webhook deliveries until an
+	// had no webhook: it receives no webhook deliveries until an
 	// administrator authorizes it again ("Receive realtime updates about
 	// your workspace" is then a requested permission on the consent screen).
 	WithoutRealtime bool      `json:"withoutRealtime,omitempty"`

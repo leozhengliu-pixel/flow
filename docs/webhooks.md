@@ -4,12 +4,11 @@ Flow sends an HTTP `POST` to a URL of your choice when data in a workspace is
 created, updated or removed. Use webhooks to keep another system in sync, start
 CI jobs or post messages, instead of polling the REST API.
 
-The contract's webhooks: the same envelope fields (`action`,
-`type`, `data`, `url`, `updatedFrom`, `actor`, `createdAt`, `organizationId`,
-`webhookId`, `webhookTimestamp`), the same payload type names (`Issue`,
-`Comment`, `IssueLabel`, ...), an HMAC-SHA256 signature of the raw body and the
-same retry schedule. Only the header names differ (`Flow-*` instead of
-`the reference app-*`).
+The contract: an envelope with the fields `action`, `type`, `data`, `url`,
+`updatedFrom`, `actor`, `createdAt`, `organizationId`, `webhookId` and
+`webhookTimestamp`, payload type names such as `Issue`, `Comment` and
+`IssueLabel`, an HMAC-SHA256 signature of the raw body and a fixed retry
+schedule. Header names start with `Flow-`.
 
 - [Create a webhook](#create-a-webhook)
 - [Events](#events)

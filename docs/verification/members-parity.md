@@ -1,10 +1,10 @@
-# Members module — parity spec (2026-09-28)
+# Members module — reference-app parity spec (2026-09-28)
 
-Measured against linear.app (dark theme, viewport 1470×708 CSS px, main panel x244 w1218).
+Measured against the reference app (dark theme, viewport 1470×708 CSS px, main panel x244 w1218).
 Flow measured at the same viewport. All sizes are CSS px from `offsetWidth/offsetHeight`
-(the reference app popovers animate from `scale(0.98)`, so bounding rects in a hidden tab read ~2% small).
+(reference popovers animate from `scale(0.98)`, so bounding rects in a hidden tab read ~2% small).
 
-Colour reference (the reference app dark → Flow token that already resolves to it in dark):
+Colour reference (reference dark → Flow token that already resolves to it in dark):
 `#e3e4e6` primary text, `#959597` secondary text, `#565759` tertiary/count text, `#1b1c1d` subtle
 button bg, `#121213` panel bg, `#161617` group header bg, `#26a644` online dot, `#5e6ad2` accent.
 Always use existing tokens (see `web/src/styles/tokens.css`) so light theme follows automatically.
@@ -12,7 +12,7 @@ Always use existing tokens (see `web/src/styles/tokens.css`) so light theme foll
 ## 1. Workspace Members page — `/:workspace/members`
 
 ### Header (row 1, 44px, bottom hairline)
-| Element | the reference app | Flow today |
+| Element | Reference app | Flow today |
 |---|---|---|
 | Title | "Members" only, 13px/500 `#e3e4e6` at x263 | "Members 1" + an **Applications** tab — remove count and tab |
 | Invite members | button 127×28 radius 9999, **no bg**, plus icon 14, text 12px/500 `#959597`; hover bg | has bg `#1c1c1d` |
@@ -96,7 +96,7 @@ The reference app shows a **profile aside** (≈440 wide, right side, under the 
 
 ## 3. Settings › Members — `/:workspace/settings/members`
 
-| Element | the reference app | Flow today |
+| Element | Reference app | Flow today |
 |---|---|---|
 | Title | "Members" 24px/32px/500 white at y73 | ok |
 | Search | 300×32 at x301 **y118**, bg `#1b1c1d`, border 0.5px `#3f4042`, radius 8, placeholder "Search by name or email" | y137, bg `#161617`, border `#232426` |
@@ -129,14 +129,14 @@ Selection:
 
 ## Verification notes (after the fix pass)
 
-- Flow's generated theme maps `--theme-text-primary` to pure white; the reference app's row/body text is
+- Flow's generated theme maps `--theme-text-primary` to pure white; the reference row/body text is
   `lch(90.8–91.2)`, so member names, team keys, profile values and dialog labels use `--text`.
 - Surfaces that the reference app pins to exact lch values (profile cards `lch(9.232)`, display popover
   `lch(12.72)`, role listbox `lch(16.433)` with `lch(25.69)` highlight, selected settings row
   `lch(15.966 18.242 286.4)`) got dedicated tokens because the generated theme overrides the
   shared surface tokens.
 - Row hover in the reference app is a `::before` inset 8px (x253 w1201); Flow rows use an 8px margin.
-- Sort arrows point down for ascending (the reference app "Name ↓" = A→Z).
+- Sort arrows point down for ascending (reference "Name ↓" = A→Z).
 - Online dots are 8px including a 1px ring in the surrounding surface colour (6px green fill).
 - Status submenu hides the checkbox until hover/checked and omits zero counts.
 - Settings bulk bar sits 16px above the panel bottom (`bottom: 52px`).

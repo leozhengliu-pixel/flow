@@ -5,8 +5,8 @@ the pipeline settings page (Settings › Releases › pipeline › CI setup), st
 as an encrypted CI secret named `FLOW_RELEASE_ACCESS_KEY`, and call the release
 API over HTTPS. The key alone identifies the pipeline, so no pipeline id is needed.
 
-The API's access-key operations used by its release CLI and
-GitHub Action. Every call sends `Authorization: Bearer $FLOW_RELEASE_ACCESS_KEY`.
+The API offers the access-key operations used by release CLIs and
+GitHub Actions. Every call sends `Authorization: Bearer $FLOW_RELEASE_ACCESS_KEY`.
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -29,7 +29,7 @@ Request fields (all optional unless noted):
 - `stage` (update only): matched exactly, then case-insensitively with `-`/`_` as
   spaces, then as a stage type (`planned`, `started`, `completed`, `canceled`).
 
-Targeting follows the reference app:
+Targeting works like this:
 
 - Sync without `version` uses the short commit SHA. Continuous pipelines create
   releases that are already completed. Scheduled pipelines add to the latest

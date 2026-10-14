@@ -1,11 +1,11 @@
-# Triage & Triage Intelligence — parity (2026-09-29)
+# Triage & Triage Intelligence — reference-app parity (2026-09-29)
 
-Observed in the reference workspace (team Flow-app, Triage + Triage Intelligence enabled with the user's permission;
+Observed in the reference app's workspace `flow-app12` (team Flow-app, Triage + Triage Intelligence enabled with the user's permission;
 changes kept). Flow mirrored with DEV-2…DEV-5 (= FLO-1…FLO-4 onboarding issues) and four triage issues.
 
 ## Same four inputs, side by side
 
-| Triage issue | the reference app (agentic AI, ~1–2 min) | Flow today (token heuristic, instant) |
+| Triage issue | Reference app (agentic AI, ~1–2 min) | Flow today (token heuristic, instant) |
 |---|---|---|
 | Sync Slack and GitHub … stay in sync | **Related to** FLO-2 Connect your tools | related DEV-2 *Get familiar with Flow* (wrong), assignee = creator |
 | App crashes when importing a large CSV file | **Related to** FLO-3 Import your data | no related issue; assignee = creator |
@@ -20,7 +20,7 @@ fell back to the heuristic; triage calls now get 16k tokens.
 The reference app is conservative: no label suggestions when no similar issue uses the label, no assignee just because someone
 created the issue, related issues only on real topical overlap; otherwise "No suggestions found".
 
-## The reference app issue page (issue in Triage)
+## Reference issue page (issue in Triage)
 
 - Status property reads **Triage** (orange triage glyph). Header right: **Accept**, **Decline**, a duplicate icon button,
   a snooze icon button. No inline triage bar.
@@ -44,6 +44,6 @@ Duplicate `3` or `MM` (Canceled + duplicate relation), Snooze `H`. Flow currentl
 
 ## Settings
 
-The reference app: AI & Agents › Triage Intelligence — enable toggle; Behavior rows *Assignee / Project / Label / Team / Duplicate
+Reference app: AI & Agents › Triage Intelligence — enable toggle; Behavior rows *Assignee / Project / Label / Team / Duplicate
 issue / Related issue is suggested* → Show / Hide / Auto-apply; Workspace guidance textarea. Team triage settings page
 shows "Triage Intelligence is not enabled in this workspace · View settings" when off.
