@@ -17,3 +17,5 @@
 :root[data-theme="light"] .workspace-region-select{border-color:var(--border-strong);background:var(--theme-surface-2);color:var(--text)}
 @media(max-width:640px){.workspace-onboarding .workspace-language{right:16px}}
 .workspace-region-menu{width:min(400px,calc(100vw - 24px))}
+/* Labels never wrap: "Switch workspace" sits on one line beside its "O then W" shortcut. */
+.workspace-primary-menu .menu-item{white-space:nowrap}
